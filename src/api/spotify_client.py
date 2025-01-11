@@ -1,72 +1,125 @@
 from typing import List, Dict, Any
 import spotipy
-from ..auth.spotify_auth import SpotifyAuthenticator
+from spotipy.oauth2 import SpotifyOAuth
+import os
+from dotenv import load_dotenv
+from tqdm import tqdm
+
+load_dotenv()
 
 class SpotifyClient:
     """Handles all Spotify API interactions."""
     
     def __init__(self):
-        self.authenticator = SpotifyAuthenticator()
-        self.client = self.authenticator.get_spotify_client()
-        # Get current user's ID for checking playlist ownership
-        self.user_id = self.client.current_user()['id']
-
-    def is_playlist_editable(self, playlist: Dict[str, Any]) -> bool:
-        """
-        Checks if the current user can edit the playlist.
-        A playlist is editable if:
-        1. The user is the owner, or
-        2. The playlist is collaborative
-        """
-        is_owner = playlist['owner']['id'] == self.user_id
-        is_collaborative = playlist.get('collaborative', False)
-        return is_owner or is_collaborative
-
-    def get_user_playlists(self) -> List[Dict[str, Any]]:
-        """Fetches all playlists that the user can edit."""
-        editable_playlists = []
-        results = self.client.current_user_playlists()
+        # Define all required scopes
+        self.scope = " ".join([
+            "playlist-read-private",
+            "playlist-read-collaborative",
+            "playlist-modify-private",
+            "playlist-modify-public"
+        ])
         
-        while results:
-            # Filter playlists to only include those we can edit
-            for playlist in results['items']:
-                if self.is_playlist_editable(playlist):
-                    editable_playlists.append(playlist)
-            
-            if results['next']:
-                results = self.client.next(results)
-            else:
-                break
-                
-        return editable_playlists
-
-    def get_playlist_tracks(self, playlist_id: str) -> List[Dict[str, Any]]:
-        """Fetches all tracks from a specific playlist."""
-        tracks = []
-        results = self.client.playlist_tracks(playlist_id)
+        # Get credentials from environment variables
+        client_id = os.getenv('SPOTIPY_CLIENT_ID')
+        client_secret = os.getenv('SPOTIPY_CLIENT_SECRET')
+        redirect_uri = os.getenv('SPOTIPY_REDIRECT_URI')
         
-        while results:
-            if 'items' in results:
-                tracks.extend(results['items'])
-            
-            if results['next']:
-                results = self.client.next(results)
-            else:
-                break
-                
-        return tracks
-
-    def update_playlist_tracks(self, playlist_id: str, track_uris: List[str]) -> bool:
-        """Updates the playlist with the new track order."""
+        # Debug print (remove these after confirming they work)
+        print(f"Client ID loaded: {'Yes' if client_id else 'No'}")
+        print(f"Client Secret loaded: {'Yes' if client_secret else 'No'}")
+        print(f"Redirect URI: {redirect_uri}")
+        
+        if not all([client_id, client_secret, redirect_uri]):
+            raise ValueError(
+                "Missing Spotify credentials. Please set SPOTIPY_CLIENT_ID, "
+                "SPOTIPY_CLIENT_SECRET, and SPOTIPY_REDIRECT_URI environment variables"
+            )
+        
+        self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri,
+            scope=self.scope,
+            cache_path='.spotifycache'
+        ))
+    
+    def update_playlist_tracks(self, playlist_id, track_uris):
         try:
-            # Verify we can edit this playlist
-            playlist = self.client.playlist(playlist_id)
-            if not self.is_playlist_editable(playlist):
-                raise ValueError("You don't have permission to edit this playlist")
+            # First, get the current tracks to verify we can access the playlist
+            current = self.sp.playlist_items(playlist_id, fields='items.track.uri')
             
-            # Replace all items at once
-            self.client.playlist_replace_items(playlist_id, track_uris)
+            print("\nClearing playlist...")
+            # Get total number of tracks first
+            total_tracks = self.sp.playlist(playlist_id)['tracks']['total']
+            
+            # Clear the playlist in batches with progress bar
+            if total_tracks > 0:
+                with tqdm(
+                    total=total_tracks,
+                    desc="Removing tracks",
+                    bar_format="{desc}: {percentage:3.0f}% |{bar}| {n_fmt}/{total_fmt} songs [elapsed: {elapsed}, remaining: {remaining}]"
+                ) as pbar:
+                    while True:
+                        items = self.sp.playlist_items(playlist_id, limit=50)['items']
+                        if not items:
+                            break
+                        
+                        track_ids = [item['track']['id'] for item in items if item['track']]
+                        if track_ids:
+                            self.sp.playlist_remove_all_occurrences_of_items(playlist_id, track_ids)
+                            pbar.update(len(track_ids))
+            
+            print("\nAdding shuffled tracks...")
+            # Add new tracks in small batches with progress bar
+            batch_size = 50
+            with tqdm(
+                total=len(track_uris),
+                desc="Adding tracks",
+                bar_format="{desc}: {percentage:3.0f}% |{bar}| {n_fmt}/{total_fmt} songs [elapsed: {elapsed}, remaining: {remaining}]"
+            ) as pbar:
+                for i in range(0, len(track_uris), batch_size):
+                    batch = track_uris[i:i + batch_size]
+                    self.sp.playlist_add_items(playlist_id, batch)
+                    pbar.update(len(batch))
+            
             return True
+            
         except Exception as e:
-            print(f"Error updating playlist: {e}")
-            return False 
+            print(f"\nError in update_playlist_tracks: {str(e)}")
+            return False
+    
+    def get_user_playlists(self):
+        """Get user's playlists that they can modify."""
+        try:
+            playlists = []
+            results = self.sp.current_user_playlists()
+            
+            while results:
+                for playlist in results['items']:
+                    # Only include playlists user can modify
+                    if playlist['owner']['id'] == self.sp.current_user()['id'] or playlist.get('collaborative'):
+                        playlists.append(playlist)
+                
+                results = self.sp.next(results) if results['next'] else None
+            
+            return playlists
+            
+        except Exception as e:
+            print(f"Error fetching playlists: {str(e)}")
+            return []
+    
+    def get_playlist_tracks(self, playlist_id):
+        """Get all tracks from a playlist."""
+        try:
+            tracks = []
+            results = self.sp.playlist_items(playlist_id)
+            
+            while results:
+                tracks.extend(results['items'])
+                results = self.sp.next(results) if results['next'] else None
+            
+            return tracks
+            
+        except Exception as e:
+            print(f"Error fetching playlist tracks: {str(e)}")
+            return [] 
