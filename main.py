@@ -1,5 +1,5 @@
 from src.api.spotify_client import SpotifyClient
-from src.utils.playlist_shuffler import PlaylistShuffler
+from src.utils.shuffify import shuffle_playlist
 
 def display_playlists(playlists):
     """Displays available playlists with numbering."""
@@ -68,15 +68,8 @@ def main():
         if keep_first > 0:
             print(f"(keeping first {keep_first} tracks unchanged)")
 
-        # Get and shuffle tracks
-        tracks = spotify_client.get_playlist_tracks(selected_playlist['id'])
-        
-        # Double check we got tracks
-        if not tracks:
-            print(f"⚠️ Could not fetch any tracks from '{selected_playlist['name']}'. The playlist might be empty.")
-            return
-            
-        shuffled_uris = PlaylistShuffler.shuffle_tracks(tracks, keep_first=keep_first)
+        # Shuffle the tracks
+        shuffled_uris = shuffle_playlist(spotify_client.sp, selected_playlist['id'], keep_first=keep_first)
         
         # Update playlist
         if spotify_client.update_playlist_tracks(selected_playlist['id'], shuffled_uris):
