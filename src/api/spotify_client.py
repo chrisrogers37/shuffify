@@ -28,21 +28,49 @@ class SpotifyClient:
                 client_id=st.secrets["SPOTIPY_CLIENT_ID"],
                 redirect_uri=st.secrets["SPOTIPY_REDIRECT_URI"],
                 scope=self.scope,
-                open_browser=True,
-                cache_handler=spotipy.CacheFileHandler(cache_path=".spotifycache")
+                open_browser=False  # Don't automatically open browser
             )
             
-            # Initialize Spotify client
-            self.sp = spotipy.Spotify(auth_manager=auth_manager)
+            # Get the authorization URL
+            auth_url = auth_manager.get_authorize_url()
             
-            # Verify authentication
-            user = self.sp.current_user()
-            st.success(f"Successfully logged in as: {user['display_name']}")
+            # Create two columns for the auth flow
+            col1, col2 = st.columns([1, 1])
             
+            with col1:
+                st.markdown("""
+                ### Spotify Authorization
+                Click the button below to connect your Spotify account:
+                """)
+                
+                # Create a button that opens the auth URL in a new tab
+                if st.button("🔗 Connect to Spotify", type="primary"):
+                    st.markdown(f'<a href="{auth_url}" target="_blank">Click here if the authorization page does not open automatically</a>', unsafe_allow_html=True)
+                    st.components.v1.html(
+                        f"""
+                        <script>
+                            window.open('{auth_url}', '_blank');
+                        </script>
+                        """,
+                        height=0
+                    )
+            
+            with col2:
+                st.markdown("### After Authorizing")
+                # After authorization, Spotify will redirect to our callback URL
+                # We can get the token from the URL
+                token_info = auth_manager.get_access_token(check_cache=True)
+                
+                if token_info:
+                    self.sp = spotipy.Spotify(auth_manager=auth_manager)
+                    user = self.sp.current_user()
+                    st.success(f"Successfully connected as: {user['display_name']}")
+                else:
+                    st.info("Waiting for authorization...")
+                    st.stop()
+                
         except Exception as e:
             st.error("Please authorize with Spotify to continue.")
-            auth_url = auth_manager.get_authorize_url()
-            st.markdown(f"[Click here to authorize with Spotify]({auth_url})")
             raise Exception("Authentication required")
     
     def update_playlist_tracks(self, playlist_id, track_uris):
