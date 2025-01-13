@@ -8,6 +8,7 @@ import time
 from datetime import datetime, timedelta
 import json
 import os.path
+import streamlit as st
 
 load_dotenv()
 
@@ -68,43 +69,43 @@ class SpotifyClient:
             current = self.sp.playlist_items(playlist_id, fields='items.track.uri')
             
             print("\nClearing playlist...")
-            # Get total number of tracks first
             total_tracks = self.sp.playlist(playlist_id)['tracks']['total']
             
-            # Clear the playlist in batches with progress bar
             if total_tracks > 0:
-                with tqdm(
-                    total=total_tracks,
-                    desc="Removing tracks",
-                    bar_format="{desc}: {percentage:3.0f}% |{bar}| {n_fmt}/{total_fmt} songs [elapsed: {elapsed}, remaining: {remaining}]"
-                ) as pbar:
-                    while True:
-                        items = self.sp.playlist_items(playlist_id, limit=50)['items']
-                        if not items:
-                            break
-                        
-                        track_ids = [item['track']['id'] for item in items if item['track']]
-                        if track_ids:
-                            self.sp.playlist_remove_all_occurrences_of_items(playlist_id, track_ids)
-                            pbar.update(len(track_ids))
+                progress_text = "Removing tracks..."
+                progress_bar = st.progress(0)
+                progress_count = st.empty()
+                
+                current_count = 0
+                while True:
+                    items = self.sp.playlist_items(playlist_id, limit=50)['items']
+                    if not items:
+                        break
+                    
+                    track_ids = [item['track']['id'] for item in items if item['track']]
+                    if track_ids:
+                        self.sp.playlist_remove_all_occurrences_of_items(playlist_id, track_ids)
+                        current_count += len(track_ids)
+                        progress_bar.progress(current_count / total_tracks)
+                        progress_count.text(f"{progress_text} ({current_count}/{total_tracks})")
             
             print("\nAdding shuffled tracks...")
-            # Add new tracks in small batches with progress bar
+            progress_text = "Adding tracks..."
+            progress_bar = st.progress(0)
+            progress_count = st.empty()
+            
             batch_size = 50
-            with tqdm(
-                total=len(track_uris),
-                desc="Adding tracks",
-                bar_format="{desc}: {percentage:3.0f}% |{bar}| {n_fmt}/{total_fmt} songs [elapsed: {elapsed}, remaining: {remaining}]"
-            ) as pbar:
-                for i in range(0, len(track_uris), batch_size):
-                    batch = track_uris[i:i + batch_size]
-                    self.sp.playlist_add_items(playlist_id, batch)
-                    pbar.update(len(batch))
+            for i in range(0, len(track_uris), batch_size):
+                batch = track_uris[i:i + batch_size]
+                self.sp.playlist_add_items(playlist_id, batch)
+                progress = (i + len(batch)) / len(track_uris)
+                progress_bar.progress(progress)
+                progress_count.text(f"{progress_text} ({i + len(batch)}/{len(track_uris)})")
             
             return True
             
         except Exception as e:
-            print(f"\nError in update_playlist_tracks: {str(e)}")
+            st.error(f"Error in update_playlist_tracks: {str(e)}")
             return False
     
     def get_user_playlists(self):
@@ -151,7 +152,7 @@ class SpotifyClient:
         # Check if undo has expired
         elapsed_time = time.time() - self.original_state['timestamp']
         if elapsed_time > self.undo_timeout:
-            print("⚠️ Undo operation has expired (1 hour limit)")
+            st.error("⚠️ Undo operation has expired (1 hour limit)")
             self.original_state = None
             self.last_shuffle = None
             return False
@@ -159,12 +160,7 @@ class SpotifyClient:
         try:
             playlist = self.sp.playlist(self.original_state['playlist_id'])
             
-            print(f"\nAre you sure you want to restore '{playlist['name']}' to its original order from when you started?")
-            confirm = input("Type 'yes' to confirm: ").strip().lower()
-            if confirm != 'yes':
-                print("Undo cancelled.")
-                return False
-            
+            # Remove confirmation prompt (will be handled in streamlit_app.py)
             print(f"\nRestoring '{playlist['name']}' to original order...")
             
             # Restore the complete original order
@@ -182,5 +178,5 @@ class SpotifyClient:
             return False
             
         except Exception as e:
-            print(f"Error restoring playlist: {str(e)}")
+            st.error(f"Error restoring playlist: {str(e)}")
             return False 
