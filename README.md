@@ -34,18 +34,16 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install spotipy python-dotenv tqdm
 ```
 
-4. Create a Spotify Application:
-   - Visit [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
-   - Create a new application
-   - Save your Client ID and Client Secret
-   - Add `http://localhost:8888/callback` to the Redirect URIs
+4. Run the application:
+```bash
+python main.py
+```
 
-5. Create a `.env` file in the project root with your Spotify credentials:
-```
-SPOTIPY_CLIENT_ID=your_client_id_here
-SPOTIPY_CLIENT_SECRET=your_client_secret_here
-SPOTIPY_REDIRECT_URI=http://localhost:8888/callback
-```
+5. When prompted:
+   - Your default browser will open
+   - Log in to your Spotify account
+   - Authorize the application to access your playlists
+   - Return to the command line to use the application
 
 ## Usage
 
