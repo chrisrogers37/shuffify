@@ -25,7 +25,6 @@ wheels/
 venv/
 ENV/
 env/
-.env
 
 # IDE
 .idea/
@@ -40,11 +39,7 @@ env/
 .cache
 
 # Logs
-*.log 
+*.log
 
-# Shuffify specific
-.shuffify_undo 
-
-# Streamlit specific
-.streamlit/
-.streamlit/* 
+# Streamlit
+.streamlit/ 
