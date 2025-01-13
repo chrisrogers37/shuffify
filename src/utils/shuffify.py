@@ -1,54 +1,57 @@
 import random
-import time
-from tqdm import tqdm
+import streamlit as st
 
 def shuffle_playlist(sp, playlist_id, keep_first=0):
-    print(f"\nFetching playlist tracks...")
+    st.write("Fetching playlist tracks...")
     # Get all tracks from the playlist
     results = sp.playlist_items(playlist_id)
     tracks = results['items']
     
     # Get all tracks if there are more (pagination)
-    with tqdm(
-        desc="Loading tracks",
-        bar_format="{desc}: {n_fmt} songs loaded [{elapsed}]"
-    ) as pbar:
-        while results['next']:
-            results = sp.next(results)
-            tracks.extend(results['items'])
-            pbar.update(len(results['items']))
+    progress_text = "Loading tracks"
+    progress_bar = st.progress(0)
+    track_count = len(tracks)
+    total_tracks = sp.playlist(playlist_id)['tracks']['total']
     
-    print(f"Found {len(tracks)} total tracks")
+    while results['next']:
+        results = sp.next(results)
+        tracks.extend(results['items'])
+        track_count += len(results['items'])
+        progress = track_count / total_tracks
+        progress_bar.progress(progress)
+        st.write(f"{progress_text}: {track_count} songs loaded")
+    
+    st.write(f"Found {len(tracks)} total tracks")
     
     # Extract track URIs and validate
     track_uris = []
-    with tqdm(
-        total=len(tracks),
-        desc="Processing tracks",
-        bar_format="{desc}: {percentage:3.0f}% |{bar}| {n_fmt}/{total_fmt} songs [elapsed: {elapsed}, remaining: {remaining}]"
-    ) as pbar:
-        for item in tracks:
-            if item.get('track'):
-                track_uris.append(item['track']['uri'])
-            pbar.update(1)
+    progress_text = "Processing tracks"
+    progress_bar = st.progress(0)
     
-    print(f"Extracted {len(track_uris)} valid track URIs")
+    for i, item in enumerate(tracks):
+        if item.get('track'):
+            track_uris.append(item['track']['uri'])
+        progress = (i + 1) / len(tracks)
+        progress_bar.progress(progress)
+        st.write(f"{progress_text}: {i + 1}/{len(tracks)} songs")
+    
+    st.write(f"Extracted {len(track_uris)} valid track URIs")
     
     try:
         # Handle the shuffling
         if keep_first > 0:
             kept_tracks = track_uris[:keep_first]
             shuffled_tracks = track_uris[keep_first:]
-            print(f"\nShuffling {len(shuffled_tracks)} tracks...")
+            st.write(f"Shuffling {len(shuffled_tracks)} tracks...")
             random.shuffle(shuffled_tracks)
             track_uris = kept_tracks + shuffled_tracks
-            print(f"Keeping first {keep_first} tracks unchanged")
+            st.write(f"Keeping first {keep_first} tracks unchanged")
         else:
-            print(f"\nShuffling all {len(track_uris)} tracks...")
+            st.write(f"Shuffling all {len(track_uris)} tracks...")
             random.shuffle(track_uris)
         
         return track_uris
             
     except Exception as e:
-        print(f"\nError during shuffle: {str(e)}")
+        st.error(f"Error during shuffle: {str(e)}")
         raise e 
