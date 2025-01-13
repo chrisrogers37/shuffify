@@ -41,3 +41,6 @@ env/
 
 # Logs
 *.log 
+
+# Shuffify specific
+.shuffify_undo 
