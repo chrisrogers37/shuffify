@@ -1,5 +1,4 @@
 import pytest
-from src.utils.playlist_shuffler import PlaylistShuffler
 
 @pytest.fixture
 def sample_tracks():
