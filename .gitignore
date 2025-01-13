@@ -44,3 +44,7 @@ env/
 
 # Shuffify specific
 .shuffify_undo 
+
+# Streamlit specific
+.streamlit/
+.streamlit/* 
