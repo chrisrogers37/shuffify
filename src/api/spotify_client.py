@@ -8,7 +8,6 @@ class SpotifyClient:
     """Handles all Spotify API interactions."""
     
     def __init__(self):
-        # Define all required scopes
         self.scope = " ".join([
             "playlist-read-private",
             "playlist-read-collaborative",
@@ -17,29 +16,34 @@ class SpotifyClient:
             "user-read-private"
         ])
         
-        # Use PKCE authentication
-        auth_manager = SpotifyPKCE(
-            client_id=st.secrets["SPOTIPY_CLIENT_ID"] if "SPOTIPY_CLIENT_ID" in st.secrets 
-                else "7ae66f7d8a4a428abb27996b87fb74be",  # Fallback for local development
-            redirect_uri=st.secrets["SPOTIPY_REDIRECT_URI"] if "SPOTIPY_REDIRECT_URI" in st.secrets
-                else "http://localhost:8888/callback",  # Fallback for local development
-            scope=self.scope,
-            cache_path='.spotifycache'
-        )
-        
-        self.sp = spotipy.Spotify(auth_manager=auth_manager)
-        
-        # Verify authentication and get user info
-        try:
-            user = self.sp.current_user()
-            print(f"\nAuthenticated as: {user['display_name']} ({user['id']})")
-        except Exception as e:
-            print("Authentication failed. Please try again.")
-            raise e
-        
+        # Initialize sp as None
+        self.sp = None
         self.last_shuffle = None
         self.original_state = None
         self.undo_timeout = 3600
+        
+        try:
+            # Use PKCE authentication
+            auth_manager = SpotifyPKCE(
+                client_id=st.secrets["SPOTIPY_CLIENT_ID"],
+                redirect_uri=st.secrets["SPOTIPY_REDIRECT_URI"],
+                scope=self.scope,
+                open_browser=True,
+                cache_handler=spotipy.CacheFileHandler(cache_path=".spotifycache")
+            )
+            
+            # Initialize Spotify client
+            self.sp = spotipy.Spotify(auth_manager=auth_manager)
+            
+            # Verify authentication
+            user = self.sp.current_user()
+            st.success(f"Successfully logged in as: {user['display_name']}")
+            
+        except Exception as e:
+            st.error("Please authorize with Spotify to continue.")
+            auth_url = auth_manager.get_authorize_url()
+            st.markdown(f"[Click here to authorize with Spotify]({auth_url})")
+            raise Exception("Authentication required")
     
     def update_playlist_tracks(self, playlist_id, track_uris):
         try:

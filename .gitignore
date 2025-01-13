@@ -42,4 +42,5 @@ env/
 *.log
 
 # Streamlit
-.streamlit/ 
+.streamlit/
+!.streamlit/config.toml 
