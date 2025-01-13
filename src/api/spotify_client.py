@@ -1,16 +1,8 @@
 from typing import List, Dict, Any
 import spotipy
 from spotipy.oauth2 import SpotifyPKCE
-import os
-from dotenv import load_dotenv
-from tqdm import tqdm
 import time
-from datetime import datetime, timedelta
-import json
-import os.path
 import streamlit as st
-
-load_dotenv()
 
 class SpotifyClient:
     """Handles all Spotify API interactions."""
@@ -27,8 +19,10 @@ class SpotifyClient:
         
         # Use PKCE authentication
         auth_manager = SpotifyPKCE(
-            client_id="7ae66f7d8a4a428abb27996b87fb74be",  # This is public and safe to share
-            redirect_uri="http://localhost:8888/callback",
+            client_id=st.secrets["SPOTIPY_CLIENT_ID"] if "SPOTIPY_CLIENT_ID" in st.secrets 
+                else "7ae66f7d8a4a428abb27996b87fb74be",  # Fallback for local development
+            redirect_uri=st.secrets["SPOTIPY_REDIRECT_URI"] if "SPOTIPY_REDIRECT_URI" in st.secrets
+                else "http://localhost:8888/callback",  # Fallback for local development
             scope=self.scope,
             cache_path='.spotifycache'
         )
