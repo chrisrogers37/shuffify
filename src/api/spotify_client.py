@@ -74,6 +74,7 @@ class SpotifyClient:
                 </button>
             </a>
             ''', unsafe_allow_html=True)
+            
             st.stop()
             
         except Exception as e:
