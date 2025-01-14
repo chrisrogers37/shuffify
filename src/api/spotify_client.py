@@ -28,14 +28,14 @@ class SpotifyClient:
                 client_id=st.secrets["SPOTIPY_CLIENT_ID"],
                 redirect_uri=st.secrets["SPOTIPY_REDIRECT_URI"],
                 scope=self.scope,
-                open_browser=False  # Don't automatically open browser
+                open_browser=False
             )
             
             # Check for callback code in URL parameters
-            params = st.experimental_get_query_params()
+            params = st.query_params
             if 'code' in params:
                 # We have a callback code, exchange it for a token
-                token = auth_manager.get_access_token(params['code'][0])
+                token = auth_manager.get_access_token(params['code'])
                 self.sp = spotipy.Spotify(auth_manager=auth_manager)
                 user = self.sp.current_user()
                 st.success(f"Successfully connected as: {user['display_name']}")
@@ -43,27 +43,21 @@ class SpotifyClient:
             
             # No callback code, show auth button
             auth_url = auth_manager.get_authorize_url()
+            
+            # Create a more reliable auth link
             st.markdown("""
-            ### Spotify Authorization
-            Click below to connect your account:
+            ### Connect to Spotify
+            Click the button below to authorize access to your playlists.
             """)
             
-            # Use a link instead of JavaScript redirect
-            st.markdown(f'''
-            <a href="{auth_url}" target="_self" class="button">
-                <button style="
-                    background-color: #1DB954;
-                    color: white;
-                    padding: 12px 24px;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 16px;
-                ">
-                    Connect Spotify Account
-                </button>
-            </a>
-            ''', unsafe_allow_html=True)
+            st.link_button(
+                "Connect Spotify Account",
+                auth_url,
+                type="primary",
+                use_container_width=True
+            )
+            
+            st.info("You'll be redirected to Spotify to authorize the app.")
             st.stop()
             
         except Exception as e:
