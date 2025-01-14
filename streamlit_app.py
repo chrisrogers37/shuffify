@@ -32,7 +32,7 @@ def main():
     if not st.session_state.authenticated:
         st.markdown("""
         ### Welcome to Shuffify!
-        To get started, connect your Spotify account using the button below.
+        Connect your Spotify account to get started.
         """)
         
         try:
@@ -41,8 +41,7 @@ def main():
             st.rerun()
         except Exception as e:
             if "Authentication required" in str(e):
-                # Authentication is handled in SpotifyClient
-                pass
+                pass  # Auth UI is handled in SpotifyClient
             else:
                 st.error(f"Authentication failed: {str(e)}")
             return
