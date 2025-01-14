@@ -28,39 +28,49 @@ class SpotifyClient:
                 client_id=st.secrets["SPOTIPY_CLIENT_ID"],
                 redirect_uri=st.secrets["SPOTIPY_REDIRECT_URI"],
                 scope=self.scope,
-                open_browser=False  # Don't automatically open browser
+                open_browser=True
             )
             
-            # Check for callback code in URL parameters
-            params = st.experimental_get_query_params()
-            if 'code' in params:
-                # We have a callback code, exchange it for a token
-                token = auth_manager.get_access_token(params['code'][0])
-                self.sp = spotipy.Spotify(auth_manager=auth_manager)
-                user = self.sp.current_user()
-                st.success(f"Successfully connected as: {user['display_name']}")
-                return
+            # Initialize Spotify client
+            self.sp = spotipy.Spotify(auth_manager=auth_manager)
             
-            # No callback code, show auth button
+            # Verify authentication
+            user = self.sp.current_user()
+            st.success(f"Successfully connected as: {user['display_name']}")
+            
+        except spotipy.SpotifyOauthError:
+            # Show the nice Spotify button if auth is needed
+            auth_manager = SpotifyPKCE(
+                client_id=st.secrets["SPOTIPY_CLIENT_ID"],
+                redirect_uri=st.secrets["SPOTIPY_REDIRECT_URI"],
+                scope=self.scope,
+                open_browser=False
+            )
             auth_url = auth_manager.get_authorize_url()
-            st.markdown("""
-            ### Spotify Authorization
-            Click below to connect your account:
-            """)
             
-            # Use a link instead of JavaScript redirect
+            # Keep our nice button styling
             st.markdown(f'''
-            <a href="{auth_url}" target="_self" class="button">
+            <a href="{auth_url}" target="_self">
                 <button style="
                     background-color: #1DB954;
                     color: white;
                     padding: 12px 24px;
                     border: none;
-                    border-radius: 4px;
+                    border-radius: 24px;
                     cursor: pointer;
                     font-size: 16px;
+                    font-weight: bold;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 100%;
+                    max-width: 300px;
+                    margin: 0 auto;
                 ">
-                    Connect Spotify Account
+                    <svg style="margin-right: 8px;" width="24" height="24" viewBox="0 0 24 24" fill="white">
+                        <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                    </svg>
+                    Connect with Spotify
                 </button>
             </a>
             ''', unsafe_allow_html=True)
