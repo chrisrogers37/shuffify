@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Shuffify{% endblock %}</title>
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .spotify-green {
+            background-color: #1DB954;
+        }
+        .spotify-green-hover:hover {
+            background-color: #1ed760;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-black p-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <a href="{{ url_for('main.index') }}" class="text-white text-2xl font-bold flex items-center">
+                🎵 Shuffify
+            </a>
+            {% if session.get('spotify_token') %}
+            <a href="{{ url_for('main.logout') }}" 
+               class="text-white hover:text-gray-300 transition duration-150">
+                Logout
+            </a>
+            {% endif %}
+        </div>
+    </nav>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="container mx-auto mt-4">
+                {% for category, message in messages %}
+                    <div class="p-4 mb-4 rounded-lg {% if category == 'error' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Main Content -->
+    <main class="container mx-auto py-8 px-4">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-4 mt-auto">
+        <div class="container mx-auto text-center">
+            <p>Built with ❤️ using Flask and Spotify API</p>
+        </div>
+    </footer>
+</body>
+</html> 
