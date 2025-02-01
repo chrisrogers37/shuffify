@@ -1,6 +1,5 @@
 # Python
 __pycache__/
-.pyc
 *.py[cod]
 *$py.class
 *.so
@@ -33,14 +32,30 @@ env/
 *.swo
 .DS_Store
 
-# Spotify specific
-.spotifycache
-.spotify_cache
-.cache
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Flask
+instance/
+.webassets-cache
+.flask_session/
 
 # Logs
 *.log
+logs/
 
-# Streamlit
-.streamlit/
-!.streamlit/config.toml 
+# Docker
+.docker/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Spotify specific
+.cache-*
+.spotify_cache
+.cache 

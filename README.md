@@ -1,6 +1,6 @@
 # Shuffify
 
-A modern web application built with Streamlit that lets you intelligently shuffle your Spotify playlists while keeping selected tracks in place.
+A modern web application built with Flask that lets you intelligently shuffle your Spotify playlists while keeping selected tracks in place.
 
 ## Features
 - 🎵 Shuffle any playlist you own or can edit
@@ -12,7 +12,7 @@ A modern web application built with Streamlit that lets you intelligently shuffl
 - 📱 Responsive design that works on all devices
 
 ## Prerequisites
-- Python 3.8 or higher
+- Python 3.9 or higher
 - Spotify Developer Account
 - Registered Spotify Application
 
@@ -38,46 +38,55 @@ pip install -r requirements.txt
 4. Set up your Spotify Developer credentials:
    - Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
    - Create a new application
-   - Add `http://localhost:8501/` as a redirect URI
-   - Copy your Client ID
+   - Add `http://localhost:8000/callback` as a redirect URI
+   - Copy your Client ID and Client Secret
 
-5. Configure Streamlit secrets:
-   - Create `.streamlit/secrets.toml` with your Spotify credentials:
-   ```toml
-   SPOTIPY_CLIENT_ID = "your-client-id"
-   SPOTIPY_REDIRECT_URI = "http://localhost:8501/"
+5. Configure environment variables:
+   - Copy `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
    ```
+   - Edit `.env` with your Spotify credentials and a secure secret key
 
 6. Run the application:
 ```bash
-streamlit run streamlit_app.py
+# Development mode
+flask run --port=8000
+
+# Or using Docker
+docker-compose up --build
 ```
 
 ## Usage
 
-1. Open the application in your browser (typically http://localhost:8501)
+1. Open the application in your browser (http://localhost:8000)
 2. Click "Connect with Spotify" to authorize the application
 3. Select a playlist from your library
 4. Choose how many tracks (if any) to keep in their original position
-5. Click "Shuffle Playlist" to randomize the order
-6. Use the "Re-shuffle" or "Restore Original Order" options as needed
+5. Click "Shuffle" to randomize the order
+6. Use the "Undo" option if you want to restore the original order
 
 ## Project Structure
 ```
 shuffify/
-├── streamlit_app.py        # Main Streamlit application
-├── src/
-│   ├── api/
+├── app/                    # Application package
+│   ├── __init__.py        # App initialization
+│   ├── routes.py          # URL routes and views
+│   ├── spotify/           # Spotify API handling
 │   │   ├── __init__.py
-│   │   └── spotify_client.py  # Spotify API handling
-│   └── utils/
-│       ├── __init__.py
-│       └── shuffify.py        # Shuffling logic
-├── .streamlit/
-│   ├── config.toml        # Streamlit configuration
-│   └── secrets.toml       # Spotify credentials (not tracked)
+│   │   └── client.py
+│   ├── utils/             # Utility functions
+│   │   ├── __init__.py
+│   │   └── shuffify.py
+│   └── templates/         # HTML templates
+│       ├── base.html
+│       ├── index.html
+│       └── dashboard.html
+├── config.py              # Configuration settings
 ├── requirements.txt       # Python dependencies
-└── .gitignore            # Git ignore rules
+├── run.py                # Application entry point
+├── Dockerfile            # Docker configuration
+└── docker-compose.yml    # Docker Compose configuration
 ```
 
 ## Development
@@ -89,15 +98,17 @@ shuffify/
 pip install -r requirements.txt
 ```
 
-2. Install pre-commit hooks:
+2. Run in development mode:
 ```bash
-pre-commit install
+export FLASK_ENV=development
+flask run --port=8000
 ```
 
-### Running Tests
+### Docker Development
 
+Run with Docker Compose for a containerized development environment:
 ```bash
-pytest
+docker-compose up --build
 ```
 
 ### Code Style
@@ -106,6 +117,30 @@ This project follows PEP 8 guidelines. We use:
 - Black for code formatting
 - isort for import sorting
 - flake8 for linting
+
+## Deployment
+
+### Digital Ocean App Platform
+
+1. Fork this repository to your GitHub account
+2. Create a new app in Digital Ocean App Platform
+3. Connect your GitHub repository
+4. Configure environment variables:
+   - `FLASK_ENV=production`
+   - `SPOTIFY_CLIENT_ID`
+   - `SPOTIFY_CLIENT_SECRET`
+   - `SPOTIFY_REDIRECT_URI` (your app's URL + /callback)
+   - `SECRET_KEY`
+5. Deploy!
+
+### Manual Deployment
+
+The application includes a Dockerfile for easy deployment to any container platform:
+
+```bash
+docker build -t shuffify .
+docker run -p 8000:8000 --env-file .env shuffify
+```
 
 ## Future Enhancements
 
@@ -134,6 +169,7 @@ MIT License - See [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 
-- Built with [Streamlit](https://streamlit.io/)
+- Built with [Flask](https://flask.palletsprojects.com/)
 - Powered by [Spotify Web API](https://developer.spotify.com/documentation/web-api/)
-- Uses [Spotipy](https://spotipy.readthedocs.io/) for Spotify API interactions 
+- Uses [Spotipy](https://spotipy.readthedocs.io/) for Spotify API interactions
+- Styled with [Tailwind CSS](https://tailwindcss.com/) 
