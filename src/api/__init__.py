@@ -1,3 +1,0 @@
-"""
-Spotify API client implementations.
-""" 
