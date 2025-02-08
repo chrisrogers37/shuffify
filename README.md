@@ -123,24 +123,59 @@ This project follows PEP 8 guidelines. We use:
 ### Digital Ocean App Platform
 
 1. Fork this repository to your GitHub account
-2. Create a new app in Digital Ocean App Platform
-3. Connect your GitHub repository
+
+2. Create a new app in Digital Ocean App Platform:
+   - Go to [Digital Ocean Apps](https://cloud.digitalocean.com/apps)
+   - Click "Create App"
+   - Select GitHub and connect your forked repository
+   - Choose the branch you want to deploy (usually `main`)
+
+3. Configure the app:
+   - Select "Web Service"
+   - Keep the Dockerfile deployment settings
+   - Set HTTP port to 8000
+
 4. Configure environment variables:
-   - `FLASK_ENV=production`
-   - `SPOTIFY_CLIENT_ID`
-   - `SPOTIFY_CLIENT_SECRET`
-   - `SPOTIFY_REDIRECT_URI` (your app's URL + /callback)
-   - `SECRET_KEY`
-5. Deploy!
+   ```
+   FLASK_ENV=production
+   SPOTIFY_CLIENT_ID=your-spotify-client-id
+   SPOTIFY_CLIENT_SECRET=your-spotify-client-secret
+   SPOTIFY_REDIRECT_URI=https://your-app-name.ondigitalocean.app/callback
+   SECRET_KEY=your-secure-secret-key
+   ```
 
-### Manual Deployment
+5. Update Spotify App Settings:
+   - Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
+   - Select your app
+   - Add `https://your-app-name.ondigitalocean.app/callback` to Redirect URIs
+   - Save changes
 
-The application includes a Dockerfile for easy deployment to any container platform:
+6. Deploy the app:
+   - Click "Launch App"
+   - Wait for the build and deployment to complete
+   - Your app will be available at `https://your-app-name.ondigitalocean.app`
 
-```bash
-docker build -t shuffify .
-docker run -p 8000:8000 --env-file .env shuffify
-```
+### Monitoring and Maintenance
+
+1. View logs in Digital Ocean App Platform:
+   - Go to your app's overview
+   - Click "Components" tab
+   - Select your web service
+   - View real-time logs
+
+2. Set up alerts:
+   - Configure alert policies for CPU and memory usage
+   - Set up notification preferences
+
+3. Update the application:
+   - Push changes to your GitHub repository
+   - Digital Ocean will automatically rebuild and deploy
+
+4. Troubleshooting:
+   - Check application logs for errors
+   - Verify environment variables are set correctly
+   - Ensure Spotify API credentials are valid
+   - Check Digital Ocean status page for service issues
 
 ## Future Enhancements
 
