@@ -7,82 +7,66 @@ from spotipy.exceptions import SpotifyException
 logger = logging.getLogger(__name__)
 
 def shuffle_playlist(
-    sp: Spotify,
-    playlist_id: str,
+    sp: Optional[Spotify] = None,
+    playlist_id: Optional[str] = None,
     keep_first: int = 0,
-    smart_shuffle: bool = False
-) -> Optional[List[str]]:
+    track_list: Optional[List[str]] = None
+) -> List[str]:
     """
-    Shuffle a Spotify playlist while optionally keeping the first N tracks in place.
+    Shuffle a playlist while optionally keeping the first N tracks in place.
+    Can work with either a Spotify client and playlist ID, or a direct list of track URIs.
     
     Args:
-        sp: Spotify client instance
-        playlist_id: ID of the playlist to shuffle
+        sp: Optional Spotify client instance
+        playlist_id: Optional ID of the playlist to shuffle
         keep_first: Number of tracks to keep in their original position (default: 0)
-        smart_shuffle: Whether to use smart shuffling considering track features (default: False)
-    
+        track_list: Optional list of track URIs to shuffle directly
+        
     Returns:
-        List of track URIs in their new order, or None if an error occurs
+        List of track URIs in their new order
     """
     try:
-        # Get all tracks from the playlist
-        results = sp.playlist_items(playlist_id)
-        tracks = results['items']
-        
-        # Get all tracks if there are more (pagination)
-        track_count = len(tracks)
-        total_tracks = sp.playlist(playlist_id)['tracks']['total']
-        
-        logger.info(f"Fetching {total_tracks} tracks from playlist {playlist_id}")
-        
-        # Fetch all tracks
-        while results['next']:
-            results = sp.next(results)
-            tracks.extend(results['items'])
-            track_count += len(results['items'])
-            logger.info(f"Loaded {track_count}/{total_tracks} tracks")
-        
-        # Extract track URIs and validate
-        track_uris: List[str] = []
-        
-        # Process tracks
-        for item in tracks:
-            if item.get('track'):
-                track_uris.append(item['track']['uri'])
-        
-        try:
-            # Handle the shuffling
-            logger.info("Shuffling tracks...")
-            if keep_first > 0:
-                kept_tracks = track_uris[:keep_first]
-                to_shuffle = track_uris[keep_first:]
+        # Handle empty input
+        if not track_list and not (sp and playlist_id):
+            return []
+            
+        # Get tracks if not provided directly
+        if not track_list:
+            try:
+                results = sp.playlist_items(playlist_id)
+                tracks = []
                 
-                if smart_shuffle:
-                    shuffled_tracks = smart_shuffle_tracks(sp, to_shuffle)
-                else:
-                    random.shuffle(to_shuffle)
-                    shuffled_tracks = to_shuffle
+                while results:
+                    tracks.extend([
+                        item['track']['uri'] for item in results['items']
+                        if item.get('track', {}).get('uri')
+                    ])
+                    results = sp.next(results) if results['next'] else None
                     
-                track_uris = kept_tracks + shuffled_tracks
-            else:
-                if smart_shuffle:
-                    track_uris = smart_shuffle_tracks(sp, track_uris)
-                else:
-                    random.shuffle(track_uris)
-            
-            logger.info(f"Successfully shuffled {len(track_uris)} tracks")
-            return track_uris
+                track_list = tracks
                 
-        except Exception as e:
-            logger.error(f"Error during shuffle operation: {str(e)}")
-            raise e
+            except Exception as e:
+                logger.error(f"Error fetching playlist tracks: {str(e)}")
+                return []
+        
+        # Handle single track case
+        if len(track_list) <= 1:
+            return track_list
             
-    except SpotifyException as e:
-        logger.error(f"Spotify API error during shuffle: {str(e)}")
-        return None
+        # Perform the shuffle
+        if keep_first > 0:
+            kept_tracks = track_list[:keep_first]
+            to_shuffle = track_list[keep_first:]
+            random.shuffle(to_shuffle)
+            return kept_tracks + to_shuffle
+        else:
+            result = track_list.copy()
+            random.shuffle(result)
+            return result
+            
     except Exception as e:
-        logger.error(f"Unexpected error during shuffle: {str(e)}")
-        return None
+        logger.error(f"Error during shuffle operation: {str(e)}")
+        return []
 
 def smart_shuffle_tracks(sp: Spotify, track_uris: List[str]) -> List[str]:
     """
