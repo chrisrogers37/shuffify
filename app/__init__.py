@@ -1,4 +1,5 @@
 import os
+import sys
 import logging
 from flask import Flask
 from flask_session import Session
@@ -16,6 +17,7 @@ def create_app(config_name=None):
     logger.debug(f"Creating app with config: {config_name}")
     logger.debug(f"Current directory: {os.getcwd()}")
     logger.debug(f"Directory contents: {os.listdir('.')}")
+    logger.debug(f"App directory contents: {os.listdir('app')}")
     
     app = Flask(__name__)
     
@@ -30,11 +32,12 @@ def create_app(config_name=None):
     
     # Register blueprints
     try:
-        from .routes import main as main_blueprint
+        from app.routes import main as main_blueprint
         app.register_blueprint(main_blueprint)
         logger.debug("Successfully registered main blueprint")
     except Exception as e:
         logger.error(f"Error registering blueprint: {str(e)}")
+        logger.error(f"Python path: {sys.path}")
         raise
     
     return app 
