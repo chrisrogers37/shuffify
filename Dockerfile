@@ -41,22 +41,24 @@ ENV FLASK_APP=run.py
 ENV FLASK_ENV=production
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
+ENV PORT=8080
 
 # Create a startup script
 RUN echo '#!/bin/sh\n\
 export PYTHONPATH=/app\n\
-echo "Current directory: $(pwd)"\n\
-echo "Python path: $PYTHONPATH"\n\
-echo "Directory contents:"\n\
-ls -la\n\
-echo "App directory contents:"\n\
-ls -la app/\n\
-echo "Starting gunicorn..."\n\
-exec gunicorn --bind 0.0.0.0:8000 --log-level debug --preload run:app\n\
+export PORT=8080\n\
+echo "Starting gunicorn on port $PORT..."\n\
+exec gunicorn \
+    --bind 0.0.0.0:$PORT \
+    --log-level debug \
+    --timeout 120 \
+    --workers 2 \
+    --preload \
+    run:app\n\
 ' > /app/start.sh && chmod +x /app/start.sh
 
-# Expose port
-EXPOSE 8000
+# Expose the correct port
+EXPOSE 8080
 
 # Run the startup script
 CMD ["/app/start.sh"] 
