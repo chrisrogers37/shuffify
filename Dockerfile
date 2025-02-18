@@ -17,18 +17,25 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Install the package in development mode
-RUN pip install -e .
+# Debug: Print directory structure and contents before install
+RUN echo "Directory structure before install:" && \
+    tree -a -I "venv|__pycache__|*.pyc|.git|.env|.cache*"
 
-# Debug: Print directory structure and contents
-RUN echo "Directory structure:" && \
+# Install the package in development mode and verify installation
+RUN pip install -e . && \
+    pip list | grep shuffify
+
+# Debug: Print directory structure and contents after install
+RUN echo "Directory structure after install:" && \
     tree -a -I "venv|__pycache__|*.pyc|.git|.env|.cache*" && \
     echo "App directory contents:" && \
     ls -la app/ && \
     echo "Utils directory contents:" && \
     ls -la app/utils/ && \
     echo "Python path:" && \
-    python -c "import sys; print('\n'.join(sys.path))"
+    PYTHONPATH=/app python -c "import sys; print('\n'.join(sys.path))" && \
+    echo "Testing imports..." && \
+    PYTHONPATH=/app python -c "import app; from app.utils.shuffify import shuffle_playlist; print('Successfully imported app and shuffle_playlist')"
 
 # Create directory for Flask sessions
 RUN mkdir -p .flask_session
@@ -39,11 +46,8 @@ ENV FLASK_ENV=production
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
-# Test imports
-RUN python -c "from app.utils.shuffify import shuffle_playlist; print('Successfully imported shuffle_playlist')"
-
 # Expose port
 EXPOSE 8000
 
 # Run gunicorn with debug logging
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--log-level", "debug", "run:app"] 
+CMD ["sh", "-c", "PYTHONPATH=/app exec gunicorn --bind 0.0.0.0:8000 --log-level debug run:app"] 
