@@ -7,6 +7,7 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
+    tree \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first to leverage Docker cache
@@ -16,8 +17,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Install the application package
-RUN pip install -e .
+# Debug: Print directory structure
+RUN echo "Directory structure:" && \
+    tree -a -I "venv|__pycache__|*.pyc|.git|.env|.cache*" && \
+    echo "Python path:" && \
+    python -c "import sys; print('\n'.join(sys.path))"
 
 # Create directory for Flask sessions
 RUN mkdir -p .flask_session

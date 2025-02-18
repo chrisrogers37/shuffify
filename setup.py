@@ -3,7 +3,8 @@ from setuptools import setup, find_packages
 setup(
     name="shuffify",
     version="1.0.0",
-    packages=find_packages(),
+    packages=find_packages(include=['app', 'app.*']),
+    package_dir={'': '.'},
     include_package_data=True,
     install_requires=[
         'Flask>=2.3.3',
