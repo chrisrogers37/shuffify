@@ -16,6 +16,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Install the application package
+RUN pip install -e .
+
 # Create directory for Flask sessions
 RUN mkdir -p .flask_session
 
@@ -23,6 +26,7 @@ RUN mkdir -p .flask_session
 ENV FLASK_APP=run.py
 ENV FLASK_ENV=production
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
 # Expose port
 EXPOSE 8000
