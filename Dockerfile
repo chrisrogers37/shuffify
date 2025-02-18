@@ -17,9 +17,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Debug: Print directory structure
+# Debug: Print directory structure and contents
 RUN echo "Directory structure:" && \
     tree -a -I "venv|__pycache__|*.pyc|.git|.env|.cache*" && \
+    echo "App directory contents:" && \
+    ls -la app/ && \
+    echo "Utils directory contents:" && \
+    ls -la app/utils/ && \
     echo "Python path:" && \
     python -c "import sys; print('\n'.join(sys.path))"
 
@@ -32,8 +36,11 @@ ENV FLASK_ENV=production
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
+# Test imports
+RUN python -c "from app.utils.shuffify import shuffle_playlist; print('Successfully imported shuffle_playlist')"
+
 # Expose port
 EXPOSE 8000
 
-# Run gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "run:app"] 
+# Run gunicorn with debug logging
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--log-level", "debug", "run:app"] 

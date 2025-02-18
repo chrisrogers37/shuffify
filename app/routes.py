@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, session, redirect, url_for, request, flash
-from .spotify.client import SpotifyClient
-from .utils.shuffify import shuffle_playlist
+from app.spotify.client import SpotifyClient
+from app.utils.shuffify import shuffle_playlist
 import logging
 
 logger = logging.getLogger(__name__)
