@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, session, redirect, url_for, request, flash
+from flask import Blueprint, render_template, session, redirect, url_for, request, flash, jsonify
 from app.spotify.client import SpotifyClient
 from app.utils.shuffify import shuffle_playlist
 import logging
@@ -110,4 +110,9 @@ def undo(playlist_id):
         logger.error(f"Error undoing shuffle: {str(e)}")
         flash('An error occurred while restoring the playlist.', 'error')
     
-    return redirect(url_for('main.index')) 
+    return redirect(url_for('main.index'))
+
+@main.route('/health')
+def health_check():
+    """Health check endpoint for Digital Ocean."""
+    return jsonify({"status": "healthy"}), 200 
