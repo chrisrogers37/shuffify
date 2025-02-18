@@ -1,0 +1,17 @@
+from setuptools import setup, find_packages
+
+setup(
+    name="shuffify",
+    version="1.0.0",
+    packages=find_packages(),
+    include_package_data=True,
+    install_requires=[
+        'Flask>=2.3.3',
+        'spotipy>=2.23.0',
+        'python-dotenv>=1.0.0',
+        'gunicorn>=21.2.0',
+        'Flask-Session>=0.5.0',
+        'requests>=2.31.0',
+        'python-jose>=3.3.0',
+    ],
+) 
