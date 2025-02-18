@@ -17,6 +17,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Install the package in development mode
+RUN pip install -e .
+
 # Debug: Print directory structure and contents
 RUN echo "Directory structure:" && \
     tree -a -I "venv|__pycache__|*.pyc|.git|.env|.cache*" && \
