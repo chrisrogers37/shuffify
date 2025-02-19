@@ -24,11 +24,11 @@ RUN mkdir -p .flask_session
 ENV FLASK_ENV=production
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
-ENV PORT=8080
+ENV PORT=8000
 
 # Create a startup script
 RUN echo '#!/bin/sh\n\
-export PORT=8080\n\
+export PORT=8000\n\
 exec gunicorn \
     --bind 0.0.0.0:$PORT \
     --log-level debug \
@@ -39,7 +39,7 @@ exec gunicorn \
 ' > /app/start.sh && chmod +x /app/start.sh
 
 # Expose the correct port
-EXPOSE 8080
+EXPOSE 8000
 
 # Run the startup script
 CMD ["/app/start.sh"] 
