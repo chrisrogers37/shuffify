@@ -36,10 +36,13 @@ class SpotifyClient:
             
             if token:
                 auth_manager.token = token
-            
-            self.sp = spotipy.Spotify(auth_manager=auth_manager)
-            # Verify the connection
-            self.sp.current_user()
+                self.sp = spotipy.Spotify(auth_manager=auth_manager)
+                # Verify the connection
+                self.sp.current_user()
+            else:
+                # If no token, just initialize the auth manager
+                self.sp = None
+                
             logger.info("Successfully initialized Spotify client")
             
         except Exception as e:
@@ -68,9 +71,12 @@ class SpotifyClient:
                 client_id=current_app.config['SPOTIFY_CLIENT_ID'],
                 client_secret=current_app.config['SPOTIFY_CLIENT_SECRET'],
                 redirect_uri=current_app.config['SPOTIFY_REDIRECT_URI'],
-                scope=self.scope
+                scope=self.scope,
+                open_browser=False
             )
-            token = auth_manager.get_access_token(code)
+            token = auth_manager.get_access_token(code, as_dict=True, check_cache=False)
+            # Initialize client with new token
+            self._initialize_client(token)
             logger.info("Successfully obtained access token")
             return token
         except Exception as e:

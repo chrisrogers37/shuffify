@@ -25,23 +25,40 @@ def index():
 
 @main.route('/login')
 def login():
-    """Initialize Spotify OAuth flow."""
-    spotify = SpotifyClient()
-    auth_url = spotify.get_auth_url()
-    return redirect(auth_url)
+    """Handle login with Spotify OAuth."""
+    try:
+        spotify = SpotifyClient()
+        auth_url = spotify.get_auth_url()
+        return redirect(auth_url)
+    except Exception as e:
+        logger.error(f"Error during login: {str(e)}")
+        flash("An error occurred during login. Please try again.", "error")
+        return redirect(url_for('main.index'))
 
 @main.route('/callback')
 def callback():
     """Handle Spotify OAuth callback."""
+    error = request.args.get('error')
+    code = request.args.get('code')
+    
+    if error:
+        logger.error(f"Error during Spotify callback: {error}")
+        flash("Error during Spotify authentication. Please try again.", "error")
+        return redirect(url_for('main.index'))
+        
+    if not code:
+        logger.error("No code received from Spotify")
+        flash("No authorization code received. Please try again.", "error")
+        return redirect(url_for('main.index'))
+    
     try:
-        code = request.args.get('code')
         spotify = SpotifyClient()
         token = spotify.get_token(code)
         session['spotify_token'] = token
         return redirect(url_for('main.index'))
     except Exception as e:
-        logger.error(f"Error during authentication: {str(e)}")
-        flash('Authentication failed. Please try again.', 'error')
+        logger.error(f"Error during callback: {str(e)}")
+        flash("An error occurred during authentication. Please try again.", "error")
         return redirect(url_for('main.index'))
 
 @main.route('/logout')
