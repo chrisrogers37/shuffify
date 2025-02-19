@@ -59,5 +59,3 @@ htmlcov/
 .cache-*
 .spotify_cache
 .cache
-
-local_dev.py

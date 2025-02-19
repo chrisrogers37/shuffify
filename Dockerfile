@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only necessary files
-COPY requirements.txt setup.py MANIFEST.in ./
+COPY requirements.txt setup.py MANIFEST.in run.py ./
 COPY app app/
 
 # Install dependencies and package
@@ -35,7 +35,7 @@ exec gunicorn \
     --timeout 120 \
     --workers 2 \
     --preload \
-    "app:application"\n\
+    run:app\n\
 ' > /app/start.sh && chmod +x /app/start.sh
 
 # Expose the correct port
