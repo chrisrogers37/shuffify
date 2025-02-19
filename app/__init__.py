@@ -1,5 +1,4 @@
 import os
-import sys
 import logging
 from flask import Flask
 from flask_session import Session
@@ -10,14 +9,8 @@ logger = logging.getLogger(__name__)
 
 def create_app(config_name=None):
     """Create and configure the Flask application."""
-    
     if config_name is None:
-        config_name = os.getenv('FLASK_ENV', 'development')
-    
-    logger.debug(f"Creating app with config: {config_name}")
-    logger.debug(f"Current directory: {os.getcwd()}")
-    logger.debug(f"Directory contents: {os.listdir('.')}")
-    logger.debug(f"App directory contents: {os.listdir('app')}")
+        config_name = os.getenv('FLASK_ENV', 'production')
     
     app = Flask(__name__)
     
@@ -31,13 +24,10 @@ def create_app(config_name=None):
     os.makedirs(app.config['SESSION_FILE_DIR'], exist_ok=True)
     
     # Register blueprints
-    try:
-        from app.routes import main as main_blueprint
-        app.register_blueprint(main_blueprint)
-        logger.debug("Successfully registered main blueprint")
-    except Exception as e:
-        logger.error(f"Error registering blueprint: {str(e)}")
-        logger.error(f"Python path: {sys.path}")
-        raise
+    from app.routes import main as main_blueprint
+    app.register_blueprint(main_blueprint)
     
-    return app 
+    return app
+
+# Create the application instance
+application = create_app() 

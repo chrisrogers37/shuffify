@@ -58,4 +58,6 @@ htmlcov/
 # Spotify specific
 .cache-*
 .spotify_cache
-.cache 
+.cache
+
+local_dev.py
