@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only necessary files
-COPY requirements.txt setup.py MANIFEST.in run.py ./
+COPY requirements.txt setup.py MANIFEST.in run.py config.py ./
 COPY app app/
 
 # Install dependencies and package
@@ -28,7 +28,10 @@ ENV PORT=8000
 
 # Create a startup script
 RUN echo '#!/bin/sh\n\
-export PORT=8000\n\
+echo "Environment variables:"\n\
+env | grep PORT\n\
+export PORT=${PORT:-8000}\n\
+echo "Using port: $PORT"\n\
 exec gunicorn \
     --bind 0.0.0.0:$PORT \
     --log-level debug \
