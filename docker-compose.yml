@@ -4,18 +4,15 @@ services:
   web:
     build: .
     ports:
-      - "8080:8080"
+      - "8000:8000"
     environment:
       - FLASK_ENV=development
       - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID}
       - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET}
-      - SPOTIFY_REDIRECT_URI=${SPOTIFY_REDIRECT_URI}
+      - SPOTIFY_REDIRECT_URI=http://localhost:8000/callback
       - SECRET_KEY=${SECRET_KEY}
     volumes:
-      - .:/app
       - flask_session:/app/.flask_session
-    # Override the production command for development
-    command: /bin/sh -c "pip install -e . && gunicorn --bind 0.0.0.0:8080 --log-level debug --reload 'app:application'"
 
 volumes:
   flask_session: 
