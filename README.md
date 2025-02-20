@@ -1,6 +1,6 @@
 # Shuffify
 
-A modern web application built with Flask that lets you intelligently shuffle your Spotify playlists while keeping selected tracks in place.
+A modern web application built with Flask that lets you intelligently shuffle your Spotify playlists while keeping selected tracks in place. Try it out at [shuffify.app](https://orca-app-6xudp.ondigitalocean.app/)!
 
 ## Features
 - 🎵 Shuffle any playlist you own or can edit
@@ -11,62 +11,18 @@ A modern web application built with Flask that lets you intelligently shuffle yo
 - 🎨 Clean, modern Spotify-themed UI
 - 📱 Responsive design that works on all devices
 
-## Prerequisites
-- Python 3.9 or higher
-- Spotify Developer Account
-- Registered Spotify Application
+## Tech Stack
+- **Backend**: Flask (Python)
+- **Frontend**: Tailwind CSS
+- **Authentication**: Spotify OAuth
+- **Deployment**: Digital Ocean App Platform
+- **Container**: Docker
+- **WSGI Server**: Gunicorn
 
-## Quick Start
+## Architecture
 
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/shuffify.git
-cd shuffify
-```
+The application follows a clean architecture pattern with the following components:
 
-2. Create and activate a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Set up your Spotify Developer credentials:
-   - Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
-   - Create a new application
-   - Add `http://localhost:8000/callback` as a redirect URI
-   - Copy your Client ID and Client Secret
-
-5. Configure environment variables:
-   - Copy `.env.example` to `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-   - Edit `.env` with your Spotify credentials and a secure secret key
-
-6. Run the application:
-```bash
-# Development mode
-flask run --port=8000
-
-# Or using Docker
-docker-compose up --build
-```
-
-## Usage
-
-1. Open the application in your browser (http://localhost:8000)
-2. Click "Connect with Spotify" to authorize the application
-3. Select a playlist from your library
-4. Choose how many tracks (if any) to keep in their original position
-5. Click "Shuffle" to randomize the order
-6. Use the "Undo" option if you want to restore the original order
-
-## Project Structure
 ```
 shuffify/
 ├── app/                    # Application package
@@ -74,108 +30,21 @@ shuffify/
 │   ├── routes.py          # URL routes and views
 │   ├── spotify/           # Spotify API handling
 │   │   ├── __init__.py
-│   │   └── client.py
+│   │   └── client.py      # Spotify client wrapper
 │   ├── utils/             # Utility functions
 │   │   ├── __init__.py
-│   │   └── shuffify.py
+│   │   └── shuffify.py    # Playlist shuffling logic
 │   └── templates/         # HTML templates
-│       ├── base.html
-│       ├── index.html
-│       └── dashboard.html
 ├── config.py              # Configuration settings
-├── requirements.txt       # Python dependencies
-├── run.py                # Application entry point
-├── Dockerfile            # Docker configuration
-└── docker-compose.yml    # Docker Compose configuration
+└── run.py                # WSGI entry point
 ```
 
-## Development
+## Security
 
-### Setting Up Development Environment
-
-1. Install development dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-2. Run in development mode:
-```bash
-export FLASK_ENV=development
-flask run --port=8000
-```
-
-### Docker Development
-
-Run with Docker Compose for a containerized development environment:
-```bash
-docker-compose up --build
-```
-
-### Code Style
-
-This project follows PEP 8 guidelines. We use:
-- Black for code formatting
-- isort for import sorting
-- flake8 for linting
-
-## Deployment
-
-### Digital Ocean App Platform
-
-1. Fork this repository to your GitHub account
-
-2. Create a new app in Digital Ocean App Platform:
-   - Go to [Digital Ocean Apps](https://cloud.digitalocean.com/apps)
-   - Click "Create App"
-   - Select GitHub and connect your forked repository
-   - Choose the branch you want to deploy (usually `main`)
-
-3. Configure the app:
-   - Select "Web Service"
-   - Keep the Dockerfile deployment settings
-   - Set HTTP port to 8000
-
-4. Configure environment variables:
-   ```
-   FLASK_ENV=production
-   SPOTIFY_CLIENT_ID=your-spotify-client-id
-   SPOTIFY_CLIENT_SECRET=your-spotify-client-secret
-   SPOTIFY_REDIRECT_URI=https://your-app-name.ondigitalocean.app/callback
-   SECRET_KEY=your-secure-secret-key
-   ```
-
-5. Update Spotify App Settings:
-   - Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
-   - Select your app
-   - Add `https://your-app-name.ondigitalocean.app/callback` to Redirect URIs
-   - Save changes
-
-6. Deploy the app:
-   - Click "Launch App"
-   - Wait for the build and deployment to complete
-   - Your app will be available at `https://your-app-name.ondigitalocean.app`
-
-### Monitoring and Maintenance
-
-1. View logs in Digital Ocean App Platform:
-   - Go to your app's overview
-   - Click "Components" tab
-   - Select your web service
-   - View real-time logs
-
-2. Set up alerts:
-   - Configure alert policies for CPU and memory usage
-   - Set up notification preferences
-
-3. Update the application:
-   - Push changes to your GitHub repository
-   - Digital Ocean will automatically rebuild and deploy
-
-4. Troubleshooting:
-   - Check application logs for errors
-   - Verify environment variables are set correctly
-   - Ensure Spotify API credentials are valid
-   - Check Digital Ocean status page for service issues
+- Industry-standard security practices
+- Secure session management
+- HTTPS encryption
+- OAuth 2.0 authentication
 
 ## Future Enhancements
 
@@ -189,18 +58,6 @@ This project follows PEP 8 guidelines. We use:
 - [ ] Batch operations
 - [ ] Shuffle presets
 - [ ] Export/import playlist orders
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
-
-## License
-
-MIT License - See [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 
