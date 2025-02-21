@@ -1,6 +1,6 @@
 # Shuffify
 
-A modern web application built with Flask that lets you intelligently shuffle your Spotify playlists while keeping selected tracks in place. Try it out at [shuffify.app](https://orca-app-6xudp.ondigitalocean.app/)!
+A modern web application built with Flask that lets you intelligently shuffle your Spotify playlists while keeping selected tracks in place.
 
 ## Features
 - 🎵 Shuffle any playlist you own or can edit
