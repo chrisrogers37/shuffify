@@ -32,17 +32,17 @@
     </nav>
 
     <!-- Flash Messages -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            <div class="container mx-auto mt-4">
+    <div id="flash-messages" class="container mx-auto mt-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
                 {% for category, message in messages %}
-                    <div class="p-4 mb-4 rounded-lg {% if category == 'error' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
+                    <div class="p-4 mb-4 rounded-lg {% if category == 'error' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %} fade-out">
                         {{ message }}
                     </div>
                 {% endfor %}
-            </div>
-        {% endif %}
-    {% endwith %}
+            {% endif %}
+        {% endwith %}
+    </div>
 
     <!-- Main Content -->
     <main class="container mx-auto py-8 px-4">
@@ -51,9 +51,54 @@
 
     <!-- Footer -->
     <footer class="bg-gray-800 text-white py-4 mt-auto">
-        <div class="container mx-auto text-center">
-            <p>Built with ❤️ using Flask and Spotify API</p>
+        <div class="container mx-auto text-center text-sm">
+            <p>Built with Flask and Spotify API</p>
+            <p class="text-gray-400 mt-1">© {% now 'utc', '%Y' %} Shuffify. All rights reserved.</p>
         </div>
     </footer>
+
+    <!-- JavaScript for AJAX operations -->
+    <script>
+        function showFlashMessage(message, category) {
+            const flashContainer = document.getElementById('flash-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `p-4 mb-4 rounded-lg ${category === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'} fade-out`;
+            messageDiv.textContent = message;
+            flashContainer.appendChild(messageDiv);
+            
+            // Remove the message after 3 seconds
+            setTimeout(() => {
+                messageDiv.style.opacity = '0';
+                setTimeout(() => messageDiv.remove(), 300);
+            }, 3000);
+        }
+
+        async function handlePlaylistAction(formElement, action) {
+            try {
+                const formData = new FormData(formElement);
+                const response = await fetch(formElement.action, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+                
+                const result = await response.json();
+                showFlashMessage(result.message, result.category);
+                
+                if (result.success) {
+                    // Toggle undo button visibility
+                    const playlistId = formElement.getAttribute('data-playlist-id');
+                    const undoButton = document.getElementById(`undo-button-${playlistId}`);
+                    if (undoButton) {
+                        undoButton.style.display = action === 'shuffle' ? 'block' : 'none';
+                    }
+                }
+            } catch (error) {
+                showFlashMessage('An error occurred. Please try again.', 'error');
+            }
+        }
+    </script>
 </body>
 </html> 
