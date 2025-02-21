@@ -104,8 +104,12 @@ def shuffle(playlist_id):
 @main.route('/undo/<playlist_id>', methods=['POST'])
 def undo(playlist_id):
     """Restore playlist to its original state."""
-    if 'spotify_token' not in session or 'last_shuffle' not in session:
-        flash('No shuffle to undo.', 'error')
+    if 'spotify_token' not in session:
+        flash('Please log in first.', 'error')
+        return redirect(url_for('main.index'))
+        
+    if 'last_shuffle' not in session:
+        flash('No recent shuffle to undo.', 'error')
         return redirect(url_for('main.index'))
     
     try:
@@ -118,6 +122,7 @@ def undo(playlist_id):
         success = spotify.update_playlist_tracks(playlist_id, last_shuffle['original_tracks'])
         
         if success:
+            # Clear the last_shuffle from session after successful undo
             session.pop('last_shuffle', None)
             flash('Successfully restored original playlist order!', 'success')
         else:
