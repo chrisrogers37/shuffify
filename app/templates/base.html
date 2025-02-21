@@ -13,6 +13,13 @@
         .spotify-green-hover:hover {
             background-color: #1ed760;
         }
+        .fade-out {
+            opacity: 1;
+            transition: opacity 0.3s ease-in-out;
+        }
+        .fade-out.hiding {
+            opacity: 0;
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -32,11 +39,11 @@
     </nav>
 
     <!-- Flash Messages -->
-    <div id="flash-messages" class="container mx-auto mt-4">
+    <div id="flash-messages" class="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md px-4">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
-                {% for category, message in messages %}
-                    <div class="p-4 mb-4 rounded-lg {% if category == 'error' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %} fade-out">
+                {% for category, message in messages[-3:] %}
+                    <div class="p-4 mb-4 rounded-lg shadow-lg {% if category == 'error' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %} fade-out">
                         {{ message }}
                     </div>
                 {% endfor %}
@@ -53,7 +60,7 @@
     <footer class="bg-gray-800 text-white py-4 mt-auto">
         <div class="container mx-auto text-center text-sm">
             <p>Built with Flask and Spotify API</p>
-            <p class="text-gray-400 mt-1">© {% now 'utc', '%Y' %} Shuffify. All rights reserved.</p>
+            <p class="text-gray-400 mt-1">© {{ current_year }} Shuffify. All rights reserved.</p>
         </div>
     </footer>
 
@@ -62,13 +69,13 @@
         function showFlashMessage(message, category) {
             const flashContainer = document.getElementById('flash-messages');
             const messageDiv = document.createElement('div');
-            messageDiv.className = `p-4 mb-4 rounded-lg ${category === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'} fade-out`;
+            messageDiv.className = `p-4 mb-4 rounded-lg shadow-lg ${category === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'} fade-out`;
             messageDiv.textContent = message;
             flashContainer.appendChild(messageDiv);
             
-            // Remove the message after 3 seconds
+            // Remove the message after 3 seconds with fade
             setTimeout(() => {
-                messageDiv.style.opacity = '0';
+                messageDiv.classList.add('hiding');
                 setTimeout(() => messageDiv.remove(), 300);
             }, 3000);
         }
@@ -88,14 +95,23 @@
                 showFlashMessage(result.message, result.category);
                 
                 if (result.success) {
-                    // Toggle undo button visibility
                     const playlistId = formElement.getAttribute('data-playlist-id');
-                    const undoButton = document.getElementById(`undo-button-${playlistId}`);
-                    if (undoButton) {
-                        undoButton.style.display = action === 'shuffle' ? 'block' : 'none';
+                    const undoForm = document.getElementById(`undo-form-${playlistId}`);
+                    
+                    if (action === 'shuffle') {
+                        // After successful shuffle, show undo button
+                        if (undoForm) {
+                            undoForm.classList.remove('hidden');
+                        }
+                    } else if (action === 'undo') {
+                        // After successful undo, hide the undo form
+                        if (undoForm) {
+                            undoForm.classList.add('hidden');
+                        }
                     }
                 }
             } catch (error) {
+                console.error('Error:', error);
                 showFlashMessage('An error occurred. Please try again.', 'error');
             }
         }
