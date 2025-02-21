@@ -1,4 +1,5 @@
 import logging
+import traceback
 from typing import List, Dict, Any, Optional
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
@@ -12,16 +13,26 @@ class SpotifyClient:
     
     def __init__(self, token: Optional[Dict[str, Any]] = None) -> None:
         """Initialize the Spotify client with OAuth authentication."""
-        self.scope: str = " ".join([
-            "playlist-read-private",
-            "playlist-read-collaborative",
-            "playlist-modify-private",
-            "playlist-modify-public",
-            "user-read-private"
-        ])
-        
-        self.sp = None
-        self._initialize_client(token)
+        try:
+            logger.debug("Initializing SpotifyClient with token: %s", "Present" if token else "None")
+            logger.debug("Current app config: %s", {
+                k: v for k, v in current_app.config.items() 
+                if k in ['SPOTIFY_CLIENT_ID', 'SPOTIFY_REDIRECT_URI'] or k.startswith('SESSION_')
+            })
+            
+            self.scope: str = " ".join([
+                "playlist-read-private",
+                "playlist-read-collaborative",
+                "playlist-modify-private",
+                "playlist-modify-public",
+                "user-read-private"
+            ])
+            
+            self.sp = None
+            self._initialize_client(token)
+        except Exception as e:
+            logger.error("Error in SpotifyClient init: %s\nTraceback: %s", str(e), traceback.format_exc())
+            raise
     
     def _initialize_client(self, token: Optional[Dict[str, Any]] = None) -> None:
         """Initialize the Spotify client with the provided token or new authentication."""
@@ -35,18 +46,35 @@ class SpotifyClient:
             )
             
             if token:
+                logger.debug("Initializing with existing token")
+                # Validate token format
+                required_keys = ['access_token', 'token_type', 'expires_at']
+                if not all(key in token for key in required_keys):
+                    logger.error("Invalid token format")
+                    raise ValueError("Invalid token format")
+                    
+                # Check if token is expired
+                if token.get('expires_at', 0) < time.time():
+                    logger.error("Token is expired")
+                    raise ValueError("Token is expired")
+                    
                 auth_manager.token = token
                 self.sp = spotipy.Spotify(auth_manager=auth_manager)
-                # Verify the connection
-                self.sp.current_user()
+                
+                # Verify the connection with a lightweight API call
+                try:
+                    self.sp.current_user()
+                except Exception as e:
+                    logger.error("Failed to verify token: %s", str(e))
+                    raise ValueError("Invalid or expired token")
             else:
-                # If no token, just initialize the auth manager
+                logger.debug("Initializing without token")
                 self.sp = None
                 
             logger.info("Successfully initialized Spotify client")
             
         except Exception as e:
-            logger.error(f"Error initializing Spotify client: {str(e)}")
+            logger.error("Error initializing Spotify client: %s\nTraceback: %s", str(e), traceback.format_exc())
             raise
     
     def get_auth_url(self) -> str:
@@ -67,6 +95,7 @@ class SpotifyClient:
     def get_token(self, code: str) -> Dict[str, Any]:
         """Get access token from authorization code."""
         try:
+            logger.debug("Getting token for code: %s", code)
             auth_manager = SpotifyOAuth(
                 client_id=current_app.config['SPOTIFY_CLIENT_ID'],
                 client_secret=current_app.config['SPOTIFY_CLIENT_SECRET'],
@@ -74,13 +103,21 @@ class SpotifyClient:
                 scope=self.scope,
                 open_browser=False
             )
+            
+            logger.debug("Created auth manager, getting access token")
             token = auth_manager.get_access_token(code, as_dict=True, check_cache=False)
-            # Initialize client with new token
+            
+            if not token:
+                logger.error("No token returned from Spotify")
+                raise Exception("Failed to get access token from Spotify")
+                
+            logger.debug("Got token, initializing client")
             self._initialize_client(token)
             logger.info("Successfully obtained access token")
             return token
+            
         except Exception as e:
-            logger.error(f"Error getting token: {str(e)}")
+            logger.error("Error getting token: %s\nTraceback: %s", str(e), traceback.format_exc())
             raise
     
     def get_current_user(self) -> Dict[str, Any]:
