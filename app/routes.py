@@ -71,7 +71,7 @@ def logout():
 def shuffle(playlist_id):
     """Shuffle a playlist."""
     if 'spotify_token' not in session:
-        return redirect(url_for('main.index'))
+        return jsonify({'success': False, 'message': 'Please log in first.', 'category': 'error'})
     
     try:
         keep_first = int(request.form.get('keep_first', 0))
@@ -89,34 +89,57 @@ def shuffle(playlist_id):
         if shuffled_uris:
             success = spotify.update_playlist_tracks(playlist_id, shuffled_uris)
             if success:
-                flash('Playlist successfully shuffled!', 'success')
+                return jsonify({
+                    'success': True,
+                    'message': 'Playlist successfully shuffled!',
+                    'category': 'success'
+                })
             else:
-                flash('Failed to update playlist.', 'error')
+                return jsonify({
+                    'success': False,
+                    'message': 'Failed to update playlist.',
+                    'category': 'error'
+                })
         else:
-            flash('Failed to shuffle playlist.', 'error')
+            return jsonify({
+                'success': False,
+                'message': 'Failed to shuffle playlist.',
+                'category': 'error'
+            })
             
     except Exception as e:
         logger.error(f"Error shuffling playlist: {str(e)}")
-        flash('An error occurred while shuffling the playlist.', 'error')
-    
-    return redirect(url_for('main.index'))
+        return jsonify({
+            'success': False,
+            'message': 'An error occurred while shuffling the playlist.',
+            'category': 'error'
+        })
 
 @main.route('/undo/<playlist_id>', methods=['POST'])
 def undo(playlist_id):
     """Restore playlist to its original state."""
     if 'spotify_token' not in session:
-        flash('Please log in first.', 'error')
-        return redirect(url_for('main.index'))
+        return jsonify({
+            'success': False,
+            'message': 'Please log in first.',
+            'category': 'error'
+        })
         
     if 'last_shuffle' not in session:
-        flash('No recent shuffle to undo.', 'error')
-        return redirect(url_for('main.index'))
+        return jsonify({
+            'success': False,
+            'message': 'No recent shuffle to undo.',
+            'category': 'error'
+        })
     
     try:
         last_shuffle = session['last_shuffle']
         if last_shuffle['playlist_id'] != playlist_id:
-            flash('Cannot undo: playlist mismatch.', 'error')
-            return redirect(url_for('main.index'))
+            return jsonify({
+                'success': False,
+                'message': 'Cannot undo: playlist mismatch.',
+                'category': 'error'
+            })
         
         spotify = SpotifyClient(session['spotify_token'])
         success = spotify.update_playlist_tracks(playlist_id, last_shuffle['original_tracks'])
@@ -124,15 +147,25 @@ def undo(playlist_id):
         if success:
             # Clear the last_shuffle from session after successful undo
             session.pop('last_shuffle', None)
-            flash('Successfully restored original playlist order!', 'success')
+            return jsonify({
+                'success': True,
+                'message': 'Successfully restored original playlist order!',
+                'category': 'success'
+            })
         else:
-            flash('Failed to restore playlist.', 'error')
+            return jsonify({
+                'success': False,
+                'message': 'Failed to restore playlist.',
+                'category': 'error'
+            })
             
     except Exception as e:
         logger.error(f"Error undoing shuffle: {str(e)}")
-        flash('An error occurred while restoring the playlist.', 'error')
-    
-    return redirect(url_for('main.index'))
+        return jsonify({
+            'success': False,
+            'message': 'An error occurred while restoring the playlist.',
+            'category': 'error'
+        })
 
 @main.route('/health')
 def health_check():
