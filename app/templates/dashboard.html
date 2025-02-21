@@ -77,22 +77,21 @@
                                     class="flex-1 px-4 py-2 spotify-green spotify-green-hover text-white rounded-md transition duration-150">
                                 Shuffle
                             </button>
-                            
-                            {% if session.get('last_shuffle') and session.last_shuffle.playlist_id == playlist.id %}
-                            <button type="button" 
-                                    id="undo-button-{{ playlist.id }}"
-                                    onclick="handlePlaylistAction(document.getElementById('undo-form-{{ playlist.id }}'), 'undo')"
-                                    class="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition duration-150">
-                                Undo Last Shuffle
-                            </button>
-                            <form id="undo-form-{{ playlist.id }}" 
-                                  action="{{ url_for('main.undo', playlist_id=playlist.id) }}" 
-                                  method="POST" 
-                                  class="hidden"
-                                  data-playlist-id="{{ playlist.id }}">
-                            </form>
-                            {% endif %}
                         </div>
+                    </form>
+
+                    <!-- Separate Undo Form -->
+                    <form id="undo-form-{{ playlist.id }}" 
+                          action="{{ url_for('main.undo', playlist_id=playlist.id) }}" 
+                          method="POST" 
+                          data-playlist-id="{{ playlist.id }}"
+                          onsubmit="event.preventDefault(); handlePlaylistAction(this, 'undo');"
+                          class="mt-2 {% if not session.get('playlist_states', {}).get(playlist.id, {}).get('states', []) or session.get('playlist_states', {}).get(playlist.id, {}).get('current_index', 0) <= 0 %}hidden{% endif %}">
+                        <button type="submit" 
+                                id="undo-button-{{ playlist.id }}"
+                                class="w-full px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition duration-150">
+                            Undo Last Shuffle
+                        </button>
                     </form>
                 </div>
             </div>

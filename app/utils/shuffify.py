@@ -28,6 +28,7 @@ def shuffle_playlist(
     try:
         # Handle empty input
         if not track_list and not (sp and playlist_id):
+            logger.error("No tracks provided and no Spotify client/playlist ID to fetch tracks")
             return []
             
         # Get tracks if not provided directly
@@ -51,18 +52,22 @@ def shuffle_playlist(
         
         # Handle single track case
         if len(track_list) <= 1:
+            logger.debug("Track list has 1 or fewer tracks, returning as is")
             return track_list
             
         # Perform the shuffle
         if keep_first > 0:
+            logger.debug(f"Keeping first {keep_first} tracks in place")
             kept_tracks = track_list[:keep_first]
             to_shuffle = track_list[keep_first:]
             random.shuffle(to_shuffle)
-            return kept_tracks + to_shuffle
+            shuffled = kept_tracks + to_shuffle
         else:
-            result = track_list.copy()
-            random.shuffle(result)
-            return result
+            shuffled = track_list.copy()
+            random.shuffle(shuffled)
+            
+        logger.info(f"Successfully shuffled {len(shuffled)} tracks")
+        return shuffled
             
     except Exception as e:
         logger.error(f"Error during shuffle operation: {str(e)}")
