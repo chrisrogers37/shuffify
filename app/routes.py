@@ -251,7 +251,8 @@ def undo(playlist_id):
         response = {
             'success': success,
             'message': message,
-            'category': category
+            'category': category,
+            'can_undo_more': current_index > 1 if success else False  # We can undo more if we're not at index 1 or 0
         }
         logger.debug("Sending AJAX response: %s", response)
         return jsonify(response)
