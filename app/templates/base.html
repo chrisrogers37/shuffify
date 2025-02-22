@@ -104,8 +104,8 @@
                             undoForm.classList.remove('hidden');
                         }
                     } else if (action === 'undo') {
-                        // After successful undo, hide the undo form
-                        if (undoForm) {
+                        // Only hide the undo button if we can't undo anymore
+                        if (undoForm && !result.can_undo_more) {
                             undoForm.classList.add('hidden');
                         }
                     }
