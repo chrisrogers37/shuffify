@@ -10,10 +10,8 @@ RUN apt-get update && apt-get install -y \
     tree \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy package files first
-COPY setup.py MANIFEST.in requirements.txt ./
-
 # Copy application files
+COPY requirements.txt ./
 COPY config.py run.py ./
 COPY app app/
 
@@ -27,9 +25,8 @@ RUN echo "=== Verifying file structure ===" && \
     echo "=== Checking app/spotify ===" && \
     ls -la app/spotify/
 
-# Install dependencies and package
+# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install -e . && \
     echo "=== Installed packages ===" && \
     pip list
 
@@ -44,7 +41,7 @@ ENV PORT=8000
 
 # Verify Python can import our modules
 RUN echo "=== Testing imports ===" && \
-    python -c "from app import application; print('Successfully imported application')" && \
+    python -c "from app import create_app; print('Successfully imported create_app')" && \
     python -c "from app.utils.shuffify import shuffle_playlist; print('Successfully imported shuffle_playlist')" && \
     python -c "from config import config; print('Successfully imported config')"
 

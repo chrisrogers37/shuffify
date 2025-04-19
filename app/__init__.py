@@ -12,6 +12,10 @@ def create_app(config_name=None):
     if config_name is None:
         config_name = os.getenv('FLASK_ENV', 'production')
     
+    # Ensure config_name is a string
+    if not isinstance(config_name, str):
+        config_name = 'development'  # Default to development if not a string
+    
     app = Flask(__name__)
     
     # Load config
