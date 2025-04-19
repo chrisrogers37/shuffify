@@ -18,7 +18,6 @@ class Config:
 
     # Application settings
     DEBUG = False
-    TESTING = False
     PORT = int(os.getenv('PORT', 8000))
     HOST = os.getenv('HOST', '0.0.0.0')
 
@@ -32,14 +31,6 @@ class ProductionConfig(Config):
 class DevelopmentConfig(Config):
     """Development configuration."""
     DEBUG = True
-    TESTING = False
-    PORT = 8000
-    HOST = 'localhost'
-
-class TestingConfig(Config):
-    """Testing configuration."""
-    TESTING = True
-    DEBUG = True
     PORT = 8000
     HOST = 'localhost'
 
@@ -47,6 +38,5 @@ class TestingConfig(Config):
 config = {
     'development': DevelopmentConfig,
     'production': ProductionConfig,
-    'testing': TestingConfig,
     'default': DevelopmentConfig
 } 
