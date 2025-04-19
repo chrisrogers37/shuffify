@@ -8,7 +8,6 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', os.urandom(24))
     SPOTIFY_CLIENT_ID = os.getenv('SPOTIFY_CLIENT_ID')
     SPOTIFY_CLIENT_SECRET = os.getenv('SPOTIFY_CLIENT_SECRET')
-    SPOTIFY_REDIRECT_URI = os.getenv('SPOTIFY_REDIRECT_URI', 'https://shuffify.app/callback')
     
     # Session configuration
     SESSION_TYPE = 'filesystem'
@@ -28,6 +27,7 @@ class ProductionConfig(Config):
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
+    SPOTIFY_REDIRECT_URI = 'https://shuffify.app/callback'
 
 class DevelopmentConfig(Config):
     """Development configuration."""
@@ -52,5 +52,5 @@ config = {
     'development': DevelopmentConfig,
     'production': ProductionConfig,
     'testing': TestingConfig,
-    'default': DevelopmentConfig
+    'default': ProductionConfig  # Changed from DevelopmentConfig to ProductionConfig
 } 
