@@ -14,12 +14,18 @@ def create_app(config_name=None):
     
     # Ensure config_name is a string
     if not isinstance(config_name, str):
-        config_name = 'development'  # Default to development if not a string
+        config_name = 'production'  # Default to production if not a string
+    
+    logger.info("Creating app with config: %s", config_name)
     
     app = Flask(__name__)
     
     # Load config
     app.config.from_object(config[config_name])
+    
+    # Log important config values
+    logger.info("SPOTIFY_REDIRECT_URI: %s", app.config.get('SPOTIFY_REDIRECT_URI'))
+    logger.info("FLASK_ENV: %s", app.config.get('FLASK_ENV'))
     
     # Initialize Flask-Session
     Session(app)
@@ -33,5 +39,5 @@ def create_app(config_name=None):
     
     return app
 
-# Create the application instance
-application = create_app() 
+# Create the application instance with explicit production config
+application = create_app('production') 
