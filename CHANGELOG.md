@@ -8,25 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Initial project setup with Flask and Spotify integration
-- Basic playlist shuffling functionality
+- Initial release with core shuffling functionality
 - Docker support for development and production
-- GitHub Actions workflows for CI/CD
+- Spotify OAuth authentication
+- Playlist management features
 
 ### Changed
-- Improved error handling and logging
-- Enhanced session management
-- Updated configuration structure
+- Removed testing configuration
+- Simplified Docker setup
+- Streamlined configuration management
 
 ### Fixed
-- Fixed authentication flow issues
-- Resolved session persistence problems
-- Addressed Docker build configuration
+- Session handling in production
+- Environment variable management
+- Docker build process
 
-## [0.1.0] - 2024-03-21
+## [1.0.0] - 2024-04-19
 
 ### Added
-- Initial release
-- Basic playlist management features
-- Spotify OAuth integration
-- Docker containerization 
+- Initial stable release
+- Core playlist shuffling functionality
+- Basic UI with Tailwind CSS
+- Spotify integration 
