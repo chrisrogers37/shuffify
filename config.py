@@ -8,7 +8,7 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', os.urandom(24))
     SPOTIFY_CLIENT_ID = os.getenv('SPOTIFY_CLIENT_ID')
     SPOTIFY_CLIENT_SECRET = os.getenv('SPOTIFY_CLIENT_SECRET')
-    SPOTIFY_REDIRECT_URI = os.getenv('SPOTIFY_REDIRECT_URI', 'http://localhost:5000/callback')
+    SPOTIFY_REDIRECT_URI = os.getenv('SPOTIFY_REDIRECT_URI', 'http://localhost:8000/callback')
     
     # Session configuration
     SESSION_TYPE = 'filesystem'
@@ -16,10 +16,14 @@ class Config:
     SESSION_PERMANENT = False
     PERMANENT_SESSION_LIFETIME = 3600  # 1 hour
 
-class ProductionConfig(Config):
-    """Production configuration."""
+    # Application settings
     DEBUG = False
     TESTING = False
+    PORT = int(os.getenv('PORT', 8000))
+    HOST = os.getenv('HOST', '0.0.0.0')
+
+class ProductionConfig(Config):
+    """Production configuration."""
     # Use secure cookie in production
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True
@@ -29,11 +33,19 @@ class DevelopmentConfig(Config):
     """Development configuration."""
     DEBUG = True
     TESTING = False
+    # Development-specific settings
+    SPOTIFY_REDIRECT_URI = 'http://localhost:8000/callback'
+    PORT = 8000
+    HOST = 'localhost'
 
 class TestingConfig(Config):
     """Testing configuration."""
     TESTING = True
     DEBUG = True
+    # Testing-specific settings
+    SPOTIFY_REDIRECT_URI = 'http://localhost:8000/callback'
+    PORT = 8000
+    HOST = 'localhost'
 
 # Dictionary for easy config selection
 config = {
