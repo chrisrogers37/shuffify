@@ -11,9 +11,6 @@ shuffify/
 │   ├── routes.py          # Route handlers
 │   ├── spotify/           # Spotify integration
 │   └── utils/             # Utility functions
-├── tests/                 # Test suite
-├── docs/                  # Documentation
-├── .github/              # GitHub workflows
 ├── docker/               # Docker configuration
 ├── requirements/         # Dependency management
 │   ├── base.txt         # Base requirements
@@ -27,20 +24,6 @@ shuffify/
 ```
 
 ## Development Workflow
-
-### Branch Strategy
-
-- `main`: Production-ready code
-- `develop`: Integration branch for features
-- `feature/*`: New features
-- `release/*`: Release preparation
-- `hotfix/*`: Urgent production fixes
-
-### Versioning
-
-We use [Semantic Versioning](https://semver.org/):
-- MAJOR.MINOR.PATCH
-- Example: 1.0.0
 
 ### Getting Started
 
@@ -56,52 +39,31 @@ We use [Semantic Versioning](https://semver.org/):
    python run.py
    ```
 
-### Testing
-
-```bash
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=app tests/
-```
-
 ### Docker Development
 
 ```bash
 # Build and start containers
 docker-compose up --build
-
-# Run tests in container
-docker-compose run --rm app pytest
 ```
 
-## Release Process
+## Deployment
 
-1. Create a release branch from develop
-2. Update version numbers
-3. Update CHANGELOG.md
-4. Create pull request to main
-5. Create GitHub release
-6. Deploy to production
+### Production (DigitalOcean)
+1. Set up environment variables in DigitalOcean
+2. Deploy using Docker:
+   ```bash
+   docker-compose up --build
+   ```
 
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests
-5. Submit a pull request
-
-## License
-
-MIT License
+### Development (Local)
+1. Use local `.env` file
+2. Run with Docker or Python directly
 
 ## Features
 - 🎵 Shuffle any playlist you own or can edit
 - 🔒 Keep first N tracks in their original position
 - 📊 Visual progress tracking for all operations
-- 🔄 Undo shuffle operations (within 1 hour)
+- 🔄 Undo shuffle operations
 - 👥 Support for collaborative playlists
 - 🎨 Clean, modern Spotify-themed UI
 - 📱 Responsive design that works on all devices
