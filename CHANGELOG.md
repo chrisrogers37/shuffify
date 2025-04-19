@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Playlist management features
 
 ### Changed
+- Simplified development workflow to main/develop branches
 - Removed testing configuration
 - Simplified Docker setup
 - Streamlined configuration management
