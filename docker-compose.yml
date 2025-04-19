@@ -1,18 +1,18 @@
 version: '3.8'
 
 services:
-  web:
+  app:
     build: .
     ports:
       - "8000:8000"
     environment:
-      - FLASK_ENV=development
+      - FLASK_ENV=production
       - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID}
       - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET}
-      - SPOTIFY_REDIRECT_URI=http://localhost:8000/callback
+      - SPOTIFY_REDIRECT_URI=https://shuffify.app/callback
       - SECRET_KEY=${SECRET_KEY}
     volumes:
-      - flask_session:/app/.flask_session
+      - .flask_session:/app/.flask_session
 
 volumes:
   flask_session: 

@@ -8,7 +8,7 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', os.urandom(24))
     SPOTIFY_CLIENT_ID = os.getenv('SPOTIFY_CLIENT_ID')
     SPOTIFY_CLIENT_SECRET = os.getenv('SPOTIFY_CLIENT_SECRET')
-    SPOTIFY_REDIRECT_URI = os.getenv('SPOTIFY_REDIRECT_URI', 'http://localhost:8000/callback')
+    SPOTIFY_REDIRECT_URI = os.getenv('SPOTIFY_REDIRECT_URI', 'https://shuffify.app/callback')
     
     # Session configuration
     SESSION_TYPE = 'filesystem'
