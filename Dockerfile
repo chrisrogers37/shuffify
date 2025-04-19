@@ -18,6 +18,10 @@ RUN pip install --no-cache-dir -r requirements/prod.txt
 # Copy application code
 COPY . .
 
+# Create session directory
+RUN mkdir -p .flask_session && \
+    chmod 777 .flask_session
+
 # Set environment variables
 ENV FLASK_APP=run.py
 ENV FLASK_ENV=production
