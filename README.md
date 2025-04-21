@@ -2,6 +2,19 @@
 
 A powerful playlist management tool for music creators and playlist managers.
 
+## Features
+- 🎵 Multiple shuffle algorithms for different use cases:
+  - Basic shuffle with option to keep tracks fixed at start
+  - Vibe-based shuffle using Spotify's audio features
+  - Balanced shuffle ensuring fair representation
+  - Percentage-based shuffle for partial reordering
+- 🔒 Keep first N tracks in their original position
+- 📊 Visual progress tracking for all operations
+- 🔄 Undo shuffle operations
+- 👥 Support for collaborative playlists
+- 🎨 Clean, modern Spotify-themed UI
+- 📱 Responsive design that works on all devices
+
 ## Project Structure
 
 ```
@@ -10,7 +23,8 @@ shuffify/
 │   ├── __init__.py        # App initialization
 │   ├── routes.py          # Route handlers
 │   ├── spotify/           # Spotify integration
-│   └── utils/             # Utility functions
+│   ├── utils/             # Utility functions
+│   └── templates/         # HTML templates
 ├── docker/               # Docker configuration
 ├── requirements/         # Dependency management
 │   ├── base.txt         # Base requirements
@@ -23,21 +37,51 @@ shuffify/
 └── README.md           # This file
 ```
 
+## Shuffle Algorithms
+
+Shuffify provides multiple algorithms for different use cases. See [app/utils/shuffle_algorithms/README.md](app/utils/shuffle_algorithms/README.md) for detailed documentation.
+
+### Quick Overview
+- **Basic Shuffle**: Standard random shuffle with fixed start option
+- **Vibe Shuffle**: Creates smooth transitions using audio features
+- **Balanced Shuffle**: Ensures fair representation from all playlist parts
+- **Percentage Shuffle**: Shuffles only a portion of the playlist
+
 ## Development Workflow
 
 ### Getting Started
 
 1. Clone the repository
-2. Create a virtual environment
+2. Create a virtual environment:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # or `venv\Scripts\activate` on Windows
+   ```
 3. Install dependencies:
    ```bash
+   # For development:
    pip install -r requirements/dev.txt
+   
+   # For production:
+   pip install -r requirements/prod.txt
    ```
 4. Copy `.env.example` to `.env` and configure
 5. Run the development server:
    ```bash
    python run.py
    ```
+
+### Requirements Management
+
+The project uses a structured requirements approach:
+- `requirements/base.txt`: Core dependencies needed by both development and production
+- `requirements/dev.txt`: Additional development tools (testing, linting, etc.)
+- `requirements/prod.txt`: Production-specific dependencies (e.g., gunicorn)
+
+When adding new dependencies:
+1. Add core dependencies to `base.txt`
+2. Add development tools to `dev.txt`
+3. Add production-specific packages to `prod.txt`
 
 ### Docker Development
 
@@ -58,15 +102,6 @@ docker-compose up --build
 ### Development (Local)
 1. Use local `.env` file
 2. Run with Docker or Python directly
-
-## Features
-- 🎵 Shuffle any playlist you own or can edit
-- 🔒 Keep first N tracks in their original position
-- 📊 Visual progress tracking for all operations
-- 🔄 Undo shuffle operations
-- 👥 Support for collaborative playlists
-- 🎨 Clean, modern Spotify-themed UI
-- 📱 Responsive design that works on all devices
 
 ## Tech Stack
 - **Backend**: Flask (Python)
