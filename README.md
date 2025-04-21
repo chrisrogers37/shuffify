@@ -1,71 +1,73 @@
 # Shuffify
 
-A powerful playlist management tool for music creators and playlist managers.
+A modern playlist management tool for music creators and playlist managers, built with Flask and Tailwind CSS.
 
 ## Features
-- 🎵 Multiple shuffle algorithms for different use cases:
-  - Basic shuffle with option to keep tracks fixed at start
-  - Vibe-based shuffle using Spotify's audio features
-  - Balanced shuffle ensuring fair representation
-  - Percentage-based shuffle for partial reordering
-- 🔒 Keep first N tracks in their original position
-- 📊 Visual progress tracking for all operations
-- 🔄 Undo shuffle operations
-- 👥 Support for collaborative playlists
-- 🎨 Clean, modern Spotify-themed UI
-- 📱 Responsive design that works on all devices
+
+- **Multiple Shuffle Algorithms**:
+  - Basic Shuffle: Standard random shuffle with fixed start option
+  - Balanced Shuffle: Ensures fair representation from all playlist parts
+  - Percentage Shuffle: Allows shuffling specific portions of playlists
+- Keep certain tracks in their original position
+- Visual progress tracking
+- Undo functionality
+- Collaborative playlist support
+- Responsive design with modern glassmorphism effects
+- Decorative music note patterns in background
+- Smooth hover and transition effects
 
 ## Project Structure
 
 ```
 shuffify/
 ├── app/                    # Application code
-│   ├── __init__.py        # App initialization
-│   ├── routes.py          # Route handlers
-│   ├── spotify/           # Spotify integration
+│   ├── static/            # Static assets (CSS, JS, images)
+│   ├── templates/         # HTML templates
+│   ├── services/          # Business logic services
+│   ├── spotify/           # Spotify API integration
 │   ├── utils/             # Utility functions
-│   └── templates/         # HTML templates
-├── docker/               # Docker configuration
-├── requirements/         # Dependency management
-│   ├── base.txt         # Base requirements
-│   ├── dev.txt          # Development requirements
-│   └── prod.txt         # Production requirements
-├── .env.example         # Environment variables template
-├── .gitignore           # Git ignore rules
-├── docker-compose.yml   # Docker compose configuration
-├── Dockerfile           # Docker build configuration
-└── README.md           # This file
+│   ├── __init__.py        # Application factory
+│   └── routes.py          # Route definitions
+├── requirements/          # Dependency management
+│   ├── base.txt          # Core dependencies
+│   ├── dev.txt           # Development dependencies
+│   └── prod.txt          # Production dependencies
+├── config.py             # Configuration settings
+├── run.py                # Application entry point
+├── Dockerfile            # Docker configuration
+├── docker-compose.yml    # Docker Compose configuration
+└── tailwind.config.js    # Tailwind CSS configuration
 ```
-
-## Shuffle Algorithms
-
-Shuffify provides multiple algorithms for different use cases. See [app/utils/shuffle_algorithms/README.md](app/utils/shuffle_algorithms/README.md) for detailed documentation.
-
-### Quick Overview
-- **Basic Shuffle**: Standard random shuffle with fixed start option
-- **Vibe Shuffle**: Creates smooth transitions using audio features
-- **Balanced Shuffle**: Ensures fair representation from all playlist parts
-- **Percentage Shuffle**: Shuffles only a portion of the playlist
 
 ## Development Workflow
 
+### Prerequisites
+
+- Python 3.8+
+- Node.js (for Tailwind CSS)
+- Spotify Developer Account
+
 ### Getting Started
 
-1. Clone the repository
-2. Create a virtual environment:
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/shuffify.git
+   cd shuffify
+   ```
+
+2. Create and activate a virtual environment:
    ```bash
    python -m venv venv
-   source venv/bin/activate  # or `venv\Scripts\activate` on Windows
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
+
 3. Install dependencies:
    ```bash
-   # For development:
    pip install -r requirements/dev.txt
-   
-   # For production:
-   pip install -r requirements/prod.txt
    ```
-4. Copy `.env.example` to `.env` and configure
+
+4. Set up your Spotify credentials in `config.py`
+
 5. Run the development server:
    ```bash
    python run.py
@@ -73,88 +75,57 @@ Shuffify provides multiple algorithms for different use cases. See [app/utils/sh
 
 ### Requirements Management
 
-The project uses a structured requirements approach:
-- `requirements/base.txt`: Core dependencies needed by both development and production
-- `requirements/dev.txt`: Additional development tools (testing, linting, etc.)
-- `requirements/prod.txt`: Production-specific dependencies (e.g., gunicorn)
+The project uses a structured approach to requirements management:
 
-When adding new dependencies:
-1. Add core dependencies to `base.txt`
-2. Add development tools to `dev.txt`
-3. Add production-specific packages to `prod.txt`
+- `requirements/base.txt`: Core dependencies required for the application to run
+- `requirements/dev.txt`: Development dependencies (includes base.txt)
+- `requirements/prod.txt`: Production dependencies (includes base.txt)
+
+To add a new dependency:
+1. Add it to `base.txt` if it's required for core functionality
+2. Add it to `dev.txt` if it's only needed for development
+3. Add it to `prod.txt` if it's only needed for production
 
 ### Docker Development
 
+To run the application using Docker:
+
 ```bash
-# Build and start containers
 docker-compose up --build
 ```
 
-## Deployment
-
-### Production (DigitalOcean)
-1. Set up environment variables in DigitalOcean
-2. Deploy using Docker:
-   ```bash
-   docker-compose up --build
-   ```
-
-### Development (Local)
-1. Use local `.env` file
-2. Run with Docker or Python directly
-
 ## Tech Stack
-- **Backend**: Flask (Python)
+
+- **Backend**: Flask
 - **Frontend**: Tailwind CSS
-- **Authentication**: Spotify OAuth
-- **Deployment**: Digital Ocean App Platform
-- **Container**: Docker
-- **WSGI Server**: Gunicorn
+- **Containerization**: Docker
+- **Authentication**: Spotify OAuth 2.0
+- **Database**: SQLite (development), PostgreSQL (production)
 
 ## Architecture
 
-The application follows a clean architecture pattern with the following components:
+The application follows clean architecture principles:
 
-```
-shuffify/
-├── app/                    # Application package
-│   ├── __init__.py        # App initialization
-│   ├── routes.py          # URL routes and views
-│   ├── spotify/           # Spotify API handling
-│   │   ├── __init__.py
-│   │   └── client.py      # Spotify client wrapper
-│   ├── utils/             # Utility functions
-│   │   ├── __init__.py
-│   │   └── shuffify.py    # Playlist shuffling logic
-│   └── templates/         # HTML templates
-├── config.py              # Configuration settings
-└── run.py                # WSGI entry point
-```
+- **Presentation Layer**: Templates and static assets
+- **Application Layer**: Routes and services
+- **Domain Layer**: Business logic and models
+- **Infrastructure Layer**: External services and utilities
 
 ## Security
 
-- Industry-standard security practices
 - Secure session management
-- HTTPS encryption
 - OAuth 2.0 authentication
+- Environment-based configuration
+- Input validation and sanitization
 
 ## Future Enhancements
 
-- [ ] Smart shuffling based on:
-  - Track tempo (BPM)
-  - Key compatibility
-  - Energy levels
-  - Genre transitions
-- [ ] Playlist analytics
-- [ ] Multiple shuffle modes
-- [ ] Batch operations
-- [ ] Shuffle presets
-- [ ] Export/import playlist orders
+- Smart shuffling based on musical attributes
+- Stratified shuffling (shuffle within sections)
+- Shuffle by release date
+- Export/import functionality
 
 ## Acknowledgments
 
 - Developed by Christopher Rogers
-- Built with [Flask](https://flask.palletsprojects.com/)
-- Powered by [Spotify Web API](https://developer.spotify.com/documentation/web-api/)
-- Uses [Spotipy](https://spotipy.readthedocs.io/) for Spotify API interactions
-- Styled with [Tailwind CSS](https://tailwindcss.com/) 
+- Built with Flask, Spotify Web API, Spotipy, and Tailwind CSS 
