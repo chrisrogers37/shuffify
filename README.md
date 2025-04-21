@@ -118,6 +118,7 @@ shuffify/
 
 ## Acknowledgments
 
+- Developed by Christopher Rogers
 - Built with [Flask](https://flask.palletsprojects.com/)
 - Powered by [Spotify Web API](https://developer.spotify.com/documentation/web-api/)
 - Uses [Spotipy](https://spotipy.readthedocs.io/) for Spotify API interactions
