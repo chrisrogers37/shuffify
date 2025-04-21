@@ -6,58 +6,46 @@
     <title>{% block title %}Shuffify{% endblock %}</title>
     <!-- Tailwind CSS via CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        .spotify-green {
-            background-color: #1DB954;
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'spotify-green': '#1DB954',
+                        'spotify-dark': '#191414',
+                    }
+                }
+            }
         }
-        .spotify-green-hover:hover {
-            background-color: #1ed760;
+    </script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
         .fade-out {
             opacity: 1;
-            transition: opacity 0.3s ease-in-out;
+            transition: opacity 0.3s ease-out;
         }
         .fade-out.hiding {
             opacity: 0;
         }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <!-- Navigation -->
-    <nav class="bg-black p-4">
-        <div class="container mx-auto flex justify-between items-center">
-            <a href="{{ url_for('main.index') }}" class="text-white text-2xl font-bold flex items-center">
-                🎵 Shuffify
-            </a>
-            {% if session.get('spotify_token') %}
-            <a href="{{ url_for('main.logout') }}" 
-               class="text-white hover:text-gray-300 transition duration-150">
-                Logout
-            </a>
-            {% endif %}
-        </div>
-    </nav>
-
+<body>
     <!-- Flash Messages -->
-    <div id="flash-messages" class="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md px-4">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages[-3:] %}
-                    <div class="p-4 mb-4 rounded-lg shadow-lg {% if category == 'error' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %} fade-out">
-                        {{ message }}
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-    </div>
+    <div id="flash-messages" class="fixed top-4 right-4 z-50"></div>
 
     <!-- Main Content -->
-    <main class="container mx-auto py-8 px-4">
+    <main class="flex-grow">
         {% block content %}{% endblock %}
     </main>
 
     <!-- Footer -->
-    <footer class="bg-gray-800 text-white py-4 mt-auto">
+    <footer class="bg-black/30 text-white py-4 backdrop-blur-sm">
         <div class="container mx-auto text-center text-sm">
             <p>Built with Flask and Spotify API</p>
             <p class="text-gray-400 mt-1">© {{ current_year }} Shuffify. All rights reserved.</p>
