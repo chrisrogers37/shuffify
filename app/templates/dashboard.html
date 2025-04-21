@@ -1,101 +1,108 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="max-w-6xl mx-auto">
+<div class="min-h-screen bg-gradient-to-br from-spotify-green via-spotify-green/90 to-spotify-dark">
+    <div class="absolute inset-0" style="background-image: url('/static/images/hero-pattern.svg'); opacity: 0.15; pointer-events: none;"></div>
+    
     <!-- User Info -->
-    <div class="bg-white rounded-lg shadow-md p-6 mb-8">
-        <div class="flex items-center">
-            {% if user.images %}
-                <img src="{{ user.images[0].url }}" alt="{{ user.display_name }}" 
-                     class="w-16 h-16 rounded-full mr-4">
-            {% else %}
-                <div class="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center mr-4">
-                    <span class="text-2xl">{{ user.display_name[0] }}</span>
+    <div class="relative max-w-6xl mx-auto px-4 pt-8">
+        <div class="p-6 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20">
+            <div class="flex items-center">
+                {% if user.images %}
+                    <img src="{{ user.images[0].url }}" alt="{{ user.display_name }}" 
+                         class="w-16 h-16 rounded-full mr-4 border-2 border-white/20">
+                {% else %}
+                    <div class="w-16 h-16 rounded-full bg-white/10 border-2 border-white/20 flex items-center justify-center mr-4">
+                        <span class="text-2xl text-white">{{ user.display_name[0] }}</span>
+                    </div>
+                {% endif %}
+                <div>
+                    <h2 class="text-2xl font-bold text-white">Welcome, {{ user.display_name }}!</h2>
+                    <p class="text-white/80">Select a playlist to shuffle below</p>
                 </div>
-            {% endif %}
-            <div>
-                <h2 class="text-2xl font-bold">Welcome, {{ user.display_name }}!</h2>
-                <p class="text-gray-600">Select a playlist to shuffle below</p>
             </div>
         </div>
     </div>
 
     <!-- Playlists Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {% for playlist in playlists %}
-            <div class="bg-white rounded-lg shadow-md overflow-hidden">
-                <!-- Playlist Header -->
-                <div class="relative h-48">
-                    {% if playlist.images %}
-                        <img src="{{ playlist.images[0].url }}" alt="{{ playlist.name }}" 
-                             class="w-full h-full object-cover">
-                    {% else %}
-                        <div class="w-full h-full bg-gray-200 flex items-center justify-center">
-                            <span class="text-4xl">🎵</span>
+    <div class="relative max-w-6xl mx-auto px-4 py-8">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for playlist in playlists %}
+                <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden transform transition duration-300 hover:scale-105 hover:shadow-2xl">
+                    <!-- Playlist Header -->
+                    <div class="relative h-48">
+                        {% if playlist.images %}
+                            <img src="{{ playlist.images[0].url }}" alt="{{ playlist.name }}" 
+                                 class="w-full h-full object-cover">
+                        {% else %}
+                            <div class="w-full h-full bg-black/20 flex items-center justify-center">
+                                <span class="text-4xl">🎵</span>
+                            </div>
+                        {% endif %}
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                        <div class="absolute bottom-0 left-0 right-0 p-4">
+                            <h3 class="text-white text-xl font-bold">{{ playlist.name }}</h3>
+                            <p class="text-white/80">{{ playlist.tracks.total }} tracks</p>
                         </div>
-                    {% endif %}
-                    <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent p-4">
-                        <h3 class="text-white text-xl font-bold">{{ playlist.name }}</h3>
-                        <p class="text-gray-300">{{ playlist.tracks.total }} tracks</p>
                     </div>
-                </div>
 
-                <!-- Playlist Controls -->
-                <div class="p-4">
-                    <form action="{{ url_for('main.shuffle', playlist_id=playlist.id) }}" 
-                          method="POST" 
-                          class="space-y-4"
-                          data-playlist-id="{{ playlist.id }}"
-                          onsubmit="event.preventDefault(); handlePlaylistAction(this, 'shuffle');">
-                        <!-- Keep First Tracks -->
-                        <div>
-                            <div class="flex items-center mb-2">
-                                <label for="keep-first-{{ playlist.id }}" class="block text-sm font-medium text-gray-700">
-                                    Number of songs to keep at the start:
-                                </label>
-                                <div class="ml-1 group relative">
-                                    <svg class="h-4 w-4 text-gray-400 cursor-help" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                                    </svg>
-                                    <div class="invisible group-hover:visible absolute z-50 w-48 p-2 mt-1 -ml-24 text-xs bg-gray-900 text-white rounded shadow-lg">
-                                        These songs will stay in their current position at the top of your playlist
+                    <!-- Playlist Controls -->
+                    <div class="p-4 space-y-4">
+                        <form action="{{ url_for('main.shuffle', playlist_id=playlist.id) }}" 
+                              method="POST" 
+                              class="space-y-4"
+                              data-playlist-id="{{ playlist.id }}"
+                              onsubmit="event.preventDefault(); handlePlaylistAction(this, 'shuffle');">
+                            <!-- Keep First Tracks -->
+                            <div>
+                                <div class="flex items-center mb-2">
+                                    <label for="keep-first-{{ playlist.id }}" class="block text-sm font-medium text-white/90">
+                                        Number of songs to keep at the start:
+                                    </label>
+                                    <div class="ml-1 group relative">
+                                        <svg class="h-4 w-4 text-white/60 cursor-help" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                                        </svg>
+                                        <div class="invisible group-hover:visible absolute z-50 w-48 p-2 mt-1 -ml-24 text-xs bg-black/90 text-white rounded shadow-lg">
+                                            These songs will stay in their current position at the top of your playlist
+                                        </div>
                                     </div>
                                 </div>
+                                <input type="number" 
+                                       id="keep-first-{{ playlist.id }}"
+                                       name="keep_first" 
+                                       min="0" 
+                                       max="{{ playlist.tracks.total }}"
+                                       class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:ring-2 focus:ring-white/30 focus:border-transparent"
+                                       value="0">
                             </div>
-                            <input type="number" 
-                                   id="keep-first-{{ playlist.id }}"
-                                   name="keep_first" 
-                                   min="0" 
-                                   max="{{ playlist.tracks.total }}"
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-spotify-green focus:border-spotify-green"
-                                   value="0">
-                        </div>
 
-                        <!-- Action Buttons -->
-                        <div class="flex space-x-2">
+                            <!-- Action Buttons -->
+                            <div class="flex space-x-2">
+                                <button type="submit" 
+                                        class="flex-1 px-4 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white font-semibold transition duration-150">
+                                    Shuffle
+                                </button>
+                            </div>
+                        </form>
+
+                        <!-- Separate Undo Form -->
+                        <form id="undo-form-{{ playlist.id }}" 
+                              action="{{ url_for('main.undo', playlist_id=playlist.id) }}" 
+                              method="POST" 
+                              data-playlist-id="{{ playlist.id }}"
+                              onsubmit="event.preventDefault(); handlePlaylistAction(this, 'undo');"
+                              class="mt-2 {% if not session.get('playlist_states', {}).get(playlist.id, {}).get('states', []) or session.get('playlist_states', {}).get(playlist.id, {}).get('current_index', 0) <= 0 %}hidden{% endif %}">
                             <button type="submit" 
-                                    class="flex-1 px-4 py-2 spotify-green spotify-green-hover text-white rounded-md transition duration-150">
-                                Shuffle
+                                    id="undo-button-{{ playlist.id }}"
+                                    class="w-full px-4 py-2 rounded-lg bg-black/30 hover:bg-black/40 text-white/90 font-semibold transition duration-150">
+                                Undo Last Shuffle
                             </button>
-                        </div>
-                    </form>
-
-                    <!-- Separate Undo Form -->
-                    <form id="undo-form-{{ playlist.id }}" 
-                          action="{{ url_for('main.undo', playlist_id=playlist.id) }}" 
-                          method="POST" 
-                          data-playlist-id="{{ playlist.id }}"
-                          onsubmit="event.preventDefault(); handlePlaylistAction(this, 'undo');"
-                          class="mt-2 {% if not session.get('playlist_states', {}).get(playlist.id, {}).get('states', []) or session.get('playlist_states', {}).get(playlist.id, {}).get('current_index', 0) <= 0 %}hidden{% endif %}">
-                        <button type="submit" 
-                                id="undo-button-{{ playlist.id }}"
-                                class="w-full px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition duration-150">
-                            Undo Last Shuffle
-                        </button>
-                    </form>
+                        </form>
+                    </div>
                 </div>
-            </div>
-        {% endfor %}
+            {% endfor %}
+        </div>
     </div>
 </div>
 {% endblock %} 
