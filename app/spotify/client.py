@@ -11,6 +11,8 @@ logger = logging.getLogger(__name__)
 class SpotifyClient:
     """Handles all Spotify API interactions with proper error handling and logging."""
     
+    BATCH_SIZE = 50  # Maximum number of tracks per audio features request
+    
     def __init__(self, token: Optional[Dict[str, Any]] = None) -> None:
         """Initialize the Spotify client with OAuth authentication."""
         try:
@@ -76,6 +78,34 @@ class SpotifyClient:
         except Exception as e:
             logger.error("Error initializing Spotify client: %s\nTraceback: %s", str(e), traceback.format_exc())
             raise
+    
+    def audio_features(self, track_ids: List[str]) -> List[Optional[Dict[str, Any]]]:
+        """
+        Get audio features for tracks in batches to avoid API limits.
+        Returns a list of audio features dictionaries in the same order as the input track_ids.
+        """
+        if not track_ids:
+            return []
+            
+        all_features = []
+        
+        # Process tracks in batches
+        for i in range(0, len(track_ids), self.BATCH_SIZE):
+            batch = track_ids[i:i + self.BATCH_SIZE]
+            try:
+                logger.debug(f"Fetching audio features batch {i//self.BATCH_SIZE + 1} ({len(batch)} tracks)")
+                batch_features = self.sp.audio_features(batch)
+                if batch_features:
+                    all_features.extend(batch_features)
+                else:
+                    # If batch_features is None, extend with None values for each track
+                    all_features.extend([None] * len(batch))
+            except Exception as e:
+                logger.error(f"Error fetching audio features batch {i//self.BATCH_SIZE + 1}: {str(e)}")
+                # On error, add None for each track in the failed batch
+                all_features.extend([None] * len(batch))
+        
+        return all_features
     
     def get_auth_url(self) -> str:
         """Get the Spotify authorization URL."""
