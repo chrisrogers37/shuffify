@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1] - 2024-04-21
+
+### Changed
+- Updated README.md to reflect current project structure
+- Removed references to deprecated features (Vibe Shuffle, Docker directory)
+- Updated documentation for current shuffle algorithms
+- Improved project structure documentation
+- Updated development workflow instructions
+
 ## [2.0.0] - 2024-04-20
 
 ### Added
