@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, session, redirect, url_for, request, flash, jsonify
 from app.spotify.client import SpotifyClient
-from app.utils.shuffify import shuffle_playlist
+from app.utils.shuffle_algorithms.registry import ShuffleRegistry
 import logging
 import traceback
 from datetime import datetime
@@ -29,7 +29,8 @@ def index():
             spotify = SpotifyClient(session['spotify_token'])
             playlists = spotify.get_user_playlists()
             user = spotify.get_current_user()
-            return render_template('dashboard.html', playlists=playlists, user=user)
+            algorithms = ShuffleRegistry.list_algorithms()
+            return render_template('dashboard.html', playlists=playlists, user=user, algorithms=algorithms)
         except Exception as e:
             logger.error("Error with Spotify client: %s\nTraceback: %s", str(e), traceback.format_exc())
             # Clear session and flash messages
@@ -100,7 +101,7 @@ def logout():
 
 @main.route('/shuffle/<playlist_id>', methods=['POST'])
 def shuffle(playlist_id):
-    """Shuffle a playlist."""
+    """Shuffle a playlist using the selected algorithm."""
     try:
         logger.debug("Shuffle request - Headers: %s", dict(request.headers))
         logger.debug("Session state: %s", dict(session))
@@ -113,7 +114,32 @@ def shuffle(playlist_id):
                 return jsonify({'success': False, 'message': 'Please log in first.', 'category': 'error'})
             return redirect(url_for('main.index'))
         
-        keep_first = int(request.form.get('keep_first', 0))
+        # Get algorithm and parameters from form
+        algorithm_name = request.form.get('algorithm', 'BasicShuffle')
+        try:
+            algorithm = ShuffleRegistry.get_algorithm(algorithm_name)
+        except ValueError as e:
+            logger.error(f"Invalid algorithm requested: {algorithm_name}")
+            if is_ajax:
+                return jsonify({'success': False, 'message': 'Invalid shuffle algorithm.', 'category': 'error'})
+            flash('Invalid shuffle algorithm.', 'error')
+            return redirect(url_for('main.index'))
+        
+        # Parse algorithm parameters from form
+        params = {}
+        for param_name, param_info in algorithm.parameters.items():
+            if param_name in request.form:
+                value = request.form[param_name]
+                # Convert value to appropriate type
+                if param_info['type'] == 'integer':
+                    params[param_name] = int(value)
+                elif param_info['type'] == 'float':
+                    params[param_name] = float(value)
+                elif param_info['type'] == 'boolean':
+                    params[param_name] = value.lower() in ('true', 't', 'yes', 'y', '1')
+                else:
+                    params[param_name] = value
+        
         spotify = SpotifyClient(session['spotify_token'])
         
         # Initialize playlist states if not exists
@@ -138,8 +164,16 @@ def shuffle(playlist_id):
                 'current_index': 0
             }
         
-        # Perform shuffle using the current track list
-        shuffled_uris = shuffle_playlist(track_list=current_tracks, keep_first=keep_first)
+        # Perform shuffle using the selected algorithm
+        try:
+            shuffled_uris = algorithm.shuffle(current_tracks, sp=spotify.sp, **params)
+        except Exception as e:
+            logger.error(f"Error during shuffle operation: {str(e)}")
+            if is_ajax:
+                return jsonify({'success': False, 'message': str(e), 'category': 'error'})
+            flash(str(e), 'error')
+            return redirect(url_for('main.index'))
+            
         if shuffled_uris:
             success = spotify.update_playlist_tracks(playlist_id, shuffled_uris)
             if success:

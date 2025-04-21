@@ -53,28 +53,32 @@
                               class="space-y-4"
                               data-playlist-id="{{ playlist.id }}"
                               onsubmit="event.preventDefault(); handlePlaylistAction(this, 'shuffle');">
-                            <!-- Keep First Tracks -->
+                            
+                            <!-- Algorithm Selection -->
                             <div>
-                                <div class="flex items-center mb-2">
-                                    <label for="keep-first-{{ playlist.id }}" class="block text-sm font-medium text-white/90">
-                                        Number of songs to keep at the start:
-                                    </label>
-                                    <div class="ml-1 group relative">
-                                        <svg class="h-4 w-4 text-white/60 cursor-help" viewBox="0 0 20 20" fill="currentColor">
-                                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                                        </svg>
-                                        <div class="invisible group-hover:visible absolute z-50 w-48 p-2 mt-1 -ml-24 text-xs bg-black/90 text-white rounded shadow-lg">
-                                            These songs will stay in their current position at the top of your playlist
-                                        </div>
-                                    </div>
-                                </div>
-                                <input type="number" 
-                                       id="keep-first-{{ playlist.id }}"
-                                       name="keep_first" 
-                                       min="0" 
-                                       max="{{ playlist.tracks.total }}"
-                                       class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:ring-2 focus:ring-white/30 focus:border-transparent"
-                                       value="0">
+                                <label for="algorithm-{{ playlist.id }}" class="block text-sm font-medium text-white/90 mb-2">
+                                    Shuffle Algorithm:
+                                </label>
+                                <select id="algorithm-{{ playlist.id }}"
+                                        name="algorithm"
+                                        class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-white/30 focus:border-transparent"
+                                        onchange="updateAlgorithmParams(this, '{{ playlist.id }}')">
+                                    {% for algo in algorithms %}
+                                        <option value="{{ algo.class_name }}" 
+                                                data-description="{{ algo.description }}"
+                                                data-parameters='{{ algo.parameters|tojson }}'>
+                                            {{ algo.name }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <p class="mt-1 text-sm text-white/60 algorithm-description-{{ playlist.id }}">
+                                    {{ algorithms[0].description }}
+                                </p>
+                            </div>
+
+                            <!-- Dynamic Algorithm Parameters -->
+                            <div id="algorithm-params-{{ playlist.id }}" class="space-y-4">
+                                <!-- Parameters will be dynamically inserted here -->
                             </div>
 
                             <!-- Action Buttons -->
@@ -92,8 +96,8 @@
                               method="POST" 
                               data-playlist-id="{{ playlist.id }}"
                               onsubmit="event.preventDefault(); handlePlaylistAction(this, 'undo');"
-                              class="mt-2 {% if not session.get('playlist_states', {}).get(playlist.id, {}).get('states', []) or session.get('playlist_states', {}).get(playlist.id, {}).get('current_index', 0) <= 0 %}hidden{% endif %}">
-                            <button type="submit" 
+                              class="mt-2 hidden">
+                            <button type="submit"
                                     id="undo-button-{{ playlist.id }}"
                                     class="w-full px-4 py-2 rounded-lg bg-black/30 hover:bg-black/40 text-white/90 font-semibold transition duration-150">
                                 Undo Last Shuffle
@@ -105,4 +109,90 @@
         </div>
     </div>
 </div>
+
+<!-- JavaScript for Dynamic Algorithm Parameters -->
+<script>
+function updateAlgorithmParams(selectElement, playlistId) {
+    const selectedOption = selectElement.options[selectElement.selectedIndex];
+    const parameters = JSON.parse(selectedOption.dataset.parameters);
+    const description = selectedOption.dataset.description;
+    
+    // Update algorithm description
+    document.querySelector(`.algorithm-description-${playlistId}`).textContent = description;
+    
+    // Update parameter inputs
+    const paramsContainer = document.getElementById(`algorithm-params-${playlistId}`);
+    paramsContainer.innerHTML = '';
+    
+    Object.entries(parameters).forEach(([paramName, paramInfo]) => {
+        const paramDiv = document.createElement('div');
+        paramDiv.className = 'space-y-2';
+        
+        // Create label
+        const label = document.createElement('label');
+        label.className = 'block text-sm font-medium text-white/90';
+        label.htmlFor = `${paramName}-${playlistId}`;
+        label.textContent = paramInfo.description;
+        
+        // Create input
+        let inputContainer;
+        if (paramInfo.type === 'string' && paramInfo.options) {
+            // Create radio group for string options
+            inputContainer = document.createElement('div');
+            inputContainer.className = 'mt-2 space-x-4 flex items-center';
+            
+            paramInfo.options.forEach(option => {
+                const radioDiv = document.createElement('div');
+                radioDiv.className = 'flex items-center space-x-2';
+                
+                const radio = document.createElement('input');
+                radio.type = 'radio';
+                radio.id = `${paramName}-${option}-${playlistId}`;
+                radio.name = paramName;
+                radio.value = option;
+                radio.checked = option === paramInfo.default;
+                radio.className = 'rounded-full border-white/20 bg-white/10 text-white focus:ring-2 focus:ring-white/30';
+                
+                const radioLabel = document.createElement('label');
+                radioLabel.htmlFor = `${paramName}-${option}-${playlistId}`;
+                radioLabel.className = 'text-sm text-white/90';
+                radioLabel.textContent = option.charAt(0).toUpperCase() + option.slice(1);
+                
+                radioDiv.appendChild(radio);
+                radioDiv.appendChild(radioLabel);
+                inputContainer.appendChild(radioDiv);
+            });
+        } else if (paramInfo.type === 'float' || paramInfo.type === 'integer') {
+            inputContainer = document.createElement('div');
+            inputContainer.className = 'mt-2';
+            
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.id = `${paramName}-${playlistId}`;
+            input.name = paramName;
+            input.value = paramName === 'keep_first' ? '0' : (paramInfo.default || '');
+            input.className = 'w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:ring-2 focus:ring-white/30 focus:border-transparent';
+            
+            if (paramInfo.min !== undefined) input.min = paramInfo.min;
+            if (paramInfo.max !== undefined) input.max = paramInfo.max;
+            if (paramInfo.type === 'integer') input.step = 1;
+            if (paramInfo.type === 'float') input.step = 0.1;
+            
+            inputContainer.appendChild(input);
+        }
+        
+        paramDiv.appendChild(label);
+        paramDiv.appendChild(inputContainer);
+        paramsContainer.appendChild(paramDiv);
+    });
+}
+
+// Initialize parameters for all playlists
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('select[name="algorithm"]').forEach(select => {
+        const playlistId = select.closest('form').dataset.playlistId;
+        updateAlgorithmParams(select, playlistId);
+    });
+});
+</script>
 {% endblock %} 
