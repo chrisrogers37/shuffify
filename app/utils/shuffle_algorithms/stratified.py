@@ -7,7 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class StratifiedSample(ShuffleAlgorithm):
-    """Divide the playlist into chunks, shuffle each chunk independently, and reassemble in order."""
+    """Divide the playlist into sections, shuffle each sections independently, and reassemble the sections in the original order. This preserves general structure while adding local variety."""
     
     @property
     def name(self) -> str:
@@ -15,7 +15,7 @@ class StratifiedSample(ShuffleAlgorithm):
     
     @property
     def description(self) -> str:
-        return "Divide the playlist into chunks, shuffle each chunk independently, and reassemble the chunks in the original order. This preserves general structure while adding local variety."
+        return "Divide the playlist into sections, shuffle each sections independently, and reassemble the sections in the original order. This preserves general structure while adding local variety."
     
     @property
     def parameters(self) -> dict:
