@@ -4,7 +4,7 @@ This directory contains various algorithms for shuffling Spotify playlists, each
 
 ## Available Algorithms
 
-### Basic Shuffle
+### Basic
 - **Class**: `BasicShuffle`
 - **Description**: Standard random shuffle with the option to keep tracks fixed at the start.
 - **Parameters**:
@@ -12,7 +12,7 @@ This directory contains various algorithms for shuffling Spotify playlists, each
   - Default: 0, Min: 0
 
 
-### Balanced Shuffle
+### Balanced
 - **Class**: `BalancedShuffle`
 - **Description**: Ensures fair representation from all parts of the playlist by dividing it into sections and using a round-robin selection process.
 - **Parameters**:
@@ -56,7 +56,7 @@ This directory contains various algorithms for shuffling Spotify playlists, each
   - Genre-mixed playlists where tracks are grouped by style and you want consistent genre variety
   - Any playlist where you want to avoid clustering of tracks from the same section
 
-### Percentage Shuffle
+### Percentage
 - **Class**: `PercentageShuffle`
 - **Description**: Shuffle a portion of your playlist while keeping the rest in order.
 - **Parameters**:
@@ -67,48 +67,50 @@ This directory contains various algorithms for shuffling Spotify playlists, each
   - Back: First 70 tracks stay in order, last 30 get shuffled
   - Front: First 30 tracks get shuffled, last 70 stay in order
 
-### Stratified Sample
-- **Class**: `StratifiedSample`
-- **Description**: Divide the playlist into chunks, shuffle each chunk independently, and reassemble in order. This preserves some structure while adding local variety.
+### Vibe
+- **Class**: `VibeShuffle`
+- **Description**: Creates smooth transitions by analyzing track characteristics using Spotify's audio features.
 - **Parameters**:
   - `keep_first` (integer): Number of tracks to keep at start
     - Default: 0, Min: 0
-  - `chunk_count` (integer): Number of chunks to divide the playlist into
-    - Default: 5, Min: 1, Max: 20
+  - `smoothness` (float): How smooth the transitions should be (0.0 to 1.0)
+    - Default: 0.5, Min: 0.0, Max: 1.0
+    - 0.0: More random transitions
+    - 1.0: Strongly prefer similar tracks
 
-- **How it works in detail**:
-  1. Divides the playlist (excluding kept tracks) into equal-sized chunks
-  2. Shuffles each chunk internally
-  3. Reassembles the chunks in their original order
+- **Features Used** (with weights):
+  - Tempo (30%): Beats per minute (normalized from 0-250 BPM)
+  - Energy (30%): Intensity and activity
+  - Valence (20%): Musical positiveness
+  - Danceability (20%): How suitable for dancing
 
-  Example with 100 tracks and 5 chunks:
-  ```
-  Original playlist: [Track1...Track100]
-  
-  1. Division into chunks:
-     Chunk 1: [Track1...Track20]    (First 20 tracks)
-     Chunk 2: [Track21...Track40]   (Next 20 tracks)
-     Chunk 3: [Track41...Track60]   (Middle tracks)
-     Chunk 4: [Track61...Track80]   (Later tracks)
-     Chunk 5: [Track81...Track100]  (Last 20 tracks)
-  
-  2. Each chunk is shuffled internally
-  
-  3. Final assembly:
-     [Shuffled Chunk 1] + [Shuffled Chunk 2] + [Shuffled Chunk 3] + [Shuffled Chunk 4] + [Shuffled Chunk 5]
-  ```
+- **How It Works**:
+  1. Fetches audio features for all tracks from Spotify API
+  2. Normalizes each feature to [0,1] range based on Spotify's ranges
+  3. For each transition:
+     - Calculates weighted Euclidean distance between current track and candidates
+     - Converts distances to probabilities using smoothness parameter
+     - Selects next track based on calculated probabilities
+  4. Randomly inserts any tracks without features
+  5. Verifies the shuffle actually changed the order
+
+- **Probability Calculation**:
+  - Distances are normalized to [0,1] range
+  - Converted to similarities: similarity = 1 - normalized_distance
+  - Smoothness affects probability exponentially: probability ∝ similarity^(1/(smoothness+0.1))
+  - Higher smoothness creates stronger preference for similar tracks
 
 - **Benefits**:
-  - Preserves some of the original playlist structure
-  - Adds local variety within each chunk
-  - Good balance between randomness and order
-  - Simple to understand and control
+  - Creates more cohesive listening experience
+  - Avoids jarring transitions between dissimilar songs
+  - Maintains variety while respecting musical similarity
+  - Adapts to different playlist styles through smoothness parameter
 
 - **Use Cases**:
-  - Playlists where you want to maintain some original grouping
-  - When you want to keep related tracks somewhat close together
-  - For playlists with intentional ordering that you want to partially preserve
-  - When you want more control over the level of randomization
+  - Party playlists where smooth energy transitions are important
+  - Workout playlists that need to maintain consistent energy
+  - Mood-based playlists where you want to avoid sudden mood shifts
+  - Any playlist where musical flow is important
 
 ## Adding New Algorithms
 
