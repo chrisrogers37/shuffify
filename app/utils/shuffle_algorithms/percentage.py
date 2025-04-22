@@ -8,7 +8,7 @@ class PercentageShuffle(ShuffleAlgorithm):
     
     @property
     def name(self) -> str:
-        return "Percentage Shuffle"
+        return "Percentage"
     
     @property
     def description(self) -> str:
