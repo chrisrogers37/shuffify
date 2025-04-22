@@ -12,7 +12,7 @@ class BasicShuffle(ShuffleAlgorithm):
     
     @property
     def description(self) -> str:
-        return "Randomly shuffle tracks while optionally keeping the first N tracks in place."
+        return "Randomly shuffle tracks while optionally keeping the tracks in place at the top."
     
     @property
     def parameters(self) -> dict:
