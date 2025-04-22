@@ -7,7 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class BalancedShuffle(ShuffleAlgorithm):
-    """Divide the playlist into sections, shuffle each section, and then select one track from each section in a round-robin fashion."""
+    """Divide the playlist into sections, shuffle each section, and then rebuild the playlist by selecting tracks from each section in a round-robin fashion."""
     
     @property
     def name(self) -> str:
@@ -15,7 +15,7 @@ class BalancedShuffle(ShuffleAlgorithm):
     
     @property
     def description(self) -> str:
-        return "Divide the playlist into sections, shuffle each section, and then select one track from each section in a round-robin fashion."
+        return "Divide the playlist into sections, shuffle each section, and then rebuild the playlist by selecting tracks from each section in a round-robin fashion."
     
     @property
     def parameters(self) -> dict:

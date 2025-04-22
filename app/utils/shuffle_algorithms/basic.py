@@ -4,7 +4,7 @@ from spotipy import Spotify
 from . import ShuffleAlgorithm
 
 class BasicShuffle(ShuffleAlgorithm):
-    """Basic random shuffle with option to keep first N tracks."""
+    """Randomly shuffle your playlist while optionally keeping tracks in place at the top."""
     
     @property
     def name(self) -> str:
@@ -12,7 +12,7 @@ class BasicShuffle(ShuffleAlgorithm):
     
     @property
     def description(self) -> str:
-        return "Randomly shuffle tracks while optionally keeping the tracks in place at the top."
+        return "Randomly shuffle your playlist while optionally keeping tracks in place at the top."
     
     @property
     def parameters(self) -> dict:
