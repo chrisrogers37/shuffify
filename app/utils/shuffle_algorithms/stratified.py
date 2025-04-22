@@ -11,7 +11,7 @@ class StratifiedSample(ShuffleAlgorithm):
     
     @property
     def name(self) -> str:
-        return "Stratified Sample"
+        return "Stratified"
     
     @property
     def description(self) -> str:

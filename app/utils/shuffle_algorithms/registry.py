@@ -35,15 +35,19 @@ class ShuffleRegistry:
             if name not in cls._hidden_algorithms
         }
         
-        # Create metadata for visible algorithms
-        for algo_class in visible_algorithms.values():
-            algo = algo_class()
-            result.append({
-                'name': algo.name,
-                'class_name': algo_class.__name__,
-                'description': algo.description,
-                'parameters': algo.parameters
-            })
+        # Define the desired order of algorithms
+        desired_order = [BasicShuffle, PercentageShuffle, BalancedShuffle, StratifiedSample]
+        
+        # Create metadata for visible algorithms in the specified order
+        for algo_class in desired_order:
+            if algo_class.__name__ in visible_algorithms:
+                algo = algo_class()
+                result.append({
+                    'name': algo.name,
+                    'class_name': algo_class.__name__,
+                    'description': algo.description,
+                    'parameters': algo.parameters
+                })
         return result
 
 # Register all algorithms
