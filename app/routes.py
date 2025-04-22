@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, session, redirect, url_for, request, flash, jsonify
 from app.spotify.client import SpotifyClient
 from app.utils.shuffle_algorithms.registry import ShuffleRegistry
+from app.services.track_cache import TrackCache
 import logging
 import traceback
 from datetime import datetime

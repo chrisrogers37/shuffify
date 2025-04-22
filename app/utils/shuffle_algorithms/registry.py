@@ -1,7 +1,7 @@
 from typing import Dict, Type, List
 from . import ShuffleAlgorithm
 from .basic import BasicShuffle
-from .vibe_based import VibeShuffle
+from .vibe import VibeShuffle
 from .balanced import BalancedShuffle
 from .percentage import PercentageShuffle
 from .stratified import StratifiedSample
@@ -10,7 +10,7 @@ class ShuffleRegistry:
     """Registry for shuffle algorithms."""
     
     _algorithms: Dict[str, Type[ShuffleAlgorithm]] = {}
-    _hidden_algorithms = {'VibeShuffle'}  # Add algorithms to hide from UI here
+    _hidden_algorithms = set()  # Empty set since we want all algorithms visible
     
     @classmethod
     def register(cls, algorithm_class: Type[ShuffleAlgorithm]) -> None:
@@ -36,7 +36,7 @@ class ShuffleRegistry:
         }
         
         # Define the desired order of algorithms
-        desired_order = [BasicShuffle, PercentageShuffle, BalancedShuffle, StratifiedSample]
+        desired_order = [BasicShuffle, PercentageShuffle, BalancedShuffle, StratifiedSample, VibeShuffle]
         
         # Create metadata for visible algorithms in the specified order
         for algo_class in desired_order:
@@ -52,7 +52,7 @@ class ShuffleRegistry:
 
 # Register all algorithms
 ShuffleRegistry.register(BasicShuffle)
-ShuffleRegistry.register(VibeShuffle)  # Still registered but hidden from UI
+ShuffleRegistry.register(VibeShuffle)
 ShuffleRegistry.register(BalancedShuffle)
 ShuffleRegistry.register(PercentageShuffle)
 ShuffleRegistry.register(StratifiedSample) 
