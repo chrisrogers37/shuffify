@@ -4,6 +4,7 @@ from .basic import BasicShuffle
 from .vibe_based import VibeShuffle
 from .balanced import BalancedShuffle
 from .percentage import PercentageShuffle
+from .stratified import StratifiedSample
 
 class ShuffleRegistry:
     """Registry for shuffle algorithms."""
@@ -34,19 +35,24 @@ class ShuffleRegistry:
             if name not in cls._hidden_algorithms
         }
         
-        # Create metadata for visible algorithms
-        for algo_class in visible_algorithms.values():
-            algo = algo_class()
-            result.append({
-                'name': algo.name,
-                'class_name': algo_class.__name__,
-                'description': algo.description,
-                'parameters': algo.parameters
-            })
+        # Define the desired order of algorithms
+        desired_order = [BasicShuffle, PercentageShuffle, BalancedShuffle, StratifiedSample]
+        
+        # Create metadata for visible algorithms in the specified order
+        for algo_class in desired_order:
+            if algo_class.__name__ in visible_algorithms:
+                algo = algo_class()
+                result.append({
+                    'name': algo.name,
+                    'class_name': algo_class.__name__,
+                    'description': algo.description,
+                    'parameters': algo.parameters
+                })
         return result
 
 # Register all algorithms
 ShuffleRegistry.register(BasicShuffle)
 ShuffleRegistry.register(VibeShuffle)  # Still registered but hidden from UI
 ShuffleRegistry.register(BalancedShuffle)
-ShuffleRegistry.register(PercentageShuffle) 
+ShuffleRegistry.register(PercentageShuffle)
+ShuffleRegistry.register(StratifiedSample) 
