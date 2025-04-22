@@ -8,7 +8,7 @@ class BasicShuffle(ShuffleAlgorithm):
     
     @property
     def name(self) -> str:
-        return "Basic Shuffle"
+        return "Basic"
     
     @property
     def description(self) -> str:

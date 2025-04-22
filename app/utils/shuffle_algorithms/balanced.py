@@ -11,7 +11,7 @@ class BalancedShuffle(ShuffleAlgorithm):
     
     @property
     def name(self) -> str:
-        return "Balanced Shuffle"
+        return "Balanced"
     
     @property
     def description(self) -> str:
