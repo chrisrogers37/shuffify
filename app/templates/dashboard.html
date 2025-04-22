@@ -134,6 +134,14 @@ function updateAlgorithmParams(selectElement, playlistId) {
         label.htmlFor = `${paramName}-${playlistId}`;
         label.textContent = paramInfo.description;
         
+        // Add secondary description if present
+        if (paramInfo.secondary_description) {
+            const secondaryDesc = document.createElement('p');
+            secondaryDesc.className = 'mt-1 text-sm text-white/60';
+            secondaryDesc.textContent = paramInfo.secondary_description;
+            label.appendChild(secondaryDesc);
+        }
+        
         // Create input
         let inputContainer;
         if (paramInfo.type === 'string' && paramInfo.options) {
