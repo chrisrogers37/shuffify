@@ -67,6 +67,49 @@ This directory contains various algorithms for shuffling Spotify playlists, each
   - Back: First 70 tracks stay in order, last 30 get shuffled
   - Front: First 30 tracks get shuffled, last 70 stay in order
 
+### Stratified Sample
+- **Class**: `StratifiedSample`
+- **Description**: Divide the playlist into chunks, shuffle each chunk independently, and reassemble in order. This preserves some structure while adding local variety.
+- **Parameters**:
+  - `keep_first` (integer): Number of tracks to keep at start
+    - Default: 0, Min: 0
+  - `chunk_count` (integer): Number of chunks to divide the playlist into
+    - Default: 5, Min: 1, Max: 20
+
+- **How it works in detail**:
+  1. Divides the playlist (excluding kept tracks) into equal-sized chunks
+  2. Shuffles each chunk internally
+  3. Reassembles the chunks in their original order
+
+  Example with 100 tracks and 5 chunks:
+  ```
+  Original playlist: [Track1...Track100]
+  
+  1. Division into chunks:
+     Chunk 1: [Track1...Track20]    (First 20 tracks)
+     Chunk 2: [Track21...Track40]   (Next 20 tracks)
+     Chunk 3: [Track41...Track60]   (Middle tracks)
+     Chunk 4: [Track61...Track80]   (Later tracks)
+     Chunk 5: [Track81...Track100]  (Last 20 tracks)
+  
+  2. Each chunk is shuffled internally
+  
+  3. Final assembly:
+     [Shuffled Chunk 1] + [Shuffled Chunk 2] + [Shuffled Chunk 3] + [Shuffled Chunk 4] + [Shuffled Chunk 5]
+  ```
+
+- **Benefits**:
+  - Preserves some of the original playlist structure
+  - Adds local variety within each chunk
+  - Good balance between randomness and order
+  - Simple to understand and control
+
+- **Use Cases**:
+  - Playlists where you want to maintain some original grouping
+  - When you want to keep related tracks somewhat close together
+  - For playlists with intentional ordering that you want to partially preserve
+  - When you want more control over the level of randomization
+
 ## Adding New Algorithms
 
 To create a new shuffle algorithm:
