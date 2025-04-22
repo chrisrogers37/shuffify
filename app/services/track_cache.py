@@ -59,28 +59,44 @@ class TrackCache:
             logger.info(f"Fetching features for {len(missing_tracks)} tracks from Spotify API")
             new_features = {}
             
-            # Get features for all missing tracks using the batched method
             try:
                 # Process tracks in batches of 100 (Spotify API limit)
                 for i in range(0, len(missing_tracks), 100):
                     batch = missing_tracks[i:i + 100]
-                    batch_features = sp.audio_features(batch)
+                    try:
+                        batch_features = sp.audio_features(batch)
+                        
+                        if batch_features:
+                            for track_uri, track_features in zip(batch, batch_features):
+                                if track_features:
+                                    # Log specific missing features
+                                    missing = [f for f in ['tempo', 'energy', 'valence', 'danceability'] 
+                                             if track_features.get(f) is None]
+                                    if missing:
+                                        logger.warning(f"Track {track_uri} missing features: {missing}")
+                                    
+                                    new_features[track_uri] = {
+                                        'tempo': track_features.get('tempo'),
+                                        'energy': track_features.get('energy'),
+                                        'valence': track_features.get('valence'),
+                                        'danceability': track_features.get('danceability')
+                                    }
+                                    # Only keep features if all values are present
+                                    if any(v is None for v in new_features[track_uri].values()):
+                                        del new_features[track_uri]
+                                        logger.warning(f"Track {track_uri} removed due to missing required features")
+                    except Exception as e:
+                        logger.error(f"Error fetching features for batch {i//100 + 1}: {str(e)}")
+                        # Log the specific error details
+                        if hasattr(e, 'response'):
+                            logger.error(f"Response status: {e.response.status_code}")
+                            logger.error(f"Response body: {e.response.text}")
+                        # Continue with next batch instead of failing completely
+                        continue
                     
-                    # Process the results
-                    if batch_features:
-                        for track_uri, track_features in zip(batch, batch_features):
-                            if track_features:  # Some tracks might not have features
-                                new_features[track_uri] = {
-                                    'tempo': track_features.get('tempo'),
-                                    'energy': track_features.get('energy'),
-                                    'valence': track_features.get('valence'),
-                                    'danceability': track_features.get('danceability')
-                                }
-                                # Verify all required features are present
-                                if any(v is None for v in new_features[track_uri].values()):
-                                    del new_features[track_uri]
             except Exception as e:
-                logger.error(f"Error fetching audio features: {str(e)}")
+                logger.error(f"Error in feature fetching process: {str(e)}")
+                # Don't raise the exception, return what we have
             
             # Cache the new features
             if new_features:
@@ -89,6 +105,11 @@ class TrackCache:
                     features.update(new_features)
                 except Exception as e:
                     logger.error(f"Error caching features: {str(e)}")
+        
+        # Log summary of feature availability
+        total_tracks = len(tracks)
+        tracks_with_features = len(features)
+        logger.info(f"Feature summary: {tracks_with_features}/{total_tracks} tracks have complete features")
         
         return features
 

@@ -99,6 +99,7 @@ class SpotifyClient:
                     all_features.extend(batch_features)
                 else:
                     # If batch_features is None, extend with None values for each track
+                    logger.warning(f"No features returned for batch {i//self.BATCH_SIZE + 1}")
                     all_features.extend([None] * len(batch))
             except Exception as e:
                 logger.error(f"Error fetching audio features batch {i//self.BATCH_SIZE + 1}: {str(e)}")
