@@ -4,6 +4,7 @@ from .basic import BasicShuffle
 from .vibe_based import VibeShuffle
 from .balanced import BalancedShuffle
 from .percentage import PercentageShuffle
+from .stratified import StratifiedSample
 
 class ShuffleRegistry:
     """Registry for shuffle algorithms."""
@@ -49,4 +50,5 @@ class ShuffleRegistry:
 ShuffleRegistry.register(BasicShuffle)
 ShuffleRegistry.register(VibeShuffle)  # Still registered but hidden from UI
 ShuffleRegistry.register(BalancedShuffle)
-ShuffleRegistry.register(PercentageShuffle) 
+ShuffleRegistry.register(PercentageShuffle)
+ShuffleRegistry.register(StratifiedSample) 
