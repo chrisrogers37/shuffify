@@ -1,8 +1,7 @@
 from typing import List, Optional, Dict, Any
 import numpy as np
-from spotipy import Spotify
+from app.spotify.client import SpotifyClient
 from . import ShuffleAlgorithm
-from app.services.track_cache import TrackCache
 import logging
 import random
 
@@ -28,14 +27,17 @@ class VibeShuffle(ShuffleAlgorithm):
     
     @property
     def name(self) -> str:
+        """Name of the algorithm."""
         return "Vibe"
     
     @property
     def description(self) -> str:
+        """Description of what the algorithm does."""
         return "Creates smooth transitions by analyzing track characteristics using Spotify's audio features."
     
     @property
     def parameters(self) -> dict:
+        """Parameters that can be configured for this algorithm."""
         return {
             'keep_first': {
                 'type': 'integer',
@@ -46,178 +48,142 @@ class VibeShuffle(ShuffleAlgorithm):
             'smoothness': {
                 'type': 'float',
                 'description': 'How smooth should transitions be?',
-                'secondary_description': '0.0 will prioritize dissimilar transitions, 1.0 will prioritize similar transitions.',
+                'secondary_description': '0.0 will prioritize dissimilar tracks, 1.0 will prioritize similar tracks',
                 'default': 0.5,
                 'min': 0.0,
                 'max': 1.0
             }
         }
     
-    def _normalize_feature(self, value: float, feature: str) -> float:
-        """Normalize a feature value to [0,1] range based on its typical range."""
-        min_val, max_val = self.FEATURE_RANGES[feature]
-        return (value - min_val) / (max_val - min_val)
-    
-    def _calculate_distance(self, features1: Dict[str, float], features2: Dict[str, float]) -> float:
-        """Calculate weighted Euclidean distance between two tracks' features."""
-        try:
-            distance = 0.0
-            for feature, weight in self.FEATURE_WEIGHTS.items():
-                if feature not in features1 or feature not in features2:
-                    logger.warning(f"Missing feature {feature} in track features")
-                    logger.debug(f"Features1: {features1}")
-                    logger.debug(f"Features2: {features2}")
-                    return float('inf')
+    def shuffle(self, tracks: List[str], sp: Optional[SpotifyClient] = None, **kwargs) -> List[str]:
+        """
+        Shuffle tracks based on their audio features to create smooth transitions.
+        
+        Args:
+            tracks: List of track URIs to shuffle
+            sp: SpotifyClient for fetching audio features
+            **kwargs: Additional parameters
+                - keep_first: Number of tracks to keep at start
+                - smoothness: How smooth transitions should be (0.0-1.0)
                 
-                # Normalize both values before calculating difference
-                val1 = self._normalize_feature(features1[feature], feature)
-                val2 = self._normalize_feature(features2[feature], feature)
-                diff = val1 - val2
-                distance += weight * (diff ** 2)
-            
-            return np.sqrt(distance)
-        except Exception as e:
-            logger.error(f"Error calculating distance: {str(e)}")
-            return float('inf')
-    
-    def _calculate_probabilities(self, distances: Dict[str, float], smoothness: float) -> Dict[str, float]:
-        """Calculate selection probabilities based on distances and smoothness."""
-        if not distances:
-            return {}
-            
-        # Normalize distances to [0, 1] range
-        max_dist = max(distances.values())
-        min_dist = min(distances.values())
-        
-        if max_dist == min_dist:
-            return {uri: 1.0/len(distances) for uri in distances}
-            
-        # Convert distances to similarities (1 - normalized_distance)
-        similarities = {
-            uri: 1 - (dist - min_dist) / (max_dist - min_dist)
-            for uri, dist in distances.items()
-        }
-        
-        # Apply smoothness factor with exponential weighting for more dramatic effect
-        # Higher smoothness = more emphasis on similar tracks
-        probabilities = {
-            uri: similarity ** (1 / (smoothness + 0.1))  # Add 0.1 to avoid division by zero
-            for uri, similarity in similarities.items()
-        }
-        
-        # Normalize probabilities
-        total = sum(probabilities.values())
-        return {uri: p/total for uri, p in probabilities.items()}
-    
-    def _find_next_track(self, current_features: Dict[str, float], 
-                        available_features: Dict[str, Dict[str, float]], 
-                        smoothness: float) -> str:
-        """Find the next track based on feature similarity and randomness."""
-        try:
-            # Calculate distances between current track and all available tracks
-            distances = {
-                uri: self._calculate_distance(current_features, features)
-                for uri, features in available_features.items()
-            }
-            
-            if not distances:
-                logger.warning("No distances calculated, returning random track")
-                return random.choice(list(available_features.keys()))
-            
-            # Calculate probabilities using the new method
-            probabilities = self._calculate_probabilities(distances, smoothness)
-            
-            # Choose next track based on probabilities
-            uris = list(probabilities.keys())
-            probs = list(probabilities.values())
-            
-            # Log probability distribution for debugging
-            sorted_probs = sorted(zip(uris, probs), key=lambda x: x[1], reverse=True)
-            logger.debug(f"Probability distribution (smoothness={smoothness}):")
-            for uri, prob in sorted_probs[:3]:
-                logger.debug(f"  Track {uri[-8:]}: {prob:.3f}")
-            
-            selected = np.random.choice(uris, p=probs)
-            logger.debug(f"Selected track {selected[-8:]} with probability {probabilities[selected]:.3f}")
-            
-            return selected
-            
-        except Exception as e:
-            logger.error(f"Error finding next track: {str(e)}")
-            return random.choice(list(available_features.keys()))
-    
-    def shuffle(self, tracks: List[str], sp: Any, **kwargs) -> List[str]:
-        """Shuffle tracks while maintaining a cohesive vibe."""
+        Returns:
+            List of shuffled track URIs
+        """
         if not tracks:
             return []
             
-        keep_first = kwargs.get('keep_first', 0)
-        if keep_first > 0:
-            kept_tracks = tracks[:keep_first]
-            to_shuffle = tracks[keep_first:]
-        else:
-            kept_tracks = []
-            to_shuffle = tracks.copy()
+        if not sp:
+            logger.warning("No Spotify client provided, falling back to random shuffle")
+            return random.sample(tracks, len(tracks))
         
-        # Get audio features for all tracks
-        features = TrackCache.load_track_features(sp, to_shuffle)
-        
-        # Separate tracks with and without features
-        tracks_with_features = [t for t in to_shuffle if t in features]
-        tracks_without_features = [t for t in to_shuffle if t not in features]
-        
-        if not tracks_with_features:
-            logger.warning("No tracks have complete features, falling back to random shuffle")
-            shuffled = to_shuffle.copy()
-            random.shuffle(shuffled)
-            return kept_tracks + shuffled
-        
-        # Start with a random track that has features
-        shuffled = [random.choice(tracks_with_features)]
-        remaining = [t for t in tracks_with_features if t != shuffled[0]]
-        
-        # Build the shuffled playlist while maintaining vibe
-        while remaining:
-            current_track = shuffled[-1]
-            current_features = features[current_track]
+        try:
+            # Get parameters with defaults
+            keep_first = kwargs.get('keep_first', 0)
+            smoothness = kwargs.get('smoothness', 0.5)
             
-            # Find the next track that best matches the current vibe
-            next_track = self._find_next_track(current_features, remaining, features)
-            if next_track:
-                shuffled.append(next_track)
-                remaining.remove(next_track)
+            # Validate parameters
+            if not 0 <= smoothness <= 1:
+                logger.warning(f"Invalid smoothness value {smoothness}, using default 0.5")
+                smoothness = 0.5
+                
+            if not 0 <= keep_first < len(tracks):
+                logger.warning(f"Invalid keep_first value {keep_first}, using default 0")
+                keep_first = 0
+            
+            # Get audio features for all tracks
+            features = sp.get_track_features(tracks)
+            
+            if not features:
+                logger.warning("No features available, falling back to random shuffle")
+                return random.sample(tracks, len(tracks))
+            
+            # Separate tracks with and without features
+            tracks_with_features = [t for t in tracks if t in features]
+            tracks_without_features = [t for t in tracks if t not in features]
+            
+            if not tracks_with_features:
+                logger.warning("No tracks with features available, falling back to random shuffle")
+                return random.sample(tracks, len(tracks))
+            
+            # Keep first N tracks if specified
+            if keep_first > 0:
+                keep_tracks = tracks[:keep_first]
+                remaining_tracks = tracks[keep_first:]
+                remaining_features = {t: features[t] for t in remaining_tracks if t in features}
             else:
-                # If no good match found, pick a random remaining track
-                next_track = random.choice(remaining)
+                keep_tracks = []
+                remaining_tracks = tracks
+                remaining_features = features
+            
+            # Create feature vectors for remaining tracks
+            feature_vectors = {}
+            for track_uri, track_features in remaining_features.items():
+                feature_vectors[track_uri] = self._create_feature_vector(track_features)
+            
+            # Start with first track (or random if keeping first N)
+            if keep_tracks:
+                shuffled = keep_tracks.copy()
+                current_track = keep_tracks[-1]
+            else:
+                shuffled = []
+                current_track = random.choice(list(feature_vectors.keys()))
+                shuffled.append(current_track)
+                del feature_vectors[current_track]
+            
+            # Build shuffled list based on feature similarity
+            while feature_vectors:
+                # Get current track's features
+                current_features = remaining_features[current_track]
+                
+                # Calculate similarity scores
+                similarities = {}
+                for track_uri, features in feature_vectors.items():
+                    similarity = self._calculate_similarity(
+                        self._create_feature_vector(current_features),
+                        features,
+                        smoothness
+                    )
+                    similarities[track_uri] = similarity
+                
+                # Select next track based on smoothness
+                if smoothness > 0.5:
+                    # Prefer similar tracks
+                    next_track = max(similarities.items(), key=lambda x: x[1])[0]
+                else:
+                    # Prefer dissimilar tracks
+                    next_track = min(similarities.items(), key=lambda x: x[1])[0]
+                
+                # Add to shuffled list and remove from remaining
                 shuffled.append(next_track)
-                remaining.remove(next_track)
-        
-        # Insert tracks without features at positions that maintain the vibe
-        if tracks_without_features:
-            logger.info(f"Inserting {len(tracks_without_features)} tracks without features")
-            for track in tracks_without_features:
-                position = self._find_best_insert_position(track, shuffled, features)
-                shuffled.insert(position, track)
-        
-        return kept_tracks + shuffled
-
-    def _find_best_insert_position(self, track: str, shuffled: List[str], features: Dict[str, Dict[str, float]]) -> int:
-        """Find the best position to insert a track without features."""
-        if not shuffled:
-            return 0
-        
-        # Calculate average distances between consecutive tracks
-        distances = []
-        for i in range(len(shuffled) - 1):
-            track1 = shuffled[i]
-            track2 = shuffled[i + 1]
-            if track1 in features and track2 in features:
-                distance = self._calculate_distance(features[track1], features[track2])
-                distances.append((i, distance))
-        
-        if not distances:
-            return random.randint(0, len(shuffled))
-        
-        # Find the position with the largest gap (most suitable for random insertion)
-        max_gap_position = max(distances, key=lambda x: x[1])[0]
-        return max_gap_position + 1 
+                del feature_vectors[next_track]
+                current_track = next_track
+            
+            # Add tracks without features at the end
+            if tracks_without_features:
+                shuffled.extend(random.sample(tracks_without_features, len(tracks_without_features)))
+            
+            return shuffled
+            
+        except Exception as e:
+            logger.error(f"Error in Vibe shuffle: {str(e)}")
+            # Fall back to random shuffle on error
+            return random.sample(tracks, len(tracks))
+    
+    def _create_feature_vector(self, features: Dict[str, float]) -> np.ndarray:
+        """Create a normalized feature vector from track features."""
+        vector = []
+        for feature, weight in self.FEATURE_WEIGHTS.items():
+            value = features.get(feature, 0)
+            min_val, max_val = self.FEATURE_RANGES[feature]
+            # Normalize to 0-1 range
+            normalized = (value - min_val) / (max_val - min_val)
+            # Apply weight
+            vector.append(normalized * weight)
+        return np.array(vector)
+    
+    def _calculate_similarity(self, vec1: np.ndarray, vec2: np.ndarray, smoothness: float) -> float:
+        """Calculate similarity between two feature vectors."""
+        # Use cosine similarity
+        similarity = np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+        # Adjust based on smoothness parameter
+        return similarity * smoothness + (1 - similarity) * (1 - smoothness) 
