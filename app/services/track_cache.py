@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from flask import session
 import logging
 
@@ -10,36 +10,41 @@ class TrackCache:
     FEATURES_KEY = 'track_features_cache'
     
     @classmethod
-    def get_features(cls, track_uris: List[str]) -> Dict[str, Dict[str, float]]:
-        """Get features for tracks from the session cache."""
+    def get_features(cls, playlist_id: str, track_uris: List[str]) -> Dict[str, Dict[str, float]]:
+        """Get features for tracks from the session cache for a specific playlist."""
         cache = session.get(cls.FEATURES_KEY, {})
+        playlist_cache = cache.get(playlist_id, {})
         return {
             uri: features
-            for uri, features in cache.items()
+            for uri, features in playlist_cache.items()
             if uri in track_uris and features and all(v is not None for v in features.values())
         }
     
     @classmethod
-    def cache_features(cls, features_data: Dict[str, dict]) -> None:
-        """Cache track features in the session."""
+    def cache_features(cls, playlist_id: str, features_data: Dict[str, dict]) -> None:
+        """Cache track features in the session for a specific playlist."""
         try:
             # Get existing cache or initialize new one
             cache = session.get(cls.FEATURES_KEY, {})
+            playlist_cache = cache.get(playlist_id, {})
             
             # Update cache with new features
             for track_uri, track_features in features_data.items():
                 if track_features:  # Only cache if we have valid features
-                    cache[track_uri] = {
+                    playlist_cache[track_uri] = {
                         'tempo': track_features.get('tempo'),
                         'energy': track_features.get('energy'),
                         'valence': track_features.get('valence'),
-                        'danceability': track_features.get('danceability')
+                        'danceability': track_features.get('danceability'),
+                        'key': track_features.get('key'),
+                        'mode': track_features.get('mode')
                     }
                     # Only keep features if all values are present
-                    if any(v is None for v in cache[track_uri].values()):
-                        del cache[track_uri]
+                    if any(v is None for v in playlist_cache[track_uri].values()):
+                        del playlist_cache[track_uri]
             
             # Store updated cache in session
+            cache[playlist_id] = playlist_cache
             session[cls.FEATURES_KEY] = cache
             
         except Exception as e:
@@ -47,13 +52,20 @@ class TrackCache:
             raise
     
     @classmethod
-    def load_track_features(cls, sp, tracks: List[str]) -> Dict[str, Dict[str, float]]:
-        """Load track features, using cache when possible and fetching missing data."""
-        # First, try to get features from session cache
-        features = cls.get_features(tracks)
+    def load_track_features(cls, sp, playlist_id: str, tracks: List[Dict[str, Any]]) -> Dict[str, Dict[str, float]]:
+        """Load track features, using cache when possible and fetching missing data.
         
-        # Identify tracks that need features fetched
-        missing_tracks = [t for t in tracks if t not in features]
+        Args:
+            sp: Spotify client
+            playlist_id: ID of the playlist being processed
+            tracks: List of track objects from the initial playlist fetch
+        """
+        # First, try to get features from session cache
+        track_uris = [track['uri'] for track in tracks]
+        features = cls.get_features(playlist_id, track_uris)
+        
+        # Identify tracks that still need features fetched
+        missing_tracks = [t['uri'] for t in tracks if t['uri'] not in features]
         
         if missing_tracks:
             logger.info(f"Fetching features for {len(missing_tracks)} tracks from Spotify API")
@@ -79,10 +91,14 @@ class TrackCache:
                                         'tempo': track_features.get('tempo'),
                                         'energy': track_features.get('energy'),
                                         'valence': track_features.get('valence'),
-                                        'danceability': track_features.get('danceability')
+                                        'danceability': track_features.get('danceability'),
+                                        'key': track_features.get('key'),
+                                        'mode': track_features.get('mode')
                                     }
-                                    # Only keep features if all values are present
-                                    if any(v is None for v in new_features[track_uri].values()):
+                                    # Only keep features if all required values are present
+                                    if any(v is None for v in [new_features[track_uri]['tempo'], 
+                                                             new_features[track_uri]['key'],
+                                                             new_features[track_uri]['mode']]):
                                         del new_features[track_uri]
                                         logger.warning(f"Track {track_uri} removed due to missing required features")
                     except Exception as e:
@@ -98,54 +114,34 @@ class TrackCache:
                 logger.error(f"Error in feature fetching process: {str(e)}")
                 # Don't raise the exception, return what we have
             
-            # Cache the new features
+            # Cache any new features we successfully fetched
             if new_features:
-                try:
-                    cls.cache_features(new_features)
-                    features.update(new_features)
-                except Exception as e:
-                    logger.error(f"Error caching features: {str(e)}")
-        
-        # Log summary of feature availability
-        total_tracks = len(tracks)
-        tracks_with_features = len(features)
-        logger.info(f"Feature summary: {tracks_with_features}/{total_tracks} tracks have complete features")
+                cls.cache_features(playlist_id, new_features)
+                features.update(new_features)
         
         return features
-
+    
     @classmethod
     def verify_session(cls) -> bool:
-        """Verify that session storage is working correctly."""
+        """Verify that the session cache is valid."""
         try:
-            # Try to store and retrieve a test value
-            test_key = '_test_cache_key'
-            test_value = {'test': 'value'}
-            
-            # Store test value
-            session[test_key] = test_value
-            
-            # Try to retrieve it
-            retrieved = session.get(test_key)
-            
-            # Clean up
-            if test_key in session:
-                del session[test_key]
-            
-            # Verify retrieval worked
-            if retrieved != test_value:
-                logger.error("Session storage verification failed: retrieved value doesn't match stored value")
-                return False
-                
-            logger.info("Session storage verification successful")
-            return True
-            
+            cache = session.get(cls.FEATURES_KEY, {})
+            return isinstance(cache, dict)
         except Exception as e:
-            logger.error(f"Session storage verification failed with error: {str(e)}")
+            logger.error(f"Error verifying session cache: {str(e)}")
             return False
     
     @classmethod
-    def clear_cache(cls) -> None:
-        """Clear the feature cache."""
-        if cls.FEATURES_KEY in session:
-            del session[cls.FEATURES_KEY]
-            logger.info("Feature cache cleared") 
+    def clear_cache(cls, playlist_id: Optional[str] = None) -> None:
+        """Clear the cache for a specific playlist or all playlists."""
+        try:
+            if playlist_id:
+                cache = session.get(cls.FEATURES_KEY, {})
+                if playlist_id in cache:
+                    del cache[playlist_id]
+                    session[cls.FEATURES_KEY] = cache
+            else:
+                session.pop(cls.FEATURES_KEY, None)
+        except Exception as e:
+            logger.error(f"Error clearing cache: {str(e)}")
+            raise 
