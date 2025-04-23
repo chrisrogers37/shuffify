@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, session, redirect, url_for, request, flash, jsonify
 from app.spotify.client import SpotifyClient
+from app.models.playlist import Playlist
 from app.utils.shuffle_algorithms.registry import ShuffleRegistry
 import logging
 import traceback
@@ -17,8 +18,6 @@ def inject_current_year():
 def index():
     """Home page route."""
     try:
-        logger.debug("Session state: %s", dict(session))
-        
         if 'spotify_token' not in session:
             logger.debug("No spotify_token in session, showing login page")
             # Clear any existing flash messages when showing login page
@@ -27,19 +26,19 @@ def index():
         
         try:
             spotify = SpotifyClient(session['spotify_token'])
-            playlists = spotify.get_user_playlists()
-            user = spotify.get_current_user()
+            playlists = spotify.get_user_playlists_data()
+            user = spotify.get_current_user_data()
             algorithms = ShuffleRegistry.list_algorithms()
             return render_template('dashboard.html', playlists=playlists, user=user, algorithms=algorithms)
         except Exception as e:
-            logger.error("Error with Spotify client: %s\nTraceback: %s", str(e), traceback.format_exc())
+            logger.error("Error with Spotify client: %s", str(e))
             # Clear session and flash messages
             session.clear()
             flash('Your session has expired. Please log in again.', 'error')
             return render_template('index.html')
             
     except Exception as e:
-        logger.error("Error in index route: %s\nTraceback: %s", str(e), traceback.format_exc())
+        logger.error("Error in index route: %s", str(e))
         session.clear()
         return render_template('index.html')
 
@@ -99,13 +98,39 @@ def logout():
     session.clear()
     return redirect(url_for('main.index'))
 
+@main.route('/playlist/<playlist_id>')
+def get_playlist(playlist_id):
+    """Get playlist data with optional features."""
+    try:
+        if 'spotify_token' not in session:
+            return jsonify({'error': 'Please log in first.'}), 401
+            
+        spotify = SpotifyClient(session['spotify_token'])
+        include_features = request.args.get('features', 'false').lower() == 'true'
+        playlist = Playlist.from_spotify(spotify, playlist_id, include_features)
+        return jsonify(playlist.to_dict())
+    except Exception as e:
+        logger.error(f"Error getting playlist: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@main.route('/playlist/<playlist_id>/stats')
+def get_playlist_stats(playlist_id):
+    """Get playlist feature statistics."""
+    try:
+        if 'spotify_token' not in session:
+            return jsonify({'error': 'Please log in first.'}), 401
+            
+        spotify = SpotifyClient(session['spotify_token'])
+        playlist = Playlist.from_spotify(spotify, playlist_id, include_features=True)
+        return jsonify(playlist.get_feature_stats())
+    except Exception as e:
+        logger.error(f"Error getting stats: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 @main.route('/shuffle/<playlist_id>', methods=['POST'])
 def shuffle(playlist_id):
     """Shuffle a playlist using the selected algorithm."""
     try:
-        logger.debug("Shuffle request - Headers: %s", dict(request.headers))
-        logger.debug("Session state: %s", dict(session))
-        
         is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         
         if 'spotify_token' not in session:
@@ -117,7 +142,8 @@ def shuffle(playlist_id):
         # Get algorithm and parameters from form
         algorithm_name = request.form.get('algorithm', 'BasicShuffle')
         try:
-            algorithm = ShuffleRegistry.get_algorithm(algorithm_name)
+            algorithm_class = ShuffleRegistry.get_algorithm(algorithm_name)
+            algorithm = algorithm_class()
         except ValueError as e:
             logger.error(f"Invalid algorithm requested: {algorithm_name}")
             if is_ajax:
@@ -142,31 +168,47 @@ def shuffle(playlist_id):
         
         spotify = SpotifyClient(session['spotify_token'])
         
+        # Get playlist with features only if needed
+        include_features = algorithm.requires_features
+        if include_features:
+            logger.info(f"Using {algorithm_name} which requires audio features")
+        playlist = Playlist.from_spotify(spotify, playlist_id, include_features)
+        
+        # Log feature status
+        if include_features:
+            if not playlist.audio_features:
+                logger.error("No audio features found for playlist despite being required")
+                if is_ajax:
+                    return jsonify({'success': False, 'message': 'Failed to get audio features for playlist.', 'category': 'error'})
+                flash('Failed to get audio features for playlist.', 'error')
+                return redirect(url_for('main.index'))
+            logger.info(f"Successfully loaded {len(playlist.audio_features)} audio features")
+        
         # Initialize playlist states if not exists
         if 'playlist_states' not in session:
             session['playlist_states'] = {}
             
         # Get current state before shuffling
-        current_tracks = spotify.get_playlist_tracks(playlist_id)
-        if not current_tracks:
+        current_uris = playlist.get_track_uris()
+        if not current_uris:
             logger.error("Failed to get current tracks from playlist")
             if is_ajax:
                 return jsonify({'success': False, 'message': 'Failed to get playlist tracks.', 'category': 'error'})
             flash('Failed to get playlist tracks.', 'error')
             return redirect(url_for('main.index'))
             
-        logger.info(f"Current track order for playlist {playlist_id}. Track count: {len(current_tracks)}")
+        logger.info(f"Current track order for playlist {playlist_id}. Track count: {len(current_uris)}")
         
         # Initialize or reset state stack for this playlist
         if playlist_id not in session['playlist_states'] or not session['playlist_states'][playlist_id].get('states'):
             session['playlist_states'][playlist_id] = {
-                'states': [current_tracks],  # First state is the original order
+                'states': [current_uris],  # First state is the original order
                 'current_index': 0
             }
         
         # Perform shuffle using the selected algorithm
         try:
-            shuffled_uris = algorithm.shuffle(current_tracks, sp=spotify, **params)
+            shuffled_uris = algorithm.shuffle(playlist.tracks, features=playlist.audio_features if include_features else None, **params)
         except Exception as e:
             logger.error(f"Error during shuffle operation: {str(e)}")
             if is_ajax:
@@ -249,52 +291,54 @@ def undo(playlist_id):
         
         # Check if we can undo
         if current_index <= 0:
-            logger.warning("Already at original playlist state")
+            logger.warning("No previous state to undo to")
             if is_ajax:
-                return jsonify({'success': False, 'message': 'Already at original playlist state.', 'category': 'error'})
-            flash('Already at original playlist state.', 'error')
+                return jsonify({'success': False, 'message': 'No previous state to undo to.', 'category': 'error'})
+            flash('No previous state to undo to.', 'error')
             return redirect(url_for('main.index'))
         
         # Get previous state
-        previous_state = playlist_states['states'][current_index - 1]
+        previous_uris = playlist_states['states'][current_index - 1]
         
+        # Update playlist
         spotify = SpotifyClient(session['spotify_token'])
-        logger.info(f"Restoring playlist {playlist_id} to previous state (index {current_index - 1})")
-        success = spotify.update_playlist_tracks(playlist_id, previous_state)
+        success = spotify.update_playlist_tracks(playlist_id, previous_uris)
         
         if success:
-            # Update current index
+            # Update state index
             playlist_states['current_index'] -= 1
             session.modified = True
-            
-            message = 'Successfully restored previous playlist order!'
+            message = 'Successfully restored previous state.'
             category = 'success'
-            logger.info("Successfully restored playlist order")
         else:
-            message = 'Failed to restore playlist.'
+            message = 'Failed to restore previous state.'
             category = 'error'
-            logger.error("Failed to restore playlist order")
             
     except Exception as e:
-        logger.error("Error undoing shuffle: %s\nTraceback: %s", str(e), traceback.format_exc())
-        message = 'An error occurred while restoring the playlist.'
+        logger.error("Error in undo route: %s\nTraceback: %s", str(e), traceback.format_exc())
+        message = 'An error occurred while restoring the previous state.'
         category = 'error'
         success = False
     
-    if is_ajax:
-        response = {
-            'success': success,
-            'message': message,
-            'category': category,
-            'can_undo_more': current_index > 1 if success else False  # We can undo more if we're not at index 1 or 0
-        }
-        logger.debug("Sending AJAX response: %s", response)
-        return jsonify(response)
-    else:
-        flash(message, category)
-        return redirect(url_for('main.index'))
+    try:
+        if is_ajax:
+            return jsonify({
+                'success': success,
+                'message': message,
+                'category': category
+            })
+        else:
+            flash(message, category)
+            return redirect(url_for('main.index'))
+    except Exception as e:
+        logger.error("Error returning response: %s\nTraceback: %s", str(e), traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'message': 'An unexpected error occurred.',
+            'category': 'error'
+        })
 
 @main.route('/health')
 def health_check():
-    """Health check endpoint for Digital Ocean."""
-    return jsonify({"status": "healthy"}), 200 
+    """Health check endpoint."""
+    return jsonify({'status': 'healthy'}) 
