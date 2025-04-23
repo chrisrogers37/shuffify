@@ -1,9 +1,8 @@
 import random
-from typing import List, Optional
-from app.spotify.client import SpotifyClient
+from typing import List, Dict, Any, Optional
 from . import ShuffleAlgorithm
 
-class BasicShuffle(ShuffleAlgorithm):
+class BasicShuffle:
     """Randomly shuffle your playlist while optionally keeping tracks in place at the top."""
     
     @property
@@ -25,13 +24,17 @@ class BasicShuffle(ShuffleAlgorithm):
             }
         }
     
-    def shuffle(self, tracks: List[str], sp: Optional[SpotifyClient] = None, **kwargs) -> List[str]:
+    @property
+    def requires_features(self) -> bool:
+        return False
+    
+    def shuffle(self, tracks: List[Dict[str, Any]], features: Optional[Dict[str, Dict[str, Any]]] = None, **kwargs) -> List[str]:
         """
         Randomly shuffle tracks while optionally keeping some at the start.
         
         Args:
-            tracks: List of track URIs to shuffle
-            sp: SpotifyClient (unused in basic shuffle)
+            tracks: List of track dictionaries from Spotify API
+            features: Optional dictionary of track URIs to audio features (unused in basic shuffle)
             **kwargs: Additional parameters
                 - keep_first: Number of tracks to keep at start
                 
@@ -40,15 +43,18 @@ class BasicShuffle(ShuffleAlgorithm):
         """
         keep_first = kwargs.get('keep_first', 0)
         
-        if len(tracks) <= 1 or keep_first >= len(tracks):
-            return tracks
+        # Extract URIs from track dictionaries
+        uris = [track['uri'] for track in tracks if track.get('uri')]
+        
+        if len(uris) <= 1 or keep_first >= len(uris):
+            return uris
             
         if keep_first > 0:
-            kept_tracks = tracks[:keep_first]
-            to_shuffle = tracks[keep_first:]
+            kept_uris = uris[:keep_first]
+            to_shuffle = uris[keep_first:]
             random.shuffle(to_shuffle)
-            return kept_tracks + to_shuffle
+            return kept_uris + to_shuffle
         
-        shuffled = tracks.copy()
+        shuffled = uris.copy()
         random.shuffle(shuffled)
         return shuffled 

@@ -4,12 +4,17 @@ from .basic import BasicShuffle
 from .vibe import VibeShuffle
 from .balanced import BalancedShuffle
 from .percentage import PercentageShuffle
-from .stratified import StratifiedSample
+from .stratified import StratifiedShuffle
 
 class ShuffleRegistry:
     """Registry for shuffle algorithms."""
     
-    _algorithms: Dict[str, Type[ShuffleAlgorithm]] = {}
+    _algorithms: Dict[str, Type[ShuffleAlgorithm]] = {
+        'BasicShuffle': BasicShuffle,
+        'BalancedShuffle': BalancedShuffle,
+        'PercentageShuffle': PercentageShuffle,
+        'StratifiedShuffle': StratifiedShuffle
+    }
     _hidden_algorithms = set()  # Empty set since we want all algorithms visible
     
     @classmethod
@@ -18,11 +23,16 @@ class ShuffleRegistry:
         cls._algorithms[algorithm_class.__name__] = algorithm_class
     
     @classmethod
-    def get_algorithm(cls, name: str) -> ShuffleAlgorithm:
-        """Get an instance of a registered algorithm."""
+    def get_algorithm(cls, name: str) -> Type[ShuffleAlgorithm]:
+        """Get a shuffle algorithm by name."""
         if name not in cls._algorithms:
             raise ValueError(f"Unknown shuffle algorithm: {name}")
-        return cls._algorithms[name]()
+        return cls._algorithms[name]
+    
+    @classmethod
+    def get_available_algorithms(cls) -> Dict[str, Type[ShuffleAlgorithm]]:
+        """Get all available shuffle algorithms."""
+        return cls._algorithms.copy()
     
     @classmethod
     def list_algorithms(cls) -> List[dict]:
@@ -36,7 +46,7 @@ class ShuffleRegistry:
         }
         
         # Define the desired order of algorithms
-        desired_order = [BasicShuffle, PercentageShuffle, BalancedShuffle, StratifiedSample, VibeShuffle]
+        desired_order = [BasicShuffle, PercentageShuffle, BalancedShuffle, StratifiedShuffle, VibeShuffle]
         
         # Create metadata for visible algorithms in the specified order
         for algo_class in desired_order:
@@ -55,4 +65,4 @@ ShuffleRegistry.register(BasicShuffle)
 ShuffleRegistry.register(VibeShuffle)
 ShuffleRegistry.register(BalancedShuffle)
 ShuffleRegistry.register(PercentageShuffle)
-ShuffleRegistry.register(StratifiedSample) 
+ShuffleRegistry.register(StratifiedShuffle) 
