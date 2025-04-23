@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Dict, Any, Optional
 import random
 from spotipy import Spotify
 from . import ShuffleAlgorithm
@@ -7,7 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class BalancedShuffle(ShuffleAlgorithm):
-    """Divide the playlist into sections, shuffle each section, and then rebuild the playlist by selecting tracks from each section one at a time in a round-robin fashion."""
+    """Ensures fair representation from all parts of the playlist by dividing it into sections and using a round-robin selection process."""
     
     @property
     def name(self) -> str:
@@ -15,14 +15,14 @@ class BalancedShuffle(ShuffleAlgorithm):
     
     @property
     def description(self) -> str:
-        return "Divide the playlist into sections, shuffle each section, and then rebuild the playlist by selecting tracks from each section one at a time in a round-robin fashion."
+        return "Ensures fair representation from all parts of the playlist by dividing it into sections and using a round-robin selection process."
     
     @property
     def parameters(self) -> dict:
         return {
             'keep_first': {
                 'type': 'integer',
-                'description': 'Number of tracks to keep at start',
+                'description': 'Number of tracks to keep in their original position',
                 'default': 0,
                 'min': 0
             },
@@ -35,49 +35,66 @@ class BalancedShuffle(ShuffleAlgorithm):
             }
         }
     
-    def shuffle(self, tracks: List[str], sp: Optional[Spotify] = None, **kwargs) -> List[str]:
+    @property
+    def requires_features(self) -> bool:
+        return False
+    
+    def shuffle(self, tracks: List[Dict[str, Any]], features: Optional[Dict[str, Dict[str, Any]]] = None, **kwargs) -> List[str]:
+        """
+        Shuffle tracks while ensuring fair representation from all parts of the playlist.
+        
+        Args:
+            tracks: List of track dictionaries from Spotify API
+            features: Optional dictionary of track URIs to audio features (unused in balanced shuffle)
+            **kwargs: Additional parameters
+                - keep_first: Number of tracks to keep at start
+                - section_count: Number of sections to divide playlist into
+                
+        Returns:
+            List of shuffled track URIs
+        """
         keep_first = kwargs.get('keep_first', 0)
         section_count = kwargs.get('section_count', 4)
         
-        logger.info(f"Starting balanced shuffle with {len(tracks)} tracks (keep_first={keep_first}, sections={section_count})")
+        # Extract URIs from track dictionaries
+        uris = [track['uri'] for track in tracks if track.get('uri')]
         
-        if len(tracks) <= 1 or keep_first >= len(tracks):
-            return tracks
+        if len(uris) <= 1:
+            return uris
             
         # Split tracks into kept and to_shuffle portions
-        kept_tracks = tracks[:keep_first] if keep_first > 0 else []
-        to_shuffle = tracks[keep_first:]
+        kept_tracks = uris[:keep_first] if keep_first > 0 else []
+        to_shuffle = uris[keep_first:]
         
         if len(to_shuffle) <= 1:
             return kept_tracks + to_shuffle
             
-        # Divide remaining tracks into sections
-        section_size = len(to_shuffle) // section_count
+        # Calculate section sizes
+        total_tracks = len(to_shuffle)
+        base_section_size = total_tracks // section_count
+        remainder = total_tracks % section_count
+        
+        # Create sections
         sections = []
+        start = 0
         
-        # Create sections of equal size (except possibly the last one)
-        for i in range(section_count - 1):
-            start = i * section_size
-            end = start + section_size
-            sections.append(to_shuffle[start:end])
+        for i in range(section_count):
+            # Add one extra track to sections until remainder is used up
+            current_section_size = base_section_size + (1 if i < remainder else 0)
+            end = start + current_section_size
+            section = to_shuffle[start:end]
+            sections.append(section)
+            start = end
             
-        # Last section gets any remaining tracks
-        sections.append(to_shuffle[(section_count-1) * section_size:])
-        
-        logger.info(f"Divided {len(to_shuffle)} tracks into {len(sections)} sections")
-        
         # Shuffle each section internally
         for section in sections:
             random.shuffle(section)
-        
-        # Build final sequence by taking tracks from each section in a round-robin fashion
-        result = kept_tracks.copy()  # Start with kept tracks
-        remaining = [list(section) for section in sections]
-        
-        while any(remaining):
-            for section in remaining:
+            
+        # Build final sequence using round-robin selection
+        result = kept_tracks.copy()
+        while any(sections):
+            for section in sections:
                 if section:
                     result.append(section.pop(0))
-        
-        logger.info(f"Completed balanced shuffle. Final playlist length: {len(result)}")
+                    
         return result 
