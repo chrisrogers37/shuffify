@@ -1,7 +1,6 @@
 from flask import Blueprint, render_template, session, redirect, url_for, request, flash, jsonify
 from app.spotify.client import SpotifyClient
 from app.utils.shuffle_algorithms.registry import ShuffleRegistry
-from app.services.track_cache import TrackCache
 import logging
 import traceback
 from datetime import datetime
@@ -167,7 +166,7 @@ def shuffle(playlist_id):
         
         # Perform shuffle using the selected algorithm
         try:
-            shuffled_uris = algorithm.shuffle(current_tracks, sp=spotify.sp, **params)
+            shuffled_uris = algorithm.shuffle(current_tracks, sp=spotify, **params)
         except Exception as e:
             logger.error(f"Error during shuffle operation: {str(e)}")
             if is_ajax:

@@ -3,15 +3,16 @@ import traceback
 from typing import List, Dict, Any, Optional
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-from flask import current_app, flash
+from flask import current_app, flash, session
 import time
 
 logger = logging.getLogger(__name__)
 
 class SpotifyClient:
-    """Handles all Spotify API interactions with proper error handling and logging."""
+    """Handles all Spotify API interactions and caching with proper error handling and logging."""
     
     BATCH_SIZE = 50  # Maximum number of tracks per audio features request
+    CACHE_KEY = 'spotify_cache'
     
     def __init__(self, token: Optional[Dict[str, Any]] = None) -> None:
         """Initialize the Spotify client with OAuth authentication."""
@@ -27,7 +28,9 @@ class SpotifyClient:
                 "playlist-read-collaborative",
                 "playlist-modify-private",
                 "playlist-modify-public",
-                "user-read-private"
+                "user-read-private",
+                "user-read-playback-state",
+                "user-read-email"
             ])
             
             self.sp = None
@@ -78,35 +81,6 @@ class SpotifyClient:
         except Exception as e:
             logger.error("Error initializing Spotify client: %s\nTraceback: %s", str(e), traceback.format_exc())
             raise
-    
-    def audio_features(self, track_ids: List[str]) -> List[Optional[Dict[str, Any]]]:
-        """
-        Get audio features for tracks in batches to avoid API limits.
-        Returns a list of audio features dictionaries in the same order as the input track_ids.
-        """
-        if not track_ids:
-            return []
-            
-        all_features = []
-        
-        # Process tracks in batches
-        for i in range(0, len(track_ids), self.BATCH_SIZE):
-            batch = track_ids[i:i + self.BATCH_SIZE]
-            try:
-                logger.debug(f"Fetching audio features batch {i//self.BATCH_SIZE + 1} ({len(batch)} tracks)")
-                batch_features = self.sp.audio_features(batch)
-                if batch_features:
-                    all_features.extend(batch_features)
-                else:
-                    # If batch_features is None, extend with None values for each track
-                    logger.warning(f"No features returned for batch {i//self.BATCH_SIZE + 1}")
-                    all_features.extend([None] * len(batch))
-            except Exception as e:
-                logger.error(f"Error fetching audio features batch {i//self.BATCH_SIZE + 1}: {str(e)}")
-                # On error, add None for each track in the failed batch
-                all_features.extend([None] * len(batch))
-        
-        return all_features
     
     def get_auth_url(self) -> str:
         """Get the Spotify authorization URL."""
@@ -220,4 +194,130 @@ class SpotifyClient:
             
         except Exception as e:
             logger.error(f"Error updating playlist: {str(e)}")
-            return False 
+            return False
+    
+    def get_track_features(self, track_uris: List[str]) -> Dict[str, Dict[str, float]]:
+        """Get audio features for tracks, using cache when possible."""
+        if not track_uris:
+            return {}
+            
+        # First, try to get features from cache
+        features = self.get_cached_features(track_uris)
+        
+        # Identify tracks that need features fetched
+        missing_tracks = [t for t in track_uris if t not in features]
+        
+        if missing_tracks:
+            logger.info(f"Fetching features for {len(missing_tracks)} tracks from Spotify API")
+            new_features = {}
+            
+            try:
+                # Process tracks in batches
+                for i in range(0, len(missing_tracks), self.BATCH_SIZE):
+                    batch = missing_tracks[i:i + self.BATCH_SIZE]
+                    try:
+                        batch_features = self.sp.audio_features(batch)
+                        
+                        if batch_features:
+                            for track_uri, track_features in zip(batch, batch_features):
+                                if track_features:
+                                    # Log specific missing features
+                                    missing = [f for f in ['tempo', 'energy', 'valence', 'danceability'] 
+                                             if track_features.get(f) is None]
+                                    if missing:
+                                        logger.warning(f"Track {track_uri} missing features: {missing}")
+                                    
+                                    new_features[track_uri] = {
+                                        'tempo': track_features.get('tempo'),
+                                        'energy': track_features.get('energy'),
+                                        'valence': track_features.get('valence'),
+                                        'danceability': track_features.get('danceability'),
+                                        'key': track_features.get('key'),
+                                        'mode': track_features.get('mode')
+                                    }
+                                    # Only require tempo, energy, valence, and danceability
+                                    if any(v is None for v in [new_features[track_uri]['tempo'], 
+                                                             new_features[track_uri]['energy'],
+                                                             new_features[track_uri]['valence'],
+                                                             new_features[track_uri]['danceability']]):
+                                        del new_features[track_uri]
+                                        logger.warning(f"Track {track_uri} removed due to missing required features")
+                                    else:
+                                        logger.debug(f"Successfully got features for track {track_uri}")
+                    except Exception as e:
+                        logger.error(f"Error fetching features for batch {i//self.BATCH_SIZE + 1}: {str(e)}")
+                        # Log the specific error details
+                        if hasattr(e, 'response'):
+                            logger.error(f"Response status: {e.response.status_code}")
+                            logger.error(f"Response body: {e.response.text}")
+                        # Continue with next batch instead of failing completely
+                        continue
+                    
+            except Exception as e:
+                logger.error(f"Error in feature fetching process: {str(e)}")
+                # Don't raise the exception, return what we have
+            
+            # Cache any new features we successfully fetched
+            if new_features:
+                self.cache_features(new_features)
+                features.update(new_features)
+        
+        # Log summary of feature availability
+        total_tracks = len(track_uris)
+        tracks_with_features = len(features)
+        logger.info(f"Feature summary: {tracks_with_features}/{total_tracks} tracks have complete features")
+        
+        return features
+    
+    def get_cached_features(self, track_uris: List[str]) -> Dict[str, Dict[str, float]]:
+        """Get cached features for tracks."""
+        cache = self._get_cache()
+        features = cache.get('features', {})
+        return {
+            uri: feature_data
+            for uri, feature_data in features.items()
+            if uri in track_uris and feature_data and all(v is not None for v in feature_data.values())
+        }
+    
+    def cache_features(self, features_data: Dict[str, Dict[str, float]]) -> None:
+        """Cache track features."""
+        try:
+            cache = self._get_cache()
+            features = cache.get('features', {})
+            
+            # Update cache with new features
+            for track_uri, track_features in features_data.items():
+                if track_features:  # Only cache if we have valid features
+                    features[track_uri] = {
+                        'tempo': track_features.get('tempo'),
+                        'energy': track_features.get('energy'),
+                        'valence': track_features.get('valence'),
+                        'danceability': track_features.get('danceability'),
+                        'key': track_features.get('key'),
+                        'mode': track_features.get('mode')
+                    }
+                    # Only keep features if all values are present
+                    if any(v is None for v in features[track_uri].values()):
+                        del features[track_uri]
+            
+            # Store updated cache
+            cache['features'] = features
+            self._update_cache(cache)
+            
+        except Exception as e:
+            logger.error(f"Error caching features: {str(e)}")
+            raise
+    
+    def clear_cache(self) -> None:
+        """Clear the feature cache."""
+        if self.CACHE_KEY in session:
+            del session[self.CACHE_KEY]
+            logger.info("Feature cache cleared")
+    
+    def _get_cache(self) -> Dict[str, Any]:
+        """Get the session cache."""
+        return session.get(self.CACHE_KEY, {})
+    
+    def _update_cache(self, cache: Dict[str, Any]) -> None:
+        """Update the session cache."""
+        session[self.CACHE_KEY] = cache 

@@ -1,6 +1,6 @@
 import random
 from typing import List, Optional
-from spotipy import Spotify
+from app.spotify.client import SpotifyClient
 from . import ShuffleAlgorithm
 
 class BasicShuffle(ShuffleAlgorithm):
@@ -25,7 +25,19 @@ class BasicShuffle(ShuffleAlgorithm):
             }
         }
     
-    def shuffle(self, tracks: List[str], sp: Optional[Spotify] = None, **kwargs) -> List[str]:
+    def shuffle(self, tracks: List[str], sp: Optional[SpotifyClient] = None, **kwargs) -> List[str]:
+        """
+        Randomly shuffle tracks while optionally keeping some at the start.
+        
+        Args:
+            tracks: List of track URIs to shuffle
+            sp: SpotifyClient (unused in basic shuffle)
+            **kwargs: Additional parameters
+                - keep_first: Number of tracks to keep at start
+                
+        Returns:
+            List of shuffled track URIs
+        """
         keep_first = kwargs.get('keep_first', 0)
         
         if len(tracks) <= 1 or keep_first >= len(tracks):
