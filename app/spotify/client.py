@@ -27,7 +27,9 @@ class SpotifyClient:
                 "playlist-read-collaborative",
                 "playlist-modify-private",
                 "playlist-modify-public",
-                "user-read-private"
+                "user-read-private",
+                "user-read-playback-state",
+                "user-read-email"
             ])
             
             self.sp = None
@@ -181,15 +183,22 @@ class SpotifyClient:
             flash("Failed to fetch your playlists. Please try again.", "error")
             return []
     
-    def get_playlist_tracks(self, playlist_id: str) -> List[str]:
-        """Get all track URIs from a playlist."""
+    def get_playlist_tracks(self, playlist_id: str) -> List[Dict[str, Any]]:
+        """Get all tracks from a playlist with basic metadata."""
         try:
             tracks = []
-            results = self.sp.playlist_items(playlist_id)
+            results = self.sp.playlist_items(playlist_id, fields='items(track(id,uri,name,artists,duration_ms))')
             
             while results:
                 tracks.extend([
-                    item['track']['uri'] for item in results['items']
+                    {
+                        'uri': item['track']['uri'],
+                        'id': item['track']['id'],
+                        'name': item['track']['name'],
+                        'artists': [artist['name'] for artist in item['track']['artists']],
+                        'duration_ms': item['track']['duration_ms']
+                    }
+                    for item in results['items']
                     if item.get('track', {}).get('uri')
                 ])
                 results = self.sp.next(results) if results['next'] else None

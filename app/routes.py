@@ -167,7 +167,7 @@ def shuffle(playlist_id):
         
         # Perform shuffle using the selected algorithm
         try:
-            shuffled_uris = algorithm.shuffle(current_tracks, sp=spotify.sp, **params)
+            shuffled_uris = algorithm.shuffle(current_tracks, sp=spotify.sp, playlist_id=playlist_id, **params)
         except Exception as e:
             logger.error(f"Error during shuffle operation: {str(e)}")
             if is_ajax:

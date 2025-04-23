@@ -147,59 +147,88 @@ class VibeShuffle(ShuffleAlgorithm):
             return random.choice(list(available_features.keys()))
     
     def shuffle(self, tracks: List[str], sp: Any, **kwargs) -> List[str]:
-        """Shuffle tracks while maintaining a cohesive vibe."""
+        """Shuffle tracks based on audio features to create smooth transitions."""
         if not tracks:
             return []
             
-        keep_first = kwargs.get('keep_first', 0)
-        if keep_first > 0:
-            kept_tracks = tracks[:keep_first]
-            to_shuffle = tracks[keep_first:]
-        else:
-            kept_tracks = []
-            to_shuffle = tracks.copy()
+        # Get parameters
+        self.keep_first = kwargs.get('keep_first', 0)
+        self.smoothness = kwargs.get('smoothness', 0.5)
         
-        # Get audio features for all tracks
-        features = TrackCache.load_track_features(sp, to_shuffle)
-        
-        # Separate tracks with and without features
-        tracks_with_features = [t for t in to_shuffle if t in features]
-        tracks_without_features = [t for t in to_shuffle if t not in features]
-        
-        if not tracks_with_features:
-            logger.warning("No tracks have complete features, falling back to random shuffle")
-            shuffled = to_shuffle.copy()
-            random.shuffle(shuffled)
-            return kept_tracks + shuffled
-        
-        # Start with a random track that has features
-        shuffled = [random.choice(tracks_with_features)]
-        remaining = [t for t in tracks_with_features if t != shuffled[0]]
-        
-        # Build the shuffled playlist while maintaining vibe
-        while remaining:
-            current_track = shuffled[-1]
-            current_features = features[current_track]
+        # Get playlist ID from kwargs
+        playlist_id = kwargs.get('playlist_id')
+        if not playlist_id:
+            logger.error("Playlist ID is required for Vibe shuffle")
+            return tracks
             
-            # Find the next track that best matches the current vibe
-            next_track = self._find_next_track(current_features, remaining, features)
-            if next_track:
-                shuffled.append(next_track)
-                remaining.remove(next_track)
+        # Get track features
+        try:
+            # Get full track objects from Spotify
+            track_objects = []
+            for i in range(0, len(tracks), 50):  # Process in batches of 50
+                batch = tracks[i:i + 50]
+                try:
+                    batch_tracks = sp.tracks(batch)['tracks']
+                    track_objects.extend(batch_tracks)
+                except Exception as e:
+                    logger.error(f"Error fetching track batch {i//50 + 1}: {str(e)}")
+                    continue
+            
+            # Get features using TrackCache
+            features = TrackCache.load_track_features(sp, playlist_id, track_objects)
+            
+            # If no features available, return original order
+            if not features:
+                logger.warning("No features available for any tracks, returning original order")
+                return tracks
+                
+            # Log feature availability
+            tracks_with_features = len(features)
+            logger.info(f"Features available for {tracks_with_features}/{len(tracks)} tracks")
+            
+            # Keep first N tracks if specified
+            if self.keep_first > 0:
+                kept_tracks = tracks[:self.keep_first]
+                to_sort = tracks[self.keep_first:]
             else:
-                # If no good match found, pick a random remaining track
-                next_track = random.choice(remaining)
-                shuffled.append(next_track)
-                remaining.remove(next_track)
-        
-        # Insert tracks without features at positions that maintain the vibe
-        if tracks_without_features:
-            logger.info(f"Inserting {len(tracks_without_features)} tracks without features")
-            for track in tracks_without_features:
-                position = self._find_best_insert_position(track, shuffled, features)
-                shuffled.insert(position, track)
-        
-        return kept_tracks + shuffled
+                kept_tracks = []
+                to_sort = tracks.copy()
+            
+            # Sort remaining tracks
+            sorted_tracks = []
+            if to_sort:
+                # Start with a random track that has features
+                available_tracks = [t for t in to_sort if t in features]
+                if not available_tracks:
+                    logger.warning("No tracks with features available for sorting")
+                    return tracks
+                    
+                current_track = random.choice(available_tracks)
+                sorted_tracks.append(current_track)
+                to_sort.remove(current_track)
+                
+                # Sort remaining tracks
+                while to_sort:
+                    next_track = self._find_next_track(
+                        features[current_track],
+                        {t: features[t] for t in to_sort if t in features},
+                        self.smoothness
+                    )
+                    
+                    if next_track:
+                        sorted_tracks.append(next_track)
+                        to_sort.remove(next_track)
+                        current_track = next_track
+                    else:
+                        # If no suitable next track found, add remaining tracks in original order
+                        sorted_tracks.extend(to_sort)
+                        break
+            
+            return kept_tracks + sorted_tracks
+            
+        except Exception as e:
+            logger.error(f"Error in Vibe shuffle: {str(e)}")
+            return tracks
 
     def _find_best_insert_position(self, track: str, shuffled: List[str], features: Dict[str, Dict[str, float]]) -> int:
         """Find the best position to insert a track without features."""

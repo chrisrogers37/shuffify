@@ -5,6 +5,7 @@ from .vibe import VibeShuffle
 from .balanced import BalancedShuffle
 from .percentage import PercentageShuffle
 from .stratified import StratifiedSample
+from .dj import DJShuffle
 
 class ShuffleRegistry:
     """Registry for shuffle algorithms."""
@@ -36,7 +37,7 @@ class ShuffleRegistry:
         }
         
         # Define the desired order of algorithms
-        desired_order = [BasicShuffle, PercentageShuffle, BalancedShuffle, StratifiedSample, VibeShuffle]
+        desired_order = [BasicShuffle, PercentageShuffle, BalancedShuffle, StratifiedSample, VibeShuffle, DJShuffle]
         
         # Create metadata for visible algorithms in the specified order
         for algo_class in desired_order:
@@ -55,4 +56,5 @@ ShuffleRegistry.register(BasicShuffle)
 ShuffleRegistry.register(VibeShuffle)
 ShuffleRegistry.register(BalancedShuffle)
 ShuffleRegistry.register(PercentageShuffle)
-ShuffleRegistry.register(StratifiedSample) 
+ShuffleRegistry.register(StratifiedSample)
+ShuffleRegistry.register(DJShuffle) 
