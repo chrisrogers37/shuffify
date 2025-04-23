@@ -113,91 +113,139 @@
 <!-- JavaScript for Dynamic Algorithm Parameters -->
 <script>
 function updateAlgorithmParams(selectElement, playlistId) {
+    const paramsContainer = document.getElementById(`algorithm-params-${playlistId}`);
     const selectedOption = selectElement.options[selectElement.selectedIndex];
     const parameters = JSON.parse(selectedOption.dataset.parameters);
     const description = selectedOption.dataset.description;
     
-    // Update algorithm description
+    // Update description
     document.querySelector(`.algorithm-description-${playlistId}`).textContent = description;
     
-    // Update parameter inputs
-    const paramsContainer = document.getElementById(`algorithm-params-${playlistId}`);
+    // Clear existing parameters
     paramsContainer.innerHTML = '';
     
-    Object.entries(parameters).forEach(([paramName, paramInfo]) => {
+    // Add new parameters
+    for (const [paramName, paramInfo] of Object.entries(parameters)) {
         const paramDiv = document.createElement('div');
         paramDiv.className = 'space-y-2';
         
         // Create label
         const label = document.createElement('label');
         label.className = 'block text-sm font-medium text-white/90';
-        label.htmlFor = `${paramName}-${playlistId}`;
         label.textContent = paramInfo.description;
-        
-        // Add secondary description if present
-        if (paramInfo.secondary_description) {
-            const secondaryDesc = document.createElement('p');
-            secondaryDesc.className = 'mt-1 text-sm text-white/60';
-            secondaryDesc.textContent = paramInfo.secondary_description;
-            label.appendChild(secondaryDesc);
-        }
-        
-        // Create input
-        let inputContainer;
-        if (paramInfo.type === 'string' && paramInfo.options) {
-            // Create radio group for string options
-            inputContainer = document.createElement('div');
-            inputContainer.className = 'mt-2 space-x-4 flex items-center';
-            
-            paramInfo.options.forEach(option => {
-                const radioDiv = document.createElement('div');
-                radioDiv.className = 'flex items-center space-x-2';
-                
-                const radio = document.createElement('input');
-                radio.type = 'radio';
-                radio.id = `${paramName}-${option}-${playlistId}`;
-                radio.name = paramName;
-                radio.value = option;
-                radio.checked = option === paramInfo.default;
-                radio.className = 'rounded-full border-white/20 bg-white/10 text-white focus:ring-2 focus:ring-white/30';
-                
-                const radioLabel = document.createElement('label');
-                radioLabel.htmlFor = `${paramName}-${option}-${playlistId}`;
-                radioLabel.className = 'text-sm text-white/90';
-                radioLabel.textContent = option.charAt(0).toUpperCase() + option.slice(1);
-                
-                radioDiv.appendChild(radio);
-                radioDiv.appendChild(radioLabel);
-                inputContainer.appendChild(radioDiv);
-            });
-        } else if (paramInfo.type === 'float' || paramInfo.type === 'integer') {
-            inputContainer = document.createElement('div');
-            inputContainer.className = 'mt-2';
-            
-            const input = document.createElement('input');
-            input.type = 'number';
-            input.id = `${paramName}-${playlistId}`;
-            input.name = paramName;
-            input.value = paramName === 'keep_first' ? '0' : (paramInfo.default || '');
-            input.className = 'w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:ring-2 focus:ring-white/30 focus:border-transparent';
-            
-            if (paramInfo.min !== undefined) input.min = paramInfo.min;
-            if (paramInfo.max !== undefined) input.max = paramInfo.max;
-            if (paramInfo.type === 'integer') input.step = 1;
-            if (paramInfo.type === 'float') input.step = 0.1;
-            
-            inputContainer.appendChild(input);
-        }
-        
         paramDiv.appendChild(label);
-        paramDiv.appendChild(inputContainer);
+        
+        // Create input based on parameter type
+        if (paramInfo.type === 'string' && paramInfo.options) {
+            // Create select for string options
+            const select = document.createElement('select');
+            select.name = paramName;
+            select.className = 'w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-white/30 focus:border-transparent';
+            
+            for (const option of paramInfo.options) {
+                const optionElement = document.createElement('option');
+                optionElement.value = option;
+                optionElement.textContent = option;
+                if (option === paramInfo.default) {
+                    optionElement.selected = true;
+                }
+                select.appendChild(optionElement);
+            }
+            
+            paramDiv.appendChild(select);
+        } else {
+            // Create input for other types
+            const input = document.createElement('input');
+            input.type = paramInfo.type === 'float' ? 'number' : 
+                        paramInfo.type === 'integer' ? 'number' : 'text';
+            input.name = paramName;
+            input.className = 'w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-white/30 focus:border-transparent';
+            input.value = paramInfo.default;
+            
+            if (paramInfo.min !== undefined) {
+                input.min = paramInfo.min;
+            }
+            if (paramInfo.max !== undefined) {
+                input.max = paramInfo.max;
+            }
+            if (paramInfo.type === 'float') {
+                input.step = '0.1';
+            }
+            
+            paramDiv.appendChild(input);
+        }
+        
         paramsContainer.appendChild(paramDiv);
+    }
+}
+
+function handlePlaylistAction(form, action) {
+    const playlistId = form.dataset.playlistId;
+    const submitButton = form.querySelector('button[type="submit"]');
+    const originalText = submitButton.textContent;
+    
+    // Disable button and show loading state
+    submitButton.disabled = true;
+    submitButton.textContent = action === 'shuffle' ? 'Shuffling...' : 'Undoing...';
+    
+    // Submit form via AJAX
+    fetch(form.action, {
+        method: 'POST',
+        body: new FormData(form)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            showNotification(data.message, 'success');
+            
+            // If it was a shuffle, show the undo button
+            if (action === 'shuffle') {
+                const undoForm = document.getElementById(`undo-form-${playlistId}`);
+                undoForm.classList.remove('hidden');
+            }
+        } else {
+            // Show error message
+            showNotification(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('An error occurred. Please try again.', 'error');
+    })
+    .finally(() => {
+        // Reset button state
+        submitButton.disabled = false;
+        submitButton.textContent = originalText;
     });
 }
 
-// Initialize parameters for all playlists
-document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('select[name="algorithm"]').forEach(select => {
+function showNotification(message, type) {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg backdrop-blur-md ${
+        type === 'success' ? 'bg-green-500/90' : 'bg-red-500/90'
+    } text-white font-semibold transform transition duration-300 translate-y-16 opacity-0`;
+    
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    // Show notification
+    setTimeout(() => {
+        notification.classList.remove('translate-y-16', 'opacity-0');
+    }, 100);
+    
+    // Hide notification after 3 seconds
+    setTimeout(() => {
+        notification.classList.add('translate-y-16', 'opacity-0');
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// Initialize algorithm parameters for each playlist
+document.addEventListener('DOMContentLoaded', () => {
+    const algorithmSelects = document.querySelectorAll('select[name="algorithm"]');
+    algorithmSelects.forEach(select => {
         const playlistId = select.closest('form').dataset.playlistId;
         updateAlgorithmParams(select, playlistId);
     });

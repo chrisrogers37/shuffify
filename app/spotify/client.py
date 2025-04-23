@@ -1,27 +1,56 @@
 import logging
 import traceback
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable, TypeVar, Generic
+from functools import wraps
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from flask import current_app, flash, session
 import time
 
+# Configure spotipy logging to reduce noise
+logging.getLogger('spotipy').setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
+T = TypeVar('T')
+
+def spotify_error_handler(func: Callable) -> Callable:
+    """Decorator to handle Spotify API errors consistently."""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error in {func.__name__}: {str(e)}")
+            if hasattr(e, 'response'):
+                logger.error(f"Response status: {e.response.status_code}")
+                logger.error(f"Response body: {e.response.text}")
+            raise
+    return wrapper
+
+class BatchProcessor(Generic[T]):
+    """Utility class for processing items in batches."""
+    
+    def __init__(self, batch_size: int):
+        self.batch_size = batch_size
+    
+    def process(self, items: List[T], process_batch: Callable[[List[T]], Any]) -> None:
+        """Process items in batches."""
+        for i in range(0, len(items), self.batch_size):
+            batch = items[i:i + self.batch_size]
+            process_batch(batch)
+
 class SpotifyClient:
-    """Handles all Spotify API interactions and caching with proper error handling and logging."""
+    """Handles Spotify API interactions and authentication."""
     
     BATCH_SIZE = 50  # Maximum number of tracks per audio features request
-    CACHE_KEY = 'spotify_cache'
+    PLAYLIST_BATCH_SIZE = 100  # Maximum number of tracks per playlist update
     
     def __init__(self, token: Optional[Dict[str, Any]] = None) -> None:
         """Initialize the Spotify client with OAuth authentication."""
         try:
+            # Only log token presence at debug level
             logger.debug("Initializing SpotifyClient with token: %s", "Present" if token else "None")
-            logger.debug("Current app config: %s", {
-                k: v for k, v in current_app.config.items() 
-                if k in ['SPOTIFY_CLIENT_ID', 'SPOTIFY_REDIRECT_URI'] or k.startswith('SESSION_')
-            })
             
             self.scope: str = " ".join([
                 "playlist-read-private",
@@ -30,25 +59,35 @@ class SpotifyClient:
                 "playlist-modify-public",
                 "user-read-private",
                 "user-read-playback-state",
-                "user-read-email"
+                "user-read-email",
+                "user-read-currently-playing",
+                "user-read-recently-played",
+                "user-top-read",
+                "user-read-playback-position"  # Required for audio features
             ])
             
             self.sp = None
             self._initialize_client(token)
+            self._batch_processor = BatchProcessor(self.BATCH_SIZE)
+            self._playlist_processor = BatchProcessor(self.PLAYLIST_BATCH_SIZE)
         except Exception as e:
-            logger.error("Error in SpotifyClient init: %s\nTraceback: %s", str(e), traceback.format_exc())
+            logger.error("Error in SpotifyClient init: %s", str(e))
             raise
+    
+    def _create_auth_manager(self) -> SpotifyOAuth:
+        """Create a SpotifyOAuth manager with current configuration."""
+        return SpotifyOAuth(
+            client_id=current_app.config['SPOTIFY_CLIENT_ID'],
+            client_secret=current_app.config['SPOTIFY_CLIENT_SECRET'],
+            redirect_uri=current_app.config['SPOTIFY_REDIRECT_URI'],
+            scope=self.scope,
+            open_browser=False
+        )
     
     def _initialize_client(self, token: Optional[Dict[str, Any]] = None) -> None:
         """Initialize the Spotify client with the provided token or new authentication."""
         try:
-            auth_manager = SpotifyOAuth(
-                client_id=current_app.config['SPOTIFY_CLIENT_ID'],
-                client_secret=current_app.config['SPOTIFY_CLIENT_SECRET'],
-                redirect_uri=current_app.config['SPOTIFY_REDIRECT_URI'],
-                scope=self.scope,
-                open_browser=False
-            )
+            auth_manager = self._create_auth_manager()
             
             if token:
                 logger.debug("Initializing with existing token")
@@ -82,242 +121,190 @@ class SpotifyClient:
             logger.error("Error initializing Spotify client: %s\nTraceback: %s", str(e), traceback.format_exc())
             raise
     
+    @spotify_error_handler
     def get_auth_url(self) -> str:
         """Get the Spotify authorization URL."""
-        try:
-            auth_manager = SpotifyOAuth(
-                client_id=current_app.config['SPOTIFY_CLIENT_ID'],
-                client_secret=current_app.config['SPOTIFY_CLIENT_SECRET'],
-                redirect_uri=current_app.config['SPOTIFY_REDIRECT_URI'],
-                scope=self.scope,
-                open_browser=False
-            )
-            return auth_manager.get_authorize_url()
-        except Exception as e:
-            logger.error(f"Error getting auth URL: {str(e)}")
-            raise
+        return self._create_auth_manager().get_authorize_url()
     
+    @spotify_error_handler
     def get_token(self, code: str) -> Dict[str, Any]:
         """Get access token from authorization code."""
+        logger.debug("Getting token for code: %s", code)
+        auth_manager = self._create_auth_manager()
+        
+        logger.debug("Created auth manager, getting access token")
+        token = auth_manager.get_access_token(code, as_dict=True, check_cache=False)
+        
+        if not token:
+            logger.error("No token returned from Spotify")
+            raise Exception("Failed to get access token from Spotify")
+            
+        logger.debug("Got token, initializing client")
+        self._initialize_client(token)
+        logger.info("Successfully obtained access token")
+        return token
+    
+    @spotify_error_handler
+    def get_current_user_data(self) -> Dict[str, Any]:
+        """Get current user's profile data from Spotify API."""
+        return self.sp.current_user()
+    
+    @spotify_error_handler
+    def get_user_playlists_data(self) -> List[Dict[str, Any]]:
+        """Get user's playlists data from Spotify API."""
+        playlists = []
+        results = self.sp.current_user_playlists()
+        user_id = self.sp.current_user()['id']
+        
+        while results:
+            for playlist in results['items']:
+                if playlist['owner']['id'] == user_id or playlist.get('collaborative'):
+                    playlists.append(playlist)
+            
+            results = self.sp.next(results) if results['next'] else None
+        
+        logger.debug(f"Retrieved {len(playlists)} editable playlists")
+        return playlists
+    
+    def _validate_token(self) -> bool:
+        """Validate the current token and its scopes."""
         try:
-            logger.debug("Getting token for code: %s", code)
-            auth_manager = SpotifyOAuth(
-                client_id=current_app.config['SPOTIFY_CLIENT_ID'],
-                client_secret=current_app.config['SPOTIFY_CLIENT_SECRET'],
-                redirect_uri=current_app.config['SPOTIFY_REDIRECT_URI'],
-                scope=self.scope,
-                open_browser=False
-            )
-            
-            logger.debug("Created auth manager, getting access token")
-            token = auth_manager.get_access_token(code, as_dict=True, check_cache=False)
-            
-            if not token:
-                logger.error("No token returned from Spotify")
-                raise Exception("Failed to get access token from Spotify")
+            if not self.sp:
+                logger.error("Spotify client not initialized")
+                return False
                 
-            logger.debug("Got token, initializing client")
-            self._initialize_client(token)
-            logger.info("Successfully obtained access token")
-            return token
-            
-        except Exception as e:
-            logger.error("Error getting token: %s\nTraceback: %s", str(e), traceback.format_exc())
-            raise
-    
-    def get_current_user(self) -> Dict[str, Any]:
-        """Get current user's profile."""
-        try:
-            return self.sp.current_user()
-        except Exception as e:
-            logger.error(f"Error getting current user: {str(e)}")
-            raise
-    
-    def get_user_playlists(self) -> List[Dict[str, Any]]:
-        """Get user's playlists that they can modify."""
-        try:
-            playlists = []
-            results = self.sp.current_user_playlists()
-            user_id = self.sp.current_user()['id']
-            
-            while results:
-                for playlist in results['items']:
-                    if playlist['owner']['id'] == user_id or playlist.get('collaborative'):
-                        playlists.append(playlist)
+            # Get token info
+            token_info = self.sp._auth_manager.get_cached_token()
+            if not token_info:
+                logger.error("No token found in auth manager")
+                return False
                 
-                results = self.sp.next(results) if results['next'] else None
-            
-            logger.info(f"Retrieved {len(playlists)} editable playlists")
-            return playlists
+            # Check expiration
+            if token_info.get('expires_at', 0) < time.time():
+                logger.error("Token is expired")
+                return False
+                
+            # Verify token with a lightweight API call
+            self.sp.current_user()
+            return True
             
         except Exception as e:
-            logger.error(f"Error fetching playlists: {str(e)}")
-            flash("Failed to fetch your playlists. Please try again.", "error")
-            return []
-    
-    def get_playlist_tracks(self, playlist_id: str) -> List[str]:
-        """Get all track URIs from a playlist."""
+            logger.error(f"Token validation failed: {str(e)}")
+            return False
+
+    def _get_audio_features_with_retry(self, track_ids: List[str], max_retries: int = 3) -> Optional[List[Dict[str, Any]]]:
+        """Get audio features with retry logic."""
+        for attempt in range(max_retries):
+            try:
+                logger.debug(f"Attempt {attempt + 1} to get audio features for {len(track_ids)} tracks")
+                features = self.sp.audio_features(track_ids)
+                if features:
+                    return features
+                logger.warning(f"No features returned on attempt {attempt + 1}")
+            except Exception as e:
+                logger.error(f"Error on attempt {attempt + 1}: {str(e)}")
+                if hasattr(e, 'response'):
+                    logger.error(f"Response status: {e.response.status_code}")
+                    logger.error(f"Response body: {e.response.text}")
+                    
+                    # If token is invalid, try to refresh
+                    if e.response.status_code in (401, 403):
+                        logger.info("Attempting to refresh token")
+                        try:
+                            self.sp._auth_manager.refresh_access_token()
+                            if self._validate_token():
+                                continue
+                        except Exception as refresh_error:
+                            logger.error(f"Token refresh failed: {str(refresh_error)}")
+                            
+                # Exponential backoff
+                if attempt < max_retries - 1:
+                    wait_time = (2 ** attempt) * 1  # 1, 2, 4 seconds
+                    logger.info(f"Waiting {wait_time} seconds before retry")
+                    time.sleep(wait_time)
+                    
+        return None
+
+    @spotify_error_handler
+    def get_playlist_with_tracks(self, playlist_id: str, include_features: bool = False) -> Dict[str, Any]:
+        """Get complete playlist data including tracks and optionally audio features."""
         try:
+            if include_features:
+                logger.info(f"Fetching playlist {playlist_id} with audio features")
+                
+                # Validate token before proceeding
+                if not self._validate_token():
+                    raise ValueError("Invalid or expired token")
+            
+            # Get playlist metadata
+            playlist_data = self.sp.playlist(playlist_id)
+            
+            # Get all tracks
             tracks = []
             results = self.sp.playlist_items(playlist_id)
             
             while results:
                 tracks.extend([
-                    item['track']['uri'] for item in results['items']
+                    item['track'] for item in results['items']
                     if item.get('track', {}).get('uri')
                 ])
                 results = self.sp.next(results) if results['next'] else None
             
-            logger.info(f"Retrieved {len(tracks)} tracks from playlist: {playlist_id}")
-            return tracks
+            logger.debug(f"Retrieved {len(tracks)} tracks for playlist {playlist_id}")
             
-        except Exception as e:
-            logger.error(f"Error fetching playlist tracks: {str(e)}")
-            raise
-    
-    def update_playlist_tracks(self, playlist_id: str, track_uris: List[str]) -> bool:
-        """Update playlist tracks."""
-        try:
-            # First, clear the playlist
-            self.sp.playlist_replace_items(playlist_id, [])
-            logger.info(f"Cleared playlist: {playlist_id}")
+            # Add tracks to playlist data
+            playlist_data['tracks'] = tracks
             
-            # Add tracks in batches
-            batch_size = 100
-            for i in range(0, len(track_uris), batch_size):
-                batch = track_uris[i:i + batch_size]
-                self.sp.playlist_add_items(playlist_id, batch)
-                logger.info(f"Added batch of {len(batch)} tracks")
-            
-            logger.info(f"Successfully updated playlist {playlist_id} with {len(track_uris)} tracks")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error updating playlist: {str(e)}")
-            return False
-    
-    def get_track_features(self, track_uris: List[str]) -> Dict[str, Dict[str, float]]:
-        """Get audio features for tracks, using cache when possible."""
-        if not track_uris:
-            return {}
-            
-        # First, try to get features from cache
-        features = self.get_cached_features(track_uris)
-        
-        # Identify tracks that need features fetched
-        missing_tracks = [t for t in track_uris if t not in features]
-        
-        if missing_tracks:
-            logger.info(f"Fetching features for {len(missing_tracks)} tracks from Spotify API")
-            new_features = {}
-            
-            try:
-                # Process tracks in batches
-                for i in range(0, len(missing_tracks), self.BATCH_SIZE):
-                    batch = missing_tracks[i:i + self.BATCH_SIZE]
+            # Get audio features if requested
+            if include_features and tracks:
+                # Extract track IDs from URIs (spotify:track:ID)
+                track_ids = [track['uri'].split(':')[-1] for track in tracks]
+                features = {}
+                
+                def process_batch(batch: List[str]) -> None:
                     try:
-                        batch_features = self.sp.audio_features(batch)
-                        
+                        logger.debug(f"Requesting audio features for {len(batch)} tracks")
+                        batch_features = self._get_audio_features_with_retry(batch)
                         if batch_features:
-                            for track_uri, track_features in zip(batch, batch_features):
+                            for track_id, track_features in zip(batch, batch_features):
                                 if track_features:
-                                    # Log specific missing features
-                                    missing = [f for f in ['tempo', 'energy', 'valence', 'danceability'] 
-                                             if track_features.get(f) is None]
-                                    if missing:
-                                        logger.warning(f"Track {track_uri} missing features: {missing}")
-                                    
-                                    new_features[track_uri] = {
-                                        'tempo': track_features.get('tempo'),
-                                        'energy': track_features.get('energy'),
-                                        'valence': track_features.get('valence'),
-                                        'danceability': track_features.get('danceability'),
-                                        'key': track_features.get('key'),
-                                        'mode': track_features.get('mode')
-                                    }
-                                    # Only require tempo, energy, valence, and danceability
-                                    if any(v is None for v in [new_features[track_uri]['tempo'], 
-                                                             new_features[track_uri]['energy'],
-                                                             new_features[track_uri]['valence'],
-                                                             new_features[track_uri]['danceability']]):
-                                        del new_features[track_uri]
-                                        logger.warning(f"Track {track_uri} removed due to missing required features")
-                                    else:
-                                        logger.debug(f"Successfully got features for track {track_uri}")
+                                    # Store features using the full track URI as key
+                                    track_uri = f"spotify:track:{track_id}"
+                                    features[track_uri] = track_features
+                                else:
+                                    logger.warning(f"No features found for track {track_id}")
+                        else:
+                            logger.warning(f"No features returned for batch of {len(batch)} tracks")
                     except Exception as e:
-                        logger.error(f"Error fetching features for batch {i//self.BATCH_SIZE + 1}: {str(e)}")
-                        # Log the specific error details
+                        logger.error(f"Error getting audio features for batch: {str(e)}")
                         if hasattr(e, 'response'):
                             logger.error(f"Response status: {e.response.status_code}")
                             logger.error(f"Response body: {e.response.text}")
-                        # Continue with next batch instead of failing completely
-                        continue
-                    
-            except Exception as e:
-                logger.error(f"Error in feature fetching process: {str(e)}")
-                # Don't raise the exception, return what we have
+                        # Continue with next batch even if this one fails
+                
+                self._batch_processor.process(track_ids, process_batch)
+                logger.info(f"Fetched features for {len(features)}/{len(tracks)} tracks")
+                playlist_data['audio_features'] = features
+            else:
+                logger.debug("Skipping audio features fetch")
             
-            # Cache any new features we successfully fetched
-            if new_features:
-                self.cache_features(new_features)
-                features.update(new_features)
-        
-        # Log summary of feature availability
-        total_tracks = len(track_uris)
-        tracks_with_features = len(features)
-        logger.info(f"Feature summary: {tracks_with_features}/{total_tracks} tracks have complete features")
-        
-        return features
-    
-    def get_cached_features(self, track_uris: List[str]) -> Dict[str, Dict[str, float]]:
-        """Get cached features for tracks."""
-        cache = self._get_cache()
-        features = cache.get('features', {})
-        return {
-            uri: feature_data
-            for uri, feature_data in features.items()
-            if uri in track_uris and feature_data and all(v is not None for v in feature_data.values())
-        }
-    
-    def cache_features(self, features_data: Dict[str, Dict[str, float]]) -> None:
-        """Cache track features."""
-        try:
-            cache = self._get_cache()
-            features = cache.get('features', {})
-            
-            # Update cache with new features
-            for track_uri, track_features in features_data.items():
-                if track_features:  # Only cache if we have valid features
-                    features[track_uri] = {
-                        'tempo': track_features.get('tempo'),
-                        'energy': track_features.get('energy'),
-                        'valence': track_features.get('valence'),
-                        'danceability': track_features.get('danceability'),
-                        'key': track_features.get('key'),
-                        'mode': track_features.get('mode')
-                    }
-                    # Only keep features if all values are present
-                    if any(v is None for v in features[track_uri].values()):
-                        del features[track_uri]
-            
-            # Store updated cache
-            cache['features'] = features
-            self._update_cache(cache)
+            return playlist_data
             
         except Exception as e:
-            logger.error(f"Error caching features: {str(e)}")
+            logger.error(f"Error getting playlist data: {str(e)}")
             raise
     
-    def clear_cache(self) -> None:
-        """Clear the feature cache."""
-        if self.CACHE_KEY in session:
-            del session[self.CACHE_KEY]
-            logger.info("Feature cache cleared")
-    
-    def _get_cache(self) -> Dict[str, Any]:
-        """Get the session cache."""
-        return session.get(self.CACHE_KEY, {})
-    
-    def _update_cache(self, cache: Dict[str, Any]) -> None:
-        """Update the session cache."""
-        session[self.CACHE_KEY] = cache 
+    @spotify_error_handler
+    def update_playlist_tracks(self, playlist_id: str, track_uris: List[str]) -> bool:
+        """Update playlist tracks via Spotify API."""
+        # First, clear the playlist
+        self.sp.playlist_replace_items(playlist_id, [])
+        logger.info(f"Cleared playlist: {playlist_id}")
+        
+        def process_batch(batch: List[str]) -> None:
+            self.sp.playlist_add_items(playlist_id, batch)
+            logger.info(f"Added batch of {len(batch)} tracks")
+        
+        self._playlist_processor.process(track_uris, process_batch)
+        logger.info(f"Successfully updated playlist {playlist_id} with {len(track_uris)} tracks")
+        return True 
