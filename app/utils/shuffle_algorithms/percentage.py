@@ -1,10 +1,9 @@
-from typing import List, Optional
 import random
-from spotipy import Spotify
+from typing import List, Dict, Any, Optional
 from . import ShuffleAlgorithm
 
-class PercentageShuffle(ShuffleAlgorithm):
-    """Shuffle only a specified percentage of the playlist."""
+class PercentageShuffle:
+    """Shuffle a portion of your playlist while keeping the rest in order."""
     
     @property
     def name(self) -> str:
@@ -19,43 +18,62 @@ class PercentageShuffle(ShuffleAlgorithm):
         return {
             'shuffle_percentage': {
                 'type': 'float',
-                'description': 'Percentage to shuffle (0-100%)',
+                'description': 'Percentage of tracks to shuffle (0-100)',
                 'default': 50.0,
                 'min': 0.0,
                 'max': 100.0
             },
             'shuffle_location': {
                 'type': 'string',
-                'description': 'Which part to shuffle',
-                'default': 'back',
+                'description': 'Location to shuffle (front or back)',
+                'default': 'front',
                 'options': ['front', 'back']
             }
         }
     
-    def shuffle(self, tracks: List[str], sp: Optional[Spotify] = None, **kwargs) -> List[str]:
+    @property
+    def requires_features(self) -> bool:
+        return False
+    
+    def shuffle(self, tracks: List[Dict[str, Any]], features: Optional[Dict[str, Dict[str, Any]]] = None, **kwargs) -> List[str]:
+        """
+        Shuffle a portion of the playlist while keeping the rest in order.
+        
+        Args:
+            tracks: List of track dictionaries from Spotify API
+            features: Optional dictionary of track URIs to audio features (unused in percentage shuffle)
+            **kwargs: Additional parameters
+                - shuffle_percentage: Percentage of tracks to shuffle (0-100)
+                - shuffle_location: Location to shuffle ('front' or 'back')
+                
+        Returns:
+            List of shuffled track URIs
+        """
         shuffle_percentage = kwargs.get('shuffle_percentage', 50.0)
-        shuffle_location = kwargs.get('shuffle_location', 'back')
+        shuffle_location = kwargs.get('shuffle_location', 'front')
         
-        if len(tracks) <= 1 or shuffle_percentage <= 0:
-            return tracks
-            
-        # Calculate how many tracks to shuffle
-        shuffle_count = int((shuffle_percentage / 100.0) * len(tracks))
+        # Extract URIs from track dictionaries
+        uris = [track['uri'] for track in tracks if track.get('uri')]
         
-        if shuffle_count >= len(tracks):
-            shuffled = tracks.copy()
-            random.shuffle(shuffled)
-            return shuffled
+        if len(uris) <= 1:
+            return uris
             
-        if shuffle_location == 'back':
-            # Keep beginning in order, shuffle the end
-            kept = tracks[:len(tracks) - shuffle_count]
-            to_shuffle = tracks[len(tracks) - shuffle_count:]
+        # Calculate number of tracks to shuffle
+        total_tracks = len(uris)
+        shuffle_count = int(total_tracks * (shuffle_percentage / 100.0))
+        
+        if shuffle_count <= 0:
+            return uris
+            
+        if shuffle_location == 'front':
+            # Shuffle the front portion
+            to_shuffle = uris[:shuffle_count]
+            kept = uris[shuffle_count:]
             random.shuffle(to_shuffle)
-            return kept + to_shuffle
+            return to_shuffle + kept
         else:
-            # Shuffle beginning, keep end in order
-            to_shuffle = tracks[:shuffle_count]
-            kept = tracks[shuffle_count:]
+            # Shuffle the back portion
+            kept = uris[:-shuffle_count]
+            to_shuffle = uris[-shuffle_count:]
             random.shuffle(to_shuffle)
-            return to_shuffle + kept 
+            return kept + to_shuffle 

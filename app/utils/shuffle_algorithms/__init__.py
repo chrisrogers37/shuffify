@@ -23,13 +23,18 @@ class ShuffleAlgorithm(Protocol):
         """Parameters that can be configured for this algorithm."""
         ...
     
-    def shuffle(self, tracks: List[str], sp: Optional[SpotifyClient] = None, **kwargs) -> List[str]:
+    @property
+    def requires_features(self) -> bool:
+        """Whether this algorithm requires audio features to work."""
+        ...
+    
+    def shuffle(self, tracks: List[Dict[str, Any]], features: Optional[Dict[str, Dict[str, Any]]] = None, **kwargs) -> List[str]:
         """
         Shuffle the tracks according to the algorithm.
         
         Args:
-            tracks: List of track URIs to shuffle
-            sp: SpotifyClient for fetching audio features
+            tracks: List of track dictionaries from Spotify API
+            features: Optional dictionary of track URIs to audio features
             **kwargs: Additional parameters specific to the algorithm
             
         Returns:
