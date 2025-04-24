@@ -43,7 +43,6 @@ class BatchProcessor(Generic[T]):
 class SpotifyClient:
     """Handles Spotify API interactions and authentication."""
     
-    BATCH_SIZE = 50  # Maximum number of tracks per audio features request
     PLAYLIST_BATCH_SIZE = 100  # Maximum number of tracks per playlist update
     
     def __init__(self, token: Optional[Dict[str, Any]] = None) -> None:
@@ -62,13 +61,11 @@ class SpotifyClient:
                 "user-read-email",
                 "user-read-currently-playing",
                 "user-read-recently-played",
-                "user-top-read",
-                "user-read-playback-position"  # Required for audio features
+                "user-top-read"
             ])
             
             self.sp = None
             self._initialize_client(token)
-            self._batch_processor = BatchProcessor(self.BATCH_SIZE)
             self._playlist_processor = BatchProcessor(self.PLAYLIST_BATCH_SIZE)
         except Exception as e:
             logger.error("Error in SpotifyClient init: %s", str(e))
@@ -179,6 +176,12 @@ class SpotifyClient:
                 logger.error("No token found in auth manager")
                 return False
                 
+            # Log token details
+            logger.debug("Token details:")
+            logger.debug(f"Expires at: {token_info.get('expires_at')}")
+            logger.debug(f"Scopes: {token_info.get('scope', 'No scopes found')}")
+            logger.debug(f"Token type: {token_info.get('token_type')}")
+                
             # Check expiration
             if token_info.get('expires_at', 0) < time.time():
                 logger.error("Token is expired")
@@ -192,50 +195,10 @@ class SpotifyClient:
             logger.error(f"Token validation failed: {str(e)}")
             return False
 
-    def _get_audio_features_with_retry(self, track_ids: List[str], max_retries: int = 3) -> Optional[List[Dict[str, Any]]]:
-        """Get audio features with retry logic."""
-        for attempt in range(max_retries):
-            try:
-                logger.debug(f"Attempt {attempt + 1} to get audio features for {len(track_ids)} tracks")
-                features = self.sp.audio_features(track_ids)
-                if features:
-                    return features
-                logger.warning(f"No features returned on attempt {attempt + 1}")
-            except Exception as e:
-                logger.error(f"Error on attempt {attempt + 1}: {str(e)}")
-                if hasattr(e, 'response'):
-                    logger.error(f"Response status: {e.response.status_code}")
-                    logger.error(f"Response body: {e.response.text}")
-                    
-                    # If token is invalid, try to refresh
-                    if e.response.status_code in (401, 403):
-                        logger.info("Attempting to refresh token")
-                        try:
-                            self.sp._auth_manager.refresh_access_token()
-                            if self._validate_token():
-                                continue
-                        except Exception as refresh_error:
-                            logger.error(f"Token refresh failed: {str(refresh_error)}")
-                            
-                # Exponential backoff
-                if attempt < max_retries - 1:
-                    wait_time = (2 ** attempt) * 1  # 1, 2, 4 seconds
-                    logger.info(f"Waiting {wait_time} seconds before retry")
-                    time.sleep(wait_time)
-                    
-        return None
-
     @spotify_error_handler
-    def get_playlist_with_tracks(self, playlist_id: str, include_features: bool = False) -> Dict[str, Any]:
-        """Get complete playlist data including tracks and optionally audio features."""
+    def get_playlist_with_tracks(self, playlist_id: str) -> Dict[str, Any]:
+        """Get complete playlist data including tracks."""
         try:
-            if include_features:
-                logger.info(f"Fetching playlist {playlist_id} with audio features")
-                
-                # Validate token before proceeding
-                if not self._validate_token():
-                    raise ValueError("Invalid or expired token")
-            
             # Get playlist metadata
             playlist_data = self.sp.playlist(playlist_id)
             
@@ -251,43 +214,12 @@ class SpotifyClient:
                 results = self.sp.next(results) if results['next'] else None
             
             logger.debug(f"Retrieved {len(tracks)} tracks for playlist {playlist_id}")
+            if tracks:
+                logger.debug(f"First track URI: {tracks[0].get('uri')}")
+                logger.debug(f"First track ID: {tracks[0].get('id')}")
             
             # Add tracks to playlist data
             playlist_data['tracks'] = tracks
-            
-            # Get audio features if requested
-            if include_features and tracks:
-                # Extract track IDs from URIs (spotify:track:ID)
-                track_ids = [track['uri'].split(':')[-1] for track in tracks]
-                features = {}
-                
-                def process_batch(batch: List[str]) -> None:
-                    try:
-                        logger.debug(f"Requesting audio features for {len(batch)} tracks")
-                        batch_features = self._get_audio_features_with_retry(batch)
-                        if batch_features:
-                            for track_id, track_features in zip(batch, batch_features):
-                                if track_features:
-                                    # Store features using the full track URI as key
-                                    track_uri = f"spotify:track:{track_id}"
-                                    features[track_uri] = track_features
-                                else:
-                                    logger.warning(f"No features found for track {track_id}")
-                        else:
-                            logger.warning(f"No features returned for batch of {len(batch)} tracks")
-                    except Exception as e:
-                        logger.error(f"Error getting audio features for batch: {str(e)}")
-                        if hasattr(e, 'response'):
-                            logger.error(f"Response status: {e.response.status_code}")
-                            logger.error(f"Response body: {e.response.text}")
-                        # Continue with next batch even if this one fails
-                
-                self._batch_processor.process(track_ids, process_batch)
-                logger.info(f"Fetched features for {len(features)}/{len(tracks)} tracks")
-                playlist_data['audio_features'] = features
-            else:
-                logger.debug("Skipping audio features fetch")
-            
             return playlist_data
             
         except Exception as e:

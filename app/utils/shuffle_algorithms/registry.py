@@ -1,7 +1,6 @@
 from typing import Dict, Type, List
 from . import ShuffleAlgorithm
 from .basic import BasicShuffle
-from .vibe import VibeShuffle
 from .balanced import BalancedShuffle
 from .percentage import PercentageShuffle
 from .stratified import StratifiedShuffle
@@ -46,7 +45,7 @@ class ShuffleRegistry:
         }
         
         # Define the desired order of algorithms
-        desired_order = [BasicShuffle, PercentageShuffle, BalancedShuffle, StratifiedShuffle, VibeShuffle]
+        desired_order = [BasicShuffle, PercentageShuffle, BalancedShuffle, StratifiedShuffle]
         
         # Create metadata for visible algorithms in the specified order
         for algo_class in desired_order:
@@ -62,7 +61,6 @@ class ShuffleRegistry:
 
 # Register all algorithms
 ShuffleRegistry.register(BasicShuffle)
-ShuffleRegistry.register(VibeShuffle)
 ShuffleRegistry.register(BalancedShuffle)
 ShuffleRegistry.register(PercentageShuffle)
 ShuffleRegistry.register(StratifiedShuffle) 
