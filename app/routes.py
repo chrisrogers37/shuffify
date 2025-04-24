@@ -5,6 +5,7 @@ from app.utils.shuffle_algorithms.registry import ShuffleRegistry
 import logging
 import traceback
 from datetime import datetime
+import random
 
 logger = logging.getLogger(__name__)
 main = Blueprint('main', __name__)
@@ -168,28 +169,23 @@ def shuffle(playlist_id):
         
         spotify = SpotifyClient(session['spotify_token'])
         
-        # Get playlist with features only if needed
-        include_features = algorithm.requires_features
-        if include_features:
-            logger.info(f"Using {algorithm_name} which requires audio features")
-        playlist = Playlist.from_spotify(spotify, playlist_id, include_features)
+        # Get playlist data
+        playlist_data = spotify.get_playlist_with_tracks(playlist_id)
+        tracks = playlist_data['tracks']
         
-        # Log feature status
-        if include_features:
-            if not playlist.audio_features:
-                logger.error("No audio features found for playlist despite being required")
-                if is_ajax:
-                    return jsonify({'success': False, 'message': 'Failed to get audio features for playlist.', 'category': 'error'})
-                flash('Failed to get audio features for playlist.', 'error')
-                return redirect(url_for('main.index'))
-            logger.info(f"Successfully loaded {len(playlist.audio_features)} audio features")
+        if not tracks:
+            logger.error("No tracks found in playlist")
+            if is_ajax:
+                return jsonify({'success': False, 'message': 'No tracks found in playlist.', 'category': 'error'})
+            flash('No tracks found in playlist.', 'error')
+            return redirect(url_for('main.index'))
         
         # Initialize playlist states if not exists
         if 'playlist_states' not in session:
             session['playlist_states'] = {}
             
         # Get current state before shuffling
-        current_uris = playlist.get_track_uris()
+        current_uris = [track['uri'] for track in tracks]
         if not current_uris:
             logger.error("Failed to get current tracks from playlist")
             if is_ajax:
@@ -208,7 +204,7 @@ def shuffle(playlist_id):
         
         # Perform shuffle using the selected algorithm
         try:
-            shuffled_uris = algorithm.shuffle(playlist.tracks, features=playlist.audio_features if include_features else None, **params)
+            shuffled_uris = algorithm.shuffle(tracks, **params)
         except Exception as e:
             logger.error(f"Error during shuffle operation: {str(e)}")
             if is_ajax:
@@ -238,14 +234,7 @@ def shuffle(playlist_id):
             message = 'Failed to shuffle playlist.'
             category = 'error'
             success = False
-            
-    except Exception as e:
-        logger.error("Error in shuffle route: %s\nTraceback: %s", str(e), traceback.format_exc())
-        message = 'An error occurred while shuffling the playlist.'
-        category = 'error'
-        success = False
-    
-    try:
+        
         if is_ajax:
             return jsonify({
                 'success': success,
@@ -255,13 +244,17 @@ def shuffle(playlist_id):
         else:
             flash(message, category)
             return redirect(url_for('main.index'))
+            
     except Exception as e:
-        logger.error("Error returning response: %s\nTraceback: %s", str(e), traceback.format_exc())
-        return jsonify({
-            'success': False,
-            'message': 'An unexpected error occurred.',
-            'category': 'error'
-        })
+        logger.error("Error in shuffle route: %s\nTraceback: %s", str(e), traceback.format_exc())
+        if is_ajax:
+            return jsonify({
+                'success': False,
+                'message': 'An error occurred while shuffling the playlist.',
+                'category': 'error'
+            })
+        flash('An error occurred while shuffling the playlist.', 'error')
+        return redirect(url_for('main.index'))
 
 @main.route('/undo/<playlist_id>', methods=['POST'])
 def undo(playlist_id):
