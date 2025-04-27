@@ -21,6 +21,13 @@ class Config:
     PORT = int(os.getenv('PORT', 8000))
     HOST = os.getenv('HOST', '0.0.0.0')
 
+    @classmethod
+    def get_spotify_credentials(cls) -> dict:
+        return {
+            'client_id': cls.SPOTIFY_CLIENT_ID,
+            'client_secret': cls.SPOTIFY_CLIENT_SECRET,
+            'redirect_uri': cls.SPOTIFY_REDIRECT_URI
+        }
 class ProductionConfig(Config):
     """Production configuration."""
     # Use secure cookie in production

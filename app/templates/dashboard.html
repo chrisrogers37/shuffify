@@ -26,34 +26,42 @@
 
     <!-- Playlists Grid -->
     <div class="relative max-w-6xl mx-auto px-4 py-8">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
             {% for playlist in playlists %}
-                <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden transform transition duration-300 hover:scale-105 hover:shadow-2xl">
-                    <!-- Playlist Header -->
+                <div class="rounded-2xl shadow-xl bg-spotify-green/90 border border-white/20 overflow-hidden transform transition duration-300 hover:scale-105 hover:shadow-2xl relative card-tile">
+                    <!-- Playlist Artwork -->
                     <div class="relative h-48">
                         {% if playlist.images %}
-                            <img src="{{ playlist.images[0].url }}" alt="{{ playlist.name }}" 
-                                 class="w-full h-full object-cover">
+                            <img src="{{ playlist.images[0].url }}" alt="{{ playlist.name }}"
+                                 class="w-full h-full object-cover rounded-t-2xl md:rounded-t-2xl lg:rounded-t-4xl">
                         {% else %}
-                            <div class="w-full h-full bg-black/20 flex items-center justify-center">
+                            <div class="w-full h-full bg-black/20 flex items-center justify-center rounded-t-2xl md:rounded-t-2xl lg:rounded-t-4xl">
                                 <span class="text-4xl">🎵</span>
                             </div>
                         {% endif %}
-                        <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
-                        <div class="absolute bottom-0 left-0 right-0 p-4">
-                            <h3 class="text-white text-xl font-bold">{{ playlist.name }}</h3>
-                            <p class="text-white/80">{{ playlist.tracks.total }} tracks</p>
-                        </div>
                     </div>
-
-                    <!-- Playlist Controls -->
-                    <div class="p-4 space-y-4">
+                    <!-- Playlist Info (below artwork, with Spotify logo) -->
+                    <div class="bg-spotify-green px-4 py-3 flex items-center justify-between">
+                        <div>
+                            <h3 class="text-white text-xl font-bold truncate">{{ playlist.name }}</h3>
+                            <p class="text-white/80 text-sm">{{ playlist.tracks.total }} tracks</p>
+                        </div>
+                        <a href="{{ playlist.external_urls.spotify }}"
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           class="bg-black/50 rounded-full p-2 ml-2 transform transition-all duration-300 hover:scale-110 hover:bg-spotify-green">
+                            <svg class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                            </svg>
+                        </a>
+                    </div>
+                    <!-- Playlist Controls: block below info bar, hidden by default, slide open on mouseover -->
+                    <div class="shuffle-menu max-h-0 opacity-0 transition-all duration-500 ease-in-out overflow-hidden shuffle-scrollbar mouseover-menu" style="pointer-events:auto;">
                         <form action="{{ url_for('main.shuffle', playlist_id=playlist.id) }}" 
                               method="POST" 
-                              class="space-y-4"
+                              class="space-y-4 p-4"
                               data-playlist-id="{{ playlist.id }}"
                               onsubmit="event.preventDefault(); handlePlaylistAction(this, 'shuffle');">
-                            
                             <!-- Algorithm Selection -->
                             <div>
                                 <label for="algorithm-{{ playlist.id }}" class="block text-sm font-medium text-white/90 mb-2">
@@ -75,12 +83,10 @@
                                     {{ algorithms[0].description }}
                                 </p>
                             </div>
-
                             <!-- Dynamic Algorithm Parameters -->
                             <div id="algorithm-params-{{ playlist.id }}" class="space-y-4">
                                 <!-- Parameters will be dynamically inserted here -->
                             </div>
-
                             <!-- Action Buttons -->
                             <div class="flex space-x-2">
                                 <button type="submit" 
@@ -89,7 +95,6 @@
                                 </button>
                             </div>
                         </form>
-
                         <!-- Separate Undo Form -->
                         <form id="undo-form-{{ playlist.id }}" 
                               action="{{ url_for('main.undo', playlist_id=playlist.id) }}" 
@@ -238,7 +243,7 @@ function showNotification(message, type) {
     // Hide notification after 3 seconds
     setTimeout(() => {
         notification.classList.add('translate-y-16', 'opacity-0');
-        setTimeout(() => notification.remove(), 300);
+        setTimeout(() => notification.remove(), 3000);
     }, 3000);
 }
 
@@ -250,5 +255,61 @@ document.addEventListener('DOMContentLoaded', () => {
         updateAlgorithmParams(select, playlistId);
     });
 });
+
+// Delayed hide for mouseover menu (for expanding menu below info bar)
+(function() {
+  document.querySelectorAll('.card-tile').forEach(function(card) {
+    let hideTimeout = null;
+    const menu = card.querySelector('.shuffle-menu');
+    card.addEventListener('mouseenter', function() {
+      card.classList.add('menu-open');
+      if (hideTimeout) {
+        clearTimeout(hideTimeout);
+        hideTimeout = null;
+      }
+    });
+    card.addEventListener('mouseleave', function() {
+      hideTimeout = setTimeout(function() {
+        card.classList.remove('menu-open');
+      }, 2000);
+    });
+    // If mouse re-enters the menu, cancel the timeout
+    menu.addEventListener('mouseenter', function() {
+      if (hideTimeout) {
+        clearTimeout(hideTimeout);
+        hideTimeout = null;
+      }
+      card.classList.add('menu-open');
+    });
+    menu.addEventListener('mouseleave', function() {
+      hideTimeout = setTimeout(function() {
+        card.classList.remove('menu-open');
+      }, 2000);
+    });
+  });
+})();
 </script>
+
+<style>
+/* Custom scrollbar for the shuffle controls */
+.shuffle-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+.shuffle-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(20, 120, 60, 0.5); /* Slightly darker green, semi-transparent */
+  border-radius: 6px;
+}
+.shuffle-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.shuffle-scrollbar {
+  scrollbar-color: rgba(20,120,60,0.5) transparent; /* For Firefox */
+  scrollbar-width: thin;
+}
+/* Slide/fade animation for expanding shuffle menu below info bar */
+.menu-open .shuffle-menu {
+  max-height: 20rem !important; /* Tailwind's max-h-80 */
+  opacity: 1 !important;
+}
+</style>
 {% endblock %} 
