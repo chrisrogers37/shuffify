@@ -11,7 +11,6 @@ This directory contains various algorithms for shuffling Spotify playlists, each
   - `keep_first` (integer): Number of tracks to keep in their original position at the start
   - Default: 0, Min: 0
 
-
 ### Balanced
 - **Class**: `BalancedShuffle`
 - **Description**: Ensures fair representation from all parts of the playlist by dividing it into sections and using a round-robin selection process.
@@ -66,51 +65,6 @@ This directory contains various algorithms for shuffling Spotify playlists, each
   With 100 tracks and 30% shuffle:
   - Back: First 70 tracks stay in order, last 30 get shuffled
   - Front: First 30 tracks get shuffled, last 70 stay in order
-
-### Vibe
-- **Class**: `VibeShuffle`
-- **Description**: Creates smooth transitions by analyzing track characteristics using Spotify's audio features.
-- **Parameters**:
-  - `keep_first` (integer): Number of tracks to keep at start
-    - Default: 0, Min: 0
-  - `smoothness` (float): How smooth the transitions should be (0.0 to 1.0)
-    - Default: 0.5, Min: 0.0, Max: 1.0
-    - 0.0: More random transitions
-    - 1.0: Strongly prefer similar tracks
-
-- **Features Used** (with weights):
-  - Tempo (30%): Beats per minute (normalized from 0-250 BPM)
-  - Energy (30%): Intensity and activity
-  - Valence (20%): Musical positiveness
-  - Danceability (20%): How suitable for dancing
-
-- **How It Works**:
-  1. Fetches audio features for all tracks from Spotify API
-  2. Normalizes each feature to [0,1] range based on Spotify's ranges
-  3. For each transition:
-     - Calculates weighted Euclidean distance between current track and candidates
-     - Converts distances to probabilities using smoothness parameter
-     - Selects next track based on calculated probabilities
-  4. Randomly inserts any tracks without features
-  5. Verifies the shuffle actually changed the order
-
-- **Probability Calculation**:
-  - Distances are normalized to [0,1] range
-  - Converted to similarities: similarity = 1 - normalized_distance
-  - Smoothness affects probability exponentially: probability ∝ similarity^(1/(smoothness+0.1))
-  - Higher smoothness creates stronger preference for similar tracks
-
-- **Benefits**:
-  - Creates more cohesive listening experience
-  - Avoids jarring transitions between dissimilar songs
-  - Maintains variety while respecting musical similarity
-  - Adapts to different playlist styles through smoothness parameter
-
-- **Use Cases**:
-  - Party playlists where smooth energy transitions are important
-  - Workout playlists that need to maintain consistent energy
-  - Mood-based playlists where you want to avoid sudden mood shifts
-  - Any playlist where musical flow is important
 
 ## Adding New Algorithms
 

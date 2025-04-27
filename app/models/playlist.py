@@ -40,13 +40,20 @@ class Playlist:
     def from_api_data(cls, playlist_data: Dict[str, Any]) -> 'Playlist':
         """Create a Playlist instance from Spotify API data."""
         try:
+            # Convert track IDs to URIs for audio features lookup
+            audio_features = {}
+            if 'audio_features' in playlist_data:
+                for track in playlist_data.get('tracks', []):
+                    if track.get('id') and track['id'] in playlist_data['audio_features']:
+                        audio_features[track['uri']] = playlist_data['audio_features'][track['id']]
+            
             return cls(
                 id=playlist_data['id'],
                 name=playlist_data['name'],
                 owner_id=playlist_data['owner']['id'],
                 description=playlist_data.get('description'),
                 tracks=playlist_data.get('tracks', []),
-                audio_features=playlist_data.get('audio_features', {})
+                audio_features=audio_features
             )
         except KeyError as e:
             logger.error(f"Missing required playlist data: {e}")
@@ -87,11 +94,16 @@ class Playlist:
         if not self.audio_features:
             return {}
         
+        # Define all available audio features
+        features = [
+            'tempo', 'energy', 'valence', 'danceability',
+            'acousticness', 'instrumentalness', 'liveness',
+            'loudness', 'speechiness', 'mode', 'key'
+        ]
+        
         stats = {
-            'tempo': {'min': float('inf'), 'max': float('-inf'), 'avg': 0},
-            'energy': {'min': float('inf'), 'max': float('-inf'), 'avg': 0},
-            'valence': {'min': float('inf'), 'max': float('-inf'), 'avg': 0},
-            'danceability': {'min': float('inf'), 'max': float('-inf'), 'avg': 0}
+            feature: {'min': float('inf'), 'max': float('-inf'), 'avg': 0}
+            for feature in features
         }
         
         count = 0
@@ -109,6 +121,22 @@ class Playlist:
                 stats[key]['avg'] /= count
         
         return stats
+    
+    def get_feature_distribution(self, feature: str) -> Dict[str, int]:
+        """Get distribution of a specific audio feature."""
+        if not self.audio_features:
+            return {}
+        
+        distribution = {}
+        for track_features in self.audio_features.values():
+            if feature in track_features:
+                value = track_features[feature]
+                # Round to 2 decimal places for numeric features
+                if isinstance(value, (int, float)):
+                    value = round(value, 2)
+                distribution[value] = distribution.get(value, 0) + 1
+        
+        return distribution
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert playlist to dictionary format."""

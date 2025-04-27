@@ -7,58 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.0.1] - 2024-04-21
+### Added
+- Audio feature retrieval for playlist tracks
+- Enhanced playlist information with audio analysis data
+- Support for batch audio feature requests
+- Audio feature caching system
 
 ### Changed
-- Updated README.md to reflect current project structure
-- Removed references to deprecated features (Vibe Shuffle, Docker directory)
-- Updated documentation for current shuffle algorithms
-- Improved project structure documentation
-- Updated development workflow instructions
+- Improved playlist data structure to include audio features
+- Enhanced playlist information retrieval performance
+- Updated playlist model to store audio feature data
 
-## [2.0.0] - 2024-04-20
+## [2.2.3] - 2025-04-25
 
 ### Added
-- Multiple shuffle algorithms:
-  - Basic Shuffle: Standard random shuffle with fixed start option
-  - Balanced Shuffle: Ensures fair representation from all playlist parts
-  - Percentage Shuffle: Allows shuffling specific portions of playlists
-- Decorative music note patterns in background
-- Smooth hover and transition effects
-- Improved form input styling
-- Better visual feedback for interactive elements
-- Undo functionality for shuffle operations
-- Detailed algorithm documentation
-- Requirements management structure (base.txt, dev.txt, prod.txt)
+- Initial implementation of playlist information retrieval
+- Basic playlist data structure
+- Core playlist management functionality
 
-### Changed
-- Completely redesigned UI with modern glassmorphism effects
-- Extended gradient background across all pages
-- Improved visual hierarchy and spacing
-- Enhanced playlist card interactions
-- Updated color scheme for better contrast and readability
-- Streamlined navigation by removing unnecessary elements
-- Restructured project organization
-- Improved error handling and logging
-- Enhanced algorithm parameter validation
-
-### Fixed
-- Inconsistent styling between landing and dashboard pages
-- Full-width background coverage issues
-- Visual hierarchy in playlist cards
-- Form input contrast and accessibility
-- Default values for algorithm parameters
-- Session handling and caching issues
-
-### Removed
-- Temporarily hidden Vibe Shuffle algorithm for future development
-- Redundant configuration files
-- Unused dependencies
-
-## [1.0.0] - 2024-04-19
+## [1.0.0] - 2025-04-19
 
 ### Added
-- Initial stable release
-- Core playlist shuffling functionality
-- Basic UI with Tailwind CSS
-- Spotify integration 
+- Initial release with Basic Shuffle functionality
+- Basic playlist management features
+- Simple user interface
+- Core project structure 

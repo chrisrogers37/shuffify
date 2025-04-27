@@ -6,9 +6,9 @@ A modern playlist management tool for music creators and playlist managers, buil
 
 - **Multiple Shuffle Algorithms**:
   - Basic Shuffle: Standard random shuffle with fixed start option
-  - Balanced Shuffle: Ensures fair representation from all playlist parts
-  - Percentage Shuffle: Allows shuffling specific portions of playlists
-  - Vibe Shuffle: Creates smooth transitions using Spotify's audio features
+  - Percentage Shuffle: Allows shuffling a percentage of the front or back of a playlist
+  - Balanced Shuffle: Ensures fair representation from all sections of playlist in the new order
+  - Stratified Shuffle: Splits the playlist into sections, shuffles the sections, and then put the sections back in place
 - Keep certain tracks in their original position
 - Visual progress tracking
 - Undo functionality

@@ -7,6 +7,12 @@ from spotipy.oauth2 import SpotifyOAuth
 from flask import current_app, flash, session
 import time
 
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
 # Configure spotipy logging to reduce noise
 logging.getLogger('spotipy').setLevel(logging.WARNING)
 
@@ -19,12 +25,16 @@ def spotify_error_handler(func: Callable) -> Callable:
     @wraps(func)
     def wrapper(*args, **kwargs):
         try:
-            return func(*args, **kwargs)
+            logger.debug(f"Calling {func.__name__} with args: {args}, kwargs: {kwargs}")
+            result = func(*args, **kwargs)
+            logger.debug(f"{func.__name__} completed successfully")
+            return result
         except Exception as e:
             logger.error(f"Error in {func.__name__}: {str(e)}")
             if hasattr(e, 'response'):
                 logger.error(f"Response status: {e.response.status_code}")
                 logger.error(f"Response body: {e.response.text}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             raise
     return wrapper
 
@@ -41,15 +51,26 @@ class BatchProcessor(Generic[T]):
             process_batch(batch)
 
 class SpotifyClient:
-    """Handles Spotify API interactions and authentication."""
+    """Client for interacting with the Spotify Web API."""
     
+    # Define required scopes as a class variable
+    REQUIRED_SCOPES = [
+        "playlist-read-private",
+        "playlist-read-collaborative",
+        "user-library-read",
+        "user-top-read"
+    ]
+
     PLAYLIST_BATCH_SIZE = 100  # Maximum number of tracks per playlist update
     
     def __init__(self, token: Optional[Dict[str, Any]] = None) -> None:
         """Initialize the Spotify client with OAuth authentication."""
         try:
-            # Only log token presence at debug level
-            logger.debug("Initializing SpotifyClient with token: %s", "Present" if token else "None")
+            logger.info("Initializing SpotifyClient")
+            logger.debug(f"Token provided: {'Yes' if token else 'No'}")
+            if token:
+                logger.debug(f"Token type: {token.get('token_type')}")
+                logger.debug(f"Token expires at: {token.get('expires_at')}")
             
             self.scope: str = " ".join([
                 "playlist-read-private",
@@ -57,18 +78,23 @@ class SpotifyClient:
                 "playlist-modify-private",
                 "playlist-modify-public",
                 "user-read-private",
-                "user-read-playback-state",
                 "user-read-email",
+                "user-read-playback-state",
                 "user-read-currently-playing",
                 "user-read-recently-played",
-                "user-top-read"
+                "user-top-read",
+                "user-read-playback-position",  # This is the correct scope for audio features
+                "user-library-read"
             ])
+            logger.debug(f"Configured scopes: {self.scope}")
             
             self.sp = None
             self._initialize_client(token)
             self._playlist_processor = BatchProcessor(self.PLAYLIST_BATCH_SIZE)
+            logger.info("SpotifyClient initialized successfully")
         except Exception as e:
-            logger.error("Error in SpotifyClient init: %s", str(e))
+            logger.error(f"Error in SpotifyClient init: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             raise
     
     def _create_auth_manager(self) -> SpotifyOAuth:
@@ -166,6 +192,7 @@ class SpotifyClient:
     def _validate_token(self) -> bool:
         """Validate the current token and its scopes."""
         try:
+            logger.info("Validating token")
             if not self.sp:
                 logger.error("Spotify client not initialized")
                 return False
@@ -176,11 +203,13 @@ class SpotifyClient:
                 logger.error("No token found in auth manager")
                 return False
                 
-            # Log token details
-            logger.debug("Token details:")
-            logger.debug(f"Expires at: {token_info.get('expires_at')}")
-            logger.debug(f"Scopes: {token_info.get('scope', 'No scopes found')}")
+            # Log detailed token information
+            logger.debug("Token validation details:")
             logger.debug(f"Token type: {token_info.get('token_type')}")
+            logger.debug(f"Expires at: {token_info.get('expires_at')}")
+            logger.debug(f"Current time: {time.time()}")
+            logger.debug(f"Time until expiration: {token_info.get('expires_at') - time.time()} seconds")
+            logger.debug(f"Scopes: {token_info.get('scope', 'No scopes found')}")
                 
             # Check expiration
             if token_info.get('expires_at', 0) < time.time():
@@ -188,16 +217,37 @@ class SpotifyClient:
                 return False
                 
             # Verify token with a lightweight API call
+            logger.debug("Verifying token with current_user API call")
             self.sp.current_user()
+            logger.info("Token validation successful")
             return True
             
         except Exception as e:
             logger.error(f"Token validation failed: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return False
 
     @spotify_error_handler
-    def get_playlist_with_tracks(self, playlist_id: str) -> Dict[str, Any]:
-        """Get complete playlist data including tracks."""
+    def get_audio_features(self, track_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Get audio features for a list of track IDs."""
+        logger.info(f"Getting audio features for {len(track_ids)} tracks")
+        logger.debug(f"Track IDs: {track_ids}")
+        
+        if not self._validate_token():
+            logger.error("Cannot get audio features: Invalid token")
+            raise ValueError("Invalid token")
+            
+        try:
+            features = self.sp.audio_features(track_ids)
+            logger.debug(f"Received features for {len(features)} tracks")
+            return {track_id: feature for track_id, feature in zip(track_ids, features) if feature}
+        except Exception as e:
+            logger.error(f"Error getting audio features: {str(e)}")
+            raise
+
+    @spotify_error_handler
+    def get_playlist_with_tracks(self, playlist_id: str, include_features: bool = False) -> Dict[str, Any]:
+        """Get complete playlist data including tracks and optionally audio features."""
         try:
             # Get playlist metadata
             playlist_data = self.sp.playlist(playlist_id)
@@ -214,12 +264,17 @@ class SpotifyClient:
                 results = self.sp.next(results) if results['next'] else None
             
             logger.debug(f"Retrieved {len(tracks)} tracks for playlist {playlist_id}")
-            if tracks:
-                logger.debug(f"First track URI: {tracks[0].get('uri')}")
-                logger.debug(f"First track ID: {tracks[0].get('id')}")
             
-            # Add tracks to playlist data
+            # Get audio features if requested
+            audio_features = {}
+            if include_features and tracks:
+                track_ids = [track['id'] for track in tracks if track.get('id')]
+                audio_features = self.get_audio_features(track_ids)
+                logger.debug(f"Retrieved audio features for {len(audio_features)} tracks")
+            
+            # Add tracks and features to playlist data
             playlist_data['tracks'] = tracks
+            playlist_data['audio_features'] = audio_features
             return playlist_data
             
         except Exception as e:
