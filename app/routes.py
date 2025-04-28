@@ -27,8 +27,8 @@ def index():
         
         try:
             spotify = SpotifyClient(session['spotify_token'])
-            playlists = spotify.get_user_playlists_data()
-            user = spotify.get_current_user_data()
+            playlists = spotify.get_user_playlists()
+            user = spotify.get_current_user()
             algorithms = ShuffleRegistry.list_algorithms()
             return render_template('dashboard.html', playlists=playlists, user=user, algorithms=algorithms)
         except Exception as e:
@@ -57,40 +57,45 @@ def login():
 
 @main.route('/callback')
 def callback():
-    """Handle Spotify OAuth callback."""
+    """Handle the OAuth callback from Spotify"""
+    logger.debug("Callback request - Args: %s", request.args)
+    logger.debug("Callback request - Headers: %s", request.headers)
+    
+    # Get the authorization code from the callback
+    code = request.args.get('code')
+    if not code:
+        logger.error("No code received in callback")
+        return redirect(url_for('main.index'))
+    
+    logger.debug("Received auth code from Spotify, attempting to get token")
+    
+    # Initialize client without token to get auth URL
+    client = SpotifyClient()
+    
     try:
-        logger.debug("Callback request - Args: %s", dict(request.args))
-        logger.debug("Callback request - Headers: %s", dict(request.headers))
-        
-        error = request.args.get('error')
-        code = request.args.get('code')
-        
-        if error:
-            logger.error("Error during Spotify callback: %s", error)
-            flash("Error during Spotify authentication. Please try again.", "error")
-            return redirect(url_for('main.index'))
-            
-        if not code:
-            logger.error("No code received from Spotify")
-            flash("No authorization code received. Please try again.", "error")
-            return redirect(url_for('main.index'))
-        
-        logger.debug("Received auth code from Spotify, attempting to get token")
-        spotify = SpotifyClient()
-        token = spotify.get_token(code)
-        
-        if not token:
-            logger.error("Failed to get token from Spotify")
-            flash("Failed to complete authentication. Please try again.", "error")
-            return redirect(url_for('main.index'))
-            
+        # Exchange the code for an access token
+        token_data = client.get_token(code)
         logger.debug("Successfully got token, storing in session")
-        session['spotify_token'] = token
+        
+        # Store the full token data in the session
+        session['spotify_token'] = token_data
+        
+        # Initialize client with full token data
+        client = SpotifyClient(token=token_data)
+        
+        # Get user data and playlists
+        user_data = client.get_current_user()
+        playlists = client.get_user_playlists()
+        
+        # Store user data in session
+        session['user_data'] = user_data
+        
+        # Redirect to dashboard with playlists
         return redirect(url_for('main.index'))
         
     except Exception as e:
-        logger.error("Error during callback: %s\nTraceback: %s", str(e), traceback.format_exc())
-        flash("An error occurred during authentication. Please try again.", "error")
+        logger.error("Error with Spotify client: %s", str(e))
+        flash('Error connecting to Spotify. Please try again.', 'error')
         return redirect(url_for('main.index'))
 
 @main.route('/logout')
@@ -170,8 +175,9 @@ def shuffle(playlist_id):
         spotify = SpotifyClient(session['spotify_token'])
         
         # Get playlist data
-        playlist_data = spotify.get_playlist_with_tracks(playlist_id)
-        tracks = playlist_data['tracks']
+        playlist = Playlist.from_spotify(spotify, playlist_id, include_features=False)
+        tracks = playlist.tracks
+
         
         if not tracks:
             logger.error("No tracks found in playlist")
