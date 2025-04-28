@@ -14,6 +14,7 @@ class Playlist:
     description: Optional[str] = None
     tracks: List[Dict[str, Any]] = field(default_factory=list)
     audio_features: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    followers: int = 0
     
     def __post_init__(self) -> None:
         if not self.id:
@@ -49,13 +50,16 @@ class Playlist:
             if track_ids:
                 audio_features = spotify_client.get_track_audio_features(track_ids)
 
+        followers = playlist_data.get('followers', {}).get('total', 0)
+
         return cls(
             id=playlist_data['id'],
             name=playlist_data['name'],
             owner_id=playlist_data['owner']['id'],
             description=playlist_data.get('description'),
             tracks=tracks,
-            audio_features=audio_features
+            audio_features=audio_features,
+            followers=followers
         )
 
     def get_track_uris(self) -> List[str]:
@@ -123,7 +127,8 @@ class Playlist:
             'owner_id': self.owner_id,
             'description': self.description,
             'tracks': self.tracks,
-            'audio_features': self.audio_features
+            'audio_features': self.audio_features,
+            'followers': self.followers
         }
 
     def __len__(self) -> int:

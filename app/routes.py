@@ -91,7 +91,7 @@ def callback():
         session['user_data'] = user_data
         
         # Redirect to dashboard with playlists
-        return redirect(url_for('main.dashboard'))
+        return redirect(url_for('main.index'))
         
     except Exception as e:
         logger.error("Error with Spotify client: %s", str(e))
