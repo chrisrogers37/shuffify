@@ -45,6 +45,7 @@
                         <div>
                             <h3 class="text-white text-xl font-bold truncate">{{ playlist.name }}</h3>
                             <p class="text-white/80 text-sm">{{ playlist.tracks.total }} tracks</p>
+                            <p class="text-white/70 text-xs">{{ "{:,}".format(playlist.followers) }} follower{{ 's' if playlist.followers != 1 else '' }}</p>
                         </div>
                         <a href="{{ playlist.external_urls.spotify }}"
                            target="_blank"
