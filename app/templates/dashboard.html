@@ -45,7 +45,6 @@
                         <div>
                             <h3 class="text-white text-xl font-bold truncate">{{ playlist.name }}</h3>
                             <p class="text-white/80 text-sm">{{ playlist.tracks.total }} tracks</p>
-                            <p class="text-white/70 text-xs">{{ "{:,}".format(playlist.followers or 0) }} follower{{ 's' if (playlist.followers or 0) != 1 else '' }}</p>
                         </div>
                         <a href="{{ playlist.external_urls.spotify }}"
                            target="_blank"
@@ -289,6 +288,32 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 })();
+
+// Tap-to-toggle for mobile devices
+function isMobile() {
+  return window.innerWidth <= 768;
+}
+document.addEventListener('DOMContentLoaded', () => {
+  // Mobile tap-to-toggle for shuffle menu
+  if (isMobile()) {
+    document.querySelectorAll('.card-tile').forEach(function(card) {
+      card.addEventListener('click', function(e) {
+        // Don't toggle if clicking on a form, button, input, select, label, or link
+        if (e.target.closest('form, button, input, select, label, a')) {
+          return;
+        }
+        // Close any other open menus
+        document.querySelectorAll('.card-tile.menu-open').forEach(function(openCard) {
+          if (openCard !== card) {
+            openCard.classList.remove('menu-open');
+          }
+        });
+        // Toggle this card
+        card.classList.toggle('menu-open');
+      });
+    });
+  }
+});
 </script>
 
 <style>
