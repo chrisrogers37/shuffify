@@ -63,3 +63,6 @@ htmlcov/
 # Jupyter Notebooks
 *.ipynb
 test_notebook.ipynb
+
+# New additions
+.web-extension-id
