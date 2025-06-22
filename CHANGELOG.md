@@ -7,6 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.0] - 2025-01-27
+
+### Added
+- Terms of Service and Privacy Policy pages for Spotify compliance
+- Legal consent checkbox on login page
+- Required user agreement before Spotify authentication
+- Legal document routes and templates
+
+### Changed
+- Updated login flow to require explicit legal consent
+- Enhanced UI for compliance with Spotify Developer Policy
+
+## [2.2.4] - 2025-01-27
+
+### Changed
+- UI updates for Spotify compliance
+- Removed follower count display from playlist cards
+- Updated menu dropdown functionality
+- Improved playlist model to handle follower visibility
+
+### Fixed
+- Spotify API compliance issues with follower data display
+
+## [2.2.3] - 2025-01-26
+
+### Changed
+- Simplified feature logic for better performance
+- Removed complex feature calculations that were causing issues
+
+## [2.2.2] - 2025-01-25
+
+### Added
+- Playlist class implementation for better data management
+- Improved playlist data handling and structure
+
+### Changed
+- Refactored playlist handling to use dedicated class
+- Enhanced playlist model architecture
+
+## [2.2.1] - 2025-01-24
+
+### Changed
+- Consolidated code structure for better maintainability
+- Improved code organization and efficiency
+
+## [2.2.0] - 2025-01-23
+
+### Added
+- Enhanced vibe-based shuffle method with improved audio feature analysis
+- Better audio feature weighting and transition calculations
+
+### Changed
+- Improved vibe shuffle algorithm performance
+- Enhanced audio feature processing
+
+## [2.1.0] - 2025-01-22
+
+### Added
+- Stratified shuffle method for section-based shuffling
+- New shuffle algorithm for maintaining playlist structure
+
+### Changed
+- Updated algorithm descriptions and documentation
+- Improved algorithm package structure
+
+## [2.0.3] - 2025-01-21
+
+### Changed
+- Updated text descriptors throughout the application
+- Improved user interface text and descriptions
+- Enhanced algorithm documentation
+
+## [2.0.2] - 2025-01-20
+
+### Changed
+- Updated algorithm README to reflect current functionality
+- Improved documentation for available shuffle methods
+
 ## [2.0.1] - 2024-04-21
 
 ### Changed

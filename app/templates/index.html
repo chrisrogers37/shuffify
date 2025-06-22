@@ -16,13 +16,34 @@
                 
                 {% if not session.get('spotify_token') %}
                 <div class="mt-8">
-                    <a href="{{ url_for('main.login') }}" 
-                       class="inline-flex items-center px-8 py-4 rounded-full bg-white text-spotify-dark font-bold transition-all duration-300 text-lg hover:bg-white/90 hover:scale-105 hover:shadow-xl">
-                        <svg class="w-6 h-6 mr-2" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
-                        </svg>
-                        Connect with Spotify
-                    </a>
+                    <!-- Legal Consent Form -->
+                    <form action="{{ url_for('main.login') }}" method="GET" class="max-w-md mx-auto">
+                        <div class="mb-6 p-6 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20">
+                            <div class="flex items-start mb-4">
+                                <input type="checkbox" id="legal-consent" name="legal_consent" required 
+                                       class="mt-1 h-4 w-4 text-spotify-green bg-white border-white/30 rounded focus:ring-spotify-green focus:ring-2">
+                                <label for="legal-consent" class="ml-3 text-sm text-white/90 leading-relaxed">
+                                    I agree to the 
+                                    <a href="{{ url_for('main.terms') }}" target="_blank" class="text-spotify-green hover:underline font-medium">Terms of Service</a> 
+                                    and 
+                                    <a href="{{ url_for('main.privacy') }}" target="_blank" class="text-spotify-green hover:underline font-medium">Privacy Policy</a>
+                                </label>
+                            </div>
+                            <p class="text-xs text-white/70">
+                                By checking this box, you acknowledge that you have read and agree to our legal terms. 
+                                This consent is required to use Shuffify.
+                            </p>
+                        </div>
+                        
+                        <button type="submit" 
+                                class="w-full inline-flex items-center justify-center px-8 py-4 rounded-full bg-white text-spotify-dark font-bold transition-all duration-300 text-lg hover:bg-white/90 hover:scale-105 hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                                id="login-button">
+                            <svg class="w-6 h-6 mr-2" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                            </svg>
+                            Connect with Spotify
+                        </button>
+                    </form>
                 </div>
                 {% endif %}
             </div>
@@ -74,4 +95,21 @@
         animation: fadeIn 1s ease-out;
     }
 </style>
+
+<script>
+    // Enable/disable login button based on checkbox
+    document.addEventListener('DOMContentLoaded', function() {
+        const checkbox = document.getElementById('legal-consent');
+        const loginButton = document.getElementById('login-button');
+        
+        if (checkbox && loginButton) {
+            function updateButtonState() {
+                loginButton.disabled = !checkbox.checked;
+            }
+            
+            checkbox.addEventListener('change', updateButtonState);
+            updateButtonState(); // Initial state
+        }
+    });
+</script>
 {% endblock %} 
