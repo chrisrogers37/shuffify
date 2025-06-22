@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Future]
+
+### Added
+- A "Refresh Playlists" button to re-fetch playlists from Spotify without losing the current undo/redo state.
+- A "Logout" button to securely end the user's session.
+
+### To Do / In Progress
+- Implement Facebook and Apple authentication flows to provide more login options.
+- Complete redesign of the pre-login landing page to improve aesthetics and user experience.
+
 ## [Unreleased]
 
 ### [2.3.1] - 2025-06-22
