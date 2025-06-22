@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, session, redirect, url_for, request, flash, jsonify
+from flask import Blueprint, render_template, session, redirect, url_for, request, flash, jsonify, send_from_directory
 from app.spotify.client import SpotifyClient
 from app.models.playlist import Playlist
 from app.utils.shuffle_algorithms.registry import ShuffleRegistry
@@ -43,10 +43,26 @@ def index():
         session.clear()
         return render_template('index.html')
 
+@main.route('/terms')
+def terms():
+    """Terms of Service page."""
+    return send_from_directory('static/public', 'terms.html')
+
+@main.route('/privacy')
+def privacy():
+    """Privacy Policy page."""
+    return send_from_directory('static/public', 'privacy.html')
+
 @main.route('/login')
 def login():
     """Handle login with Spotify OAuth."""
     try:
+        # Check for legal consent
+        legal_consent = request.args.get('legal_consent')
+        if not legal_consent:
+            flash('You must agree to the Terms of Service and Privacy Policy to use Shuffify.', 'error')
+            return redirect(url_for('main.index'))
+        
         spotify = SpotifyClient()
         auth_url = spotify.get_auth_url()
         return redirect(auth_url)
