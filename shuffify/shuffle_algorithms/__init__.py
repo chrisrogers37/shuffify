@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any, Protocol
-from app.spotify.client import SpotifyClient
+from shuffify.spotify.client import SpotifyClient
 import random
 import logging
 

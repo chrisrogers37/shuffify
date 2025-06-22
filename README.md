@@ -21,12 +21,12 @@ A modern playlist management tool for music creators and playlist managers, buil
 
 ```
 shuffify/
-├── app/                    # Application code
+├── shuffify/               # Application package
+│   ├── models/            # Data models (Playlist)
+│   ├── shuffle_algorithms/ # Core shuffling logic
 │   ├── static/            # Static assets (CSS, JS, images)
-│   ├── templates/         # HTML templates
-│   ├── services/          # Business logic services
 │   ├── spotify/           # Spotify API integration
-│   ├── utils/             # Utility functions
+│   ├── templates/         # HTML templates
 │   ├── __init__.py        # Application factory
 │   └── routes.py          # Route definitions
 ├── requirements/          # Dependency management

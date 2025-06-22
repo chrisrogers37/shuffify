@@ -108,6 +108,12 @@
                                 Undo Last Shuffle
                             </button>
                         </form>
+                        <!-- Debugging Info - Uncomment to display state on the card -->
+                        <!--
+                        <div id="debug-info-{{ playlist.id }}" class="p-2 mt-2 text-xs text-white/50 bg-black/20 rounded-lg">
+                            Debug: Waiting for action...
+                        </div>
+                        -->
                     </div>
                 </div>
             {% endfor %}
@@ -196,27 +202,53 @@ function handlePlaylistAction(form, action) {
     // Submit form via AJAX
     fetch(form.action, {
         method: 'POST',
-        body: new FormData(form)
+        body: new FormData(form),
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            // Try to parse error JSON, but fall back to status text if that fails
+            return response.json().catch(() => {
+                throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+            });
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
-            // Show success message
             showNotification(data.message, 'success');
             
-            // If it was a shuffle, show the undo button
-            if (action === 'shuffle') {
+            // The server sends back the complete, updated state.
+            // We use this "single source of truth" to update the UI.
+            if (data.playlist_state) {
                 const undoForm = document.getElementById(`undo-form-${playlistId}`);
-                undoForm.classList.remove('hidden');
+                const debugInfo = document.getElementById(`debug-info-${playlistId}`);
+                const canUndo = data.playlist_state.current_index > 0;
+                
+                // Update debug view
+                debugInfo.textContent = `Debug: Index is ${data.playlist_state.current_index}. Can undo: ${canUndo}.`;
+                console.log(`Playlist ${playlistId}: Index is ${data.playlist_state.current_index}. Can undo: ${canUndo}.`);
+
+                if (canUndo) {
+                    undoForm.classList.remove('hidden');
+                    console.log(`Playlist ${playlistId}: Showing undo button.`);
+                } else {
+                    undoForm.classList.add('hidden');
+                    console.log(`Playlist ${playlistId}: Hiding undo button.`);
+                }
             }
         } else {
-            // Show error message
-            showNotification(data.message, 'error');
+            // If the server explicitly returns success: false, show the message.
+            showNotification(data.message || 'An operation failed.', data.category || 'error');
         }
     })
     .catch(error => {
-        console.error('Error:', error);
-        showNotification('An error occurred. Please try again.', 'error');
+        console.error('Error during playlist action:', error);
+        // This will catch network errors or errors from the !response.ok block
+        const errorMessage = error.message || 'An unknown network error occurred. Please try again.';
+        showNotification(errorMessage, 'error');
     })
     .finally(() => {
         // Reset button state
@@ -254,65 +286,34 @@ document.addEventListener('DOMContentLoaded', () => {
         const playlistId = select.closest('form').dataset.playlistId;
         updateAlgorithmParams(select, playlistId);
     });
-});
 
-// Delayed hide for mouseover menu (for expanding menu below info bar)
-(function() {
-  document.querySelectorAll('.card-tile').forEach(function(card) {
-    let hideTimeout = null;
-    const menu = card.querySelector('.shuffle-menu');
-    card.addEventListener('mouseenter', function() {
-      card.classList.add('menu-open');
-      if (hideTimeout) {
-        clearTimeout(hideTimeout);
-        hideTimeout = null;
-      }
-    });
-    card.addEventListener('mouseleave', function() {
-      hideTimeout = setTimeout(function() {
-        card.classList.remove('menu-open');
-      }, 2000);
-    });
-    // If mouse re-enters the menu, cancel the timeout
-    menu.addEventListener('mouseenter', function() {
-      if (hideTimeout) {
-        clearTimeout(hideTimeout);
-        hideTimeout = null;
-      }
-      card.classList.add('menu-open');
-    });
-    menu.addEventListener('mouseleave', function() {
-      hideTimeout = setTimeout(function() {
-        card.classList.remove('menu-open');
-      }, 2000);
-    });
-  });
-})();
-
-// Tap-to-toggle for mobile devices
-function isMobile() {
-  return window.innerWidth <= 768;
-}
-document.addEventListener('DOMContentLoaded', () => {
-  // Mobile tap-to-toggle for shuffle menu
-  if (isMobile()) {
+    // Click-to-toggle for shuffle menu on all devices
     document.querySelectorAll('.card-tile').forEach(function(card) {
-      card.addEventListener('click', function(e) {
-        // Don't toggle if clicking on a form, button, input, select, label, or link
-        if (e.target.closest('form, button, input, select, label, a')) {
-          return;
-        }
-        // Close any other open menus
-        document.querySelectorAll('.card-tile.menu-open').forEach(function(openCard) {
-          if (openCard !== card) {
-            openCard.classList.remove('menu-open');
-          }
+        card.addEventListener('click', function(e) {
+            // Don't toggle if a click is on an interactive element inside the menu
+            if (e.target.closest('.shuffle-menu, a')) {
+                // Allow clicks on links and inside the menu itself
+                if (!e.target.closest('a')) {
+                     // If it's inside the menu but not a link, do nothing.
+                    return;
+                }
+            }
+
+            // If the click is on the card but outside the interactive menu area, toggle it.
+            // But if the target is the spotify link, let it through.
+            if(e.target.closest("a[href*='spotify.com']")) return;
+
+            // Close any other open menus
+            document.querySelectorAll('.card-tile.menu-open').forEach(function(openCard) {
+                if (openCard !== card) {
+                    openCard.classList.remove('menu-open');
+                }
+            });
+
+            // Toggle the current card
+            card.classList.toggle('menu-open');
         });
-        // Toggle this card
-        card.classList.toggle('menu-open');
-      });
     });
-  }
 });
 </script>
 

@@ -22,11 +22,11 @@
                             <div class="flex items-start mb-4">
                                 <input type="checkbox" id="legal-consent" name="legal_consent" required 
                                        class="mt-1 h-4 w-4 text-spotify-green bg-white border-white/30 rounded focus:ring-spotify-green focus:ring-2">
-                                <label for="legal-consent" class="ml-3 text-sm text-white/90 leading-relaxed">
+                                <label for="legal-consent" class="ml-3 text-sm text-white/90 leading-relaxed legal-links">
                                     I agree to the 
-                                    <a href="{{ url_for('main.terms') }}" target="_blank" class="text-spotify-green hover:underline font-medium">Terms of Service</a> 
+                                    <a href="{{ url_for('main.terms') }}" target="_blank" class="hover:underline font-semibold">Terms of Service</a> 
                                     and 
-                                    <a href="{{ url_for('main.privacy') }}" target="_blank" class="text-spotify-green hover:underline font-medium">Privacy Policy</a>
+                                    <a href="{{ url_for('main.privacy') }}" target="_blank" class="hover:underline font-semibold">Privacy Policy</a>
                                 </label>
                             </div>
                             <p class="text-xs text-white/70">
@@ -87,6 +87,11 @@
 </div>
 
 <style>
+    /* Force legal links to be white */
+    .legal-links a {
+        color: white !important;
+    }
+
     @keyframes fadeIn {
         from { opacity: 0; transform: translateY(20px); }
         to { opacity: 1; transform: translateY(0); }
