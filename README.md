@@ -1,131 +1,57 @@
-# Shuffify
+# Shuffify - Playlist Perfection
 
-A modern playlist management tool for music creators and playlist managers, built with Flask and Tailwind CSS.
+Shuffify is a web application designed to give Spotify users advanced control over their playlists. It provides a suite of unique shuffling algorithms that go beyond Spotify's default shuffle, allowing users to reorder their tracks in more creative and useful ways.
 
-## Features
+**Live Application:** [**shuffify.app**](https://shuffify.app)
 
-- **Multiple Shuffle Algorithms**:
-  - Basic Shuffle: Standard random shuffle with fixed start option
-  - Balanced Shuffle: Ensures fair representation from all playlist parts
-  - Percentage Shuffle: Allows shuffling specific portions of playlists
-  - Vibe Shuffle: Creates smooth transitions using Spotify's audio features
-- Keep certain tracks in their original position
-- Visual progress tracking
-- Undo functionality
-- Collaborative playlist support
-- Responsive design with modern glassmorphism effects
-- Decorative music note patterns in background
-- Smooth hover and transition effects
+<!-- Placeholder, consider adding a real screenshot of the page-->
 
-## Project Structure
+## Project Overview
 
-```
-shuffify/
-├── shuffify/               # Application package
-│   ├── models/            # Data models (Playlist)
-│   ├── shuffle_algorithms/ # Core shuffling logic
-│   ├── static/            # Static assets (CSS, JS, images)
-│   ├── spotify/           # Spotify API integration
-│   ├── templates/         # HTML templates
-│   ├── __init__.py        # Application factory
-│   └── routes.py          # Route definitions
-├── requirements/          # Dependency management
-│   ├── base.txt          # Core dependencies
-│   ├── dev.txt           # Development dependencies
-│   └── prod.txt          # Production dependencies
-├── config.py             # Configuration settings
-├── run.py                # Application entry point
-├── Dockerfile            # Docker configuration
-├── docker-compose.yml    # Docker Compose configuration
-└── tailwind.config.js    # Tailwind CSS configuration
-```
+This project was built to solve a common frustration for avid Spotify users: the generally highly manual nature of managing playlist song orders. Shuffify addresses this by providing a simple, intuitive interface where users can connect their Spotify account, select a playlist, and apply a variety of sorting algorithms to reorder the track list!
 
-## Development Workflow
+The application is built with a security-first mindset, using environment variables to manage sensitive API keys and a robust session management system. It features a multi-level undo system, allowing users to step back through previous shuffles with ease.
 
-### Prerequisites
+## Key Features
 
-- Python 3.8+
-- Node.js (for Tailwind CSS)
-- Spotify Developer Account
-
-### Getting Started
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/shuffify.git
-   cd shuffify
-   ```
-
-2. Create and activate a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. Install dependencies:
-   ```bash
-   pip install -r requirements/dev.txt
-   ```
-
-4. Set up your Spotify credentials in `config.py`
-
-5. Run the development server:
-   ```bash
-   python run.py
-   ```
-
-### Requirements Management
-
-The project uses a structured approach to requirements management:
-
-- `requirements/base.txt`: Core dependencies required for the application to run
-- `requirements/dev.txt`: Development dependencies (includes base.txt)
-- `requirements/prod.txt`: Production dependencies (includes base.txt)
-
-To add a new dependency:
-1. Add it to `base.txt` if it's required for core functionality
-2. Add it to `dev.txt` if it's only needed for development
-3. Add it to `prod.txt` if it's only needed for production
-
-### Docker Development
-
-To run the application using Docker:
-
-```bash
-docker-compose up --build
-```
+- **Secure Spotify Authentication:** Connects to your Spotify account using the official OAuth 2.0 flow.
+- **Multiple Shuffle Algorithms:**
+    - **Basic Shuffle:** A standard, random reordering.
+    - **Balanced Shuffle:** A more complex algorithm to distribute artists and genres evenly.
+    - **Percentage Shuffle:** Keep a certain percentage of tracks at the top of the playlist.
+    - **Stratified Shuffle:** Group tracks by audio features (like danceability or energy) before shuffling.
+- **Multi-Level Undo:** Step back through every shuffle you've made to a playlist within your session.
+- **Click-to-Open UI:** A clean and responsive user interface for a smooth user experience.
+- **Legal Compliance:** Includes Terms of Service and Privacy Policy pages, as required by Spotify's developer policies.
 
 ## Tech Stack
 
-- **Backend**: Flask
-- **Frontend**: Tailwind CSS
-- **Containerization**: Docker
-- **Authentication**: Spotify OAuth 2.0
-- **Database**: SQLite (development), PostgreSQL (production)
+- **Backend:** Flask (Python)
+- **Frontend:** Tailwind CSS
+- **API:** Spotify Web API
+- **Server:** Gunicorn
+- **Containerization:** Docker
 
-## Architecture
+## Project Structure
 
-The application follows clean architecture principles:
+The project follows a standard Flask application structure, with a focus on modularity and separation of concerns.
 
-- **Presentation Layer**: Templates and static assets
-- **Application Layer**: Routes and services
-- **Domain Layer**: Business logic and models
-- **Infrastructure Layer**: External services and utilities
+```
+shuffify/
+├── config.py                 # Application configuration (loads from .env)
+├── requirements/             # Python dependencies
+├── run.py                    # Application entry point
+├── shuffify/
+│   ├── __init__.py           # App factory
+│   ├── routes.py             # All web routes and view logic
+│   ├── models/               # Data models (e.g., Playlist)
+│   ├── spotify/              # Spotify API client
+│   ├── shuffle_algorithms/   # Core shuffling logic
+│   └── templates/            # Jinja2 templates for all pages
+├── Dockerfile                # Defines the application container
+└── docker-compose.yml        # Orchestrates the local Docker environment
+```
 
-## Security
+## License
 
-- Secure session management
-- OAuth 2.0 authentication
-- Environment-based configuration
-- Input validation and sanitization
-
-## Future Enhancements
-
-- Stratified shuffling (shuffle within sections)
-- Shuffle by release date
-- Export/import functionality
-
-## Acknowledgments
-
-- Developed by Christopher Rogers
-- Built with Flask, Spotify Web API, Spotipy, and Tailwind CSS 
+This project is licensed under the MIT License - see the `LICENSE` file for details. 

@@ -5,10 +5,12 @@ load_dotenv()
 
 class Config:
     """Base configuration."""
-    SECRET_KEY = os.getenv('SECRET_KEY', os.urandom(24))
+    SECRET_KEY = os.getenv('SECRET_KEY', 'a_default_secret_key_for_development')
+    SESSION_COOKIE_NAME = os.getenv('SESSION_COOKIE_NAME', 'shuffify_session')
     SPOTIFY_CLIENT_ID = os.getenv('SPOTIFY_CLIENT_ID')
     SPOTIFY_CLIENT_SECRET = os.getenv('SPOTIFY_CLIENT_SECRET')
-    SPOTIFY_REDIRECT_URI = os.getenv('SPOTIFY_REDIRECT_URI')
+    # The redirect URI must match the one set in your Spotify Developer Dashboard
+    SPOTIFY_REDIRECT_URI = os.getenv('SPOTIFY_REDIRECT_URI', 'http://localhost:8000/callback')
     
     # Session configuration
     SESSION_TYPE = 'filesystem'
@@ -28,22 +30,26 @@ class Config:
             'client_secret': cls.SPOTIFY_CLIENT_SECRET,
             'redirect_uri': cls.SPOTIFY_REDIRECT_URI
         }
-class ProductionConfig(Config):
+
+class ProdConfig(Config):
     """Production configuration."""
-    # Use secure cookie in production
+    FLASK_ENV = 'production'
+    DEBUG = False
+    TESTING = False
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
 
-class DevelopmentConfig(Config):
+class DevConfig(Config):
     """Development configuration."""
+    FLASK_ENV = 'development'
     DEBUG = True
-    PORT = 8000
-    HOST = 'localhost'
+    TESTING = True
+    SESSION_COOKIE_SECURE = False
 
 # Dictionary for easy config selection
 config = {
-    'development': DevelopmentConfig,
-    'production': ProductionConfig,
-    'default': DevelopmentConfig
+    'development': DevConfig,
+    'production': ProdConfig,
+    'default': DevConfig
 } 
