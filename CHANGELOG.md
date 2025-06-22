@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.3.0] - 2025-01-27
+### [2.3.1] - 2025-06-22
+
+#### Fixed
+- Resolved a critical bug preventing the multi-level "Undo" feature from working correctly. The session state is now managed robustly, allowing users to undo multiple shuffles in a row.
+- Addressed a frontend issue where the "Undo" button would incorrectly disappear after a single use.
+- Fixed a CSS regression where legal links on the index page were incorrectly styled.
+- Replaced the hover-to-open mechanic on playlist tiles with a more stable click-to-open system to improve UX and prevent visual bugs.
+
+### [2.3.0] - 2025-06-22
+
+#### Added
+- `LEGAL_GUIDE.md` to outline the process for adding legal documentation.
 
 ### Added
 - Terms of Service and Privacy Policy pages for Spotify compliance

@@ -68,39 +68,55 @@
             }, 3000);
         }
 
-        async function handlePlaylistAction(formElement, action) {
+        async function handlePlaylistAction(form, action) {
+            const playlistId = form.dataset.playlistId;
+            const submitButton = form.querySelector('button[type="submit"]');
+            const originalText = submitButton.textContent;
+            // const debugInfo = document.getElementById(`debug-info-${playlistId}`); // Uncomment for debugging
+
+            submitButton.disabled = true;
+            submitButton.textContent = action === 'shuffle' ? 'Shuffling...' : 'Undoing...';
+            // if (debugInfo) debugInfo.textContent = 'Processing...'; // Uncomment for debugging
+
             try {
-                const formData = new FormData(formElement);
-                const response = await fetch(formElement.action, {
+                const response = await fetch(form.action, {
                     method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest'
-                    }
+                    body: new FormData(form),
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
                 });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || `Server error: ${response.status}`);
+                }
                 
-                const result = await response.json();
-                showFlashMessage(result.message, result.category);
+                showFlashMessage(data.message, data.category || 'success');
                 
-                if (result.success) {
-                    const playlistId = formElement.getAttribute('data-playlist-id');
+                if (data.playlist_state) {
                     const undoForm = document.getElementById(`undo-form-${playlistId}`);
+                    const canUndo = data.playlist_state.current_index > 0;
+
+                    /* Uncomment for debugging
+                    if (debugInfo) {
+                        debugInfo.textContent = `Debug: Index is ${data.playlist_state.current_index}. Can undo: ${canUndo}.`;
+                    }
+                    */
                     
-                    if (action === 'shuffle') {
-                        // After successful shuffle, show undo button
-                        if (undoForm) {
-                            undoForm.classList.remove('hidden');
-                        }
-                    } else if (action === 'undo') {
-                        // Only hide the undo button if we can't undo anymore
-                        if (undoForm && !result.can_undo_more) {
-                            undoForm.classList.add('hidden');
-                        }
+                    if (canUndo) {
+                        undoForm.classList.remove('hidden');
+                    } else {
+                        undoForm.classList.add('hidden');
                     }
                 }
             } catch (error) {
-                console.error('Error:', error);
-                showFlashMessage('An error occurred. Please try again.', 'error');
+                console.error('Error in handlePlaylistAction:', error);
+                const errorMessage = error.message || 'An unknown error occurred.';
+                // if (debugInfo) debugInfo.textContent = `Error: ${errorMessage}`; // Uncomment for debugging
+                showFlashMessage(errorMessage, 'error');
+            } finally {
+                submitButton.disabled = false;
+                submitButton.textContent = originalText;
             }
         }
     </script>

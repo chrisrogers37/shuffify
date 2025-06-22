@@ -1,6 +1,8 @@
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 import logging
+from shuffify.spotify.client import SpotifyClient
+import numpy as np
 
 logger = logging.getLogger(__name__)
 

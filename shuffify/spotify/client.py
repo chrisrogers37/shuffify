@@ -158,10 +158,19 @@ class SpotifyClient:
         self._refresh_token_if_needed()
         self._ensure_spotify_client()
         try:
-            self.sp.playlist_replace_items(playlist_id, [])
-            logger.info(f"Cleared playlist: {playlist_id}")
-            for i in range(0, len(track_uris), 100):
+            # If track_uris is empty, clear the playlist.
+            if not track_uris:
+                self.sp.playlist_replace_items(playlist_id, [])
+                logger.info(f"Cleared playlist: {playlist_id}")
+                return True
+
+            # Replace the first 100 tracks.
+            self.sp.playlist_replace_items(playlist_id, track_uris[:100])
+            
+            # Add the rest in batches of 100.
+            for i in range(100, len(track_uris), 100):
                 self.sp.playlist_add_items(playlist_id, track_uris[i:i+100])
+                
             logger.info(f"Updated playlist {playlist_id} with {len(track_uris)} tracks")
             return True
         except Exception as e:

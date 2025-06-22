@@ -1,4 +1,4 @@
-from app import create_app
+from shuffify import create_app
 from config import config
 
 # This file exists solely for gunicorn to have a WSGI entry point

@@ -34,8 +34,18 @@ def create_app(config_name=None):
     os.makedirs(app.config['SESSION_FILE_DIR'], exist_ok=True)
     
     # Register blueprints
-    from app.routes import main as main_blueprint
+    from shuffify.routes import main as main_blueprint
     app.register_blueprint(main_blueprint)
+    
+    # Add a `no-cache` header to responses in development mode. This prevents
+    # the browser from caching assets and not showing changes.
+    if app.debug:
+        @app.after_request
+        def after_request(response):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, public, max-age=0"
+            response.headers["Expires"] = 0
+            response.headers["Pragma"] = "no-cache"
+            return response
     
     return app
 
