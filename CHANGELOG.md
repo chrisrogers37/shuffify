@@ -13,6 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement Facebook and Apple authentication flows to provide more login options.
 - Complete redesign of the pre-login landing page to improve aesthetics and user experience.
 
+### Planned Infrastructure Improvements
+- **Flask 3.x Upgrade**: Major version upgrade from Flask 2.3.3 to 3.1.2+ with comprehensive testing
+  - Breaking changes assessment and migration guide
+  - Full application testing (routes, sessions, templates, error handling)
+  - Performance validation and security review
+  - Rollback plan and monitoring strategy
+- **Session Security**: Migration from filesystem sessions to Redis or database-backed sessions
+- **Caching Strategy**: Implement Redis caching for Spotify API responses
+- **CI/CD Pipeline**: Automated testing and deployment pipeline
+- **Database Integration**: Lightweight database for user preferences and analytics
+
 ### [2.3.4] - 2025-08-31
 
 #### Security
@@ -29,6 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Package updates**: Updated spotipy (2.23.0 → 2.25.1), requests (2.31.0 → 2.32.5), python-dotenv (1.0.0 → 1.1.1), gunicorn (21.2.0 → 23.0.0), numpy (1.24.3 → >=1.26.0)
 - **Conservative approach**: Kept Flask 2.3.3 for compatibility while updating other packages
 - **Production safety**: Application now fails fast in production with missing environment variables
+
+#### Notes
+- **Flask 3.x consideration**: Flask was kept at 2.3.3 for compatibility. A future major version upgrade to Flask 3.x is planned with comprehensive testing and migration guide.
 
 ### [2.3.3] - 2025-08-31
 
