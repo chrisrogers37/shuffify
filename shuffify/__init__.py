@@ -2,7 +2,7 @@ import os
 import logging
 from flask import Flask
 from flask_session import Session
-from config import config
+from config import config, validate_required_env_vars
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -17,6 +17,17 @@ def create_app(config_name=None):
         config_name = 'production'  # Default to production if not a string
     
     logger.info("Creating app with config: %s", config_name)
+    
+    # Validate required environment variables
+    try:
+        validate_required_env_vars()
+        logger.info("Environment validation passed")
+    except ValueError as e:
+        logger.error("Environment validation failed: %s", str(e))
+        if config_name == 'production':
+            raise  # Fail fast in production
+        else:
+            logger.warning("Continuing in development mode with missing environment variables")
     
     app = Flask(__name__)
     
@@ -47,7 +58,4 @@ def create_app(config_name=None):
             response.headers["Pragma"] = "no-cache"
             return response
     
-    return app
-
-# Create the application instance with explicit production config
-application = create_app('production') 
+    return app 
