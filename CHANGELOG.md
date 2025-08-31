@@ -22,6 +22,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI/CD Pipeline**: Automated testing and deployment pipeline
 - **Database Integration**: Lightweight database for user preferences and analytics
 
+### [2.3.6] - 2025-08-31
+
+#### Fixed
+- **Facebook OAuth Support**: Resolved critical issue preventing Facebook-authenticated Spotify accounts from logging in
+  - Enhanced OAuth error handling to detect and report authentication failures
+  - Added comprehensive token validation to prevent crashes from malformed tokens
+  - Improved session management with proper cleanup on authentication errors
+  - Removed invalid `user-read-birthdate` scope that was causing "illegal scope" errors
+  - Added detailed logging throughout the OAuth flow for better debugging
+
+#### Changed
+- **Landing Page Updates**: Updated to reflect development mode status
+  - Added prominent development mode notice with contact information for user whitelisting
+  - Removed misleading "Trusted by Music Lovers" social proof section
+  - Updated testimonial section to "Why I Built This" with more authentic messaging
+  - Changed "Enjoy" step to "Reorder" in "How It Works" section for clarity
+  - Updated testimonial text to better reflect the app's purpose
+  - Improved layout with proper right-alignment for testimonial attribution
+
+#### Added
+- **Enhanced Error Handling**: Comprehensive OAuth error detection and user-friendly error messages
+- **Development Mode Communication**: Clear messaging about app status and whitelisting requirements
+- **Improved Logging**: Detailed debug information for OAuth troubleshooting
+
+#### Removed
+- **Development Tools**: Removed `/debug/oauth` endpoint and `test_oauth.py` script (development-only tools)
+- **Invalid OAuth Scope**: Removed `user-read-birthdate` scope that was causing authentication failures
+- **Misleading Content**: Removed fake social proof metrics and inappropriate testimonials
+
+#### Technical Improvements
+- **Session Configuration**: Updated session security settings for better OAuth compatibility
+- **Token Validation**: Added robust token structure validation before API calls
+- **Error Recovery**: Improved session cleanup on authentication failures
+
 ### [2.3.5] - 2025-08-31
 
 #### Added

@@ -19,11 +19,16 @@ class Config:
     # The redirect URI must match the one set in your Spotify Developer Dashboard
     SPOTIFY_REDIRECT_URI = os.getenv('SPOTIFY_REDIRECT_URI', 'http://localhost:8000/callback')
     
-    # Session configuration
+    # Session configuration - improved for OAuth compatibility
     SESSION_TYPE = 'filesystem'
     SESSION_FILE_DIR = './.flask_session/'
     SESSION_PERMANENT = False
     PERMANENT_SESSION_LIFETIME = 3600  # 1 hour
+    
+    # Session security settings for OAuth
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'  # More permissive for OAuth flows
+    SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
 
     # Application settings
     DEBUG = False

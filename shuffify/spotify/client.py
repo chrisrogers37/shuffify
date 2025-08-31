@@ -25,6 +25,7 @@ def spotify_error_handler(func):
 
 class SpotifyClient:
     def __init__(self, token: Optional[Dict[str, Any]] = None, credentials: Optional[Dict[str, str]] = None) -> None:
+        # Enhanced scope list to ensure compatibility with Facebook login
         self.scope = " ".join([
             "playlist-read-private", "playlist-read-collaborative",
             "playlist-modify-private", "playlist-modify-public",
@@ -49,7 +50,8 @@ class SpotifyClient:
                 client_secret=self.credentials['client_secret'],
                 redirect_uri=self.credentials['redirect_uri'],
                 scope=self.scope,
-                open_browser=False
+                open_browser=False,
+                cache_handler=None  # Disable caching to avoid issues
             )
         else:
             from flask import current_app
@@ -58,7 +60,8 @@ class SpotifyClient:
                 client_secret=current_app.config['SPOTIFY_CLIENT_SECRET'],
                 redirect_uri=current_app.config['SPOTIFY_REDIRECT_URI'],
                 scope=self.scope,
-                open_browser=False
+                open_browser=False,
+                cache_handler=None  # Disable caching to avoid issues
             )
 
     def _initialize_client(self, token: Dict[str, Any]) -> None:
@@ -76,13 +79,30 @@ class SpotifyClient:
 
     @spotify_error_handler
     def get_token(self, code: str) -> Dict[str, Any]:
-        token_info = self.auth_manager.get_access_token(code, as_dict=True, check_cache=False)
-        if not token_info:
-            logger.error("No token returned from Spotify")
-            raise Exception("Failed to get access token from Spotify")
-        logger.debug("Token received, reinitializing client")
-        self._initialize_client(token_info)
-        return token_info
+        logger.debug("Attempting to exchange code for token")
+        try:
+            token_info = self.auth_manager.get_access_token(code, as_dict=True, check_cache=False)
+            if not token_info:
+                logger.error("No token returned from Spotify")
+                raise Exception("Failed to get access token from Spotify")
+            
+            logger.debug("Token received successfully")
+            logger.debug("Token keys: %s", list(token_info.keys()))
+            
+            # Validate token structure
+            required_keys = ['access_token', 'token_type']
+            missing_keys = [key for key in required_keys if key not in token_info]
+            if missing_keys:
+                logger.error("Token missing required keys: %s", missing_keys)
+                raise Exception(f"Invalid token structure: missing {missing_keys}")
+            
+            self._initialize_client(token_info)
+            return token_info
+            
+        except Exception as e:
+            logger.error("Error during token exchange: %s", str(e), exc_info=True)
+            # Re-raise with more context
+            raise Exception(f"Token exchange failed: {str(e)}")
 
     def _refresh_token_if_needed(self):
         token_info = self.auth_manager.cache_handler.get_cached_token()
