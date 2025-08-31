@@ -18,6 +18,8 @@ def inject_current_year():
 def index():
     """Home page route."""
     try:
+        logger.debug("Index route accessed - Session keys: %s", list(session.keys()) if session else 'No session')
+        
         if 'spotify_token' not in session:
             logger.debug("No spotify_token in session, showing login page")
             # Clear any existing flash messages when showing login page
@@ -29,16 +31,17 @@ def index():
             playlists = spotify.get_user_playlists()
             user = spotify.get_current_user()
             algorithms = ShuffleRegistry.list_algorithms()
+            logger.debug("User %s successfully loaded dashboard", user.get('display_name', 'Unknown'))
             return render_template('dashboard.html', playlists=playlists, user=user, algorithms=algorithms)
         except Exception as e:
-            logger.error("Error with Spotify client: %s", str(e))
+            logger.error("Error with Spotify client: %s", str(e), exc_info=True)
             # Clear session and flash messages
             session.clear()
             flash('Your session has expired. Please log in again.', 'error')
             return render_template('index.html')
             
     except Exception as e:
-        logger.error("Error in index route: %s", str(e))
+        logger.error("Error in index route: %s", str(e), exc_info=True)
         session.clear()
         return render_template('index.html')
 
@@ -67,13 +70,21 @@ def login():
             flash('You must agree to the Terms of Service and Privacy Policy to use Shuffify.', 'error')
             return redirect(url_for('main.index'))
         
+        # Clear any existing session data to start fresh
+        session.pop('spotify_token', None)
+        session.pop('user_data', None)
+        session.modified = True
+        
         spotify = SpotifyClient()
         auth_url = spotify.get_auth_url()
+        logger.debug("Generated auth URL: %s", auth_url)
         return redirect(auth_url)
     except Exception as e:
-        logger.error(f"Error during login: {str(e)}")
+        logger.error(f"Error during login: {str(e)}", exc_info=True)
         flash("An error occurred during login. Please try again.", "error")
         return redirect(url_for('main.index'))
+
+
 
 @main.route('/callback')
 def callback():
@@ -81,10 +92,19 @@ def callback():
     logger.debug("Callback request - Args: %s", request.args)
     logger.debug("Callback request - Headers: %s", request.headers)
     
+    # Check for OAuth errors first (common with Facebook login)
+    error = request.args.get('error')
+    if error:
+        logger.error("OAuth error received: %s", error)
+        error_description = request.args.get('error_description', 'Unknown error')
+        flash(f'OAuth Error: {error_description}', 'error')
+        return redirect(url_for('main.index'))
+    
     # Get the authorization code from the callback
     code = request.args.get('code')
     if not code:
         logger.error("No code received in callback")
+        flash('No authorization code received from Spotify. Please try again.', 'error')
         return redirect(url_for('main.index'))
     
     logger.debug("Received auth code from Spotify, attempting to get token")
@@ -97,24 +117,54 @@ def callback():
         token_data = client.get_token(code)
         logger.debug("Successfully got token, storing in session")
         
+        # Validate token data structure
+        if not isinstance(token_data, dict) or 'access_token' not in token_data:
+            logger.error("Invalid token data received: %s", type(token_data))
+            flash('Invalid token data received from Spotify. Please try again.', 'error')
+            return redirect(url_for('main.index'))
+        
         # Store the full token data in the session
         session['spotify_token'] = token_data
         
         # Initialize client with full token data
         client = SpotifyClient(token=token_data)
         
-        # Get user data and playlists
-        user_data = client.get_current_user()
-        playlists = client.get_user_playlists()
+        # Test the token by getting user data
+        try:
+            user_data = client.get_current_user()
+            logger.debug("Successfully retrieved user data: %s", user_data.get('display_name', 'Unknown'))
+        except Exception as user_error:
+            logger.error("Failed to get user data with token: %s", str(user_error))
+            # Clear the invalid token from session
+            session.pop('spotify_token', None)
+            flash('Failed to authenticate with Spotify. Please try again.', 'error')
+            return redirect(url_for('main.index'))
+        
+        # Get playlists
+        try:
+            playlists = client.get_user_playlists()
+            logger.debug("Successfully retrieved %d playlists", len(playlists))
+        except Exception as playlist_error:
+            logger.error("Failed to get playlists: %s", str(playlist_error))
+            # Don't fail the login if we can't get playlists, just log it
+            playlists = []
         
         # Store user data in session
         session['user_data'] = user_data
+        
+        # Ensure session is saved
+        session.modified = True
+        
+        logger.info("User %s successfully authenticated", user_data.get('display_name', 'Unknown'))
         
         # Redirect to dashboard with playlists
         return redirect(url_for('main.index'))
         
     except Exception as e:
-        logger.error("Error with Spotify client: %s", str(e))
+        logger.error("Error with Spotify client: %s", str(e), exc_info=True)
+        # Clear any partial session data
+        session.pop('spotify_token', None)
+        session.pop('user_data', None)
         flash('Error connecting to Spotify. Please try again.', 'error')
         return redirect(url_for('main.index'))
 
