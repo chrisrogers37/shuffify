@@ -3,6 +3,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def validate_required_env_vars():
+    """Validate that all required environment variables are present."""
+    required_vars = ['SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET']
+    missing = [var for var in required_vars if not os.getenv(var)]
+    if missing:
+        raise ValueError(f"Missing required environment variables: {missing}")
+
 class Config:
     """Base configuration."""
     SECRET_KEY = os.getenv('SECRET_KEY', 'a_default_secret_key_for_development')
