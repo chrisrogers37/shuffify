@@ -7,19 +7,30 @@
     <!-- User Info -->
     <div class="relative max-w-6xl mx-auto px-4 pt-8">
         <div class="p-6 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20">
-            <div class="flex items-center">
-                {% if user.images %}
-                    <img src="{{ user.images[0].url }}" alt="{{ user.display_name }}" 
-                         class="w-16 h-16 rounded-full mr-4 border-2 border-white/20">
-                {% else %}
-                    <div class="w-16 h-16 rounded-full bg-white/10 border-2 border-white/20 flex items-center justify-center mr-4">
-                        <span class="text-2xl text-white">{{ user.display_name[0] }}</span>
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    {% if user.images %}
+                        <img src="{{ user.images[0].url }}" alt="{{ user.display_name }}" 
+                             class="w-16 h-16 rounded-full mr-4 border-2 border-white/20">
+                    {% else %}
+                        <div class="w-16 h-16 rounded-full bg-white/10 border-2 border-white/20 flex items-center justify-center mr-4">
+                            <span class="text-2xl text-white">{{ user.display_name[0] }}</span>
+                        </div>
+                    {% endif %}
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Welcome, {{ user.display_name }}!</h2>
+                        <p class="text-white/80">Select a playlist to shuffle below</p>
                     </div>
-                {% endif %}
-                <div>
-                    <h2 class="text-2xl font-bold text-white">Welcome, {{ user.display_name }}!</h2>
-                    <p class="text-white/80">Select a playlist to shuffle below</p>
                 </div>
+                <!-- Logout Button -->
+                <a href="{{ url_for('main.logout') }}" 
+                   class="inline-flex items-center px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition duration-150 border border-white/20 hover:border-white/30"
+                   title="Logout and return to landing page">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                    </svg>
+                    Logout
+                </a>
             </div>
         </div>
     </div>
