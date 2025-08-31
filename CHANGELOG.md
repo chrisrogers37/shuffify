@@ -13,6 +13,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement Facebook and Apple authentication flows to provide more login options.
 - Complete redesign of the pre-login landing page to improve aesthetics and user experience.
 
+### [2.3.3] - 2025-08-31
+
+#### Security
+- **Fixed critical security vulnerability**: Changed session directory permissions from `chmod 777` to `chmod 755` with proper ownership (`nobody:nogroup`)
+- **Added Docker security hardening**: Implemented proper file permissions and ownership for production containers
+
+#### Added
+- **Health check endpoint**: Added `/health` route returning JSON status for monitoring and container orchestration
+- **Docker health checks**: Added `HEALTHCHECK` directive with curl-based monitoring
+- **Container monitoring**: Added curl dependency for health check functionality
+
+#### Fixed
+- **Tailwind CSS configuration**: Fixed content paths from `./app/templates/**/*.html` to `./shuffify/templates/**/*.html` for proper asset optimization
+- **Build optimization**: Ensured Tailwind classes are properly purged in production builds
+
+#### Changed
+- **Dockerfile improvements**: Enhanced container security and operational readiness
+- **Infrastructure documentation**: Updated `dev_guides/infrastructure_critiques.md` to track completed fixes
+
 ### [2.3.2] - 2025-01-27
 
 #### Fixed
