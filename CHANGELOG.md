@@ -9,9 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planned Features
 - A "Refresh Playlists" button to re-fetch playlists from Spotify without losing the current undo/redo state.
-- A "Logout" button to securely end the user's session.
 - Implement Facebook and Apple authentication flows to provide more login options.
-- Complete redesign of the pre-login landing page to improve aesthetics and user experience.
 
 ### Planned Infrastructure Improvements
 - **Flask 3.x Upgrade**: Major version upgrade from Flask 2.3.3 to 3.1.2+ with comprehensive testing
@@ -23,6 +21,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Caching Strategy**: Implement Redis caching for Spotify API responses
 - **CI/CD Pipeline**: Automated testing and deployment pipeline
 - **Database Integration**: Lightweight database for user preferences and analytics
+
+### [2.3.5] - 2025-08-31
+
+#### Added
+- **Comprehensive UX Review**: Complete frontend landing page analysis and renovation plan
+- **Enhanced Legal Consent**: Redesigned consent form with "Quick & Secure" messaging and improved visual appeal
+- **Dynamic CTA Button**: Progressive enhancement with dynamic subtext that changes based on consent checkbox state
+- **Social Proof Section**: Added "Trusted by Music Lovers" with realistic stats (1K+ playlists, 100+ users) and user testimonial
+- **How It Works Section**: Clear 3-step process explanation (Connect, Choose, Enjoy) positioned for optimal user flow
+- **Use Cases Section**: Four targeted cards for different user types (Curated Collections, Tastemaker Playlists, New Perspectives, Playlist Maintenance)
+- **Trust Indicators**: Added security and privacy badges (Secure OAuth, No Data Stored, Instant Results, Free Forever)
+- **User Testimonial**: Added specific testimonial from playlist curator with 5-star rating
+- **Logout Functionality**: Added logout button to dashboard for better session management and user switching
+- **Accessibility Improvements**: Added skip links, ARIA labels, focus states, and screen reader support
+- **Scroll Animations**: Added intersection observer for smooth scroll-triggered animations
+- **Custom Scrollbar**: Enhanced scrollbar styling for better visual consistency
+
+#### Changed
+- **Hero Section Copy**: Updated to target "tastemakers" and "reorder carefully curated Spotify playlists" instead of generic shuffling
+- **CTA Button Text**: Changed from "Connect with Spotify" to "Start Reordering Now" with dynamic subtext
+- **Section Ordering**: Moved "How It Works" above "Trusted by Music Lovers" for better information architecture
+- **Spacing Optimization**: Reduced excessive padding between sections for better visual flow and scrolling experience
+- **Feature Descriptions**: Updated to emphasize "reordering" instead of "shuffling" for clarity
+- **Color Scheme**: Enhanced legal links with Spotify green color for better brand consistency
+- **Responsive Design**: Improved spacing and layout across all screen sizes
+
+#### Fixed
+- **Legal Consent UX**: Transformed required consent from friction point to positive security feature
+- **Information Architecture**: Reordered sections for more logical user journey
+- **Visual Hierarchy**: Improved spacing and typography for better content digestion
+- **Mobile Experience**: Optimized touch targets and spacing for mobile devices
+- **Session Management**: Added proper logout functionality for user switching
+
+#### Technical Improvements
+- **Tailwind Config**: Extended with custom animations (fade-in, slide-up, scale-in)
+- **Global CSS**: Added accessibility styles, focus states, and custom scrollbar
+- **JavaScript**: Added dynamic CTA updates and scroll-triggered animations
+- **Template Structure**: Improved semantic HTML with proper ARIA labels and skip links
 
 ### [2.3.4] - 2025-08-31
 
