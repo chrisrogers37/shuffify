@@ -11,6 +11,10 @@ black==23.7.0
 isort==5.12.0
 mypy==1.5.1
 
+# Security & Quality
+safety==2.3.5
+bandit==1.7.5
+
 # Development
 ipython==8.14.0
 python-dotenv==1.0.0 
