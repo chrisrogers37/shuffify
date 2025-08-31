@@ -2,7 +2,7 @@ import random
 from typing import List, Dict, Any, Optional
 from . import ShuffleAlgorithm
 
-class PercentageShuffle:
+class PercentageShuffle(ShuffleAlgorithm):
     """Shuffle a portion of your playlist while keeping the rest in order."""
     
     @property
