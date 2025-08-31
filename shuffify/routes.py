@@ -52,6 +52,11 @@ def privacy():
     """Privacy Policy page."""
     return send_from_directory('static/public', 'privacy.html')
 
+@main.route('/health')
+def health():
+    """Health check endpoint for Docker and monitoring."""
+    return jsonify({'status': 'healthy', 'timestamp': datetime.utcnow().isoformat()}), 200
+
 @main.route('/login')
 def login():
     """Handle login with Spotify OAuth."""
