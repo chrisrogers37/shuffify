@@ -66,3 +66,7 @@ test_notebook.ipynb
 
 # New additions
 .web-extension-id
+
+# Docs
+dev_guides/
+dev_guides/*.md

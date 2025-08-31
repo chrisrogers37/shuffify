@@ -9,7 +9,16 @@ This directory contains various algorithms for shuffling Spotify playlists, each
 - **Description**: Standard random shuffle with the option to keep tracks fixed at the start.
 - **Parameters**:
   - `keep_first` (integer): Number of tracks to keep in their original position at the start
-  - Default: 0, Min: 0
+    - Default: 0, Min: 0
+- **Example**:
+  With `keep_first=3`:
+  1. First 3 tracks remain in their original positions
+  2. Remaining tracks are shuffled randomly
+  3. Result: [Track1, Track2, Track3, Shuffled_Track7, Shuffled_Track15, ...]
+- **Use Cases**:
+  - Keeping your favorite songs at the top of a playlist
+  - Maintaining a specific opening sequence while randomizing the rest
+  - Creating playlists with a consistent start but varied middle/end
 
 
 ### Balanced
@@ -61,30 +70,54 @@ This directory contains various algorithms for shuffling Spotify playlists, each
 - **Description**: Shuffle a portion of your playlist while keeping the rest in order.
 - **Parameters**:
   - `shuffle_percentage` (float): Percentage to shuffle (0-100%)
+    - Default: 50.0, Min: 0.0, Max: 100.0
   - `shuffle_location` (string): Choose 'front' to shuffle the beginning or 'back' to shuffle the end
+    - Default: 'front', Options: ['front', 'back']
 - **Example**:
   With 100 tracks and 30% shuffle:
-  - Back: First 70 tracks stay in order, last 30 get shuffled
-  - Front: First 30 tracks get shuffled, last 70 stay in order
+  - **Front**: First 30 tracks get shuffled, last 70 stay in order
+    - Result: [Shuffled_Track15, Shuffled_Track8, Shuffled_Track22, Track31, Track32, ...]
+  - **Back**: First 70 tracks stay in order, last 30 get shuffled
+    - Result: [Track1, Track2, ..., Track70, Shuffled_Track85, Shuffled_Track92, ...]
+- **Use Cases**:
+  - Shuffling only the beginning of a playlist to find a good starting point
+  - Keeping the end of a playlist in order while randomizing the middle
+  - Creating variety in specific sections while maintaining structure elsewhere
 
 ### Stratified
 - **Class**: `StratifiedShuffle`
-- **Description**: Groups tracks by a specific audio feature (like 'danceability' or 'energy') and then shuffles the groups, preserving the internal order of each group.
+- **Description**: Divide the playlist into sections, shuffle each section independently, and reassemble the sections in the original order.
 - **Parameters**:
-  - `feature` (string): The audio feature to group by. Options include `danceability`, `energy`, `valence`, `acousticness`, `instrumentalness`, `liveness`, `speechiness`.
-  - `bins` (integer): The number of groups (bins) to create based on the feature's value.
-    - Default: 5, Min: 2, Max: 10
+  - `keep_first` (integer): Number of tracks to keep in their original position
+    - Default: 0, Min: 0
+  - `section_count` (integer): Number of sections to divide the playlist into
+    - Default: 5, Min: 1, Max: 20
 - **Example**:
-  With `feature='energy'` and `bins=3`:
-  1. Tracks are fetched with their audio features from Spotify.
-  2. Tracks are divided into 3 groups: low energy, medium energy, and high energy.
-  3. The *groups themselves* are shuffled. For example, the new order might be [Medium Energy Group, High Energy Group, Low Energy Group].
-  4. The final playlist is constructed by concatenating the tracks from the shuffled groups. The order of tracks *within* each group remains unchanged.
+  With `section_count=3` and 90 tracks:
+  1. The playlist is divided into 3 equal sections:
+     - Section 1: Tracks 1-30
+     - Section 2: Tracks 31-60  
+     - Section 3: Tracks 61-90
+  2. Each section is shuffled internally:
+     - Section 1: [Track7, Track15, Track3, Track22, ...]
+     - Section 2: [Track45, Track31, Track58, Track37, ...]
+     - Section 3: [Track78, Track61, Track89, Track67, ...]
+  3. The sections are reassembled in their original order: [Shuffled Section 1, Shuffled Section 2, Shuffled Section 3]
 - **Use Cases**:
-  - Creating a workout playlist that builds from low to high energy (by not shuffling the groups).
-  - Creating a mood-based playlist that flows from happy to sad songs.
-  - Interspersing instrumental and vocal tracks in a study playlist.
+  - Creating playlists with controlled randomness within sections
+  - Maintaining some structure while adding variety
+  - Breaking up large playlists into manageable chunks for shuffling
+  - Preserving the general flow of a playlist while adding local variety
 
+
+## Algorithm Comparison
+
+| Algorithm | Randomness Level | Structure Preservation | Best For |
+|-----------|------------------|----------------------|----------|
+| **Basic** | High | Low | Simple random shuffling with optional fixed start |
+| **Percentage** | Medium | High | Partial shuffling while keeping most order intact |
+| **Balanced** | Medium | Medium | Ensuring fair representation from all playlist regions |
+| **Stratified** | Low | High | Controlled randomness within defined sections |
 
 ## Adding New Algorithms
 

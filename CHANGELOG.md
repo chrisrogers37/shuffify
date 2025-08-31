@@ -7,15 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Future]
 
-### Added
+### Planned Features
 - A "Refresh Playlists" button to re-fetch playlists from Spotify without losing the current undo/redo state.
 - A "Logout" button to securely end the user's session.
-
-### To Do / In Progress
 - Implement Facebook and Apple authentication flows to provide more login options.
 - Complete redesign of the pre-login landing page to improve aesthetics and user experience.
 
-## [Unreleased]
+### [2.3.2] - 2025-01-27
+
+#### Fixed
+- Fixed shuffle algorithm inheritance issues - all algorithms now properly inherit from ShuffleAlgorithm base class
+- Corrected Balanced Shuffle description in global README to accurately reflect playlist position-based shuffling (not artist/genre-based)
+- Fixed CHANGELOG contradictions - moved unimplemented "Refresh Playlists" and "Logout" features to "Planned Features" section
+
+#### Changed
+- Enhanced shuffle algorithm documentation with detailed examples, use cases, and comparison table
+- Updated shuffle algorithms README to reflect current implementations without audio features
+- Improved algorithm descriptions and parameter documentation
+
+#### Added
+- Comprehensive infrastructure critiques and recommendations document in `dev_guides/infrastructure_critiques.md`
+- Algorithm comparison table to help users choose appropriate shuffle methods
+- Detailed use cases for all shuffle algorithms
 
 ### [2.3.1] - 2025-06-22
 
@@ -26,9 +39,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replaced the hover-to-open mechanic on playlist tiles with a more stable click-to-open system to improve UX and prevent visual bugs.
 
 ### [2.3.0] - 2025-06-22
-
-#### Added
-- `LEGAL_GUIDE.md` to outline the process for adding legal documentation.
 
 ### Added
 - Terms of Service and Privacy Policy pages for Spotify compliance
