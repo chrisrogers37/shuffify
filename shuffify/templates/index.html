@@ -5,47 +5,170 @@
     <div class="absolute inset-0" style="background-image: url('/static/images/hero-pattern.svg'); opacity: 0.15; pointer-events: none;"></div>
     
     <!-- Hero Section -->
-    <div class="relative flex items-center justify-center pt-16 pb-12">
+    <div class="relative flex items-center justify-center pt-16 pb-8">
         <div class="w-full max-w-6xl mx-auto px-4 text-center">
             <div class="animate-fade-in space-y-6">
                 <h1 class="text-6xl font-bold text-white">🎵 Shuffify</h1>
                 <h2 class="text-3xl font-semibold text-white/90">Playlist Perfection</h2>
-                <p class="text-xl text-white/80 max-w-2xl mx-auto">
-                    Update your playlists with quick and easy re-ordering. Perfect for long playlists and curated collections.
+                <p class="text-xl text-white/80 max-w-3xl mx-auto leading-relaxed">
+                    Reorder your carefully curated Spotify playlists with intelligent shuffling algorithms. 
+                    Perfect for tastemakers who want to keep their playlists fresh and flowing.
                 </p>
                 
                 {% if not session.get('spotify_token') %}
-                <div class="mt-8">
-                    <!-- Legal Consent Form -->
-                    <form action="{{ url_for('main.login') }}" method="GET" class="max-w-md mx-auto">
-                        <div class="mb-6 p-6 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20">
-                            <div class="flex items-start mb-4">
-                                <input type="checkbox" id="legal-consent" name="legal_consent" required 
-                                       class="mt-1 h-4 w-4 text-spotify-green bg-white border-white/30 rounded focus:ring-spotify-green focus:ring-2">
-                                <label for="legal-consent" class="ml-3 text-sm text-white/90 leading-relaxed legal-links">
-                                    I agree to the 
-                                    <a href="{{ url_for('main.terms') }}" target="_blank" class="hover:underline font-semibold">Terms of Service</a> 
-                                    and 
-                                    <a href="{{ url_for('main.privacy') }}" target="_blank" class="hover:underline font-semibold">Privacy Policy</a>
-                                </label>
+                <div class="mt-12">
+                    <!-- Enhanced Legal Consent Form -->
+                    <form action="{{ url_for('main.login') }}" method="GET" class="max-w-lg mx-auto">
+                        <!-- Enhanced Consent Card -->
+                        <div class="consent-card bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 mb-6">
+                            <div class="flex items-start space-x-4">
+                                <div class="flex-shrink-0">
+                                    <div class="w-8 h-8 bg-spotify-green rounded-full flex items-center justify-center">
+                                        <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="flex-1">
+                                    <h4 class="text-lg font-semibold text-white mb-2">Quick & Secure</h4>
+                                    <p class="text-white/80 text-sm mb-4">
+                                        We use Spotify's secure OAuth to access your playlists. Your data stays with Spotify - we never store it.
+                                    </p>
+                                    <div class="flex items-start space-x-3">
+                                        <input type="checkbox" id="legal-consent" name="legal_consent" required 
+                                               class="mt-1 h-4 w-4 text-spotify-green bg-white border-white/30 rounded focus:ring-spotify-green focus:ring-2">
+                                        <label for="legal-consent" class="text-sm text-white/90 leading-relaxed legal-links">
+                                            I agree to the 
+                                            <a href="{{ url_for('main.terms') }}" target="_blank" class="text-spotify-green hover:underline font-medium">Terms of Service</a> 
+                                            and 
+                                            <a href="{{ url_for('main.privacy') }}" target="_blank" class="text-spotify-green hover:underline font-medium">Privacy Policy</a>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
-                            <p class="text-xs text-white/70">
-                                By checking this box, you acknowledge that you have read and agree to our legal terms. 
-                                This consent is required to use Shuffify.
-                            </p>
                         </div>
                         
+                        <!-- Enhanced CTA Button -->
                         <button type="submit" 
-                                class="w-full inline-flex items-center justify-center px-8 py-4 rounded-full bg-white text-spotify-dark font-bold transition-all duration-300 text-lg hover:bg-white/90 hover:scale-105 hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
-                                id="login-button">
-                            <svg class="w-6 h-6 mr-2" viewBox="0 0 24 24" fill="currentColor">
+                                class="w-full inline-flex items-center justify-center px-8 py-4 rounded-full bg-white text-spotify-dark font-bold transition-all duration-300 text-lg hover:bg-white/90 hover:scale-105 hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed cta-button"
+                                id="login-button"
+                                aria-label="Connect with Spotify to start shuffling playlists">
+                            <svg class="w-6 h-6 mr-3" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
                             </svg>
-                            Connect with Spotify
+                            <div class="text-left">
+                                <div class="font-bold">Start Reordering Now</div>
+                                <div class="text-sm opacity-90" id="cta-subtext">Free • Approve & Connect</div>
+                            </div>
                         </button>
                     </form>
                 </div>
                 {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- How It Works Section -->
+    <div class="relative pt-12 pb-12">
+        <div class="w-full max-w-6xl mx-auto px-4">
+            <h3 class="text-3xl font-bold text-white text-center mb-12">How It Works</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <!-- Step 1: Connect -->
+                <div class="text-center">
+                    <div class="step-number bg-white text-spotify-green rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-4 font-bold text-xl">1</div>
+                    <h4 class="text-xl font-semibold text-white mb-3">Connect</h4>
+                    <p class="text-white/80">Link your Spotify account in one click</p>
+                </div>
+                
+                <!-- Step 2: Choose -->
+                <div class="text-center">
+                    <div class="step-number bg-white text-spotify-green rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-4 font-bold text-xl">2</div>
+                    <h4 class="text-xl font-semibold text-white mb-3">Choose</h4>
+                    <p class="text-white/80">Pick your playlist and reordering algorithm</p>
+                </div>
+                
+                <!-- Step 3: Enjoy -->
+                <div class="text-center">
+                    <div class="step-number bg-white text-spotify-green rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-4 font-bold text-xl">3</div>
+                    <h4 class="text-xl font-semibold text-white mb-3">Enjoy</h4>
+                    <p class="text-white/80">Fresh playlist flow in seconds</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Social Proof Section -->
+    <div class="relative py-12">
+        <div class="w-full max-w-4xl mx-auto px-4 text-center">
+            <h3 class="text-2xl font-semibold text-white mb-8">Trusted by Music Lovers</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                <div class="text-center">
+                    <div class="text-3xl font-bold text-white mb-2">1K+</div>
+                    <div class="text-white/70">Playlists Reordered</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-3xl font-bold text-white mb-2">100+</div>
+                    <div class="text-white/70">Happy Users</div>
+                </div>
+            </div>
+            
+            <!-- User Testimonial -->
+            <div class="max-w-3xl mx-auto">
+                <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
+                    <div class="flex items-start space-x-4">
+                        <div class="flex-shrink-0">
+                            <div class="w-12 h-12 bg-spotify-green rounded-full flex items-center justify-center">
+                                <span class="text-white font-bold text-lg">C</span>
+                            </div>
+                        </div>
+                        <div class="flex-1">
+                            <blockquote class="text-white/90 text-lg leading-relaxed italic">
+                                "I curate many large playlists with thousands of followers, and shuffify allows me to easily rearrange them to keep them feeling fresh, especially after I spend hours crate-digging and dumping new finds in at the bottom!"
+                            </blockquote>
+                            <div class="mt-4 flex items-center justify-between">
+                                <div>
+                                    <div class="text-white font-semibold">Chris</div>
+                                    <div class="text-white/70 text-sm">Playlist Curator</div>
+                                </div>
+                                <div class="text-2xl">⭐️⭐️⭐️⭐️⭐️</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Use Cases Section -->
+    <div class="relative py-12 bg-white/5">
+        <div class="w-full max-w-6xl mx-auto px-4">
+            <h3 class="text-3xl font-bold text-white text-center mb-12">Perfect For</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="use-case-card p-6 rounded-2xl bg-white/10 border border-white/20 transform transition duration-300 hover:scale-105 hover:shadow-2xl">
+                    <div class="text-3xl mb-4">🎵</div>
+                    <h4 class="text-xl font-semibold text-white mb-3">Curated Collections</h4>
+                    <p class="text-white/80">Keep your curated playlists fresh, especially after adding new songs.</p>
+                </div>
+                
+                <div class="use-case-card p-6 rounded-2xl bg-white/10 border border-white/20 transform transition duration-300 hover:scale-105 hover:shadow-2xl">
+                    <div class="text-3xl mb-4">🎧</div>
+                    <h4 class="text-xl font-semibold text-white mb-3">Tastemaker Playlists</h4>
+                    <p class="text-white/80">Perfect for tastemakers who want to mix it up and get those new adds to the top for their followers.</p>
+                </div>
+                
+                <div class="use-case-card p-6 rounded-2xl bg-white/10 border border-white/20 transform transition duration-300 hover:scale-105 hover:shadow-2xl">
+                    <div class="text-3xl mb-4">🔄</div>
+                    <h4 class="text-xl font-semibold text-white mb-3">New Perspectives</h4>
+                    <p class="text-white/80">Make your playlists feel new with a quick shuffle.</p>
+                </div>
+                
+                <div class="use-case-card p-6 rounded-2xl bg-white/10 border border-white/20 transform transition duration-300 hover:scale-105 hover:shadow-2xl">
+                    <div class="text-3xl mb-4">✨</div>
+                    <h4 class="text-xl font-semibold text-white mb-3">Playlist Maintenance</h4>
+                    <p class="text-white/80">Reorder that massive playlist that you've been meaning to update with one click.</p>
+                </div>
             </div>
         </div>
     </div>
@@ -56,9 +179,9 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div class="p-6 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 transform transition duration-300 hover:scale-105 hover:shadow-2xl">
                     <div class="text-4xl mb-4">🎵</div>
-                    <h3 class="text-xl font-semibold mb-3 text-white">Creative Reordering</h3>
+                    <h3 class="text-xl font-semibold mb-3 text-white">Intelligent Reordering</h3>
                     <p class="text-white/80">
-                        Choose from a number of different shuffling algorithms to get your playlist just right.
+                        Choose from multiple intelligent algorithms to reorder your playlist while maintaining the perfect flow.
                     </p>
                 </div>
                 
@@ -66,21 +189,41 @@
                     <div class="text-4xl mb-4">↩️</div>
                     <h3 class="text-xl font-semibold mb-3 text-white">Easy Undo</h3>
                     <p class="text-white/80">
-                        Not happy with the shuffle? Instantly revert to your previous playlist order.
+                        Not happy with the reorder? Instantly revert to your previous playlist order.
                     </p>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Why Section -->
-    <div class="relative pb-16">
-        <div class="w-full max-w-6xl mx-auto px-4">
-            <div class="text-center p-8 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20">
-                <h3 class="text-2xl font-semibold mb-4 text-white">Why Shuffify?</h3>
-                <p class="text-white/80 text-lg max-w-3xl mx-auto">
-                    Whether you're managing a massive playlist or curating a new mix, Shuffify gives you the control you need to create the perfect listening experience.
-                </p>
+    <!-- Trust Indicators -->
+    <div class="relative py-12 border-t border-white/20">
+        <div class="w-full max-w-4xl mx-auto px-4 text-center">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 text-sm text-white/70">
+                <div class="flex items-center justify-center">
+                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
+                    </svg>
+                    Secure OAuth
+                </div>
+                <div class="flex items-center justify-center">
+                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                    </svg>
+                    No Data Stored
+                </div>
+                <div class="flex items-center justify-center">
+                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/>
+                    </svg>
+                    Instant Results
+                </div>
+                <div class="flex items-center justify-center">
+                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
+                    </svg>
+                    Free Forever
+                </div>
             </div>
         </div>
     </div>
@@ -89,9 +232,25 @@
 <style>
     /* Force legal links to be white */
     .legal-links a {
-        color: white !important;
+        color: #1DB954 !important;
     }
 
+    /* Enhanced CTA button styles */
+    .cta-button {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .cta-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(29, 185, 84, 0.3);
+    }
+
+    .cta-button:focus {
+        outline: 2px solid white;
+        outline-offset: 2px;
+    }
+
+    /* Animation for elements */
     @keyframes fadeIn {
         from { opacity: 0; transform: translateY(20px); }
         to { opacity: 1; transform: translateY(0); }
@@ -99,22 +258,67 @@
     .animate-fade-in {
         animation: fadeIn 1s ease-out;
     }
+
+    /* Step number animation */
+    .step-number {
+        transition: all 0.3s ease;
+    }
+    .step-number:hover {
+        transform: scale(1.1);
+    }
+
+    /* Use case card hover effects */
+    .use-case-card:hover {
+        background: rgba(255, 255, 255, 0.15);
+    }
 </style>
 
 <script>
-    // Enable/disable login button based on checkbox
+    // Enable/disable login button based on checkbox and update CTA text
     document.addEventListener('DOMContentLoaded', function() {
         const checkbox = document.getElementById('legal-consent');
         const loginButton = document.getElementById('login-button');
+        const ctaSubtext = document.getElementById('cta-subtext');
         
         if (checkbox && loginButton) {
             function updateButtonState() {
-                loginButton.disabled = !checkbox.checked;
+                const isChecked = checkbox.checked;
+                loginButton.disabled = !isChecked;
+                
+                // Update CTA subtext based on checkbox state
+                if (ctaSubtext) {
+                    if (isChecked) {
+                        ctaSubtext.textContent = 'Free • Ready to Start';
+                        ctaSubtext.classList.add('text-spotify-green');
+                    } else {
+                        ctaSubtext.textContent = 'Free • Approve & Connect';
+                        ctaSubtext.classList.remove('text-spotify-green');
+                    }
+                }
             }
             
             checkbox.addEventListener('change', updateButtonState);
             updateButtonState(); // Initial state
         }
+
+        // Add scroll-triggered animations
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('animate-in');
+                }
+            });
+        }, observerOptions);
+
+        // Observe elements for animation
+        document.querySelectorAll('.use-case-card, .step-number').forEach(el => {
+            observer.observe(el);
+        });
     });
 </script>
 {% endblock %} 
