@@ -13,6 +13,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement Facebook and Apple authentication flows to provide more login options.
 - Complete redesign of the pre-login landing page to improve aesthetics and user experience.
 
+### [2.3.4] - 2025-08-31
+
+#### Security
+- **Environment variable validation**: Added fail-fast validation for required environment variables in production
+- **Dependency security updates**: Updated non-breaking packages to latest versions for security improvements
+- **Security scanning tools**: Added safety and bandit to development environment for vulnerability detection
+
+#### Added
+- **Environment validation**: Added startup validation for SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET
+- **Development security tools**: Added safety==2.3.5 and bandit==1.7.5 for automated security scanning
+- **Improved error handling**: Better logging and error messages for missing environment variables
+
+#### Changed
+- **Package updates**: Updated spotipy (2.23.0 → 2.25.1), requests (2.31.0 → 2.32.5), python-dotenv (1.0.0 → 1.1.1), gunicorn (21.2.0 → 23.0.0), numpy (1.24.3 → >=1.26.0)
+- **Conservative approach**: Kept Flask 2.3.3 for compatibility while updating other packages
+- **Production safety**: Application now fails fast in production with missing environment variables
+
 ### [2.3.3] - 2025-08-31
 
 #### Security
