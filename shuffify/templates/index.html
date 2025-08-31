@@ -15,6 +15,8 @@
                     Perfect for tastemakers who want to keep their playlists fresh and flowing.
                 </p>
                 
+
+                
                 {% if not session.get('spotify_token') %}
                 <div class="mt-12">
                     <!-- Enhanced Legal Consent Form -->
@@ -91,29 +93,36 @@
                 <!-- Step 3: Enjoy -->
                 <div class="text-center">
                     <div class="step-number bg-white text-spotify-green rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-4 font-bold text-xl">3</div>
-                    <h4 class="text-xl font-semibold text-white mb-3">Enjoy</h4>
-                    <p class="text-white/80">Fresh playlist flow in seconds</p>
+                    <h4 class="text-xl font-semibold text-white mb-3">Reorder</h4>
+                    <p class="text-white/80">Enjoy a fresh playlist flow in seconds</p>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Social Proof Section -->
-    <div class="relative py-12">
-        <div class="w-full max-w-4xl mx-auto px-4 text-center">
-            <h3 class="text-2xl font-semibold text-white mb-8">Trusted by Music Lovers</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                <div class="text-center">
-                    <div class="text-3xl font-bold text-white mb-2">1K+</div>
-                    <div class="text-white/70">Playlists Reordered</div>
-                </div>
-                <div class="text-center">
-                    <div class="text-3xl font-bold text-white mb-2">100+</div>
-                    <div class="text-white/70">Happy Users</div>
+    <!-- Development Mode Notice -->
+    <div class="relative py-8">
+        <div class="w-full max-w-4xl mx-auto px-4">
+            <div class="p-6 bg-yellow-500/20 border border-yellow-500/30 rounded-2xl">
+                <div class="flex items-center">
+                    <svg class="w-6 h-6 text-yellow-400 mr-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    <div>
+                        <h4 class="text-yellow-200 font-semibold text-lg mb-2">Development Mode</h4>
+                        <p class="text-yellow-100">This app is currently in development. To check it out, please contact <a href="mailto:christophertrogers37@gmail.com" class="underline font-medium">christophertrogers37@gmail.com</a> to request user whitelisting.</p>
+                    </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Developer Testimonial Section -->
+    <div class="relative py-12">
+        <div class="w-full max-w-4xl mx-auto px-4 text-center">
+            <h3 class="text-2xl font-semibold text-white mb-8">Why I Built This</h3>
             
-            <!-- User Testimonial -->
+            <!-- Developer Testimonial -->
             <div class="max-w-3xl mx-auto">
                 <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
                     <div class="flex items-start space-x-4">
@@ -124,14 +133,14 @@
                         </div>
                         <div class="flex-1">
                             <blockquote class="text-white/90 text-lg leading-relaxed italic">
-                                "I curate many large playlists with thousands of followers, and shuffify allows me to easily rearrange them to keep them feeling fresh, especially after I spend hours crate-digging and dumping new finds in at the bottom!"
+                                "I curate many large playlists and shuffify allows me to easily rearrange them to keep them feeling fresh, especially after I spend hours crate-digging and dumping new finds in at the bottom!"
                             </blockquote>
-                            <div class="mt-4 flex items-center justify-between">
-                                <div>
+                            <div class="mt-4 flex items-end justify-end space-x-3">
+                                <div class="text-right">
                                     <div class="text-white font-semibold">Chris</div>
-                                    <div class="text-white/70 text-sm">Playlist Curator</div>
+                                    <div class="text-white/70 text-sm">Developer & Playlist Curator</div>
                                 </div>
-                                <div class="text-2xl">⭐️⭐️⭐️⭐️⭐️</div>
+                                <div class="text-2xl">🎵</div>
                             </div>
                         </div>
                     </div>
