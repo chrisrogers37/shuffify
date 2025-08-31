@@ -17,9 +17,9 @@ The application is built with a security-first mindset, using environment variab
 - **Secure Spotify Authentication:** Connects to your Spotify account using the official OAuth 2.0 flow.
 - **Multiple Shuffle Algorithms:**
     - **Basic Shuffle:** A standard, random reordering.
-    - **Balanced Shuffle:** A more complex algorithm to distribute artists and genres evenly.
+    - **Balanced Shuffle:** A more complex algorithm to distribute tracks from all parts of the playlist evenly using round-robin selection.
     - **Percentage Shuffle:** Keep a certain percentage of tracks at the top of the playlist.
-    - **Stratified Shuffle:** Group tracks by audio features (like danceability or energy) before shuffling.
+    - **Stratified Shuffle:** Divide the playlist into sections, shuffle each section independently, and reassemble the sections in the original order.
 - **Multi-Level Undo:** Step back through every shuffle you've made to a playlist within your session.
 - **Click-to-Open UI:** A clean and responsive user interface for a smooth user experience.
 - **Legal Compliance:** Includes Terms of Service and Privacy Policy pages, as required by Spotify's developer policies.

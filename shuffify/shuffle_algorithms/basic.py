@@ -2,7 +2,7 @@ import random
 from typing import List, Dict, Any, Optional
 from . import ShuffleAlgorithm
 
-class BasicShuffle:
+class BasicShuffle(ShuffleAlgorithm):
     """Randomly shuffle your playlist while optionally keeping tracks in place at the top."""
     
     @property

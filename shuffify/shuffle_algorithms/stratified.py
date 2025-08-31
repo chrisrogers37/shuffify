@@ -6,7 +6,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class StratifiedShuffle:
+class StratifiedShuffle(ShuffleAlgorithm):
     """Divide the playlist into sections, shuffle each section independently, and reassemble the sections in the original order."""
     
     @property
