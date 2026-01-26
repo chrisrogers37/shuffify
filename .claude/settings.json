@@ -1,0 +1,72 @@
+{
+  "$schema": "https://cdn.jsdelivr.net/gh/anthropics/claude-code@main/schema/settings.schema.json",
+  "allowedCommands": [
+    {
+      "type": "exact",
+      "command": "git status"
+    },
+    {
+      "type": "exact",
+      "command": "git diff"
+    },
+    {
+      "type": "exact",
+      "command": "git log --oneline -5"
+    },
+    {
+      "type": "exact",
+      "command": "python run.py"
+    },
+    {
+      "type": "exact",
+      "command": "pytest tests/ -v"
+    },
+    {
+      "type": "pattern",
+      "command": "pytest tests/**/*.py -v"
+    },
+    {
+      "type": "exact",
+      "command": "pytest tests/ --cov=shuffify"
+    },
+    {
+      "type": "exact",
+      "command": "flask routes"
+    },
+    {
+      "type": "exact",
+      "command": "ruff check shuffify/"
+    },
+    {
+      "type": "exact",
+      "command": "black --check shuffify/"
+    },
+    {
+      "type": "exact",
+      "command": "black shuffify/"
+    },
+    {
+      "type": "exact",
+      "command": "curl http://localhost:5000/health"
+    },
+    {
+      "type": "pattern",
+      "command": "pip install -r requirements/*.txt"
+    },
+    {
+      "type": "exact",
+      "command": "ls -la"
+    },
+    {
+      "type": "pattern",
+      "command": "ls -la *"
+    },
+    {
+      "type": "pattern",
+      "command": "cat *.md"
+    }
+  ],
+  "dangerouslySkipPermissions": false,
+  "allowCreateFiles": true,
+  "allowEditFiles": true
+}
