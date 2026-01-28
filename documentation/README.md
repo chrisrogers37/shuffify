@@ -9,12 +9,32 @@ This directory contains all project documentation organized by purpose.
 ```
 documentation/
 ├── README.md          # This file - documentation index
+├── evaluation/        # System evaluations and assessments
+│   ├── README.md
+│   ├── 01_architecture_evaluation.md
+│   ├── 02_modularity_assessment.md
+│   ├── 03_extensibility_evaluation.md
+│   ├── 04_future_features_readiness.md
+│   └── 05_brainstorm_enhancements.md
 ├── planning/          # Design docs, architecture decisions
 │   └── separation_of_concerns_evaluation.md
 ├── guides/            # How-to guides and tutorials (planned)
 ├── updates/           # Dated bug fixes, patches, hotfixes (planned)
 └── operations/        # Production runbooks (planned)
 ```
+
+---
+
+## System Evaluation
+
+Comprehensive system review documents for development planning:
+
+- **[Evaluation Overview](evaluation/README.md)** - Summary and reading guide
+- **[Architecture Evaluation](evaluation/01_architecture_evaluation.md)** - Three-layer architecture analysis
+- **[Modularity Assessment](evaluation/02_modularity_assessment.md)** - Code modularity and coupling analysis
+- **[Extensibility Evaluation](evaluation/03_extensibility_evaluation.md)** - Service extensibility patterns
+- **[Future Features Readiness](evaluation/04_future_features_readiness.md)** - Readiness for planned features
+- **[Brainstorm Enhancements](evaluation/05_brainstorm_enhancements.md)** - Additional enhancement ideas
 
 ---
 
@@ -100,6 +120,7 @@ Production runbooks and procedures:
 
 | Document Type | Location | Example |
 |--------------|----------|---------|
+| System evaluations | `evaluation/` | `evaluation/01_architecture_evaluation.md` |
 | Architecture decisions | `planning/` | `planning/redis-migration-adr.md` |
 | How-to guides | `guides/` | `guides/spotify-oauth-setup.md` |
 | Bug fixes (dated) | `updates/` | `updates/2026-02-15-session-bug.md` |
@@ -133,4 +154,4 @@ This documentation index should be updated whenever:
 - Documentation is reorganized
 - Documentation is deprecated or removed
 
-Last updated: 2026-01-26
+Last updated: 2026-01-28
