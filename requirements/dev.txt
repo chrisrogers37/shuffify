@@ -17,4 +17,4 @@ bandit==1.7.5
 
 # Development
 ipython==8.14.0
-python-dotenv==1.0.0 
+# python-dotenv version is inherited from base.txt 

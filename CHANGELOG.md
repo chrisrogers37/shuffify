@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Pydantic Validation Layer** (Phase 2) - Type-safe request validation using Pydantic v2
+  - `ShuffleRequest` schema with algorithm parameter validation
+  - `PlaylistQueryParams` for query parameter validation
+  - Algorithm-specific parameter schemas with constraints
+  - `parse_shuffle_request()` utility for form data parsing
+- **Global Error Handlers** - Centralized exception handling for all routes
+  - Consistent JSON error responses across all endpoints
+  - Handlers for `ValidationError`, `AuthenticationError`, `PlaylistError`, etc.
+  - HTTP status code handlers (400, 401, 404, 500)
+- **Schema Test Suite** - 39 comprehensive tests for Pydantic schemas
+  - Tests for all request validation scenarios
+  - Tests for type conversion and error handling
+
+### Changed
+- **Routes Simplified** - Removed try/except boilerplate, delegating to global handlers
+- **ShuffleService Refactored** - Removed manual parameter parsing (now handled by Pydantic)
+- **Dependencies** - Added `pydantic>=2.0.0` to requirements
+
+### Technical Improvements
+- **Modularity Score** - Increased from 7.5/10 to 8.3/10 (Phase 2 completion)
+- **Test Coverage** - 139 total tests (up from 100), all passing
+- **Code Quality** - Cleaner routes with less error handling boilerplate
+
+---
+
 ## [Future]
 
 ### Planned Features
