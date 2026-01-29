@@ -17,6 +17,7 @@ documentation/
 │   ├── 04_future_features_readiness.md
 │   └── 05_brainstorm_enhancements.md
 ├── planning/          # Design docs, architecture decisions
+│   ├── phase_0_test_foundation.md    # ✅ Complete
 │   └── separation_of_concerns_evaluation.md
 ├── guides/            # How-to guides and tutorials (planned)
 ├── updates/           # Dated bug fixes, patches, hotfixes (planned)
@@ -40,7 +41,21 @@ Comprehensive system review documents for development planning:
 
 ## Planning & Architecture
 
+### Development Phases
+
+| Phase | Status | Document |
+|-------|--------|----------|
+| **Phase 0: Test Foundation** | ✅ Complete | [phase_0_test_foundation.md](planning/phase_0_test_foundation.md) |
+| **Phase 1A: Service Layer** | 🔜 Next | Planned |
+| **Phase 1B: Database** | 🔜 Next | Planned |
+| **Phase 1C: UI Improvements** | 🔜 Next | Planned |
+
 ### Existing Documents
+
+- **[Phase 0: Test Foundation](planning/phase_0_test_foundation.md)** ✅ Complete
+  - Comprehensive test suite (176 tests)
+  - 100% coverage on shuffle algorithms, models, config
+  - Prerequisite for all future phases
 
 - **[Separation of Concerns Evaluation](planning/separation_of_concerns_evaluation.md)**
   - Evaluation of current codebase architecture
@@ -49,10 +64,11 @@ Comprehensive system review documents for development planning:
 
 ### Planned Documents
 
+- Phase 1A: Service Layer Extraction
+- Phase 1B: Database Integration Design
 - Architecture Decision Records (ADRs)
 - Flask 3.x upgrade planning
 - Redis session storage migration plan
-- Database integration design
 - Algorithm performance comparison framework
 
 ---
@@ -154,4 +170,4 @@ This documentation index should be updated whenever:
 - Documentation is reorganized
 - Documentation is deprecated or removed
 
-Last updated: 2026-01-28
+Last updated: 2026-01-29
