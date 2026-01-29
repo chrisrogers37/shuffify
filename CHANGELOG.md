@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Comprehensive Test Suite (Phase 0)** - Established testing foundation before architectural changes
+  - Created `tests/` directory with proper structure mirroring source code
+  - Added `tests/conftest.py` with shared fixtures for tracks, playlists, and audio features
+  - **Shuffle Algorithm Tests** (100% coverage):
+    - `test_basic.py` - 20 tests for BasicShuffle algorithm
+    - `test_balanced.py` - 23 tests for BalancedShuffle algorithm
+    - `test_percentage.py` - 24 tests for PercentageShuffle algorithm
+    - `test_stratified.py` - 24 tests for StratifiedShuffle algorithm
+    - `test_registry.py` - 23 tests for ShuffleRegistry pattern
+  - **Model Tests** (99% coverage):
+    - `test_playlist.py` - 32 tests for Playlist dataclass and methods
+  - **Configuration Tests** (100% coverage):
+    - `test_config.py` - 29 tests for Config classes and environment handling
+  - Total: 176 tests passing, 50% overall coverage (100% on testable modules)
+
 ## [Future]
 
 ### Planned Features
