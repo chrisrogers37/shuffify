@@ -18,7 +18,7 @@ Shuffify now demonstrates **good modularity** following Phase 1 completion. The 
 |-------|-------------|--------|
 | Phase 0 | Add comprehensive testing | ✅ **COMPLETED** |
 | Phase 1 | Extract Service Layer | ✅ **COMPLETED** |
-| Phase 2 | Add Validation Layer | 📋 **NEXT** |
+| Phase 2 | Add Validation Layer | ✅ **COMPLETED** |
 | Phase 3 | Split SpotifyClient | 📋 Planned |
 
 ---
@@ -29,16 +29,20 @@ Shuffify now demonstrates **good modularity** following Phase 1 completion. The 
 
 ```
 shuffify/
-├── __init__.py           (61 LOC)   - App factory, initialization
-├── routes.py             (413 LOC)  - HTTP routes only ✅ (refactored)
+├── __init__.py           (65 LOC)   - App factory, initialization
+├── routes.py             (~350 LOC) - HTTP routes only ✅ (refactored)
+├── error_handlers.py     (~170 LOC) - Global error handlers ✅ (Phase 2)
 ├── models/
 │   ├── __init__.py       (1 LOC)
 │   └── playlist.py       (142 LOC)  - Domain model ✅
-├── services/                        - NEW: Service layer ✅
+├── schemas/                         - NEW: Pydantic schemas ✅ (Phase 2)
+│   ├── __init__.py       (30 LOC)   - Exports all schemas
+│   └── requests.py       (~180 LOC) - Request validation schemas ✅
+├── services/                        - Service layer ✅ (Phase 1)
 │   ├── __init__.py       (35 LOC)   - Exports all services/exceptions
 │   ├── auth_service.py   (~150 LOC) - OAuth flow, token management ✅
 │   ├── playlist_service.py (~180 LOC) - Playlist operations ✅
-│   ├── shuffle_service.py (~200 LOC) - Shuffle orchestration ✅
+│   ├── shuffle_service.py (~130 LOC) - Shuffle orchestration ✅ (simplified)
 │   └── state_service.py  (~315 LOC) - Session state management ✅
 ├── spotify/
 │   ├── __init__.py       (1 LOC)
@@ -501,17 +505,18 @@ tests/
 │   ├── __init__.py              ✅ IMPLEMENTED
 │   ├── test_auth_service.py     ✅ IMPLEMENTED - Auth tests
 │   ├── test_playlist_service.py ✅ IMPLEMENTED - Playlist tests
-│   ├── test_shuffle_service.py  ✅ IMPLEMENTED - Shuffle tests
+│   ├── test_shuffle_service.py  ✅ IMPLEMENTED - Shuffle tests (23 tests)
 │   └── test_state_service.py    ✅ IMPLEMENTED - State tests
+├── schemas/
+│   ├── __init__.py              ✅ IMPLEMENTED
+│   └── test_requests.py         ✅ IMPLEMENTED - 39 validation tests
 ├── unit/
 │   ├── test_algorithms.py       📋 TODO
 │   ├── test_playlist_model.py   📋 TODO
 │   └── test_registry.py         📋 TODO
-├── integration/
-│   ├── test_routes.py           📋 TODO
-│   └── test_spotify_client.py   📋 TODO
-└── schemas/
-    └── test_validators.py       📋 Phase 2
+└── integration/
+    ├── test_routes.py           📋 TODO
+    └── test_spotify_client.py   📋 TODO
 ```
 
 ---
@@ -553,29 +558,44 @@ tests/services/
 
 **Routes Refactored:** Business logic removed, now HTTP-only handlers.
 
-### 7.2 Phase 2: Add Validation Layer
+### 7.2 Phase 2: Add Validation Layer ✅ COMPLETED
 
-**New Module:**
+**Status:** ✅ **FULLY IMPLEMENTED** (January 29, 2026)
+
+**Implemented Modules:**
 ```
 shuffify/schemas/
-├── __init__.py
-└── validators.py
+├── __init__.py              ✅ Exports all schemas + ValidationError
+└── requests.py              ✅ Pydantic request validation schemas
+
+shuffify/error_handlers.py   ✅ Global Flask error handlers
 ```
 
-**Using Pydantic:**
-```python
-from pydantic import BaseModel, validator
+**Pydantic Schemas Created:**
+- `ShuffleRequest` - Full shuffle request validation with algorithm-specific parameters
+- `PlaylistQueryParams` - Query parameter validation for playlist endpoints
+- `BasicShuffleParams`, `BalancedShuffleParams`, etc. - Algorithm-specific schemas
+- `parse_shuffle_request()` - Utility for parsing form data
 
-class ShuffleRequest(BaseModel):
-    algorithm: str
-    keep_first: int = 0
-    section_count: int = 4
+**Global Error Handlers:**
+- `ValidationError` (Pydantic) → 400 with detailed error messages
+- `AuthenticationError`, `TokenValidationError` → 401
+- `PlaylistNotFoundError`, `NoHistoryError` → 404
+- `InvalidAlgorithmError`, `ParameterValidationError` → 400
+- `PlaylistUpdateError`, `ShuffleExecutionError` → 500
+- HTTP 400, 401, 404, 500 fallbacks
 
-    @validator('keep_first')
-    def validate_keep_first(cls, v):
-        if v < 0:
-            raise ValueError('keep_first must be non-negative')
-        return v
+**Routes Refactored:**
+- `/shuffle/<id>` - Uses `parse_shuffle_request()` for validation
+- `/playlist/<id>` - Uses `PlaylistQueryParams` for query validation
+- `/undo/<id>` - Relies on global error handlers
+- Removed try/except boilerplate from all routes
+
+**Test Coverage:**
+```
+tests/schemas/
+├── __init__.py              ✅
+└── test_requests.py         ✅ 39 tests for all schemas
 ```
 
 ### 7.3 Phase 3: Split SpotifyClient
@@ -598,31 +618,31 @@ shuffify/spotify/
 
 ## 8. Modularity Metrics Summary
 
-### 8.1 Current State (POST PHASE 1 ✅)
+### 8.1 Current State (POST PHASE 2 ✅)
 
-| Metric | Before | After | Notes |
-|--------|--------|-------|-------|
-| **Module Size** | 6/10 | 8/10 | Services extracted, routes focused ✅ |
-| **Coupling** | 5/10 | 7/10 | Routes → services only ✅ |
-| **Cohesion** | 5/10 | 8/10 | Single responsibility achieved ✅ |
-| **Testability** | 4/10 | 8/10 | Services fully testable ✅ |
-| **Extensibility** | 7/10 | 8/10 | Service layer enables extension ✅ |
-| **Interface Design** | 4/10 | 7/10 | Services have clear interfaces ✅ |
+| Metric | Phase 0 | Phase 1 | Phase 2 | Notes |
+|--------|---------|---------|---------|-------|
+| **Module Size** | 6/10 | 8/10 | 8/10 | Services + schemas organized ✅ |
+| **Coupling** | 5/10 | 7/10 | 7.5/10 | Global error handlers reduce coupling ✅ |
+| **Cohesion** | 5/10 | 8/10 | 9/10 | Validation separated to schemas ✅ |
+| **Testability** | 4/10 | 8/10 | 9/10 | 139 tests, Pydantic schemas testable ✅ |
+| **Extensibility** | 7/10 | 8/10 | 8.5/10 | Schema-based validation extensible ✅ |
+| **Interface Design** | 4/10 | 7/10 | 8/10 | Pydantic provides typed interfaces ✅ |
 
-**Overall: 7.5/10** *(up from 5.2/10)*
+**Overall: 8.3/10** *(up from 7.5/10, originally 5.2/10)*
 
-### 8.2 Target State (After Phase 2 & 3)
+### 8.2 Target State (After Phase 3)
 
 | Metric | Current | Target | Remaining Work |
 |--------|---------|--------|----------------|
 | Module Size | 8/10 | 8/10 | ✅ Achieved |
-| Coupling | 7/10 | 8/10 | Full DI (Phase 3) |
-| Cohesion | 8/10 | 9/10 | Add validation layer (Phase 2) |
-| Testability | 8/10 | 9/10 | Add validators + more unit tests |
-| Extensibility | 8/10 | 9/10 | Plugin patterns throughout |
-| Interface Design | 7/10 | 8/10 | Pydantic schemas (Phase 2) |
+| Coupling | 7.5/10 | 8/10 | Full DI (Phase 3) |
+| Cohesion | 9/10 | 9/10 | ✅ Achieved |
+| Testability | 9/10 | 9/10 | ✅ Achieved |
+| Extensibility | 8.5/10 | 9/10 | Plugin patterns (Phase 3) |
+| Interface Design | 8/10 | 8/10 | ✅ Achieved |
 
-**Target Overall: 8.5/10**
+**Target Overall: 8.5/10** (only Phase 3 remaining)
 
 ---
 
@@ -661,11 +681,19 @@ shuffify/spotify/
 
 3. **Write algorithm unit tests** (tests/unit/)
 
-### 9.3 Phase 2 Improvements (Next)
+### 9.3 Phase 2 Improvements ✅ COMPLETED
 
-1. **Add request/response schemas** (Pydantic)
-2. **Flask error handlers for global error handling**
-3. **Validators for algorithm parameters**
+1. **Add request/response schemas** (Pydantic) ✅
+   - `ShuffleRequest`, `PlaylistQueryParams` schemas
+   - Type-safe validation with clear error messages
+
+2. **Flask error handlers for global error handling** ✅
+   - `shuffify/error_handlers.py` with handlers for all exceptions
+   - Consistent JSON error responses
+
+3. **Validators for algorithm parameters** ✅
+   - Pydantic validates all algorithm parameters
+   - `parse_shuffle_request()` handles form data conversion
 
 ---
 
@@ -689,18 +717,16 @@ shuffify/spotify/
 
 ### Remaining Issues
 - SpotifyClient has hidden Flask dependency (Phase 3)
-- No request/response validation schemas (Phase 2)
-- No Flask error handlers for global error handling (Phase 2)
 
-### Priority Actions for Phase 2
-1. **Add Pydantic schemas** - Request validation
-2. **Add Flask error handlers** - Global error handling
+### Priority Actions for Phase 3
+1. **Split SpotifyClient** - Separate auth, api, and facade
+2. **Consider full DI** - Flask-Injector for dependency injection
 3. **Write algorithm unit tests** - Expand test coverage
-4. **Consider full DI** - Flask-Injector (Phase 3)
 
 ---
 
 **Phase 1 Completed:** January 29, 2026
-**Next Phase:** Phase 2 - Add Validation Layer (Section 7.2)
+**Phase 2 Completed:** January 29, 2026
+**Next Phase:** Phase 3 - Split SpotifyClient (Section 7.3)
 
 **See Also:** [03_extensibility_evaluation.md](./03_extensibility_evaluation.md) for service extensibility analysis.
