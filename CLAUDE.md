@@ -48,16 +48,17 @@ flask routes
 **Core Philosophy**: Security-first development with OAuth 2.0, multi-level undo, and intuitive UX.
 
 **Tech Stack**:
-- **Backend**: Flask 2.3.3 (Python 3.12+)
+- **Backend**: Flask 3.1.x (Python 3.12+)
 - **Frontend**: Tailwind CSS with custom animations, vanilla JavaScript
 - **API**: Spotify Web API (via spotipy library)
 - **Server**: Gunicorn (production), Flask dev server (local)
 - **Containerization**: Docker with health checks
-- **Session Management**: Flask-Session (filesystem-based, planned migration to Redis)
+- **Session Management**: Flask-Session 0.8.x (filesystem-based, planned migration to Redis)
+- **Validation**: Pydantic v2 for request validation
 
 ## Architecture at a Glance
 
-### Three-Layer Architecture
+### Four-Layer Architecture
 
 ```
 ┌─────────────────────────────────────────┐
@@ -65,10 +66,19 @@ flask routes
 │  • templates/     - Jinja2 templates   │
 │  • static/        - CSS, JS, images    │
 │  • routes.py      - Flask routes       │
+│  • schemas/       - Pydantic validation │
 └─────────────────┬───────────────────────┘
                   │
 ┌─────────────────▼───────────────────────┐
-│  Business Logic Layer                   │
+│  Services Layer                         │
+│  • services/auth_service.py    - OAuth │
+│  • services/playlist_service.py        │
+│  • services/shuffle_service.py         │
+│  • services/state_service.py           │
+└─────────────────┬───────────────────────┘
+                  │
+┌─────────────────▼───────────────────────┐
+│  Business Logic & Data Layer            │
 │  • shuffle_algorithms/ - Algorithms    │
 │  • spotify/           - API client      │
 │  • models/            - Data models     │
@@ -379,7 +389,8 @@ SPOTIFY_CLIENT_SECRET=your_client_secret_here
 SPOTIFY_REDIRECT_URI=http://localhost:5000/callback
 
 # Flask Configuration
-FLASK_ENV=development  # or production
+# Note: FLASK_ENV was deprecated in Flask 3.0. The app uses it as a config selector.
+FLASK_ENV=development  # or production (used for config selection)
 SECRET_KEY=your-secret-key-here
 
 # Optional

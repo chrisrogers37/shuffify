@@ -36,7 +36,7 @@ def create_app(config_name=None):
     
     # Log important config values
     logger.info("SPOTIFY_REDIRECT_URI: %s", app.config.get('SPOTIFY_REDIRECT_URI'))
-    logger.info("FLASK_ENV: %s", app.config.get('FLASK_ENV'))
+    logger.info("CONFIG_NAME: %s", app.config.get('CONFIG_NAME', config_name))
     
     # Initialize Flask-Session
     Session(app)

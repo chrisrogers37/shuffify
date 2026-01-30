@@ -10,7 +10,9 @@ from unittest.mock import Mock, patch, MagicMock
 
 import spotipy
 
-from shuffify.spotify.api import SpotifyAPI, api_error_handler
+from requests.exceptions import ConnectionError, Timeout
+
+from shuffify.spotify.api import SpotifyAPI, api_error_handler, _calculate_backoff_delay, MAX_RETRIES
 from shuffify.spotify.auth import SpotifyAuthManager, TokenInfo
 from shuffify.spotify.credentials import SpotifyCredentials
 from shuffify.spotify.exceptions import (
@@ -447,3 +449,171 @@ class TestSpotifyAPIAudioFeatures:
 
             assert mock_sp.audio_features.call_count == 2
             assert len(result) == 60
+
+
+# =============================================================================
+# Retry Logic Tests
+# =============================================================================
+
+class TestBackoffCalculation:
+    """Tests for backoff delay calculation."""
+
+    def test_first_attempt_returns_base_delay(self):
+        """First retry should use base delay."""
+        delay = _calculate_backoff_delay(0, base_delay=2)
+        assert delay == 2
+
+    def test_exponential_increase(self):
+        """Delay should increase exponentially."""
+        delay0 = _calculate_backoff_delay(0, base_delay=2)
+        delay1 = _calculate_backoff_delay(1, base_delay=2)
+        delay2 = _calculate_backoff_delay(2, base_delay=2)
+
+        assert delay0 == 2
+        assert delay1 == 4
+        assert delay2 == 8
+
+    def test_caps_at_max_delay(self):
+        """Delay should cap at MAX_DELAY (16s)."""
+        delay = _calculate_backoff_delay(10, base_delay=2)
+        assert delay == 16
+
+
+class TestApiErrorHandlerRetry:
+    """Tests for retry logic in api_error_handler."""
+
+    def test_retries_on_rate_limit(self):
+        """Should retry on 429 rate limit errors."""
+        call_count = 0
+
+        @api_error_handler
+        def rate_limited_func():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                error = spotipy.SpotifyException(429, -1, 'Rate limited')
+                error.headers = {'Retry-After': '0'}  # Use 0 for test speed
+                raise error
+            return 'success'
+
+        with patch('shuffify.spotify.api.time.sleep'):  # Don't actually sleep
+            result = rate_limited_func()
+
+        assert result == 'success'
+        assert call_count == 3  # Failed twice, succeeded on third
+
+    def test_retries_on_server_errors(self):
+        """Should retry on 5xx server errors."""
+        call_count = 0
+
+        @api_error_handler
+        def server_error_func():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise spotipy.SpotifyException(503, -1, 'Service unavailable')
+            return 'success'
+
+        with patch('shuffify.spotify.api.time.sleep'):
+            result = server_error_func()
+
+        assert result == 'success'
+        assert call_count == 2
+
+    def test_retries_on_connection_error(self):
+        """Should retry on network connection errors."""
+        call_count = 0
+
+        @api_error_handler
+        def connection_error_func():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise ConnectionError('Connection refused')
+            return 'success'
+
+        with patch('shuffify.spotify.api.time.sleep'):
+            result = connection_error_func()
+
+        assert result == 'success'
+        assert call_count == 2
+
+    def test_retries_on_timeout(self):
+        """Should retry on timeout errors."""
+        call_count = 0
+
+        @api_error_handler
+        def timeout_func():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise Timeout('Request timed out')
+            return 'success'
+
+        with patch('shuffify.spotify.api.time.sleep'):
+            result = timeout_func()
+
+        assert result == 'success'
+        assert call_count == 2
+
+    def test_no_retry_on_404(self):
+        """Should not retry on 404 errors."""
+        call_count = 0
+
+        @api_error_handler
+        def not_found_func():
+            nonlocal call_count
+            call_count += 1
+            raise spotipy.SpotifyException(404, -1, 'Not found')
+
+        with pytest.raises(SpotifyNotFoundError):
+            not_found_func()
+
+        assert call_count == 1  # No retry
+
+    def test_no_retry_on_401(self):
+        """Should not retry on 401 errors."""
+        call_count = 0
+
+        @api_error_handler
+        def unauthorized_func():
+            nonlocal call_count
+            call_count += 1
+            raise spotipy.SpotifyException(401, -1, 'Unauthorized')
+
+        with pytest.raises(SpotifyTokenExpiredError):
+            unauthorized_func()
+
+        assert call_count == 1  # No retry
+
+    def test_max_retries_exceeded_rate_limit(self):
+        """Should raise after max retries on rate limit."""
+        @api_error_handler
+        def always_rate_limited():
+            error = spotipy.SpotifyException(429, -1, 'Rate limited')
+            error.headers = {'Retry-After': '0'}
+            raise error
+
+        with patch('shuffify.spotify.api.time.sleep'):
+            with pytest.raises(SpotifyRateLimitError):
+                always_rate_limited()
+
+    def test_max_retries_exceeded_server_error(self):
+        """Should raise after max retries on server errors."""
+        @api_error_handler
+        def always_503():
+            raise spotipy.SpotifyException(503, -1, 'Service unavailable')
+
+        with patch('shuffify.spotify.api.time.sleep'):
+            with pytest.raises(SpotifyAPIError):
+                always_503()
+
+    def test_max_retries_exceeded_network_error(self):
+        """Should raise after max retries on network errors."""
+        @api_error_handler
+        def always_fails():
+            raise ConnectionError('Connection refused')
+
+        with patch('shuffify.spotify.api.time.sleep'):
+            with pytest.raises(SpotifyAPIError):
+                always_fails()
