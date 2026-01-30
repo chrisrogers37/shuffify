@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Critical Dependency Updates** - Fixed multiple security vulnerabilities across dependencies
+  - `cryptography` 41.0.7 → 46.0.4 (fixes CVE-2023-50782, CVE-2024-0727, PYSEC-2024-225, GHSA-h4gh-qq45-vh27)
+  - `python-jose` 3.3.0 → 3.5.0 (fixes PYSEC-2024-232, PYSEC-2024-233)
+  - `black` 23.7.0 → 26.1.0 (fixes PYSEC-2024-48)
+  - `safety` 2.3.5 → 3.x (resolves dependency conflict, newer security scanning)
+- **Docker Build Security** - Upgraded pip, setuptools, and wheel in Dockerfile
+  - Addresses CVE-2025-8869 (pip), CVE-2024-6345 (setuptools), CVE-2026-24049 (wheel)
+  - Build tools upgraded before installing project dependencies
+
 ### Added
 - **Spotify Module Refactoring** (Phase 3) - Split SpotifyClient into modular components
   - `SpotifyCredentials` - Immutable dataclass for OAuth credentials, enabling dependency injection
