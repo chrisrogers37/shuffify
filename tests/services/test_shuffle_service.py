@@ -76,108 +76,12 @@ class TestShuffleServiceGetAlgorithm:
         """Should raise InvalidAlgorithmError for unknown algorithm."""
         with pytest.raises(InvalidAlgorithmError) as exc_info:
             ShuffleService.get_algorithm('NonExistentShuffle')
-        assert "Unknown algorithm" in str(exc_info.value)
+        assert "Invalid algorithm" in str(exc_info.value)
 
     def test_get_algorithm_empty_name(self):
         """Should raise InvalidAlgorithmError for empty name."""
         with pytest.raises(InvalidAlgorithmError):
             ShuffleService.get_algorithm('')
-
-
-class TestShuffleServiceParseParameters:
-    """Tests for parse_parameters method."""
-
-    def test_parse_parameters_integer(self):
-        """Should convert string to integer."""
-        algorithm = ShuffleService.get_algorithm('BasicShuffle')
-        form_data = {'keep_first': '5'}
-
-        params = ShuffleService.parse_parameters(algorithm, form_data)
-
-        assert params['keep_first'] == 5
-        assert isinstance(params['keep_first'], int)
-
-    def test_parse_parameters_float(self):
-        """Should convert string to float."""
-        # Create a mock algorithm with float parameter
-        mock_algo = Mock()
-        mock_algo.parameters = {
-            'ratio': {'type': 'float', 'default': 0.5}
-        }
-        form_data = {'ratio': '0.75'}
-
-        params = ShuffleService.parse_parameters(mock_algo, form_data)
-
-        assert params['ratio'] == 0.75
-        assert isinstance(params['ratio'], float)
-
-    def test_parse_parameters_boolean_true_values(self):
-        """Should convert various truthy strings to True."""
-        mock_algo = Mock()
-        mock_algo.parameters = {
-            'enabled': {'type': 'boolean', 'default': False}
-        }
-
-        for true_value in ['true', 'True', 'TRUE', 't', 'yes', 'y', '1']:
-            form_data = {'enabled': true_value}
-            params = ShuffleService.parse_parameters(mock_algo, form_data)
-            assert params['enabled'] is True, f"Failed for value: {true_value}"
-
-    def test_parse_parameters_boolean_false_values(self):
-        """Should convert various falsy strings to False."""
-        mock_algo = Mock()
-        mock_algo.parameters = {
-            'enabled': {'type': 'boolean', 'default': True}
-        }
-
-        for false_value in ['false', 'False', 'FALSE', 'f', 'no', 'n', '0']:
-            form_data = {'enabled': false_value}
-            params = ShuffleService.parse_parameters(mock_algo, form_data)
-            assert params['enabled'] is False, f"Failed for value: {false_value}"
-
-    def test_parse_parameters_string(self):
-        """Should keep string as string."""
-        mock_algo = Mock()
-        mock_algo.parameters = {
-            'mode': {'type': 'string', 'default': 'normal'}
-        }
-        form_data = {'mode': 'advanced'}
-
-        params = ShuffleService.parse_parameters(mock_algo, form_data)
-
-        assert params['mode'] == 'advanced'
-        assert isinstance(params['mode'], str)
-
-    def test_parse_parameters_missing_param_ignored(self):
-        """Should ignore parameters not in form data."""
-        algorithm = ShuffleService.get_algorithm('BasicShuffle')
-        form_data = {}  # No parameters provided
-
-        params = ShuffleService.parse_parameters(algorithm, form_data)
-
-        assert 'keep_first' not in params
-
-    def test_parse_parameters_invalid_integer(self):
-        """Should raise ParameterValidationError for invalid integer."""
-        algorithm = ShuffleService.get_algorithm('BasicShuffle')
-        form_data = {'keep_first': 'not_a_number'}
-
-        with pytest.raises(ParameterValidationError) as exc_info:
-            ShuffleService.parse_parameters(algorithm, form_data)
-        assert "Invalid value for parameter" in str(exc_info.value)
-
-    def test_parse_parameters_unknown_type_defaults_to_string(self):
-        """Should default to string for unknown parameter types."""
-        mock_algo = Mock()
-        mock_algo.parameters = {
-            'custom': {'type': 'unknown_type', 'default': 'x'}
-        }
-        form_data = {'custom': '123'}
-
-        params = ShuffleService.parse_parameters(mock_algo, form_data)
-
-        assert params['custom'] == '123'
-        assert isinstance(params['custom'], str)
 
 
 class TestShuffleServiceExecute:

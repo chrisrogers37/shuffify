@@ -25,14 +25,9 @@ from shuffify.services import (
     ShuffleService,
     StateService,
     AuthenticationError,
-    PlaylistError,
-    PlaylistNotFoundError,
     PlaylistUpdateError,
-    ShuffleError,
-    InvalidAlgorithmError,
-    NoHistoryError,
-    AlreadyAtOriginalError,
 )
+from shuffify.schemas import parse_shuffle_request, PlaylistQueryParams
 
 logger = logging.getLogger(__name__)
 main = Blueprint('main', __name__)
@@ -247,17 +242,12 @@ def get_playlist(playlist_id):
     if not client:
         return json_error('Please log in first.', 401)
 
-    try:
-        include_features = request.args.get('features', 'false').lower() == 'true'
-        playlist_service = PlaylistService(client)
-        playlist = playlist_service.get_playlist(playlist_id, include_features)
-        return jsonify(playlist.to_dict())
+    # Validate query parameters
+    query_params = PlaylistQueryParams(features=request.args.get('features', 'false'))
 
-    except PlaylistNotFoundError:
-        return json_error('Playlist not found.', 404)
-    except PlaylistError as e:
-        logger.error(f"Error getting playlist: {e}")
-        return json_error(str(e), 500)
+    playlist_service = PlaylistService(client)
+    playlist = playlist_service.get_playlist(playlist_id, query_params.features)
+    return jsonify(playlist.to_dict())
 
 
 @main.route('/playlist/<playlist_id>/stats')
@@ -267,16 +257,9 @@ def get_playlist_stats(playlist_id):
     if not client:
         return json_error('Please log in first.', 401)
 
-    try:
-        playlist_service = PlaylistService(client)
-        stats = playlist_service.get_playlist_stats(playlist_id)
-        return jsonify(stats)
-
-    except PlaylistNotFoundError:
-        return json_error('Playlist not found.', 404)
-    except PlaylistError as e:
-        logger.error(f"Error getting stats: {e}")
-        return json_error(str(e), 500)
+    playlist_service = PlaylistService(client)
+    stats = playlist_service.get_playlist_stats(playlist_id)
+    return jsonify(stats)
 
 
 # =============================================================================
@@ -290,79 +273,64 @@ def shuffle(playlist_id):
     if not client:
         return json_error('Please log in first.', 401)
 
-    try:
-        # Get and validate algorithm
-        algorithm_name = request.form.get('algorithm', 'BasicShuffle')
-        algorithm = ShuffleService.get_algorithm(algorithm_name)
+    # Validate request using Pydantic schema (raises ValidationError on failure)
+    shuffle_request = parse_shuffle_request(request.form.to_dict())
 
-        # Parse parameters
-        params = ShuffleService.parse_parameters(algorithm, request.form.to_dict())
+    # Get algorithm instance
+    algorithm = ShuffleService.get_algorithm(shuffle_request.algorithm)
 
-        # Get playlist data
-        playlist_service = PlaylistService(client)
-        playlist = playlist_service.get_playlist(playlist_id, include_features=False)
-        playlist_service.validate_playlist_has_tracks(playlist)
+    # Get validated parameters for this algorithm
+    params = shuffle_request.get_algorithm_params()
 
-        # Get current track URIs
-        current_uris = [track['uri'] for track in playlist.tracks]
+    # Get playlist data
+    playlist_service = PlaylistService(client)
+    playlist = playlist_service.get_playlist(playlist_id, include_features=False)
+    playlist_service.validate_playlist_has_tracks(playlist)
 
-        # Initialize or get state for this playlist
-        state = StateService.ensure_playlist_initialized(session, playlist_id, current_uris)
+    # Get current track URIs
+    current_uris = [track['uri'] for track in playlist.tracks]
 
-        # Get URIs from current state (may differ from Spotify if manually reordered)
-        uris_to_shuffle = StateService.get_current_uris(session, playlist_id) or current_uris
+    # Initialize or get state for this playlist
+    StateService.ensure_playlist_initialized(session, playlist_id, current_uris)
 
-        # Prepare tracks in the correct order for shuffling
-        tracks_to_shuffle = ShuffleService.prepare_tracks_for_shuffle(playlist.tracks, uris_to_shuffle)
+    # Get URIs from current state (may differ from Spotify if manually reordered)
+    uris_to_shuffle = StateService.get_current_uris(session, playlist_id) or current_uris
 
-        # Execute shuffle
-        shuffled_uris = ShuffleService.execute(
-            algorithm_name,
-            tracks_to_shuffle,
-            params,
-            spotify_client=client
-        )
+    # Prepare tracks in the correct order for shuffling
+    tracks_to_shuffle = ShuffleService.prepare_tracks_for_shuffle(playlist.tracks, uris_to_shuffle)
 
-        # Check if order actually changed
-        if not ShuffleService.shuffle_changed_order(uris_to_shuffle, shuffled_uris):
-            return jsonify({
-                'success': False,
-                'message': 'Shuffle did not change the playlist order.',
-                'category': 'info'
-            })
+    # Execute shuffle
+    shuffled_uris = ShuffleService.execute(
+        shuffle_request.algorithm,
+        tracks_to_shuffle,
+        params,
+        spotify_client=client
+    )
 
-        # Update Spotify
-        playlist_service.update_playlist_tracks(playlist_id, shuffled_uris)
+    # Check if order actually changed
+    if not ShuffleService.shuffle_changed_order(uris_to_shuffle, shuffled_uris):
+        return jsonify({
+            'success': False,
+            'message': 'Shuffle did not change the playlist order.',
+            'category': 'info'
+        })
 
-        # Record new state
-        updated_state = StateService.record_new_state(session, playlist_id, shuffled_uris)
+    # Update Spotify
+    playlist_service.update_playlist_tracks(playlist_id, shuffled_uris)
 
-        # Fetch updated playlist for response
-        updated_playlist = playlist_service.get_playlist(playlist_id, include_features=False)
+    # Record new state
+    updated_state = StateService.record_new_state(session, playlist_id, shuffled_uris)
 
-        logger.info(f"Shuffled playlist {playlist_id} with {algorithm_name}")
+    # Fetch updated playlist for response
+    updated_playlist = playlist_service.get_playlist(playlist_id, include_features=False)
 
-        return json_success(
-            f'Playlist shuffled with {algorithm.name}.',
-            playlist=updated_playlist.to_dict(),
-            playlist_state=updated_state.to_dict()
-        )
+    logger.info(f"Shuffled playlist {playlist_id} with {shuffle_request.algorithm}")
 
-    except InvalidAlgorithmError:
-        return json_error('Invalid shuffle algorithm.', 400)
-    except PlaylistNotFoundError:
-        return json_error('Playlist not found.', 404)
-    except PlaylistError as e:
-        logger.error(f"Playlist error in shuffle: {e}")
-        return json_error(str(e), 400)
-    except PlaylistUpdateError:
-        return json_error('Failed to update playlist on Spotify.', 500)
-    except ShuffleError as e:
-        logger.error(f"Shuffle error: {e}")
-        return json_error(str(e), 500)
-    except Exception as e:
-        logger.error(f"Unexpected error in shuffle: {e}", exc_info=True)
-        return json_error('An unexpected error occurred.', 500)
+    return json_success(
+        f'Playlist shuffled with {algorithm.name}.',
+        playlist=updated_playlist.to_dict(),
+        playlist_state=updated_state.to_dict()
+    )
 
 
 @main.route('/undo/<playlist_id>', methods=['POST'])
@@ -372,41 +340,28 @@ def undo(playlist_id):
     if not client:
         return json_error('Please log in first.', 401)
 
+    # Get previous state URIs (raises NoHistoryError or AlreadyAtOriginalError)
+    restore_uris = StateService.undo(session, playlist_id)
+
+    logger.info(f"Restoring playlist {playlist_id} with {len(restore_uris)} tracks")
+
+    # Update Spotify
+    playlist_service = PlaylistService(client)
     try:
-        # Get previous state URIs
-        restore_uris = StateService.undo(session, playlist_id)
+        playlist_service.update_playlist_tracks(playlist_id, restore_uris)
+    except PlaylistUpdateError:
+        # Revert the undo if Spotify update failed
+        StateService.revert_undo(session, playlist_id)
+        raise  # Re-raise for global handler
 
-        logger.info(f"Restoring playlist {playlist_id} with {len(restore_uris)} tracks")
+    # Fetch restored playlist for response
+    restored_playlist = playlist_service.get_playlist(playlist_id, include_features=False)
+    state_info = StateService.get_state_info(session, playlist_id)
 
-        # Update Spotify
-        playlist_service = PlaylistService(client)
-        try:
-            playlist_service.update_playlist_tracks(playlist_id, restore_uris)
-        except PlaylistUpdateError:
-            # Revert the undo if Spotify update failed
-            StateService.revert_undo(session, playlist_id)
-            return json_error('Failed to restore playlist.', 500)
+    logger.info(f"Successfully restored playlist {playlist_id}")
 
-        # Fetch restored playlist for response
-        restored_playlist = playlist_service.get_playlist(playlist_id, include_features=False)
-        state_info = StateService.get_state_info(session, playlist_id)
-
-        logger.info(f"Successfully restored playlist {playlist_id}")
-
-        return json_success(
-            'Playlist restored successfully.',
-            playlist=restored_playlist.to_dict(),
-            playlist_state=state_info
-        )
-
-    except NoHistoryError:
-        return json_error('No history to restore.', 404)
-    except AlreadyAtOriginalError:
-        return jsonify({
-            'success': False,
-            'message': 'Already at original playlist state.',
-            'category': 'info'
-        }), 400
-    except Exception as e:
-        logger.error(f"Error in undo: {e}", exc_info=True)
-        return json_error('An unexpected error occurred.', 500)
+    return json_success(
+        'Playlist restored successfully.',
+        playlist=restored_playlist.to_dict(),
+        playlist_state=state_info
+    )
