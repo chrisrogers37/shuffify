@@ -1,0 +1,449 @@
+"""
+Tests for SpotifyAPI.
+
+Tests cover all data operations: user, playlists, tracks, and audio features.
+"""
+
+import pytest
+import time
+from unittest.mock import Mock, patch, MagicMock
+
+import spotipy
+
+from shuffify.spotify.api import SpotifyAPI, api_error_handler
+from shuffify.spotify.auth import SpotifyAuthManager, TokenInfo
+from shuffify.spotify.credentials import SpotifyCredentials
+from shuffify.spotify.exceptions import (
+    SpotifyAPIError,
+    SpotifyNotFoundError,
+    SpotifyRateLimitError,
+    SpotifyTokenExpiredError,
+)
+
+
+# =============================================================================
+# Fixtures
+# =============================================================================
+
+@pytest.fixture
+def credentials():
+    """Valid SpotifyCredentials for testing."""
+    return SpotifyCredentials(
+        client_id='test_client_id',
+        client_secret='test_client_secret',
+        redirect_uri='http://localhost:5000/callback'
+    )
+
+
+@pytest.fixture
+def auth_manager(credentials):
+    """SpotifyAuthManager instance."""
+    return SpotifyAuthManager(credentials)
+
+
+@pytest.fixture
+def valid_token_info():
+    """Valid TokenInfo for testing."""
+    return TokenInfo(
+        access_token='test_access_token',
+        token_type='Bearer',
+        expires_at=time.time() + 3600,
+        refresh_token='test_refresh_token'
+    )
+
+
+@pytest.fixture
+def expired_token_info():
+    """Expired TokenInfo for testing."""
+    return TokenInfo(
+        access_token='expired_token',
+        token_type='Bearer',
+        expires_at=time.time() - 100,
+        refresh_token='test_refresh_token'
+    )
+
+
+@pytest.fixture
+def mock_spotipy():
+    """Mock spotipy.Spotify instance."""
+    mock = Mock(spec=spotipy.Spotify)
+    return mock
+
+
+@pytest.fixture
+def sample_user():
+    """Sample user data."""
+    return {
+        'id': 'user123',
+        'display_name': 'Test User',
+        'email': 'test@example.com'
+    }
+
+
+@pytest.fixture
+def sample_playlists():
+    """Sample playlists data."""
+    return [
+        {'id': 'playlist1', 'name': 'Playlist 1', 'owner': {'id': 'user123'}},
+        {'id': 'playlist2', 'name': 'Playlist 2', 'owner': {'id': 'user123'}},
+    ]
+
+
+@pytest.fixture
+def sample_tracks():
+    """Sample tracks data."""
+    return [
+        {'uri': 'spotify:track:track1', 'name': 'Track 1'},
+        {'uri': 'spotify:track:track2', 'name': 'Track 2'},
+        {'uri': 'spotify:track:track3', 'name': 'Track 3'},
+    ]
+
+
+# =============================================================================
+# API Error Handler Tests
+# =============================================================================
+
+class TestApiErrorHandler:
+    """Tests for the api_error_handler decorator."""
+
+    def test_passes_through_successful_calls(self):
+        """Should return result for successful calls."""
+        @api_error_handler
+        def success_func():
+            return 'success'
+
+        result = success_func()
+        assert result == 'success'
+
+    def test_converts_404_to_not_found_error(self):
+        """Should convert 404 SpotifyException to SpotifyNotFoundError."""
+        @api_error_handler
+        def not_found_func():
+            error = spotipy.SpotifyException(404, -1, 'Not found')
+            raise error
+
+        with pytest.raises(SpotifyNotFoundError):
+            not_found_func()
+
+    def test_converts_429_to_rate_limit_error(self):
+        """Should convert 429 SpotifyException to SpotifyRateLimitError."""
+        @api_error_handler
+        def rate_limit_func():
+            error = spotipy.SpotifyException(429, -1, 'Rate limited')
+            error.headers = {'Retry-After': '30'}
+            raise error
+
+        with pytest.raises(SpotifyRateLimitError) as exc_info:
+            rate_limit_func()
+        assert exc_info.value.retry_after == 30
+
+    def test_converts_401_to_token_expired_error(self):
+        """Should convert 401 SpotifyException to SpotifyTokenExpiredError."""
+        @api_error_handler
+        def unauthorized_func():
+            raise spotipy.SpotifyException(401, -1, 'Unauthorized')
+
+        with pytest.raises(SpotifyTokenExpiredError):
+            unauthorized_func()
+
+    def test_converts_other_errors_to_api_error(self):
+        """Should convert other SpotifyExceptions to SpotifyAPIError."""
+        @api_error_handler
+        def other_error_func():
+            raise spotipy.SpotifyException(500, -1, 'Server error')
+
+        with pytest.raises(SpotifyAPIError):
+            other_error_func()
+
+    def test_wraps_unexpected_exceptions(self):
+        """Should wrap unexpected exceptions in SpotifyAPIError."""
+        @api_error_handler
+        def unexpected_func():
+            raise ValueError('Unexpected error')
+
+        with pytest.raises(SpotifyAPIError):
+            unexpected_func()
+
+
+# =============================================================================
+# SpotifyAPI Initialization Tests
+# =============================================================================
+
+class TestSpotifyAPIInit:
+    """Tests for SpotifyAPI initialization."""
+
+    def test_init_with_valid_token(self, valid_token_info, auth_manager):
+        """Should initialize with valid token."""
+        with patch('shuffify.spotify.api.spotipy.Spotify'):
+            api = SpotifyAPI(valid_token_info, auth_manager)
+
+            assert api._token_info == valid_token_info
+            assert api._auth_manager == auth_manager
+
+    def test_init_with_expired_token_auto_refresh(self, expired_token_info, auth_manager):
+        """Should auto-refresh expired token when enabled."""
+        new_token = TokenInfo(
+            access_token='new_token',
+            token_type='Bearer',
+            expires_at=time.time() + 3600,
+            refresh_token='new_refresh'
+        )
+
+        with patch.object(auth_manager, 'ensure_valid_token', return_value=new_token):
+            with patch('shuffify.spotify.api.spotipy.Spotify'):
+                api = SpotifyAPI(expired_token_info, auth_manager, auto_refresh=True)
+
+                assert api._token_info == new_token
+
+    def test_init_with_expired_token_no_auto_refresh(self, expired_token_info, auth_manager):
+        """Should raise error for expired token when auto_refresh disabled."""
+        with pytest.raises(SpotifyTokenExpiredError):
+            SpotifyAPI(expired_token_info, auth_manager, auto_refresh=False)
+
+    def test_token_info_property(self, valid_token_info, auth_manager):
+        """Should expose token_info property."""
+        with patch('shuffify.spotify.api.spotipy.Spotify'):
+            api = SpotifyAPI(valid_token_info, auth_manager)
+
+            assert api.token_info == valid_token_info
+
+
+# =============================================================================
+# SpotifyAPI User Operations Tests
+# =============================================================================
+
+class TestSpotifyAPIUserOperations:
+    """Tests for user-related API operations."""
+
+    def test_get_current_user_success(self, valid_token_info, auth_manager, sample_user):
+        """Should return current user data."""
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_sp.current_user.return_value = sample_user
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            result = api.get_current_user()
+
+            assert result == sample_user
+            mock_sp.current_user.assert_called_once()
+
+
+# =============================================================================
+# SpotifyAPI Playlist Operations Tests
+# =============================================================================
+
+class TestSpotifyAPIPlaylistOperations:
+    """Tests for playlist-related API operations."""
+
+    def test_get_user_playlists_success(self, valid_token_info, auth_manager, sample_playlists, sample_user):
+        """Should return user's editable playlists."""
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_sp.current_user.return_value = sample_user
+            mock_sp.current_user_playlists.return_value = {
+                'items': sample_playlists,
+                'next': None
+            }
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            result = api.get_user_playlists()
+
+            assert len(result) == 2
+            assert result[0]['id'] == 'playlist1'
+
+    def test_get_user_playlists_filters_non_owned(self, valid_token_info, auth_manager, sample_user):
+        """Should filter out playlists not owned by user (unless collaborative)."""
+        playlists = [
+            {'id': 'owned', 'name': 'Owned', 'owner': {'id': 'user123'}},
+            {'id': 'other', 'name': 'Other User', 'owner': {'id': 'other_user'}},
+            {'id': 'collab', 'name': 'Collab', 'owner': {'id': 'other_user'}, 'collaborative': True},
+        ]
+
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_sp.current_user.return_value = sample_user
+            mock_sp.current_user_playlists.return_value = {
+                'items': playlists,
+                'next': None
+            }
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            result = api.get_user_playlists()
+
+            assert len(result) == 2  # owned and collab only
+            ids = [p['id'] for p in result]
+            assert 'owned' in ids
+            assert 'collab' in ids
+            assert 'other' not in ids
+
+    def test_get_playlist_success(self, valid_token_info, auth_manager):
+        """Should return single playlist."""
+        playlist = {'id': 'playlist123', 'name': 'Test Playlist'}
+
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_sp.playlist.return_value = playlist
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            result = api.get_playlist('playlist123')
+
+            assert result == playlist
+            mock_sp.playlist.assert_called_with('playlist123')
+
+    def test_get_playlist_tracks_success(self, valid_token_info, auth_manager, sample_tracks):
+        """Should return all playlist tracks."""
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_sp.playlist_items.return_value = {
+                'items': [{'track': t} for t in sample_tracks],
+                'next': None
+            }
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            result = api.get_playlist_tracks('playlist123')
+
+            assert len(result) == 3
+            assert result[0]['uri'] == 'spotify:track:track1'
+
+    def test_get_playlist_tracks_filters_none_tracks(self, valid_token_info, auth_manager, sample_tracks):
+        """Should filter out None tracks."""
+        items = [
+            {'track': sample_tracks[0]},
+            {'track': None},  # None track (deleted or local)
+            {'track': sample_tracks[1]},
+        ]
+
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_sp.playlist_items.return_value = {
+                'items': items,
+                'next': None
+            }
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            result = api.get_playlist_tracks('playlist123')
+
+            assert len(result) == 2
+
+    def test_update_playlist_tracks_success(self, valid_token_info, auth_manager):
+        """Should update playlist tracks."""
+        track_uris = ['spotify:track:1', 'spotify:track:2']
+
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            result = api.update_playlist_tracks('playlist123', track_uris)
+
+            assert result is True
+            mock_sp.playlist_replace_items.assert_called_once()
+
+    def test_update_playlist_tracks_empty_list(self, valid_token_info, auth_manager):
+        """Should clear playlist when given empty list."""
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            result = api.update_playlist_tracks('playlist123', [])
+
+            assert result is True
+            mock_sp.playlist_replace_items.assert_called_with('playlist123', [])
+
+    def test_update_playlist_tracks_batches_large_lists(self, valid_token_info, auth_manager):
+        """Should batch large track lists (>100)."""
+        track_uris = [f'spotify:track:{i}' for i in range(150)]
+
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            result = api.update_playlist_tracks('playlist123', track_uris)
+
+            assert result is True
+            # Should call replace_items once and add_items once
+            assert mock_sp.playlist_replace_items.call_count == 1
+            assert mock_sp.playlist_add_items.call_count == 1
+
+
+# =============================================================================
+# SpotifyAPI Audio Features Tests
+# =============================================================================
+
+class TestSpotifyAPIAudioFeatures:
+    """Tests for audio features operations."""
+
+    def test_get_audio_features_success(self, valid_token_info, auth_manager):
+        """Should return audio features for tracks."""
+        features = [
+            {'id': 'track1', 'tempo': 120},
+            {'id': 'track2', 'tempo': 130},
+        ]
+
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_sp.audio_features.return_value = features
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            result = api.get_audio_features(['track1', 'track2'])
+
+            assert len(result) == 2
+            assert 'track1' in result
+            assert 'track2' in result
+
+    def test_get_audio_features_handles_uris(self, valid_token_info, auth_manager):
+        """Should extract IDs from URIs."""
+        features = [{'id': 'track1', 'tempo': 120}]
+
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_sp.audio_features.return_value = features
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            result = api.get_audio_features(['spotify:track:track1'])
+
+            assert 'track1' in result
+
+    def test_get_audio_features_filters_none_results(self, valid_token_info, auth_manager):
+        """Should filter out None feature results."""
+        features = [
+            {'id': 'track1', 'tempo': 120},
+            None,  # Some tracks may not have features
+        ]
+
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_sp.audio_features.return_value = features
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            result = api.get_audio_features(['track1', 'track2'])
+
+            assert len(result) == 1
+            assert 'track1' in result
+
+    def test_get_audio_features_batches_large_lists(self, valid_token_info, auth_manager):
+        """Should batch requests for >50 tracks."""
+        track_ids = [f'track{i}' for i in range(60)]
+        features = [{'id': f'track{i}', 'tempo': 120} for i in range(60)]
+
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_sp.audio_features.side_effect = [features[:50], features[50:]]
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            result = api.get_audio_features(track_ids)
+
+            assert mock_sp.audio_features.call_count == 2
+            assert len(result) == 60
