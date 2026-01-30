@@ -17,7 +17,7 @@ from flask import (
     send_from_directory,
 )
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from shuffify.services import (
     AuthService,
@@ -40,7 +40,7 @@ main = Blueprint('main', __name__)
 @main.context_processor
 def inject_current_year():
     """Make current year available to all templates."""
-    return {'current_year': datetime.utcnow().year}
+    return {'current_year': datetime.now(timezone.utc).year}
 
 
 # =============================================================================
@@ -152,7 +152,7 @@ def health():
     """Health check endpoint for Docker and monitoring."""
     return jsonify({
         'status': 'healthy',
-        'timestamp': datetime.utcnow().isoformat()
+        'timestamp': datetime.now(timezone.utc).isoformat()
     }), 200
 
 

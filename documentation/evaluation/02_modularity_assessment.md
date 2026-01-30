@@ -2,7 +2,7 @@
 
 **Date:** January 2026
 **Last Updated:** January 30, 2026
-**Project:** Shuffify v2.3.6
+**Project:** Shuffify v2.4.x (Flask 3.1.x)
 **Scope:** Code-level modularity analysis
 
 ---
@@ -14,9 +14,9 @@ Shuffify now demonstrates **excellent modularity** following Phase 3 completion.
 - **Phase 2:** Pydantic validation layer added
 - **Phase 3:** SpotifyClient split into auth, api, and facade modules
 
-The codebase now has clean separation of concerns, comprehensive testing (303 tests), and proper dependency injection support.
+The codebase now has clean separation of concerns, comprehensive testing (315 tests), proper dependency injection support, and retry logic with exponential backoff.
 
-**Overall Modularity Score: 9.1/10** *(up from 8.3/10, originally 5.2/10)*
+**Overall Modularity Score: 9.2/10** *(up from 9.1/10, originally 5.2/10)*
 
 ### Phase Status
 | Phase | Description | Status |
@@ -312,12 +312,12 @@ spotify/
 - Batch processing for large operations
 - Clean public interface
 
-**Weaknesses:**
-- **Critical Bug:** Token refresh uses disabled cache_handler
-- Hidden Flask dependency in constructor
-- No rate limiting
-- No retry logic
-- Single class handles auth + data + operations
+**Weaknesses (All Addressed in Phase 3):**
+- ~~**Critical Bug:** Token refresh uses disabled cache_handler~~ → **FIXED**
+- ~~Hidden Flask dependency in constructor~~ → **FIXED**
+- ~~No rate limiting~~ → **FIXED** (exponential backoff implemented)
+- ~~No retry logic~~ → **FIXED** (automatic retry for 429, 5xx, network errors)
+- ~~Single class handles auth + data + operations~~ → **FIXED** (split into modules)
 
 **Recommended Split:**
 ```
@@ -634,7 +634,7 @@ shuffify/spotify/
 tests/spotify/
 ├── test_credentials.py   ✅ 12 tests
 ├── test_auth.py          ✅ 20 tests
-└── test_api.py           ✅ 20 tests
+└── test_api.py           ✅ 35 tests (including 12 retry logic tests)
 
 tests/algorithms/
 ├── test_basic_shuffle.py      ✅ 21 tests
@@ -746,7 +746,7 @@ tests/test_integration.py      ✅ 12 tests
 - **Phase 3:** Spotify module split into clean components ✅
 - **Phase 3:** SpotifyCredentials enables dependency injection ✅
 - **Phase 3:** TokenInfo provides type-safe token handling ✅
-- **Phase 3:** 303 comprehensive tests, all passing ✅
+- **Phase 3:** 315 comprehensive tests, all passing ✅
 
 ### All Issues Resolved ✅
 - ~~routes.py is a monolith that needs splitting~~ → **FIXED (Phase 1)**
@@ -760,7 +760,15 @@ tests/test_integration.py      ✅ 12 tests
 ### Future Enhancements (Optional)
 1. **Flask-Injector** - Full DI container (not required, current approach is clean)
 2. **Type hints for routes** - Add return type hints to route functions
-3. **Rate limiting** - Add retry logic for Spotify API rate limits
+
+### Completed Post-Phase Enhancements ✅
+1. **Rate limiting/retry logic** ✅ (January 30, 2026)
+   - Exponential backoff for rate limits (429) and server errors (5xx)
+   - Network error handling (ConnectionError, Timeout)
+   - 12 new tests in `tests/spotify/test_api.py`
+2. **Flask 3.x upgrade** ✅ (January 30, 2026)
+   - Flask 2.3.3 → 3.1.x with Flask-Session 0.8.x
+   - All 315 tests passing
 
 ---
 

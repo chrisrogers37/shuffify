@@ -7,8 +7,10 @@ authentication concerns.
 """
 
 import logging
+import time
 from functools import wraps
 from typing import Dict, List, Any, Optional, Callable
+from requests.exceptions import RequestException, ConnectionError, Timeout
 
 import spotipy
 
@@ -26,34 +28,105 @@ logger = logging.getLogger(__name__)
 # Silence spotipy's verbose logging
 logging.getLogger('spotipy').setLevel(logging.WARNING)
 
+# Retry configuration
+MAX_RETRIES = 4
+BASE_DELAY = 2  # seconds
+MAX_DELAY = 16  # seconds
+
+
+def _calculate_backoff_delay(attempt: int, base_delay: float = BASE_DELAY) -> float:
+    """
+    Calculate exponential backoff delay with jitter.
+
+    Args:
+        attempt: The current retry attempt (0-indexed).
+        base_delay: Base delay in seconds.
+
+    Returns:
+        Delay in seconds, capped at MAX_DELAY.
+    """
+    delay = min(base_delay * (2 ** attempt), MAX_DELAY)
+    return delay
+
 
 def api_error_handler(func: Callable) -> Callable:
     """
-    Decorator for handling Spotify API errors consistently.
+    Decorator for handling Spotify API errors with automatic retry.
 
     Catches spotipy exceptions and converts them to our exception types.
+    Implements exponential backoff for rate limits and transient errors.
     """
     @wraps(func)
     def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except spotipy.SpotifyException as e:
-            logger.error(f"Spotify API error in {func.__name__}: {e}")
-            if e.http_status == 404:
-                raise SpotifyNotFoundError(f"Resource not found: {e.msg}")
-            elif e.http_status == 429:
-                retry_after = e.headers.get('Retry-After', 60) if e.headers else 60
-                raise SpotifyRateLimitError(
-                    f"Rate limited: {e.msg}",
-                    retry_after=int(retry_after)
-                )
-            elif e.http_status == 401:
-                raise SpotifyTokenExpiredError(f"Token expired or invalid: {e.msg}")
-            else:
-                raise SpotifyAPIError(f"API error: {e.msg}")
-        except Exception as e:
-            logger.error(f"Unexpected error in {func.__name__}: {e}", exc_info=True)
-            raise SpotifyAPIError(f"Unexpected error: {e}")
+        last_exception = None
+
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                return func(*args, **kwargs)
+
+            except spotipy.SpotifyException as e:
+                last_exception = e
+
+                # Don't retry 404 or 401 errors
+                if e.http_status == 404:
+                    raise SpotifyNotFoundError(f"Resource not found: {e.msg}")
+                elif e.http_status == 401:
+                    raise SpotifyTokenExpiredError(f"Token expired or invalid: {e.msg}")
+                elif e.http_status == 429:
+                    # Rate limited - use Retry-After header or calculate backoff
+                    retry_after = e.headers.get('Retry-After', 60) if e.headers else 60
+                    if attempt < MAX_RETRIES:
+                        delay = max(int(retry_after), _calculate_backoff_delay(attempt))
+                        logger.warning(
+                            f"Rate limited in {func.__name__}, attempt {attempt + 1}/{MAX_RETRIES + 1}. "
+                            f"Retrying in {delay}s"
+                        )
+                        time.sleep(delay)
+                        continue
+                    raise SpotifyRateLimitError(
+                        f"Rate limited after {MAX_RETRIES + 1} attempts: {e.msg}",
+                        retry_after=int(retry_after)
+                    )
+                elif e.http_status in (500, 502, 503, 504):
+                    # Server errors - retry with backoff
+                    if attempt < MAX_RETRIES:
+                        delay = _calculate_backoff_delay(attempt)
+                        logger.warning(
+                            f"Server error {e.http_status} in {func.__name__}, attempt {attempt + 1}/{MAX_RETRIES + 1}. "
+                            f"Retrying in {delay}s"
+                        )
+                        time.sleep(delay)
+                        continue
+                    logger.error(f"Spotify API error in {func.__name__} after {MAX_RETRIES + 1} attempts: {e}")
+                    raise SpotifyAPIError(f"API error after retries: {e.msg}")
+                else:
+                    # Other client errors - don't retry
+                    logger.error(f"Spotify API error in {func.__name__}: {e}")
+                    raise SpotifyAPIError(f"API error: {e.msg}")
+
+            except (ConnectionError, Timeout, RequestException) as e:
+                # Network errors - retry with backoff
+                last_exception = e
+                if attempt < MAX_RETRIES:
+                    delay = _calculate_backoff_delay(attempt)
+                    logger.warning(
+                        f"Network error in {func.__name__}, attempt {attempt + 1}/{MAX_RETRIES + 1}. "
+                        f"Retrying in {delay}s: {e}"
+                    )
+                    time.sleep(delay)
+                    continue
+                logger.error(f"Network error in {func.__name__} after {MAX_RETRIES + 1} attempts: {e}", exc_info=True)
+                raise SpotifyAPIError(f"Network error after retries: {e}")
+
+            except Exception as e:
+                # Unexpected errors - don't retry
+                logger.error(f"Unexpected error in {func.__name__}: {e}", exc_info=True)
+                raise SpotifyAPIError(f"Unexpected error: {e}")
+
+        # Should not reach here, but handle it just in case
+        if last_exception:
+            raise SpotifyAPIError(f"Failed after {MAX_RETRIES + 1} attempts: {last_exception}")
+
     return wrapper
 
 
