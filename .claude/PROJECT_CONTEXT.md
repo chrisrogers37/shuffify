@@ -15,7 +15,7 @@ Shuffify is a web application that provides advanced playlist reordering control
 
 ---
 
-## Architecture (3-Layer)
+## Architecture (4-Layer)
 
 ```
 ┌─────────────────────────────────────┐
@@ -23,12 +23,21 @@ Shuffify is a web application that provides advanced playlist reordering control
 │  • routes.py    - Flask routes     │
 │  • templates/   - Jinja2 HTML     │
 │  • static/      - CSS, JS          │
+│  • schemas/     - Pydantic schemas │
+└───────────────┬─────────────────────┘
+                │
+┌───────────────▼─────────────────────┐
+│  Services Layer                     │
+│  • auth_service.py - OAuth flow    │
+│  • playlist_service.py - Playlists │
+│  • shuffle_service.py - Shuffling  │
+│  • state_service.py - Undo/redo    │
 └───────────────┬─────────────────────┘
                 │
 ┌───────────────▼─────────────────────┐
 │  Business Logic Layer               │
 │  • shuffle_algorithms/ - Algorithms│
-│  • spotify/client.py - API wrapper │
+│  • spotify/     - Modular API      │
 │  • models/     - Data structures   │
 └───────────────┬─────────────────────┘
                 │
@@ -39,7 +48,7 @@ Shuffify is a web application that provides advanced playlist reordering control
 └─────────────────────────────────────┘
 ```
 
-**STRICT RULE**: Never violate layer boundaries. Routes call business logic, business logic calls external APIs.
+**STRICT RULE**: Never violate layer boundaries. Routes call services, services call business logic, business logic calls external APIs.
 
 ---
 
@@ -47,11 +56,12 @@ Shuffify is a web application that provides advanced playlist reordering control
 
 | Component | Technology |
 |-----------|-----------|
-| **Backend** | Flask 2.3.3 (Python 3.12+) |
+| **Backend** | Flask 3.1.x (Python 3.12+) |
 | **Frontend** | Tailwind CSS, vanilla JavaScript |
 | **API Client** | spotipy (Spotify API wrapper) |
+| **Validation** | Pydantic v2 (request/response validation) |
 | **Server** | Gunicorn (prod), Flask dev server (local) |
-| **Session** | Flask-Session (filesystem, migrating to Redis) |
+| **Session** | Flask-Session 0.8.x (filesystem, migrating to Redis) |
 | **Containerization** | Docker with health checks |
 
 ---
@@ -75,24 +85,29 @@ All algorithms inherit from `ShuffleAlgorithm` base class and auto-register via 
 |------|---------|
 | `shuffify/__init__.py` | Flask app factory |
 | `shuffify/routes.py` | All HTTP routes |
-| `shuffify/spotify/client.py` | Spotify API wrapper |
+| `shuffify/services/` | Service layer (auth, playlist, shuffle, state) |
+| `shuffify/schemas/` | Pydantic validation schemas |
+| `shuffify/spotify/` | Modular Spotify client (credentials, auth, api, client) |
 | `shuffify/shuffle_algorithms/registry.py` | Algorithm registration |
 | `shuffify/models/playlist.py` | Playlist data model |
+| `shuffify/error_handlers.py` | Global exception handlers |
 | `config.py` | Configuration (dev/prod) |
 
 ---
 
 ## Session Management
 
-**Undo System**:
-- Each shuffle saves previous track order to `session['undo_stack']`
-- Users can undo multiple times within a session
+**Undo System** (via StateService):
+- Each shuffle saves state to `session['playlist_states'][playlist_id]`
+- States tracked with `current_index` for navigation
+- Users can undo/redo multiple times within a session
 - Stack cleared on logout or session expiry
 
 **OAuth Tokens**:
-- Stored in `session['access_token']`
+- Stored in `session['spotify_token']` as TokenInfo dict
 - Never exposed to client-side
-- Refresh handled by spotipy library
+- Auto-refresh via SpotifyAuthManager when expired
+- Retry logic with exponential backoff for transient errors
 
 ---
 
@@ -110,16 +125,24 @@ All algorithms inherit from `ShuffleAlgorithm` base class and auto-register via 
 
 ---
 
-## Current Status: v2.3.6
+## Current Status: v2.4.x
 
+**Completed:**
 - ✅ OAuth 2.0 authentication (Facebook-compatible)
-- ✅ Four shuffle algorithms
-- ✅ Multi-level undo system
-- ✅ Docker containerization
-- ✅ Health check endpoint
-- 🔲 Flask 3.x upgrade (planned)
-- 🔲 Redis session storage (planned)
-- 🔲 Unit tests for algorithms (planned)
+- ✅ Four shuffle algorithms with comprehensive tests
+- ✅ Multi-level undo system (StateService)
+- ✅ Docker containerization with health checks
+- ✅ Flask 3.x upgrade (3.1.x)
+- ✅ Services layer (auth, playlist, shuffle, state)
+- ✅ Pydantic validation layer
+- ✅ Modular Spotify client (credentials, auth, api)
+- ✅ Retry logic with exponential backoff
+- ✅ 315+ unit tests, all passing
+
+**Planned:**
+- 🔲 Redis session storage
+- 🔲 Caching for Spotify API responses
+- 🔲 CI/CD pipeline
 
 ---
 

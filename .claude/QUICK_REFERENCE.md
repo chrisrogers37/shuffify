@@ -14,14 +14,15 @@
 
 ---
 
-## Architecture (3-Layer)
+## Architecture (4-Layer)
 
 ```
-Routes → Business Logic → External APIs
+Routes → Services → Business Logic → External APIs
 ```
 
 **NEVER violate layer boundaries:**
-- Routes call business logic (algorithms, spotify client)
+- Routes call services (auth, playlist, shuffle, state)
+- Services call business logic (algorithms, spotify client)
 - Business logic calls external APIs (Spotify Web API)
 - Templates only handle presentation
 
@@ -32,8 +33,10 @@ Routes → Business Logic → External APIs
 | Path | Purpose |
 |------|---------|
 | `shuffify/` | Main application code |
+| `shuffify/services/` | Service layer (auth, playlist, shuffle, state) |
+| `shuffify/schemas/` | Pydantic validation schemas |
 | `shuffify/shuffle_algorithms/` | All shuffle algorithms |
-| `shuffify/spotify/` | Spotify API client |
+| `shuffify/spotify/` | Modular Spotify client (credentials, auth, api) |
 | `shuffify/models/` | Data models |
 | `shuffify/templates/` | Jinja2 templates |
 | `shuffify/static/` | CSS, JS, images |
@@ -65,8 +68,13 @@ Routes → Business Logic → External APIs
 |------|----------|
 | `shuffify/__init__.py` | Flask app factory |
 | `shuffify/routes.py` | All HTTP routes |
-| `shuffify/spotify/client.py` | Spotify API wrapper |
+| `shuffify/services/` | Service layer modules |
+| `shuffify/schemas/requests.py` | Pydantic validation schemas |
+| `shuffify/spotify/api.py` | Spotify API with retry logic |
+| `shuffify/spotify/auth.py` | OAuth flow, token management |
+| `shuffify/spotify/client.py` | Facade for backward compat |
 | `shuffify/shuffle_algorithms/registry.py` | Algorithm registration |
+| `shuffify/error_handlers.py` | Global exception handlers |
 | `config.py` | Configuration classes |
 | `run.py` | Application entry point |
 
@@ -87,16 +95,18 @@ All in: `shuffify/shuffle_algorithms/`
 
 ## Session Flow
 
-**OAuth**:
+**OAuth** (via AuthService):
 1. User clicks "Connect with Spotify"
-2. Redirected to Spotify authorization
+2. `AuthService.get_auth_url()` → Spotify authorization
 3. Callback receives code
-4. Exchange code for access token
-5. Store token in `session['access_token']`
+4. `AuthService.exchange_code_for_token(code)` → TokenInfo
+5. Store token in `session['spotify_token']`
+6. Auto-refresh via SpotifyAuthManager when expired
 
-**Undo**:
-- `session['undo_stack']` = list of previous states
-- Push before shuffle, pop on undo
+**Undo** (via StateService):
+- `session['playlist_states'][playlist_id]` = state history
+- `StateService.record_new_state()` before shuffle
+- `StateService.undo()` restores previous
 - Clear on logout
 
 ---
@@ -144,10 +154,20 @@ Every PR must update `CHANGELOG.md` under `## [Unreleased]`
 
 ```
 ✅ CORRECT:
-routes.py → shuffle_algorithms/basic.py → (algorithm logic)
-routes.py → spotify/client.py → Spotify API
+routes.py → services/shuffle_service.py → shuffle_algorithms/basic.py
+routes.py → services/playlist_service.py → spotify/api.py → Spotify API
+routes.py → services/auth_service.py → spotify/auth.py
 
 ❌ INCORRECT:
-routes.py → Spotify API directly (bypass client)
-templates → business logic (should be in routes/algorithms)
+routes.py → Spotify API directly (bypass services and client)
+routes.py → spotify/api.py directly (bypass services)
+templates → business logic (should be in services)
 ```
+
+## Stack Summary (Flask 3.1.x)
+
+- **Flask** 3.1.x + **Flask-Session** 0.8.x
+- **Pydantic** v2 for request validation
+- **spotipy** for Spotify API
+- **315+** tests, all passing
+- Retry logic with exponential backoff
