@@ -13,6 +13,10 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements first to leverage Docker cache
 COPY requirements/ requirements/
 
+# Upgrade pip, setuptools, and wheel to fix security vulnerabilities
+# CVE-2025-8869 (pip), CVE-2024-6345 (setuptools), CVE-2026-24049 (wheel)
+RUN pip install --no-cache-dir --upgrade pip>=25.3 setuptools>=78.1.1 wheel>=0.46.2
+
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements/prod.txt
 
