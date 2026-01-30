@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Flask 3.x Upgrade** - Upgraded from Flask 2.3.3 to Flask 3.1.x
+  - Updated Flask-Session from 0.5.0 to 0.8.0 for Flask 3.x compatibility
+  - Replaced deprecated `FLASK_ENV` config with `CONFIG_NAME` (removed in Flask 3.0)
+  - Updated `datetime.utcnow()` to `datetime.now(timezone.utc)` (deprecated in Python 3.12)
+  - All 303 tests passing with Flask 3.x
+- **Spotify API Retry Logic** - Added exponential backoff for transient errors
+  - Automatic retry on rate limits (429) with Retry-After header support
+  - Automatic retry on server errors (500, 502, 503, 504)
+  - Automatic retry on network errors (ConnectionError, Timeout)
+  - Configurable max retries (4) with exponential backoff (2s, 4s, 8s, 16s)
+  - 12 new unit tests covering all retry scenarios
+
 ### Security
 - **Critical Dependency Updates** - Fixed multiple security vulnerabilities across dependencies
   - `cryptography` 41.0.7 → 46.0.4 (fixes CVE-2023-50782, CVE-2024-0727, PYSEC-2024-225, GHSA-h4gh-qq45-vh27)
@@ -63,11 +76,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement Facebook and Apple authentication flows to provide more login options.
 
 ### Planned Infrastructure Improvements
-- **Flask 3.x Upgrade**: Major version upgrade from Flask 2.3.3 to 3.1.2+ with comprehensive testing
-  - Breaking changes assessment and migration guide
-  - Full application testing (routes, sessions, templates, error handling)
-  - Performance validation and security review
-  - Rollback plan and monitoring strategy
 - **Session Security**: Migration from filesystem sessions to Redis or database-backed sessions
 - **Caching Strategy**: Implement Redis caching for Spotify API responses
 - **CI/CD Pipeline**: Automated testing and deployment pipeline

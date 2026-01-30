@@ -139,8 +139,8 @@ To create a new shuffle algorithm:
    def parameters(self) -> dict:
        """Parameter specifications"""
    
-   def shuffle(self, tracks: List[str], sp: Optional[Spotify] = None, **kwargs) -> List[str]:
-       """Actual shuffle implementation"""
+   def shuffle(self, tracks: List[Dict[str, Any]], features: Optional[Dict[str, Dict[str, Any]]] = None, **kwargs) -> List[str]:
+       """Actual shuffle implementation - returns list of track URIs"""
    ```
 4. Register your algorithm in `registry.py`
 

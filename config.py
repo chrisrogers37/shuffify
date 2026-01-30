@@ -45,7 +45,8 @@ class Config:
 
 class ProdConfig(Config):
     """Production configuration."""
-    FLASK_ENV = 'production'
+    # Note: FLASK_ENV was removed in Flask 3.0. Use config_name parameter instead.
+    CONFIG_NAME = 'production'
     DEBUG = False
     TESTING = False
     SESSION_COOKIE_SECURE = True
@@ -54,7 +55,8 @@ class ProdConfig(Config):
 
 class DevConfig(Config):
     """Development configuration."""
-    FLASK_ENV = 'development'
+    # Note: FLASK_ENV was removed in Flask 3.0. Use config_name parameter instead.
+    CONFIG_NAME = 'development'
     DEBUG = True
     TESTING = True
     SESSION_COOKIE_SECURE = False
