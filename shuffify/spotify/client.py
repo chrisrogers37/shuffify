@@ -1,198 +1,318 @@
-# app/spotify/client.py
+"""
+Spotify client facade.
+
+Provides a unified interface combining authentication and API operations.
+This module maintains backward compatibility while using the new modular
+architecture internally.
+
+For new code, consider using SpotifyAuthManager and SpotifyAPI directly
+for better separation of concerns.
+"""
+
 import logging
-import traceback
-import time
-from typing import List, Dict, Any, Optional
-from functools import wraps
-import spotipy
-from spotipy.oauth2 import SpotifyOAuth
+from typing import Dict, List, Any, Optional
+
+from .auth import SpotifyAuthManager, TokenInfo, DEFAULT_SCOPES
+from .api import SpotifyAPI
+from .credentials import SpotifyCredentials
+from .exceptions import (
+    SpotifyError,
+    SpotifyAuthError,
+    SpotifyTokenError,
+    SpotifyTokenExpiredError,
+    SpotifyAPIError,
+)
 
 logger = logging.getLogger(__name__)
-logging.getLogger('spotipy').setLevel(logging.WARNING)
 
-def spotify_error_handler(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            logger.error(f"Error in {func.__name__}: {str(e)}")
-            if hasattr(e, 'response'):
-                logger.error(f"Response status: {e.response.status_code}")
-                logger.error(f"Response body: {e.response.text}")
-            raise
-    return wrapper
 
 class SpotifyClient:
-    def __init__(self, token: Optional[Dict[str, Any]] = None, credentials: Optional[Dict[str, str]] = None) -> None:
-        # Enhanced scope list to ensure compatibility with Facebook login
-        self.scope = " ".join([
-            "playlist-read-private", "playlist-read-collaborative",
-            "playlist-modify-private", "playlist-modify-public",
-            "user-read-private", "user-read-playback-state",
-            "user-read-email", "user-read-currently-playing",
-            "user-read-recently-played", "user-top-read"
-        ])
-        self.credentials = credentials
-        self.token = token
-        self.auth_manager = self._create_auth_manager()
-        self.sp = None
+    """
+    Unified Spotify client facade.
+
+    Combines authentication and API functionality in a single interface.
+    This class maintains backward compatibility with existing code while
+    delegating to the new SpotifyAuthManager and SpotifyAPI internally.
+
+    For new code, prefer using SpotifyAuthManager and SpotifyAPI directly:
+        - SpotifyAuthManager: For OAuth flow and token management
+        - SpotifyAPI: For data operations (playlists, tracks, etc.)
+
+    Example (legacy pattern - still supported):
+        client = SpotifyClient(token=session['spotify_token'])
+        playlists = client.get_user_playlists()
+
+    Example (new pattern - preferred):
+        credentials = SpotifyCredentials.from_flask_config(app.config)
+        auth_manager = SpotifyAuthManager(credentials)
+        token_info = TokenInfo.from_dict(session['spotify_token'])
+        api = SpotifyAPI(token_info, auth_manager)
+        playlists = api.get_user_playlists()
+    """
+
+    def __init__(
+        self,
+        token: Optional[Dict[str, Any]] = None,
+        credentials: Optional[Dict[str, str]] = None
+    ):
+        """
+        Initialize the Spotify client.
+
+        Args:
+            token: OAuth token dictionary (for authenticated operations).
+            credentials: OAuth credentials dict with client_id, client_secret,
+                         redirect_uri. If not provided, loads from Flask config.
+
+        Note:
+            When credentials are not provided, this will attempt to load from
+            Flask's current_app.config. This is deprecated - prefer passing
+            credentials explicitly or using SpotifyCredentials.
+        """
+        self._credentials = self._resolve_credentials(credentials)
+        self._auth_manager = SpotifyAuthManager(self._credentials)
+        self._token_info: Optional[TokenInfo] = None
+        self._api: Optional[SpotifyAPI] = None
 
         if token:
-            self._initialize_client(token)
-        else:
-            logger.debug("Initialized SpotifyClient without token")
+            self._initialize_with_token(token)
 
-    def _create_auth_manager(self) -> SpotifyOAuth:
-        if self.credentials:
-            return SpotifyOAuth(
-                client_id=self.credentials['client_id'],
-                client_secret=self.credentials['client_secret'],
-                redirect_uri=self.credentials['redirect_uri'],
-                scope=self.scope,
-                open_browser=False,
-                cache_handler=None  # Disable caching to avoid issues
+    def _resolve_credentials(
+        self,
+        credentials: Optional[Dict[str, str]]
+    ) -> SpotifyCredentials:
+        """
+        Resolve credentials from explicit dict or Flask config.
+
+        Args:
+            credentials: Optional credentials dictionary.
+
+        Returns:
+            SpotifyCredentials instance.
+        """
+        if credentials:
+            return SpotifyCredentials(
+                client_id=credentials['client_id'],
+                client_secret=credentials['client_secret'],
+                redirect_uri=credentials['redirect_uri']
             )
-        else:
+
+        # Fall back to Flask config (for backward compatibility)
+        try:
             from flask import current_app
-            return SpotifyOAuth(
-                client_id=current_app.config['SPOTIFY_CLIENT_ID'],
-                client_secret=current_app.config['SPOTIFY_CLIENT_SECRET'],
-                redirect_uri=current_app.config['SPOTIFY_REDIRECT_URI'],
-                scope=self.scope,
-                open_browser=False,
-                cache_handler=None  # Disable caching to avoid issues
+            return SpotifyCredentials.from_flask_config(current_app.config)
+        except RuntimeError:
+            # Not in Flask context - try environment
+            return SpotifyCredentials.from_env()
+
+    def _initialize_with_token(self, token: Dict[str, Any]) -> None:
+        """
+        Initialize the API client with a token.
+
+        Args:
+            token: OAuth token dictionary.
+
+        Raises:
+            ValueError: If token is invalid or expired.
+        """
+        try:
+            self._token_info = TokenInfo.from_dict(token)
+
+            # Validate token (will raise if expired)
+            self._token_info.validate()
+
+            # Create API client
+            self._api = SpotifyAPI(
+                self._token_info,
+                self._auth_manager,
+                auto_refresh=True
             )
+            logger.info("SpotifyClient initialized with valid token")
 
-    def _initialize_client(self, token: Dict[str, Any]) -> None:
-        if not token or token.get('expires_at', 0) < time.time():
-            logger.error("Cannot initialize Spotify client without valid token")
-            raise ValueError("Invalid or expired token for Spotify initialization.")
-        self.token = token
-        self.auth_manager.cache_handler.save_token_to_cache(token)
-        self.sp = spotipy.Spotify(auth_manager=self.auth_manager)
-        logger.info("Spotify client initialized with fresh token")
+        except SpotifyTokenError as e:
+            logger.error(f"Token validation failed: {e}")
+            raise ValueError(f"Invalid or expired token: {e}")
 
-    @spotify_error_handler
+    @property
+    def token_info(self) -> Optional[TokenInfo]:
+        """Get the current token info."""
+        if self._api:
+            return self._api.token_info
+        return self._token_info
+
+    @property
+    def is_authenticated(self) -> bool:
+        """Check if client has a valid token."""
+        return self._api is not None
+
+    # =========================================================================
+    # Authentication Methods
+    # =========================================================================
+
     def get_auth_url(self) -> str:
-        return self.auth_manager.get_authorize_url()
+        """
+        Get the Spotify authorization URL.
 
-    @spotify_error_handler
+        Returns:
+            Authorization URL for user to visit.
+
+        Raises:
+            SpotifyAuthError: If URL generation fails.
+        """
+        return self._auth_manager.get_auth_url()
+
     def get_token(self, code: str) -> Dict[str, Any]:
-        logger.debug("Attempting to exchange code for token")
+        """
+        Exchange authorization code for token.
+
+        Args:
+            code: Authorization code from OAuth callback.
+
+        Returns:
+            Token dictionary with access_token, refresh_token, etc.
+
+        Raises:
+            Exception: If token exchange fails (for backward compatibility).
+        """
         try:
-            token_info = self.auth_manager.get_access_token(code, as_dict=True, check_cache=False)
-            if not token_info:
-                logger.error("No token returned from Spotify")
-                raise Exception("Failed to get access token from Spotify")
-            
-            logger.debug("Token received successfully")
-            logger.debug("Token keys: %s", list(token_info.keys()))
-            
-            # Validate token structure
-            required_keys = ['access_token', 'token_type']
-            missing_keys = [key for key in required_keys if key not in token_info]
-            if missing_keys:
-                logger.error("Token missing required keys: %s", missing_keys)
-                raise Exception(f"Invalid token structure: missing {missing_keys}")
-            
-            self._initialize_client(token_info)
-            return token_info
-            
-        except Exception as e:
-            logger.error("Error during token exchange: %s", str(e), exc_info=True)
-            # Re-raise with more context
-            raise Exception(f"Token exchange failed: {str(e)}")
+            token_info = self._auth_manager.exchange_code(code)
+            self._token_info = token_info
+            self._api = SpotifyAPI(token_info, self._auth_manager)
+            return token_info.to_dict()
+        except SpotifyTokenError as e:
+            # Preserve backward-compatible exception format
+            raise Exception(f"Token exchange failed: {e}")
 
-    def _refresh_token_if_needed(self):
-        token_info = self.auth_manager.cache_handler.get_cached_token()
-        if not token_info:
-            logger.error("No cached token available")
-            raise RuntimeError("No cached token available to refresh")
-        if token_info.get('expires_at', 0) < time.time():
-            logger.info("Refreshing Spotify token")
-            refreshed = self.auth_manager.refresh_access_token(token_info['refresh_token'])
-            self._initialize_client(refreshed)
+    # =========================================================================
+    # User Methods
+    # =========================================================================
 
-    def _ensure_spotify_client(self):
-        if not self.sp:
-            raise RuntimeError("Spotify client not initialized. Please authenticate first.")
-
-    @spotify_error_handler
     def get_current_user(self) -> Dict[str, Any]:
-        self._refresh_token_if_needed()
-        self._ensure_spotify_client()
-        return self.sp.current_user()
+        """
+        Get the current user's profile.
 
-    @spotify_error_handler
+        Returns:
+            User profile dictionary.
+
+        Raises:
+            RuntimeError: If not authenticated.
+            SpotifyAPIError: If the request fails.
+        """
+        self._ensure_authenticated()
+        return self._api.get_current_user()
+
+    # =========================================================================
+    # Playlist Methods
+    # =========================================================================
+
     def get_user_playlists(self) -> List[Dict[str, Any]]:
-        self._refresh_token_if_needed()
-        self._ensure_spotify_client()
-        playlists = []
-        results = self.sp.current_user_playlists()
-        user_id = self.sp.current_user()['id']
-        while results:
-            for playlist in results['items']:
-                if playlist['owner']['id'] == user_id or playlist.get('collaborative'):
-                    playlists.append(playlist)
-            results = self.sp.next(results) if results['next'] else None
-        logger.debug(f"Retrieved {len(playlists)} editable playlists")
-        return playlists
+        """
+        Get all playlists the user can edit.
 
-    @spotify_error_handler
+        Returns:
+            List of playlist dictionaries.
+
+        Raises:
+            RuntimeError: If not authenticated.
+            SpotifyAPIError: If the request fails.
+        """
+        self._ensure_authenticated()
+        return self._api.get_user_playlists()
+
     def get_playlist(self, playlist_id: str) -> Dict[str, Any]:
-        self._refresh_token_if_needed()
-        self._ensure_spotify_client()
-        return self.sp.playlist(playlist_id)
+        """
+        Get a single playlist.
 
-    @spotify_error_handler
+        Args:
+            playlist_id: The Spotify playlist ID.
+
+        Returns:
+            Playlist dictionary.
+
+        Raises:
+            RuntimeError: If not authenticated.
+            SpotifyAPIError: If the request fails.
+        """
+        self._ensure_authenticated()
+        return self._api.get_playlist(playlist_id)
+
     def get_playlist_tracks(self, playlist_id: str) -> List[Dict[str, Any]]:
-        self._refresh_token_if_needed()
-        self._ensure_spotify_client()
-        tracks = []
-        results = self.sp.playlist_items(playlist_id)
-        while results:
-            tracks.extend([item['track'] for item in results['items'] if item.get('track', {}).get('uri')])
-            results = self.sp.next(results) if results['next'] else None
-        logger.debug(f"Retrieved {len(tracks)} tracks for playlist {playlist_id}")
-        return tracks
+        """
+        Get all tracks from a playlist.
 
-    @spotify_error_handler
-    def get_track_audio_features(self, track_ids: List[str]) -> Dict[str, Dict[str, Any]]:
-        self._refresh_token_if_needed()
-        self._ensure_spotify_client()
-        features = {}
-        valid_ids = [tid.split(":")[-1] for tid in track_ids if tid]
-        batch_size = 50
-        for i in range(0, len(valid_ids), batch_size):
-            batch = valid_ids[i:i+batch_size]
-            results = self.sp.audio_features(batch)
-            if results:
-                for track_id, feature in zip(batch, results):
-                    if feature:
-                        features[track_id] = feature
-        return features
+        Args:
+            playlist_id: The Spotify playlist ID.
 
-    @spotify_error_handler
-    def update_playlist_tracks(self, playlist_id: str, track_uris: List[str]) -> bool:
-        self._refresh_token_if_needed()
-        self._ensure_spotify_client()
+        Returns:
+            List of track dictionaries.
+
+        Raises:
+            RuntimeError: If not authenticated.
+            SpotifyAPIError: If the request fails.
+        """
+        self._ensure_authenticated()
+        return self._api.get_playlist_tracks(playlist_id)
+
+    def update_playlist_tracks(
+        self,
+        playlist_id: str,
+        track_uris: List[str]
+    ) -> bool:
+        """
+        Update a playlist with new track order.
+
+        Args:
+            playlist_id: The Spotify playlist ID.
+            track_uris: List of track URIs in desired order.
+
+        Returns:
+            True if update succeeded, False otherwise.
+
+        Raises:
+            RuntimeError: If not authenticated.
+        """
+        self._ensure_authenticated()
         try:
-            # If track_uris is empty, clear the playlist.
-            if not track_uris:
-                self.sp.playlist_replace_items(playlist_id, [])
-                logger.info(f"Cleared playlist: {playlist_id}")
-                return True
-
-            # Replace the first 100 tracks.
-            self.sp.playlist_replace_items(playlist_id, track_uris[:100])
-            
-            # Add the rest in batches of 100.
-            for i in range(100, len(track_uris), 100):
-                self.sp.playlist_add_items(playlist_id, track_uris[i:i+100])
-                
-            logger.info(f"Updated playlist {playlist_id} with {len(track_uris)} tracks")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to update playlist: {str(e)}")
+            return self._api.update_playlist_tracks(playlist_id, track_uris)
+        except SpotifyAPIError as e:
+            logger.error(f"Failed to update playlist: {e}")
             return False
+
+    # =========================================================================
+    # Audio Features Methods
+    # =========================================================================
+
+    def get_track_audio_features(
+        self,
+        track_ids: List[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Get audio features for tracks.
+
+        Args:
+            track_ids: List of track IDs or URIs.
+
+        Returns:
+            Dictionary mapping track ID to audio features.
+
+        Raises:
+            RuntimeError: If not authenticated.
+            SpotifyAPIError: If the request fails.
+        """
+        self._ensure_authenticated()
+        return self._api.get_audio_features(track_ids)
+
+    # =========================================================================
+    # Private Methods
+    # =========================================================================
+
+    def _ensure_authenticated(self) -> None:
+        """
+        Ensure the client is authenticated.
+
+        Raises:
+            RuntimeError: If not authenticated.
+        """
+        if not self._api:
+            raise RuntimeError(
+                "Spotify client not initialized. Please authenticate first."
+            )
