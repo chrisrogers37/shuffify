@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Spotify Module Refactoring** (Phase 3) - Split SpotifyClient into modular components
+  - `SpotifyCredentials` - Immutable dataclass for OAuth credentials, enabling dependency injection
+  - `SpotifyAuthManager` - Dedicated class for OAuth flow, token exchange, and refresh
+  - `SpotifyAPI` - Dedicated class for all Spotify Web API data operations
+  - `TokenInfo` - Type-safe container for token data with validation and expiration checking
+  - Comprehensive exception hierarchy (`SpotifyError`, `SpotifyAuthError`, `SpotifyTokenError`, etc.)
+- **Comprehensive Test Suite** - 303 tests total, all passing
+  - 32 new Spotify module tests (credentials, auth, API)
+  - 99 new algorithm unit tests (BasicShuffle, BalancedShuffle, PercentageShuffle, StratifiedShuffle)
+  - 12 integration tests covering full application flow
 - **Pydantic Validation Layer** (Phase 2) - Type-safe request validation using Pydantic v2
   - `ShuffleRequest` schema with algorithm parameter validation
   - `PlaylistQueryParams` for query parameter validation
@@ -17,19 +27,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Consistent JSON error responses across all endpoints
   - Handlers for `ValidationError`, `AuthenticationError`, `PlaylistError`, etc.
   - HTTP status code handlers (400, 401, 404, 500)
-- **Schema Test Suite** - 39 comprehensive tests for Pydantic schemas
-  - Tests for all request validation scenarios
-  - Tests for type conversion and error handling
 
 ### Changed
+- **SpotifyClient Refactored** - Now a facade that delegates to SpotifyAuthManager and SpotifyAPI
+  - Maintains full backward compatibility with existing code
+  - Hidden Flask dependency removed (credentials now explicitly passed)
+  - Token refresh bug fixed (was using disabled cache_handler)
 - **Routes Simplified** - Removed try/except boilerplate, delegating to global handlers
 - **ShuffleService Refactored** - Removed manual parameter parsing (now handled by Pydantic)
 - **Dependencies** - Added `pydantic>=2.0.0` to requirements
 
 ### Technical Improvements
-- **Modularity Score** - Increased from 7.5/10 to 8.3/10 (Phase 2 completion)
-- **Test Coverage** - 139 total tests (up from 100), all passing
-- **Code Quality** - Cleaner routes with less error handling boilerplate
+- **Modularity Score** - Increased from 7.5/10 to 8.5/10 (Phase 3 completion)
+- **Test Coverage** - 303 total tests (up from 139), all passing
+- **Code Quality** - Clean separation of auth, API, and facade concerns
+- **Dependency Injection** - SpotifyCredentials enables proper DI patterns
+- **Token Management** - Proper token refresh with auto-refresh capability
 
 ---
 
