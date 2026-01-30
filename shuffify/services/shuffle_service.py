@@ -1,7 +1,8 @@
 """
 Shuffle service for managing playlist shuffle operations.
 
-Handles algorithm selection, parameter parsing, and shuffle execution.
+Handles algorithm selection, parameter validation, and shuffle execution.
+Uses Pydantic schemas for type-safe parameter validation.
 """
 
 import logging
@@ -36,12 +37,12 @@ class ShuffleExecutionError(ShuffleError):
 class ShuffleService:
     """Service for managing shuffle algorithm execution."""
 
-    # Type conversion mapping for algorithm parameters
-    TYPE_CONVERTERS = {
-        'integer': int,
-        'float': float,
-        'boolean': lambda v: str(v).lower() in ('true', 't', 'yes', 'y', '1'),
-        'string': str,
+    # Valid algorithm names for quick validation
+    VALID_ALGORITHMS = {
+        'BasicShuffle',
+        'BalancedShuffle',
+        'StratifiedShuffle',
+        'PercentageShuffle'
     }
 
     @staticmethod
@@ -68,54 +69,19 @@ class ShuffleService:
         Raises:
             InvalidAlgorithmError: If the algorithm doesn't exist.
         """
+        if name not in ShuffleService.VALID_ALGORITHMS:
+            logger.error(f"Invalid algorithm requested: {name}")
+            raise InvalidAlgorithmError(
+                f"Invalid algorithm '{name}'. "
+                f"Valid options: {', '.join(sorted(ShuffleService.VALID_ALGORITHMS))}"
+            )
+
         try:
             algorithm_class = ShuffleRegistry.get_algorithm(name)
             return algorithm_class()
         except ValueError as e:
-            logger.error(f"Invalid algorithm requested: {name}")
+            logger.error(f"Failed to get algorithm: {name}")
             raise InvalidAlgorithmError(f"Unknown algorithm: {name}")
-
-    @staticmethod
-    def parse_parameters(
-        algorithm: Any,
-        form_data: Dict[str, str]
-    ) -> Dict[str, Any]:
-        """
-        Parse and validate algorithm parameters from form data.
-
-        Converts string form values to the appropriate types based on
-        the algorithm's parameter definitions.
-
-        Args:
-            algorithm: An algorithm instance with a 'parameters' property.
-            form_data: Dictionary of string values from a form submission.
-
-        Returns:
-            Dictionary of parsed parameters with correct types.
-
-        Raises:
-            ParameterValidationError: If a parameter cannot be converted.
-        """
-        params = {}
-
-        for param_name, param_info in algorithm.parameters.items():
-            if param_name not in form_data:
-                continue
-
-            value = form_data[param_name]
-            param_type = param_info.get('type', 'string')
-
-            try:
-                converter = ShuffleService.TYPE_CONVERTERS.get(param_type, str)
-                params[param_name] = converter(value)
-            except (ValueError, TypeError) as e:
-                logger.error(f"Failed to convert parameter '{param_name}' to {param_type}: {e}")
-                raise ParameterValidationError(
-                    f"Invalid value for parameter '{param_name}': expected {param_type}"
-                )
-
-        logger.debug(f"Parsed parameters: {params}")
-        return params
 
     @staticmethod
     def execute(

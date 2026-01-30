@@ -47,7 +47,11 @@ def create_app(config_name=None):
     # Register blueprints
     from shuffify.routes import main as main_blueprint
     app.register_blueprint(main_blueprint)
-    
+
+    # Register global error handlers
+    from shuffify.error_handlers import register_error_handlers
+    register_error_handlers(app)
+
     # Add a `no-cache` header to responses in development mode. This prevents
     # the browser from caching assets and not showing changes.
     if app.debug:
