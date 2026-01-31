@@ -419,3 +419,168 @@ class TestSpotifyCacheConnection:
 
         cache = SpotifyCache(mock_redis)
         assert cache.is_connected() is False
+
+
+# =============================================================================
+# Additional Edge Case Tests for Full Coverage
+# =============================================================================
+
+class TestSpotifyCachePlaylistEdgeCases:
+    """Edge case tests for playlist operations."""
+
+    def test_get_playlists_redis_error(self):
+        """Test handling Redis error on get playlists."""
+        mock_redis = Mock(spec=redis.Redis)
+        mock_redis.get.side_effect = redis.RedisError("Connection failed")
+
+        cache = SpotifyCache(mock_redis)
+        result = cache.get_playlists('user123')
+
+        assert result is None
+
+    def test_set_playlists_redis_error(self):
+        """Test handling Redis error on set playlists."""
+        mock_redis = Mock(spec=redis.Redis)
+        mock_redis.setex.side_effect = redis.RedisError("Connection failed")
+
+        cache = SpotifyCache(mock_redis)
+        result = cache.set_playlists('user123', [{'id': 'pl1'}])
+
+        assert result is False
+
+    def test_get_playlist_redis_error(self):
+        """Test handling Redis error on get single playlist."""
+        mock_redis = Mock(spec=redis.Redis)
+        mock_redis.get.side_effect = redis.RedisError("Connection failed")
+
+        cache = SpotifyCache(mock_redis)
+        result = cache.get_playlist('pl1')
+
+        assert result is None
+
+    def test_set_playlist_redis_error(self):
+        """Test handling Redis error on set single playlist."""
+        mock_redis = Mock(spec=redis.Redis)
+        mock_redis.setex.side_effect = redis.RedisError("Connection failed")
+
+        cache = SpotifyCache(mock_redis)
+        result = cache.set_playlist('pl1', {'id': 'pl1'})
+
+        assert result is False
+
+    def test_set_playlists_custom_ttl(self):
+        """Test setting playlists with custom TTL."""
+        mock_redis = Mock(spec=redis.Redis)
+        cache = SpotifyCache(mock_redis)
+
+        cache.set_playlists('user123', [{'id': 'pl1'}], ttl=120)
+
+        call_args = mock_redis.setex.call_args
+        assert call_args[0][1] == 120
+
+    def test_set_playlist_custom_ttl(self):
+        """Test setting single playlist with custom TTL."""
+        mock_redis = Mock(spec=redis.Redis)
+        cache = SpotifyCache(mock_redis)
+
+        cache.set_playlist('pl1', {'id': 'pl1'}, ttl=90)
+
+        call_args = mock_redis.setex.call_args
+        assert call_args[0][1] == 90
+
+
+class TestSpotifyCacheTracksEdgeCases:
+    """Edge case tests for playlist tracks operations."""
+
+    def test_get_playlist_tracks_redis_error(self):
+        """Test handling Redis error on get tracks."""
+        mock_redis = Mock(spec=redis.Redis)
+        mock_redis.get.side_effect = redis.RedisError("Connection failed")
+
+        cache = SpotifyCache(mock_redis)
+        result = cache.get_playlist_tracks('pl1')
+
+        assert result is None
+
+    def test_set_playlist_tracks_redis_error(self):
+        """Test handling Redis error on set tracks."""
+        mock_redis = Mock(spec=redis.Redis)
+        mock_redis.setex.side_effect = redis.RedisError("Connection failed")
+
+        cache = SpotifyCache(mock_redis)
+        result = cache.set_playlist_tracks('pl1', [{'id': 't1'}])
+
+        assert result is False
+
+    def test_get_playlist_tracks_cache_miss(self):
+        """Test cache miss for playlist tracks."""
+        mock_redis = Mock(spec=redis.Redis)
+        mock_redis.get.return_value = None
+
+        cache = SpotifyCache(mock_redis)
+        result = cache.get_playlist_tracks('pl1')
+
+        assert result is None
+
+    def test_set_playlist_tracks_custom_ttl(self):
+        """Test setting playlist tracks with custom TTL."""
+        mock_redis = Mock(spec=redis.Redis)
+        cache = SpotifyCache(mock_redis)
+
+        cache.set_playlist_tracks('pl1', [{'id': 't1'}], ttl=45)
+
+        call_args = mock_redis.setex.call_args
+        assert call_args[0][1] == 45
+
+
+class TestSpotifyCacheAudioFeaturesEdgeCases:
+    """Edge case tests for audio features operations."""
+
+    def test_get_audio_features_redis_error(self):
+        """Test handling Redis error on get audio features."""
+        mock_redis = Mock(spec=redis.Redis)
+        mock_redis.mget.side_effect = redis.RedisError("Connection failed")
+
+        cache = SpotifyCache(mock_redis)
+        result = cache.get_audio_features(['track1', 'track2'])
+
+        assert result == {}
+
+    def test_set_audio_features_redis_error(self):
+        """Test handling Redis error on set audio features."""
+        mock_redis = Mock(spec=redis.Redis)
+        mock_pipe = MagicMock()
+        mock_pipe.execute.side_effect = redis.RedisError("Connection failed")
+        mock_redis.pipeline.return_value = mock_pipe
+
+        cache = SpotifyCache(mock_redis)
+        result = cache.set_audio_features({'t1': {'tempo': 120}})
+
+        assert result is False
+
+    def test_set_audio_features_custom_ttl(self):
+        """Test setting audio features with custom TTL."""
+        mock_redis = Mock(spec=redis.Redis)
+        mock_pipe = MagicMock()
+        mock_redis.pipeline.return_value = mock_pipe
+
+        cache = SpotifyCache(mock_redis)
+        cache.set_audio_features({'t1': {'tempo': 120}}, ttl=7200)
+
+        # Verify custom TTL was used
+        call_args = mock_pipe.setex.call_args
+        assert call_args[0][1] == 7200
+
+
+class TestSpotifyCacheInvalidationEdgeCases:
+    """Edge case tests for cache invalidation."""
+
+    def test_invalidate_user_playlists_redis_error(self):
+        """Test handling Redis error on invalidate user playlists."""
+        mock_redis = Mock(spec=redis.Redis)
+        mock_redis.delete.side_effect = redis.RedisError("Connection failed")
+
+        cache = SpotifyCache(mock_redis)
+        result = cache.invalidate_user_playlists('user123')
+
+        assert result is False
