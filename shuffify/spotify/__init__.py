@@ -2,12 +2,13 @@
 Spotify API integration module.
 
 This module provides a clean, modular interface for Spotify OAuth authentication
-and API operations.
+and API operations, with optional Redis caching.
 
 Architecture:
     - credentials.py: SpotifyCredentials for config/DI
     - auth.py: SpotifyAuthManager for OAuth and token management
     - api.py: SpotifyAPI for data operations
+    - cache.py: SpotifyCache for Redis-based response caching
     - client.py: SpotifyClient facade (combines auth + api)
     - exceptions.py: Exception hierarchy
 
@@ -16,6 +17,7 @@ Usage (preferred - explicit dependencies):
         SpotifyCredentials,
         SpotifyAuthManager,
         SpotifyAPI,
+        SpotifyCache,
         TokenInfo,
     )
 
@@ -31,8 +33,11 @@ Usage (preferred - explicit dependencies):
     # After callback, exchange code for token
     token_info = auth_manager.exchange_code(code)
 
-    # Create API client for data operations
-    api = SpotifyAPI(token_info, auth_manager)
+    # Create API client for data operations (with optional caching)
+    import redis
+    redis_client = redis.from_url('redis://localhost:6379/0')
+    cache = SpotifyCache(redis_client)
+    api = SpotifyAPI(token_info, auth_manager, cache=cache)
     playlists = api.get_user_playlists()
 
 Usage (legacy - backward compatible):
@@ -54,6 +59,9 @@ from .auth import (
 
 # API (data operations)
 from .api import SpotifyAPI
+
+# Cache (Redis-based caching)
+from .cache import SpotifyCache
 
 # Client (facade for backward compatibility)
 from .client import SpotifyClient
@@ -81,6 +89,9 @@ __all__ = [
 
     # API
     'SpotifyAPI',
+
+    # Cache
+    'SpotifyCache',
 
     # Client (facade)
     'SpotifyClient',
