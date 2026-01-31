@@ -10,7 +10,7 @@ for better separation of concerns.
 """
 
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, TYPE_CHECKING
 
 from .auth import SpotifyAuthManager, TokenInfo, DEFAULT_SCOPES
 from .api import SpotifyAPI
@@ -22,6 +22,9 @@ from .exceptions import (
     SpotifyTokenExpiredError,
     SpotifyAPIError,
 )
+
+if TYPE_CHECKING:
+    from .cache import SpotifyCache
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +56,8 @@ class SpotifyClient:
     def __init__(
         self,
         token: Optional[Dict[str, Any]] = None,
-        credentials: Optional[Dict[str, str]] = None
+        credentials: Optional[Dict[str, str]] = None,
+        cache: Optional['SpotifyCache'] = None
     ):
         """
         Initialize the Spotify client.
@@ -62,6 +66,7 @@ class SpotifyClient:
             token: OAuth token dictionary (for authenticated operations).
             credentials: OAuth credentials dict with client_id, client_secret,
                          redirect_uri. If not provided, loads from Flask config.
+            cache: Optional SpotifyCache instance for caching API responses.
 
         Note:
             When credentials are not provided, this will attempt to load from
@@ -72,6 +77,7 @@ class SpotifyClient:
         self._auth_manager = SpotifyAuthManager(self._credentials)
         self._token_info: Optional[TokenInfo] = None
         self._api: Optional[SpotifyAPI] = None
+        self._cache = cache
 
         if token:
             self._initialize_with_token(token)
@@ -124,9 +130,10 @@ class SpotifyClient:
             self._api = SpotifyAPI(
                 self._token_info,
                 self._auth_manager,
-                auto_refresh=True
+                auto_refresh=True,
+                cache=self._cache
             )
-            logger.info("SpotifyClient initialized with valid token")
+            logger.info("SpotifyClient initialized with valid token%s", " (with cache)" if self._cache else "")
 
         except SpotifyTokenError as e:
             logger.error(f"Token validation failed: {e}")
@@ -176,7 +183,7 @@ class SpotifyClient:
         try:
             token_info = self._auth_manager.exchange_code(code)
             self._token_info = token_info
-            self._api = SpotifyAPI(token_info, self._auth_manager)
+            self._api = SpotifyAPI(token_info, self._auth_manager, cache=self._cache)
             return token_info.to_dict()
         except SpotifyTokenError as e:
             # Preserve backward-compatible exception format

@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Redis Session Storage** - Migrated from filesystem to Redis-based sessions
+  - Added `redis>=5.0.0` dependency for session and caching support
+  - Configurable via `REDIS_URL` environment variable
+  - Automatic fallback to filesystem sessions if Redis unavailable
+  - Session keys prefixed with `shuffify:session:` for namespacing
+  - Graceful degradation with logging when Redis connection fails
+- **Redis API Caching** - Implemented caching layer for Spotify API responses
+  - `SpotifyCache` class in `shuffify/spotify/cache.py` for centralized cache management
+  - Configurable TTLs per data type: playlists (60s), user data (600s), audio features (24h)
+  - Automatic cache invalidation after playlist modifications
+  - `skip_cache` parameter for bypassing cache when fresh data needed
+  - Partial cache support for audio features (fetch only uncached tracks)
+  - 45 new tests for cache functionality and API caching integration
 - **Flask 3.x Upgrade** - Upgraded from Flask 2.3.3 to Flask 3.1.x
   - Updated Flask-Session from 0.5.0 to 0.8.0 for Flask 3.x compatibility
   - Replaced deprecated `FLASK_ENV` config with `CONFIG_NAME` (removed in Flask 3.0)
@@ -19,6 +32,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatic retry on network errors (ConnectionError, Timeout)
   - Configurable max retries (4) with exponential backoff (2s, 4s, 8s, 16s)
   - 12 new unit tests covering all retry scenarios
+
+### Changed
+- **SpotifyAPI** - Now supports optional caching via `cache` parameter
+  - Methods accept `skip_cache` parameter to bypass cache when needed
+  - Cache automatically invalidated after playlist updates
+- **SpotifyClient** - Updated to pass cache to internal SpotifyAPI
+  - Optional `cache` parameter in constructor for caching support
+- **App Factory** - Enhanced with Redis initialization and helper functions
+  - `get_redis_client()` to access the global Redis connection
+  - `get_spotify_cache()` to obtain configured SpotifyCache instance
 
 ### Security
 - **Critical Dependency Updates** - Fixed multiple security vulnerabilities across dependencies
@@ -76,8 +99,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement Facebook and Apple authentication flows to provide more login options.
 
 ### Planned Infrastructure Improvements
-- **Session Security**: Migration from filesystem sessions to Redis or database-backed sessions
-- **Caching Strategy**: Implement Redis caching for Spotify API responses
+- ~~**Session Security**: Migration from filesystem sessions to Redis or database-backed sessions~~ (Completed)
+- ~~**Caching Strategy**: Implement Redis caching for Spotify API responses~~ (Completed)
 - **CI/CD Pipeline**: Automated testing and deployment pipeline
 - **Database Integration**: Lightweight database for user preferences and analytics
 

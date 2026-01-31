@@ -2,6 +2,7 @@
 Tests for SpotifyAPI.
 
 Tests cover all data operations: user, playlists, tracks, and audio features.
+Also includes tests for caching integration.
 """
 
 import pytest
@@ -14,6 +15,7 @@ from requests.exceptions import ConnectionError, Timeout
 
 from shuffify.spotify.api import SpotifyAPI, api_error_handler, _calculate_backoff_delay, MAX_RETRIES
 from shuffify.spotify.auth import SpotifyAuthManager, TokenInfo
+from shuffify.spotify.cache import SpotifyCache
 from shuffify.spotify.credentials import SpotifyCredentials
 from shuffify.spotify.exceptions import (
     SpotifyAPIError,
@@ -617,3 +619,189 @@ class TestApiErrorHandlerRetry:
         with patch('shuffify.spotify.api.time.sleep'):
             with pytest.raises(SpotifyAPIError):
                 always_fails()
+
+
+# =============================================================================
+# Caching Integration Tests
+# =============================================================================
+
+@pytest.fixture
+def mock_cache():
+    """Mock SpotifyCache for testing."""
+    cache = Mock(spec=SpotifyCache)
+    cache.get_user.return_value = None
+    cache.get_playlists.return_value = None
+    cache.get_playlist.return_value = None
+    cache.get_playlist_tracks.return_value = None
+    cache.get_audio_features.return_value = {}
+    cache.set_user.return_value = True
+    cache.set_playlists.return_value = True
+    cache.set_playlist.return_value = True
+    cache.set_playlist_tracks.return_value = True
+    cache.set_audio_features.return_value = True
+    cache.invalidate_playlist.return_value = True
+    cache.invalidate_user_playlists.return_value = True
+    return cache
+
+
+class TestSpotifyAPICaching:
+    """Tests for SpotifyAPI caching integration."""
+
+    def test_init_with_cache(self, valid_token_info, auth_manager, mock_cache):
+        """Should initialize with cache enabled."""
+        with patch('shuffify.spotify.api.spotipy.Spotify'):
+            api = SpotifyAPI(valid_token_info, auth_manager, cache=mock_cache)
+
+            assert api._cache is mock_cache
+            assert api.cache is mock_cache
+
+    def test_get_user_playlists_uses_cache(self, valid_token_info, auth_manager, mock_cache, sample_playlists):
+        """Should return cached playlists when available."""
+        mock_cache.get_playlists.return_value = sample_playlists
+
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_sp.current_user.return_value = {'id': 'user123'}
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager, cache=mock_cache)
+            result = api.get_user_playlists()
+
+            assert result == sample_playlists
+            mock_sp.current_user_playlists.assert_not_called()  # Cache hit, no API call
+
+    def test_get_user_playlists_caches_result(self, valid_token_info, auth_manager, mock_cache, sample_playlists, sample_user):
+        """Should cache playlists on API fetch."""
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_sp.current_user.return_value = sample_user
+            mock_sp.current_user_playlists.return_value = {
+                'items': sample_playlists,
+                'next': None
+            }
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager, cache=mock_cache)
+            api.get_user_playlists()
+
+            mock_cache.set_playlists.assert_called_once()
+
+    def test_get_user_playlists_skip_cache(self, valid_token_info, auth_manager, mock_cache, sample_playlists, sample_user):
+        """Should skip cache when skip_cache=True."""
+        mock_cache.get_playlists.return_value = sample_playlists  # Cache has data
+
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_sp.current_user.return_value = sample_user
+            mock_sp.current_user_playlists.return_value = {
+                'items': sample_playlists,
+                'next': None
+            }
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager, cache=mock_cache)
+            api.get_user_playlists(skip_cache=True)
+
+            # Should call API even though cache has data
+            mock_sp.current_user_playlists.assert_called_once()
+
+    def test_get_playlist_uses_cache(self, valid_token_info, auth_manager, mock_cache):
+        """Should return cached playlist when available."""
+        cached_playlist = {'id': 'pl1', 'name': 'Cached Playlist'}
+        mock_cache.get_playlist.return_value = cached_playlist
+
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager, cache=mock_cache)
+            result = api.get_playlist('pl1')
+
+            assert result == cached_playlist
+            mock_sp.playlist.assert_not_called()
+
+    def test_get_playlist_tracks_uses_cache(self, valid_token_info, auth_manager, mock_cache, sample_tracks):
+        """Should return cached tracks when available."""
+        mock_cache.get_playlist_tracks.return_value = sample_tracks
+
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager, cache=mock_cache)
+            result = api.get_playlist_tracks('pl1')
+
+            assert result == sample_tracks
+            mock_sp.playlist_items.assert_not_called()
+
+    def test_update_playlist_invalidates_cache(self, valid_token_info, auth_manager, mock_cache):
+        """Should invalidate cache after updating playlist."""
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_sp.current_user.return_value = {'id': 'user123'}
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager, cache=mock_cache)
+            # Prime the user_id
+            api._user_id = 'user123'
+            api.update_playlist_tracks('pl1', ['spotify:track:1'])
+
+            mock_cache.invalidate_playlist.assert_called_once_with('pl1')
+            mock_cache.invalidate_user_playlists.assert_called_once_with('user123')
+
+    def test_get_audio_features_uses_cache(self, valid_token_info, auth_manager, mock_cache):
+        """Should use cached audio features when available."""
+        cached_features = {
+            'track1': {'id': 'track1', 'tempo': 120},
+            'track2': {'id': 'track2', 'tempo': 130},
+        }
+        mock_cache.get_audio_features.return_value = cached_features
+
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager, cache=mock_cache)
+            result = api.get_audio_features(['track1', 'track2'])
+
+            assert result == cached_features
+            mock_sp.audio_features.assert_not_called()
+
+    def test_get_audio_features_partial_cache(self, valid_token_info, auth_manager, mock_cache):
+        """Should fetch only uncached audio features."""
+        # track1 is cached, track2 is not
+        cached_features = {'track1': {'id': 'track1', 'tempo': 120}}
+        mock_cache.get_audio_features.return_value = cached_features
+
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_sp.audio_features.return_value = [{'id': 'track2', 'tempo': 130}]
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager, cache=mock_cache)
+            result = api.get_audio_features(['track1', 'track2'])
+
+            # Should only fetch track2
+            mock_sp.audio_features.assert_called_once_with(['track2'])
+            assert 'track1' in result
+            assert 'track2' in result
+
+    def test_get_audio_features_caches_fetched(self, valid_token_info, auth_manager, mock_cache):
+        """Should cache newly fetched audio features."""
+        mock_cache.get_audio_features.return_value = {}  # Nothing cached
+
+        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify_class:
+            mock_sp = Mock()
+            mock_sp.audio_features.return_value = [
+                {'id': 'track1', 'tempo': 120},
+                {'id': 'track2', 'tempo': 130},
+            ]
+            mock_spotify_class.return_value = mock_sp
+
+            api = SpotifyAPI(valid_token_info, auth_manager, cache=mock_cache)
+            api.get_audio_features(['track1', 'track2'])
+
+            mock_cache.set_audio_features.assert_called_once()
+            cached_data = mock_cache.set_audio_features.call_args[0][0]
+            assert 'track1' in cached_data
+            assert 'track2' in cached_data
