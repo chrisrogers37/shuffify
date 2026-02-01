@@ -53,7 +53,8 @@ flask routes
 - **API**: Spotify Web API (via spotipy library)
 - **Server**: Gunicorn (production), Flask dev server (local)
 - **Containerization**: Docker with health checks
-- **Session Management**: Flask-Session 0.8.x (filesystem-based, planned migration to Redis)
+- **Session Management**: Flask-Session 0.8.x (Redis-based, filesystem fallback)
+- **Caching**: Redis for Spotify API response caching
 - **Validation**: Pydantic v2 for request validation
 
 ## Architecture at a Glance
@@ -81,6 +82,7 @@ flask routes
 │  Business Logic & Data Layer            │
 │  • shuffle_algorithms/ - Algorithms    │
 │  • spotify/           - API client      │
+│  • spotify/cache.py   - Redis caching   │
 │  • models/            - Data models     │
 └─────────────────┬───────────────────────┘
                   │
@@ -88,6 +90,7 @@ flask routes
 │  External Services                      │
 │  • Spotify Web API                      │
 │  • OAuth 2.0 Provider                   │
+│  • Redis (sessions + caching)           │
 └─────────────────────────────────────────┘
 ```
 
@@ -190,6 +193,13 @@ All algorithms inherit from `ShuffleAlgorithm` base class and implement the `shu
 
 ## Session Management & State
 
+### Redis-Based Sessions
+
+The application uses Redis for session storage with automatic filesystem fallback:
+- **Primary**: Redis (configured via `REDIS_URL` environment variable)
+- **Fallback**: Filesystem sessions in `.flask_session/` if Redis unavailable
+- Session keys prefixed with `shuffify:session:` for namespacing
+
 ### Undo System
 
 The application maintains a **session-based undo stack**:
@@ -199,12 +209,30 @@ The application maintains a **session-based undo stack**:
 
 **Implementation**: `session['undo_stack']` in Flask session
 
+### API Response Caching
+
+Spotify API responses are cached in Redis for improved performance:
+- **Playlists**: 60 second TTL (changes frequently)
+- **User profile**: 10 minute TTL
+- **Audio features**: 24 hour TTL (rarely change)
+- Cache automatically invalidated after playlist modifications
+
+**Usage**:
+```python
+from shuffify import get_spotify_cache
+from shuffify.spotify import SpotifyAPI
+
+cache = get_spotify_cache()  # Returns None if Redis unavailable
+api = SpotifyAPI(token_info, auth_manager, cache=cache)
+playlists = api.get_user_playlists()  # Uses cache if available
+```
+
 ### Security Considerations
 
-- **OAuth Tokens**: Stored in Flask session, never exposed to client
-- **Session Directory**: `.flask_session/` (gitignored)
+- **OAuth Tokens**: Stored in Flask session (Redis), never exposed to client
+- **Session Fallback**: Filesystem sessions in `.flask_session/` (gitignored)
 - **CSRF Protection**: Handled by Flask session cookies
-- **No Database**: Stateless design, all state in session
+- **Redis Security**: Use `REDIS_URL` with authentication in production
 
 ---
 
@@ -393,11 +421,19 @@ SPOTIFY_REDIRECT_URI=http://localhost:5000/callback
 FLASK_ENV=development  # or production (used for config selection)
 SECRET_KEY=your-secret-key-here
 
+# Redis (recommended for production)
+REDIS_URL=redis://localhost:6379/0  # Falls back to filesystem if unavailable
+
 # Optional
 PORT=5000
 ```
 
 **Validation**: The application validates required environment variables on startup and fails fast in production.
+
+**Redis Notes**:
+- `REDIS_URL` format: `redis://[[username]:[password]@]host[:port][/database]`
+- In production, use authentication: `redis://:password@host:6379/0`
+- If Redis is unavailable, app automatically falls back to filesystem sessions
 
 ### Configuration Files
 
@@ -616,18 +652,22 @@ if session.get('undo_stack'):
 
 ### Short-term (v2.4.x)
 - Refresh playlists button without losing undo state
-- Unit tests for all shuffle algorithms
 - Integration tests for OAuth flow
 
 ### Medium-term (v2.5.x)
-- Flask 3.x upgrade (breaking changes assessment needed)
-- Redis session storage (more scalable than filesystem)
-- Caching layer for Spotify API responses
+- CI/CD pipeline for automated testing and deployment
+- Lightweight database for user preferences
 
 ### Long-term (v3.0.0+)
-- Lightweight database for user preferences
 - Analytics dashboard
 - Algorithm performance comparison
+- A/B testing framework
+
+### Completed
+- ~~Flask 3.x upgrade~~ (v3.1.x - completed)
+- ~~Redis session storage~~ (completed)
+- ~~Caching layer for Spotify API responses~~ (completed)
+- ~~Unit tests for all shuffle algorithms~~ (99 tests - completed)
 - A/B testing framework
 
 ---
@@ -649,12 +689,14 @@ if session.get('undo_stack'):
 
 | File | Contains |
 |------|----------|
-| `shuffify/__init__.py` | Flask app factory, configuration loading |
+| `shuffify/__init__.py` | Flask app factory, Redis initialization, configuration loading |
 | `shuffify/routes.py` | All HTTP routes and view logic |
-| `shuffify/spotify/client.py` | Spotify API wrapper |
+| `shuffify/spotify/client.py` | Spotify API wrapper (facade) |
+| `shuffify/spotify/api.py` | Spotify Web API data operations with caching support |
+| `shuffify/spotify/cache.py` | Redis caching layer for Spotify API responses |
 | `shuffify/shuffle_algorithms/registry.py` | Algorithm registration system |
 | `shuffify/models/playlist.py` | Playlist data model |
-| `config.py` | Configuration classes (dev, prod) |
+| `config.py` | Configuration classes (dev, prod) with Redis settings |
 | `run.py` | Application entry point |
 
 ---
