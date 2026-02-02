@@ -12,14 +12,11 @@ for better separation of concerns.
 import logging
 from typing import Dict, List, Any, Optional, TYPE_CHECKING
 
-from .auth import SpotifyAuthManager, TokenInfo, DEFAULT_SCOPES
+from .auth import SpotifyAuthManager, TokenInfo
 from .api import SpotifyAPI
 from .credentials import SpotifyCredentials
 from .exceptions import (
-    SpotifyError,
-    SpotifyAuthError,
     SpotifyTokenError,
-    SpotifyTokenExpiredError,
     SpotifyAPIError,
 )
 
@@ -57,7 +54,7 @@ class SpotifyClient:
         self,
         token: Optional[Dict[str, Any]] = None,
         credentials: Optional[Dict[str, str]] = None,
-        cache: Optional['SpotifyCache'] = None
+        cache: Optional["SpotifyCache"] = None,
     ):
         """
         Initialize the Spotify client.
@@ -83,8 +80,7 @@ class SpotifyClient:
             self._initialize_with_token(token)
 
     def _resolve_credentials(
-        self,
-        credentials: Optional[Dict[str, str]]
+        self, credentials: Optional[Dict[str, str]]
     ) -> SpotifyCredentials:
         """
         Resolve credentials from explicit dict or Flask config.
@@ -97,14 +93,15 @@ class SpotifyClient:
         """
         if credentials:
             return SpotifyCredentials(
-                client_id=credentials['client_id'],
-                client_secret=credentials['client_secret'],
-                redirect_uri=credentials['redirect_uri']
+                client_id=credentials["client_id"],
+                client_secret=credentials["client_secret"],
+                redirect_uri=credentials["redirect_uri"],
             )
 
         # Fall back to Flask config (for backward compatibility)
         try:
             from flask import current_app
+
             return SpotifyCredentials.from_flask_config(current_app.config)
         except RuntimeError:
             # Not in Flask context - try environment
@@ -131,9 +128,12 @@ class SpotifyClient:
                 self._token_info,
                 self._auth_manager,
                 auto_refresh=True,
-                cache=self._cache
+                cache=self._cache,
             )
-            logger.info("SpotifyClient initialized with valid token%s", " (with cache)" if self._cache else "")
+            logger.info(
+                "SpotifyClient initialized with valid token%s",
+                " (with cache)" if self._cache else "",
+            )
 
         except SpotifyTokenError as e:
             logger.error(f"Token validation failed: {e}")
@@ -259,11 +259,7 @@ class SpotifyClient:
         self._ensure_authenticated()
         return self._api.get_playlist_tracks(playlist_id)
 
-    def update_playlist_tracks(
-        self,
-        playlist_id: str,
-        track_uris: List[str]
-    ) -> bool:
+    def update_playlist_tracks(self, playlist_id: str, track_uris: List[str]) -> bool:
         """
         Update a playlist with new track order.
 
@@ -289,8 +285,7 @@ class SpotifyClient:
     # =========================================================================
 
     def get_track_audio_features(
-        self,
-        track_ids: List[str]
+        self, track_ids: List[str]
     ) -> Dict[str, Dict[str, Any]]:
         """
         Get audio features for tracks.

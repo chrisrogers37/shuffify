@@ -56,35 +56,29 @@ from shuffify.services.state_service import (
     PLAYLIST_STATES_KEY,
 )
 
-
 __all__ = [
     # Services
-    'AuthService',
-    'PlaylistService',
-    'ShuffleService',
-    'StateService',
-
+    "AuthService",
+    "PlaylistService",
+    "ShuffleService",
+    "StateService",
     # Auth Exceptions
-    'AuthenticationError',
-    'TokenValidationError',
-
+    "AuthenticationError",
+    "TokenValidationError",
     # Playlist Exceptions
-    'PlaylistError',
-    'PlaylistNotFoundError',
-    'PlaylistUpdateError',
-
+    "PlaylistError",
+    "PlaylistNotFoundError",
+    "PlaylistUpdateError",
     # Shuffle Exceptions
-    'ShuffleError',
-    'InvalidAlgorithmError',
-    'ParameterValidationError',
-    'ShuffleExecutionError',
-
+    "ShuffleError",
+    "InvalidAlgorithmError",
+    "ParameterValidationError",
+    "ShuffleExecutionError",
     # State Exceptions
-    'StateError',
-    'NoHistoryError',
-    'AlreadyAtOriginalError',
-
+    "StateError",
+    "NoHistoryError",
+    "AlreadyAtOriginalError",
     # State Types
-    'PlaylistState',
-    'PLAYLIST_STATES_KEY',
+    "PlaylistState",
+    "PLAYLIST_STATES_KEY",
 ]

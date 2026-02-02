@@ -12,43 +12,43 @@ from dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 # Session key for storing playlist states
-PLAYLIST_STATES_KEY = 'playlist_states'
+PLAYLIST_STATES_KEY = "playlist_states"
 
 
 @dataclass
 class PlaylistState:
     """Represents the state history for a single playlist."""
+
     states: List[List[str]]  # List of URI lists (each list is a state)
     current_index: int  # Index pointing to the current state
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for session storage."""
-        return {
-            'states': self.states,
-            'current_index': self.current_index
-        }
+        return {"states": self.states, "current_index": self.current_index}
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'PlaylistState':
+    def from_dict(cls, data: Dict[str, Any]) -> "PlaylistState":
         """Create from dictionary (from session)."""
         return cls(
-            states=data.get('states', []),
-            current_index=data.get('current_index', 0)
+            states=data.get("states", []), current_index=data.get("current_index", 0)
         )
 
 
 class StateError(Exception):
     """Base exception for state operations."""
+
     pass
 
 
 class NoHistoryError(StateError):
     """Raised when there's no history to restore."""
+
     pass
 
 
 class AlreadyAtOriginalError(StateError):
     """Raised when already at the original state."""
+
     pass
 
 
@@ -84,8 +84,7 @@ class StateService:
 
     @staticmethod
     def get_playlist_state(
-        session: Dict[str, Any],
-        playlist_id: str
+        session: Dict[str, Any], playlist_id: str
     ) -> Optional[PlaylistState]:
         """
         Get the state history for a playlist.
@@ -107,8 +106,7 @@ class StateService:
 
     @staticmethod
     def get_current_uris(
-        session: Dict[str, Any],
-        playlist_id: str
+        session: Dict[str, Any], playlist_id: str
     ) -> Optional[List[str]]:
         """
         Get the current track URIs for a playlist from state history.
@@ -127,9 +125,7 @@ class StateService:
 
     @staticmethod
     def initialize_playlist_state(
-        session: Dict[str, Any],
-        playlist_id: str,
-        initial_uris: List[str]
+        session: Dict[str, Any], playlist_id: str, initial_uris: List[str]
     ) -> PlaylistState:
         """
         Initialize state history for a playlist with its original order.
@@ -144,22 +140,19 @@ class StateService:
         """
         StateService.initialize_session(session)
 
-        state = PlaylistState(
-            states=[initial_uris],
-            current_index=0
-        )
+        state = PlaylistState(states=[initial_uris], current_index=0)
 
         session[PLAYLIST_STATES_KEY][playlist_id] = state.to_dict()
         session.modified = True
 
-        logger.info(f"Initialized state for playlist {playlist_id} with {len(initial_uris)} tracks")
+        logger.info(
+            f"Initialized state for playlist {playlist_id} with {len(initial_uris)} tracks"
+        )
         return state
 
     @staticmethod
     def record_new_state(
-        session: Dict[str, Any],
-        playlist_id: str,
-        new_uris: List[str]
+        session: Dict[str, Any], playlist_id: str, new_uris: List[str]
     ) -> PlaylistState:
         """
         Record a new state after a shuffle operation.
@@ -183,7 +176,7 @@ class StateService:
             raise StateError(f"No existing state for playlist {playlist_id}")
 
         # Truncate any future states (from previous undos)
-        state.states = state.states[:state.current_index + 1]
+        state.states = state.states[: state.current_index + 1]
 
         # Add the new state
         state.states.append(new_uris)
@@ -193,7 +186,9 @@ class StateService:
         session[PLAYLIST_STATES_KEY][playlist_id] = state.to_dict()
         session.modified = True
 
-        logger.info(f"Recorded new state for playlist {playlist_id}, index now at {state.current_index}")
+        logger.info(
+            f"Recorded new state for playlist {playlist_id}, index now at {state.current_index}"
+        )
         return state
 
     @staticmethod
@@ -235,7 +230,9 @@ class StateService:
             raise NoHistoryError(f"No state history for playlist {playlist_id}")
 
         if state.current_index <= 0:
-            raise AlreadyAtOriginalError(f"Already at original state for playlist {playlist_id}")
+            raise AlreadyAtOriginalError(
+                f"Already at original state for playlist {playlist_id}"
+            )
 
         # Move to previous state
         state.current_index -= 1
@@ -245,7 +242,9 @@ class StateService:
         session[PLAYLIST_STATES_KEY][playlist_id] = state.to_dict()
         session.modified = True
 
-        logger.info(f"Undo for playlist {playlist_id}, index now at {state.current_index}")
+        logger.info(
+            f"Undo for playlist {playlist_id}, index now at {state.current_index}"
+        )
         return previous_uris
 
     @staticmethod
@@ -270,8 +269,7 @@ class StateService:
 
     @staticmethod
     def get_state_info(
-        session: Dict[str, Any],
-        playlist_id: str
+        session: Dict[str, Any], playlist_id: str
     ) -> Optional[Dict[str, Any]]:
         """
         Get state information for a playlist (for API responses).
@@ -290,9 +288,7 @@ class StateService:
 
     @staticmethod
     def ensure_playlist_initialized(
-        session: Dict[str, Any],
-        playlist_id: str,
-        current_uris: List[str]
+        session: Dict[str, Any], playlist_id: str, current_uris: List[str]
     ) -> PlaylistState:
         """
         Ensure a playlist has state initialized, creating it if needed.
@@ -308,7 +304,11 @@ class StateService:
         state = StateService.get_playlist_state(session, playlist_id)
 
         if state is None:
-            logger.info(f"First interaction with playlist {playlist_id}, storing original state")
-            state = StateService.initialize_playlist_state(session, playlist_id, current_uris)
+            logger.info(
+                f"First interaction with playlist {playlist_id}, storing original state"
+            )
+            state = StateService.initialize_playlist_state(
+                session, playlist_id, current_uris
+            )
 
         return state

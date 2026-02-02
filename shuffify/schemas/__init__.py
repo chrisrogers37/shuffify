@@ -19,15 +19,15 @@ from .requests import (
 
 __all__ = [
     # Exceptions
-    'ValidationError',
+    "ValidationError",
     # Request schemas
-    'ShuffleRequest',
-    'ShuffleRequestBase',
-    'BasicShuffleParams',
-    'BalancedShuffleParams',
-    'StratifiedShuffleParams',
-    'PercentageShuffleParams',
-    'PlaylistQueryParams',
+    "ShuffleRequest",
+    "ShuffleRequestBase",
+    "BasicShuffleParams",
+    "BalancedShuffleParams",
+    "StratifiedShuffleParams",
+    "PercentageShuffleParams",
+    "PlaylistQueryParams",
     # Utility functions
-    'parse_shuffle_request',
+    "parse_shuffle_request",
 ]

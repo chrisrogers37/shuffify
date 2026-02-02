@@ -6,7 +6,7 @@ Uses Pydantic schemas for type-safe parameter validation.
 """
 
 import logging
-from typing import Dict, List, Any, Optional, Type
+from typing import Dict, List, Any, Optional
 
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 from shuffify.spotify.client import SpotifyClient
@@ -16,21 +16,25 @@ logger = logging.getLogger(__name__)
 
 class ShuffleError(Exception):
     """Base exception for shuffle operations."""
+
     pass
 
 
 class InvalidAlgorithmError(ShuffleError):
     """Raised when an invalid algorithm is requested."""
+
     pass
 
 
 class ParameterValidationError(ShuffleError):
     """Raised when algorithm parameters are invalid."""
+
     pass
 
 
 class ShuffleExecutionError(ShuffleError):
     """Raised when shuffle execution fails."""
+
     pass
 
 
@@ -39,10 +43,10 @@ class ShuffleService:
 
     # Valid algorithm names for quick validation
     VALID_ALGORITHMS = {
-        'BasicShuffle',
-        'BalancedShuffle',
-        'StratifiedShuffle',
-        'PercentageShuffle'
+        "BasicShuffle",
+        "BalancedShuffle",
+        "StratifiedShuffle",
+        "PercentageShuffle",
     }
 
     @staticmethod
@@ -79,7 +83,7 @@ class ShuffleService:
         try:
             algorithm_class = ShuffleRegistry.get_algorithm(name)
             return algorithm_class()
-        except ValueError as e:
+        except ValueError:
             logger.error(f"Failed to get algorithm: {name}")
             raise InvalidAlgorithmError(f"Unknown algorithm: {name}")
 
@@ -88,7 +92,7 @@ class ShuffleService:
         algorithm_name: str,
         tracks: List[Dict[str, Any]],
         params: Optional[Dict[str, Any]] = None,
-        spotify_client: Optional[SpotifyClient] = None
+        spotify_client: Optional[SpotifyClient] = None,
     ) -> List[str]:
         """
         Execute a shuffle algorithm on a list of tracks.
@@ -113,7 +117,7 @@ class ShuffleService:
 
             # Some algorithms accept a Spotify client for additional features
             if spotify_client:
-                params['sp'] = spotify_client
+                params["sp"] = spotify_client
 
             shuffled_uris = algorithm.shuffle(tracks, **params)
 
@@ -128,8 +132,7 @@ class ShuffleService:
 
     @staticmethod
     def shuffle_changed_order(
-        original_uris: List[str],
-        shuffled_uris: List[str]
+        original_uris: List[str], shuffled_uris: List[str]
     ) -> bool:
         """
         Check if the shuffle actually changed the track order.
@@ -147,8 +150,7 @@ class ShuffleService:
 
     @staticmethod
     def prepare_tracks_for_shuffle(
-        tracks: List[Dict[str, Any]],
-        current_uris: List[str]
+        tracks: List[Dict[str, Any]], current_uris: List[str]
     ) -> List[Dict[str, Any]]:
         """
         Prepare tracks for shuffling by ordering them according to current URIs.
@@ -163,5 +165,5 @@ class ShuffleService:
         Returns:
             List of track dictionaries ordered according to current_uris.
         """
-        uri_to_track = {t['uri']: t for t in tracks}
+        uri_to_track = {t["uri"]: t for t in tracks}
         return [uri_to_track[uri] for uri in current_uris if uri in uri_to_track]

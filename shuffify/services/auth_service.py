@@ -14,11 +14,13 @@ logger = logging.getLogger(__name__)
 
 class AuthenticationError(Exception):
     """Raised when authentication fails."""
+
     pass
 
 
 class TokenValidationError(AuthenticationError):
     """Raised when token validation fails."""
+
     pass
 
 
@@ -89,9 +91,11 @@ class AuthService:
             TokenValidationError: If token structure is invalid.
         """
         if not isinstance(token_data, dict):
-            raise TokenValidationError(f"Token data is not a dictionary: {type(token_data)}")
+            raise TokenValidationError(
+                f"Token data is not a dictionary: {type(token_data)}"
+            )
 
-        required_keys = ['access_token', 'token_type']
+        required_keys = ["access_token", "token_type"]
         missing_keys = [key for key in required_keys if key not in token_data]
 
         if missing_keys:
@@ -158,7 +162,9 @@ class AuthService:
             raise AuthenticationError(f"Failed to fetch user profile: {e}")
 
     @staticmethod
-    def authenticate_and_get_user(token: Dict[str, Any]) -> Tuple[SpotifyClient, Dict[str, Any]]:
+    def authenticate_and_get_user(
+        token: Dict[str, Any],
+    ) -> Tuple[SpotifyClient, Dict[str, Any]]:
         """
         Authenticate with a token and retrieve user data in one operation.
 

@@ -41,6 +41,60 @@ flask routes
 
 ---
 
+## Pre-Push Checklist (REQUIRED)
+
+**CRITICAL**: Before pushing ANY code to `main`, you MUST run these checks locally and ensure they pass. CI/CD will fail if these are not passing.
+
+### Required Checks
+
+```bash
+# 1. Backend Lint (REQUIRED - CI will fail without this)
+flake8 shuffify/
+# Must have 0 errors. Fix any issues before pushing.
+
+# 2. Backend Tests (REQUIRED)
+pytest tests/ -v
+# All tests must pass.
+
+# 3. Code Formatting Check (Recommended)
+black --check shuffify/
+# Run `black shuffify/` to auto-fix formatting issues.
+```
+
+### CI/CD Pipeline
+
+The following checks run automatically on push to `main`:
+
+| Check | Command | Must Pass |
+|-------|---------|-----------|
+| **Backend Lint** | `flake8 shuffify/` | ✅ Yes |
+| **Backend Tests** | `pytest tests/ -v` | ✅ Yes |
+| **Frontend Lint** | (Tailwind/JS checks) | ✅ Yes |
+| **Frontend E2E Tests** | (Template rendering) | ✅ Yes |
+| **Security Checks** | GitGuardian | ✅ Yes |
+
+### Quick Pre-Push Command
+
+Run this before every push:
+```bash
+flake8 shuffify/ && pytest tests/ -v && echo "✅ Ready to push!"
+```
+
+### Common Lint Fixes
+
+```bash
+# Auto-fix formatting
+black shuffify/
+
+# Remove unused imports (manual review needed)
+# Look for F401 errors in flake8 output
+
+# Fix line length (E501) - break long lines or use:
+# flake8 --max-line-length=100 shuffify/  (if project allows)
+```
+
+---
+
 ## Project Overview
 
 **Shuffify** is a web application that provides advanced playlist reordering controls for Spotify users.
@@ -682,6 +736,7 @@ if session.get('undo_stack'):
 - Don't create templates without extending `base.html`
 - Don't deploy to production without explicit approval
 - Don't modify `CHANGELOG.md` version numbers (only add to Unreleased)
+- **Don't push to `main` without running `flake8 shuffify/` and `pytest tests/ -v` first**
 
 ---
 

@@ -5,7 +5,7 @@ Handles playlist retrieval, track management, and playlist updates.
 """
 
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 
 from shuffify.spotify.client import SpotifyClient
 from shuffify.models.playlist import Playlist
@@ -15,16 +15,19 @@ logger = logging.getLogger(__name__)
 
 class PlaylistError(Exception):
     """Base exception for playlist operations."""
+
     pass
 
 
 class PlaylistNotFoundError(PlaylistError):
     """Raised when a playlist cannot be found."""
+
     pass
 
 
 class PlaylistUpdateError(PlaylistError):
     """Raised when a playlist update fails."""
+
     pass
 
 
@@ -59,9 +62,7 @@ class PlaylistService:
             raise PlaylistError(f"Failed to fetch playlists: {e}")
 
     def get_playlist(
-        self,
-        playlist_id: str,
-        include_features: bool = False
+        self, playlist_id: str, include_features: bool = False
     ) -> Playlist:
         """
         Fetch a single playlist with its tracks.
@@ -82,13 +83,13 @@ class PlaylistService:
 
         try:
             playlist = Playlist.from_spotify(
-                self._client,
-                playlist_id,
-                include_features=include_features
+                self._client, playlist_id, include_features=include_features
             )
-            logger.debug(f"Retrieved playlist '{playlist.name}' with {len(playlist)} tracks")
+            logger.debug(
+                f"Retrieved playlist '{playlist.name}' with {len(playlist)} tracks"
+            )
             return playlist
-        except ValueError as e:
+        except ValueError:
             logger.error(f"Invalid playlist ID: {playlist_id}")
             raise PlaylistNotFoundError(f"Playlist not found: {playlist_id}")
         except Exception as e:
@@ -114,11 +115,7 @@ class PlaylistService:
         logger.debug(f"Computed stats for playlist {playlist_id}")
         return stats
 
-    def update_playlist_tracks(
-        self,
-        playlist_id: str,
-        track_uris: List[str]
-    ) -> bool:
+    def update_playlist_tracks(self, playlist_id: str, track_uris: List[str]) -> bool:
         """
         Update a playlist with a new track order.
 
@@ -136,12 +133,16 @@ class PlaylistService:
             raise PlaylistUpdateError("Playlist ID is required")
 
         if not track_uris:
-            logger.warning(f"Attempting to update playlist {playlist_id} with empty track list")
+            logger.warning(
+                f"Attempting to update playlist {playlist_id} with empty track list"
+            )
 
         try:
             success = self._client.update_playlist_tracks(playlist_id, track_uris)
             if success:
-                logger.info(f"Updated playlist {playlist_id} with {len(track_uris)} tracks")
+                logger.info(
+                    f"Updated playlist {playlist_id} with {len(track_uris)} tracks"
+                )
                 return True
             else:
                 raise PlaylistUpdateError("Spotify API returned failure")

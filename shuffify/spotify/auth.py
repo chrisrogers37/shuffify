@@ -58,7 +58,7 @@ class TokenInfo:
     _raw: Dict[str, Any] = field(default_factory=dict, repr=False)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'TokenInfo':
+    def from_dict(cls, data: Dict[str, Any]) -> "TokenInfo":
         """
         Create TokenInfo from a dictionary.
 
@@ -72,42 +72,44 @@ class TokenInfo:
             SpotifyTokenError: If required fields are missing.
         """
         if not isinstance(data, dict):
-            raise SpotifyTokenError(f"Token data must be a dictionary, got {type(data)}")
+            raise SpotifyTokenError(
+                f"Token data must be a dictionary, got {type(data)}"
+            )
 
-        required = ['access_token', 'token_type']
+        required = ["access_token", "token_type"]
         missing = [k for k in required if k not in data]
         if missing:
             raise SpotifyTokenError(f"Token missing required fields: {missing}")
 
         # Handle expires_at - compute if not present
-        expires_at = data.get('expires_at')
+        expires_at = data.get("expires_at")
         if expires_at is None:
-            expires_in = data.get('expires_in', 3600)
+            expires_in = data.get("expires_in", 3600)
             expires_at = time.time() + expires_in
 
         return cls(
-            access_token=data['access_token'],
-            token_type=data['token_type'],
+            access_token=data["access_token"],
+            token_type=data["token_type"],
             expires_at=expires_at,
-            refresh_token=data.get('refresh_token'),
-            scope=data.get('scope'),
-            expires_in=data.get('expires_in'),
-            _raw=data.copy()
+            refresh_token=data.get("refresh_token"),
+            scope=data.get("scope"),
+            expires_in=data.get("expires_in"),
+            _raw=data.copy(),
         )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for storage/transmission."""
         result = {
-            'access_token': self.access_token,
-            'token_type': self.token_type,
-            'expires_at': self.expires_at,
+            "access_token": self.access_token,
+            "token_type": self.token_type,
+            "expires_at": self.expires_at,
         }
         if self.refresh_token:
-            result['refresh_token'] = self.refresh_token
+            result["refresh_token"] = self.refresh_token
         if self.scope:
-            result['scope'] = self.scope
+            result["scope"] = self.scope
         if self.expires_in:
-            result['expires_in'] = self.expires_in
+            result["expires_in"] = self.expires_in
         return result
 
     @property
@@ -159,11 +161,7 @@ class SpotifyAuthManager:
             token_info = auth_manager.refresh_token(token_info)
     """
 
-    def __init__(
-        self,
-        credentials: SpotifyCredentials,
-        scopes: Optional[list] = None
-    ):
+    def __init__(self, credentials: SpotifyCredentials, scopes: Optional[list] = None):
         """
         Initialize the auth manager.
 
@@ -188,7 +186,7 @@ class SpotifyAuthManager:
             redirect_uri=self._credentials.redirect_uri,
             scope=self._scope_string,
             open_browser=False,
-            cache_handler=None  # We manage our own token storage
+            cache_handler=None,  # We manage our own token storage
         )
 
     def get_auth_url(self, state: Optional[str] = None) -> str:
@@ -232,11 +230,7 @@ class SpotifyAuthManager:
 
         try:
             oauth = self._create_oauth()
-            token_data = oauth.get_access_token(
-                code,
-                as_dict=True,
-                check_cache=False
-            )
+            token_data = oauth.get_access_token(code, as_dict=True, check_cache=False)
 
             if not token_data:
                 raise SpotifyTokenError("No token returned from Spotify")
