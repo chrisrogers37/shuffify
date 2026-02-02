@@ -6,7 +6,6 @@ eliminating hidden Flask dependencies.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -48,7 +47,7 @@ class SpotifyCredentials:
             raise ValueError("redirect_uri is required")
 
     @classmethod
-    def from_flask_config(cls, config: dict) -> 'SpotifyCredentials':
+    def from_flask_config(cls, config: dict) -> "SpotifyCredentials":
         """
         Create credentials from Flask app config.
 
@@ -62,13 +61,13 @@ class SpotifyCredentials:
             ValueError: If required config keys are missing.
         """
         return cls(
-            client_id=config.get('SPOTIFY_CLIENT_ID', ''),
-            client_secret=config.get('SPOTIFY_CLIENT_SECRET', ''),
-            redirect_uri=config.get('SPOTIFY_REDIRECT_URI', '')
+            client_id=config.get("SPOTIFY_CLIENT_ID", ""),
+            client_secret=config.get("SPOTIFY_CLIENT_SECRET", ""),
+            redirect_uri=config.get("SPOTIFY_REDIRECT_URI", ""),
         )
 
     @classmethod
-    def from_env(cls) -> 'SpotifyCredentials':
+    def from_env(cls) -> "SpotifyCredentials":
         """
         Create credentials from environment variables.
 
@@ -79,16 +78,17 @@ class SpotifyCredentials:
             ValueError: If required environment variables are missing.
         """
         import os
+
         return cls(
-            client_id=os.getenv('SPOTIFY_CLIENT_ID', ''),
-            client_secret=os.getenv('SPOTIFY_CLIENT_SECRET', ''),
-            redirect_uri=os.getenv('SPOTIFY_REDIRECT_URI', '')
+            client_id=os.getenv("SPOTIFY_CLIENT_ID", ""),
+            client_secret=os.getenv("SPOTIFY_CLIENT_SECRET", ""),
+            redirect_uri=os.getenv("SPOTIFY_REDIRECT_URI", ""),
         )
 
     def to_dict(self) -> dict:
         """Convert to dictionary for legacy compatibility."""
         return {
-            'client_id': self.client_id,
-            'client_secret': self.client_secret,
-            'redirect_uri': self.redirect_uri
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "redirect_uri": self.redirect_uri,
         }

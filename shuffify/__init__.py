@@ -64,11 +64,11 @@ def get_spotify_cache():
         config = current_app.config
         return SpotifyCache(
             _redis_client,
-            key_prefix=config.get('CACHE_KEY_PREFIX', 'shuffify:cache:'),
-            default_ttl=config.get('CACHE_DEFAULT_TTL', 300),
-            playlist_ttl=config.get('CACHE_PLAYLIST_TTL', 60),
-            user_ttl=config.get('CACHE_USER_TTL', 600),
-            audio_features_ttl=config.get('CACHE_AUDIO_FEATURES_TTL', 86400),
+            key_prefix=config.get("CACHE_KEY_PREFIX", "shuffify:cache:"),
+            default_ttl=config.get("CACHE_DEFAULT_TTL", 300),
+            playlist_ttl=config.get("CACHE_PLAYLIST_TTL", 60),
+            user_ttl=config.get("CACHE_USER_TTL", 600),
+            audio_features_ttl=config.get("CACHE_AUDIO_FEATURES_TTL", 86400),
         )
     except RuntimeError:
         # Not in Flask context - use defaults
@@ -78,11 +78,11 @@ def get_spotify_cache():
 def create_app(config_name=None):
     """Create and configure the Flask application."""
     if config_name is None:
-        config_name = os.getenv('FLASK_ENV', 'production')
+        config_name = os.getenv("FLASK_ENV", "production")
 
     # Ensure config_name is a string
     if not isinstance(config_name, str):
-        config_name = 'production'  # Default to production if not a string
+        config_name = "production"  # Default to production if not a string
 
     logger.info("Creating app with config: %s", config_name)
 
@@ -92,10 +92,12 @@ def create_app(config_name=None):
         logger.info("Environment validation passed")
     except ValueError as e:
         logger.error("Environment validation failed: %s", str(e))
-        if config_name == 'production':
+        if config_name == "production":
             raise  # Fail fast in production
         else:
-            logger.warning("Continuing in development mode with missing environment variables")
+            logger.warning(
+                "Continuing in development mode with missing environment variables"
+            )
 
     app = Flask(__name__)
 
@@ -103,53 +105,62 @@ def create_app(config_name=None):
     app.config.from_object(config[config_name])
 
     # Log important config values
-    logger.info("SPOTIFY_REDIRECT_URI: %s", app.config.get('SPOTIFY_REDIRECT_URI'))
-    logger.info("CONFIG_NAME: %s", app.config.get('CONFIG_NAME', config_name))
+    logger.info("SPOTIFY_REDIRECT_URI: %s", app.config.get("SPOTIFY_REDIRECT_URI"))
+    logger.info("CONFIG_NAME: %s", app.config.get("CONFIG_NAME", config_name))
 
     # Configure Redis for session storage and caching
     global _redis_client
-    redis_url = app.config.get('REDIS_URL')
+    redis_url = app.config.get("REDIS_URL")
     if redis_url:
         try:
             redis_client = _create_redis_client(redis_url)
             # Test the connection
             redis_client.ping()
-            app.config['SESSION_REDIS'] = redis_client
+            app.config["SESSION_REDIS"] = redis_client
             _redis_client = redis_client
-            logger.info("Redis session storage configured: %s", redis_url.split('@')[-1])
+            logger.info(
+                "Redis session storage configured: %s", redis_url.split("@")[-1]
+            )
             logger.info("Redis caching enabled")
         except redis.ConnectionError as e:
-            logger.warning("Redis connection failed: %s. Falling back to filesystem sessions.", e)
-            app.config['SESSION_TYPE'] = 'filesystem'
-            app.config['SESSION_FILE_DIR'] = './.flask_session/'
-            os.makedirs(app.config['SESSION_FILE_DIR'], exist_ok=True)
+            logger.warning(
+                "Redis connection failed: %s. Falling back to filesystem sessions.", e
+            )
+            app.config["SESSION_TYPE"] = "filesystem"
+            app.config["SESSION_FILE_DIR"] = "./.flask_session/"
+            os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)
             _redis_client = None
     else:
         logger.warning("REDIS_URL not configured. Using filesystem sessions.")
-        app.config['SESSION_TYPE'] = 'filesystem'
-        app.config['SESSION_FILE_DIR'] = './.flask_session/'
-        os.makedirs(app.config['SESSION_FILE_DIR'], exist_ok=True)
+        app.config["SESSION_TYPE"] = "filesystem"
+        app.config["SESSION_FILE_DIR"] = "./.flask_session/"
+        os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)
         _redis_client = None
 
     # Initialize Flask-Session
     Session(app)
-    
+
     # Register blueprints
     from shuffify.routes import main as main_blueprint
+
     app.register_blueprint(main_blueprint)
 
     # Register global error handlers
     from shuffify.error_handlers import register_error_handlers
+
     register_error_handlers(app)
 
     # Add a `no-cache` header to responses in development mode. This prevents
     # the browser from caching assets and not showing changes.
     if app.debug:
+
         @app.after_request
         def after_request(response):
-            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, public, max-age=0"
+            response.headers["Cache-Control"] = (
+                "no-cache, no-store, must-revalidate, public, max-age=0"
+            )
             response.headers["Expires"] = 0
             response.headers["Pragma"] = "no-cache"
             return response
-    
-    return app 
+
+    return app

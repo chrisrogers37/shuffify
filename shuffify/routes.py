@@ -25,31 +25,34 @@ from shuffify.services import (
     ShuffleService,
     StateService,
     AuthenticationError,
+    PlaylistError,
     PlaylistUpdateError,
 )
 from shuffify.schemas import parse_shuffle_request, PlaylistQueryParams
 
 logger = logging.getLogger(__name__)
-main = Blueprint('main', __name__)
+main = Blueprint("main", __name__)
 
 
 # =============================================================================
 # Template Context Processors
 # =============================================================================
 
+
 @main.context_processor
 def inject_current_year():
     """Make current year available to all templates."""
-    return {'current_year': datetime.now(timezone.utc).year}
+    return {"current_year": datetime.now(timezone.utc).year}
 
 
 # =============================================================================
 # Helper Functions
 # =============================================================================
 
+
 def is_authenticated() -> bool:
     """Check if the user has a valid session token."""
-    return AuthService.validate_session_token(session.get('spotify_token'))
+    return AuthService.validate_session_token(session.get("spotify_token"))
 
 
 def require_auth():
@@ -62,7 +65,7 @@ def require_auth():
     if not is_authenticated():
         return None
     try:
-        return AuthService.get_authenticated_client(session['spotify_token'])
+        return AuthService.get_authenticated_client(session["spotify_token"])
     except AuthenticationError:
         return None
 
@@ -71,34 +74,31 @@ def clear_session_and_show_login(message: str = None):
     """Clear session and return to login page with optional message."""
     session.clear()
     if message:
-        flash(message, 'error')
-    return render_template('index.html')
+        flash(message, "error")
+    return render_template("index.html")
 
 
 def json_error(message: str, status_code: int = 400) -> tuple:
     """Return a JSON error response."""
-    return jsonify({
-        'success': False,
-        'message': message,
-        'category': 'error'
-    }), status_code
+    return (
+        jsonify({"success": False, "message": message, "category": "error"}),
+        status_code,
+    )
 
 
 def json_success(message: str, **extra) -> dict:
     """Return a JSON success response."""
-    return jsonify({
-        'success': True,
-        'message': message,
-        'category': 'success',
-        **extra
-    })
+    return jsonify(
+        {"success": True, "message": message, "category": "success", **extra}
+    )
 
 
 # =============================================================================
 # Public Routes
 # =============================================================================
 
-@main.route('/')
+
+@main.route("/")
 def index():
     """Home page - shows login or dashboard based on auth state."""
     try:
@@ -106,11 +106,11 @@ def index():
 
         if not is_authenticated():
             logger.debug("No valid token, showing login page")
-            session.pop('_flashes', None)
-            return render_template('index.html')
+            session.pop("_flashes", None)
+            return render_template("index.html")
 
         try:
-            client = AuthService.get_authenticated_client(session['spotify_token'])
+            client = AuthService.get_authenticated_client(session["spotify_token"])
             user = AuthService.get_user_data(client)
 
             playlist_service = PlaylistService(client)
@@ -120,58 +120,63 @@ def index():
 
             logger.debug(f"User {user.get('display_name', 'Unknown')} loaded dashboard")
             return render_template(
-                'dashboard.html',
-                playlists=playlists,
-                user=user,
-                algorithms=algorithms
+                "dashboard.html", playlists=playlists, user=user, algorithms=algorithms
             )
 
         except (AuthenticationError, PlaylistError) as e:
             logger.error(f"Error loading dashboard: {e}")
-            return clear_session_and_show_login('Your session has expired. Please log in again.')
+            return clear_session_and_show_login(
+                "Your session has expired. Please log in again."
+            )
 
     except Exception as e:
         logger.error(f"Unexpected error in index route: {e}", exc_info=True)
         return clear_session_and_show_login()
 
 
-@main.route('/terms')
+@main.route("/terms")
 def terms():
     """Terms of Service page."""
-    return send_from_directory('static/public', 'terms.html')
+    return send_from_directory("static/public", "terms.html")
 
 
-@main.route('/privacy')
+@main.route("/privacy")
 def privacy():
     """Privacy Policy page."""
-    return send_from_directory('static/public', 'privacy.html')
+    return send_from_directory("static/public", "privacy.html")
 
 
-@main.route('/health')
+@main.route("/health")
 def health():
     """Health check endpoint for Docker and monitoring."""
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.now(timezone.utc).isoformat()
-    }), 200
+    return (
+        jsonify(
+            {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
+        ),
+        200,
+    )
 
 
 # =============================================================================
 # Authentication Routes
 # =============================================================================
 
-@main.route('/login')
+
+@main.route("/login")
 def login():
     """Initiate Spotify OAuth flow."""
     try:
         # Check for legal consent
-        if not request.args.get('legal_consent'):
-            flash('You must agree to the Terms of Service and Privacy Policy to use Shuffify.', 'error')
-            return redirect(url_for('main.index'))
+        if not request.args.get("legal_consent"):
+            flash(
+                "You must agree to the Terms of Service and Privacy Policy to use Shuffify.",
+                "error",
+            )
+            return redirect(url_for("main.index"))
 
         # Clear any existing session data
-        session.pop('spotify_token', None)
-        session.pop('user_data', None)
+        session.pop("spotify_token", None)
+        session.pop("user_data", None)
         session.modified = True
 
         auth_url = AuthService.get_auth_url()
@@ -181,81 +186,87 @@ def login():
     except AuthenticationError as e:
         logger.error(f"Login error: {e}")
         flash("An error occurred during login. Please try again.", "error")
-        return redirect(url_for('main.index'))
+        return redirect(url_for("main.index"))
 
 
-@main.route('/callback')
+@main.route("/callback")
 def callback():
     """Handle OAuth callback from Spotify."""
     logger.debug(f"Callback received with args: {request.args}")
 
     # Check for OAuth errors
-    error = request.args.get('error')
+    error = request.args.get("error")
     if error:
         logger.error(f"OAuth error: {error}")
-        flash(f'OAuth Error: {request.args.get("error_description", "Unknown error")}', 'error')
-        return redirect(url_for('main.index'))
+        flash(
+            f'OAuth Error: {request.args.get("error_description", "Unknown error")}',
+            "error",
+        )
+        return redirect(url_for("main.index"))
 
     # Get authorization code
-    code = request.args.get('code')
+    code = request.args.get("code")
     if not code:
         logger.error("No authorization code in callback")
-        flash('No authorization code received from Spotify. Please try again.', 'error')
-        return redirect(url_for('main.index'))
+        flash("No authorization code received from Spotify. Please try again.", "error")
+        return redirect(url_for("main.index"))
 
     try:
         # Exchange code for token
         token_data = AuthService.exchange_code_for_token(code)
-        session['spotify_token'] = token_data
+        session["spotify_token"] = token_data
 
         # Validate by fetching user data
         client, user_data = AuthService.authenticate_and_get_user(token_data)
-        session['user_data'] = user_data
+        session["user_data"] = user_data
         session.modified = True
 
-        logger.info(f"User {user_data.get('display_name', 'Unknown')} authenticated successfully")
-        return redirect(url_for('main.index'))
+        logger.info(
+            f"User {user_data.get('display_name', 'Unknown')} authenticated successfully"
+        )
+        return redirect(url_for("main.index"))
 
     except AuthenticationError as e:
         logger.error(f"Authentication failed: {e}")
-        session.pop('spotify_token', None)
-        session.pop('user_data', None)
-        flash('Error connecting to Spotify. Please try again.', 'error')
-        return redirect(url_for('main.index'))
+        session.pop("spotify_token", None)
+        session.pop("user_data", None)
+        flash("Error connecting to Spotify. Please try again.", "error")
+        return redirect(url_for("main.index"))
 
 
-@main.route('/logout')
+@main.route("/logout")
 def logout():
     """Clear session and log out."""
     session.clear()
-    return redirect(url_for('main.index'))
+    return redirect(url_for("main.index"))
 
 
 # =============================================================================
 # Playlist API Routes
 # =============================================================================
 
-@main.route('/playlist/<playlist_id>')
+
+@main.route("/playlist/<playlist_id>")
 def get_playlist(playlist_id):
     """Get playlist data with optional audio features."""
     client = require_auth()
     if not client:
-        return json_error('Please log in first.', 401)
+        return json_error("Please log in first.", 401)
 
     # Validate query parameters
-    query_params = PlaylistQueryParams(features=request.args.get('features', 'false'))
+    query_params = PlaylistQueryParams(features=request.args.get("features", "false"))
 
     playlist_service = PlaylistService(client)
     playlist = playlist_service.get_playlist(playlist_id, query_params.features)
     return jsonify(playlist.to_dict())
 
 
-@main.route('/playlist/<playlist_id>/stats')
+@main.route("/playlist/<playlist_id>/stats")
 def get_playlist_stats(playlist_id):
     """Get playlist audio feature statistics."""
     client = require_auth()
     if not client:
-        return json_error('Please log in first.', 401)
+        return json_error("Please log in first.", 401)
 
     playlist_service = PlaylistService(client)
     stats = playlist_service.get_playlist_stats(playlist_id)
@@ -266,12 +277,13 @@ def get_playlist_stats(playlist_id):
 # Shuffle Routes
 # =============================================================================
 
-@main.route('/shuffle/<playlist_id>', methods=['POST'])
+
+@main.route("/shuffle/<playlist_id>", methods=["POST"])
 def shuffle(playlist_id):
     """Shuffle a playlist using the selected algorithm."""
     client = require_auth()
     if not client:
-        return json_error('Please log in first.', 401)
+        return json_error("Please log in first.", 401)
 
     # Validate request using Pydantic schema (raises ValidationError on failure)
     shuffle_request = parse_shuffle_request(request.form.to_dict())
@@ -288,32 +300,35 @@ def shuffle(playlist_id):
     playlist_service.validate_playlist_has_tracks(playlist)
 
     # Get current track URIs
-    current_uris = [track['uri'] for track in playlist.tracks]
+    current_uris = [track["uri"] for track in playlist.tracks]
 
     # Initialize or get state for this playlist
     StateService.ensure_playlist_initialized(session, playlist_id, current_uris)
 
     # Get URIs from current state (may differ from Spotify if manually reordered)
-    uris_to_shuffle = StateService.get_current_uris(session, playlist_id) or current_uris
+    uris_to_shuffle = (
+        StateService.get_current_uris(session, playlist_id) or current_uris
+    )
 
     # Prepare tracks in the correct order for shuffling
-    tracks_to_shuffle = ShuffleService.prepare_tracks_for_shuffle(playlist.tracks, uris_to_shuffle)
+    tracks_to_shuffle = ShuffleService.prepare_tracks_for_shuffle(
+        playlist.tracks, uris_to_shuffle
+    )
 
     # Execute shuffle
     shuffled_uris = ShuffleService.execute(
-        shuffle_request.algorithm,
-        tracks_to_shuffle,
-        params,
-        spotify_client=client
+        shuffle_request.algorithm, tracks_to_shuffle, params, spotify_client=client
     )
 
     # Check if order actually changed
     if not ShuffleService.shuffle_changed_order(uris_to_shuffle, shuffled_uris):
-        return jsonify({
-            'success': False,
-            'message': 'Shuffle did not change the playlist order.',
-            'category': 'info'
-        })
+        return jsonify(
+            {
+                "success": False,
+                "message": "Shuffle did not change the playlist order.",
+                "category": "info",
+            }
+        )
 
     # Update Spotify
     playlist_service.update_playlist_tracks(playlist_id, shuffled_uris)
@@ -322,23 +337,25 @@ def shuffle(playlist_id):
     updated_state = StateService.record_new_state(session, playlist_id, shuffled_uris)
 
     # Fetch updated playlist for response
-    updated_playlist = playlist_service.get_playlist(playlist_id, include_features=False)
+    updated_playlist = playlist_service.get_playlist(
+        playlist_id, include_features=False
+    )
 
     logger.info(f"Shuffled playlist {playlist_id} with {shuffle_request.algorithm}")
 
     return json_success(
-        f'Playlist shuffled with {algorithm.name}.',
+        f"Playlist shuffled with {algorithm.name}.",
         playlist=updated_playlist.to_dict(),
-        playlist_state=updated_state.to_dict()
+        playlist_state=updated_state.to_dict(),
     )
 
 
-@main.route('/undo/<playlist_id>', methods=['POST'])
+@main.route("/undo/<playlist_id>", methods=["POST"])
 def undo(playlist_id):
     """Undo the last shuffle for a playlist."""
     client = require_auth()
     if not client:
-        return json_error('Please log in first.', 401)
+        return json_error("Please log in first.", 401)
 
     # Get previous state URIs (raises NoHistoryError or AlreadyAtOriginalError)
     restore_uris = StateService.undo(session, playlist_id)
@@ -355,13 +372,15 @@ def undo(playlist_id):
         raise  # Re-raise for global handler
 
     # Fetch restored playlist for response
-    restored_playlist = playlist_service.get_playlist(playlist_id, include_features=False)
+    restored_playlist = playlist_service.get_playlist(
+        playlist_id, include_features=False
+    )
     state_info = StateService.get_state_info(session, playlist_id)
 
     logger.info(f"Successfully restored playlist {playlist_id}")
 
     return json_success(
-        'Playlist restored successfully.',
+        "Playlist restored successfully.",
         playlist=restored_playlist.to_dict(),
-        playlist_state=state_info
+        playlist_state=state_info,
     )

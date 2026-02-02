@@ -17,7 +17,6 @@ from requests.exceptions import RequestException, ConnectionError, Timeout
 import spotipy
 
 from .auth import TokenInfo, SpotifyAuthManager
-from .credentials import SpotifyCredentials
 from .exceptions import (
     SpotifyAPIError,
     SpotifyRateLimitError,
@@ -31,7 +30,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Silence spotipy's verbose logging
-logging.getLogger('spotipy').setLevel(logging.WARNING)
+logging.getLogger("spotipy").setLevel(logging.WARNING)
 
 # Retry configuration
 MAX_RETRIES = 4
@@ -50,7 +49,7 @@ def _calculate_backoff_delay(attempt: int, base_delay: float = BASE_DELAY) -> fl
     Returns:
         Delay in seconds, capped at MAX_DELAY.
     """
-    delay = min(base_delay * (2 ** attempt), MAX_DELAY)
+    delay = min(base_delay * (2**attempt), MAX_DELAY)
     return delay
 
 
@@ -61,6 +60,7 @@ def api_error_handler(func: Callable) -> Callable:
     Catches spotipy exceptions and converts them to our exception types.
     Implements exponential backoff for rate limits and transient errors.
     """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         last_exception = None
@@ -79,7 +79,7 @@ def api_error_handler(func: Callable) -> Callable:
                     raise SpotifyTokenExpiredError(f"Token expired or invalid: {e.msg}")
                 elif e.http_status == 429:
                     # Rate limited - use Retry-After header or calculate backoff
-                    retry_after = e.headers.get('Retry-After', 60) if e.headers else 60
+                    retry_after = e.headers.get("Retry-After", 60) if e.headers else 60
                     if attempt < MAX_RETRIES:
                         delay = max(int(retry_after), _calculate_backoff_delay(attempt))
                         logger.warning(
@@ -90,19 +90,21 @@ def api_error_handler(func: Callable) -> Callable:
                         continue
                     raise SpotifyRateLimitError(
                         f"Rate limited after {MAX_RETRIES + 1} attempts: {e.msg}",
-                        retry_after=int(retry_after)
+                        retry_after=int(retry_after),
                     )
                 elif e.http_status in (500, 502, 503, 504):
                     # Server errors - retry with backoff
                     if attempt < MAX_RETRIES:
                         delay = _calculate_backoff_delay(attempt)
                         logger.warning(
-                            f"Server error {e.http_status} in {func.__name__}, attempt {attempt + 1}/{MAX_RETRIES + 1}. "
-                            f"Retrying in {delay}s"
+                            f"Server error {e.http_status} in {func.__name__}, "
+                            f"attempt {attempt + 1}/{MAX_RETRIES + 1}. Retrying in {delay}s"
                         )
                         time.sleep(delay)
                         continue
-                    logger.error(f"Spotify API error in {func.__name__} after {MAX_RETRIES + 1} attempts: {e}")
+                    logger.error(
+                        f"Spotify API error in {func.__name__} after {MAX_RETRIES + 1} attempts: {e}"
+                    )
                     raise SpotifyAPIError(f"API error after retries: {e.msg}")
                 else:
                     # Other client errors - don't retry
@@ -120,7 +122,10 @@ def api_error_handler(func: Callable) -> Callable:
                     )
                     time.sleep(delay)
                     continue
-                logger.error(f"Network error in {func.__name__} after {MAX_RETRIES + 1} attempts: {e}", exc_info=True)
+                logger.error(
+                    f"Network error in {func.__name__} after {MAX_RETRIES + 1} attempts: {e}",
+                    exc_info=True,
+                )
                 raise SpotifyAPIError(f"Network error after retries: {e}")
 
             except Exception as e:
@@ -130,7 +135,9 @@ def api_error_handler(func: Callable) -> Callable:
 
         # Should not reach here, but handle it just in case
         if last_exception:
-            raise SpotifyAPIError(f"Failed after {MAX_RETRIES + 1} attempts: {last_exception}")
+            raise SpotifyAPIError(
+                f"Failed after {MAX_RETRIES + 1} attempts: {last_exception}"
+            )
 
     return wrapper
 
@@ -172,7 +179,7 @@ class SpotifyAPI:
         token_info: TokenInfo,
         auth_manager: Optional[SpotifyAuthManager] = None,
         auto_refresh: bool = True,
-        cache: Optional['SpotifyCache'] = None
+        cache: Optional["SpotifyCache"] = None,
     ):
         """
         Initialize the API client.
@@ -200,7 +207,10 @@ class SpotifyAPI:
         self._token_info = token_info
         self._sp = spotipy.Spotify(auth=token_info.access_token)
         self._user_id: Optional[str] = None
-        logger.debug("SpotifyAPI initialized with valid token%s", " (with cache)" if cache else "")
+        logger.debug(
+            "SpotifyAPI initialized with valid token%s",
+            " (with cache)" if cache else "",
+        )
 
     @property
     def token_info(self) -> TokenInfo:
@@ -208,7 +218,7 @@ class SpotifyAPI:
         return self._token_info
 
     @property
-    def cache(self) -> Optional['SpotifyCache']:
+    def cache(self) -> Optional["SpotifyCache"]:
         """Get the cache instance (if configured)."""
         return self._cache
 
@@ -233,7 +243,7 @@ class SpotifyAPI:
         """Get the current user's ID, caching the result."""
         if self._user_id is None:
             user = self.get_current_user()
-            self._user_id = user['id']
+            self._user_id = user["id"]
         return self._user_id
 
     # =========================================================================
@@ -264,8 +274,8 @@ class SpotifyAPI:
 
         # Cache the result
         if self._cache and user:
-            self._user_id = user['id']
-            self._cache.set_user(user['id'], user)
+            self._user_id = user["id"]
+            self._cache.set_user(user["id"], user)
 
         return user
 
@@ -300,11 +310,11 @@ class SpotifyAPI:
 
         results = self._sp.current_user_playlists()
         while results:
-            for playlist in results['items']:
+            for playlist in results["items"]:
                 # Include playlists the user owns or can collaborate on
-                if playlist['owner']['id'] == user_id or playlist.get('collaborative'):
+                if playlist["owner"]["id"] == user_id or playlist.get("collaborative"):
                     playlists.append(playlist)
-            results = self._sp.next(results) if results['next'] else None
+            results = self._sp.next(results) if results["next"] else None
 
         logger.debug(f"Retrieved {len(playlists)} editable playlists")
 
@@ -315,7 +325,9 @@ class SpotifyAPI:
         return playlists
 
     @api_error_handler
-    def get_playlist(self, playlist_id: str, skip_cache: bool = False) -> Dict[str, Any]:
+    def get_playlist(
+        self, playlist_id: str, skip_cache: bool = False
+    ) -> Dict[str, Any]:
         """
         Get a single playlist by ID.
 
@@ -348,7 +360,9 @@ class SpotifyAPI:
         return playlist
 
     @api_error_handler
-    def get_playlist_tracks(self, playlist_id: str, skip_cache: bool = False) -> List[Dict[str, Any]]:
+    def get_playlist_tracks(
+        self, playlist_id: str, skip_cache: bool = False
+    ) -> List[Dict[str, Any]]:
         """
         Get all tracks from a playlist.
 
@@ -375,12 +389,12 @@ class SpotifyAPI:
 
         results = self._sp.playlist_items(playlist_id)
         while results:
-            for item in results['items']:
+            for item in results["items"]:
                 # Only include valid tracks (not None, not local-only)
-                track = item.get('track')
-                if track and track.get('uri'):
+                track = item.get("track")
+                if track and track.get("uri"):
                     tracks.append(track)
-            results = self._sp.next(results) if results['next'] else None
+            results = self._sp.next(results) if results["next"] else None
 
         logger.debug(f"Retrieved {len(tracks)} tracks from playlist {playlist_id}")
 
@@ -391,11 +405,7 @@ class SpotifyAPI:
         return tracks
 
     @api_error_handler
-    def update_playlist_tracks(
-        self,
-        playlist_id: str,
-        track_uris: List[str]
-    ) -> bool:
+    def update_playlist_tracks(self, playlist_id: str, track_uris: List[str]) -> bool:
         """
         Replace all tracks in a playlist with a new list.
 
@@ -422,11 +432,11 @@ class SpotifyAPI:
             return True
 
         # Replace first batch (up to 100 tracks)
-        self._sp.playlist_replace_items(playlist_id, track_uris[:self.BATCH_SIZE])
+        self._sp.playlist_replace_items(playlist_id, track_uris[: self.BATCH_SIZE])
 
         # Add remaining tracks in batches
         for i in range(self.BATCH_SIZE, len(track_uris), self.BATCH_SIZE):
-            batch = track_uris[i:i + self.BATCH_SIZE]
+            batch = track_uris[i : i + self.BATCH_SIZE]
             self._sp.playlist_add_items(playlist_id, batch)
 
         logger.info(f"Updated playlist {playlist_id} with {len(track_uris)} tracks")
@@ -446,9 +456,7 @@ class SpotifyAPI:
 
     @api_error_handler
     def get_audio_features(
-        self,
-        track_ids: List[str],
-        skip_cache: bool = False
+        self, track_ids: List[str], skip_cache: bool = False
     ) -> Dict[str, Dict[str, Any]]:
         """
         Get audio features for multiple tracks.
@@ -491,7 +499,7 @@ class SpotifyAPI:
         # Fetch uncached in batches
         new_features = {}
         for i in range(0, len(ids_to_fetch), self.AUDIO_FEATURES_BATCH_SIZE):
-            batch = ids_to_fetch[i:i + self.AUDIO_FEATURES_BATCH_SIZE]
+            batch = ids_to_fetch[i : i + self.AUDIO_FEATURES_BATCH_SIZE]
             results = self._sp.audio_features(batch)
 
             if results:
@@ -500,7 +508,9 @@ class SpotifyAPI:
                         features[track_id] = feature
                         new_features[track_id] = feature
 
-        logger.debug(f"Retrieved audio features for {len(new_features)} tracks (from API)")
+        logger.debug(
+            f"Retrieved audio features for {len(new_features)} tracks (from API)"
+        )
 
         # Cache the new results
         if self._cache and new_features:

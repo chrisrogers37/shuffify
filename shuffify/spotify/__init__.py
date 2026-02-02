@@ -77,31 +77,25 @@ from .exceptions import (
     SpotifyNotFoundError,
 )
 
-
 __all__ = [
     # Credentials
-    'SpotifyCredentials',
-
+    "SpotifyCredentials",
     # Auth
-    'SpotifyAuthManager',
-    'TokenInfo',
-    'DEFAULT_SCOPES',
-
+    "SpotifyAuthManager",
+    "TokenInfo",
+    "DEFAULT_SCOPES",
     # API
-    'SpotifyAPI',
-
+    "SpotifyAPI",
     # Cache
-    'SpotifyCache',
-
+    "SpotifyCache",
     # Client (facade)
-    'SpotifyClient',
-
+    "SpotifyClient",
     # Exceptions
-    'SpotifyError',
-    'SpotifyAuthError',
-    'SpotifyTokenError',
-    'SpotifyTokenExpiredError',
-    'SpotifyAPIError',
-    'SpotifyRateLimitError',
-    'SpotifyNotFoundError',
+    "SpotifyError",
+    "SpotifyAuthError",
+    "SpotifyTokenError",
+    "SpotifyTokenExpiredError",
+    "SpotifyAPIError",
+    "SpotifyRateLimitError",
+    "SpotifyNotFoundError",
 ]

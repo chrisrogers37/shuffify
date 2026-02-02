@@ -7,15 +7,13 @@ Cache keys are prefixed and organized by data type with appropriate TTLs.
 
 import json
 import logging
-import hashlib
-from typing import Dict, List, Any, Optional, Callable, TypeVar
-from functools import wraps
+from typing import Dict, List, Any, Optional, TypeVar
 
 import redis
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class SpotifyCache:
@@ -44,11 +42,11 @@ class SpotifyCache:
     def __init__(
         self,
         redis_client: redis.Redis,
-        key_prefix: str = 'shuffify:cache:',
+        key_prefix: str = "shuffify:cache:",
         default_ttl: int = DEFAULT_TTL,
         playlist_ttl: int = PLAYLIST_TTL,
         user_ttl: int = USER_TTL,
-        audio_features_ttl: int = AUDIO_FEATURES_TTL
+        audio_features_ttl: int = AUDIO_FEATURES_TTL,
     ):
         """
         Initialize the cache.
@@ -83,13 +81,13 @@ class SpotifyCache:
 
     def _serialize(self, data: Any) -> bytes:
         """Serialize data to bytes for storage."""
-        return json.dumps(data).encode('utf-8')
+        return json.dumps(data).encode("utf-8")
 
     def _deserialize(self, data: bytes) -> Any:
         """Deserialize bytes to Python object."""
         if data is None:
             return None
-        return json.loads(data.decode('utf-8'))
+        return json.loads(data.decode("utf-8"))
 
     # =========================================================================
     # User Data
@@ -106,7 +104,7 @@ class SpotifyCache:
             User profile dict or None if not cached.
         """
         try:
-            key = self._make_key('user', user_id)
+            key = self._make_key("user", user_id)
             data = self._redis.get(key)
             if data:
                 logger.debug(f"Cache hit for user: {user_id}")
@@ -117,7 +115,9 @@ class SpotifyCache:
             logger.warning(f"Redis error getting user cache: {e}")
             return None
 
-    def set_user(self, user_id: str, user_data: Dict[str, Any], ttl: Optional[int] = None) -> bool:
+    def set_user(
+        self, user_id: str, user_data: Dict[str, Any], ttl: Optional[int] = None
+    ) -> bool:
         """
         Cache user profile.
 
@@ -130,7 +130,7 @@ class SpotifyCache:
             True if cached successfully.
         """
         try:
-            key = self._make_key('user', user_id)
+            key = self._make_key("user", user_id)
             ttl = ttl or self._user_ttl
             self._redis.setex(key, ttl, self._serialize(user_data))
             logger.debug(f"Cached user: {user_id} (TTL: {ttl}s)")
@@ -154,7 +154,7 @@ class SpotifyCache:
             List of playlist dicts or None if not cached.
         """
         try:
-            key = self._make_key('playlists', user_id)
+            key = self._make_key("playlists", user_id)
             data = self._redis.get(key)
             if data:
                 logger.debug(f"Cache hit for playlists: {user_id}")
@@ -166,10 +166,7 @@ class SpotifyCache:
             return None
 
     def set_playlists(
-        self,
-        user_id: str,
-        playlists: List[Dict[str, Any]],
-        ttl: Optional[int] = None
+        self, user_id: str, playlists: List[Dict[str, Any]], ttl: Optional[int] = None
     ) -> bool:
         """
         Cache user playlists.
@@ -183,10 +180,12 @@ class SpotifyCache:
             True if cached successfully.
         """
         try:
-            key = self._make_key('playlists', user_id)
+            key = self._make_key("playlists", user_id)
             ttl = ttl or self._playlist_ttl
             self._redis.setex(key, ttl, self._serialize(playlists))
-            logger.debug(f"Cached {len(playlists)} playlists for user: {user_id} (TTL: {ttl}s)")
+            logger.debug(
+                f"Cached {len(playlists)} playlists for user: {user_id} (TTL: {ttl}s)"
+            )
             return True
         except redis.RedisError as e:
             logger.warning(f"Redis error setting playlists cache: {e}")
@@ -203,7 +202,7 @@ class SpotifyCache:
             Playlist dict or None if not cached.
         """
         try:
-            key = self._make_key('playlist', playlist_id)
+            key = self._make_key("playlist", playlist_id)
             data = self._redis.get(key)
             if data:
                 logger.debug(f"Cache hit for playlist: {playlist_id}")
@@ -215,10 +214,7 @@ class SpotifyCache:
             return None
 
     def set_playlist(
-        self,
-        playlist_id: str,
-        playlist: Dict[str, Any],
-        ttl: Optional[int] = None
+        self, playlist_id: str, playlist: Dict[str, Any], ttl: Optional[int] = None
     ) -> bool:
         """
         Cache single playlist.
@@ -232,7 +228,7 @@ class SpotifyCache:
             True if cached successfully.
         """
         try:
-            key = self._make_key('playlist', playlist_id)
+            key = self._make_key("playlist", playlist_id)
             ttl = ttl or self._playlist_ttl
             self._redis.setex(key, ttl, self._serialize(playlist))
             logger.debug(f"Cached playlist: {playlist_id} (TTL: {ttl}s)")
@@ -256,7 +252,7 @@ class SpotifyCache:
             List of track dicts or None if not cached.
         """
         try:
-            key = self._make_key('tracks', playlist_id)
+            key = self._make_key("tracks", playlist_id)
             data = self._redis.get(key)
             if data:
                 logger.debug(f"Cache hit for tracks: {playlist_id}")
@@ -268,10 +264,7 @@ class SpotifyCache:
             return None
 
     def set_playlist_tracks(
-        self,
-        playlist_id: str,
-        tracks: List[Dict[str, Any]],
-        ttl: Optional[int] = None
+        self, playlist_id: str, tracks: List[Dict[str, Any]], ttl: Optional[int] = None
     ) -> bool:
         """
         Cache playlist tracks.
@@ -285,10 +278,12 @@ class SpotifyCache:
             True if cached successfully.
         """
         try:
-            key = self._make_key('tracks', playlist_id)
+            key = self._make_key("tracks", playlist_id)
             ttl = ttl or self._playlist_ttl
             self._redis.setex(key, ttl, self._serialize(tracks))
-            logger.debug(f"Cached {len(tracks)} tracks for playlist: {playlist_id} (TTL: {ttl}s)")
+            logger.debug(
+                f"Cached {len(tracks)} tracks for playlist: {playlist_id} (TTL: {ttl}s)"
+            )
             return True
         except redis.RedisError as e:
             logger.warning(f"Redis error setting tracks cache: {e}")
@@ -312,7 +307,7 @@ class SpotifyCache:
             return {}
 
         try:
-            keys = [self._make_key('audio', tid) for tid in track_ids]
+            keys = [self._make_key("audio", tid) for tid in track_ids]
             values = self._redis.mget(keys)
 
             result = {}
@@ -327,9 +322,7 @@ class SpotifyCache:
             return {}
 
     def set_audio_features(
-        self,
-        features: Dict[str, Dict[str, Any]],
-        ttl: Optional[int] = None
+        self, features: Dict[str, Dict[str, Any]], ttl: Optional[int] = None
     ) -> bool:
         """
         Cache audio features for multiple tracks.
@@ -349,11 +342,13 @@ class SpotifyCache:
             pipe = self._redis.pipeline()
 
             for track_id, feature_data in features.items():
-                key = self._make_key('audio', track_id)
+                key = self._make_key("audio", track_id)
                 pipe.setex(key, ttl, self._serialize(feature_data))
 
             pipe.execute()
-            logger.debug(f"Cached audio features for {len(features)} tracks (TTL: {ttl}s)")
+            logger.debug(
+                f"Cached audio features for {len(features)} tracks (TTL: {ttl}s)"
+            )
             return True
         except redis.RedisError as e:
             logger.warning(f"Redis error setting audio features cache: {e}")
@@ -377,8 +372,8 @@ class SpotifyCache:
         """
         try:
             keys = [
-                self._make_key('playlist', playlist_id),
-                self._make_key('tracks', playlist_id),
+                self._make_key("playlist", playlist_id),
+                self._make_key("tracks", playlist_id),
             ]
             self._redis.delete(*keys)
             logger.debug(f"Invalidated cache for playlist: {playlist_id}")
@@ -400,7 +395,7 @@ class SpotifyCache:
             True if invalidation succeeded.
         """
         try:
-            key = self._make_key('playlists', user_id)
+            key = self._make_key("playlists", user_id)
             self._redis.delete(key)
             logger.debug(f"Invalidated playlists cache for user: {user_id}")
             return True
