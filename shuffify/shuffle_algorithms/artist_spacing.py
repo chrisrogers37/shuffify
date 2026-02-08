@@ -1,4 +1,5 @@
 import random
+import heapq
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
 from . import ShuffleAlgorithm
@@ -87,41 +88,48 @@ class ArtistSpacingShuffle(ShuffleAlgorithm):
         for group in artist_tracks.values():
             random.shuffle(group)
 
-        # Build result using greedy spacing approach
+        # Use a max-heap approach: always pick from the artist with the
+        # most remaining tracks (that isn't blocked by spacing). This
+        # prevents the algorithm from painting itself into a corner.
+        # Heap entries: (-count, random_tiebreaker, artist_name)
+        heap = []
+        for artist, tracks_list in artist_tracks.items():
+            heapq.heappush(heap, (-len(tracks_list), random.random(), artist))
+
         result = []
-        recent_artists = []  # Track recent artists for spacing
-        remaining = list(uris)
-        random.shuffle(remaining)
+        recent_artists = []  # Sliding window of recent artist names
+        cooldown = []  # Artists waiting out their spacing cooldown
 
-        while remaining:
-            # Find candidates that respect spacing constraint
-            blocked_artists = set(recent_artists[-min_spacing:])
-            candidates = [
-                u for u in remaining if uri_to_artist[u] not in blocked_artists
-            ]
+        while heap or cooldown:
+            # Move artists off cooldown if enough tracks have been placed
+            still_waiting = []
+            for wait_until, entry in cooldown:
+                if len(result) >= wait_until:
+                    heapq.heappush(heap, entry)
+                else:
+                    still_waiting.append((wait_until, entry))
+            cooldown = still_waiting
 
-            if candidates:
-                chosen = candidates[0]
+            if not heap:
+                # All artists are on cooldown — impossible to satisfy
+                # spacing. Pick the one that comes off cooldown soonest.
+                cooldown.sort(key=lambda x: x[0])
+                _, entry = cooldown.pop(0)
+                neg_count, tiebreaker, artist = entry
             else:
-                # No valid candidate; pick the one whose artist appeared
-                # longest ago to maximize spacing
-                best = None
-                best_dist = -1
-                for u in remaining:
-                    a = uri_to_artist[u]
-                    # Distance since last occurrence
-                    dist = len(result)
-                    for i in range(len(recent_artists) - 1, -1, -1):
-                        if recent_artists[i] == a:
-                            dist = len(recent_artists) - 1 - i
-                            break
-                    if dist > best_dist:
-                        best_dist = dist
-                        best = u
-                chosen = best
+                neg_count, tiebreaker, artist = heapq.heappop(heap)
 
+            # Take one track from this artist
+            chosen = artist_tracks[artist].pop()
             result.append(chosen)
-            recent_artists.append(uri_to_artist[chosen])
-            remaining.remove(chosen)
+            recent_artists.append(artist)
+
+            # Put artist back on cooldown if they have remaining tracks
+            remaining_count = -neg_count - 1
+            if remaining_count > 0:
+                release_at = len(result) + min_spacing
+                cooldown.append(
+                    (release_at, (-remaining_count, random.random(), artist))
+                )
 
         return result
