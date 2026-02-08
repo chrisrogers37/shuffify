@@ -246,6 +246,27 @@ def logout():
 # =============================================================================
 
 
+@main.route("/refresh-playlists", methods=["POST"])
+def refresh_playlists():
+    """Refresh playlists from Spotify without losing undo state."""
+    client = require_auth()
+    if not client:
+        return json_error("Please log in first.", 401)
+
+    try:
+        playlist_service = PlaylistService(client)
+        playlists = playlist_service.get_user_playlists(skip_cache=True)
+
+        logger.info(f"Refreshed {len(playlists)} playlists from Spotify")
+        return json_success(
+            "Playlists refreshed successfully.",
+            playlists=playlists,
+        )
+    except PlaylistError as e:
+        logger.error(f"Failed to refresh playlists: {e}")
+        return json_error("Failed to refresh playlists. Please try again.", 500)
+
+
 @main.route("/playlist/<playlist_id>")
 def get_playlist(playlist_id):
     """Get playlist data with optional audio features."""
