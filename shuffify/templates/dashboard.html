@@ -22,15 +22,27 @@
                         <p class="text-white/80">Select a playlist to shuffle below</p>
                     </div>
                 </div>
-                <!-- Logout Button -->
-                <a href="{{ url_for('main.logout') }}" 
-                   class="inline-flex items-center px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition duration-150 border border-white/20 hover:border-white/30"
-                   title="Logout and return to landing page">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                    </svg>
-                    Logout
-                </a>
+                <div class="flex items-center space-x-2">
+                    <!-- Refresh Playlists Button -->
+                    <button id="refresh-playlists-btn"
+                            onclick="refreshPlaylists()"
+                            class="inline-flex items-center px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition duration-150 border border-white/20 hover:border-white/30"
+                            title="Refresh playlists from Spotify">
+                        <svg id="refresh-icon" class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        Refresh
+                    </button>
+                    <!-- Logout Button -->
+                    <a href="{{ url_for('main.logout') }}"
+                       class="inline-flex items-center px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition duration-150 border border-white/20 hover:border-white/30"
+                       title="Logout and return to landing page">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                        </svg>
+                        Logout
+                    </a>
+                </div>
             </div>
         </div>
     </div>
@@ -288,6 +300,40 @@ function showNotification(message, type) {
         notification.classList.add('translate-y-16', 'opacity-0');
         setTimeout(() => notification.remove(), 3000);
     }, 3000);
+}
+
+function refreshPlaylists() {
+    const btn = document.getElementById('refresh-playlists-btn');
+    const icon = document.getElementById('refresh-icon');
+    const originalText = btn.innerHTML;
+
+    btn.disabled = true;
+    icon.classList.add('animate-spin');
+
+    fetch('{{ url_for("main.refresh_playlists") }}', {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            // Reload page to show updated playlists (preserves session/undo state)
+            window.location.reload();
+        } else {
+            showNotification(data.message || 'Failed to refresh playlists.', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error refreshing playlists:', error);
+        showNotification('Failed to refresh playlists. Please try again.', 'error');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        icon.classList.remove('animate-spin');
+    });
 }
 
 // Initialize algorithm parameters for each playlist

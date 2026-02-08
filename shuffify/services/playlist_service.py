@@ -43,9 +43,14 @@ class PlaylistService:
         """
         self._client = spotify_client
 
-    def get_user_playlists(self) -> List[Dict[str, Any]]:
+    def get_user_playlists(
+        self, skip_cache: bool = False
+    ) -> List[Dict[str, Any]]:
         """
         Fetch all playlists the user can edit.
+
+        Args:
+            skip_cache: If True, bypass cache and fetch fresh data.
 
         Returns:
             List of playlist dictionaries (owned or collaborative).
@@ -54,7 +59,12 @@ class PlaylistService:
             PlaylistError: If fetching playlists fails.
         """
         try:
-            playlists = self._client.get_user_playlists()
+            if skip_cache and hasattr(self._client, "_api") and self._client._api:
+                playlists = self._client._api.get_user_playlists(
+                    skip_cache=True
+                )
+            else:
+                playlists = self._client.get_user_playlists()
             logger.debug(f"Retrieved {len(playlists)} user playlists")
             return playlists
         except Exception as e:
