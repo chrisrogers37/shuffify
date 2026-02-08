@@ -21,7 +21,9 @@ class ShuffleRegistry:
         "AlbumSequenceShuffle": AlbumSequenceShuffle,
         "TempoGradientShuffle": TempoGradientShuffle,
     }
-    _hidden_algorithms = set()  # Empty set since we want all algorithms visible
+    # TempoGradientShuffle hidden: Spotify deprecated Audio Features API
+    # (Nov 2024). Unhide when extended API access is granted.
+    _hidden_algorithms = {"TempoGradientShuffle"}
 
     @classmethod
     def register(cls, algorithm_class: Type[ShuffleAlgorithm]) -> None:
