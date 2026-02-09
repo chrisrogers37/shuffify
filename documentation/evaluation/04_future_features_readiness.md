@@ -1,14 +1,15 @@
 # Future Features Readiness Assessment
 
 **Date:** January 2026
-**Project:** Shuffify v2.3.6
+**Last Updated:** February 8, 2026
+**Project:** Shuffify v2.4.x
 **Scope:** Readiness assessment for planned features
 
 ---
 
 ## Executive Summary
 
-This document assesses Shuffify's readiness to implement the planned future features. Most features require significant foundational work (service layer, database, background jobs) before implementation can begin. The UI enhancement feature is the most ready, while notification systems and automations require the most preparation.
+This document assesses Shuffify's readiness to implement the planned future features. **Update (Feb 2026):** The service layer has been fully extracted, Redis sessions and caching are in place, and Pydantic validation is implemented. The primary remaining blocker is database persistence. UI enhancements are the most ready, while notification systems and automations still require background job infrastructure.
 
 ---
 
@@ -16,13 +17,13 @@ This document assesses Shuffify's readiness to implement the planned future feat
 
 | Feature | Readiness | Blocking Dependencies |
 |---------|-----------|----------------------|
-| A. Database Persistence | 2/10 | Service layer extraction |
-| B. User Logins | 3/10 | Database, user model |
-| C1. Playlist Re-ordering Automations | 4/10 | Database, job system |
-| C2. Playlist Raiding | 4/10 | Database, job system, triggers |
-| D. Notification System (SMS/Telegram) | 2/10 | Database, job system, external APIs |
-| E. Enhanced Snappy UI | 6/10 | WebSocket infrastructure |
-| F. Live Playlist Preview | 5/10 | WebSocket, caching |
+| A. Database Persistence | 5/10 | ~~Service layer~~ ✅ → ORM setup only |
+| B. User Logins | 4/10 | Database, user model |
+| C1. Playlist Re-ordering Automations | 5/10 | Database, job system |
+| C2. Playlist Raiding | 5/10 | Database, job system, triggers |
+| D. Notification System (SMS/Telegram) | 3/10 | Database, job system, external APIs |
+| E. Enhanced Snappy UI | 7/10 | WebSocket infrastructure |
+| F. Live Playlist Preview | 6/10 | WebSocket, ~~caching~~ ✅ |
 | G. Playlist Growth Features | 3/10 | Analytics, external integrations |
 
 ---
@@ -100,14 +101,16 @@ Phase 4: Migration (1 day)
 └── Deploy with backward compatibility
 ```
 
-### Readiness Score: 2/10
+### Readiness Score: 5/10 *(up from 2/10, service layer now exists)*
 
 **Blocking Issues:**
-- No service layer (business logic in routes)
+- ~~No service layer (business logic in routes)~~ ✅ RESOLVED
 - No repository pattern
-- Session manipulation scattered
+- ~~Session manipulation scattered~~ ✅ RESOLVED (StateService)
 
-**Effort Estimate:** 5-8 days
+**Remaining Work:** ORM setup (SQLAlchemy + Alembic), repository pattern
+
+**Effort Estimate:** 3-5 days *(reduced from 5-8, service layer done)*
 
 ---
 
@@ -313,15 +316,15 @@ Phase 4: Triggers (2 days per trigger)
 ├── Manual trigger (on-demand)
 ```
 
-### Readiness Score: 4/10
+### Readiness Score: 5/10 *(up from 4/10, service layer done)*
 
 **Blocking Issues:**
 - Requires Feature A (database)
 - No background job infrastructure
 - No scheduler
-- Service layer needed
+- ~~Service layer needed~~ ✅ RESOLVED
 
-**Effort Estimate:** 10-14 days (after Feature A)
+**Effort Estimate:** 8-12 days (after Feature A) *(reduced, service layer done)*
 
 ---
 
@@ -676,19 +679,21 @@ Phase 4: Advanced (3-4 days)
 └── Progressive Web App (PWA)
 ```
 
-### Readiness Score: 6/10
+### Readiness Score: 7/10 *(up from 6/10, refresh button + caching done)*
 
 **Strengths:**
 - Good CSS foundation (Tailwind)
 - AJAX already working
 - Modern browser targets
+- ✅ Refresh playlists button implemented (Feb 2026)
+- ✅ Response caching with skip_cache bypass
 
 **Gaps:**
 - No build process (could add Vite)
 - No WebSocket infrastructure
 - Limited JavaScript architecture
 
-**Effort Estimate:** 7-11 days total
+**Effort Estimate:** 6-10 days total *(reduced, some quick wins done)*
 
 ---
 
@@ -814,18 +819,19 @@ Phase 4: Real-time (2 days)
 └── Performance optimization
 ```
 
-### Readiness Score: 5/10
+### Readiness Score: 6/10 *(up from 5/10, caching layer done)*
 
 **Strengths:**
 - Algorithm architecture supports preview (returns URIs without commit)
 - AJAX infrastructure exists
+- ✅ Redis caching layer available for playlist data
 
 **Gaps:**
 - No preview endpoint
 - No diff computation
 - No WebSocket infrastructure
 
-**Effort Estimate:** 7-10 days
+**Effort Estimate:** 6-9 days *(reduced, caching in place)*
 
 ---
 
@@ -896,13 +902,13 @@ This could mean:
 
 | Feature | Readiness | Dependencies | Effort | Priority |
 |---------|-----------|--------------|--------|----------|
-| A. Database | 2/10 | Service layer | 5-8 days | **FIRST** |
-| B. User Logins | 3/10 | A | 7-10 days | After A |
-| C1. Automations | 4/10 | A + Jobs | 10-14 days | After A |
-| C2. Raiding | 4/10 | C1 | 8-11 days | After C1 |
-| D. Notifications | 2/10 | C1 | 8-12 days | After C1 |
-| E. Snappy UI | 6/10 | Minor | 7-11 days | Parallel |
-| F. Live Preview | 5/10 | WebSocket | 7-10 days | Parallel |
+| A. Database | 5/10 | ~~Service layer~~ ✅ → ORM only | 3-5 days | **FIRST** |
+| B. User Logins | 4/10 | A | 7-10 days | After A |
+| C1. Automations | 5/10 | A + Jobs | 8-12 days | After A |
+| C2. Raiding | 5/10 | C1 | 8-11 days | After C1 |
+| D. Notifications | 3/10 | C1 | 8-12 days | After C1 |
+| E. Snappy UI | 7/10 | Minor | 6-10 days | Parallel |
+| F. Live Preview | 6/10 | WebSocket | 6-9 days | Parallel |
 | G. Playlist Growth | 3/10 | A + APIs | TBD | Last |
 
 ### Recommended Order
@@ -927,9 +933,10 @@ PHASE 3: ADVANCED FEATURES
 ### Critical Path
 
 ```
-Service Layer → Database → Automations → Raiding → Notifications
-     ↓              ↓
-UI Improvements  Live Preview
+Service Layer ✅ → Database → Automations → Raiding → Notifications
+                       ↓
+                  UI Improvements (parallel)
+                  Live Preview (parallel)
 ```
 
 ---
