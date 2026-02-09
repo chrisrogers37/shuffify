@@ -1,7 +1,8 @@
 # Brainstorm: Enhancement Opportunities
 
 **Date:** January 2026
-**Project:** Shuffify v2.3.6
+**Last Updated:** February 8, 2026
+**Project:** Shuffify v2.4.x
 **Purpose:** Creative exploration of potential features and improvements
 
 ---
@@ -34,10 +35,10 @@ This is a brainstorm document - not all ideas are fully vetted. Ideas are catego
 | Idea | Description | Effort | Impact |
 |------|-------------|--------|--------|
 | **Genre clustering** ⭐ | Group songs by genre, shuffle within groups | M | H |
-| **Artist spacing** 🔥 | Ensure same artist doesn't appear back-to-back | L | H |
+| ✅ **Artist spacing** | Ensure same artist doesn't appear back-to-back | L | H | **DONE (Feb 2026)** |
 | **Energy flow** | Create energy arc (calm → peak → calm) | M | H |
-| **Album sequence** | Keep album tracks together but shuffle albums | L | M |
-| **Tempo gradient** | Sort by BPM for DJ-style transitions | L | M |
+| ✅ **Album sequence** | Keep album tracks together but shuffle albums | L | M | **DONE (Feb 2026)** |
+| ✅ **Tempo gradient** | Sort by BPM for DJ-style transitions (hidden — needs Audio Features API) | L | M | **DONE (Feb 2026, hidden)** |
 | **Decade distribution** | Even mix from different eras | L | M |
 
 ### 1.3 Algorithm Composition
@@ -225,7 +226,7 @@ This is a brainstorm document - not all ideas are fully vetted. Ideas are catego
 
 | Idea | Description | Effort | Impact |
 |------|-------------|--------|--------|
-| **Response caching** 🔥 | Cache Spotify API responses | M | H |
+| ✅ **Response caching** | Cache Spotify API responses | M | H | **DONE** |
 | **Lazy loading** | Load playlists on demand | L | M |
 | **Virtual scrolling** | Handle 1000+ track playlists smoothly | M | M |
 | **WebSocket updates** | Real-time playlist changes | M | M |

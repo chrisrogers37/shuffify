@@ -9,15 +9,16 @@ This directory contains all project documentation organized by purpose.
 ```
 documentation/
 ├── README.md          # This file - documentation index
-├── evaluation/        # System evaluations and assessments
+├── evaluation/        # Active system evaluations and assessments
 │   ├── README.md
-│   ├── 01_architecture_evaluation.md
-│   ├── 02_modularity_assessment.md
 │   ├── 03_extensibility_evaluation.md
 │   ├── 04_future_features_readiness.md
 │   └── 05_brainstorm_enhancements.md
-├── planning/          # Design docs, architecture decisions
+├── archive/           # Completed evaluations and planning docs
+│   ├── 01_architecture_evaluation.md
+│   ├── 02_modularity_assessment.md
 │   └── separation_of_concerns_evaluation.md
+├── planning/          # Design docs, architecture decisions
 ├── guides/            # How-to guides and tutorials (planned)
 ├── updates/           # Dated bug fixes, patches, hotfixes (planned)
 └── operations/        # Production runbooks (planned)
@@ -25,33 +26,34 @@ documentation/
 
 ---
 
-## System Evaluation
+## System Evaluation (Active)
 
-Comprehensive system review documents for development planning:
+Active evaluation documents for ongoing development planning:
 
 - **[Evaluation Overview](evaluation/README.md)** - Summary and reading guide
-- **[Architecture Evaluation](evaluation/01_architecture_evaluation.md)** - Three-layer architecture analysis
-- **[Modularity Assessment](evaluation/02_modularity_assessment.md)** - Code modularity and coupling analysis
 - **[Extensibility Evaluation](evaluation/03_extensibility_evaluation.md)** - Service extensibility patterns
 - **[Future Features Readiness](evaluation/04_future_features_readiness.md)** - Readiness for planned features
-- **[Brainstorm Enhancements](evaluation/05_brainstorm_enhancements.md)** - Additional enhancement ideas
+- **[Brainstorm Enhancements](evaluation/05_brainstorm_enhancements.md)** - Enhancement ideas and tracking
+
+## Archived (Completed)
+
+Evaluations and plans that have been fully implemented:
+
+- **[Architecture Evaluation](archive/01_architecture_evaluation.md)** - All critical recommendations implemented
+- **[Modularity Assessment](archive/02_modularity_assessment.md)** - All 4 refactoring phases completed
+- **[Separation of Concerns Evaluation](archive/separation_of_concerns_evaluation.md)** - Service layer extracted, all recommendations done
 
 ---
 
 ## Planning & Architecture
 
-### Existing Documents
+### Completed Documents (moved to archive/)
 
-- **[Separation of Concerns Evaluation](planning/separation_of_concerns_evaluation.md)**
-  - Evaluation of current codebase architecture
-  - Layer boundary analysis
-  - Recommendations for maintaining separation
+- **[Separation of Concerns Evaluation](archive/separation_of_concerns_evaluation.md)** — All recommendations implemented
 
 ### Planned Documents
 
 - Architecture Decision Records (ADRs)
-- Flask 3.x upgrade planning
-- Redis session storage migration plan
 - Database integration design
 - Algorithm performance comparison framework
 
@@ -154,4 +156,4 @@ This documentation index should be updated whenever:
 - Documentation is reorganized
 - Documentation is deprecated or removed
 
-Last updated: 2026-01-28
+Last updated: 2026-02-08
