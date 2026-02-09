@@ -82,6 +82,15 @@ class ShuffleRequest(BaseModel):
     shuffle_percentage: Annotated[float, Field(ge=0.0, le=100.0)] = 50.0
     shuffle_location: Literal["front", "back"] = "front"
 
+    # ArtistSpacingShuffle specific
+    min_spacing: Annotated[int, Field(ge=1, le=10)] = 1
+
+    # AlbumSequenceShuffle specific
+    shuffle_within_albums: Literal["no", "yes"] = "no"
+
+    # TempoGradientShuffle specific
+    direction: Literal["ascending", "descending"] = "ascending"
+
     class Config:
         extra = "ignore"
 
@@ -94,6 +103,9 @@ class ShuffleRequest(BaseModel):
             "BalancedShuffle",
             "StratifiedShuffle",
             "PercentageShuffle",
+            "ArtistSpacingShuffle",
+            "AlbumSequenceShuffle",
+            "TempoGradientShuffle",
         }
         if not v or not v.strip():
             raise ValueError("Algorithm name cannot be empty")
@@ -123,6 +135,12 @@ class ShuffleRequest(BaseModel):
                 "shuffle_percentage": self.shuffle_percentage,
                 "shuffle_location": self.shuffle_location,
             }
+        elif self.algorithm == "ArtistSpacingShuffle":
+            return {"min_spacing": self.min_spacing}
+        elif self.algorithm == "AlbumSequenceShuffle":
+            return {"shuffle_within_albums": self.shuffle_within_albums}
+        elif self.algorithm == "TempoGradientShuffle":
+            return {"direction": self.direction}
         else:
             return {}
 
@@ -168,7 +186,7 @@ def parse_shuffle_request(form_data: Dict[str, Any]) -> ShuffleRequest:
         parsed["algorithm"] = str(form_data["algorithm"])
 
     # Integer parameters
-    for key in ["keep_first", "section_count"]:
+    for key in ["keep_first", "section_count", "min_spacing"]:
         if key in form_data:
             try:
                 parsed[key] = int(form_data[key])
@@ -183,7 +201,8 @@ def parse_shuffle_request(form_data: Dict[str, Any]) -> ShuffleRequest:
             parsed["shuffle_percentage"] = form_data["shuffle_percentage"]
 
     # String parameters
-    if "shuffle_location" in form_data:
-        parsed["shuffle_location"] = str(form_data["shuffle_location"])
+    for key in ["shuffle_location", "shuffle_within_albums", "direction"]:
+        if key in form_data:
+            parsed[key] = str(form_data[key])
 
     return ShuffleRequest(**parsed)

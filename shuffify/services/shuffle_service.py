@@ -47,6 +47,9 @@ class ShuffleService:
         "BalancedShuffle",
         "StratifiedShuffle",
         "PercentageShuffle",
+        "ArtistSpacingShuffle",
+        "AlbumSequenceShuffle",
+        "TempoGradientShuffle",
     }
 
     @staticmethod

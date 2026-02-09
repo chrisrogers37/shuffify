@@ -4,6 +4,9 @@ from .basic import BasicShuffle
 from .balanced import BalancedShuffle
 from .percentage import PercentageShuffle
 from .stratified import StratifiedShuffle
+from .artist_spacing import ArtistSpacingShuffle
+from .album_sequence import AlbumSequenceShuffle
+from .tempo_gradient import TempoGradientShuffle
 
 
 class ShuffleRegistry:
@@ -14,8 +17,13 @@ class ShuffleRegistry:
         "BalancedShuffle": BalancedShuffle,
         "PercentageShuffle": PercentageShuffle,
         "StratifiedShuffle": StratifiedShuffle,
+        "ArtistSpacingShuffle": ArtistSpacingShuffle,
+        "AlbumSequenceShuffle": AlbumSequenceShuffle,
+        "TempoGradientShuffle": TempoGradientShuffle,
     }
-    _hidden_algorithms = set()  # Empty set since we want all algorithms visible
+    # TempoGradientShuffle hidden: Spotify deprecated Audio Features API
+    # (Nov 2024). Unhide when extended API access is granted.
+    _hidden_algorithms = {"TempoGradientShuffle"}
 
     @classmethod
     def register(cls, algorithm_class: Type[ShuffleAlgorithm]) -> None:
@@ -51,6 +59,9 @@ class ShuffleRegistry:
             PercentageShuffle,
             BalancedShuffle,
             StratifiedShuffle,
+            ArtistSpacingShuffle,
+            AlbumSequenceShuffle,
+            TempoGradientShuffle,
         ]
 
         # Create metadata for visible algorithms in the specified order
@@ -73,3 +84,6 @@ ShuffleRegistry.register(BasicShuffle)
 ShuffleRegistry.register(BalancedShuffle)
 ShuffleRegistry.register(PercentageShuffle)
 ShuffleRegistry.register(StratifiedShuffle)
+ShuffleRegistry.register(ArtistSpacingShuffle)
+ShuffleRegistry.register(AlbumSequenceShuffle)
+ShuffleRegistry.register(TempoGradientShuffle)
