@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Refresh Playlists Button** - Re-fetch playlists from Spotify without losing undo state
+  - New `POST /refresh-playlists` endpoint with Redis cache bypass
+  - Dashboard UI button with spinning icon animation during refresh
+  - Preserves `session['playlist_states']` (undo/redo history) across refreshes
+- **Artist Spacing Algorithm** - New shuffle algorithm that prevents same artist appearing back-to-back
+  - Configurable `min_spacing` parameter (1-10 tracks between same artist)
+  - Uses max-heap priority scheduling to optimally distribute artists
+  - Graceful fallback when perfect spacing is impossible (e.g., one dominant artist)
+  - 19 new tests covering spacing enforcement, edge cases, and fallback behavior
+- **Album Sequence Algorithm** - Shuffle album order while keeping album tracks together
+  - Preserves internal track order within each album by default
+  - Optional `shuffle_within_albums` parameter to also randomize intra-album order
+  - Useful for listening to full albums in random order
+  - 22 new tests covering album grouping, internal ordering, and edge cases
+- **Tempo Gradient Algorithm** - Sort tracks by BPM for DJ-style transitions (hidden)
+  - Supports ascending (building energy) and descending (winding down) directions
+  - Requires Spotify Audio Features API (deprecated Nov 2024, hidden from UI)
+  - Code ready to unhide when extended API access is granted
+  - 21 new tests covering tempo sorting, partial features, and edge cases
 - **Redis Session Storage** - Migrated from filesystem to Redis-based sessions
   - Added `redis>=5.0.0` dependency for session and caching support
   - Configurable via `REDIS_URL` environment variable
@@ -34,6 +53,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 12 new unit tests covering all retry scenarios
 
 ### Changed
+- **ShuffleRegistry** - Extended to support 7 algorithms (6 visible, 1 hidden)
+  - `_hidden_algorithms` mechanism hides Tempo Gradient pending Spotify API access
+  - New algorithms registered with defined display order in UI
+- **Pydantic Schemas** - Updated to validate new algorithm parameters
+  - Added `min_spacing`, `shuffle_within_albums`, `direction` fields
+  - Extended `validate_algorithm_name` and `get_algorithm_params` for 7 algorithms
+- **PlaylistService** - Added `skip_cache` parameter to `get_user_playlists()`
 - **SpotifyAPI** - Now supports optional caching via `cache` parameter
   - Methods accept `skip_cache` parameter to bypass cache when needed
   - Cache automatically invalidated after playlist updates
@@ -60,7 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `SpotifyAPI` - Dedicated class for all Spotify Web API data operations
   - `TokenInfo` - Type-safe container for token data with validation and expiration checking
   - Comprehensive exception hierarchy (`SpotifyError`, `SpotifyAuthError`, `SpotifyTokenError`, etc.)
-- **Comprehensive Test Suite** - 303 tests total, all passing
+- **Comprehensive Test Suite** - 479 tests total, all passing
   - 32 new Spotify module tests (credentials, auth, API)
   - 99 new algorithm unit tests (BasicShuffle, BalancedShuffle, PercentageShuffle, StratifiedShuffle)
   - 12 integration tests covering full application flow
@@ -85,7 +111,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Technical Improvements
 - **Modularity Score** - Increased from 7.5/10 to 8.5/10 (Phase 3 completion)
-- **Test Coverage** - 303 total tests (up from 139), all passing
+- **Test Coverage** - 479 total tests (up from 139), all passing
 - **Code Quality** - Clean separation of auth, API, and facade concerns
 - **Dependency Injection** - SpotifyCredentials enables proper DI patterns
 - **Token Management** - Proper token refresh with auto-refresh capability
@@ -95,8 +121,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Future]
 
 ### Planned Features
-- A "Refresh Playlists" button to re-fetch playlists from Spotify without losing the current undo/redo state.
+- ~~A "Refresh Playlists" button to re-fetch playlists from Spotify without losing the current undo/redo state.~~ (Completed)
 - Implement Facebook and Apple authentication flows to provide more login options.
+- **Tempo Gradient Algorithm** - Unhide when Spotify Audio Features API access is restored
 
 ### Planned Infrastructure Improvements
 - ~~**Session Security**: Migration from filesystem sessions to Redis or database-backed sessions~~ (Completed)
