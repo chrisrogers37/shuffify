@@ -1,7 +1,7 @@
 # Future Features Readiness Assessment
 
 **Date:** January 2026
-**Last Updated:** February 8, 2026
+**Last Updated:** February 10, 2026
 **Project:** Shuffify v2.4.x
 **Scope:** Readiness assessment for planned features
 
@@ -18,12 +18,12 @@ This document assesses Shuffify's readiness to implement the planned future feat
 | Feature | Readiness | Blocking Dependencies |
 |---------|-----------|----------------------|
 | A. Database Persistence | 5/10 | ~~Service layer~~ ✅ → ORM setup only |
-| B. User Logins | 4/10 | Database, user model |
-| C1. Playlist Re-ordering Automations | 5/10 | Database, job system |
-| C2. Playlist Raiding | 5/10 | Database, job system, triggers |
-| D. Notification System (SMS/Telegram) | 3/10 | Database, job system, external APIs |
+| B. User Logins | 3/10 | Database, user model, password hashing |
+| C1. Playlist Re-ordering Automations | 5/10 | Database, background job system |
+| C2. Playlist Raiding | 4/10 | C1 + change detection system |
+| D. Notification System (SMS/Telegram) | 2/10 | Database, job system, external service APIs |
 | E. Enhanced Snappy UI | 7/10 | WebSocket infrastructure |
-| F. Live Playlist Preview | 6/10 | WebSocket, ~~caching~~ ✅ |
+| F. Live Playlist Preview | 6/10 | Preview endpoint, WebSocket; ~~caching~~ ✅ |
 | G. Playlist Growth Features | 3/10 | Analytics, external integrations |
 
 ---
@@ -31,10 +31,11 @@ This document assesses Shuffify's readiness to implement the planned future feat
 ## Feature A: Database Persistence
 
 ### Current State
-- **Storage:** Filesystem sessions only (`.flask_session/`)
-- **Lifetime:** 1 hour session timeout
-- **Data Lost:** Undo history, user preferences, usage patterns
-- **Models:** Single `Playlist` dataclass (in-memory only)
+- **Storage:** Redis-based sessions (primary) with filesystem fallback (`.flask_session/`)
+- **Caching:** Redis-based Spotify API response caching (60s playlists, 10min user, 24hr audio features)
+- **Lifetime:** 1 hour session timeout (`PERMANENT_SESSION_LIFETIME = 3600`)
+- **Data Lost on Session Expiry:** Undo history (stored in `session['playlist_states']`), shuffle state
+- **Models:** Single `Playlist` dataclass (in-memory only, loaded per request from Spotify API or cache)
 
 ### Requirements
 1. Database selection (PostgreSQL recommended)
@@ -77,25 +78,25 @@ ON playlist_snapshots(user_id, playlist_id);
 ### Implementation Roadmap
 
 ```
-Phase 1: Infrastructure (1-2 days)
+Phase 1: Infrastructure (1-2 days) — PENDING
 ├── Add SQLAlchemy to requirements
 ├── Create database configuration
 ├── Set up Alembic migrations
 └── Create base repository pattern
 
-Phase 2: Models (1-2 days)
+Phase 2: Models (1-2 days) — PENDING
 ├── Create User model
 ├── Create PlaylistSnapshot model
 ├── Create migration scripts
 └── Add model validation
 
-Phase 3: Service Integration (2-3 days)
+Phase 3: Service Integration (2-3 days) — PENDING
 ├── Create UserRepository
 ├── Create SnapshotRepository
-├── Migrate session state to DB
-└── Update routes to use repositories
+├── Migrate playlist state from session['playlist_states'] to DB
+└── Update StateService to use repositories
 
-Phase 4: Migration (1 day)
+Phase 4: Migration (1 day) — PENDING
 ├── Write data migration script
 ├── Test with existing sessions
 └── Deploy with backward compatibility
@@ -106,9 +107,11 @@ Phase 4: Migration (1 day)
 **Blocking Issues:**
 - ~~No service layer (business logic in routes)~~ ✅ RESOLVED
 - No repository pattern
-- ~~Session manipulation scattered~~ ✅ RESOLVED (StateService)
+- ~~Session manipulation scattered~~ ✅ RESOLVED (StateService manages all state via `session['playlist_states']`)
 
-**Remaining Work:** ORM setup (SQLAlchemy + Alembic), repository pattern
+**What Exists:** Service layer (AuthService, PlaylistService, ShuffleService, StateService), Redis sessions, Redis caching, Pydantic validation
+
+**Remaining Work:** ORM setup (SQLAlchemy + Alembic), repository pattern, database schema
 
 **Effort Estimate:** 3-5 days *(reduced from 5-8, service layer done)*
 
@@ -117,9 +120,10 @@ Phase 4: Migration (1 day)
 ## Feature B: User Logins (Beyond Spotify OAuth)
 
 ### Current State
-- **Authentication:** Spotify OAuth only
-- **Identity:** Spotify user ID is the user identity
-- **Session:** OAuth tokens stored in Flask session
+- **Authentication:** Spotify OAuth only (via SpotifyAuthManager with 10 scopes)
+- **Auth Service:** AuthService exists (`shuffify/services/auth_service.py`) — handles OAuth flow, token validation, client creation
+- **Identity:** Spotify user ID is the user identity (no local user model)
+- **Session:** OAuth tokens stored in Redis-backed Flask session (key: `spotify_token`)
 - **No local accounts:** Users can't have Shuffify-specific credentials
 
 ### Use Cases
@@ -162,25 +166,25 @@ class User:
 ### Implementation Roadmap
 
 ```
-Phase 1: User Model (Requires Feature A)
+Phase 1: User Model (Requires Feature A) — PENDING
 ├── Create User database model
-├── Password hashing utilities
+├── Password hashing utilities (bcrypt/argon2)
 ├── User repository
 └── Account creation service
 
-Phase 2: Auth Service (2-3 days)
-├── Email/password registration
+Phase 2: Local Auth (2-3 days) — PENDING
+├── Email/password registration endpoint
 ├── Login endpoint
-├── Session management
+├── Session management (extend existing AuthService)
 ├── Password reset flow
 
-Phase 3: Account Linking (2 days)
-├── Link Spotify to existing account
+Phase 3: Account Linking (2 days) — PENDING
+├── Link Spotify to existing local account
 ├── Unlink service
 ├── Multiple services per account
-└── Service token encryption
+└── Service token encryption at rest
 
-Phase 4: UI Updates (1-2 days)
+Phase 4: UI Updates (1-2 days) — PENDING
 ├── Registration page
 ├── Login page
 ├── Account settings page
@@ -190,9 +194,12 @@ Phase 4: UI Updates (1-2 days)
 ### Readiness Score: 3/10
 
 **Blocking Issues:**
-- Requires Feature A (database)
-- No auth service abstraction
-- OAuth tokens not encrypted
+- Requires Feature A (database) — no user model exists
+- ~~No auth service abstraction~~ ✅ RESOLVED (AuthService exists in `services/auth_service.py`)
+- OAuth tokens not encrypted at rest (stored in Redis session)
+- No password hashing infrastructure
+
+**What Exists:** AuthService (OAuth flow, token validation), SpotifyAuthManager (token management with 10 scopes), Redis sessions
 
 **Effort Estimate:** 7-10 days (after Feature A)
 
@@ -292,25 +299,25 @@ class ShuffleAction:
 ### Implementation Roadmap
 
 ```
-Phase 1: Infrastructure (3-4 days)
-├── Add Celery + Redis to stack
+Phase 1: Infrastructure (3-4 days) — PENDING
+├── Add Celery + Redis to stack (Redis already in use for sessions/caching)
 ├── Configure Celery beat scheduler
 ├── Create task execution framework
 └── Set up monitoring (Flower)
 
-Phase 2: Core System (3-4 days)
-├── Automation model
+Phase 2: Core System (3-4 days) — PENDING
+├── Automation model (database required)
 ├── Trigger protocol + implementations
 ├── Action protocol + implementations
-├── Automation engine
+├── Automation engine (see 03_extensibility_evaluation.md Section 4)
 
-Phase 3: UI (2-3 days)
+Phase 3: UI (2-3 days) — PENDING
 ├── Automation list page
 ├── Create/edit automation form
 ├── Execution logs view
 └── Enable/disable toggle
 
-Phase 4: Triggers (2 days per trigger)
+Phase 4: Triggers (2 days per trigger) — PENDING
 ├── Schedule trigger (cron)
 ├── Playlist change trigger (webhook/polling)
 ├── Manual trigger (on-demand)
@@ -320,9 +327,11 @@ Phase 4: Triggers (2 days per trigger)
 
 **Blocking Issues:**
 - Requires Feature A (database)
-- No background job infrastructure
+- No background job infrastructure (Celery not yet added)
 - No scheduler
 - ~~Service layer needed~~ ✅ RESOLVED
+
+**What Exists:** ShuffleService (algorithm orchestration), Redis (can serve as Celery broker), service layer for all core operations
 
 **Effort Estimate:** 8-12 days (after Feature A) *(reduced, service layer done)*
 
@@ -444,36 +453,37 @@ class RaidEngine:
 ### Implementation Roadmap
 
 ```
-Phase 1: Source System (2-3 days)
-├── Source protocol
-├── PlaylistSource implementation
-├── ArtistSource implementation
+Phase 1: Source System (2-3 days) — PENDING
+├── Source protocol (PlaylistSource, ArtistSource)
+├── PlaylistSource implementation (snapshot-based change detection)
+├── ArtistSource implementation (release date comparison)
 └── Change detection logic
 
-Phase 2: Raid Engine (2-3 days)
-├── RaidRule model
-├── Deduplication logic
-├── Filter system
+Phase 2: Raid Engine (2-3 days) — PENDING
+├── RaidRule model (database required)
+├── Deduplication logic (compare target playlist URIs)
+├── Filter system (audio features, genre, etc.)
 └── Execution engine
 
-Phase 3: Integration (2 days)
-├── Connect to automation system
-├── Scheduled raid execution
-├── Notification on raid results
+Phase 3: Integration (2 days) — PENDING
+├── Connect to automation system (Feature C1)
+├── Scheduled raid execution via Celery
+├── Notification on raid results (Feature D)
 
-Phase 4: UI (2-3 days)
+Phase 4: UI (2-3 days) — PENDING
 ├── Source management page
-├── Raid rule creation
-├── Execution history
+├── Raid rule creation form
+├── Execution history view
 └── "Raid Now" button
 ```
 
 ### Readiness Score: 4/10
 
 **Blocking Issues:**
-- Same as C1, plus:
-- Need change detection system
-- Need efficient Spotify API usage (rate limits)
+- Requires Feature C1 (automation infrastructure), plus:
+- Need change detection system (Spotify playlist snapshot comparison)
+- Need efficient Spotify API usage (rate limits — current retry logic helps)
+- SpotifyAPI already has `get_playlist_tracks()` and caching for reads
 
 **Effort Estimate:** 8-11 days (after C1)
 
@@ -545,42 +555,44 @@ CREATE TABLE notifications (
 ### Implementation Roadmap
 
 ```
-Phase 1: Channel System (2-3 days)
-├── NotificationChannel protocol
-├── Telegram implementation
+Phase 1: Channel System (2-3 days) — PENDING
+├── NotificationChannel protocol (see 03_extensibility_evaluation.md Section 3)
+├── Telegram implementation (Telegram Bot API)
 ├── SMS implementation (Twilio)
-├── Email implementation
-└── Channel registry
+├── Email implementation (SMTP/SendGrid)
+└── Channel registry (same pattern as ShuffleRegistry)
 
-Phase 2: Delivery System (2 days)
+Phase 2: Delivery System (2 days) — PENDING
 ├── Notification queue (Celery task)
-├── Retry logic
+├── Retry logic (can adapt SpotifyAPI's existing retry pattern)
 ├── Rate limiting per channel
-└── Failure handling
+└── Failure handling and logging
 
-Phase 3: Templates (1-2 days)
+Phase 3: Templates (1-2 days) — PENDING
 ├── Message templates per notification type
-├── Variable substitution
+├── Variable substitution (Jinja2 can be reused)
 ├── Localization (future)
 
-Phase 4: UI (2-3 days)
+Phase 4: UI (2-3 days) — PENDING
 ├── Add notification channel page
 ├── Verify channel (Telegram: /verify code)
 ├── Notification preferences
 └── Test notification button
 
-Phase 5: Integration (1-2 days)
-├── Connect to automation system
-├── Connect to raid system
+Phase 5: Integration (1-2 days) — PENDING
+├── Connect to automation system (Feature C1)
+├── Connect to raid system (Feature C2)
 ├── Error notification hooks
 ```
 
 ### Readiness Score: 2/10
 
 **Blocking Issues:**
-- Requires Feature A, C1 (database, jobs)
-- No external service integrations
-- Need third-party accounts (Telegram, Twilio)
+- Requires Feature A (database for channel config), C1 (background jobs for async delivery)
+- No external service integrations yet
+- Need third-party accounts (Telegram Bot, Twilio, SendGrid)
+
+**What Exists:** Protocol + Registry pattern proven (ShuffleRegistry), Redis available for message queuing
 
 **Effort Estimate:** 8-12 days (after C1)
 
@@ -654,25 +666,27 @@ document.addEventListener('keydown', (e) => {
 ### Implementation Roadmap
 
 ```
-Phase 1: Quick Wins (1-2 days)
+Phase 1: Quick Wins (1-2 days) — PENDING (partially started)
 ├── Skeleton loaders for playlist loading
 ├── Optimistic UI updates
 ├── Better loading spinners
 └── Toast notifications (replace flash)
+    ✅ Refresh playlists button done (POST /refresh-playlists)
+    ✅ Response caching with skip_cache bypass done
 
-Phase 2: Keyboard & Accessibility (1-2 days)
+Phase 2: Keyboard & Accessibility (1-2 days) — PENDING
 ├── Full keyboard navigation
 ├── ARIA live regions for updates
 ├── Focus management
 └── Screen reader improvements
 
-Phase 3: Performance (2-3 days)
+Phase 3: Performance (2-3 days) — PENDING
 ├── Virtual scrolling for long playlists
 ├── Image lazy loading
-├── Response caching
+├── ✅ Response caching (COMPLETED — Redis caching layer)
 └── Service worker (offline support)
 
-Phase 4: Advanced (3-4 days)
+Phase 4: Advanced (3-4 days) — PENDING
 ├── WebSocket for real-time updates
 ├── Drag-and-drop track reordering
 ├── Touch gestures for mobile
@@ -682,16 +696,17 @@ Phase 4: Advanced (3-4 days)
 ### Readiness Score: 7/10 *(up from 6/10, refresh button + caching done)*
 
 **Strengths:**
-- Good CSS foundation (Tailwind)
-- AJAX already working
+- Good CSS foundation (Tailwind CSS via CDN)
+- AJAX already working for shuffle/undo operations
 - Modern browser targets
-- ✅ Refresh playlists button implemented (Feb 2026)
-- ✅ Response caching with skip_cache bypass
+- ✅ Refresh playlists button implemented (Feb 2026) — `POST /refresh-playlists`
+- ✅ Response caching with skip_cache bypass via SpotifyCache
 
 **Gaps:**
-- No build process (could add Vite)
-- No WebSocket infrastructure
-- Limited JavaScript architecture
+- No build process (could add Vite for JS bundling/minification)
+- No WebSocket infrastructure (needed for real-time updates)
+- Limited JavaScript architecture (vanilla JS, no framework, no module system)
+- 3 monolithic templates (944 lines total) — no component decomposition
 
 **Effort Estimate:** 6-10 days total *(reduced, some quick wins done)*
 
@@ -770,50 +785,64 @@ class PlaylistPreviewer {
 }
 ```
 
-### Server-Side Preview Endpoint
+### Server-Side Preview Endpoint (Proposed)
 
 ```python
+# Proposed addition to shuffify/routes.py
+# Uses existing service layer — no new infrastructure needed
+
 @main.route('/shuffle/<playlist_id>/preview', methods=['POST'])
 def preview_shuffle(playlist_id):
     """Preview shuffle without committing to Spotify."""
+    client = require_auth()
+    if client is None:
+        return json_error("Not authenticated", 401)
+
+    # Use existing PlaylistService to load tracks
+    playlist_service = PlaylistService(client)
+    playlist = playlist_service.get_playlist(playlist_id)
+
+    # Use existing ShuffleService to execute algorithm
+    shuffle_service = ShuffleService()
     algorithm_name = request.json.get('algorithm')
     params = request.json.get('params', {})
 
-    spotify = SpotifyClient(session['spotify_token'])
-    playlist = Playlist.from_spotify(spotify, playlist_id)
-
-    algorithm = ShuffleRegistry.get_algorithm(algorithm_name)()
-    shuffled_uris = algorithm.shuffle(playlist.tracks, **params)
+    # Execute shuffle (returns URIs without Spotify side effects)
+    shuffled_uris = shuffle_service.execute(
+        playlist, algorithm_name, **params
+    )
 
     # Return preview without updating Spotify
-    return jsonify({
-        'original': [t['uri'] for t in playlist.tracks],
+    return json_success({
+        'original': playlist.get_track_uris(),
         'preview': shuffled_uris,
         'diff': compute_diff(playlist.tracks, shuffled_uris)
     })
 ```
 
+**Note:** The existing `ShuffleService.execute()` and algorithm `shuffle()` methods return URIs without side effects. The current `/shuffle/<id>` route separately calls `PlaylistService.update_playlist_tracks()` to commit to Spotify. A preview endpoint would simply skip that commit step.
+
 ### Implementation Roadmap
 
 ```
-Phase 1: Preview Endpoint (1-2 days)
-├── /shuffle/<id>/preview endpoint
-├── Return preview without commit
-└── Compute diff information
+Phase 1: Preview Endpoint (1-2 days) — PENDING
+├── /shuffle/<id>/preview endpoint (new route in routes.py)
+├── Return preview without committing to Spotify
+└── Compute diff information (track position changes)
 
-Phase 2: Preview UI (2-3 days)
-├── Preview mode toggle
-├── Side-by-side view
+Phase 2: Preview UI (2-3 days) — PENDING
+├── Preview mode toggle in dashboard
+├── Side-by-side view (before/after)
 ├── Diff highlighting (moved tracks)
 └── Commit/discard buttons
 
-Phase 3: Enhanced Preview (2-3 days)
+Phase 3: Enhanced Preview (2-3 days) — PENDING
 ├── Multiple algorithm comparison
 ├── Drag-and-drop manual adjustment
 ├── Undo within preview
 └── Save as preset
 
-Phase 4: Real-time (2 days)
+Phase 4: Real-time (2 days) — PENDING
 ├── WebSocket for instant preview
 ├── Parameter slider with live update
 └── Performance optimization
@@ -822,13 +851,14 @@ Phase 4: Real-time (2 days)
 ### Readiness Score: 6/10 *(up from 5/10, caching layer done)*
 
 **Strengths:**
-- Algorithm architecture supports preview (returns URIs without commit)
-- AJAX infrastructure exists
-- ✅ Redis caching layer available for playlist data
+- Algorithm architecture supports preview — `shuffle()` returns URIs without side effects
+- ShuffleService.execute() could be adapted to return preview without calling Spotify
+- AJAX infrastructure exists (shuffle/undo already use fetch)
+- ✅ Redis caching layer available for playlist data (60s TTL for playlists)
 
 **Gaps:**
-- No preview endpoint
-- No diff computation
+- No preview endpoint (current `POST /shuffle/<id>` commits immediately to Spotify)
+- No diff computation logic
 - No WebSocket infrastructure
 
 **Effort Estimate:** 6-9 days *(reduced, caching in place)*
@@ -900,43 +930,43 @@ This could mean:
 
 ## Summary Matrix
 
-| Feature | Readiness | Dependencies | Effort | Priority |
-|---------|-----------|--------------|--------|----------|
-| A. Database | 5/10 | ~~Service layer~~ ✅ → ORM only | 3-5 days | **FIRST** |
-| B. User Logins | 4/10 | A | 7-10 days | After A |
-| C1. Automations | 5/10 | A + Jobs | 8-12 days | After A |
-| C2. Raiding | 5/10 | C1 | 8-11 days | After C1 |
-| D. Notifications | 3/10 | C1 | 8-12 days | After C1 |
-| E. Snappy UI | 7/10 | Minor | 6-10 days | Parallel |
-| F. Live Preview | 6/10 | WebSocket | 6-9 days | Parallel |
-| G. Playlist Growth | 3/10 | A + APIs | TBD | Last |
+| Feature | Readiness | Status | Dependencies | Effort | Priority |
+|---------|-----------|--------|--------------|--------|----------|
+| A. Database | 5/10 | **PENDING** | ~~Service layer~~ ✅ → ORM only | 3-5 days | **FIRST** |
+| B. User Logins | 3/10 | **PENDING** | A (database) | 7-10 days | After A |
+| C1. Automations | 5/10 | **PENDING** | A + Celery | 8-12 days | After A |
+| C2. Raiding | 4/10 | **PENDING** | C1 | 8-11 days | After C1 |
+| D. Notifications | 2/10 | **PENDING** | C1 + external APIs | 8-12 days | After C1 |
+| E. Snappy UI | 7/10 | **PENDING** (partial) | Minor; WebSocket for advanced | 6-10 days | Parallel |
+| F. Live Preview | 6/10 | **PENDING** | Preview endpoint | 6-9 days | Parallel |
+| G. Playlist Growth | 3/10 | **PENDING** | A + social APIs | TBD | Last |
 
 ### Recommended Order
 
 ```
-PHASE 1: FOUNDATION
-├── Service layer extraction (prerequisite for all)
-├── Feature A: Database
-└── Feature E: UI improvements (parallel)
+PHASE 1: FOUNDATION — IN PROGRESS (service layer done, database next)
+├── ✅ Service layer extraction — COMPLETED (Jan 2026)
+├── Feature A: Database — PENDING (critical path)
+└── Feature E: UI improvements — PENDING (can run in parallel)
 
-PHASE 2: CORE FEATURES
-├── Feature C1: Automations
-├── Feature F: Live preview
-└── Feature B: User logins (if needed)
+PHASE 2: CORE FEATURES — PENDING (blocked by Phase 1)
+├── Feature C1: Automations — PENDING
+├── Feature F: Live preview — PENDING (can start without database)
+└── Feature B: User logins — PENDING (if needed)
 
-PHASE 3: ADVANCED FEATURES
-├── Feature C2: Raiding
-├── Feature D: Notifications
-└── Feature G: Growth (scope TBD)
+PHASE 3: ADVANCED FEATURES — PENDING (blocked by Phase 2)
+├── Feature C2: Raiding — PENDING
+├── Feature D: Notifications — PENDING
+└── Feature G: Growth — PENDING (scope TBD)
 ```
 
 ### Critical Path
 
 ```
-Service Layer ✅ → Database → Automations → Raiding → Notifications
+Service Layer ✅ → Database (PENDING) → Automations → Raiding → Notifications
                        ↓
-                  UI Improvements (parallel)
-                  Live Preview (parallel)
+                  UI Improvements (parallel, PENDING)
+                  Live Preview (parallel, PENDING)
 ```
 
 ---

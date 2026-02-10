@@ -14,14 +14,10 @@ documentation/
 │   ├── 03_extensibility_evaluation.md
 │   ├── 04_future_features_readiness.md
 │   └── 05_brainstorm_enhancements.md
-├── archive/           # Completed evaluations and planning docs
-│   ├── 01_architecture_evaluation.md
-│   ├── 02_modularity_assessment.md
-│   └── separation_of_concerns_evaluation.md
-├── planning/          # Design docs, architecture decisions
-├── guides/            # How-to guides and tutorials (planned)
-├── updates/           # Dated bug fixes, patches, hotfixes (planned)
-└── operations/        # Production runbooks (planned)
+└── archive/           # Completed evaluations and legacy documents
+    ├── 01_architecture_evaluation.md
+    ├── 02_modularity_assessment.md
+    └── separation_of_concerns_evaluation.md
 ```
 
 ---
@@ -31,8 +27,8 @@ documentation/
 Active evaluation documents for ongoing development planning:
 
 - **[Evaluation Overview](evaluation/README.md)** - Summary and reading guide
-- **[Extensibility Evaluation](evaluation/03_extensibility_evaluation.md)** - Service extensibility patterns
-- **[Future Features Readiness](evaluation/04_future_features_readiness.md)** - Readiness for planned features
+- **[Extensibility Evaluation](evaluation/03_extensibility_evaluation.md)** - Service extensibility patterns, plugin architecture proposals
+- **[Future Features Readiness](evaluation/04_future_features_readiness.md)** - Readiness for planned features (database, automations, notifications, UI)
 - **[Brainstorm Enhancements](evaluation/05_brainstorm_enhancements.md)** - Enhancement ideas and tracking
 
 ## Archived (Completed)
@@ -45,74 +41,25 @@ Evaluations and plans that have been fully implemented:
 
 ---
 
-## Planning & Architecture
+## Related Project Documentation
 
-### Completed Documents (moved to archive/)
+### Root-Level Documents
 
-- **[Separation of Concerns Evaluation](archive/separation_of_concerns_evaluation.md)** — All recommendations implemented
-
-### Planned Documents
-
-- Architecture Decision Records (ADRs)
-- Database integration design
-- Algorithm performance comparison framework
-
----
-
-## Guides (Planned)
-
-Future how-to guides and tutorials:
-
-- **Spotify Setup Guide** - OAuth app configuration on Spotify Developer Dashboard
-- **Algorithm Development Guide** - Step-by-step for creating new shuffle algorithms
-- **Deployment Guide** - Production deployment procedures
-- **Docker Setup Guide** - Container configuration and deployment
-- **Testing Guide** - Running and writing tests
-
----
-
-## Updates (Planned)
-
-Dated bug fixes, patches, and hotfixes:
-
-Format: `YYYY-MM-DD-description.md`
-
-Examples:
-- `2026-02-15-oauth-security-patch.md`
-- `2026-03-10-session-storage-bugfix.md`
-
----
-
-## Operations (Planned)
-
-Production runbooks and procedures:
-
-- **Monitoring** - Health checks, metrics, alerting
-- **Backups** - Session data, configuration
-- **Troubleshooting** - Common issues and solutions
-- **Incident Response** - Procedures for outages
-- **Rollback Procedures** - How to revert deployments
-
----
-
-## Quick Links
-
-### Root-Level Documentation
-
-- [README.md](../README.md) - Project overview and quick start
-- [CHANGELOG.md](../CHANGELOG.md) - Version history
-- [CLAUDE.md](../CLAUDE.md) - Developer guide for AI assistants
-- [LICENSE](../LICENSE) - MIT License
-
-### Development Guides
-
-- [dev_guides/infrastructure_critiques.md](../dev_guides/infrastructure_critiques.md)
-- [dev_guides/UX_CRITIQUES.md](../dev_guides/UX_CRITIQUES.md)
-- [dev_guides/FACEBOOK_OAUTH_TROUBLESHOOTING.md](../dev_guides/FACEBOOK_OAUTH_TROUBLESHOOTING.md)
+| File | Description |
+|------|-------------|
+| [README.md](../README.md) | Project overview and quick start |
+| [CHANGELOG.md](../CHANGELOG.md) | Version history |
+| [CLAUDE.md](../CLAUDE.md) | Developer guide for AI assistants |
 
 ### Algorithm Documentation
 
-- [shuffify/shuffle_algorithms/README.md](../shuffify/shuffle_algorithms/README.md)
+- [shuffify/shuffle_algorithms/README.md](../shuffify/shuffle_algorithms/README.md) - All 7 shuffle algorithms with usage details
+
+### Development Guides
+
+- [dev_guides/infrastructure_critiques.md](../dev_guides/infrastructure_critiques.md) - Infrastructure improvement notes
+- [dev_guides/UX_CRITIQUES.md](../dev_guides/UX_CRITIQUES.md) - UX improvement notes
+- [dev_guides/FACEBOOK_OAUTH_TROUBLESHOOTING.md](../dev_guides/FACEBOOK_OAUTH_TROUBLESHOOTING.md) - OAuth troubleshooting
 
 ---
 
@@ -122,11 +69,8 @@ Production runbooks and procedures:
 
 | Document Type | Location | Example |
 |--------------|----------|---------|
-| System evaluations | `evaluation/` | `evaluation/01_architecture_evaluation.md` |
-| Architecture decisions | `planning/` | `planning/redis-migration-adr.md` |
-| How-to guides | `guides/` | `guides/spotify-oauth-setup.md` |
-| Bug fixes (dated) | `updates/` | `updates/2026-02-15-session-bug.md` |
-| Operations | `operations/` | `operations/deployment.md` |
+| System evaluations | `evaluation/` | `evaluation/06_performance_review.md` |
+| Completed evaluations | `archive/` | `archive/01_architecture_evaluation.md` |
 | Project overview | Root | `README.md` |
 | Version history | Root | `CHANGELOG.md` |
 
@@ -137,6 +81,7 @@ Production runbooks and procedures:
 3. **Link Liberally** - Cross-reference related documents
 4. **Keep Root Clean** - Only critical docs in project root
 5. **Update This Index** - Add new docs to this README
+6. **Development Plans** - Mark phases as PENDING, IN PROGRESS, or COMPLETED
 
 ### Documentation Review Checklist
 
@@ -154,6 +99,6 @@ Production runbooks and procedures:
 This documentation index should be updated whenever:
 - New documentation is added
 - Documentation is reorganized
-- Documentation is deprecated or removed
+- Documentation is deprecated or archived
 
-Last updated: 2026-02-08
+Last updated: 2026-02-10

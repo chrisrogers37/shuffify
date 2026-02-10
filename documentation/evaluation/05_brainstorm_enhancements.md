@@ -1,7 +1,7 @@
 # Brainstorm: Enhancement Opportunities
 
 **Date:** January 2026
-**Last Updated:** February 8, 2026
+**Last Updated:** February 10, 2026
 **Project:** Shuffify v2.4.x
 **Purpose:** Creative exploration of potential features and improvements
 
@@ -334,7 +334,7 @@ This is a brainstorm document - not all ideas are fully vetted. Ideas are catego
 
 ### Highest Impact, Lowest Effort
 
-1. **Artist spacing algorithm** (L effort, H impact)
+1. ✅ ~~**Artist spacing algorithm**~~ (L effort, H impact) — **COMPLETED** (Feb 2026)
 2. **Multi-playlist shuffle** (L effort, H impact)
 3. **User presets** (L effort, H impact)
 4. **Playlist merge** (L effort, H impact)
@@ -342,7 +342,7 @@ This is a brainstorm document - not all ideas are fully vetted. Ideas are catego
 
 ### Best ROI Features
 
-1. 🔥 **Response caching** - Performance boost for everyone
+1. ✅ ~~**Response caching**~~ - Performance boost for everyone — **COMPLETED** (Redis caching layer)
 2. 🔥 **Public API** - Enables ecosystem growth
 3. 🔥 **PWA** - Mobile experience without app stores
 4. ⭐ **Duplicate finder** - Immediate user value
@@ -354,7 +354,7 @@ This is a brainstorm document - not all ideas are fully vetted. Ideas are catego
 
 ### "The Smart Shuffle" Package
 - Skip-aware shuffle
-- Artist spacing
+- ✅ Artist spacing — **COMPLETED**
 - Mood-based shuffle
 - Listening history shuffle
 
