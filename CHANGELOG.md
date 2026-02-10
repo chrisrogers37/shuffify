@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Algorithm validation uses registry as single source of truth** - Removed hardcoded `VALID_ALGORITHMS` set from `ShuffleService` and hardcoded algorithm list from `ShuffleRequest` validator; both now query the registry dynamically
 - **Algorithm params mapping is declarative** - Replaced 8-branch `elif` chain in `get_algorithm_params()` with a dict-based mapping
 - **SpotifyClient exposes skip_cache parameter** - Added `skip_cache` to `SpotifyClient.get_user_playlists()` facade; `PlaylistService` no longer reaches through to private `_api` attribute
+- **Shared shuffle algorithm utilities** - Extracted `extract_uris`, `split_keep_first`, and `split_into_sections` into `shuffle_algorithms/utils.py`; 5 algorithm files now use shared functions instead of duplicated code
 
 ### Removed
 - **Duplicate algorithm registration** - Removed redundant `ShuffleRegistry.register()` calls that duplicated the `_algorithms` class dict
