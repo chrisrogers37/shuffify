@@ -41,17 +41,6 @@ class ShuffleExecutionError(ShuffleError):
 class ShuffleService:
     """Service for managing shuffle algorithm execution."""
 
-    # Valid algorithm names for quick validation
-    VALID_ALGORITHMS = {
-        "BasicShuffle",
-        "BalancedShuffle",
-        "StratifiedShuffle",
-        "PercentageShuffle",
-        "ArtistSpacingShuffle",
-        "AlbumSequenceShuffle",
-        "TempoGradientShuffle",
-    }
-
     @staticmethod
     def list_algorithms() -> List[Dict[str, Any]]:
         """
@@ -76,19 +65,16 @@ class ShuffleService:
         Raises:
             InvalidAlgorithmError: If the algorithm doesn't exist.
         """
-        if name not in ShuffleService.VALID_ALGORITHMS:
-            logger.error(f"Invalid algorithm requested: {name}")
-            raise InvalidAlgorithmError(
-                f"Invalid algorithm '{name}'. "
-                f"Valid options: {', '.join(sorted(ShuffleService.VALID_ALGORITHMS))}"
-            )
-
         try:
             algorithm_class = ShuffleRegistry.get_algorithm(name)
             return algorithm_class()
         except ValueError:
-            logger.error(f"Failed to get algorithm: {name}")
-            raise InvalidAlgorithmError(f"Unknown algorithm: {name}")
+            valid_names = sorted(ShuffleRegistry.get_available_algorithms().keys())
+            logger.error(f"Invalid algorithm requested: {name}")
+            raise InvalidAlgorithmError(
+                f"Invalid algorithm '{name}'. "
+                f"Valid options: {', '.join(valid_names)}"
+            )
 
     @staticmethod
     def execute(
