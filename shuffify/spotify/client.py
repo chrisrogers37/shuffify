@@ -211,9 +211,12 @@ class SpotifyClient:
     # Playlist Methods
     # =========================================================================
 
-    def get_user_playlists(self) -> List[Dict[str, Any]]:
+    def get_user_playlists(self, skip_cache: bool = False) -> List[Dict[str, Any]]:
         """
         Get all playlists the user can edit.
+
+        Args:
+            skip_cache: If True, bypass cache and fetch fresh data from Spotify.
 
         Returns:
             List of playlist dictionaries.
@@ -223,7 +226,7 @@ class SpotifyClient:
             SpotifyAPIError: If the request fails.
         """
         self._ensure_authenticated()
-        return self._api.get_user_playlists()
+        return self._api.get_user_playlists(skip_cache=skip_cache)
 
     def get_playlist(self, playlist_id: str) -> Dict[str, Any]:
         """
