@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, Optional
 import random
 from . import ShuffleAlgorithm
+from .utils import extract_uris, split_keep_first, split_into_sections
 import logging
 
 logger = logging.getLogger(__name__)
@@ -68,35 +69,17 @@ class BalancedShuffle(ShuffleAlgorithm):
         keep_first = kwargs.get("keep_first", 0)
         section_count = kwargs.get("section_count", 4)
 
-        # Extract URIs from track dictionaries
-        uris = [track["uri"] for track in tracks if track.get("uri")]
+        uris = extract_uris(tracks)
 
         if len(uris) <= 1:
             return uris
 
-        # Split tracks into kept and to_shuffle portions
-        kept_tracks = uris[:keep_first] if keep_first > 0 else []
-        to_shuffle = uris[keep_first:]
+        kept_tracks, to_shuffle = split_keep_first(uris, keep_first)
 
         if len(to_shuffle) <= 1:
             return kept_tracks + to_shuffle
 
-        # Calculate section sizes
-        total_tracks = len(to_shuffle)
-        base_section_size = total_tracks // section_count
-        remainder = total_tracks % section_count
-
-        # Create sections
-        sections = []
-        start = 0
-
-        for i in range(section_count):
-            # Add one extra track to sections until remainder is used up
-            current_section_size = base_section_size + (1 if i < remainder else 0)
-            end = start + current_section_size
-            section = to_shuffle[start:end]
-            sections.append(section)
-            start = end
+        sections = split_into_sections(to_shuffle, section_count)
 
         # Shuffle each section internally
         for section in sections:

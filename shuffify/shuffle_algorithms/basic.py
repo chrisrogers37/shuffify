@@ -1,6 +1,7 @@
 import random
 from typing import List, Dict, Any, Optional
 from . import ShuffleAlgorithm
+from .utils import extract_uris, split_keep_first
 
 
 class BasicShuffle(ShuffleAlgorithm):
@@ -49,18 +50,11 @@ class BasicShuffle(ShuffleAlgorithm):
         """
         keep_first = kwargs.get("keep_first", 0)
 
-        # Extract URIs from track dictionaries
-        uris = [track["uri"] for track in tracks if track.get("uri")]
+        uris = extract_uris(tracks)
 
         if len(uris) <= 1 or keep_first >= len(uris):
             return uris
 
-        if keep_first > 0:
-            kept_uris = uris[:keep_first]
-            to_shuffle = uris[keep_first:]
-            random.shuffle(to_shuffle)
-            return kept_uris + to_shuffle
-
-        shuffled = uris.copy()
-        random.shuffle(shuffled)
-        return shuffled
+        kept_uris, to_shuffle = split_keep_first(uris, keep_first)
+        random.shuffle(to_shuffle)
+        return kept_uris + to_shuffle

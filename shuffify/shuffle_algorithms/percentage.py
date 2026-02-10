@@ -1,6 +1,7 @@
 import random
 from typing import List, Dict, Any, Optional
 from . import ShuffleAlgorithm
+from .utils import extract_uris
 
 
 class PercentageShuffle(ShuffleAlgorithm):
@@ -58,8 +59,7 @@ class PercentageShuffle(ShuffleAlgorithm):
         shuffle_percentage = kwargs.get("shuffle_percentage", 50.0)
         shuffle_location = kwargs.get("shuffle_location", "front")
 
-        # Extract URIs from track dictionaries
-        uris = [track["uri"] for track in tracks if track.get("uri")]
+        uris = extract_uris(tracks)
 
         if len(uris) <= 1:
             return uris
