@@ -2,7 +2,7 @@
 
 **Scan Date:** 2026-02-10
 **Codebase Version:** `07de5fd` (main)
-**Tests:** 479 passing | 0 failing
+**Tests:** 513 passing | 0 failing
 **Lint:** Clean (flake8, black)
 
 ---

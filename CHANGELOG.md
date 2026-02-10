@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Duplicate TTL class constants** - Removed `DEFAULT_TTL`, `PLAYLIST_TTL`, `USER_TTL`, `AUDIO_FEATURES_TTL` from `SpotifyCache`; `config.py` is the single source of truth
 
 ### Added
+- **Error handler test coverage** - 14 new tests verifying all service exception handlers return correct HTTP status codes, JSON structure, and error categories
+- **Playlist model test coverage** - 20 new tests covering construction, validation, track operations, feature statistics, and serialization
 - **Refresh Playlists Button** - Re-fetch playlists from Spotify without losing undo state
   - New `POST /refresh-playlists` endpoint with Redis cache bypass
   - Dashboard UI button with spinning icon animation during refresh
