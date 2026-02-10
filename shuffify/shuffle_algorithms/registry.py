@@ -77,13 +77,3 @@ class ShuffleRegistry:
                     }
                 )
         return result
-
-
-# Register all algorithms
-ShuffleRegistry.register(BasicShuffle)
-ShuffleRegistry.register(BalancedShuffle)
-ShuffleRegistry.register(PercentageShuffle)
-ShuffleRegistry.register(StratifiedShuffle)
-ShuffleRegistry.register(ArtistSpacingShuffle)
-ShuffleRegistry.register(AlbumSequenceShuffle)
-ShuffleRegistry.register(TempoGradientShuffle)
