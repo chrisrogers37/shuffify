@@ -78,28 +78,6 @@ class Playlist:
         """Return all track URIs."""
         return [track["uri"] for track in self.tracks if track.get("uri")]
 
-    def get_tracks_with_features(self) -> List[Dict[str, Any]]:
-        """Return tracks, attaching audio features when available."""
-        enriched_tracks = []
-        for track in self.tracks:
-            track_id = track["id"]
-            enriched_track = {**track}
-            enriched_track["features"] = self.audio_features.get(track_id, {})
-            enriched_tracks.append(enriched_track)
-        return enriched_tracks
-
-    def get_track(self, uri: str) -> Optional[Dict[str, Any]]:
-        """Retrieve a track by its URI."""
-        return next((track for track in self.tracks if track.get("uri") == uri), None)
-
-    def get_track_with_features(self, uri: str) -> Optional[Dict[str, Any]]:
-        """Retrieve a track and its features."""
-        track = self.get_track(uri)
-        if not track:
-            return None
-        track_id = track.get("id")
-        return {**track, "features": self.audio_features.get(track_id, {})}
-
     def has_features(self) -> bool:
         """Check if features were loaded."""
         return bool(self.audio_features)

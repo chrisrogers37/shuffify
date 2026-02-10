@@ -33,20 +33,14 @@ class SpotifyCache:
         playlists = cache.get_playlists(user_id)
     """
 
-    # Default TTL values in seconds
-    DEFAULT_TTL = 300  # 5 minutes
-    PLAYLIST_TTL = 60  # 1 minute (changes frequently)
-    USER_TTL = 600  # 10 minutes
-    AUDIO_FEATURES_TTL = 86400  # 24 hours (rarely change)
-
     def __init__(
         self,
         redis_client: redis.Redis,
         key_prefix: str = "shuffify:cache:",
-        default_ttl: int = DEFAULT_TTL,
-        playlist_ttl: int = PLAYLIST_TTL,
-        user_ttl: int = USER_TTL,
-        audio_features_ttl: int = AUDIO_FEATURES_TTL,
+        default_ttl: int = 300,
+        playlist_ttl: int = 60,
+        user_ttl: int = 600,
+        audio_features_ttl: int = 86400,
     ):
         """
         Initialize the cache.
