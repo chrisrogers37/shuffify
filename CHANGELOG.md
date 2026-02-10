@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - **Duplicate algorithm registration** - Removed redundant `ShuffleRegistry.register()` calls that duplicated the `_algorithms` class dict
 - **Template debug artifacts** - Removed debug comments, commented-out debug div, orphaned JS debug references, and verbose `console.log` state tracing from `base.html` and `dashboard.html`
+- **Unused Playlist methods** - Removed `get_track()`, `get_track_with_features()`, and `get_tracks_with_features()` from Playlist model (no callers in codebase)
+- **Duplicate TTL class constants** - Removed `DEFAULT_TTL`, `PLAYLIST_TTL`, `USER_TTL`, `AUDIO_FEATURES_TTL` from `SpotifyCache`; `config.py` is the single source of truth
 
 ### Added
 - **Refresh Playlists Button** - Re-fetch playlists from Spotify without losing undo state
