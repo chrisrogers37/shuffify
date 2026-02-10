@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- **Duplicate algorithm registration** - Removed redundant `ShuffleRegistry.register()` calls that duplicated the `_algorithms` class dict
+- **Template debug artifacts** - Removed debug comments, commented-out debug div, orphaned JS debug references, and verbose `console.log` state tracing from `base.html` and `dashboard.html`
+
 ### Added
 - **Refresh Playlists Button** - Re-fetch playlists from Spotify without losing undo state
   - New `POST /refresh-playlists` endpoint with Redis cache bypass
