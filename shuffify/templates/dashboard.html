@@ -131,12 +131,6 @@
                                 Undo Last Shuffle
                             </button>
                         </form>
-                        <!-- Debugging Info - Uncomment to display state on the card -->
-                        <!--
-                        <div id="debug-info-{{ playlist.id }}" class="p-2 mt-2 text-xs text-white/50 bg-black/20 rounded-lg">
-                            Debug: Waiting for action...
-                        </div>
-                        -->
                     </div>
                 </div>
             {% endfor %}
@@ -247,19 +241,12 @@ function handlePlaylistAction(form, action) {
             // We use this "single source of truth" to update the UI.
             if (data.playlist_state) {
                 const undoForm = document.getElementById(`undo-form-${playlistId}`);
-                const debugInfo = document.getElementById(`debug-info-${playlistId}`);
                 const canUndo = data.playlist_state.current_index > 0;
-                
-                // Update debug view
-                debugInfo.textContent = `Debug: Index is ${data.playlist_state.current_index}. Can undo: ${canUndo}.`;
-                console.log(`Playlist ${playlistId}: Index is ${data.playlist_state.current_index}. Can undo: ${canUndo}.`);
 
                 if (canUndo) {
                     undoForm.classList.remove('hidden');
-                    console.log(`Playlist ${playlistId}: Showing undo button.`);
                 } else {
                     undoForm.classList.add('hidden');
-                    console.log(`Playlist ${playlistId}: Hiding undo button.`);
                 }
             }
         } else {

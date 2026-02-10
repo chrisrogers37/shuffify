@@ -138,11 +138,9 @@
             const playlistId = form.dataset.playlistId;
             const submitButton = form.querySelector('button[type="submit"]');
             const originalText = submitButton.textContent;
-            // const debugInfo = document.getElementById(`debug-info-${playlistId}`); // Uncomment for debugging
 
             submitButton.disabled = true;
             submitButton.textContent = action === 'shuffle' ? 'Shuffling...' : 'Undoing...';
-            // if (debugInfo) debugInfo.textContent = 'Processing...'; // Uncomment for debugging
 
             try {
                 const response = await fetch(form.action, {
@@ -163,12 +161,6 @@
                     const undoForm = document.getElementById(`undo-form-${playlistId}`);
                     const canUndo = data.playlist_state.current_index > 0;
 
-                    /* Uncomment for debugging
-                    if (debugInfo) {
-                        debugInfo.textContent = `Debug: Index is ${data.playlist_state.current_index}. Can undo: ${canUndo}.`;
-                    }
-                    */
-                    
                     if (canUndo) {
                         undoForm.classList.remove('hidden');
                     } else {
@@ -178,7 +170,6 @@
             } catch (error) {
                 console.error('Error in handlePlaylistAction:', error);
                 const errorMessage = error.message || 'An unknown error occurred.';
-                // if (debugInfo) debugInfo.textContent = `Error: ${errorMessage}`; // Uncomment for debugging
                 showFlashMessage(errorMessage, 'error');
             } finally {
                 submitButton.disabled = false;
