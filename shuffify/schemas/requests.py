@@ -7,6 +7,8 @@ Provides type-safe validation for all API request parameters.
 from typing import Literal, Annotated, Any, Dict
 from pydantic import BaseModel, Field, field_validator
 
+from shuffify.shuffle_algorithms.registry import ShuffleRegistry
+
 
 class ShuffleRequestBase(BaseModel):
     """Base schema for shuffle requests."""
@@ -98,24 +100,28 @@ class ShuffleRequest(BaseModel):
     @classmethod
     def validate_algorithm_name(cls, v: str) -> str:
         """Ensure algorithm name is valid."""
-        valid_algorithms = {
-            "BasicShuffle",
-            "BalancedShuffle",
-            "StratifiedShuffle",
-            "PercentageShuffle",
-            "ArtistSpacingShuffle",
-            "AlbumSequenceShuffle",
-            "TempoGradientShuffle",
-        }
         if not v or not v.strip():
             raise ValueError("Algorithm name cannot be empty")
         v = v.strip()
+        valid_algorithms = set(ShuffleRegistry.get_available_algorithms().keys())
         if v not in valid_algorithms:
             raise ValueError(
                 f"Invalid algorithm '{v}'. "
                 f"Valid options: {', '.join(sorted(valid_algorithms))}"
             )
         return v
+
+    # Maps algorithm names to the list of parameter field names they use.
+    # When adding a new algorithm, add an entry here with its parameter names.
+    _ALGORITHM_PARAMS = {
+        "BasicShuffle": ["keep_first"],
+        "BalancedShuffle": ["keep_first", "section_count"],
+        "StratifiedShuffle": ["keep_first", "section_count"],
+        "PercentageShuffle": ["shuffle_percentage", "shuffle_location"],
+        "ArtistSpacingShuffle": ["min_spacing"],
+        "AlbumSequenceShuffle": ["shuffle_within_albums"],
+        "TempoGradientShuffle": ["direction"],
+    }
 
     def get_algorithm_params(self) -> Dict[str, Any]:
         """
@@ -124,25 +130,8 @@ class ShuffleRequest(BaseModel):
         Returns:
             Dictionary of algorithm-specific parameters.
         """
-        if self.algorithm == "BasicShuffle":
-            return {"keep_first": self.keep_first}
-        elif self.algorithm == "BalancedShuffle":
-            return {"keep_first": self.keep_first, "section_count": self.section_count}
-        elif self.algorithm == "StratifiedShuffle":
-            return {"keep_first": self.keep_first, "section_count": self.section_count}
-        elif self.algorithm == "PercentageShuffle":
-            return {
-                "shuffle_percentage": self.shuffle_percentage,
-                "shuffle_location": self.shuffle_location,
-            }
-        elif self.algorithm == "ArtistSpacingShuffle":
-            return {"min_spacing": self.min_spacing}
-        elif self.algorithm == "AlbumSequenceShuffle":
-            return {"shuffle_within_albums": self.shuffle_within_albums}
-        elif self.algorithm == "TempoGradientShuffle":
-            return {"direction": self.direction}
-        else:
-            return {}
+        param_names = self._ALGORITHM_PARAMS.get(self.algorithm, [])
+        return {name: getattr(self, name) for name in param_names}
 
 
 class PlaylistQueryParams(BaseModel):

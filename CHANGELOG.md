@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Algorithm validation uses registry as single source of truth** - Removed hardcoded `VALID_ALGORITHMS` set from `ShuffleService` and hardcoded algorithm list from `ShuffleRequest` validator; both now query the registry dynamically
+- **Algorithm params mapping is declarative** - Replaced 8-branch `elif` chain in `get_algorithm_params()` with a dict-based mapping
+
 ### Removed
 - **Duplicate algorithm registration** - Removed redundant `ShuffleRegistry.register()` calls that duplicated the `_algorithms` class dict
 - **Template debug artifacts** - Removed debug comments, commented-out debug div, orphaned JS debug references, and verbose `console.log` state tracing from `base.html` and `dashboard.html`
