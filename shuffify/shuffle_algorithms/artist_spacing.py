@@ -3,6 +3,7 @@ import heapq
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
 from . import ShuffleAlgorithm
+from .utils import extract_uris
 
 
 class ArtistSpacingShuffle(ShuffleAlgorithm):
@@ -70,7 +71,7 @@ class ArtistSpacingShuffle(ShuffleAlgorithm):
         """
         min_spacing = kwargs.get("min_spacing", 1)
 
-        uris = [t["uri"] for t in tracks if t.get("uri")]
+        uris = extract_uris(tracks)
         if len(uris) <= 1:
             return uris
 
