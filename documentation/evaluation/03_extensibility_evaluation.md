@@ -1,7 +1,7 @@
 # Extensibility Evaluation
 
 **Date:** January 2026
-**Last Updated:** February 8, 2026
+**Last Updated:** February 10, 2026
 **Project:** Shuffify v2.4.x
 **Scope:** Service extensibility and plugin pattern analysis
 
@@ -11,7 +11,7 @@
 
 Shuffify demonstrates excellent extensibility in the shuffle algorithms module through the Protocol + Registry pattern. However, other areas lack extension points: no plugin architecture for notifications, automations, or data sources. The codebase is not API-ready for external integrations. Significant work is needed to make the system extensible for the planned features.
 
-**Overall Extensibility Score: 5/10**
+**Overall Extensibility Score: 2.6/10** (see Section 10 for detailed breakdown)
 
 ---
 
@@ -48,7 +48,7 @@ Shuffify demonstrates excellent extensibility in the shuffle algorithms module t
 ### 2.1 Current Design
 
 ```python
-# Protocol definition (interface)
+# Protocol definition (shuffify/shuffle_algorithms/__init__.py)
 class ShuffleAlgorithm(Protocol):
     @property
     def name(self) -> str: ...
@@ -62,29 +62,43 @@ class ShuffleAlgorithm(Protocol):
     @property
     def requires_features(self) -> bool: ...
 
-    def shuffle(self, tracks: List[Dict], features: Optional[Dict] = None,
+    def shuffle(self, tracks: List[Dict[str, Any]],
+                features: Optional[Dict[str, Dict[str, Any]]] = None,
                 **kwargs) -> List[str]: ...
 
-# Registry for discovery
+# Registry for discovery (shuffify/shuffle_algorithms/registry.py)
 class ShuffleRegistry:
-    _algorithms: Dict[str, Type[ShuffleAlgorithm]] = {}
+    # Pre-populated dict, not dynamic self-registration
+    _algorithms: Dict[str, Type[ShuffleAlgorithm]] = {
+        "BasicShuffle": BasicShuffle,
+        "BalancedShuffle": BalancedShuffle,
+        # ... all 7 algorithms
+    }
+    _hidden_algorithms = {"TempoGradientShuffle"}  # Hidden from UI
 
     @classmethod
     def register(cls, algorithm_class): ...
 
     @classmethod
     def get_algorithm(cls, name): ...
+        # Returns hidden algorithms too (direct access)
 
     @classmethod
     def list_algorithms(cls): ...
+        # Filters out _hidden_algorithms, returns in defined display order
+
+    @classmethod
+    def get_available_algorithms(cls): ...
+        # Returns ALL algorithms including hidden ones
 ```
 
 ### 2.2 Why This Works
 
-1. **Duck Typing:** Protocol allows any class with matching signature
-2. **Self-Registration:** Algorithms register themselves
-3. **Metadata-Driven UI:** Parameters dict auto-generates form fields
-4. **No Modification Required:** Add algorithm → it appears in UI
+1. **Duck Typing:** Protocol allows any class with matching signature (no ABC inheritance required)
+2. **Centralized Registration:** Algorithms are registered in `registry.py` via the `_algorithms` dict and `register()` classmethod
+3. **Metadata-Driven UI:** `parameters` dict auto-generates form fields in the frontend
+4. **Visibility Control:** `_hidden_algorithms` set allows hiding algorithms from the UI while keeping code accessible (e.g., TempoGradientShuffle hidden due to deprecated Spotify API)
+5. **Ordered Display:** `list_algorithms()` returns visible algorithms in a defined display order
 
 ### 2.3 Pattern Replication Opportunities
 
@@ -347,15 +361,29 @@ class AutomationEngine:
 
 ## 5. Data Source Abstraction
 
-### 5.1 Current State: Hardcoded Spotify
+### 5.1 Current State: Modular but Spotify-Only
 
 ```python
-# Current: Direct Spotify dependency everywhere
+# Current: Well-structured but single-service (shuffify/spotify/client.py)
 class SpotifyClient:
-    def get_user_playlists(self): ...
-    def get_playlist_tracks(self): ...
-    def update_playlist_tracks(self): ...
+    """Facade combining auth and API operations."""
+    def get_auth_url(self) -> str: ...
+    def get_token(self, code: str) -> Dict: ...
+    def get_current_user(self) -> Dict: ...
+    def get_user_playlists(self) -> List[Dict]: ...
+    def get_playlist(self, playlist_id: str) -> Dict: ...
+    def get_playlist_tracks(self, playlist_id: str) -> List[Dict]: ...
+    def update_playlist_tracks(self, playlist_id: str, track_uris: List[str]) -> bool: ...
+    def get_track_audio_features(self, track_ids: List[str]) -> Dict: ...
+
+# Also available as separate components (preferred for new code):
+# SpotifyAuthManager — OAuth and token management
+# SpotifyAPI — Data operations with caching support
+# SpotifyCredentials — DI for credentials
+# SpotifyCache — Redis caching layer
 ```
+
+**Note:** The Spotify module is well-modularized internally (auth, API, cache, credentials, exceptions), but there is no abstract `MusicService` interface that would allow swapping in Apple Music or another provider without modifying consumers.
 
 ### 5.2 Proposed: Music Service Interface
 
@@ -414,11 +442,26 @@ class AppleMusicService(MusicService):
 ### 6.1 Current: Internal-Only API
 
 ```
-Current endpoints are designed for internal AJAX use:
-- GET  /playlist/<id>        - Returns playlist JSON
-- POST /shuffle/<id>         - Executes shuffle
-- POST /undo/<id>            - Undoes shuffle
+Current endpoints serve both HTML pages and internal AJAX (12 routes total):
+
+HTML pages:
+- GET  /                     - Home/dashboard (login or authenticated view)
+- GET  /login                - Initiates Spotify OAuth flow
+- GET  /callback             - Handles Spotify OAuth callback
+- GET  /logout               - Clears session
+- GET  /health               - Health check for Docker/monitoring
+- GET  /terms                - Terms of Service page
+- GET  /privacy              - Privacy Policy page
+
+AJAX/JSON endpoints:
+- POST /refresh-playlists    - Refreshes playlists without losing undo state
+- GET  /playlist/<id>        - Returns playlist JSON (with optional audio features)
+- GET  /playlist/<id>/stats  - Returns audio feature statistics
+- POST /shuffle/<id>         - Executes shuffle and commits to Spotify
+- POST /undo/<id>            - Undoes last shuffle
 ```
+
+All routes are in a single `main` Blueprint in `shuffify/routes.py` (407 lines). No versioned API, no API key auth, no rate limiting beyond Spotify's own limits.
 
 ### 6.2 Proposed: Public API Layer
 
@@ -498,10 +541,12 @@ def require_api_key(f):
 
 ```
 templates/
-├── base.html       - Layout + JS utilities
-├── index.html      - Login page (332 lines)
-└── dashboard.html  - Main app (356 lines)
+├── base.html       - Layout, nav, JS utilities (210 lines)
+├── index.html      - Login/landing page (332 lines)
+└── dashboard.html  - Main app with playlist management (402 lines)
 ```
+
+**Total:** 944 lines across 3 templates. No component decomposition, no Jinja2 macros used currently.
 
 ### 7.2 Proposed: Component-Based Structure
 
@@ -656,49 +701,57 @@ plugins/
 
 ### 9.1 Phase 1: Foundation (Required First)
 
-1. ✅ **Extract Service Layer** — COMPLETED (January 29, 2026)
+1. ✅ **Extract Service Layer** — **COMPLETED** (January 29, 2026)
    - Service interfaces created (AuthService, PlaylistService, ShuffleService, StateService)
    - Dependency injection enabled via constructor parameters
    - Service substitution supported
+   - 479 tests covering all services
 
-2. **Add Database** — PENDING
+2. **Add Database** — **PENDING**
    - User preferences storage
    - Automation rules storage
    - Execution logs
+   - Requires: SQLAlchemy + Alembic setup
 
-3. **Event System** — PENDING
+3. **Event System** — **PENDING**
    - Internal event bus
    - Webhook handlers
    - Scheduled jobs
+   - Requires: Database (item 2) + Celery/RQ
 
 ### 9.2 Phase 2: Core Extensions
 
-4. **Notification System**
+4. **Notification System** — **PENDING**
    - NotificationChannel protocol
    - Telegram, SMS, Webhook implementations
    - NotificationRegistry
+   - Requires: Database + Event System
 
-5. **Automation Engine**
+5. **Automation Engine** — **PENDING**
    - Trigger and Action protocols
    - AutomationEngine orchestrator
    - Basic triggers and actions
+   - Requires: Database + Event System
 
-6. **API Layer**
-   - REST API endpoints
+6. **API Layer** — **PENDING**
+   - REST API endpoints (versioned Blueprint)
    - API key management
    - Rate limiting
+   - Requires: Database for API key storage
 
 ### 9.3 Phase 3: Advanced Extensions
 
-7. **Plugin Architecture**
+7. **Plugin Architecture** — **PENDING**
    - Plugin protocol
    - Auto-discovery
    - Plugin marketplace (future)
+   - Requires: All Phase 2 items
 
-8. **Multi-Service Support**
+8. **Multi-Service Support** — **PENDING**
    - MusicService protocol
    - Apple Music, YouTube Music (future)
    - Cross-service operations
+   - Requires: Plugin Architecture
 
 ---
 
@@ -708,15 +761,15 @@ plugins/
 
 | Dimension | Score | Notes |
 |-----------|-------|-------|
-| Algorithm Extension | 9/10 | Excellent pattern |
-| Notification Extension | 0/10 | Not implemented |
-| Automation Extension | 0/10 | Not implemented |
-| Data Source Extension | 2/10 | Hardcoded Spotify |
-| API Extension | 3/10 | Internal only |
-| UI Extension | 4/10 | Monolithic templates |
+| Algorithm Extension | 9/10 | Excellent Protocol + Registry pattern, proven with 7 algorithms |
+| Notification Extension | 0/10 | Not implemented, no channel abstraction |
+| Automation Extension | 0/10 | Not implemented, no trigger/action system |
+| Data Source Extension | 3/10 | Spotify-only but well-modularized internally (auth, API, cache, credentials separated) |
+| API Extension | 3/10 | Internal AJAX only, no versioned public API |
+| UI Extension | 4/10 | 3 monolithic templates (944 lines total), no component decomposition |
 | Plugin Support | 0/10 | No plugin system |
 
-**Overall: 2.6/10**
+**Overall: 2.7/10**
 
 ### 10.2 Target Scores (After Implementation)
 
@@ -725,42 +778,48 @@ plugins/
 | Algorithm Extension | 9/10 | 9/10 | None needed |
 | Notification Extension | 0/10 | 8/10 | Medium |
 | Automation Extension | 0/10 | 8/10 | High |
-| Data Source Extension | 2/10 | 7/10 | High |
+| Data Source Extension | 3/10 | 7/10 | High |
 | API Extension | 3/10 | 8/10 | Medium |
 | UI Extension | 4/10 | 7/10 | Medium |
 | Plugin Support | 0/10 | 7/10 | High |
 
 **Target Overall: 7.7/10**
 
+*Note: Target scores assume completion of all three roadmap phases. Database (Phase 1) is the critical path blocker for most improvements.*
+
 ---
 
 ## 11. Conclusion
 
 ### What Extensibility Exists
-- Shuffle algorithms are excellently extensible — **proven with 3 new algorithms (Feb 2026)**
-  - ArtistSpacingShuffle, AlbumSequenceShuffle, TempoGradientShuffle added
-  - `_hidden_algorithms` mechanism allows hiding algorithms from UI while keeping code accessible
-  - 7 total algorithms registered, 6 visible to users
-- ✅ Service interfaces for core operations — COMPLETED
-- Flask blueprint pattern allows route extension
-- Configuration is environment-based
+- **Shuffle algorithms** — excellently extensible via Protocol + Registry pattern
+  - 7 total algorithms registered (BasicShuffle, BalancedShuffle, PercentageShuffle, StratifiedShuffle, ArtistSpacingShuffle, AlbumSequenceShuffle, TempoGradientShuffle)
+  - 6 visible to users; TempoGradientShuffle hidden due to deprecated Spotify Audio Features API
+  - `_hidden_algorithms` mechanism allows hiding without removing code
+  - Adding a new algorithm requires: 1 new file, import in registry, optional test file
+- **Service layer** — 4 services (Auth, Playlist, Shuffle, State) with dependency injection
+- **Spotify module** — well-modularized (auth, API, cache, credentials, exceptions) but no abstract music service interface
+- **Flask blueprint** pattern allows route extension
+- **Configuration** is environment-based with dev/prod classes
 
 ### What's Missing
-- ~~No service interfaces for core operations~~ → ✅ COMPLETED
-- No notification channel abstraction
-- No automation system
-- No plugin architecture
-- No public API
+- ~~No service interfaces for core operations~~ → **COMPLETED** (Jan 2026)
+- No notification channel abstraction (proposed: NotificationChannel protocol)
+- No automation system (proposed: Trigger/Action protocols + AutomationEngine)
+- No plugin architecture (proposed: ShuffifyPlugin protocol + auto-discovery)
+- No public API (internal AJAX only; proposed: versioned REST API with API keys)
+- No database (all state in ephemeral Redis sessions with filesystem fallback)
 
 ### Key Insight
-The shuffle algorithm module is a **template for all future extension points**. Apply the same Protocol + Registry pattern to notifications, automations, and data sources.
+The shuffle algorithm module is a **proven template for all future extension points**. Apply the same Protocol + Registry pattern to notifications, automations, and data sources. The service layer extraction makes this feasible — each new system can follow the same dependency injection pattern.
 
 ### Priority Actions
-1. ✅ Extract services with interfaces (enables everything else) — COMPLETED
-2. Implement NotificationChannel protocol — PENDING
-3. Implement automation Trigger/Action protocols — PENDING
-4. Create public API layer — PENDING
-5. Design plugin system — PENDING
+1. ✅ Extract services with interfaces (enables everything else) — **COMPLETED**
+2. Add database persistence (SQLAlchemy + Alembic) — **PENDING** (critical path blocker)
+3. Implement NotificationChannel protocol — **PENDING** (requires database)
+4. Implement automation Trigger/Action protocols — **PENDING** (requires database + job system)
+5. Create public API layer — **PENDING** (requires database for API keys)
+6. Design plugin system — **PENDING** (requires all of the above)
 
 ---
 
