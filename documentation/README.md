@@ -14,10 +14,14 @@ documentation/
 │   ├── 03_extensibility_evaluation.md
 │   ├── 04_future_features_readiness.md
 │   └── 05_brainstorm_enhancements.md
+├── planning/          # Development plans and feature phases
+│   └── phases/
+│       └── playlist-workshop_2026-02-10/  # Workshop Enhancement Suite (6 phases)
 └── archive/           # Completed evaluations and legacy documents
     ├── 01_architecture_evaluation.md
     ├── 02_modularity_assessment.md
-    └── separation_of_concerns_evaluation.md
+    ├── separation_of_concerns_evaluation.md
+    └── tech_debt_q1-2026_2026-02-10/  # Completed tech debt session
 ```
 
 ---
@@ -31,6 +35,12 @@ Active evaluation documents for ongoing development planning:
 - **[Future Features Readiness](evaluation/04_future_features_readiness.md)** - Readiness for planned features (database, automations, notifications, UI)
 - **[Brainstorm Enhancements](evaluation/05_brainstorm_enhancements.md)** - Enhancement ideas and tracking
 
+## Planning
+
+Development plans for feature implementation:
+
+- **[Playlist Workshop Enhancement Suite](planning/phases/playlist-workshop_2026-02-10/00_OVERVIEW.md)** - 6-phase plan for workshop features (all phases completed)
+
 ## Archived (Completed)
 
 Evaluations and plans that have been fully implemented:
@@ -38,6 +48,7 @@ Evaluations and plans that have been fully implemented:
 - **[Architecture Evaluation](archive/01_architecture_evaluation.md)** - All critical recommendations implemented
 - **[Modularity Assessment](archive/02_modularity_assessment.md)** - All 4 refactoring phases completed
 - **[Separation of Concerns Evaluation](archive/separation_of_concerns_evaluation.md)** - Service layer extracted, all recommendations done
+- **[Tech Debt Q1 2026](archive/tech_debt_q1-2026_2026-02-10/00_TECH_DEBT.md)** - Completed tech debt remediation session (6 items)
 
 ---
 
@@ -101,4 +112,4 @@ This documentation index should be updated whenever:
 - Documentation is reorganized
 - Documentation is deprecated or archived
 
-Last updated: 2026-02-10
+Last updated: 2026-02-11

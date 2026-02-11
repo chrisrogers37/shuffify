@@ -15,13 +15,18 @@ The application is built with a security-first mindset, using environment variab
 ## Key Features
 
 - **Secure Spotify Authentication:** Connects to your Spotify account using the official OAuth 2.0 flow with enhanced security messaging.
-- **Multiple Shuffle Algorithms:**
+- **7 Shuffle Algorithms:**
     - **Basic Shuffle:** A standard, random reordering.
-    - **Balanced Shuffle:** A more complex algorithm to distribute tracks from all parts of the playlist evenly using round-robin selection.
+    - **Balanced Shuffle:** Distribute tracks from all parts of the playlist evenly using round-robin selection.
     - **Percentage Shuffle:** Keep a certain percentage of tracks at the top of the playlist.
-    - **Stratified Shuffle:** Divide the playlist into sections, shuffle each section independently, and reassemble the sections in the original order.
+    - **Stratified Shuffle:** Divide the playlist into sections, shuffle each section independently.
+    - **Artist Spacing Shuffle:** Ensure the same artist doesn't appear back-to-back.
+    - **Album Sequence Shuffle:** Keep album tracks together but shuffle albums.
+    - **Tempo Gradient Shuffle:** Sort by BPM for DJ-style transitions *(hidden — needs Audio Features API)*.
+- **Playlist Workshop:** Advanced playlist management with track operations, playlist merging, and external playlist raiding.
+- **Scheduled Operations:** Automated shuffle and raid jobs on recurring schedules via APScheduler.
 - **Multi-Level Undo:** Step back through every shuffle you've made to a playlist within your session.
-- **Enhanced User Experience:** 
+- **Enhanced User Experience:**
     - Modern, responsive design with glassmorphism effects
     - Progressive enhancement with dynamic interactions
     - Accessibility-first approach with ARIA labels and keyboard navigation
@@ -38,12 +43,16 @@ The application is built with a security-first mindset, using environment variab
 
 ## Tech Stack
 
-- **Backend:** Flask (Python)
+- **Backend:** Flask 3.1.x (Python 3.12+)
 - **Frontend:** Tailwind CSS with custom animations
-- **API:** Spotify Web API
-- **Server:** Gunicorn
-- **Containerization:** Docker
-- **Security:** Environment validation, health checks, security scanning tools
+- **API:** Spotify Web API (via spotipy)
+- **Database:** SQLAlchemy + SQLite
+- **Scheduler:** APScheduler for background jobs
+- **Server:** Gunicorn (production), Flask dev server (local)
+- **Caching:** Redis for sessions and API response caching
+- **Validation:** Pydantic v2 for request validation
+- **Security:** Fernet encryption, environment validation, health checks
+- **Containerization:** Docker with health checks
 
 ## Project Structure
 
@@ -54,27 +63,31 @@ shuffify/
 ├── config.py                 # Application configuration (loads from .env)
 ├── requirements/             # Python dependencies (base.txt, dev.txt, prod.txt)
 ├── run.py                    # Application entry point
-├── dev_guides/               # Development documentation and critiques
+├── documentation/            # Project documentation and evaluations
 ├── shuffify/
-│   ├── __init__.py           # App factory
+│   ├── __init__.py           # App factory (Redis, DB, Scheduler init)
 │   ├── routes.py             # All web routes and view logic
-│   ├── models/               # Data models (e.g., Playlist)
-│   ├── spotify/              # Spotify API client
-│   ├── shuffle_algorithms/   # Core shuffling logic
-│   ├── templates/            # Jinja2 templates for all pages
+│   ├── services/             # 10 service modules (business logic layer)
+│   ├── schemas/              # Pydantic validation schemas
+│   ├── models/               # Data models + SQLAlchemy DB models
+│   ├── spotify/              # Modular Spotify client (auth, api, cache)
+│   ├── shuffle_algorithms/   # 7 shuffle algorithms with registry
+│   ├── templates/            # Jinja2 templates (5 pages)
 │   └── static/               # Static assets (images, public pages)
+├── tests/                    # 690 tests
 ├── Dockerfile                # Defines the application container
 └── docker-compose.yml        # Orchestrates the local Docker environment
 ```
 
-## Recent Updates (v2.3.5)
+## Recent Updates
 
-- **Enhanced Landing Page:** Complete UX renovation with improved conversion optimization
-- **Accessibility Improvements:** ARIA labels, skip links, focus states, and screen reader support
-- **Dynamic Interactions:** Progressive enhancement with scroll animations and responsive feedback
-- **Trust Indicators:** Security badges and social proof elements
-- **Session Management:** Added logout functionality for better user control
-- **Spacing Optimization:** Improved visual flow and scrolling experience
+- **Playlist Workshop Enhancement Suite** (6 phases) — Track management, playlist merging, external raiding, user database, scheduled operations
+- **7 Shuffle Algorithms** — Added ArtistSpacing, AlbumSequence, TempoGradient (hidden)
+- **SQLAlchemy Database** — User, Schedule, and JobExecution models
+- **APScheduler Integration** — Background job execution for automated shuffle/raid
+- **Fernet Token Encryption** — Secure storage of Spotify refresh tokens
+- **10 Service Layer Modules** — Full separation of concerns
+- **690 Tests** — Comprehensive coverage across all modules
 
 ## License
 

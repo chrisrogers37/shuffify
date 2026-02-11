@@ -39,18 +39,27 @@ These documents have been moved to [`documentation/archive/`](../archive/):
 - ArtistSpacingShuffle, AlbumSequenceShuffle (added Feb 2026)
 - TempoGradientShuffle (hidden — requires deprecated Spotify Audio Features API)
 
-**Services:** 4 extracted service classes:
+**Services:** 10 extracted service classes:
 - `AuthService` — OAuth flow and token management
 - `PlaylistService` — Playlist CRUD and validation
 - `ShuffleService` — Algorithm orchestration and execution
 - `StateService` — Session state and undo history (uses `session['playlist_states']` key)
+- `TokenService` — Fernet encryption/decryption for stored refresh tokens
+- `SchedulerService` — Schedule CRUD operations with APScheduler
+- `JobExecutorService` — Background job execution (shuffle/raid)
+- `UserService` — User CRUD with `get_or_create_from_spotify()`
+- `WorkshopSessionService` — Playlist Workshop session management
+- `UpstreamSourceService` — External playlist source management for raiding
 
 **Infrastructure:**
 - Redis-based sessions (primary) with filesystem fallback
 - Redis-based Spotify API response caching with configurable TTLs
+- SQLAlchemy database (User, Schedule, JobExecution models)
+- APScheduler for background job execution
+- Fernet symmetric encryption for stored refresh tokens
 - Pydantic v2 request validation schemas
 - Retry logic with exponential backoff in Spotify API calls
-- 479 tests across algorithms, services, schemas, and Spotify modules
+- 690 tests across algorithms, services, schemas, models, and Spotify modules
 
 **Spotify Module:** Modular architecture with dependency injection:
 - `SpotifyCredentials` — DI for OAuth credentials
@@ -61,28 +70,31 @@ These documents have been moved to [`documentation/archive/`](../archive/):
 - Custom exception hierarchy (`SpotifyError` base → Auth, Token, API, RateLimit, NotFound)
 
 ### Resolved Gaps (previously critical)
-- ~~No service layer~~ → Extracted Jan 2026 (AuthService, PlaylistService, ShuffleService, StateService)
-- ~~No validation framework~~ → Pydantic v2 schemas in `shuffify/schemas/requests.py`
+- ~~No service layer~~ → 10 services extracted (Jan-Feb 2026)
+- ~~No validation framework~~ → Pydantic v2 schemas in `shuffify/schemas/`
 - ~~Token refresh bug~~ → Fixed in SpotifyAuthManager
 - ~~No rate limiting~~ → Exponential backoff retry logic in SpotifyAPI
 - ~~No caching~~ → Redis-based caching layer with per-data-type TTLs
+- ~~No database~~ → SQLAlchemy with User, Schedule, JobExecution models (Feb 2026)
+- ~~No background job infrastructure~~ → APScheduler with SchedulerService + JobExecutorService (Feb 2026)
 
 ### Remaining Gaps
-- **No database** — All state in ephemeral sessions (Redis + filesystem)
-- **No background job infrastructure** — Needed for automations and scheduled tasks
 - **No notification system** — Needs external service integrations (Telegram, Twilio, etc.)
 - **No plugin architecture** — Extensibility limited to shuffle algorithms via Registry pattern
+- **No public API** — Internal AJAX only, no versioned REST API
+- **No Alembic migrations** — Schema managed by `db.create_all()` (sufficient for now)
 
 ### Readiness Scores (Updated Feb 2026)
 
-| Feature | Readiness | Blocking Issues |
-|---------|-----------|-----------------|
-| Database Persistence | 5/10 | ORM setup needed (SQLAlchemy + Alembic) |
-| User Logins | 3/10 | Need database, user model, password hashing |
-| Spotify Automations | 5/10 | Need database + background job infrastructure |
-| Notification System | 2/10 | Need database, job system, external service APIs |
-| Enhanced UI | 7/10 | Refresh button done, WebSocket still needed |
-| Live Preview | 6/10 | Need preview endpoint, WebSocket; caching done |
+| Feature | Readiness | Status |
+|---------|-----------|--------|
+| Database Persistence | ✅ 10/10 | **COMPLETED** — SQLAlchemy + User/Schedule/JobExecution |
+| User Logins | 5/10 | **PARTIAL** — Spotify-linked User exists, no local auth |
+| Spotify Automations | ✅ 10/10 | **COMPLETED** — APScheduler + SchedulerService |
+| Playlist Raiding | ✅ 10/10 | **COMPLETED** — UpstreamSourceService + raid jobs |
+| Notification System | 2/10 | **PENDING** — Needs external service APIs |
+| Enhanced UI | 7/10 | **PARTIAL** — Refresh button done, WebSocket still needed |
+| Live Preview | 6/10 | **PENDING** — Preview endpoint needed; caching done |
 
 ## Recommended Reading Order
 
