@@ -36,6 +36,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New `SpotifyAPI.search_tracks()` method wrapping spotipy search
   - New `SpotifyCache` search result caching (get/set with query normalization)
   - All changes are client-side staging until "Save to Spotify" is clicked
+- **Source Playlists Panel** - Collapsible panel in Workshop for cross-playlist track merging
+  - Dropdown to select from user's editable playlists (excluding current)
+  - Browse source playlist tracks with album art, artist names, and duration
+  - Click "+" button to cherry-pick individual tracks into the working playlist
+  - Drag tracks from source panel directly into the main track list (SortableJS cross-list groups)
+  - Visual duplicate detection: yellow warning icon on tracks already in the working playlist
+  - Confirm dialog before adding duplicate tracks
+  - New API endpoint: `GET /api/user-playlists` returns lightweight playlist list for AJAX consumers
   - New routes: `GET /workshop/<id>`, `POST /workshop/<id>/preview-shuffle`, `POST /workshop/<id>/commit`
   - Pydantic validation for commit request (`WorkshopCommitRequest` schema)
 - **Error handler test coverage** - 14 new tests verifying all service exception handlers return correct HTTP status codes, JSON structure, and error categories
