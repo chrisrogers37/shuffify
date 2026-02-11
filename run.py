@@ -8,5 +8,8 @@ if __name__ == '__main__':
     app.run(
         host=os.getenv('FLASK_HOST', '0.0.0.0'),
         port=int(os.getenv('FLASK_PORT', 8000)),
-        debug=app.debug
-    ) 
+        debug=app.debug,
+        use_reloader=os.getenv(
+            'FLASK_USE_RELOADER', 'true'
+        ).lower() == 'true',
+    )

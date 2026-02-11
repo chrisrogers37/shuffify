@@ -222,6 +222,12 @@ def app():
     from shuffify import create_app
     app = create_app('development')
     app.config['TESTING'] = True
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+    app.config['SCHEDULER_ENABLED'] = False
+
+    with app.app_context():
+        from shuffify.models.db import db
+        db.create_all()
 
     return app
 
