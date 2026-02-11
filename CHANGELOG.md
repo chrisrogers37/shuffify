@@ -27,6 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - "Save to Spotify" button commits staged changes with state tracking for undo
   - "Undo Changes" reverts to last saved order before committing
   - Dashboard playlist cards now include "Workshop" button for quick access
+- **Track Management in Workshop** - Add and remove tracks within the Playlist Workshop
+  - Delete button (X) on each track row to remove from working copy
+  - Search Spotify panel in workshop sidebar to find new tracks
+  - Add button (+) on search results to append track to working playlist
+  - Search results cached in Redis for 120 seconds to reduce API calls
+  - New `POST /workshop/search` endpoint with Pydantic validation
+  - New `SpotifyAPI.search_tracks()` method wrapping spotipy search
+  - New `SpotifyCache` search result caching (get/set with query normalization)
+  - All changes are client-side staging until "Save to Spotify" is clicked
   - New routes: `GET /workshop/<id>`, `POST /workshop/<id>/preview-shuffle`, `POST /workshop/<id>/commit`
   - Pydantic validation for commit request (`WorkshopCommitRequest` schema)
 - **Error handler test coverage** - 14 new tests verifying all service exception handlers return correct HTTP status codes, JSON structure, and error categories
