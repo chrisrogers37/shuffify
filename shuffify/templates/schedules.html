@@ -1,0 +1,405 @@
+{% extends "base.html" %}
+
+{% block title %}Schedules - Shuffify{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-spotify-green via-spotify-green/90 to-spotify-dark">
+    <div class="absolute inset-0" style="background-image: url('/static/images/hero-pattern.svg'); opacity: 0.15; pointer-events: none;"></div>
+
+    <!-- Header -->
+    <div class="relative max-w-5xl mx-auto px-4 pt-8">
+        <div class="p-6 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20">
+            <div class="flex items-center justify-between flex-wrap gap-4">
+                <div class="flex items-center">
+                    <a href="{{ url_for('main.index') }}"
+                       class="mr-4 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition duration-150 border border-white/20"
+                       title="Back to Dashboard">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                    </a>
+                    <div>
+                        <h1 class="text-2xl font-bold text-white">Scheduled Operations</h1>
+                        <p class="text-white/70 text-sm">
+                            {{ schedules|length }} / {{ max_schedules }} schedules configured
+                        </p>
+                    </div>
+                </div>
+                <button id="new-schedule-btn"
+                        onclick="showCreateModal()"
+                        class="inline-flex items-center px-4 py-2 rounded-lg bg-white text-spotify-dark font-bold transition duration-150 hover:bg-green-100 shadow-lg {% if schedules|length >= max_schedules %}opacity-40 cursor-not-allowed{% endif %}"
+                        {% if schedules|length >= max_schedules %}disabled{% endif %}>
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    New Schedule
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Schedule List -->
+    <div class="relative max-w-5xl mx-auto px-4 py-6">
+        {% if not schedules %}
+        <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-8 text-center">
+            <svg class="w-16 h-16 mx-auto text-white/30 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <p class="text-white/60 text-lg mb-2">No scheduled operations yet.</p>
+            <p class="text-white/40 text-sm">Create a schedule to automatically raid playlists or run shuffles on a recurring basis.</p>
+        </div>
+        {% else %}
+        <div class="space-y-4" id="schedule-list">
+            {% for schedule in schedules %}
+            <div class="schedule-card rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-5"
+                 data-schedule-id="{{ schedule.id }}">
+                <div class="flex items-start justify-between flex-wrap gap-3">
+                    <!-- Schedule Info -->
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="px-2 py-0.5 rounded-full text-xs font-bold uppercase
+                                {% if schedule.job_type == 'raid' %}bg-blue-500/80
+                                {% elif schedule.job_type == 'shuffle' %}bg-purple-500/80
+                                {% else %}bg-orange-500/80{% endif %} text-white">
+                                {{ schedule.job_type | replace('_', ' ') }}
+                            </span>
+                            <span class="px-2 py-0.5 rounded-full text-xs font-semibold
+                                {% if schedule.is_enabled %}bg-green-500/60 text-white
+                                {% else %}bg-gray-500/60 text-white/70{% endif %}">
+                                {{ 'Active' if schedule.is_enabled else 'Paused' }}
+                            </span>
+                        </div>
+                        <h3 class="text-white font-bold text-lg truncate">{{ schedule.target_playlist_name }}</h3>
+                        <p class="text-white/60 text-sm">
+                            Runs {{ schedule.schedule_value | replace('_', ' ') }}
+                            {% if schedule.algorithm_name %}
+                            &middot; {{ schedule.algorithm_name }}
+                            {% endif %}
+                            {% if schedule.source_playlist_ids %}
+                            &middot; {{ schedule.source_playlist_ids|length }} source{{ 's' if schedule.source_playlist_ids|length != 1 else '' }}
+                            {% endif %}
+                        </p>
+                        {% if schedule.last_run_at %}
+                        <p class="text-white/40 text-xs mt-1">
+                            Last run: {{ schedule.last_run_at }}
+                            {% if schedule.last_status == 'success' %}
+                            <span class="text-green-400">-- Success</span>
+                            {% elif schedule.last_status == 'failed' %}
+                            <span class="text-red-400">-- Failed</span>
+                            {% endif %}
+                        </p>
+                        {% endif %}
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="flex items-center space-x-2 flex-shrink-0">
+                        <button onclick="runScheduleNow({{ schedule.id }})"
+                                class="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition duration-150 border border-white/20"
+                                title="Run Now">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </button>
+                        <button onclick="toggleSchedule({{ schedule.id }})"
+                                class="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition duration-150 border border-white/20"
+                                title="{{ 'Pause' if schedule.is_enabled else 'Enable' }}">
+                            {% if schedule.is_enabled %}
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            {% else %}
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                            </svg>
+                            {% endif %}
+                        </button>
+                        <button onclick="deleteSchedule({{ schedule.id }})"
+                                class="p-2 rounded-lg bg-red-500/20 hover:bg-red-500/40 text-red-300 transition duration-150 border border-red-500/30"
+                                title="Delete">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Create Schedule Modal -->
+<div id="create-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="hideCreateModal()"></div>
+    <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="rounded-2xl shadow-2xl bg-spotify-dark border border-white/20 p-6">
+            <h2 class="text-xl font-bold text-white mb-4">New Scheduled Operation</h2>
+
+            <form id="create-schedule-form" class="space-y-4">
+                <!-- Job Type -->
+                <div>
+                    <label class="block text-sm font-medium text-white/90 mb-1">Operation Type</label>
+                    <select id="modal-job-type" name="job_type"
+                            class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                            onchange="updateModalFields()">
+                        <option value="raid">Raid (pull new tracks from sources)</option>
+                        <option value="shuffle">Shuffle (reorder playlist)</option>
+                        <option value="raid_and_shuffle">Raid + Shuffle (pull then shuffle)</option>
+                    </select>
+                </div>
+
+                <!-- Target Playlist -->
+                <div>
+                    <label class="block text-sm font-medium text-white/90 mb-1">Target Playlist</label>
+                    <select id="modal-target-playlist" name="target_playlist"
+                            class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white">
+                        {% for pl in playlists %}
+                        <option value="{{ pl.id }}" data-name="{{ pl.name }}">{{ pl.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Source Playlists (shown for raid types) -->
+                <div id="modal-sources-section">
+                    <label class="block text-sm font-medium text-white/90 mb-1">Source Playlists</label>
+                    <p class="text-white/50 text-xs mb-2">Select playlists to pull new tracks from.</p>
+                    <div class="max-h-40 overflow-y-auto space-y-1 bg-white/5 rounded-lg p-2">
+                        {% for pl in playlists %}
+                        <label class="flex items-center space-x-2 px-2 py-1 rounded hover:bg-white/5 cursor-pointer">
+                            <input type="checkbox" name="source_playlist" value="{{ pl.id }}"
+                                   class="rounded border-white/30 bg-white/10 text-spotify-green focus:ring-spotify-green">
+                            <span class="text-white/80 text-sm truncate">{{ pl.name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Algorithm (shown for shuffle types) -->
+                <div id="modal-algorithm-section" class="hidden">
+                    <label class="block text-sm font-medium text-white/90 mb-1">Shuffle Algorithm</label>
+                    <select id="modal-algorithm" name="algorithm_name"
+                            class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white">
+                        {% for algo in algorithms %}
+                        <option value="{{ algo.class_name }}">{{ algo.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Schedule Frequency -->
+                <div>
+                    <label class="block text-sm font-medium text-white/90 mb-1">Frequency</label>
+                    <select id="modal-frequency" name="schedule_value"
+                            class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white">
+                        <option value="every_6h">Every 6 hours</option>
+                        <option value="every_12h">Every 12 hours</option>
+                        <option value="daily" selected>Daily</option>
+                        <option value="every_3d">Every 3 days</option>
+                        <option value="weekly">Weekly</option>
+                    </select>
+                </div>
+
+                <!-- Buttons -->
+                <div class="flex space-x-3 pt-2">
+                    <button type="button" onclick="hideCreateModal()"
+                            class="flex-1 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition border border-white/20">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                            class="flex-1 px-4 py-2 rounded-lg bg-white text-spotify-dark font-bold transition hover:bg-green-100 shadow-lg">
+                        Create Schedule
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// =============================================================================
+// Modal Management
+// =============================================================================
+
+function showCreateModal() {
+    document.getElementById('create-modal').classList.remove('hidden');
+    updateModalFields();
+}
+
+function hideCreateModal() {
+    document.getElementById('create-modal').classList.add('hidden');
+}
+
+function updateModalFields() {
+    const jobType = document.getElementById('modal-job-type').value;
+    const sourcesSection = document.getElementById('modal-sources-section');
+    const algorithmSection = document.getElementById('modal-algorithm-section');
+
+    // Show/hide sections based on job type
+    if (jobType === 'raid' || jobType === 'raid_and_shuffle') {
+        sourcesSection.classList.remove('hidden');
+    } else {
+        sourcesSection.classList.add('hidden');
+    }
+
+    if (jobType === 'shuffle' || jobType === 'raid_and_shuffle') {
+        algorithmSection.classList.remove('hidden');
+    } else {
+        algorithmSection.classList.add('hidden');
+    }
+}
+
+// =============================================================================
+// Create Schedule
+// =============================================================================
+
+document.getElementById('create-schedule-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const jobType = document.getElementById('modal-job-type').value;
+    const targetSelect = document.getElementById('modal-target-playlist');
+    const targetId = targetSelect.value;
+    const targetName = targetSelect.options[targetSelect.selectedIndex].dataset.name;
+    const scheduleValue = document.getElementById('modal-frequency').value;
+
+    const body = {
+        job_type: jobType,
+        target_playlist_id: targetId,
+        target_playlist_name: targetName,
+        schedule_type: 'interval',
+        schedule_value: scheduleValue,
+    };
+
+    // Add source playlists if applicable
+    if (jobType === 'raid' || jobType === 'raid_and_shuffle') {
+        const checked = document.querySelectorAll('input[name="source_playlist"]:checked');
+        body.source_playlist_ids = Array.from(checked).map(cb => cb.value);
+        if (body.source_playlist_ids.length === 0) {
+            showNotification('Please select at least one source playlist.', 'error');
+            return;
+        }
+    }
+
+    // Add algorithm if applicable
+    if (jobType === 'shuffle' || jobType === 'raid_and_shuffle') {
+        body.algorithm_name = document.getElementById('modal-algorithm').value;
+        body.algorithm_params = {};
+    }
+
+    fetch('/schedules/create', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify(body),
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(d => { throw new Error(d.message || 'Failed to create schedule.'); });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            hideCreateModal();
+            // Reload to show the new schedule
+            setTimeout(() => window.location.reload(), 500);
+        }
+    })
+    .catch(error => {
+        showNotification(error.message, 'error');
+    });
+});
+
+// =============================================================================
+// Schedule Actions
+// =============================================================================
+
+function runScheduleNow(scheduleId) {
+    if (!confirm('Run this schedule now?')) return;
+
+    fetch(`/schedules/${scheduleId}/run`, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(d => { throw new Error(d.message || 'Execution failed.'); });
+        }
+        return response.json();
+    })
+    .then(data => {
+        showNotification(data.message || 'Executed successfully.', 'success');
+        setTimeout(() => window.location.reload(), 1000);
+    })
+    .catch(error => {
+        showNotification(error.message, 'error');
+    });
+}
+
+function toggleSchedule(scheduleId) {
+    fetch(`/schedules/${scheduleId}/toggle`, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            setTimeout(() => window.location.reload(), 500);
+        } else {
+            showNotification(data.message || 'Toggle failed.', 'error');
+        }
+    })
+    .catch(error => {
+        showNotification('Failed to toggle schedule.', 'error');
+    });
+}
+
+function deleteSchedule(scheduleId) {
+    if (!confirm('Delete this schedule? This cannot be undone.')) return;
+
+    fetch(`/schedules/${scheduleId}`, {
+        method: 'DELETE',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            const card = document.querySelector(`[data-schedule-id="${scheduleId}"]`);
+            if (card) card.remove();
+        } else {
+            showNotification(data.message || 'Delete failed.', 'error');
+        }
+    })
+    .catch(error => {
+        showNotification('Failed to delete schedule.', 'error');
+    });
+}
+
+// =============================================================================
+// Notifications (reused from dashboard pattern)
+// =============================================================================
+
+function showNotification(message, type) {
+    const notification = document.createElement('div');
+    const bgColor = type === 'success' ? 'bg-green-500/90' :
+                    type === 'info' ? 'bg-blue-500/90' : 'bg-red-500/90';
+    notification.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg backdrop-blur-md ${bgColor} text-white font-semibold transform transition duration-300 translate-y-16 opacity-0 z-50`;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.classList.remove('translate-y-16', 'opacity-0');
+    }, 100);
+
+    setTimeout(() => {
+        notification.classList.add('translate-y-16', 'opacity-0');
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+</script>
+{% endblock %}

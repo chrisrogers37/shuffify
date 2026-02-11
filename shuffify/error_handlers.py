@@ -29,6 +29,10 @@ from shuffify.services import (
     WorkshopSessionLimitError,
     UpstreamSourceError,
     UpstreamSourceNotFoundError,
+    ScheduleError,
+    ScheduleNotFoundError,
+    ScheduleLimitError,
+    JobExecutionError,
 )
 
 logger = logging.getLogger(__name__)
@@ -230,6 +234,46 @@ def register_error_handlers(app):
         logger.error(f"Upstream source error: {error}")
         return json_error_response(
             "Source operation failed.", 500
+        )
+
+    # =========================================================================
+    # Schedule Errors
+    # =========================================================================
+
+    @app.errorhandler(ScheduleNotFoundError)
+    def handle_schedule_not_found(
+        error: ScheduleNotFoundError,
+    ):
+        """Handle schedule not found errors."""
+        logger.info(f"Schedule not found: {error}")
+        return json_error_response(
+            "Schedule not found.", 404
+        )
+
+    @app.errorhandler(ScheduleLimitError)
+    def handle_schedule_limit(
+        error: ScheduleLimitError,
+    ):
+        """Handle schedule limit exceeded errors."""
+        logger.warning(
+            f"Schedule limit exceeded: {error}"
+        )
+        return json_error_response(str(error), 400)
+
+    @app.errorhandler(ScheduleError)
+    def handle_schedule_error(error: ScheduleError):
+        """Handle general schedule errors."""
+        logger.error(f"Schedule error: {error}")
+        return json_error_response(str(error), 500)
+
+    @app.errorhandler(JobExecutionError)
+    def handle_job_execution_error(
+        error: JobExecutionError,
+    ):
+        """Handle job execution failures."""
+        logger.error(f"Job execution error: {error}")
+        return json_error_response(
+            f"Job execution failed: {error}", 500
         )
 
     # =========================================================================

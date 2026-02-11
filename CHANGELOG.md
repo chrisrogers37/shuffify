@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Scheduled Operations** - Automated playlist management via APScheduler
+  - Configure recurring raid, shuffle, or combined operations
+  - Background scheduler runs jobs without user interaction
+  - Encrypted refresh token storage (Fernet) for secure background API access
+  - New `/schedules` page for managing scheduled operations
+  - Create, edit, toggle, delete, and manually trigger schedules
+  - Execution history tracking per schedule
+  - Max 5 schedules per user
+  - Graceful handling of expired tokens, deleted playlists, rate limits
+  - New models: `Schedule`, `JobExecution` (SQLite via Flask-SQLAlchemy)
+  - New services: `TokenService`, `SchedulerService`, `JobExecutorService`
+  - New routes: `GET /schedules`, `POST /schedules/create`, `PUT /schedules/<id>`,
+    `DELETE /schedules/<id>`, `POST /schedules/<id>/toggle`,
+    `POST /schedules/<id>/run`, `GET /schedules/<id>/history`
+  - Pydantic validation: `ScheduleCreateRequest`, `ScheduleUpdateRequest`
+  - Dashboard header now includes "Schedules" navigation link
+  - New dependency: `APScheduler>=3.10`
+
 ### Changed
 - **Algorithm validation uses registry as single source of truth** - Removed hardcoded `VALID_ALGORITHMS` set from `ShuffleService` and hardcoded algorithm list from `ShuffleRequest` validator; both now query the registry dynamically
 - **Algorithm params mapping is declarative** - Replaced 8-branch `elif` chain in `get_algorithm_params()` with a dict-based mapping
