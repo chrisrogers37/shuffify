@@ -517,3 +517,65 @@ class SpotifyAPI:
             self._cache.set_audio_features(new_features)
 
         return features
+
+    # =========================================================================
+    # Search Operations
+    # =========================================================================
+
+    @api_error_handler
+    def search_tracks(
+        self,
+        query: str,
+        limit: int = 20,
+        offset: int = 0,
+        market: Optional[str] = None,
+        skip_cache: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Search Spotify's catalog for tracks.
+
+        Args:
+            query: Search query string (e.g., artist name, track title).
+            limit: Maximum number of results (1-50, default 20).
+            offset: Result offset for pagination (default 0).
+            market: ISO 3166-1 alpha-2 country code for market filtering.
+            skip_cache: If True, bypass cache and fetch fresh data.
+
+        Returns:
+            List of track dictionaries from Spotify search.
+
+        Raises:
+            SpotifyAPIError: If the search request fails.
+        """
+        self._ensure_valid_token()
+
+        # Clamp limit to Spotify's maximum
+        limit = max(1, min(limit, 50))
+        offset = max(0, offset)
+
+        # Check cache first
+        if self._cache and not skip_cache:
+            cached = self._cache.get_search_results(query, offset)
+            if cached is not None:
+                return cached
+
+        results = self._sp.search(
+            q=query, limit=limit, offset=offset, type="track", market=market
+        )
+
+        tracks = []
+        if results and "tracks" in results and "items" in results["tracks"]:
+            for item in results["tracks"]["items"]:
+                if item and item.get("uri"):
+                    tracks.append(item)
+
+        logger.debug(
+            f"Search for '{query}' returned {len(tracks)} tracks "
+            f"(offset={offset}, limit={limit})"
+        )
+
+        # Cache the results
+        if self._cache and tracks:
+            self._cache.set_search_results(query, offset, tracks)
+
+        return tracks

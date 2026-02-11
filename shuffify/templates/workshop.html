@@ -65,6 +65,7 @@
                         <span class="flex-1 ml-3">Title</span>
                         <span class="w-24 text-right hidden sm:block">Duration</span>
                         <span class="w-8"></span>
+                        <span class="w-8"></span>
                     </div>
 
                     <!-- Scrollable Track List -->
@@ -106,8 +107,17 @@
                                 {{ '%d:%02d' | format(track.duration_ms // 60000, (track.duration_ms % 60000) // 1000) }}
                             </span>
 
+                            <!-- Delete Button -->
+                            <button class="delete-track-btn w-8 text-center text-white/20 hover:text-red-400 transition duration-150 ml-1 flex-shrink-0"
+                                    onclick="deleteTrack('{{ track.uri }}', this)"
+                                    title="Remove from playlist">
+                                <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </button>
+
                             <!-- Drag Handle -->
-                            <span class="drag-handle w-8 text-center text-white/30 hover:text-white/60 cursor-grab active:cursor-grabbing ml-2">
+                            <span class="drag-handle w-8 text-center text-white/30 hover:text-white/60 cursor-grab active:cursor-grabbing ml-1 flex-shrink-0">
                                 <svg class="w-5 h-5 mx-auto" fill="currentColor" viewBox="0 0 24 24">
                                     <path d="M8 6h2v2H8V6zm6 0h2v2h-2V6zM8 11h2v2H8v-2zm6 0h2v2h-2v-2zm-6 5h2v2H8v-2zm6 0h2v2h-2v-2z"/>
                                 </svg>
@@ -158,6 +168,45 @@
                             class="w-full px-4 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white font-semibold transition duration-150"
                             {% if not playlist.tracks %}disabled{% endif %}>
                         Preview Shuffle
+                    </button>
+                </div>
+
+                <!-- Search Spotify Panel -->
+                <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-5">
+                    <h2 class="text-white font-bold text-lg mb-3">Search Spotify</h2>
+                    <p class="text-white/60 text-sm mb-3">Find tracks to add to your playlist.</p>
+
+                    <!-- Search Input -->
+                    <div class="flex items-center space-x-2 mb-4">
+                        <input id="search-input"
+                               type="text"
+                               placeholder="Search tracks, artists..."
+                               class="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-white/30 focus:border-transparent text-sm"
+                               onkeydown="if(event.key==='Enter'){event.preventDefault(); searchSpotify();}"
+                               maxlength="200"
+                               autocomplete="off">
+                        <button id="search-btn"
+                                onclick="searchSpotify()"
+                                class="px-3 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white transition duration-150 flex-shrink-0"
+                                title="Search">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Search Results Container -->
+                    <div id="search-results" class="space-y-1 max-h-[40vh] overflow-y-auto workshop-scrollbar">
+                        <p id="search-placeholder" class="text-white/40 text-sm text-center py-4">
+                            Type a query and press Enter
+                        </p>
+                    </div>
+
+                    <!-- Load More Button (hidden by default) -->
+                    <button id="search-load-more"
+                            onclick="searchSpotifyMore()"
+                            class="hidden w-full mt-2 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-sm transition duration-150">
+                        Load more results
                     </button>
                 </div>
 
@@ -401,7 +450,8 @@ function commitToSpotify() {
 
 function undoPreview() {
     workshopState.workingUris = [...workshopState.savedUris];
-    rerenderTrackList();
+    fullRerenderTrackList();
+    updateTrackCount();
     markDirty();
     showNotification('Reverted to last saved order.', 'success');
 }
@@ -412,20 +462,7 @@ function undoPreview() {
 // =============================================================================
 
 function rerenderTrackList() {
-    const container = document.getElementById('track-list');
-    const existingElements = {};
-    container.querySelectorAll('.track-item').forEach(el => {
-        existingElements[el.dataset.uri] = el;
-    });
-
-    workshopState.workingUris.forEach((uri, index) => {
-        const el = existingElements[uri];
-        if (el) {
-            container.appendChild(el);
-        }
-    });
-
-    renumberTracks();
+    fullRerenderTrackList();
 }
 
 
@@ -502,6 +539,340 @@ function showNotification(message, type) {
         notification.classList.add('translate-y-16', 'opacity-0');
         setTimeout(() => notification.remove(), 300);
     }, 3000);
+}
+
+
+// =============================================================================
+// Delete Track
+// =============================================================================
+
+function deleteTrack(uri, buttonElement) {
+    const trackItem = buttonElement.closest('.track-item');
+    if (!trackItem) return;
+
+    // Get the index from DOM position (handles duplicates correctly)
+    const allItems = Array.from(document.querySelectorAll('#track-list .track-item'));
+    const domIndex = allItems.indexOf(trackItem);
+    if (domIndex === -1) return;
+
+    // Remove from workingUris at the same index
+    workshopState.workingUris.splice(domIndex, 1);
+
+    // Remove the DOM element with a fade-out animation
+    trackItem.style.transition = 'opacity 0.2s ease-out, max-height 0.3s ease-out';
+    trackItem.style.opacity = '0';
+    trackItem.style.maxHeight = trackItem.offsetHeight + 'px';
+    trackItem.style.overflow = 'hidden';
+
+    setTimeout(() => {
+        trackItem.style.maxHeight = '0';
+        trackItem.style.padding = '0';
+        setTimeout(() => {
+            trackItem.remove();
+            renumberTracks();
+            updateTrackCount();
+            markDirty();
+        }, 300);
+    }, 200);
+
+    showNotification('Track removed from working copy.', 'info');
+}
+
+
+// =============================================================================
+// Track Count Update
+// =============================================================================
+
+function updateTrackCount() {
+    const count = workshopState.workingUris.length;
+    const countEl = document.getElementById('track-count');
+    const infoCountEl = document.getElementById('info-track-count');
+    if (countEl) countEl.textContent = count;
+    if (infoCountEl) infoCountEl.textContent = count;
+}
+
+
+// =============================================================================
+// Full Re-render (handles additions and deletions, not just reordering)
+// =============================================================================
+
+function fullRerenderTrackList() {
+    const container = document.getElementById('track-list');
+    const existingElements = {};
+    container.querySelectorAll('.track-item').forEach(el => {
+        const uri = el.dataset.uri;
+        if (!existingElements[uri]) existingElements[uri] = [];
+        existingElements[uri].push(el);
+    });
+
+    const usedElements = new Set();
+
+    workshopState.workingUris.forEach((uri, index) => {
+        const available = existingElements[uri];
+        let el = null;
+
+        if (available && available.length > 0) {
+            el = available.shift();
+            usedElements.add(el);
+            container.appendChild(el);
+        } else if (trackDataByUri[uri]) {
+            el = createTrackElement(trackDataByUri[uri], index + 1);
+            container.appendChild(el);
+        }
+    });
+
+    // Remove DOM elements that are no longer in workingUris
+    container.querySelectorAll('.track-item').forEach(el => {
+        if (!usedElements.has(el) && !workshopState.workingUris.includes(el.dataset.uri)) {
+            el.remove();
+        }
+    });
+
+    renumberTracks();
+}
+
+
+// =============================================================================
+// Search Spotify
+// =============================================================================
+
+let searchState = {
+    currentQuery: '',
+    currentOffset: 0,
+    isSearching: false,
+    limit: 20,
+};
+
+
+function searchSpotify() {
+    const input = document.getElementById('search-input');
+    const query = input.value.trim();
+    if (!query) return;
+
+    searchState.currentQuery = query;
+    searchState.currentOffset = 0;
+
+    const container = document.getElementById('search-results');
+    container.innerHTML = '';
+
+    executeSearch(query, 0, false);
+}
+
+
+function searchSpotifyMore() {
+    if (searchState.isSearching || !searchState.currentQuery) return;
+    executeSearch(
+        searchState.currentQuery,
+        searchState.currentOffset,
+        true
+    );
+}
+
+
+function executeSearch(query, offset, append) {
+    if (searchState.isSearching) return;
+    searchState.isSearching = true;
+
+    const searchBtn = document.getElementById('search-btn');
+    const loadMoreBtn = document.getElementById('search-load-more');
+    searchBtn.disabled = true;
+
+    const container = document.getElementById('search-results');
+    if (!append) {
+        container.innerHTML = '<p class="text-white/40 text-sm text-center py-4">Searching...</p>';
+    } else {
+        loadMoreBtn.textContent = 'Loading...';
+        loadMoreBtn.disabled = true;
+    }
+
+    fetch('/workshop/search', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({
+            query: query,
+            limit: searchState.limit,
+            offset: offset,
+        }),
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => { throw new Error(data.message || 'Search failed.'); });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (!data.success) {
+            throw new Error(data.message || 'Search returned an error.');
+        }
+
+        if (!append) {
+            container.innerHTML = '';
+        }
+
+        if (data.tracks.length === 0 && offset === 0) {
+            container.innerHTML = '<p class="text-white/40 text-sm text-center py-4">No results found.</p>';
+            loadMoreBtn.classList.add('hidden');
+            return;
+        }
+
+        data.tracks.forEach(track => {
+            container.appendChild(createSearchResultElement(track));
+        });
+
+        searchState.currentOffset = offset + data.tracks.length;
+
+        if (data.tracks.length >= searchState.limit) {
+            loadMoreBtn.classList.remove('hidden');
+        } else {
+            loadMoreBtn.classList.add('hidden');
+        }
+    })
+    .catch(error => {
+        console.error('Search error:', error);
+        if (!append) {
+            container.innerHTML = '<p class="text-red-400 text-sm text-center py-4">' + escapeHtml(error.message) + '</p>';
+        } else {
+            showNotification(error.message || 'Failed to load more results.', 'error');
+        }
+        loadMoreBtn.classList.add('hidden');
+    })
+    .finally(() => {
+        searchState.isSearching = false;
+        searchBtn.disabled = false;
+        loadMoreBtn.disabled = false;
+        loadMoreBtn.textContent = 'Load more results';
+    });
+}
+
+
+function createSearchResultElement(track) {
+    const el = document.createElement('div');
+    el.className = 'flex items-center p-2 rounded-lg hover:bg-white/5 transition duration-150 group';
+    el.dataset.uri = track.uri;
+
+    const alreadyAdded = workshopState.workingUris.includes(track.uri);
+
+    const albumImg = track.album_image_url
+        ? '<img src="' + escapeHtml(track.album_image_url) + '" alt="" class="w-8 h-8 rounded object-cover" loading="lazy">'
+        : '<div class="w-8 h-8 rounded bg-black/20 flex items-center justify-center text-white/30"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
+
+    const artists = Array.isArray(track.artists) ? track.artists.join(', ') : '';
+    const durationMin = Math.floor((track.duration_ms || 0) / 60000);
+    const durationSec = Math.floor(((track.duration_ms || 0) % 60000) / 1000);
+    const durationStr = durationMin + ':' + String(durationSec).padStart(2, '0');
+
+    el.innerHTML = albumImg +
+        '<div class="ml-2 flex-1 min-w-0">' +
+            '<p class="text-white text-xs font-medium truncate">' + escapeHtml(track.name) + '</p>' +
+            '<p class="text-white/40 text-xs truncate">' + escapeHtml(artists) + '</p>' +
+        '</div>' +
+        '<span class="text-white/30 text-xs mr-2 hidden sm:inline">' + durationStr + '</span>';
+
+    // Create add button with data attribute instead of inline JSON
+    const addBtn = document.createElement('button');
+    addBtn.className = 'add-track-btn flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition duration-150 ' +
+        (alreadyAdded ? 'bg-white/10 text-white/30 cursor-default' : 'bg-white/20 hover:bg-green-500/50 text-white/60 hover:text-white');
+    addBtn.title = alreadyAdded ? 'Already in playlist' : 'Add to playlist';
+    addBtn.disabled = alreadyAdded;
+    addBtn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+        '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="' +
+        (alreadyAdded ? 'M5 13l4 4L19 7' : 'M12 6v12M6 12h12') + '"></path></svg>';
+
+    // Store track data on the button element to avoid inline JSON in onclick
+    addBtn._trackData = track;
+    addBtn.addEventListener('click', function() {
+        addTrackFromSearch(this, this._trackData);
+    });
+
+    el.appendChild(addBtn);
+    return el;
+}
+
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(text));
+    return div.innerHTML;
+}
+
+
+// =============================================================================
+// Add Track from Search Results
+// =============================================================================
+
+function addTrackFromSearch(button, track) {
+    if (!track || !track.uri) return;
+
+    // Add track data to the lookup map
+    trackDataByUri[track.uri] = {
+        id: track.id,
+        name: track.name,
+        artists: track.artists || [],
+        album_name: track.album_name || '',
+        album_image_url: track.album_image_url || '',
+        duration_ms: track.duration_ms || 0,
+        uri: track.uri,
+    };
+
+    // Add URI to the end of the working list
+    workshopState.workingUris.push(track.uri);
+
+    // Create and append a new track DOM element
+    const trackList = document.getElementById('track-list');
+    const newTrackEl = createTrackElement(track, workshopState.workingUris.length);
+    trackList.appendChild(newTrackEl);
+
+    // Update button state to show "already added"
+    button.disabled = true;
+    button.classList.remove('hover:bg-green-500/50', 'text-white/60', 'hover:text-white', 'bg-white/20');
+    button.classList.add('bg-white/10', 'text-white/30', 'cursor-default');
+    button.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+        '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>';
+    button.title = 'Already in playlist';
+
+    updateTrackCount();
+    markDirty();
+    showNotification('Added "' + track.name + '" to playlist.', 'success');
+
+    // Scroll track list to bottom to show new track
+    trackList.scrollTop = trackList.scrollHeight;
+}
+
+
+function createTrackElement(track, position) {
+    const el = document.createElement('div');
+    el.className = 'track-item flex items-center px-4 py-2 hover:bg-white/5 transition duration-150 border-b border-white/5 cursor-grab active:cursor-grabbing';
+    el.dataset.uri = track.uri;
+    el.dataset.trackId = track.id;
+
+    const artists = Array.isArray(track.artists) ? track.artists.join(', ') : '';
+    const durationMin = Math.floor((track.duration_ms || 0) / 60000);
+    const durationSec = Math.floor(((track.duration_ms || 0) % 60000) / 1000);
+    const durationStr = durationMin + ':' + String(durationSec).padStart(2, '0');
+
+    const albumImg = track.album_image_url
+        ? '<img src="' + escapeHtml(track.album_image_url) + '" alt="" class="w-full h-full object-cover" loading="lazy">'
+        : '<div class="w-full h-full flex items-center justify-center text-white/30"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
+
+    el.innerHTML =
+        '<span class="track-number w-10 text-center text-white/50 text-sm font-mono">' + position + '</span>' +
+        '<div class="w-10 h-10 rounded overflow-hidden flex-shrink-0 bg-black/20">' + albumImg + '</div>' +
+        '<div class="ml-3 flex-1 min-w-0">' +
+            '<p class="text-white text-sm font-medium truncate">' + escapeHtml(track.name) + '</p>' +
+            '<p class="text-white/50 text-xs truncate">' + escapeHtml(artists) + '</p>' +
+        '</div>' +
+        '<span class="w-24 text-right text-white/50 text-sm hidden sm:block">' + durationStr + '</span>' +
+        '<button class="delete-track-btn w-8 text-center text-white/20 hover:text-red-400 transition duration-150 ml-1 flex-shrink-0" onclick="deleteTrack(\'' + track.uri + '\', this)" title="Remove from playlist">' +
+            '<svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>' +
+        '</button>' +
+        '<span class="drag-handle w-8 text-center text-white/30 hover:text-white/60 cursor-grab active:cursor-grabbing ml-1 flex-shrink-0">' +
+            '<svg class="w-5 h-5 mx-auto" fill="currentColor" viewBox="0 0 24 24"><path d="M8 6h2v2H8V6zm6 0h2v2h-2V6zM8 11h2v2H8v-2zm6 0h2v2h-2v-2zm-6 5h2v2H8v-2zm6 0h2v2h-2v-2z"/></svg>' +
+        '</span>';
+
+    return el;
 }
 </script>
 

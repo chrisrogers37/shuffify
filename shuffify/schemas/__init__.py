@@ -15,6 +15,7 @@ from .requests import (
     PercentageShuffleParams,
     PlaylistQueryParams,
     WorkshopCommitRequest,
+    WorkshopSearchRequest,
     parse_shuffle_request,
 )
 
@@ -30,6 +31,7 @@ __all__ = [
     "PercentageShuffleParams",
     "PlaylistQueryParams",
     "WorkshopCommitRequest",
+    "WorkshopSearchRequest",
     # Utility functions
     "parse_shuffle_request",
 ]
