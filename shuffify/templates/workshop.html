@@ -126,6 +126,73 @@
                         {% endfor %}
                     </div>
                 </div>
+
+                <!-- Source Playlists Panel -->
+                <div class="mt-6">
+                    <button id="source-panel-toggle"
+                            onclick="toggleSourcePanel()"
+                            class="w-full flex items-center justify-between px-5 py-3 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 text-white font-bold text-lg hover:bg-white/15 transition duration-150"
+                            aria-expanded="false"
+                            aria-controls="source-panel-body">
+                        <span class="flex items-center">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                            </svg>
+                            Source Playlists
+                        </span>
+                        <svg id="source-panel-chevron" class="w-5 h-5 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </button>
+
+                    <div id="source-panel-body" class="hidden mt-2 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden">
+                        <!-- Source Playlist Selector -->
+                        <div class="px-5 py-4 border-b border-white/10">
+                            <label for="source-playlist-select" class="block text-sm font-medium text-white/90 mb-2">
+                                Load tracks from another playlist:
+                            </label>
+                            <div class="flex items-center space-x-2">
+                                <select id="source-playlist-select"
+                                        class="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-white/30 focus:border-transparent"
+                                        disabled>
+                                    <option value="">Loading playlists...</option>
+                                </select>
+                                <button id="load-source-btn"
+                                        onclick="loadSourcePlaylist()"
+                                        disabled
+                                        class="px-4 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white font-semibold transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed">
+                                    Load
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Source Track List -->
+                        <div id="source-tracks-container" class="hidden">
+                            <div class="px-4 py-2 border-b border-white/10 flex items-center justify-between">
+                                <div class="flex items-center text-white/60 text-xs uppercase tracking-wide font-semibold">
+                                    <span class="w-10"></span>
+                                    <span class="ml-3">Source Tracks</span>
+                                </div>
+                                <span id="source-track-count" class="text-white/50 text-xs">0 tracks</span>
+                            </div>
+                            <div id="source-track-list" class="max-h-[40vh] overflow-y-auto workshop-scrollbar">
+                            </div>
+                        </div>
+
+                        <!-- Empty state -->
+                        <div id="source-empty-state" class="px-5 py-6 text-center text-white/50 text-sm">
+                            Select a playlist above and click "Load" to browse its tracks.
+                        </div>
+
+                        <!-- Loading state -->
+                        <div id="source-loading-state" class="hidden px-5 py-6 text-center text-white/50 text-sm">
+                            <svg class="w-6 h-6 mx-auto mb-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            Loading tracks...
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Sidebar Controls (1/3 width on large screens) -->
@@ -246,6 +313,12 @@ const workshopState = {
     isDirty: false,
     isSaving: false,
     isShuffling: false,
+    // Source panel state
+    sourcePlaylistId: null,
+    sourcePlaylistName: null,
+    sourceTracks: [],
+    playlistsLoaded: false,
+    isLoadingSource: false,
 };
 
 const trackDataByUri = {};
@@ -278,6 +351,14 @@ document.addEventListener('DOMContentLoaded', () => {
         ghostClass: 'sortable-ghost',
         chosenClass: 'sortable-chosen',
         dragClass: 'sortable-drag',
+        group: {
+            name: 'workshop-tracks',
+            pull: true,
+            put: true,
+        },
+        onAdd: function(evt) {
+            handleSourceTrackAddedViaDrag(evt);
+        },
         onEnd: function(evt) {
             updateWorkingUrisFromDOM();
             markDirty();
@@ -427,6 +508,7 @@ function commitToSpotify() {
         if (data.success) {
             workshopState.savedUris = [...workshopState.workingUris];
             markDirty();
+            refreshSourceDuplicateIndicators();
             showNotification(data.message || 'Saved to Spotify!', 'success');
         } else {
             showNotification(data.message || 'Save returned unexpected response.', 'error');
@@ -453,6 +535,7 @@ function undoPreview() {
     fullRerenderTrackList();
     updateTrackCount();
     markDirty();
+    refreshSourceDuplicateIndicators();
     showNotification('Reverted to last saved order.', 'success');
 }
 
@@ -874,6 +957,327 @@ function createTrackElement(track, position) {
 
     return el;
 }
+
+
+// =============================================================================
+// Source Panel — Toggle, Load, Render
+// =============================================================================
+
+let sourceSortableInstance = null;
+
+function toggleSourcePanel() {
+    const body = document.getElementById('source-panel-body');
+    const chevron = document.getElementById('source-panel-chevron');
+    const toggle = document.getElementById('source-panel-toggle');
+    const isHidden = body.classList.contains('hidden');
+
+    body.classList.toggle('hidden');
+    chevron.classList.toggle('rotate-180');
+    toggle.setAttribute('aria-expanded', String(isHidden));
+
+    // Lazy-load playlists on first open
+    if (isHidden && !workshopState.playlistsLoaded) {
+        fetchUserPlaylists();
+    }
+}
+
+function fetchUserPlaylists() {
+    const select = document.getElementById('source-playlist-select');
+    select.disabled = true;
+    select.innerHTML = '<option value="">Loading playlists...</option>';
+
+    fetch('/api/user-playlists', {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.message || 'Failed to load playlists.');
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (!data.success || !data.playlists) {
+            throw new Error('Unexpected response format.');
+        }
+
+        select.innerHTML = '<option value="">-- Select a playlist --</option>';
+
+        data.playlists.forEach(p => {
+            if (p.id === workshopState.playlistId) return;
+
+            const option = document.createElement('option');
+            option.value = p.id;
+            option.textContent = p.name + ' (' + p.track_count + ' tracks)';
+            option.dataset.name = p.name;
+            select.appendChild(option);
+        });
+
+        select.disabled = false;
+        document.getElementById('load-source-btn').disabled = false;
+        workshopState.playlistsLoaded = true;
+    })
+    .catch(error => {
+        console.error('Error fetching playlists:', error);
+        select.innerHTML = '<option value="">Failed to load playlists</option>';
+        showNotification(error.message || 'Failed to load playlists.', 'error');
+    });
+}
+
+function loadSourcePlaylist() {
+    const select = document.getElementById('source-playlist-select');
+    const playlistId = select.value;
+
+    if (!playlistId) {
+        showNotification('Please select a playlist first.', 'info');
+        return;
+    }
+
+    if (workshopState.isLoadingSource) return;
+
+    const selectedOption = select.options[select.selectedIndex];
+    const playlistName = selectedOption.dataset.name || selectedOption.textContent;
+
+    workshopState.isLoadingSource = true;
+    workshopState.sourcePlaylistId = playlistId;
+    workshopState.sourcePlaylistName = playlistName;
+
+    document.getElementById('source-empty-state').classList.add('hidden');
+    document.getElementById('source-tracks-container').classList.add('hidden');
+    document.getElementById('source-loading-state').classList.remove('hidden');
+
+    const loadBtn = document.getElementById('load-source-btn');
+    loadBtn.disabled = true;
+    loadBtn.textContent = 'Loading...';
+
+    fetch('/playlist/' + playlistId, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.message || 'Failed to load playlist.');
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        workshopState.sourceTracks = data.tracks || [];
+        renderSourceTracks();
+    })
+    .catch(error => {
+        console.error('Error loading source playlist:', error);
+        showNotification(error.message || 'Failed to load source playlist.', 'error');
+        document.getElementById('source-loading-state').classList.add('hidden');
+        document.getElementById('source-empty-state').classList.remove('hidden');
+    })
+    .finally(() => {
+        workshopState.isLoadingSource = false;
+        loadBtn.disabled = false;
+        loadBtn.textContent = 'Load';
+    });
+}
+
+function renderSourceTracks() {
+    const container = document.getElementById('source-track-list');
+    const tracks = workshopState.sourceTracks;
+
+    container.innerHTML = '';
+
+    if (tracks.length === 0) {
+        document.getElementById('source-loading-state').classList.add('hidden');
+        document.getElementById('source-tracks-container').classList.add('hidden');
+        document.getElementById('source-empty-state').classList.remove('hidden');
+        document.getElementById('source-empty-state').textContent =
+            'This playlist has no tracks.';
+        return;
+    }
+
+    tracks.forEach(function(track) {
+        const isDuplicate = workshopState.workingUris.includes(track.uri);
+
+        const div = document.createElement('div');
+        div.className = 'source-track-item flex items-center px-4 py-2 hover:bg-white/5 transition duration-150 border-b border-white/5 cursor-grab active:cursor-grabbing';
+        div.dataset.uri = track.uri;
+        div.dataset.trackId = track.id;
+
+        const durationMin = Math.floor(track.duration_ms / 60000);
+        const durationSec = Math.floor((track.duration_ms % 60000) / 1000);
+        const durationStr = durationMin + ':' + String(durationSec).padStart(2, '0');
+
+        const artistsStr = Array.isArray(track.artists) ? track.artists.join(', ') : '';
+
+        const albumImg = track.album_image_url
+            ? '<img src="' + escapeHtml(track.album_image_url) + '" alt="" class="w-full h-full object-cover" loading="lazy">'
+            : '<div class="w-full h-full flex items-center justify-center text-white/30"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
+
+        div.innerHTML =
+            '<div class="w-10 h-10 rounded overflow-hidden flex-shrink-0 bg-black/20">' + albumImg + '</div>' +
+            '<div class="ml-3 flex-1 min-w-0">' +
+                '<p class="text-white text-sm font-medium truncate">' + escapeHtml(track.name) + '</p>' +
+                '<p class="text-white/50 text-xs truncate">' + escapeHtml(artistsStr) + '</p>' +
+            '</div>' +
+            '<span class="w-20 text-right text-white/50 text-sm hidden sm:block">' + durationStr + '</span>';
+
+        // Create add button with data attribute for safe event handling
+        const addBtn = document.createElement('button');
+        addBtn.className = 'add-source-track-btn ml-2 w-8 h-8 flex items-center justify-center rounded-full transition duration-150 flex-shrink-0 ' +
+            (isDuplicate ? 'bg-yellow-500/30 text-yellow-300' : 'bg-white/10 hover:bg-white/20 text-white/70 hover:text-white');
+        addBtn.title = isDuplicate ? 'Already in playlist (click to add duplicate)' : 'Add to playlist';
+        addBtn.innerHTML = isDuplicate
+            ? '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
+            : '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>';
+        addBtn._trackUri = track.uri;
+        addBtn.addEventListener('click', function() {
+            addSourceTrackToWorking(this._trackUri);
+        });
+
+        div.appendChild(addBtn);
+        container.appendChild(div);
+    });
+
+    document.getElementById('source-track-count').textContent = tracks.length + ' tracks';
+
+    document.getElementById('source-loading-state').classList.add('hidden');
+    document.getElementById('source-empty-state').classList.add('hidden');
+    document.getElementById('source-tracks-container').classList.remove('hidden');
+
+    initSourceSortable();
+}
+
+function initSourceSortable() {
+    const sourceList = document.getElementById('source-track-list');
+    if (!sourceList) return;
+
+    if (sourceSortableInstance) {
+        sourceSortableInstance.destroy();
+    }
+
+    sourceSortableInstance = Sortable.create(sourceList, {
+        animation: 200,
+        sort: false,
+        group: {
+            name: 'workshop-tracks',
+            pull: 'clone',
+            put: false,
+        },
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        dragClass: 'sortable-drag',
+    });
+}
+
+
+// =============================================================================
+// Adding Source Tracks to Working Playlist
+// =============================================================================
+
+function addSourceTrackToWorking(uri) {
+    const isDuplicate = workshopState.workingUris.includes(uri);
+
+    if (isDuplicate) {
+        if (!confirm('This track is already in the playlist. Add it again?')) {
+            return;
+        }
+    }
+
+    const trackData = workshopState.sourceTracks.find(function(t) { return t.uri === uri; });
+    if (!trackData) {
+        showNotification('Track data not found.', 'error');
+        return;
+    }
+
+    // Register in trackDataByUri if not already there
+    if (!trackDataByUri[uri]) {
+        trackDataByUri[uri] = {
+            id: trackData.id,
+            name: trackData.name,
+            artists: trackData.artists,
+            album_name: trackData.album_name || '',
+            album_image_url: trackData.album_image_url || '',
+            duration_ms: trackData.duration_ms,
+            uri: trackData.uri,
+        };
+    }
+
+    workshopState.workingUris.push(uri);
+
+    const trackList = document.getElementById('track-list');
+    const newEl = createTrackElement(trackData, workshopState.workingUris.length);
+    trackList.appendChild(newEl);
+
+    renumberTracks();
+    markDirty();
+    updateTrackCount();
+    refreshSourceDuplicateIndicators();
+
+    showNotification('Added "' + trackData.name + '" to playlist.', 'success');
+
+    trackList.scrollTop = trackList.scrollHeight;
+}
+
+function handleSourceTrackAddedViaDrag(evt) {
+    const addedEl = evt.item;
+    const uri = addedEl.dataset.uri;
+
+    const trackData = workshopState.sourceTracks.find(function(t) { return t.uri === uri; });
+    if (!trackData) {
+        addedEl.remove();
+        return;
+    }
+
+    if (!trackDataByUri[uri]) {
+        trackDataByUri[uri] = {
+            id: trackData.id,
+            name: trackData.name,
+            artists: trackData.artists,
+            album_name: trackData.album_name || '',
+            album_image_url: trackData.album_image_url || '',
+            duration_ms: trackData.duration_ms,
+            uri: trackData.uri,
+        };
+    }
+
+    const isDuplicate = workshopState.workingUris.includes(uri);
+    if (isDuplicate) {
+        showNotification('Note: "' + trackData.name + '" is already in the playlist (duplicate added).', 'info');
+    }
+
+    // Replace the cloned source element with a proper track-item element
+    const newEl = createTrackElement(trackData, workshopState.workingUris.length + 1);
+    addedEl.replaceWith(newEl);
+
+    updateWorkingUrisFromDOM();
+    markDirty();
+    updateTrackCount();
+    refreshSourceDuplicateIndicators();
+}
+
+
+// =============================================================================
+// Refresh Duplicate Indicators on Source Tracks
+// =============================================================================
+
+function refreshSourceDuplicateIndicators() {
+    const sourceItems = document.querySelectorAll('#source-track-list .source-track-item');
+    sourceItems.forEach(function(item) {
+        const uri = item.dataset.uri;
+        const isDuplicate = workshopState.workingUris.includes(uri);
+        const btn = item.querySelector('.add-source-track-btn');
+        if (!btn) return;
+
+        if (isDuplicate) {
+            btn.className = 'add-source-track-btn ml-2 w-8 h-8 flex items-center justify-center rounded-full bg-yellow-500/30 text-yellow-300 transition duration-150 flex-shrink-0';
+            btn.title = 'Already in playlist (click to add duplicate)';
+            btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+        } else {
+            btn.className = 'add-source-track-btn ml-2 w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition duration-150 flex-shrink-0';
+            btn.title = 'Add to playlist';
+            btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>';
+        }
+    });
+}
 </script>
 
 <style>
@@ -885,5 +1289,9 @@ function createTrackElement(track, position) {
 .sortable-ghost { opacity: 0.4; background: rgba(29, 185, 84, 0.2) !important; border-radius: 8px; }
 .sortable-chosen { background: rgba(255, 255, 255, 0.08) !important; }
 .sortable-drag { background: rgba(29, 185, 84, 0.3) !important; border-radius: 8px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3); }
+
+.rotate-180 { transform: rotate(180deg); }
+.source-track-item { background: rgba(255, 255, 255, 0.02); }
+.source-track-item:hover { background: rgba(255, 255, 255, 0.06); }
 </style>
 {% endblock %}

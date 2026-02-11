@@ -300,6 +300,36 @@ def get_playlist_stats(playlist_id):
     return jsonify(stats)
 
 
+@main.route("/api/user-playlists")
+def api_user_playlists():
+    """Return the user's editable playlists as JSON for AJAX consumers."""
+    client = require_auth()
+    if not client:
+        return json_error("Please log in first.", 401)
+
+    try:
+        playlist_service = PlaylistService(client)
+        playlists = playlist_service.get_user_playlists()
+
+        # Return a lightweight list: id, name, track count, image
+        result = []
+        for p in playlists:
+            result.append({
+                "id": p["id"],
+                "name": p["name"],
+                "track_count": p.get("tracks", {}).get("total", 0),
+                "image_url": (
+                    p["images"][0]["url"] if p.get("images") else None
+                ),
+            })
+
+        logger.debug(f"API returned {len(result)} playlists")
+        return jsonify({"success": True, "playlists": result})
+    except PlaylistError as e:
+        logger.error(f"Failed to fetch playlists for API: {e}")
+        return json_error("Failed to fetch playlists.", 500)
+
+
 # =============================================================================
 # Shuffle Routes
 # =============================================================================
