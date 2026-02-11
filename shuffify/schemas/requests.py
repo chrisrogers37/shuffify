@@ -4,7 +4,7 @@ Request validation schemas using Pydantic.
 Provides type-safe validation for all API request parameters.
 """
 
-from typing import Literal, Annotated, Any, Dict, List
+from typing import Literal, Annotated, Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
@@ -234,3 +234,44 @@ class WorkshopSearchRequest(BaseModel):
 
     class Config:
         extra = "ignore"
+
+
+class ExternalPlaylistRequest(BaseModel):
+    """Schema for loading an external playlist by URL or search query."""
+
+    url: Optional[str] = Field(
+        default=None,
+        description="Spotify playlist URL, URI, or ID",
+    )
+    query: Optional[str] = Field(
+        default=None,
+        max_length=200,
+        description="Search query for finding playlists by name",
+    )
+
+    @field_validator("url")
+    @classmethod
+    def validate_url_not_empty(cls, v: Optional[str]) -> Optional[str]:
+        """Strip whitespace from URL if provided."""
+        if v is not None:
+            v = v.strip()
+            if not v:
+                return None
+        return v
+
+    @field_validator("query")
+    @classmethod
+    def validate_query_not_empty(cls, v: Optional[str]) -> Optional[str]:
+        """Strip whitespace from query if provided."""
+        if v is not None:
+            v = v.strip()
+            if not v:
+                return None
+        return v
+
+    def model_post_init(self, __context) -> None:
+        """Ensure at least one of url or query is provided."""
+        if not self.url and not self.query:
+            raise ValueError(
+                "Either 'url' or 'query' must be provided"
+            )

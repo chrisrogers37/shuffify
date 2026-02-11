@@ -16,6 +16,7 @@ from .requests import (
     PlaylistQueryParams,
     WorkshopCommitRequest,
     WorkshopSearchRequest,
+    ExternalPlaylistRequest,
     parse_shuffle_request,
 )
 
@@ -32,6 +33,7 @@ __all__ = [
     "PlaylistQueryParams",
     "WorkshopCommitRequest",
     "WorkshopSearchRequest",
+    "ExternalPlaylistRequest",
     # Utility functions
     "parse_shuffle_request",
 ]
