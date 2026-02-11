@@ -55,6 +55,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New API method: `SpotifyAPI.search_playlists()` with Redis caching
   - New routes: `POST /workshop/load-external-playlist`, `POST /workshop/search-playlists`
   - Pydantic validation for external playlist requests (`ExternalPlaylistRequest` schema)
+- **User Database & Persistence** - SQLite database with Flask-SQLAlchemy for persistent storage
+  - User model: stores Spotify user ID, display name, email, profile image; auto-upserted on login
+  - WorkshopSession model: save/load named workshop arrangements across browser sessions
+  - UpstreamSource model: persist external playlist source configurations for scheduled operations
+  - New routes: workshop session CRUD (`/workshop/<id>/sessions`), upstream source CRUD
+  - Flask-Migrate (Alembic) integration for database schema versioning
+  - Graceful degradation: core shuffle/undo features work without database; only persistence returns errors
+  - New services: UserService, WorkshopSessionService, UpstreamSourceService
+  - New dependencies: Flask-SQLAlchemy>=3.1.0, Flask-Migrate>=4.0.0
 - **Error handler test coverage** - 14 new tests verifying all service exception handlers return correct HTTP status codes, JSON structure, and error categories
 - **Playlist model test coverage** - 20 new tests covering construction, validation, track operations, feature statistics, and serialization
 - **Refresh Playlists Button** - Re-fetch playlists from Spotify without losing undo state

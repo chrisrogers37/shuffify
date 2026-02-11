@@ -22,6 +22,13 @@ from shuffify.services import (
     StateError,
     NoHistoryError,
     AlreadyAtOriginalError,
+    UserServiceError,
+    UserNotFoundError,
+    WorkshopSessionError,
+    WorkshopSessionNotFoundError,
+    WorkshopSessionLimitError,
+    UpstreamSourceError,
+    UpstreamSourceNotFoundError,
 )
 
 logger = logging.getLogger(__name__)
@@ -160,6 +167,70 @@ def register_error_handlers(app):
         """Handle state management errors."""
         logger.error(f"State error: {error}")
         return json_error_response("State management error.", 500)
+
+    # =========================================================================
+    # Database / Persistence Errors
+    # =========================================================================
+
+    @app.errorhandler(UserServiceError)
+    def handle_user_service_error(error: UserServiceError):
+        """Handle user service errors."""
+        logger.error(f"User service error: {error}")
+        return json_error_response(
+            "User operation failed.", 500
+        )
+
+    @app.errorhandler(UserNotFoundError)
+    def handle_user_not_found(error: UserNotFoundError):
+        """Handle user not found errors."""
+        logger.info(f"User not found: {error}")
+        return json_error_response("User not found.", 404)
+
+    @app.errorhandler(WorkshopSessionNotFoundError)
+    def handle_workshop_session_not_found(
+        error: WorkshopSessionNotFoundError,
+    ):
+        """Handle workshop session not found."""
+        logger.info(f"Workshop session not found: {error}")
+        return json_error_response(
+            "Saved session not found.", 404
+        )
+
+    @app.errorhandler(WorkshopSessionLimitError)
+    def handle_workshop_session_limit(
+        error: WorkshopSessionLimitError,
+    ):
+        """Handle workshop session limit exceeded."""
+        logger.warning(f"Workshop session limit: {error}")
+        return json_error_response(str(error), 400)
+
+    @app.errorhandler(WorkshopSessionError)
+    def handle_workshop_session_error(
+        error: WorkshopSessionError,
+    ):
+        """Handle general workshop session errors."""
+        logger.error(f"Workshop session error: {error}")
+        return json_error_response(
+            "Workshop session operation failed.", 500
+        )
+
+    @app.errorhandler(UpstreamSourceNotFoundError)
+    def handle_upstream_source_not_found(
+        error: UpstreamSourceNotFoundError,
+    ):
+        """Handle upstream source not found."""
+        logger.info(f"Upstream source not found: {error}")
+        return json_error_response("Source not found.", 404)
+
+    @app.errorhandler(UpstreamSourceError)
+    def handle_upstream_source_error(
+        error: UpstreamSourceError,
+    ):
+        """Handle general upstream source errors."""
+        logger.error(f"Upstream source error: {error}")
+        return json_error_response(
+            "Source operation failed.", 500
+        )
 
     # =========================================================================
     # HTTP Error Codes
