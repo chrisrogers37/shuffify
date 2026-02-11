@@ -105,11 +105,14 @@ black shuffify/
 - **Backend**: Flask 3.1.x (Python 3.12+)
 - **Frontend**: Tailwind CSS with custom animations, vanilla JavaScript
 - **API**: Spotify Web API (via spotipy library)
+- **Database**: SQLAlchemy + SQLite (User, Schedule, JobExecution models)
+- **Scheduler**: APScheduler for background job execution
 - **Server**: Gunicorn (production), Flask dev server (local)
 - **Containerization**: Docker with health checks
 - **Session Management**: Flask-Session 0.8.x (Redis-based, filesystem fallback)
 - **Caching**: Redis for Spotify API response caching
 - **Validation**: Pydantic v2 for request validation
+- **Security**: Fernet symmetric encryption for stored refresh tokens
 
 ## Architecture at a Glance
 
@@ -125,11 +128,17 @@ black shuffify/
 └─────────────────┬───────────────────────┘
                   │
 ┌─────────────────▼───────────────────────┐
-│  Services Layer                         │
-│  • services/auth_service.py    - OAuth │
-│  • services/playlist_service.py        │
-│  • services/shuffle_service.py         │
-│  • services/state_service.py           │
+│  Services Layer (10 services)           │
+│  • auth_service.py      - OAuth flow   │
+│  • playlist_service.py  - Playlist ops │
+│  • shuffle_service.py   - Algorithms   │
+│  • state_service.py     - Undo/redo    │
+│  • token_service.py     - Encryption   │
+│  • scheduler_service.py - CRUD sched   │
+│  • job_executor_service - Job runner   │
+│  • user_service.py      - User mgmt   │
+│  • workshop_session_service.py         │
+│  • upstream_source_service.py          │
 └─────────────────┬───────────────────────┘
                   │
 ┌─────────────────▼───────────────────────┐
@@ -137,7 +146,7 @@ black shuffify/
 │  • shuffle_algorithms/ - Algorithms    │
 │  • spotify/           - API client      │
 │  • spotify/cache.py   - Redis caching   │
-│  • models/            - Data models     │
+│  • models/            - Data & DB models│
 └─────────────────┬───────────────────────┘
                   │
 ┌─────────────────▼───────────────────────┐
@@ -145,6 +154,7 @@ black shuffify/
 │  • Spotify Web API                      │
 │  • OAuth 2.0 Provider                   │
 │  • Redis (sessions + caching)           │
+│  • SQLite/PostgreSQL (database)         │
 └─────────────────────────────────────────┘
 ```
 
@@ -173,13 +183,13 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements/dev.txt
 
 # Configure environment
-cp .env.example .env
-# Edit .env with your Spotify API credentials
+cp .env .env  # Create .env file manually (no .env.example provided)
+# Add your Spotify API credentials to .env
 # Get them from: https://developer.spotify.com/dashboard
 
 # Run development server
 python run.py
-# Visit http://localhost:5000
+# Visit http://localhost:8000
 ```
 
 ### Common Development Tasks
@@ -187,7 +197,7 @@ python run.py
 ```bash
 # Run application
 python run.py                 # Development server (auto-reload)
-gunicorn -c gunicorn_config.py run:app  # Production mode
+gunicorn run:app                  # Production mode
 
 # Code quality
 ruff check shuffify/          # Linting
@@ -219,6 +229,9 @@ All algorithms inherit from `ShuffleAlgorithm` base class and implement the `shu
 | **BalancedShuffle** | Round-robin from playlist sections | Even distribution from all parts |
 | **PercentageShuffle** | Keep top N% fixed, shuffle rest | Protect favorites while refreshing |
 | **StratifiedShuffle** | Shuffle within sections independently | Maintain overall structure |
+| **ArtistSpacingShuffle** | Ensure same artist doesn't appear back-to-back | Variety in artist sequence |
+| **AlbumSequenceShuffle** | Keep album tracks together, shuffle albums | Preserve album flow |
+| **TempoGradientShuffle** | Sort by BPM for DJ-style transitions | DJ-style mixing *(hidden — needs Audio Features API)* |
 
 **Location**: `shuffify/shuffle_algorithms/`
 
@@ -242,6 +255,11 @@ All algorithms inherit from `ShuffleAlgorithm` base class and implement the `shu
 - Encapsulates playlist data and metadata
 - Validation for Spotify API payloads
 - Helper methods for track manipulation
+
+**Database Models** (`shuffify/models/db.py`):
+- `User` — Spotify user with encrypted refresh token storage
+- `Schedule` — Scheduled job definitions (shuffle/raid) with algorithm config
+- `JobExecution` — Execution history log with status and results
 
 ---
 
@@ -403,15 +421,17 @@ except Exception as e:
 **Test Structure** (mirrors `shuffify/`):
 ```
 tests/
-├── shuffle_algorithms/
-│   ├── test_basic.py
-│   ├── test_balanced.py
-│   ├── test_percentage.py
-│   └── test_stratified.py
-├── spotify/
-│   └── test_client.py
-└── test_routes.py
+├── shuffle_algorithms/     # Tests for all 7 algorithms
+├── spotify/                # Spotify client, API, cache tests
+├── schemas/                # Pydantic schema validation tests
+├── services/               # Service layer tests (scheduler, job executor, token, etc.)
+├── models/                 # Database model tests
+├── test_routes.py          # Route/endpoint tests
+├── test_error_handlers.py  # Error handler tests
+└── conftest.py             # Shared fixtures (app context, db, mocks)
 ```
+
+**690 tests** covering all modules.
 
 **Test Template**:
 
@@ -468,7 +488,7 @@ pytest tests/ --cov=shuffify --cov-report=html
 # Spotify API (REQUIRED)
 SPOTIFY_CLIENT_ID=your_client_id_here
 SPOTIFY_CLIENT_SECRET=your_client_secret_here
-SPOTIFY_REDIRECT_URI=http://localhost:5000/callback
+SPOTIFY_REDIRECT_URI=http://localhost:8000/callback
 
 # Flask Configuration
 # Note: FLASK_ENV was deprecated in Flask 3.0. The app uses it as a config selector.
@@ -479,7 +499,7 @@ SECRET_KEY=your-secret-key-here
 REDIS_URL=redis://localhost:6379/0  # Falls back to filesystem if unavailable
 
 # Optional
-PORT=5000
+PORT=8000
 ```
 
 **Validation**: The application validates required environment variables on startup and fails fast in production.
@@ -512,7 +532,7 @@ PORT=5000
 **Health Check**:
 ```bash
 # Check application health
-curl http://localhost:5000/health
+curl http://localhost:8000/health
 # Returns: {"status": "healthy"}
 ```
 
@@ -586,14 +606,17 @@ curl http://localhost:5000/health
 
 ```
 documentation/
-├── planning/              # Design docs, architecture decisions
-│   └── separation_of_concerns_evaluation.md
-├── guides/                # How-to guides and tutorials
-│   ├── spotify_setup.md   # OAuth setup guide
-│   └── algorithm_dev.md   # Algorithm development guide
-└── operations/            # Production runbooks
-    ├── deployment.md      # Deployment procedures
-    └── monitoring.md      # Health check and monitoring
+├── README.md              # Documentation index
+├── evaluation/            # Active system evaluations
+│   ├── 03_extensibility_evaluation.md
+│   ├── 04_future_features_readiness.md
+│   └── 05_brainstorm_enhancements.md
+├── planning/              # Development plans
+│   └── phases/            # Feature implementation plans
+├── archive/               # Completed evaluations and plans
+│   ├── 01_architecture_evaluation.md
+│   ├── 02_modularity_assessment.md
+│   └── tech_debt_q1-2026_2026-02-10/
 ```
 
 **Rules**:
@@ -673,7 +696,7 @@ if session.get('undo_stack'):
 **OAuth errors ("Invalid redirect URI")**:
 - Ensure `SPOTIFY_REDIRECT_URI` in `.env` matches Spotify Developer Dashboard
 - Must be exact match including protocol and port
-- Common: `http://localhost:5000/callback`
+- Common: `http://localhost:8000/callback`
 
 **Session not persisting**:
 - Check `.flask_session/` directory exists and is writable
@@ -704,25 +727,32 @@ if session.get('undo_stack'):
 
 ## Planned Improvements
 
-### Short-term (v2.4.x)
-- Refresh playlists button without losing undo state
+### Short-term
 - Integration tests for OAuth flow
+- Live playlist preview (preview shuffle before committing)
 
-### Medium-term (v2.5.x)
+### Medium-term
 - CI/CD pipeline for automated testing and deployment
-- Lightweight database for user preferences
+- Notification system (Telegram, SMS, email)
+- Public REST API layer
 
-### Long-term (v3.0.0+)
+### Long-term
 - Analytics dashboard
-- Algorithm performance comparison
-- A/B testing framework
+- Multi-service support (Apple Music, YouTube Music)
+- Plugin architecture
 
 ### Completed
-- ~~Flask 3.x upgrade~~ (v3.1.x - completed)
-- ~~Redis session storage~~ (completed)
-- ~~Caching layer for Spotify API responses~~ (completed)
-- ~~Unit tests for all shuffle algorithms~~ (99 tests - completed)
-- A/B testing framework
+- ~~Flask 3.x upgrade~~ (v3.1.x)
+- ~~Redis session storage~~
+- ~~Caching layer for Spotify API responses~~
+- ~~Service layer extraction~~ (10 services)
+- ~~Pydantic validation layer~~
+- ~~7 shuffle algorithms~~ (6 visible + 1 hidden, 690 tests)
+- ~~Playlist Workshop~~ (track management, merging, raiding)
+- ~~SQLAlchemy database~~ (User, Schedule, JobExecution models)
+- ~~APScheduler background jobs~~ (scheduled shuffle/raid operations)
+- ~~Fernet token encryption~~ (secure refresh token storage)
+- ~~Refresh playlists button~~
 
 ---
 
@@ -744,14 +774,19 @@ if session.get('undo_stack'):
 
 | File | Contains |
 |------|----------|
-| `shuffify/__init__.py` | Flask app factory, Redis initialization, configuration loading |
+| `shuffify/__init__.py` | Flask app factory, Redis/DB/Scheduler initialization |
 | `shuffify/routes.py` | All HTTP routes and view logic |
+| `shuffify/services/` | 10 service modules (auth, playlist, shuffle, state, token, scheduler, job_executor, user, workshop_session, upstream_source) |
+| `shuffify/schemas/requests.py` | Pydantic v2 validation schemas for API requests |
+| `shuffify/schemas/schedule_requests.py` | Pydantic schemas for schedule CRUD |
 | `shuffify/spotify/client.py` | Spotify API wrapper (facade) |
 | `shuffify/spotify/api.py` | Spotify Web API data operations with caching support |
 | `shuffify/spotify/cache.py` | Redis caching layer for Spotify API responses |
-| `shuffify/shuffle_algorithms/registry.py` | Algorithm registration system |
+| `shuffify/shuffle_algorithms/registry.py` | Algorithm registration system (7 algorithms) |
 | `shuffify/models/playlist.py` | Playlist data model |
-| `config.py` | Configuration classes (dev, prod) with Redis settings |
+| `shuffify/models/db.py` | SQLAlchemy models (User, Schedule, JobExecution) |
+| `shuffify/error_handlers.py` | Global exception handlers |
+| `config.py` | Configuration classes (dev, prod) with Redis/DB/Scheduler settings |
 | `run.py` | Application entry point |
 
 ---
@@ -770,10 +805,11 @@ if session.get('undo_stack'):
 **Quick Reference**:
 - Main application: `python run.py`
 - Run tests: `pytest tests/ -v`
-- Check health: `curl http://localhost:5000/health`
+- Check health: `curl http://localhost:8000/health`
 - View routes: `flask routes`
 - All documentation: See `documentation/` directory
 - Algorithm docs: `shuffify/shuffle_algorithms/README.md`
+- 690 tests across all modules
 
 ---
 

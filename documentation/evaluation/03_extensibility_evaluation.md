@@ -707,17 +707,15 @@ plugins/
    - Service substitution supported
    - 479 tests covering all services
 
-2. **Add Database** — **PENDING**
-   - User preferences storage
-   - Automation rules storage
-   - Execution logs
-   - Requires: SQLAlchemy + Alembic setup
+2. ✅ **Add Database** — **COMPLETED** (Feb 2026)
+   - SQLAlchemy ORM with User, Schedule, JobExecution models
+   - Fernet encryption for stored refresh tokens via TokenService
+   - UserService for user CRUD operations
 
-3. **Event System** — **PENDING**
-   - Internal event bus
-   - Webhook handlers
-   - Scheduled jobs
-   - Requires: Database (item 2) + Celery/RQ
+3. ✅ **Scheduled Jobs** — **COMPLETED** (Feb 2026)
+   - APScheduler for background job execution
+   - SchedulerService for schedule CRUD
+   - JobExecutorService for shuffle/raid execution
 
 ### 9.2 Phase 2: Core Extensions
 
@@ -797,7 +795,7 @@ plugins/
   - 6 visible to users; TempoGradientShuffle hidden due to deprecated Spotify Audio Features API
   - `_hidden_algorithms` mechanism allows hiding without removing code
   - Adding a new algorithm requires: 1 new file, import in registry, optional test file
-- **Service layer** — 4 services (Auth, Playlist, Shuffle, State) with dependency injection
+- **Service layer** — 10 services (Auth, Playlist, Shuffle, State, Token, Scheduler, JobExecutor, User, WorkshopSession, UpstreamSource) with dependency injection
 - **Spotify module** — well-modularized (auth, API, cache, credentials, exceptions) but no abstract music service interface
 - **Flask blueprint** pattern allows route extension
 - **Configuration** is environment-based with dev/prod classes
@@ -808,18 +806,18 @@ plugins/
 - No automation system (proposed: Trigger/Action protocols + AutomationEngine)
 - No plugin architecture (proposed: ShuffifyPlugin protocol + auto-discovery)
 - No public API (internal AJAX only; proposed: versioned REST API with API keys)
-- No database (all state in ephemeral Redis sessions with filesystem fallback)
+- ~~No database~~ ✅ RESOLVED (SQLAlchemy with User, Schedule, JobExecution models — Feb 2026)
 
 ### Key Insight
 The shuffle algorithm module is a **proven template for all future extension points**. Apply the same Protocol + Registry pattern to notifications, automations, and data sources. The service layer extraction makes this feasible — each new system can follow the same dependency injection pattern.
 
 ### Priority Actions
-1. ✅ Extract services with interfaces (enables everything else) — **COMPLETED**
-2. Add database persistence (SQLAlchemy + Alembic) — **PENDING** (critical path blocker)
-3. Implement NotificationChannel protocol — **PENDING** (requires database)
-4. Implement automation Trigger/Action protocols — **PENDING** (requires database + job system)
-5. Create public API layer — **PENDING** (requires database for API keys)
-6. Design plugin system — **PENDING** (requires all of the above)
+1. ✅ Extract services with interfaces (enables everything else) — **COMPLETED** (10 services)
+2. ✅ Add database persistence (SQLAlchemy) — **COMPLETED** (User, Schedule, JobExecution models)
+3. ✅ Add background job system (APScheduler) — **COMPLETED** (SchedulerService + JobExecutorService)
+4. Implement NotificationChannel protocol — **PENDING**
+5. Create public API layer — **PENDING**
+6. Design plugin system — **PENDING**
 
 ---
 
