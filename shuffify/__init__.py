@@ -1,4 +1,5 @@
 import os
+import atexit
 import logging
 from typing import Optional
 from flask import Flask
@@ -163,6 +164,19 @@ def create_app(config_name=None):
     # Initialize Flask-Session
     Session(app)
 
+    # Initialize token encryption service
+    from shuffify.services.token_service import TokenService
+
+    try:
+        TokenService.initialize(app.config["SECRET_KEY"])
+        logger.info("Token encryption service initialized")
+    except Exception as e:
+        logger.warning(
+            "Token encryption init failed: %s. "
+            "Scheduled operations will be unavailable.",
+            e,
+        )
+
     # Initialize SQLAlchemy database
     try:
         from shuffify.models.db import db
@@ -197,6 +211,21 @@ def create_app(config_name=None):
     from shuffify.error_handlers import register_error_handlers
 
     register_error_handlers(app)
+
+    # Initialize APScheduler (after all extensions)
+    if app.config.get("SCHEDULER_ENABLED", True):
+        from shuffify.scheduler import init_scheduler
+
+        scheduler = init_scheduler(app)
+        if scheduler:
+            app.extensions["scheduler"] = scheduler
+
+    # Register scheduler shutdown on app teardown
+    @atexit.register
+    def shutdown():
+        from shuffify.scheduler import shutdown_scheduler
+
+        shutdown_scheduler()
 
     # Add a `no-cache` header to responses in development mode. This prevents
     # the browser from caching assets and not showing changes.

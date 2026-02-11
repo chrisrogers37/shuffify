@@ -9,7 +9,14 @@ Usage:
     from shuffify.models import Playlist  # existing dataclass
 """
 
-from shuffify.models.db import db, User, WorkshopSession, UpstreamSource
+from shuffify.models.db import (
+    db,
+    User,
+    WorkshopSession,
+    UpstreamSource,
+    Schedule,
+    JobExecution,
+)
 from shuffify.models.playlist import Playlist
 
 __all__ = [
@@ -17,5 +24,7 @@ __all__ = [
     "User",
     "WorkshopSession",
     "UpstreamSource",
+    "Schedule",
+    "JobExecution",
     "Playlist",
 ]
