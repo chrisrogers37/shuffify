@@ -239,6 +239,20 @@ def client(app):
     return app.test_client()
 
 
+@pytest.fixture
+def authenticated_client(app):
+    """Flask test client with a valid session token pre-set."""
+    with app.test_client() as test_client:
+        with test_client.session_transaction() as sess:
+            sess["spotify_token"] = {
+                "access_token": "test_access_token",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "refresh_token": "test_refresh_token",
+            }
+        yield test_client
+
+
 # =============================================================================
 # Algorithm Fixtures
 # =============================================================================

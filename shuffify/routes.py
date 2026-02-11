@@ -28,7 +28,12 @@ from shuffify.services import (
     PlaylistError,
     PlaylistUpdateError,
 )
-from shuffify.schemas import parse_shuffle_request, PlaylistQueryParams
+from pydantic import ValidationError
+from shuffify.schemas import (
+    parse_shuffle_request,
+    PlaylistQueryParams,
+    WorkshopCommitRequest,
+)
 
 logger = logging.getLogger(__name__)
 main = Blueprint("main", __name__)
@@ -404,4 +409,161 @@ def undo(playlist_id):
         "Playlist restored successfully.",
         playlist=restored_playlist.to_dict(),
         playlist_state=state_info,
+    )
+
+
+# =============================================================================
+# Workshop Routes
+# =============================================================================
+
+
+@main.route("/workshop/<playlist_id>")
+def workshop(playlist_id):
+    """Render the Playlist Workshop page."""
+    if not is_authenticated():
+        return redirect(url_for("main.index"))
+
+    try:
+        client = AuthService.get_authenticated_client(session["spotify_token"])
+        user = AuthService.get_user_data(client)
+
+        playlist_service = PlaylistService(client)
+        playlist = playlist_service.get_playlist(
+            playlist_id, include_features=False
+        )
+
+        algorithms = ShuffleService.list_algorithms()
+
+        logger.info(
+            f"User {user.get('display_name', 'Unknown')} opened workshop for "
+            f"playlist '{playlist.name}' ({len(playlist)} tracks)"
+        )
+
+        return render_template(
+            "workshop.html",
+            playlist=playlist.to_dict(),
+            user=user,
+            algorithms=algorithms,
+        )
+
+    except (AuthenticationError, PlaylistError) as e:
+        logger.error(f"Error loading workshop: {e}")
+        return clear_session_and_show_login(
+            "Your session has expired. Please log in again."
+        )
+
+
+@main.route("/workshop/<playlist_id>/preview-shuffle", methods=["POST"])
+def workshop_preview_shuffle(playlist_id):
+    """
+    Run a shuffle algorithm on client-provided tracks and return the new
+    order WITHOUT saving to Spotify or fetching from the API.
+
+    Expects JSON body:
+        { "algorithm": "BasicShuffle", "tracks": [...], ... params }
+    Returns JSON:
+        { "success": true, "shuffled_uris": [...] }
+    """
+    client = require_auth()
+    if not client:
+        return json_error("Please log in first.", 401)
+
+    data = request.get_json()
+    if not data:
+        return json_error("Request body must be JSON.", 400)
+
+    # Parse and validate via existing Pydantic schema
+    shuffle_request = parse_shuffle_request(data)
+
+    # Get algorithm instance
+    algorithm = ShuffleService.get_algorithm(shuffle_request.algorithm)
+
+    # Get validated parameters for this algorithm
+    params = shuffle_request.get_algorithm_params()
+
+    # Use tracks from client — no Spotify API call needed
+    tracks = data.get("tracks")
+    if not tracks or not isinstance(tracks, list):
+        return json_error("Request must include 'tracks' array.", 400)
+
+    # Execute shuffle (does NOT update Spotify)
+    shuffled_uris = ShuffleService.execute(
+        shuffle_request.algorithm, tracks, params
+    )
+
+    logger.info(
+        f"Preview shuffle for playlist {playlist_id} "
+        f"with {shuffle_request.algorithm}"
+    )
+
+    return jsonify(
+        {
+            "success": True,
+            "shuffled_uris": shuffled_uris,
+            "algorithm_name": algorithm.name,
+        }
+    )
+
+
+@main.route("/workshop/<playlist_id>/commit", methods=["POST"])
+def workshop_commit(playlist_id):
+    """
+    Save the workshop's staged track order to Spotify.
+
+    Expects JSON body: { "track_uris": ["spotify:track:...", ...] }
+    """
+    client = require_auth()
+    if not client:
+        return json_error("Please log in first.", 401)
+
+    data = request.get_json()
+    if not data:
+        return json_error("Request body must be JSON.", 400)
+
+    # Validate with Pydantic
+    try:
+        commit_request = WorkshopCommitRequest(**data)
+    except ValidationError as e:
+        return json_error(
+            f"Invalid request: {e.error_count()} validation error(s).", 400
+        )
+
+    # Get current track URIs from Spotify for state tracking
+    playlist_service = PlaylistService(client)
+    playlist = playlist_service.get_playlist(
+        playlist_id, include_features=False
+    )
+    current_uris = [track["uri"] for track in playlist.tracks]
+
+    # Initialize state if needed
+    StateService.ensure_playlist_initialized(
+        session, playlist_id, current_uris
+    )
+
+    # Check if order actually changed
+    if not ShuffleService.shuffle_changed_order(
+        current_uris, commit_request.track_uris
+    ):
+        return json_success(
+            "No changes to save — track order is unchanged."
+        )
+
+    # Update Spotify
+    playlist_service.update_playlist_tracks(
+        playlist_id, commit_request.track_uris
+    )
+
+    # Record new state for undo
+    updated_state = StateService.record_new_state(
+        session, playlist_id, commit_request.track_uris
+    )
+
+    logger.info(
+        f"Workshop commit for playlist {playlist_id}: "
+        f"{len(commit_request.track_uris)} tracks saved"
+    )
+
+    return json_success(
+        "Playlist saved to Spotify!",
+        playlist_state=updated_state.to_dict(),
     )

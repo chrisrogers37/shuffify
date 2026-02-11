@@ -4,7 +4,7 @@ Request validation schemas using Pydantic.
 Provides type-safe validation for all API request parameters.
 """
 
-from typing import Literal, Annotated, Any, Dict
+from typing import Literal, Annotated, Any, Dict, List
 from pydantic import BaseModel, Field, field_validator
 
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
@@ -195,3 +195,20 @@ def parse_shuffle_request(form_data: Dict[str, Any]) -> ShuffleRequest:
             parsed[key] = str(form_data[key])
 
     return ShuffleRequest(**parsed)
+
+
+class WorkshopCommitRequest(BaseModel):
+    """Schema for committing workshop changes to Spotify."""
+
+    track_uris: List[str] = Field(
+        ..., min_length=0, description="Ordered list of track URIs to save"
+    )
+
+    @field_validator("track_uris")
+    @classmethod
+    def validate_track_uris(cls, v: List[str]) -> List[str]:
+        """Ensure all URIs look like Spotify track URIs."""
+        for uri in v:
+            if not uri.startswith("spotify:track:"):
+                raise ValueError(f"Invalid track URI format: {uri}")
+        return v
