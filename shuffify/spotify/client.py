@@ -307,6 +307,38 @@ class SpotifyClient:
         return self._api.get_audio_features(track_ids)
 
     # =========================================================================
+    # Search Methods
+    # =========================================================================
+
+    def search_tracks(
+        self,
+        query: str,
+        limit: int = 20,
+        offset: int = 0,
+        market: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Search Spotify's catalog for tracks.
+
+        Args:
+            query: Search query string.
+            limit: Maximum number of results (1-50, default 20).
+            offset: Pagination offset (default 0).
+            market: Optional ISO 3166-1 alpha-2 country code.
+
+        Returns:
+            List of track dictionaries from Spotify search.
+
+        Raises:
+            RuntimeError: If not authenticated.
+            SpotifyAPIError: If the search fails.
+        """
+        self._ensure_authenticated()
+        return self._api.search_tracks(
+            query=query, limit=limit, offset=offset, market=market
+        )
+
+    # =========================================================================
     # Private Methods
     # =========================================================================
 

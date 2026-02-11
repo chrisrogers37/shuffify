@@ -349,6 +349,73 @@ class SpotifyCache:
             return False
 
     # =========================================================================
+    # Search Results
+    # =========================================================================
+
+    def get_search_results(
+        self, query: str, offset: int = 0
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        Get cached search results.
+
+        Args:
+            query: The search query string (lowercased for cache key).
+            offset: Pagination offset.
+
+        Returns:
+            List of track dicts or None if not cached.
+        """
+        try:
+            normalized_query = query.strip().lower()
+            key = self._make_key("search", normalized_query, str(offset))
+            data = self._redis.get(key)
+            if data:
+                logger.debug(
+                    f"Cache hit for search: {normalized_query} offset={offset}"
+                )
+                return self._deserialize(data)
+            logger.debug(
+                f"Cache miss for search: {normalized_query} offset={offset}"
+            )
+            return None
+        except redis.RedisError as e:
+            logger.warning(f"Redis error getting search cache: {e}")
+            return None
+
+    def set_search_results(
+        self,
+        query: str,
+        offset: int,
+        results: List[Dict[str, Any]],
+        ttl: Optional[int] = None,
+    ) -> bool:
+        """
+        Cache search results.
+
+        Args:
+            query: The search query string.
+            offset: Pagination offset.
+            results: List of track data from Spotify search.
+            ttl: Time-to-live in seconds (default: 120s).
+
+        Returns:
+            True if cached successfully.
+        """
+        try:
+            normalized_query = query.strip().lower()
+            key = self._make_key("search", normalized_query, str(offset))
+            ttl = ttl or 120
+            self._redis.setex(key, ttl, self._serialize(results))
+            logger.debug(
+                f"Cached {len(results)} search results for: "
+                f"{normalized_query} offset={offset} (TTL: {ttl}s)"
+            )
+            return True
+        except redis.RedisError as e:
+            logger.warning(f"Redis error setting search cache: {e}")
+            return False
+
+    # =========================================================================
     # Cache Management
     # =========================================================================
 

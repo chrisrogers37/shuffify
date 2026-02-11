@@ -33,6 +33,7 @@ from shuffify.schemas import (
     parse_shuffle_request,
     PlaylistQueryParams,
     WorkshopCommitRequest,
+    WorkshopSearchRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -567,3 +568,69 @@ def workshop_commit(playlist_id):
         "Playlist saved to Spotify!",
         playlist_state=updated_state.to_dict(),
     )
+
+
+@main.route("/workshop/search", methods=["POST"])
+def workshop_search():
+    """
+    Search Spotify's catalog for tracks.
+
+    Expects JSON body: { "query": "...", "limit": 20, "offset": 0 }
+    Returns JSON: { "success": true, "tracks": [...] }
+    """
+    client = require_auth()
+    if not client:
+        return json_error("Please log in first.", 401)
+
+    data = request.get_json()
+    if not data:
+        return json_error("Request body must be JSON.", 400)
+
+    # Validate with Pydantic
+    try:
+        search_request = WorkshopSearchRequest(**data)
+    except ValidationError as e:
+        return json_error(
+            f"Invalid request: {e.error_count()} validation error(s).", 400
+        )
+
+    # Execute search via SpotifyClient facade
+    raw_tracks = client.search_tracks(
+        query=search_request.query,
+        limit=search_request.limit,
+        offset=search_request.offset,
+    )
+
+    # Transform raw Spotify track objects to simplified format
+    # matching the structure used by workshopState/trackDataByUri
+    tracks = []
+    for track in raw_tracks:
+        if not track.get("id") or not track.get("uri"):
+            continue
+        tracks.append({
+            "id": track["id"],
+            "name": track["name"],
+            "uri": track["uri"],
+            "duration_ms": track.get("duration_ms", 0),
+            "artists": [
+                artist.get("name", "Unknown")
+                for artist in track.get("artists", [])
+            ],
+            "album_name": track.get("album", {}).get("name", ""),
+            "album_image_url": (
+                track.get("album", {}).get("images", [{}])[0].get("url", "")
+            ),
+        })
+
+    logger.info(
+        f"Workshop search for '{search_request.query}' "
+        f"returned {len(tracks)} tracks"
+    )
+
+    return jsonify({
+        "success": True,
+        "tracks": tracks,
+        "query": search_request.query,
+        "offset": search_request.offset,
+        "limit": search_request.limit,
+    })
