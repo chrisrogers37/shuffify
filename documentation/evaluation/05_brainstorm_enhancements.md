@@ -59,7 +59,7 @@ This is a brainstorm document - not all ideas are fully vetted. Ideas are catego
 |------|-------------|--------|--------|
 | **Playlist folders** | Group related playlists (requires Spotify API support check) | M | M |
 | **Playlist templates** | "Create new playlist like this one" | L | M |
-| **Playlist merge** 🔥 | Combine multiple playlists into one | L | H |
+| ✅ **Playlist merge** | Combine multiple playlists into one | L | H | **DONE (Feb 2026)** |
 | **Playlist diff** | Compare two playlists, show differences | M | M |
 | **Duplicate finder** ⭐ | Find duplicate tracks across playlists | M | H |
 | **Orphan finder** | Find tracks not in any playlist | M | L |
@@ -69,7 +69,7 @@ This is a brainstorm document - not all ideas are fully vetted. Ideas are catego
 | Idea | Description | Effort | Impact |
 |------|-------------|--------|--------|
 | **Multi-playlist shuffle** 🔥 | Shuffle multiple playlists at once | L | H |
-| **Scheduled operations** | "Shuffle these 5 playlists every Monday" | M | H |
+| ✅ **Scheduled operations** | "Shuffle these 5 playlists every Monday" | M | H | **DONE (Feb 2026)** |
 | **Batch export** | Export playlist data (CSV, JSON) | L | M |
 | **Batch import** | Import track lists from files | M | M |
 
@@ -337,7 +337,7 @@ This is a brainstorm document - not all ideas are fully vetted. Ideas are catego
 1. ✅ ~~**Artist spacing algorithm**~~ (L effort, H impact) — **COMPLETED** (Feb 2026)
 2. **Multi-playlist shuffle** (L effort, H impact)
 3. **User presets** (L effort, H impact)
-4. **Playlist merge** (L effort, H impact)
+4. ✅ ~~**Playlist merge**~~ (L effort, H impact) — **COMPLETED** (Feb 2026, Workshop)
 5. **Genre distribution chart** (L effort, M impact)
 
 ### Best ROI Features

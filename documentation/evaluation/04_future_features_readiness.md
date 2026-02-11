@@ -9,22 +9,22 @@
 
 ## Executive Summary
 
-This document assesses Shuffify's readiness to implement the planned future features. **Update (Feb 2026):** The service layer has been fully extracted, Redis sessions and caching are in place, and Pydantic validation is implemented. The primary remaining blocker is database persistence. UI enhancements are the most ready, while notification systems and automations still require background job infrastructure.
+This document assesses Shuffify's readiness to implement the planned future features. **Update (Feb 2026):** The Playlist Workshop Enhancement Suite (6 phases) has been completed, adding: track management, playlist merging, external raiding, SQLAlchemy database (User, Schedule, JobExecution models), APScheduler background jobs, Fernet token encryption, and 10 service modules. The primary remaining gaps are notification systems, public API, and live preview.
 
 ---
 
 ## Feature Overview
 
-| Feature | Readiness | Blocking Dependencies |
-|---------|-----------|----------------------|
-| A. Database Persistence | 5/10 | ~~Service layer~~ ✅ → ORM setup only |
-| B. User Logins | 3/10 | Database, user model, password hashing |
-| C1. Playlist Re-ordering Automations | 5/10 | Database, background job system |
-| C2. Playlist Raiding | 4/10 | C1 + change detection system |
-| D. Notification System (SMS/Telegram) | 2/10 | Database, job system, external service APIs |
-| E. Enhanced Snappy UI | 7/10 | WebSocket infrastructure |
-| F. Live Playlist Preview | 6/10 | Preview endpoint, WebSocket; ~~caching~~ ✅ |
-| G. Playlist Growth Features | 3/10 | Analytics, external integrations |
+| Feature | Readiness | Status |
+|---------|-----------|--------|
+| A. Database Persistence | ✅ 10/10 | **COMPLETED** — SQLAlchemy + User/Schedule/JobExecution models |
+| B. User Logins | 5/10 | **PARTIAL** — User model exists (Spotify-linked), no local auth |
+| C1. Playlist Re-ordering Automations | ✅ 10/10 | **COMPLETED** — APScheduler + SchedulerService + JobExecutorService |
+| C2. Playlist Raiding | ✅ 10/10 | **COMPLETED** — UpstreamSourceService + raid job type |
+| D. Notification System (SMS/Telegram) | 2/10 | **PENDING** — No external service integrations yet |
+| E. Enhanced Snappy UI | 7/10 | **PARTIAL** — Refresh button done, WebSocket still needed |
+| F. Live Playlist Preview | 6/10 | **PENDING** — Preview endpoint needed; caching done |
+| G. Playlist Growth Features | 3/10 | **PENDING** — Analytics, external integrations |
 
 ---
 
@@ -102,18 +102,18 @@ Phase 4: Migration (1 day) — PENDING
 └── Deploy with backward compatibility
 ```
 
-### Readiness Score: 5/10 *(up from 2/10, service layer now exists)*
+### Readiness Score: ✅ 10/10 — COMPLETED (Feb 2026)
 
-**Blocking Issues:**
-- ~~No service layer (business logic in routes)~~ ✅ RESOLVED
-- No repository pattern
-- ~~Session manipulation scattered~~ ✅ RESOLVED (StateService manages all state via `session['playlist_states']`)
+**Status:** Fully implemented as part of the Playlist Workshop Enhancement Suite (Phase 5).
 
-**What Exists:** Service layer (AuthService, PlaylistService, ShuffleService, StateService), Redis sessions, Redis caching, Pydantic validation
-
-**Remaining Work:** ORM setup (SQLAlchemy + Alembic), repository pattern, database schema
-
-**Effort Estimate:** 3-5 days *(reduced from 5-8, service layer done)*
+**What Was Built:**
+- SQLAlchemy ORM with `db.create_all()` schema management
+- `User` model — Spotify-linked user with encrypted refresh token storage
+- `Schedule` model — Job definitions with algorithm config, frequency, source playlists (JSON columns)
+- `JobExecution` model — Execution history with status, results, error tracking
+- `TokenService` — Fernet symmetric encryption (PBKDF2-derived key) for stored refresh tokens
+- `UserService` — User CRUD with `get_or_create_from_spotify()`
+- Database configured via `DATABASE_URL` env var (default: `sqlite:///shuffify.db`)
 
 ---
 
@@ -323,17 +323,19 @@ Phase 4: Triggers (2 days per trigger) — PENDING
 ├── Manual trigger (on-demand)
 ```
 
-### Readiness Score: 5/10 *(up from 4/10, service layer done)*
+### Readiness Score: ✅ 10/10 — COMPLETED (Feb 2026)
 
-**Blocking Issues:**
-- Requires Feature A (database)
-- No background job infrastructure (Celery not yet added)
-- No scheduler
-- ~~Service layer needed~~ ✅ RESOLVED
+**Status:** Fully implemented as part of the Playlist Workshop Enhancement Suite (Phase 6).
 
-**What Exists:** ShuffleService (algorithm orchestration), Redis (can serve as Celery broker), service layer for all core operations
-
-**Effort Estimate:** 8-12 days (after Feature A) *(reduced, service layer done)*
+**What Was Built:**
+- APScheduler (not Celery) for background job execution with SQLAlchemy job store
+- `SchedulerService` — CRUD operations for schedule definitions (create, read, update, delete, toggle)
+- `JobExecutorService` — Executes shuffle and raid jobs with encrypted token decryption
+- `Schedule` model with `job_type` (shuffle/raid), `schedule_type`, `schedule_value`, `algorithm_name`, `algorithm_params`
+- `JobExecution` model for execution logging
+- Pydantic validation via `schedule_requests.py` (CreateScheduleRequest, UpdateScheduleRequest)
+- Full UI at `/schedules` with create/edit/delete/toggle/run-now controls
+- `MAX_SCHEDULES_PER_USER = 5` limit enforced
 
 ---
 
@@ -477,15 +479,16 @@ Phase 4: UI (2-3 days) — PENDING
 └── "Raid Now" button
 ```
 
-### Readiness Score: 4/10
+### Readiness Score: ✅ 10/10 — COMPLETED (Feb 2026)
 
-**Blocking Issues:**
-- Requires Feature C1 (automation infrastructure), plus:
-- Need change detection system (Spotify playlist snapshot comparison)
-- Need efficient Spotify API usage (rate limits — current retry logic helps)
-- SpotifyAPI already has `get_playlist_tracks()` and caching for reads
+**Status:** Fully implemented as part of the Playlist Workshop Enhancement Suite (Phases 3-4).
 
-**Effort Estimate:** 8-11 days (after C1)
+**What Was Built:**
+- `UpstreamSourceService` — Manages upstream playlist sources for raiding
+- Raid job type in `JobExecutorService._execute_raid()` — deduplicates tracks, adds new ones to target
+- Workshop UI at `/workshop` with source management and manual raid controls
+- Scheduled raid support — raid jobs run on recurring schedules via APScheduler
+- `source_playlist_ids` stored as JSON column on `Schedule` model
 
 ---
 
@@ -930,43 +933,33 @@ This could mean:
 
 ## Summary Matrix
 
-| Feature | Readiness | Status | Dependencies | Effort | Priority |
-|---------|-----------|--------|--------------|--------|----------|
-| A. Database | 5/10 | **PENDING** | ~~Service layer~~ ✅ → ORM only | 3-5 days | **FIRST** |
-| B. User Logins | 3/10 | **PENDING** | A (database) | 7-10 days | After A |
-| C1. Automations | 5/10 | **PENDING** | A + Celery | 8-12 days | After A |
-| C2. Raiding | 4/10 | **PENDING** | C1 | 8-11 days | After C1 |
-| D. Notifications | 2/10 | **PENDING** | C1 + external APIs | 8-12 days | After C1 |
-| E. Snappy UI | 7/10 | **PENDING** (partial) | Minor; WebSocket for advanced | 6-10 days | Parallel |
-| F. Live Preview | 6/10 | **PENDING** | Preview endpoint | 6-9 days | Parallel |
-| G. Playlist Growth | 3/10 | **PENDING** | A + social APIs | TBD | Last |
+| Feature | Readiness | Status | Dependencies | Priority |
+|---------|-----------|--------|--------------|----------|
+| A. Database | ✅ 10/10 | **COMPLETED** | — | Done |
+| B. User Logins | 5/10 | **PARTIAL** | Local auth, password hashing | Medium |
+| C1. Automations | ✅ 10/10 | **COMPLETED** | — | Done |
+| C2. Raiding | ✅ 10/10 | **COMPLETED** | — | Done |
+| D. Notifications | 2/10 | **PENDING** | External APIs (Telegram, Twilio, etc.) | Next |
+| E. Snappy UI | 7/10 | **PARTIAL** | WebSocket for advanced features | Parallel |
+| F. Live Preview | 6/10 | **PENDING** | Preview endpoint | Parallel |
+| G. Playlist Growth | 3/10 | **PENDING** | Social APIs, analytics | Last |
 
-### Recommended Order
-
-```
-PHASE 1: FOUNDATION — IN PROGRESS (service layer done, database next)
-├── ✅ Service layer extraction — COMPLETED (Jan 2026)
-├── Feature A: Database — PENDING (critical path)
-└── Feature E: UI improvements — PENDING (can run in parallel)
-
-PHASE 2: CORE FEATURES — PENDING (blocked by Phase 1)
-├── Feature C1: Automations — PENDING
-├── Feature F: Live preview — PENDING (can start without database)
-└── Feature B: User logins — PENDING (if needed)
-
-PHASE 3: ADVANCED FEATURES — PENDING (blocked by Phase 2)
-├── Feature C2: Raiding — PENDING
-├── Feature D: Notifications — PENDING
-└── Feature G: Growth — PENDING (scope TBD)
-```
-
-### Critical Path
+### Remaining Work
 
 ```
-Service Layer ✅ → Database (PENDING) → Automations → Raiding → Notifications
-                       ↓
-                  UI Improvements (parallel, PENDING)
-                  Live Preview (parallel, PENDING)
+COMPLETED (Feb 2026):
+├── ✅ Service layer extraction (10 services)
+├── ✅ Feature A: Database (SQLAlchemy + User/Schedule/JobExecution)
+├── ✅ Feature C1: Automations (APScheduler + SchedulerService)
+├── ✅ Feature C2: Raiding (UpstreamSourceService + raid jobs)
+└── ✅ Playlist Workshop (track management, merging, workshop UI)
+
+REMAINING:
+├── Feature D: Notifications — Need external service integrations
+├── Feature E: UI enhancements — WebSocket, skeleton loading, drag-and-drop
+├── Feature F: Live preview — Preview endpoint, diff visualization
+├── Feature B: User logins — Local auth if needed (Spotify-linked User exists)
+└── Feature G: Growth — Scope TBD
 ```
 
 ---
