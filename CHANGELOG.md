@@ -46,6 +46,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New API endpoint: `GET /api/user-playlists` returns lightweight playlist list for AJAX consumers
   - New routes: `GET /workshop/<id>`, `POST /workshop/<id>/preview-shuffle`, `POST /workshop/<id>/commit`
   - Pydantic validation for commit request (`WorkshopCommitRequest` schema)
+- **External Playlist Raiding** - Load any public Spotify playlist in the Workshop source panel
+  - Paste a Spotify playlist URL, URI, or bare ID to load tracks instantly
+  - Search for playlists by name using Spotify's search API
+  - Reuses Phase 3's source panel for cherry-pick/drag-to-add UX
+  - Session-based "Recently Loaded" history (up to 10 playlists)
+  - New utility: `shuffify/spotify/url_parser.py` for parsing Spotify URL formats
+  - New API method: `SpotifyAPI.search_playlists()` with Redis caching
+  - New routes: `POST /workshop/load-external-playlist`, `POST /workshop/search-playlists`
+  - Pydantic validation for external playlist requests (`ExternalPlaylistRequest` schema)
 - **Error handler test coverage** - 14 new tests verifying all service exception handlers return correct HTTP status codes, JSON structure, and error categories
 - **Playlist model test coverage** - 20 new tests covering construction, validation, track operations, feature statistics, and serialization
 - **Refresh Playlists Button** - Re-fetch playlists from Spotify without losing undo state

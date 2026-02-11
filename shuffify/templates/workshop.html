@@ -238,6 +238,52 @@
                     </button>
                 </div>
 
+                <!-- External Playlist Panel -->
+                <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-5">
+                    <h2 class="text-white font-bold text-lg mb-3">Load External Playlist</h2>
+                    <p class="text-white/60 text-sm mb-3">Paste a Spotify playlist URL or search by name.</p>
+
+                    <!-- URL/Search Input -->
+                    <div class="flex space-x-2 mb-3">
+                        <input id="external-playlist-input"
+                               type="text"
+                               placeholder="Paste URL or search..."
+                               class="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm placeholder-white/40 focus:ring-2 focus:ring-white/30 focus:border-transparent"
+                               onkeydown="if(event.key==='Enter') loadExternalPlaylist()">
+                        <button onclick="loadExternalPlaylist()"
+                                class="px-3 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white text-sm font-semibold transition duration-150 flex-shrink-0">
+                            Load
+                        </button>
+                    </div>
+
+                    <!-- Search Results (hidden by default) -->
+                    <div id="external-search-results" class="hidden max-h-48 overflow-y-auto workshop-scrollbar space-y-1">
+                    </div>
+
+                    <!-- Recently Loaded (from session) -->
+                    {% if session.get('external_playlist_history') %}
+                    <div class="mt-3">
+                        <p class="text-white/50 text-xs uppercase tracking-wide font-semibold mb-2">Recently Loaded</p>
+                        <div id="external-recent-list" class="space-y-1 max-h-32 overflow-y-auto workshop-scrollbar">
+                            {% for entry in session.get('external_playlist_history', [])[:5] %}
+                            <button onclick="loadExternalById('{{ entry.id }}')"
+                                    class="w-full text-left px-2 py-1.5 rounded-lg hover:bg-white/10 transition duration-150 text-sm text-white/80 truncate">
+                                {{ entry.name }} <span class="text-white/40">({{ entry.track_count }} tracks)</span>
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Loading indicator -->
+                    <div id="external-loading" class="hidden py-3 text-center">
+                        <svg class="w-6 h-6 mx-auto animate-spin text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        <p class="text-white/50 text-xs mt-1">Loading...</p>
+                    </div>
+                </div>
+
                 <!-- Search Spotify Panel -->
                 <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-5">
                     <h2 class="text-white font-bold text-lg mb-3">Search Spotify</h2>
@@ -1277,6 +1323,143 @@ function refreshSourceDuplicateIndicators() {
             btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>';
         }
     });
+}
+
+
+// =============================================================================
+// External Playlist Loading (Phase 4)
+// =============================================================================
+
+function loadExternalPlaylist() {
+    const input = document.getElementById('external-playlist-input');
+    const value = input.value.trim();
+    if (!value) return;
+
+    const loading = document.getElementById('external-loading');
+    const searchResults = document.getElementById('external-search-results');
+    loading.classList.remove('hidden');
+    searchResults.classList.add('hidden');
+
+    // Determine if this looks like a URL/URI or a search query
+    const looksLikeUrl = value.includes('spotify.com/playlist/')
+        || value.startsWith('spotify:playlist:')
+        || /^[a-zA-Z0-9]{22}$/.test(value);
+
+    const body = looksLikeUrl
+        ? { url: value }
+        : { query: value };
+
+    fetch('/workshop/load-external-playlist', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify(body),
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.message || 'Failed to load playlist.');
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success && data.mode === 'tracks') {
+            displayExternalTracks(data.playlist, data.tracks);
+            showNotification(
+                'Loaded "' + data.playlist.name + '" (' + data.tracks.length + ' tracks)',
+                'success'
+            );
+            input.value = '';
+        } else if (data.success && data.mode === 'search') {
+            displayExternalSearchResults(data.playlists);
+        } else {
+            showNotification(data.message || 'Unexpected response.', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('External playlist load error:', error);
+        showNotification(error.message || 'Failed to load playlist.', 'error');
+    })
+    .finally(() => {
+        loading.classList.add('hidden');
+    });
+}
+
+function loadExternalById(playlistId) {
+    const input = document.getElementById('external-playlist-input');
+    input.value = playlistId;
+    loadExternalPlaylist();
+}
+
+function displayExternalSearchResults(playlists) {
+    const container = document.getElementById('external-search-results');
+    container.innerHTML = '';
+
+    if (!playlists || playlists.length === 0) {
+        container.innerHTML = '<p class="text-white/50 text-sm py-2">No playlists found.</p>';
+        container.classList.remove('hidden');
+        return;
+    }
+
+    playlists.forEach(function(pl) {
+        const btn = document.createElement('button');
+        btn.className = 'w-full flex items-center px-2 py-2 rounded-lg hover:bg-white/10 transition duration-150 text-left';
+        btn._playlistId = pl.id;
+        btn.addEventListener('click', function() {
+            loadExternalById(this._playlistId);
+            container.classList.add('hidden');
+        });
+
+        const imgHtml = pl.image_url
+            ? '<img src="' + escapeHtml(pl.image_url) + '" alt="" class="w-8 h-8 rounded flex-shrink-0 object-cover">'
+            : '<div class="w-8 h-8 rounded flex-shrink-0 bg-white/10 flex items-center justify-center text-white/30">' +
+                  '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>' +
+              '</div>';
+
+        btn.innerHTML =
+            imgHtml +
+            '<div class="ml-2 min-w-0 flex-1">' +
+                '<p class="text-white text-sm font-medium truncate">' + escapeHtml(pl.name) + '</p>' +
+                '<p class="text-white/50 text-xs truncate">' + escapeHtml(pl.owner_display_name) + ' &middot; ' + pl.total_tracks + ' tracks</p>' +
+            '</div>';
+        container.appendChild(btn);
+    });
+
+    container.classList.remove('hidden');
+}
+
+function displayExternalTracks(playlistInfo, tracks) {
+    // Integrate with Phase 3's source panel by setting state and rendering
+    workshopState.sourcePlaylistId = playlistInfo.id;
+    workshopState.sourcePlaylistName = playlistInfo.name;
+    workshopState.sourceTracks = tracks;
+
+    // Register all tracks in trackDataByUri
+    tracks.forEach(function(track) {
+        if (!trackDataByUri[track.uri]) {
+            trackDataByUri[track.uri] = {
+                id: track.id,
+                name: track.name,
+                artists: track.artists || [],
+                album_name: track.album_name || '',
+                album_image_url: track.album_image_url || '',
+                duration_ms: track.duration_ms || 0,
+                uri: track.uri,
+            };
+        }
+    });
+
+    // Ensure source panel is visible
+    const body = document.getElementById('source-panel-body');
+    if (body.classList.contains('hidden')) {
+        toggleSourcePanel();
+    }
+
+    // Render using Phase 3's existing function
+    renderSourceTracks();
 }
 </script>
 

@@ -60,6 +60,9 @@ from .auth import (
 # API (data operations)
 from .api import SpotifyAPI
 
+# URL parser utility
+from .url_parser import parse_spotify_playlist_url
+
 # Cache (Redis-based caching)
 from .cache import SpotifyCache
 
@@ -86,6 +89,8 @@ __all__ = [
     "DEFAULT_SCOPES",
     # API
     "SpotifyAPI",
+    # URL Parser
+    "parse_spotify_playlist_url",
     # Cache
     "SpotifyCache",
     # Client (facade)
