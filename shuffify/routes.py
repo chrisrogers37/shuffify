@@ -34,7 +34,9 @@ from shuffify.schemas import (
     PlaylistQueryParams,
     WorkshopCommitRequest,
     WorkshopSearchRequest,
+    ExternalPlaylistRequest,
 )
+from shuffify.spotify.url_parser import parse_spotify_playlist_url
 
 logger = logging.getLogger(__name__)
 main = Blueprint("main", __name__)
@@ -664,3 +666,170 @@ def workshop_search():
         "offset": search_request.offset,
         "limit": search_request.limit,
     })
+
+
+# =============================================================================
+# Workshop: External Playlist Routes
+# =============================================================================
+
+
+@main.route("/workshop/search-playlists", methods=["POST"])
+def workshop_search_playlists():
+    """
+    Search for public playlists by name.
+
+    Expects JSON body: { "query": "jazz vibes" }
+    Returns JSON: { "success": true, "playlists": [...] }
+    """
+    client = require_auth()
+    if not client:
+        return json_error("Please log in first.", 401)
+
+    data = request.get_json()
+    if not data:
+        return json_error("Request body must be JSON.", 400)
+
+    query = data.get("query", "").strip()
+    if not query:
+        return json_error("Search query is required.", 400)
+
+    if len(query) > 200:
+        return json_error(
+            "Search query too long (max 200 characters).", 400
+        )
+
+    try:
+        results = client.search_playlists(query, limit=10)
+
+        logger.info(
+            f"Playlist search for '{query}' returned "
+            f"{len(results)} results"
+        )
+
+        return jsonify({
+            "success": True,
+            "playlists": results,
+        })
+
+    except Exception as e:
+        logger.error(f"Playlist search failed: {e}", exc_info=True)
+        return json_error("Search failed. Please try again.", 500)
+
+
+@main.route("/workshop/load-external-playlist", methods=["POST"])
+def workshop_load_external_playlist():
+    """
+    Load tracks from an external playlist by URL/URI/ID or search query.
+
+    Expects JSON body:
+        { "url": "https://open.spotify.com/playlist/..." }
+        or
+        { "query": "jazz vibes" }
+
+    Returns JSON:
+        For URL: { "success": true, "mode": "tracks", ... }
+        For query: { "success": true, "mode": "search", ... }
+    """
+    client = require_auth()
+    if not client:
+        return json_error("Please log in first.", 401)
+
+    data = request.get_json()
+    if not data:
+        return json_error("Request body must be JSON.", 400)
+
+    # Validate with Pydantic
+    try:
+        ext_request = ExternalPlaylistRequest(**data)
+    except Exception as e:
+        return json_error(str(e), 400)
+
+    # --- URL mode: load a specific playlist ---
+    if ext_request.url:
+        playlist_id = parse_spotify_playlist_url(ext_request.url)
+        if not playlist_id:
+            return json_error(
+                "Could not parse a playlist ID from the provided URL. "
+                "Please use a Spotify playlist URL, URI, or ID.",
+                400,
+            )
+
+        try:
+            playlist_service = PlaylistService(client)
+            playlist = playlist_service.get_playlist(
+                playlist_id, include_features=False
+            )
+
+            # Store in session history for "recently loaded" feature
+            if "external_playlist_history" not in session:
+                session["external_playlist_history"] = []
+
+            history = session["external_playlist_history"]
+            # Add to front, remove duplicates, keep max 10
+            entry = {
+                "id": playlist.id,
+                "name": playlist.name,
+                "owner_id": playlist.owner_id,
+                "track_count": len(playlist),
+            }
+            history = [h for h in history if h["id"] != playlist.id]
+            history.insert(0, entry)
+            session["external_playlist_history"] = history[:10]
+            session.modified = True
+
+            logger.info(
+                f"Loaded external playlist '{playlist.name}' "
+                f"({len(playlist)} tracks)"
+            )
+
+            return jsonify({
+                "success": True,
+                "mode": "tracks",
+                "playlist": {
+                    "id": playlist.id,
+                    "name": playlist.name,
+                    "owner_id": playlist.owner_id,
+                    "description": playlist.description,
+                    "track_count": len(playlist),
+                },
+                "tracks": playlist.tracks,
+            })
+
+        except PlaylistError as e:
+            logger.error(f"Failed to load external playlist: {e}")
+            return json_error(
+                "Could not load playlist. "
+                "It may be private or deleted.",
+                404,
+            )
+
+    # --- Query mode: search for playlists ---
+    if ext_request.query:
+        try:
+            results = client.search_playlists(
+                ext_request.query, limit=10
+            )
+
+            logger.info(
+                f"External playlist search for "
+                f"'{ext_request.query}' "
+                f"returned {len(results)} results"
+            )
+
+            return jsonify({
+                "success": True,
+                "mode": "search",
+                "playlists": results,
+            })
+
+        except Exception as e:
+            logger.error(
+                f"Playlist search failed: {e}", exc_info=True
+            )
+            return json_error(
+                "Search failed. Please try again.", 500
+            )
+
+    return json_error(
+        "Either 'url' or 'query' must be provided.", 400
+    )

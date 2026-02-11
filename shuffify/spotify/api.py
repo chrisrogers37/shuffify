@@ -523,6 +523,76 @@ class SpotifyAPI:
     # =========================================================================
 
     @api_error_handler
+    def search_playlists(
+        self, query: str, limit: int = 10, skip_cache: bool = False
+    ) -> List[Dict[str, Any]]:
+        """
+        Search for playlists by name.
+
+        Args:
+            query: Search query string.
+            limit: Maximum number of results (1-50, default 10).
+            skip_cache: If True, bypass cache and fetch fresh data.
+
+        Returns:
+            List of playlist summary dictionaries with keys:
+            id, name, owner_display_name, image_url, total_tracks.
+
+        Raises:
+            SpotifyAPIError: If the request fails.
+        """
+        self._ensure_valid_token()
+
+        # Clamp limit to Spotify's allowed range
+        limit = max(1, min(limit, 50))
+
+        # Check cache first
+        if self._cache and not skip_cache:
+            cached = self._cache.get_search_playlists(query, limit)
+            if cached is not None:
+                return cached
+
+        results = self._sp.search(q=query, type="playlist", limit=limit)
+
+        playlists = []
+        if (
+            results
+            and "playlists" in results
+            and "items" in results["playlists"]
+        ):
+            for item in results["playlists"]["items"]:
+                if item is None:
+                    continue
+                playlists.append(
+                    {
+                        "id": item["id"],
+                        "name": item["name"],
+                        "owner_display_name": item.get("owner", {}).get(
+                            "display_name", "Unknown"
+                        ),
+                        "image_url": (
+                            item["images"][0]["url"]
+                            if item.get("images")
+                            else None
+                        ),
+                        "total_tracks": item.get("tracks", {}).get(
+                            "total", 0
+                        ),
+                    }
+                )
+
+        logger.debug(
+            f"Playlist search for '{query}' returned "
+            f"{len(playlists)} results"
+        )
+
+        # Cache the results
+        if self._cache and playlists:
+            self._cache.set_search_playlists(query, limit, playlists)
+
+        return playlists
+
+    @api_error_handler
     def search_tracks(
         self,
         query: str,

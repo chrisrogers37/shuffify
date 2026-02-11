@@ -283,6 +283,26 @@ class SpotifyClient:
             logger.error(f"Failed to update playlist: {e}")
             return False
 
+    def search_playlists(
+        self, query: str, limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Search for playlists by name.
+
+        Args:
+            query: Search query string.
+            limit: Maximum number of results (1-50).
+
+        Returns:
+            List of playlist summary dictionaries.
+
+        Raises:
+            RuntimeError: If not authenticated.
+            SpotifyAPIError: If the request fails.
+        """
+        self._ensure_authenticated()
+        return self._api.search_playlists(query, limit=limit)
+
     # =========================================================================
     # Audio Features Methods
     # =========================================================================
