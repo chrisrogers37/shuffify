@@ -349,7 +349,7 @@ class SpotifyCache:
             return False
 
     # =========================================================================
-    # Search Results
+    # Search Results — Tracks
     # =========================================================================
 
     def get_search_results(
@@ -409,6 +409,71 @@ class SpotifyCache:
             logger.debug(
                 f"Cached {len(results)} search results for: "
                 f"{normalized_query} offset={offset} (TTL: {ttl}s)"
+            )
+            return True
+        except redis.RedisError as e:
+            logger.warning(f"Redis error setting search cache: {e}")
+            return False
+
+    # =========================================================================
+    # Search Results — Playlists
+    # =========================================================================
+
+    def get_search_playlists(
+        self, query: str, limit: int
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        Get cached playlist search results.
+
+        Args:
+            query: The search query string.
+            limit: The result limit used in the search.
+
+        Returns:
+            List of playlist summary dicts, or None if not cached.
+        """
+        try:
+            key = self._make_key(
+                "search_playlists", f"{query.lower()}:{limit}"
+            )
+            data = self._redis.get(key)
+            if data:
+                logger.debug(f"Cache hit for playlist search: {query!r}")
+                return self._deserialize(data)
+            logger.debug(f"Cache miss for playlist search: {query!r}")
+            return None
+        except redis.RedisError as e:
+            logger.warning(f"Redis error getting search cache: {e}")
+            return None
+
+    def set_search_playlists(
+        self,
+        query: str,
+        limit: int,
+        results: List[Dict[str, Any]],
+        ttl: Optional[int] = None,
+    ) -> bool:
+        """
+        Cache playlist search results.
+
+        Args:
+            query: The search query string.
+            limit: The result limit used in the search.
+            results: List of playlist summary dicts.
+            ttl: Time-to-live in seconds (default: default_ttl / 300s).
+
+        Returns:
+            True if cached successfully.
+        """
+        try:
+            key = self._make_key(
+                "search_playlists", f"{query.lower()}:{limit}"
+            )
+            ttl = ttl or self._default_ttl
+            self._redis.setex(key, ttl, self._serialize(results))
+            logger.debug(
+                f"Cached {len(results)} playlist search results for "
+                f"{query!r} (TTL: {ttl}s)"
             )
             return True
         except redis.RedisError as e:
