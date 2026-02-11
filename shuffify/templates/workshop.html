@@ -1,0 +1,518 @@
+{% extends "base.html" %}
+
+{% block title %}Workshop: {{ playlist.name }} - Shuffify{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-spotify-green via-spotify-green/90 to-spotify-dark">
+    <div class="absolute inset-0" style="background-image: url('/static/images/hero-pattern.svg'); opacity: 0.15; pointer-events: none;"></div>
+
+    <!-- Workshop Header -->
+    <div class="relative max-w-5xl mx-auto px-4 pt-8">
+        <div class="p-6 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20">
+            <div class="flex items-center justify-between flex-wrap gap-4">
+                <div class="flex items-center min-w-0">
+                    <a href="{{ url_for('main.index') }}"
+                       class="mr-4 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition duration-150 border border-white/20 flex-shrink-0"
+                       title="Back to Dashboard">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                    </a>
+                    <div class="min-w-0">
+                        <h1 class="text-2xl font-bold text-white truncate">{{ playlist.name }}</h1>
+                        <p class="text-white/70 text-sm">
+                            <span id="track-count">{{ playlist.tracks|length }}</span> tracks
+                            <span id="modified-badge" class="ml-2 px-2 py-0.5 rounded-full bg-yellow-500/80 text-xs font-semibold hidden">Modified</span>
+                        </p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2 flex-shrink-0">
+                    <button id="undo-preview-btn"
+                            onclick="undoPreview()"
+                            class="hidden inline-flex items-center px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition duration-150 border border-white/20"
+                            title="Revert to last saved order">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 015 5v2M3 10l4-4M3 10l4 4"></path>
+                        </svg>
+                        Undo Changes
+                    </button>
+                    <button id="save-btn"
+                            onclick="commitToSpotify()"
+                            disabled
+                            class="inline-flex items-center px-6 py-2 rounded-lg bg-white text-spotify-dark font-bold transition duration-150 hover:bg-green-100 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg"
+                            title="Save current order to Spotify">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        Save to Spotify
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Workshop Area -->
+    <div class="relative max-w-5xl mx-auto px-4 py-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Track List (2/3 width on large screens) -->
+            <div class="lg:col-span-2">
+                <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden">
+                    <!-- Track List Header -->
+                    <div class="px-4 py-3 border-b border-white/10 flex items-center text-white/60 text-xs uppercase tracking-wide font-semibold">
+                        <span class="w-10 text-center">#</span>
+                        <span class="w-10"></span>
+                        <span class="flex-1 ml-3">Title</span>
+                        <span class="w-24 text-right hidden sm:block">Duration</span>
+                        <span class="w-8"></span>
+                    </div>
+
+                    <!-- Scrollable Track List -->
+                    <div id="track-list" class="max-h-[65vh] overflow-y-auto workshop-scrollbar">
+                        <!-- Empty state -->
+                        {% if not playlist.tracks %}
+                        <div class="p-8 text-center text-white/60">
+                            <p class="text-lg">This playlist has no tracks.</p>
+                            <a href="{{ url_for('main.index') }}" class="text-white underline mt-2 inline-block">Back to Dashboard</a>
+                        </div>
+                        {% endif %}
+
+                        {% for track in playlist.tracks %}
+                        <div class="track-item flex items-center px-4 py-2 hover:bg-white/5 transition duration-150 border-b border-white/5 cursor-grab active:cursor-grabbing"
+                             data-uri="{{ track.uri }}"
+                             data-track-id="{{ track.id }}">
+                            <!-- Track Number -->
+                            <span class="track-number w-10 text-center text-white/50 text-sm font-mono">{{ loop.index }}</span>
+
+                            <!-- Album Art -->
+                            <div class="w-10 h-10 rounded overflow-hidden flex-shrink-0 bg-black/20">
+                                {% if track.album_image_url %}
+                                <img src="{{ track.album_image_url }}" alt="" class="w-full h-full object-cover" loading="lazy">
+                                {% else %}
+                                <div class="w-full h-full flex items-center justify-center text-white/30">
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Track Info -->
+                            <div class="ml-3 flex-1 min-w-0">
+                                <p class="text-white text-sm font-medium truncate">{{ track.name }}</p>
+                                <p class="text-white/50 text-xs truncate">{{ track.artists | join(', ') }}</p>
+                            </div>
+
+                            <!-- Duration -->
+                            <span class="w-24 text-right text-white/50 text-sm hidden sm:block">
+                                {{ '%d:%02d' | format(track.duration_ms // 60000, (track.duration_ms % 60000) // 1000) }}
+                            </span>
+
+                            <!-- Drag Handle -->
+                            <span class="drag-handle w-8 text-center text-white/30 hover:text-white/60 cursor-grab active:cursor-grabbing ml-2">
+                                <svg class="w-5 h-5 mx-auto" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8 6h2v2H8V6zm6 0h2v2h-2V6zM8 11h2v2H8v-2zm6 0h2v2h-2v-2zm-6 5h2v2H8v-2zm6 0h2v2h-2v-2z"/>
+                                </svg>
+                            </span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar Controls (1/3 width on large screens) -->
+            <div class="lg:col-span-1 space-y-6">
+
+                <!-- Shuffle Controls Panel -->
+                <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-5">
+                    <h2 class="text-white font-bold text-lg mb-4">Shuffle Preview</h2>
+                    <p class="text-white/60 text-sm mb-4">Preview a shuffle without affecting Spotify. Only saved when you click "Save to Spotify".</p>
+
+                    <!-- Algorithm Selection -->
+                    <div class="mb-4">
+                        <label for="workshop-algorithm" class="block text-sm font-medium text-white/90 mb-2">
+                            Algorithm:
+                        </label>
+                        <select id="workshop-algorithm"
+                                name="algorithm"
+                                class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-white/30 focus:border-transparent">
+                            {% for algo in algorithms %}
+                            <option value="{{ algo.class_name }}"
+                                    data-description="{{ algo.description }}"
+                                    data-parameters='{{ algo.parameters | tojson }}'>
+                                {{ algo.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <p id="algorithm-description" class="mt-1 text-sm text-white/60">
+                            {{ algorithms[0].description if algorithms else '' }}
+                        </p>
+                    </div>
+
+                    <!-- Dynamic Algorithm Parameters -->
+                    <div id="workshop-algorithm-params" class="space-y-4 mb-4">
+                        <!-- Parameters dynamically inserted here -->
+                    </div>
+
+                    <!-- Preview Shuffle Button -->
+                    <button id="preview-shuffle-btn"
+                            onclick="previewShuffle()"
+                            class="w-full px-4 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white font-semibold transition duration-150"
+                            {% if not playlist.tracks %}disabled{% endif %}>
+                        Preview Shuffle
+                    </button>
+                </div>
+
+                <!-- Playlist Info Panel -->
+                <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-5">
+                    <h2 class="text-white font-bold text-lg mb-3">Playlist Info</h2>
+                    <dl class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <dt class="text-white/60">Tracks</dt>
+                            <dd class="text-white font-medium" id="info-track-count">{{ playlist.tracks | length }}</dd>
+                        </div>
+                        {% if playlist.description %}
+                        <div>
+                            <dt class="text-white/60 mb-1">Description</dt>
+                            <dd class="text-white/80 text-xs">{{ playlist.description }}</dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SortableJS via CDN -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+
+<script>
+// =============================================================================
+// Workshop State Management
+// =============================================================================
+
+const workshopState = {
+    playlistId: {{ playlist.id | tojson }},
+    savedUris: {{ playlist.tracks | map(attribute='uri') | list | tojson }},
+    workingUris: {{ playlist.tracks | map(attribute='uri') | list | tojson }},
+    isDirty: false,
+    isSaving: false,
+    isShuffling: false,
+};
+
+const trackDataByUri = {};
+{% for track in playlist.tracks %}
+trackDataByUri[{{ track.uri | tojson }}] = {
+    id: {{ track.id | tojson }},
+    name: {{ track.name | tojson }},
+    artists: {{ track.artists | tojson }},
+    album_name: {{ (track.album_name or '') | tojson }},
+    album_image_url: {{ (track.album_image_url or '') | tojson }},
+    duration_ms: {{ track.duration_ms | tojson }},
+    uri: {{ track.uri | tojson }},
+};
+{% endfor %}
+
+
+// =============================================================================
+// SortableJS Initialization
+// =============================================================================
+
+let sortableInstance = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    const trackList = document.getElementById('track-list');
+    if (!trackList || trackList.children.length === 0) return;
+
+    sortableInstance = Sortable.create(trackList, {
+        animation: 200,
+        handle: '.drag-handle',
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        dragClass: 'sortable-drag',
+        onEnd: function(evt) {
+            updateWorkingUrisFromDOM();
+            markDirty();
+        },
+    });
+
+    updateWorkshopAlgorithmParams();
+    document.getElementById('workshop-algorithm').addEventListener('change', updateWorkshopAlgorithmParams);
+});
+
+
+// =============================================================================
+// DOM / State Sync
+// =============================================================================
+
+function updateWorkingUrisFromDOM() {
+    const items = document.querySelectorAll('#track-list .track-item');
+    workshopState.workingUris = Array.from(items).map(el => el.dataset.uri);
+    renumberTracks();
+}
+
+function renumberTracks() {
+    const items = document.querySelectorAll('#track-list .track-item .track-number');
+    items.forEach((el, i) => { el.textContent = i + 1; });
+}
+
+function markDirty() {
+    const changed = !arraysEqual(workshopState.savedUris, workshopState.workingUris);
+    workshopState.isDirty = changed;
+
+    const saveBtn = document.getElementById('save-btn');
+    const undoBtn = document.getElementById('undo-preview-btn');
+    const badge = document.getElementById('modified-badge');
+
+    saveBtn.disabled = !changed || workshopState.isSaving;
+    undoBtn.classList.toggle('hidden', !changed);
+    badge.classList.toggle('hidden', !changed);
+}
+
+function arraysEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
+}
+
+
+// =============================================================================
+// Shuffle Preview
+// =============================================================================
+
+function previewShuffle() {
+    if (workshopState.isShuffling) return;
+
+    const select = document.getElementById('workshop-algorithm');
+    const algorithmName = select.value;
+
+    const paramsContainer = document.getElementById('workshop-algorithm-params');
+    const paramInputs = paramsContainer.querySelectorAll('input, select');
+
+    // Send full track objects so the server can shuffle without an API call
+    const tracks = workshopState.workingUris.map(uri => trackDataByUri[uri]);
+    const body = {
+        algorithm: algorithmName,
+        tracks: tracks,
+    };
+    paramInputs.forEach(input => {
+        body[input.name] = input.value;
+    });
+
+    const btn = document.getElementById('preview-shuffle-btn');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Shuffling...';
+    workshopState.isShuffling = true;
+
+    fetch(`/workshop/${workshopState.playlistId}/preview-shuffle`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify(body),
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => { throw new Error(data.message || 'Shuffle preview failed.'); });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success && data.shuffled_uris) {
+            workshopState.workingUris = data.shuffled_uris;
+            rerenderTrackList();
+            markDirty();
+            showNotification(`Preview applied: ${data.algorithm_name}`, 'success');
+        } else {
+            showNotification(data.message || 'Shuffle did not change order.', 'info');
+        }
+    })
+    .catch(error => {
+        console.error('Preview shuffle error:', error);
+        showNotification(error.message || 'Failed to preview shuffle.', 'error');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        workshopState.isShuffling = false;
+    });
+}
+
+
+// =============================================================================
+// Commit to Spotify
+// =============================================================================
+
+function commitToSpotify() {
+    if (workshopState.isSaving || !workshopState.isDirty) return;
+
+    const btn = document.getElementById('save-btn');
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `
+        <svg class="w-5 h-5 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+        </svg>
+        Saving...
+    `;
+    workshopState.isSaving = true;
+
+    fetch(`/workshop/${workshopState.playlistId}/commit`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({ track_uris: workshopState.workingUris }),
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => { throw new Error(data.message || 'Save failed.'); });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            workshopState.savedUris = [...workshopState.workingUris];
+            markDirty();
+            showNotification(data.message || 'Saved to Spotify!', 'success');
+        } else {
+            showNotification(data.message || 'Save returned unexpected response.', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Commit error:', error);
+        showNotification(error.message || 'Failed to save to Spotify. Please try again.', 'error');
+    })
+    .finally(() => {
+        btn.disabled = !workshopState.isDirty;
+        btn.innerHTML = originalHTML;
+        workshopState.isSaving = false;
+    });
+}
+
+
+// =============================================================================
+// Undo Preview (revert to last saved order)
+// =============================================================================
+
+function undoPreview() {
+    workshopState.workingUris = [...workshopState.savedUris];
+    rerenderTrackList();
+    markDirty();
+    showNotification('Reverted to last saved order.', 'success');
+}
+
+
+// =============================================================================
+// Track List Rendering (after shuffle preview reorders URIs)
+// =============================================================================
+
+function rerenderTrackList() {
+    const container = document.getElementById('track-list');
+    const existingElements = {};
+    container.querySelectorAll('.track-item').forEach(el => {
+        existingElements[el.dataset.uri] = el;
+    });
+
+    workshopState.workingUris.forEach((uri, index) => {
+        const el = existingElements[uri];
+        if (el) {
+            container.appendChild(el);
+        }
+    });
+
+    renumberTracks();
+}
+
+
+// =============================================================================
+// Algorithm Parameter UI (mirrors dashboard.html pattern)
+// =============================================================================
+
+function updateWorkshopAlgorithmParams() {
+    const select = document.getElementById('workshop-algorithm');
+    const paramsContainer = document.getElementById('workshop-algorithm-params');
+    const selectedOption = select.options[select.selectedIndex];
+    const parameters = JSON.parse(selectedOption.dataset.parameters);
+    const description = selectedOption.dataset.description;
+
+    document.getElementById('algorithm-description').textContent = description;
+    paramsContainer.innerHTML = '';
+
+    for (const [paramName, paramInfo] of Object.entries(parameters)) {
+        const paramDiv = document.createElement('div');
+        paramDiv.className = 'space-y-1';
+
+        const label = document.createElement('label');
+        label.className = 'block text-sm font-medium text-white/90';
+        label.textContent = paramInfo.description;
+        paramDiv.appendChild(label);
+
+        if (paramInfo.type === 'string' && paramInfo.options) {
+            const sel = document.createElement('select');
+            sel.name = paramName;
+            sel.className = 'w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-white/30 focus:border-transparent';
+            for (const option of paramInfo.options) {
+                const opt = document.createElement('option');
+                opt.value = option;
+                opt.textContent = option;
+                if (option === paramInfo.default) opt.selected = true;
+                sel.appendChild(opt);
+            }
+            paramDiv.appendChild(sel);
+        } else {
+            const input = document.createElement('input');
+            input.type = paramInfo.type === 'float' ? 'number' :
+                         paramInfo.type === 'integer' ? 'number' : 'text';
+            input.name = paramName;
+            input.className = 'w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-white/30 focus:border-transparent';
+            input.value = paramInfo.default;
+            if (paramInfo.min !== undefined) input.min = paramInfo.min;
+            if (paramInfo.max !== undefined) input.max = paramInfo.max;
+            if (paramInfo.type === 'float') input.step = '0.1';
+            paramDiv.appendChild(input);
+        }
+
+        paramsContainer.appendChild(paramDiv);
+    }
+}
+
+
+// =============================================================================
+// Notifications
+// =============================================================================
+
+function showNotification(message, type) {
+    const notification = document.createElement('div');
+    const bgColor = type === 'success' ? 'bg-green-500/90' :
+                    type === 'info' ? 'bg-blue-500/90' : 'bg-red-500/90';
+    notification.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg backdrop-blur-md ${bgColor} text-white font-semibold transform transition duration-300 translate-y-16 opacity-0 z-50`;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.classList.remove('translate-y-16', 'opacity-0');
+    }, 100);
+
+    setTimeout(() => {
+        notification.classList.add('translate-y-16', 'opacity-0');
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+</script>
+
+<style>
+.workshop-scrollbar::-webkit-scrollbar { width: 8px; }
+.workshop-scrollbar::-webkit-scrollbar-thumb { background: rgba(20, 120, 60, 0.5); border-radius: 6px; }
+.workshop-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.workshop-scrollbar { scrollbar-color: rgba(20, 120, 60, 0.5) transparent; scrollbar-width: thin; }
+
+.sortable-ghost { opacity: 0.4; background: rgba(29, 185, 84, 0.2) !important; border-radius: 8px; }
+.sortable-chosen { background: rgba(255, 255, 255, 0.08) !important; }
+.sortable-drag { background: rgba(29, 185, 84, 0.3) !important; border-radius: 8px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3); }
+</style>
+{% endblock %}
