@@ -46,6 +46,10 @@ class Config:
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    # Scheduler configuration
+    SCHEDULER_ENABLED = True
+    SCHEDULER_MAX_SCHEDULES_PER_USER = 5
+
     # Application settings
     DEBUG = False
     PORT = int(os.getenv('PORT', 8000))
@@ -65,6 +69,9 @@ class ProdConfig(Config):
     CONFIG_NAME = 'production'
     DEBUG = False
     TESTING = False
+    SCHEDULER_ENABLED = (
+        os.getenv('SCHEDULER_ENABLED', 'true').lower() == 'true'
+    )
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
@@ -92,6 +99,10 @@ class DevConfig(Config):
     # Development database
     SQLALCHEMY_DATABASE_URI = os.getenv(
         'DATABASE_URL', 'sqlite:///shuffify_dev.db'
+    )
+
+    SCHEDULER_ENABLED = (
+        os.getenv('SCHEDULER_ENABLED', 'true').lower() == 'true'
     )
 
 # Dictionary for easy config selection

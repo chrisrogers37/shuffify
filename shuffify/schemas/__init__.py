@@ -19,6 +19,10 @@ from .requests import (
     ExternalPlaylistRequest,
     parse_shuffle_request,
 )
+from .schedule_requests import (
+    ScheduleCreateRequest,
+    ScheduleUpdateRequest,
+)
 
 __all__ = [
     # Exceptions
@@ -36,4 +40,7 @@ __all__ = [
     "ExternalPlaylistRequest",
     # Utility functions
     "parse_shuffle_request",
+    # Schedule schemas
+    "ScheduleCreateRequest",
+    "ScheduleUpdateRequest",
 ]

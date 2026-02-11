@@ -78,6 +78,26 @@ from shuffify.services.upstream_source_service import (
     UpstreamSourceNotFoundError,
 )
 
+# Token Service
+from shuffify.services.token_service import (
+    TokenService,
+    TokenEncryptionError,
+)
+
+# Scheduler Service
+from shuffify.services.scheduler_service import (
+    SchedulerService,
+    ScheduleError,
+    ScheduleNotFoundError,
+    ScheduleLimitError,
+)
+
+# Job Executor Service
+from shuffify.services.job_executor_service import (
+    JobExecutorService,
+    JobExecutionError,
+)
+
 __all__ = [
     # Services
     "AuthService",
@@ -116,4 +136,15 @@ __all__ = [
     "UpstreamSourceService",
     "UpstreamSourceError",
     "UpstreamSourceNotFoundError",
+    # Token Service
+    "TokenService",
+    "TokenEncryptionError",
+    # Scheduler Service
+    "SchedulerService",
+    "ScheduleError",
+    "ScheduleNotFoundError",
+    "ScheduleLimitError",
+    # Job Executor Service
+    "JobExecutorService",
+    "JobExecutionError",
 ]
