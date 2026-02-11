@@ -14,6 +14,7 @@ from .requests import (
     StratifiedShuffleParams,
     PercentageShuffleParams,
     PlaylistQueryParams,
+    WorkshopCommitRequest,
     parse_shuffle_request,
 )
 
@@ -28,6 +29,7 @@ __all__ = [
     "StratifiedShuffleParams",
     "PercentageShuffleParams",
     "PlaylistQueryParams",
+    "WorkshopCommitRequest",
     # Utility functions
     "parse_shuffle_request",
 ]
