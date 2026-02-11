@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Tech Debt Remediation Plans** - Post-Workshop cleanup planning documentation
+  - Master inventory of 8 tech debt items with severity scoring and dependency matrix
+  - Phase 01: Missing test coverage for schedule schemas, scheduler, algorithm utils
+  - Phase 02: Extract job type and schedule value string literals to enums
+  - Phase 03: Split monolithic routes.py (1509 lines) into feature-based Blueprint modules
+  - Phase 04: Dependency updates and .env.example creation
 - **Scheduled Operations** - Automated playlist management via APScheduler
   - Configure recurring raid, shuffle, or combined operations
   - Background scheduler runs jobs without user interaction
