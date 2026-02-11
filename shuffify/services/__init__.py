@@ -56,6 +56,28 @@ from shuffify.services.state_service import (
     PLAYLIST_STATES_KEY,
 )
 
+# User Service
+from shuffify.services.user_service import (
+    UserService,
+    UserServiceError,
+    UserNotFoundError,
+)
+
+# Workshop Session Service
+from shuffify.services.workshop_session_service import (
+    WorkshopSessionService,
+    WorkshopSessionError,
+    WorkshopSessionNotFoundError,
+    WorkshopSessionLimitError,
+)
+
+# Upstream Source Service
+from shuffify.services.upstream_source_service import (
+    UpstreamSourceService,
+    UpstreamSourceError,
+    UpstreamSourceNotFoundError,
+)
+
 __all__ = [
     # Services
     "AuthService",
@@ -81,4 +103,17 @@ __all__ = [
     # State Types
     "PlaylistState",
     "PLAYLIST_STATES_KEY",
+    # User Service
+    "UserService",
+    "UserServiceError",
+    "UserNotFoundError",
+    # Workshop Session Service
+    "WorkshopSessionService",
+    "WorkshopSessionError",
+    "WorkshopSessionNotFoundError",
+    "WorkshopSessionLimitError",
+    # Upstream Source Service
+    "UpstreamSourceService",
+    "UpstreamSourceError",
+    "UpstreamSourceNotFoundError",
 ]

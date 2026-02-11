@@ -40,6 +40,12 @@ class Config:
     CACHE_USER_TTL = 600  # 10 minutes for user profile data
     CACHE_AUDIO_FEATURES_TTL = 86400  # 24 hours for audio features (rarely change)
 
+    # Database configuration
+    SQLALCHEMY_DATABASE_URI = os.getenv(
+        'DATABASE_URL', 'sqlite:///shuffify.db'
+    )
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+
     # Application settings
     DEBUG = False
     PORT = int(os.getenv('PORT', 8000))
@@ -66,6 +72,11 @@ class ProdConfig(Config):
     # Production Redis settings - require REDIS_URL to be set
     REDIS_URL = os.getenv('REDIS_URL')  # Must be explicitly set in production
 
+    # Production database - use explicit path or override via DATABASE_URL
+    SQLALCHEMY_DATABASE_URI = os.getenv(
+        'DATABASE_URL', 'sqlite:///shuffify.db'
+    )
+
 
 class DevConfig(Config):
     """Development configuration."""
@@ -77,6 +88,11 @@ class DevConfig(Config):
 
     # Development Redis settings - fallback to localhost
     REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+
+    # Development database
+    SQLALCHEMY_DATABASE_URI = os.getenv(
+        'DATABASE_URL', 'sqlite:///shuffify_dev.db'
+    )
 
 # Dictionary for easy config selection
 config = {

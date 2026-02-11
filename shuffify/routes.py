@@ -24,10 +24,19 @@ from shuffify.services import (
     PlaylistService,
     ShuffleService,
     StateService,
+    UserService,
+    WorkshopSessionService,
+    WorkshopSessionError,
+    WorkshopSessionNotFoundError,
+    WorkshopSessionLimitError,
+    UpstreamSourceService,
+    UpstreamSourceError,
+    UpstreamSourceNotFoundError,
     AuthenticationError,
     PlaylistError,
     PlaylistUpdateError,
 )
+from shuffify import is_db_available
 from pydantic import ValidationError
 from shuffify.schemas import (
     parse_shuffle_request,
@@ -227,6 +236,17 @@ def callback():
         # Validate by fetching user data
         client, user_data = AuthService.authenticate_and_get_user(token_data)
         session["user_data"] = user_data
+
+        # Upsert user record in database (non-blocking)
+        try:
+            UserService.upsert_from_spotify(user_data)
+        except Exception as e:
+            # Database failure should NOT block login
+            logger.warning(
+                f"Failed to upsert user to database: {e}. "
+                f"Login continues without persistence."
+            )
+
         session.modified = True
 
         logger.info(
@@ -833,3 +853,302 @@ def workshop_load_external_playlist():
     return json_error(
         "Either 'url' or 'query' must be provided.", 400
     )
+
+
+# =============================================================================
+# Workshop Session Persistence Routes
+# =============================================================================
+
+
+@main.route("/workshop/<playlist_id>/sessions", methods=["GET"])
+def list_workshop_sessions(playlist_id):
+    """List all saved workshop sessions for a playlist."""
+    client = require_auth()
+    if not client:
+        return json_error("Please log in first.", 401)
+
+    if not is_db_available():
+        return json_error(
+            "Database is unavailable. Cannot load saved sessions.",
+            503,
+        )
+
+    user_data = session.get("user_data", {})
+    spotify_id = user_data.get("id")
+    if not spotify_id:
+        return json_error("User data not found in session.", 401)
+
+    sessions = WorkshopSessionService.list_sessions(
+        spotify_id, playlist_id
+    )
+    return jsonify({
+        "success": True,
+        "sessions": [ws.to_dict() for ws in sessions],
+    })
+
+
+@main.route("/workshop/<playlist_id>/sessions", methods=["POST"])
+def save_workshop_session(playlist_id):
+    """Save the current workshop state as a named session."""
+    client = require_auth()
+    if not client:
+        return json_error("Please log in first.", 401)
+
+    if not is_db_available():
+        return json_error(
+            "Database is unavailable. Cannot save session.", 503
+        )
+
+    data = request.get_json()
+    if not data:
+        return json_error("Request body must be JSON.", 400)
+
+    session_name = data.get("session_name", "").strip()
+    track_uris = data.get("track_uris", [])
+
+    if not session_name:
+        return json_error("Session name is required.", 400)
+
+    if not isinstance(track_uris, list):
+        return json_error("track_uris must be a list.", 400)
+
+    user_data = session.get("user_data", {})
+    spotify_id = user_data.get("id")
+    if not spotify_id:
+        return json_error("User data not found in session.", 401)
+
+    try:
+        ws = WorkshopSessionService.save_session(
+            spotify_id=spotify_id,
+            playlist_id=playlist_id,
+            session_name=session_name,
+            track_uris=track_uris,
+        )
+        logger.info(
+            f"User {spotify_id} saved workshop session "
+            f"'{session_name}' for playlist {playlist_id}"
+        )
+        return json_success(
+            f"Session '{session_name}' saved.",
+            session=ws.to_dict(),
+        )
+    except WorkshopSessionLimitError as e:
+        return json_error(str(e), 400)
+    except WorkshopSessionError as e:
+        return json_error(str(e), 500)
+
+
+@main.route(
+    "/workshop/sessions/<int:session_id>", methods=["GET"]
+)
+def load_workshop_session(session_id):
+    """Load a saved workshop session by ID."""
+    client = require_auth()
+    if not client:
+        return json_error("Please log in first.", 401)
+
+    if not is_db_available():
+        return json_error(
+            "Database is unavailable. Cannot load session.", 503
+        )
+
+    user_data = session.get("user_data", {})
+    spotify_id = user_data.get("id")
+    if not spotify_id:
+        return json_error("User data not found in session.", 401)
+
+    try:
+        ws = WorkshopSessionService.get_session(
+            session_id, spotify_id
+        )
+        return jsonify({
+            "success": True,
+            "session": ws.to_dict(),
+        })
+    except WorkshopSessionNotFoundError:
+        return json_error("Saved session not found.", 404)
+
+
+@main.route(
+    "/workshop/sessions/<int:session_id>", methods=["PUT"]
+)
+def update_workshop_session(session_id):
+    """Update an existing saved workshop session."""
+    client = require_auth()
+    if not client:
+        return json_error("Please log in first.", 401)
+
+    if not is_db_available():
+        return json_error(
+            "Database is unavailable. Cannot update session.",
+            503,
+        )
+
+    data = request.get_json()
+    if not data:
+        return json_error("Request body must be JSON.", 400)
+
+    track_uris = data.get("track_uris")
+    session_name = data.get("session_name")
+
+    if track_uris is not None and not isinstance(
+        track_uris, list
+    ):
+        return json_error("track_uris must be a list.", 400)
+
+    user_data = session.get("user_data", {})
+    spotify_id = user_data.get("id")
+    if not spotify_id:
+        return json_error("User data not found in session.", 401)
+
+    try:
+        ws = WorkshopSessionService.update_session(
+            session_id=session_id,
+            spotify_id=spotify_id,
+            track_uris=(
+                track_uris if track_uris is not None else []
+            ),
+            session_name=session_name,
+        )
+        return json_success(
+            f"Session '{ws.session_name}' updated.",
+            session=ws.to_dict(),
+        )
+    except WorkshopSessionNotFoundError:
+        return json_error("Saved session not found.", 404)
+    except WorkshopSessionError as e:
+        return json_error(str(e), 500)
+
+
+@main.route(
+    "/workshop/sessions/<int:session_id>", methods=["DELETE"]
+)
+def delete_workshop_session(session_id):
+    """Delete a saved workshop session."""
+    client = require_auth()
+    if not client:
+        return json_error("Please log in first.", 401)
+
+    if not is_db_available():
+        return json_error(
+            "Database is unavailable. Cannot delete session.",
+            503,
+        )
+
+    user_data = session.get("user_data", {})
+    spotify_id = user_data.get("id")
+    if not spotify_id:
+        return json_error("User data not found in session.", 401)
+
+    try:
+        WorkshopSessionService.delete_session(
+            session_id, spotify_id
+        )
+        return json_success("Session deleted.")
+    except WorkshopSessionNotFoundError:
+        return json_error("Saved session not found.", 404)
+    except WorkshopSessionError as e:
+        return json_error(str(e), 500)
+
+
+# =============================================================================
+# Upstream Source Routes
+# =============================================================================
+
+
+@main.route(
+    "/playlist/<playlist_id>/upstream-sources", methods=["GET"]
+)
+def list_upstream_sources(playlist_id):
+    """List all upstream sources for a target playlist."""
+    client = require_auth()
+    if not client:
+        return json_error("Please log in first.", 401)
+
+    if not is_db_available():
+        return json_error("Database is unavailable.", 503)
+
+    user_data = session.get("user_data", {})
+    spotify_id = user_data.get("id")
+    if not spotify_id:
+        return json_error("User data not found in session.", 401)
+
+    sources = UpstreamSourceService.list_sources(
+        spotify_id, playlist_id
+    )
+    return jsonify({
+        "success": True,
+        "sources": [s.to_dict() for s in sources],
+    })
+
+
+@main.route(
+    "/playlist/<playlist_id>/upstream-sources", methods=["POST"]
+)
+def add_upstream_source(playlist_id):
+    """Add an upstream source to a target playlist."""
+    client = require_auth()
+    if not client:
+        return json_error("Please log in first.", 401)
+
+    if not is_db_available():
+        return json_error("Database is unavailable.", 503)
+
+    data = request.get_json()
+    if not data:
+        return json_error("Request body must be JSON.", 400)
+
+    source_playlist_id = data.get("source_playlist_id")
+    if not source_playlist_id:
+        return json_error(
+            "source_playlist_id is required.", 400
+        )
+
+    user_data = session.get("user_data", {})
+    spotify_id = user_data.get("id")
+    if not spotify_id:
+        return json_error("User data not found in session.", 401)
+
+    try:
+        source = UpstreamSourceService.add_source(
+            spotify_id=spotify_id,
+            target_playlist_id=playlist_id,
+            source_playlist_id=source_playlist_id,
+            source_type=data.get("source_type", "external"),
+            source_url=data.get("source_url"),
+            source_name=data.get("source_name"),
+        )
+        return json_success(
+            "Source added.",
+            source=source.to_dict(),
+        )
+    except UpstreamSourceError as e:
+        return json_error(str(e), 400)
+
+
+@main.route(
+    "/upstream-sources/<int:source_id>", methods=["DELETE"]
+)
+def delete_upstream_source(source_id):
+    """Delete an upstream source configuration."""
+    client = require_auth()
+    if not client:
+        return json_error("Please log in first.", 401)
+
+    if not is_db_available():
+        return json_error("Database is unavailable.", 503)
+
+    user_data = session.get("user_data", {})
+    spotify_id = user_data.get("id")
+    if not spotify_id:
+        return json_error("User data not found in session.", 401)
+
+    try:
+        UpstreamSourceService.delete_source(
+            source_id, spotify_id
+        )
+        return json_success("Source removed.")
+    except UpstreamSourceNotFoundError:
+        return json_error("Source not found.", 404)
+    except UpstreamSourceError as e:
+        return json_error(str(e), 500)

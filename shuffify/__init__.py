@@ -4,6 +4,7 @@ from typing import Optional
 from flask import Flask
 from flask_session import Session
 import redis
+from flask_migrate import Migrate
 from config import config, validate_required_env_vars
 
 logging.basicConfig(level=logging.DEBUG)
@@ -11,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 # Global Redis client for caching (initialized in create_app)
 _redis_client: Optional[redis.Redis] = None
+_migrate: Optional[Migrate] = None
 
 
 def _create_redis_client(redis_url: str) -> redis.Redis:
@@ -73,6 +75,27 @@ def get_spotify_cache():
     except RuntimeError:
         # Not in Flask context - use defaults
         return SpotifyCache(_redis_client)
+
+
+def is_db_available() -> bool:
+    """
+    Check if the SQLAlchemy database is initialized and available.
+
+    Returns:
+        True if database is available, False otherwise.
+    """
+    try:
+        from shuffify.models.db import db
+        from flask import current_app
+
+        # Verify we're in app context and db is initialized
+        if not current_app:
+            return False
+        # Quick test query
+        db.session.execute(db.text("SELECT 1"))
+        return True
+    except Exception:
+        return False
 
 
 def create_app(config_name=None):
@@ -139,6 +162,31 @@ def create_app(config_name=None):
 
     # Initialize Flask-Session
     Session(app)
+
+    # Initialize SQLAlchemy database
+    try:
+        from shuffify.models.db import db
+
+        db.init_app(app)
+
+        global _migrate
+        _migrate = Migrate(app, db)
+
+        # Create tables if they don't exist (development convenience)
+        # In production, use Flask-Migrate/Alembic for schema changes
+        with app.app_context():
+            db.create_all()
+
+        logger.info(
+            "SQLAlchemy database initialized: %s",
+            app.config.get("SQLALCHEMY_DATABASE_URI", "not set"),
+        )
+    except Exception as e:
+        logger.warning(
+            "Database initialization failed: %s. "
+            "Persistence features will be unavailable.",
+            e,
+        )
 
     # Register blueprints
     from shuffify.routes import main as main_blueprint
