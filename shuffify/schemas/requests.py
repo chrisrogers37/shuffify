@@ -212,3 +212,25 @@ class WorkshopCommitRequest(BaseModel):
             if not uri.startswith("spotify:track:"):
                 raise ValueError(f"Invalid track URI format: {uri}")
         return v
+
+
+class WorkshopSearchRequest(BaseModel):
+    """Schema for searching Spotify's catalog from the workshop."""
+
+    query: str = Field(
+        ..., min_length=1, max_length=200, description="Search query string"
+    )
+    limit: Annotated[int, Field(ge=1, le=50)] = 20
+    offset: Annotated[int, Field(ge=0)] = 0
+
+    @field_validator("query")
+    @classmethod
+    def validate_query(cls, v: str) -> str:
+        """Ensure query is not just whitespace."""
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("Search query cannot be empty or whitespace")
+        return stripped
+
+    class Config:
+        extra = "ignore"
