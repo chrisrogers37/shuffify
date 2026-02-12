@@ -16,6 +16,7 @@ import os
 from typing import Optional, Tuple, Dict
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from shuffify.enums import ScheduleType, IntervalValue
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.events import (
@@ -255,18 +256,18 @@ def _parse_schedule(
     Returns:
         Tuple of (trigger_type_string, trigger_kwargs_dict).
     """
-    if schedule_type == "interval":
+    if schedule_type == ScheduleType.INTERVAL:
         interval_map = {
-            "every_6h": {"hours": 6},
-            "every_12h": {"hours": 12},
-            "daily": {"days": 1},
-            "every_3d": {"days": 3},
-            "weekly": {"weeks": 1},
+            IntervalValue.EVERY_6H: {"hours": 6},
+            IntervalValue.EVERY_12H: {"hours": 12},
+            IntervalValue.DAILY: {"days": 1},
+            IntervalValue.EVERY_3D: {"days": 3},
+            IntervalValue.WEEKLY: {"weeks": 1},
         }
         kwargs = interval_map.get(schedule_value, {"days": 1})
         return "interval", kwargs
 
-    elif schedule_type == "cron":
+    elif schedule_type == ScheduleType.CRON:
         parts = schedule_value.split()
         if len(parts) != 5:
             logger.warning(

@@ -12,18 +12,12 @@ from pydantic import (
     model_validator,
 )
 
+from shuffify.enums import JobType, ScheduleType, IntervalValue
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 
-
-VALID_JOB_TYPES = {"raid", "shuffle", "raid_and_shuffle"}
-VALID_SCHEDULE_TYPES = {"interval", "cron"}
-VALID_INTERVAL_VALUES = {
-    "every_6h",
-    "every_12h",
-    "daily",
-    "every_3d",
-    "weekly",
-}
+VALID_JOB_TYPES = set(JobType)
+VALID_SCHEDULE_TYPES = set(ScheduleType)
+VALID_INTERVAL_VALUES = set(IntervalValue)
 
 
 class ScheduleCreateRequest(BaseModel):
@@ -34,8 +28,8 @@ class ScheduleCreateRequest(BaseModel):
     target_playlist_name: str = Field(
         ..., min_length=1, max_length=255
     )
-    schedule_type: str = Field(default="interval")
-    schedule_value: str = Field(default="daily")
+    schedule_type: str = Field(default=ScheduleType.INTERVAL)
+    schedule_value: str = Field(default=IntervalValue.DAILY)
     source_playlist_ids: Optional[List[str]] = Field(
         default=None
     )
@@ -97,19 +91,21 @@ class ScheduleCreateRequest(BaseModel):
     @model_validator(mode="after")
     def validate_job_requirements(self):
         """Cross-field validation for job type requirements."""
-        if self.job_type in ("raid", "raid_and_shuffle"):
+        if self.job_type in (JobType.RAID, JobType.RAID_AND_SHUFFLE):
             if not self.source_playlist_ids:
                 raise ValueError(
                     f"source_playlist_ids required for "
                     f"job_type '{self.job_type}'"
                 )
-        if self.job_type in ("shuffle", "raid_and_shuffle"):
+        if self.job_type in (
+            JobType.SHUFFLE, JobType.RAID_AND_SHUFFLE
+        ):
             if not self.algorithm_name:
                 raise ValueError(
                     f"algorithm_name required for "
                     f"job_type '{self.job_type}'"
                 )
-        if self.schedule_type == "interval":
+        if self.schedule_type == ScheduleType.INTERVAL:
             if self.schedule_value not in VALID_INTERVAL_VALUES:
                 raise ValueError(
                     f"Invalid interval "
@@ -117,7 +113,7 @@ class ScheduleCreateRequest(BaseModel):
                     f"of: "
                     f"{', '.join(sorted(VALID_INTERVAL_VALUES))}"
                 )
-        if self.schedule_type == "cron":
+        if self.schedule_type == ScheduleType.CRON:
             parts = self.schedule_value.split()
             if len(parts) != 5:
                 raise ValueError(
