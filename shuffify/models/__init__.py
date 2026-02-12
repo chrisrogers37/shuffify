@@ -16,6 +16,7 @@ from shuffify.models.db import (
     UpstreamSource,
     Schedule,
     JobExecution,
+    LoginHistory,
 )
 from shuffify.models.playlist import Playlist
 
@@ -26,5 +27,6 @@ __all__ = [
     "UpstreamSource",
     "Schedule",
     "JobExecution",
+    "LoginHistory",
     "Playlist",
 ]

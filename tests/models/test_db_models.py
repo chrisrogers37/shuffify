@@ -9,7 +9,9 @@ import json
 import pytest
 from datetime import datetime, timezone
 
-from shuffify.models.db import db, User, WorkshopSession, UpstreamSource
+from shuffify.models.db import (
+    db, User, WorkshopSession, UpstreamSource, LoginHistory
+)
 
 
 @pytest.fixture
@@ -448,3 +450,151 @@ class TestUpstreamSourceModel:
         db_session.commit()
 
         assert source.source_type == "external"
+
+
+class TestLoginHistoryModel:
+    """Tests for the LoginHistory model."""
+
+    @pytest.fixture
+    def user(self, db_session):
+        """Create a test user."""
+        user = User(
+            spotify_id="user123", display_name="Test User"
+        )
+        db_session.add(user)
+        db_session.commit()
+        return user
+
+    def test_create_login_history(self, db_session, user):
+        """Should create a login history record."""
+        entry = LoginHistory(
+            user_id=user.id,
+            ip_address="192.168.1.1",
+            user_agent="TestBrowser/1.0",
+            session_id="sess_abc123",
+            login_type="oauth_initial",
+        )
+        db_session.add(entry)
+        db_session.commit()
+
+        assert entry.id is not None
+        assert entry.user_id == user.id
+        assert entry.ip_address == "192.168.1.1"
+        assert entry.user_agent == "TestBrowser/1.0"
+        assert entry.session_id == "sess_abc123"
+        assert entry.login_type == "oauth_initial"
+        assert entry.logged_in_at is not None
+        assert entry.logged_out_at is None
+
+    def test_login_type_required(self, db_session, user):
+        """Should require login_type field."""
+        entry = LoginHistory(
+            user_id=user.id,
+        )
+        db_session.add(entry)
+
+        with pytest.raises(Exception):  # IntegrityError
+            db_session.commit()
+        db_session.rollback()
+
+    def test_nullable_fields(self, db_session, user):
+        """Should allow null for optional fields."""
+        entry = LoginHistory(
+            user_id=user.id,
+            login_type="oauth_initial",
+        )
+        db_session.add(entry)
+        db_session.commit()
+
+        assert entry.ip_address is None
+        assert entry.user_agent is None
+        assert entry.session_id is None
+        assert entry.logged_out_at is None
+
+    def test_logged_out_at_update(self, db_session, user):
+        """Should allow setting logged_out_at after creation."""
+        entry = LoginHistory(
+            user_id=user.id,
+            login_type="oauth_initial",
+        )
+        db_session.add(entry)
+        db_session.commit()
+
+        entry.logged_out_at = datetime.now(timezone.utc)
+        db_session.commit()
+
+        assert entry.logged_out_at is not None
+
+    def test_to_dict(self, db_session, user):
+        """Should serialize all fields."""
+        entry = LoginHistory(
+            user_id=user.id,
+            ip_address="10.0.0.1",
+            user_agent="Chrome/100",
+            session_id="sess_xyz",
+            login_type="oauth_initial",
+        )
+        db_session.add(entry)
+        db_session.commit()
+
+        d = entry.to_dict()
+        assert d["user_id"] == user.id
+        assert d["ip_address"] == "10.0.0.1"
+        assert d["user_agent"] == "Chrome/100"
+        assert d["session_id"] == "sess_xyz"
+        assert d["login_type"] == "oauth_initial"
+        assert d["logged_in_at"] is not None
+        assert d["logged_out_at"] is None
+
+    def test_repr(self, db_session, user):
+        """Should have a useful string representation."""
+        entry = LoginHistory(
+            user_id=user.id,
+            login_type="oauth_initial",
+        )
+        db_session.add(entry)
+        db_session.commit()
+
+        r = repr(entry)
+        assert "LoginHistory" in r
+        assert "oauth_initial" in r
+
+    def test_user_relationship(self, db_session, user):
+        """Should link to parent User."""
+        entry = LoginHistory(
+            user_id=user.id,
+            login_type="oauth_initial",
+        )
+        db_session.add(entry)
+        db_session.commit()
+
+        assert entry.user.spotify_id == "user123"
+        assert len(user.login_history) == 1
+
+    def test_cascade_delete(self, db_session, user):
+        """Deleting user should delete login history."""
+        entry = LoginHistory(
+            user_id=user.id,
+            login_type="oauth_initial",
+        )
+        db_session.add(entry)
+        db_session.commit()
+        entry_id = entry.id
+
+        db_session.delete(user)
+        db_session.commit()
+
+        assert db_session.get(LoginHistory, entry_id) is None
+
+    def test_multiple_login_entries(self, db_session, user):
+        """Should support multiple login records per user."""
+        for i in range(5):
+            entry = LoginHistory(
+                user_id=user.id,
+                login_type="oauth_initial",
+                ip_address=f"10.0.0.{i}",
+            )
+            db_session.add(entry)
+        db_session.commit()
+
+        assert len(user.login_history) == 5
