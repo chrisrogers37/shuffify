@@ -26,6 +26,8 @@ class User(db.Model):
 
     Created or updated on each OAuth login via the upsert pattern.
     Links to all user-specific data (workshop sessions, upstream sources).
+    Serves as the user dimension table with login tracking and
+    extended Spotify profile fields.
     """
 
     __tablename__ = "users"
@@ -41,6 +43,22 @@ class User(db.Model):
     # Encrypted with Fernet using a key derived from SECRET_KEY.
     # Set during OAuth callback, updated on token refresh.
     encrypted_refresh_token = db.Column(db.Text, nullable=True)
+
+    # Login tracking
+    last_login_at = db.Column(db.DateTime, nullable=True)
+    login_count = db.Column(
+        db.Integer, nullable=False, default=0
+    )
+
+    # Account status
+    is_active = db.Column(
+        db.Boolean, nullable=False, default=True
+    )
+
+    # Extended Spotify profile fields
+    country = db.Column(db.String(10), nullable=True)
+    spotify_product = db.Column(db.String(50), nullable=True)
+    spotify_uri = db.Column(db.String(255), nullable=True)
 
     created_at = db.Column(
         db.DateTime,
@@ -74,11 +92,25 @@ class User(db.Model):
             "display_name": self.display_name,
             "email": self.email,
             "profile_image_url": self.profile_image_url,
+            "last_login_at": (
+                self.last_login_at.isoformat()
+                if self.last_login_at
+                else None
+            ),
+            "login_count": self.login_count,
+            "is_active": self.is_active,
+            "country": self.country,
+            "spotify_product": self.spotify_product,
+            "spotify_uri": self.spotify_uri,
             "created_at": (
-                self.created_at.isoformat() if self.created_at else None
+                self.created_at.isoformat()
+                if self.created_at
+                else None
             ),
             "updated_at": (
-                self.updated_at.isoformat() if self.updated_at else None
+                self.updated_at.isoformat()
+                if self.updated_at
+                else None
             ),
         }
 

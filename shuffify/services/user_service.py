@@ -5,6 +5,7 @@ Handles user creation, retrieval, and the upsert-on-login pattern.
 """
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
@@ -25,27 +26,43 @@ class UserNotFoundError(UserServiceError):
     pass
 
 
+@dataclass
+class UpsertResult:
+    """Result of a user upsert operation."""
+
+    user: User
+    is_new: bool
+
+
 class UserService:
     """Service for managing User records."""
 
     @staticmethod
-    def upsert_from_spotify(user_data: Dict[str, Any]) -> User:
+    def upsert_from_spotify(
+        user_data: Dict[str, Any],
+    ) -> UpsertResult:
         """
         Create or update a User from Spotify profile data.
 
-        Called on every successful OAuth login. If the user already exists
-        (matched by spotify_id), update their profile fields and timestamp.
-        If the user does not exist, create a new record.
+        Called on every successful OAuth login. If the user already
+        exists (matched by spotify_id), update their profile fields,
+        increment login_count, and set last_login_at. If the user
+        does not exist, create a new record with login_count=1.
 
         Args:
-            user_data: The Spotify user profile dictionary. Expected keys:
+            user_data: The Spotify user profile dictionary.
+                Expected keys:
                 - 'id' (str): Spotify user ID (REQUIRED)
                 - 'display_name' (str): Display name
                 - 'email' (str): Email address
-                - 'images' (list): List of image dicts with 'url' key
+                - 'images' (list): Image dicts with 'url' key
+                - 'country' (str): ISO 3166-1 alpha-2 code
+                - 'product' (str): Spotify subscription level
+                - 'uri' (str): Spotify URI for the user
 
         Returns:
-            The User instance (created or updated).
+            UpsertResult with the User instance and whether
+            it was a new user.
 
         Raises:
             UserServiceError: If the upsert fails.
@@ -62,6 +79,8 @@ class UserService:
             images[0].get("url") if images else None
         )
 
+        now = datetime.now(timezone.utc)
+
         try:
             user = User.query.filter_by(
                 spotify_id=spotify_id
@@ -69,35 +88,61 @@ class UserService:
 
             if user:
                 # Update existing user
-                user.display_name = user_data.get("display_name")
+                user.display_name = user_data.get(
+                    "display_name"
+                )
                 user.email = user_data.get("email")
                 user.profile_image_url = profile_image_url
-                user.updated_at = datetime.now(timezone.utc)
+                user.country = user_data.get("country")
+                user.spotify_product = user_data.get(
+                    "product"
+                )
+                user.spotify_uri = user_data.get("uri")
+                user.last_login_at = now
+                user.login_count = (
+                    user.login_count or 0
+                ) + 1
+                user.updated_at = now
+                is_new = False
                 logger.info(
-                    f"Updated existing user: {spotify_id} "
-                    f"({user_data.get('display_name', 'Unknown')})"
+                    "Updated existing user: %s (%s)"
+                    " — login #%d",
+                    spotify_id,
+                    user_data.get("display_name", "Unknown"),
+                    user.login_count,
                 )
             else:
                 # Create new user
                 user = User(
                     spotify_id=spotify_id,
-                    display_name=user_data.get("display_name"),
+                    display_name=user_data.get(
+                        "display_name"
+                    ),
                     email=user_data.get("email"),
                     profile_image_url=profile_image_url,
+                    country=user_data.get("country"),
+                    spotify_product=user_data.get("product"),
+                    spotify_uri=user_data.get("uri"),
+                    last_login_at=now,
+                    login_count=1,
                 )
                 db.session.add(user)
+                is_new = True
                 logger.info(
-                    f"Created new user: {spotify_id} "
-                    f"({user_data.get('display_name', 'Unknown')})"
+                    "Created new user: %s (%s)",
+                    spotify_id,
+                    user_data.get("display_name", "Unknown"),
                 )
 
             db.session.commit()
-            return user
+            return UpsertResult(user=user, is_new=is_new)
 
         except Exception as e:
             db.session.rollback()
             logger.error(
-                f"Failed to upsert user {spotify_id}: {e}",
+                "Failed to upsert user %s: %s",
+                spotify_id,
+                e,
                 exc_info=True,
             )
             raise UserServiceError(
@@ -105,7 +150,9 @@ class UserService:
             )
 
     @staticmethod
-    def get_by_spotify_id(spotify_id: str) -> Optional[User]:
+    def get_by_spotify_id(
+        spotify_id: str,
+    ) -> Optional[User]:
         """
         Look up a user by their Spotify ID.
 
@@ -117,7 +164,9 @@ class UserService:
         """
         if not spotify_id:
             return None
-        return User.query.filter_by(spotify_id=spotify_id).first()
+        return User.query.filter_by(
+            spotify_id=spotify_id
+        ).first()
 
     @staticmethod
     def get_by_id(user_id: int) -> Optional[User]:
