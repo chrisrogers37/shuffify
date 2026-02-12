@@ -102,7 +102,7 @@ Phase 03 must wait for Phase 02 to merge.
 
 | Phase | Document | PR Title | Risk | Effort |
 |-------|----------|----------|------|--------|
-| 01 | [01_add-missing-tests.md](01_add-missing-tests.md) | test: Add coverage for schedule schemas, scheduler, and algorithm utils | Low | ~2 hours | 🔧 IN PROGRESS |
+| 01 | [01_add-missing-tests.md](01_add-missing-tests.md) | test: Add coverage for schedule schemas, scheduler, and algorithm utils | Low | ~2 hours | ✅ COMPLETE |
 | 02 | [02_extract-enums.md](02_extract-enums.md) | refactor: Extract job type and schedule value string literals to enums | Medium | ~2 hours |
 | 03 | [03_split-routes.md](03_split-routes.md) | refactor: Split routes.py into feature-based Blueprint modules | Medium | ~3 hours |
 | 04 | [04_housekeeping.md](04_housekeeping.md) | chore: Update dependencies and add .env.example | Low | ~1 hour |
