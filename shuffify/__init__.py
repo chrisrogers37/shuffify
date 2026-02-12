@@ -186,10 +186,29 @@ def create_app(config_name=None):
         global _migrate
         _migrate = Migrate(app, db)
 
-        # Create tables if they don't exist (development convenience)
-        # In production, use Flask-Migrate/Alembic for schema changes
         with app.app_context():
-            db.create_all()
+            if app.config.get("TESTING"):
+                # Tests use in-memory SQLite -- create tables directly
+                db.create_all()
+            else:
+                # Development and production: use Alembic migrations.
+                # In development without migrations dir, fall back to
+                # db.create_all() for convenience.
+                migrations_dir = os.path.join(
+                    os.path.dirname(os.path.dirname(__file__)),
+                    'migrations'
+                )
+                if os.path.isdir(migrations_dir):
+                    from flask_migrate import upgrade
+                    upgrade()
+                else:
+                    logger.warning(
+                        "No migrations/ directory found. "
+                        "Using db.create_all() as fallback. "
+                        "Run 'flask db init && flask db migrate' "
+                        "to set up Alembic migrations."
+                    )
+                    db.create_all()
 
         logger.info(
             "SQLAlchemy database initialized: %s",

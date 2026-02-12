@@ -7,7 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **PostgreSQL Support** - Production database support for Neon and Railway
+  - Added `psycopg2-binary` (development) and `psycopg2` (production) drivers
+  - Automatic `postgres://` to `postgresql://` URL conversion for managed providers
+  - SSL and connection pooling configuration for Neon/Railway
+- **Alembic Migrations** - Database schema management via Flask-Migrate
+  - Initial migration capturing all 5 tables
+  - Automatic migration execution on app startup (non-test environments)
+  - `db.create_all()` preserved for test fixtures using in-memory SQLite
+- **Database Health Check** - Enhanced `/health` endpoint reports database connectivity
+- **Docker PostgreSQL** - Added PostgreSQL service to `docker-compose.yml`
+
 ### Changed
+- **Database Config** - `config.py` uses `_resolve_database_url()` helper for DATABASE_URL resolution
+- **App Factory** - Uses Alembic `upgrade()` instead of `db.create_all()` for non-test environments
+- **Dockerfile** - Added `libpq-dev`, `--preload` for gunicorn, updated HEALTHCHECK to `/health`
 - **Routes Split into Modules** - Split monolithic `routes.py` (1509 lines) into `routes/` package
   - 6 feature modules: core, playlists, shuffle, workshop, upstream_sources, schedules
   - Single Blueprint preserved — zero template changes needed
