@@ -5,11 +5,13 @@ Tests cover user upsert, lookup, and error handling.
 """
 
 import pytest
+from datetime import datetime, timezone
 
 from shuffify.models.db import db, User
 from shuffify.services.user_service import (
     UserService,
     UserServiceError,
+    UpsertResult,
 )
 
 
@@ -56,12 +58,12 @@ class TestUserServiceUpsert:
             ],
         }
 
-        user = UserService.upsert_from_spotify(user_data)
+        result = UserService.upsert_from_spotify(user_data)
 
-        assert user.spotify_id == "spotify_user_1"
-        assert user.display_name == "Test User"
-        assert user.email == "test@example.com"
-        assert user.profile_image_url == (
+        assert result.user.spotify_id == "spotify_user_1"
+        assert result.user.display_name == "Test User"
+        assert result.user.email == "test@example.com"
+        assert result.user.profile_image_url == (
             "https://example.com/img.jpg"
         )
 
@@ -83,11 +85,13 @@ class TestUserServiceUpsert:
                 {"url": "https://example.com/new.jpg"}
             ],
         }
-        user = UserService.upsert_from_spotify(updated_data)
+        result = UserService.upsert_from_spotify(
+            updated_data
+        )
 
-        assert user.display_name == "New Name"
-        assert user.email == "new@example.com"
-        assert user.profile_image_url == (
+        assert result.user.display_name == "New Name"
+        assert result.user.email == "new@example.com"
+        assert result.user.profile_image_url == (
             "https://example.com/new.jpg"
         )
 
@@ -104,8 +108,8 @@ class TestUserServiceUpsert:
             "display_name": "No Image User",
             "images": [],
         }
-        user = UserService.upsert_from_spotify(user_data)
-        assert user.profile_image_url is None
+        result = UserService.upsert_from_spotify(user_data)
+        assert result.user.profile_image_url is None
 
     def test_upsert_missing_id_raises(self, app_ctx):
         """Should raise error when spotify ID is missing."""
@@ -124,6 +128,173 @@ class TestUserServiceUpsert:
             UserService.upsert_from_spotify(
                 {"id": "", "display_name": "Empty"}
             )
+
+    def test_create_returns_upsert_result(self, app_ctx):
+        """Should return UpsertResult with is_new=True."""
+        user_data = {
+            "id": "new_user",
+            "display_name": "New User",
+            "email": "new@example.com",
+            "images": [],
+        }
+
+        result = UserService.upsert_from_spotify(user_data)
+
+        assert isinstance(result, UpsertResult)
+        assert result.is_new is True
+        assert result.user.spotify_id == "new_user"
+
+    def test_update_returns_upsert_result(self, app_ctx):
+        """Should return UpsertResult with is_new=False."""
+        user_data = {
+            "id": "returning_user",
+            "display_name": "Returning",
+            "images": [],
+        }
+        UserService.upsert_from_spotify(user_data)
+
+        result = UserService.upsert_from_spotify(user_data)
+
+        assert isinstance(result, UpsertResult)
+        assert result.is_new is False
+
+    def test_create_sets_login_count_to_one(self, app_ctx):
+        """Should set login_count to 1 on first login."""
+        user_data = {
+            "id": "first_login",
+            "display_name": "First",
+            "images": [],
+        }
+
+        result = UserService.upsert_from_spotify(user_data)
+
+        assert result.user.login_count == 1
+
+    def test_update_increments_login_count(self, app_ctx):
+        """Should increment login_count on each login."""
+        user_data = {
+            "id": "multi_login",
+            "display_name": "Multi",
+            "images": [],
+        }
+
+        UserService.upsert_from_spotify(user_data)
+        UserService.upsert_from_spotify(user_data)
+        result = UserService.upsert_from_spotify(user_data)
+
+        assert result.user.login_count == 3
+
+    def test_create_sets_last_login_at(self, app_ctx):
+        """Should set last_login_at on first login."""
+        before = datetime.now(timezone.utc).replace(tzinfo=None)
+        user_data = {
+            "id": "login_time",
+            "display_name": "Timed",
+            "images": [],
+        }
+
+        result = UserService.upsert_from_spotify(user_data)
+        after = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        assert result.user.last_login_at is not None
+        assert before <= result.user.last_login_at <= after
+
+    def test_update_refreshes_last_login_at(self, app_ctx):
+        """Should update last_login_at on re-login."""
+        user_data = {
+            "id": "refresh_time",
+            "display_name": "Refreshed",
+            "images": [],
+        }
+
+        first_result = UserService.upsert_from_spotify(
+            user_data
+        )
+        first_login = first_result.user.last_login_at
+
+        second_result = UserService.upsert_from_spotify(
+            user_data
+        )
+
+        assert (
+            second_result.user.last_login_at >= first_login
+        )
+
+    def test_create_extracts_country(self, app_ctx):
+        """Should extract country from Spotify data."""
+        user_data = {
+            "id": "country_user",
+            "display_name": "Country User",
+            "images": [],
+            "country": "DE",
+        }
+
+        result = UserService.upsert_from_spotify(user_data)
+
+        assert result.user.country == "DE"
+
+    def test_create_extracts_product(self, app_ctx):
+        """Should extract product as spotify_product."""
+        user_data = {
+            "id": "product_user",
+            "display_name": "Product User",
+            "images": [],
+            "product": "premium",
+        }
+
+        result = UserService.upsert_from_spotify(user_data)
+
+        assert result.user.spotify_product == "premium"
+
+    def test_create_extracts_uri(self, app_ctx):
+        """Should extract uri as spotify_uri."""
+        user_data = {
+            "id": "uri_user",
+            "display_name": "URI User",
+            "images": [],
+            "uri": "spotify:user:uri_user",
+        }
+
+        result = UserService.upsert_from_spotify(user_data)
+
+        assert result.user.spotify_uri == (
+            "spotify:user:uri_user"
+        )
+
+    def test_update_refreshes_spotify_fields(self, app_ctx):
+        """Should update country/product/uri on re-login."""
+        user_data = {
+            "id": "update_fields",
+            "display_name": "Fields",
+            "images": [],
+            "country": "US",
+            "product": "free",
+            "uri": "spotify:user:update_fields",
+        }
+        UserService.upsert_from_spotify(user_data)
+
+        user_data["country"] = "GB"
+        user_data["product"] = "premium"
+        result = UserService.upsert_from_spotify(user_data)
+
+        assert result.user.country == "GB"
+        assert result.user.spotify_product == "premium"
+
+    def test_missing_optional_fields_default_none(
+        self, app_ctx
+    ):
+        """Should default to None when optional fields absent."""
+        user_data = {
+            "id": "minimal_user",
+            "display_name": "Minimal",
+            "images": [],
+        }
+
+        result = UserService.upsert_from_spotify(user_data)
+
+        assert result.user.country is None
+        assert result.user.spotify_product is None
+        assert result.user.spotify_uri is None
 
 
 class TestUserServiceLookup:
@@ -158,13 +329,13 @@ class TestUserServiceLookup:
 
     def test_get_by_id_found(self, app_ctx):
         """Should return user by internal ID."""
-        created = UserService.upsert_from_spotify({
+        result = UserService.upsert_from_spotify({
             "id": "user_y",
             "display_name": "User Y",
             "images": [],
         })
 
-        user = UserService.get_by_id(created.id)
+        user = UserService.get_by_id(result.user.id)
         assert user is not None
         assert user.spotify_id == "user_y"
 

@@ -200,14 +200,20 @@ def callback():
         session["user_data"] = user_data
 
         # Upsert user record in database (non-blocking)
+        is_new_user = False
         try:
-            UserService.upsert_from_spotify(user_data)
+            result = UserService.upsert_from_spotify(
+                user_data
+            )
+            is_new_user = result.is_new
         except Exception as e:
             # Database failure should NOT block login
             logger.warning(
                 f"Failed to upsert user to database: {e}. "
                 f"Login continues without persistence."
             )
+
+        session["is_new_user"] = is_new_user
 
         # Store encrypted refresh token for scheduled ops
         if token_data.get("refresh_token"):

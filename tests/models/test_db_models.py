@@ -7,6 +7,7 @@ including creation, relationships, serialization, and constraints.
 
 import json
 import pytest
+from datetime import datetime, timezone
 
 from shuffify.models.db import db, User, WorkshopSession, UpstreamSource
 
@@ -121,6 +122,95 @@ class TestUserModel:
         assert user.display_name is None
         assert user.email is None
         assert user.profile_image_url is None
+
+    def test_new_fields_defaults(self, db_session):
+        """Should have correct defaults for new fields."""
+        user = User(spotify_id="default_user")
+        db_session.add(user)
+        db_session.commit()
+
+        assert user.login_count == 0
+        assert user.is_active is True
+        assert user.last_login_at is None
+        assert user.country is None
+        assert user.spotify_product is None
+        assert user.spotify_uri is None
+
+    def test_create_user_with_all_fields(self, db_session):
+        """Should create a user with all new fields populated."""
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        user = User(
+            spotify_id="full_user",
+            display_name="Full User",
+            email="full@example.com",
+            profile_image_url="https://example.com/img.jpg",
+            last_login_at=now,
+            login_count=5,
+            is_active=True,
+            country="US",
+            spotify_product="premium",
+            spotify_uri="spotify:user:full_user",
+        )
+        db_session.add(user)
+        db_session.commit()
+
+        assert user.last_login_at == now
+        assert user.login_count == 5
+        assert user.is_active is True
+        assert user.country == "US"
+        assert user.spotify_product == "premium"
+        assert user.spotify_uri == "spotify:user:full_user"
+
+    def test_to_dict_includes_new_fields(self, db_session):
+        """Should include new fields in serialized dict."""
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        user = User(
+            spotify_id="dict_user",
+            last_login_at=now,
+            login_count=3,
+            is_active=True,
+            country="GB",
+            spotify_product="free",
+            spotify_uri="spotify:user:dict_user",
+        )
+        db_session.add(user)
+        db_session.commit()
+
+        d = user.to_dict()
+        assert d["last_login_at"] == now.isoformat()
+        assert d["login_count"] == 3
+        assert d["is_active"] is True
+        assert d["country"] == "GB"
+        assert d["spotify_product"] == "free"
+        assert d["spotify_uri"] == "spotify:user:dict_user"
+
+    def test_to_dict_null_new_fields(self, db_session):
+        """Should serialize None for unpopulated new fields."""
+        user = User(spotify_id="null_fields_user")
+        db_session.add(user)
+        db_session.commit()
+
+        d = user.to_dict()
+        assert d["last_login_at"] is None
+        assert d["login_count"] == 0
+        assert d["is_active"] is True
+        assert d["country"] is None
+        assert d["spotify_product"] is None
+        assert d["spotify_uri"] is None
+
+    def test_is_active_can_be_set_false(self, db_session):
+        """Should allow setting is_active to False."""
+        user = User(
+            spotify_id="inactive_user",
+            is_active=False,
+        )
+        db_session.add(user)
+        db_session.commit()
+
+        fetched = User.query.filter_by(
+            spotify_id="inactive_user"
+        ).first()
+        assert fetched.is_active is False
 
 
 class TestWorkshopSessionModel:
