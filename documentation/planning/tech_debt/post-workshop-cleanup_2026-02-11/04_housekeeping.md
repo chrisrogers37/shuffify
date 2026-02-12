@@ -1,5 +1,9 @@
 # Phase 04: Housekeeping — Dependency Updates and .env.example
 
+**Status:** ✅ COMPLETE
+**Started:** 2026-02-11
+**Completed:** 2026-02-11
+
 **PR Title:** `chore: Update dependencies and add .env.example`
 **Risk:** Low (requirements files + new file only)
 **Effort:** ~1 hour
@@ -77,10 +81,9 @@ Address two housekeeping items:
 - **Patch updates** (e.g., 2.25.1 → 2.25.2): Apply directly
 - **Minor updates** (e.g., 7.4.0 → 7.5.0): Apply, run tests
 - **Major updates** (e.g., pytest 7→8, sentry-sdk 1→2, flake8 6→7):
-  - Read changelog/migration guide
-  - Apply in separate commit
-  - Run full test suite
-  - If tests fail, fix or defer the update
+  - **DEFERRED** — Stay within current major versions to keep this low-risk
+  - Update to latest patch/minor within current major instead
+  - Major version migrations will be handled in a separate effort
 
 ---
 
