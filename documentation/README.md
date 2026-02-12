@@ -16,7 +16,8 @@ documentation/
 │   └── 05_brainstorm_enhancements.md
 ├── planning/          # Development plans and feature phases
 │   └── phases/
-│       └── playlist-workshop_2026-02-10/  # Workshop Enhancement Suite (6 phases)
+│       ├── playlist-workshop_2026-02-10/  # Workshop Enhancement Suite (6 phases)
+│       └── user-persistence_2026-02-12/  # User Persistence Suite (7 phases)
 └── archive/           # Completed evaluations and legacy documents
     ├── 01_architecture_evaluation.md
     ├── 02_modularity_assessment.md
@@ -41,6 +42,7 @@ Active evaluation documents for ongoing development planning:
 Development plans for feature implementation:
 
 - **[Playlist Workshop Enhancement Suite](planning/phases/playlist-workshop_2026-02-10/00_OVERVIEW.md)** - 6-phase plan for workshop features (all phases completed)
+- **[User Persistence Enhancement Suite](planning/phases/user-persistence_2026-02-12/00_OVERVIEW.md)** - 7-phase plan: PostgreSQL, user dimension table, login tracking, settings, snapshots, activity log, dashboard
 
 ## Archived (Completed)
 
@@ -114,4 +116,4 @@ This documentation index should be updated whenever:
 - Documentation is reorganized
 - Documentation is deprecated or archived
 
-Last updated: 2026-02-11
+Last updated: 2026-02-12

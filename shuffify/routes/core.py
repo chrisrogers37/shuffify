@@ -26,6 +26,7 @@ from shuffify.services import (
     PlaylistService,
     ShuffleService,
     UserService,
+    LoginHistoryService,
     AuthenticationError,
     PlaylistError,
 )
@@ -246,6 +247,28 @@ def callback():
                     f"Scheduled operations may not work."
                 )
 
+        # Record login event (non-blocking)
+        try:
+            db_user = UserService.get_by_spotify_id(
+                user_data["id"]
+            )
+            if db_user:
+                flask_session_id = getattr(
+                    session, "sid", None
+                )
+                LoginHistoryService.record_login(
+                    user_id=db_user.id,
+                    request=request,
+                    session_id=flask_session_id,
+                    login_type="oauth_initial",
+                )
+        except Exception as e:
+            # Login history failure should NOT block login
+            logger.warning(
+                f"Failed to record login history: {e}. "
+                f"Login continues without history tracking."
+            )
+
         session.modified = True
 
         logger.info(
@@ -270,5 +293,26 @@ def callback():
 @main.route("/logout")
 def logout():
     """Clear session and log out."""
+    # Record logout event before clearing session
+    try:
+        user_data = session.get("user_data")
+        if user_data and user_data.get("id"):
+            db_user = UserService.get_by_spotify_id(
+                user_data["id"]
+            )
+            if db_user:
+                flask_session_id = getattr(
+                    session, "sid", None
+                )
+                LoginHistoryService.record_logout(
+                    user_id=db_user.id,
+                    session_id=flask_session_id,
+                )
+    except Exception as e:
+        logger.warning(
+            f"Failed to record logout: {e}. "
+            f"Logout continues."
+        )
+
     session.clear()
     return redirect(url_for("main.index"))

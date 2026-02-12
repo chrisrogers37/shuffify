@@ -83,6 +83,12 @@ class User(db.Model):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    login_history = db.relationship(
+        "LoginHistory",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="LoginHistory.logged_in_at.desc()",
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the User to a dictionary."""
@@ -447,4 +453,66 @@ class JobExecution(db.Model):
             f"<JobExecution {self.id}: "
             f"schedule={self.schedule_id} "
             f"status={self.status}>"
+        )
+
+
+class LoginHistory(db.Model):
+    """
+    Record of a single user login event.
+
+    Created on each OAuth callback. The logged_out_at field is updated
+    when the user explicitly logs out or when the session expires.
+    """
+
+    __tablename__ = "login_history"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    logged_in_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    logged_out_at = db.Column(db.DateTime, nullable=True)
+    ip_address = db.Column(db.String(45), nullable=True)
+    user_agent = db.Column(db.String(512), nullable=True)
+    session_id = db.Column(db.String(255), nullable=True)
+    login_type = db.Column(db.String(20), nullable=False)
+
+    # Relationships
+    user = db.relationship(
+        "User", back_populates="login_history"
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize the LoginHistory to a dictionary."""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "logged_in_at": (
+                self.logged_in_at.isoformat()
+                if self.logged_in_at
+                else None
+            ),
+            "logged_out_at": (
+                self.logged_out_at.isoformat()
+                if self.logged_out_at
+                else None
+            ),
+            "ip_address": self.ip_address,
+            "user_agent": self.user_agent,
+            "session_id": self.session_id,
+            "login_type": self.login_type,
+        }
+
+    def __repr__(self) -> str:
+        return (
+            f"<LoginHistory {self.id}: user={self.user_id} "
+            f"type={self.login_type} "
+            f"at={self.logged_in_at}>"
         )

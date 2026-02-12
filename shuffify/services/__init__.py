@@ -99,6 +99,13 @@ from shuffify.services.job_executor_service import (
     JobExecutionError,
 )
 
+# Login History Service
+from shuffify.services.login_history_service import (
+    LoginHistoryService,
+    LoginHistoryError,
+    LoginHistoryNotFoundError,
+)
+
 __all__ = [
     # Services
     "AuthService",
@@ -149,4 +156,8 @@ __all__ = [
     # Job Executor Service
     "JobExecutorService",
     "JobExecutionError",
+    # Login History Service
+    "LoginHistoryService",
+    "LoginHistoryError",
+    "LoginHistoryNotFoundError",
 ]
