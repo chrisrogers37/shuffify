@@ -57,7 +57,11 @@ def sample_user():
     return {
         'id': 'user123',
         'display_name': 'Test User',
-        'email': 'test@example.com'
+        'email': 'test@example.com',
+        'images': [{'url': 'https://example.com/avatar.jpg'}],
+        'country': 'US',
+        'product': 'premium',
+        'uri': 'spotify:user:user123',
     }
 
 
