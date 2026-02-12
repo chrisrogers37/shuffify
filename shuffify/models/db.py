@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List
 
 from flask_sqlalchemy import SQLAlchemy
+from shuffify.enums import ScheduleType, IntervalValue
 
 logger = logging.getLogger(__name__)
 
@@ -279,10 +280,12 @@ class Schedule(db.Model):
         db.JSON, nullable=True, default=dict
     )
     schedule_type = db.Column(
-        db.String(10), nullable=False, default="interval"
+        db.String(10), nullable=False,
+        default=ScheduleType.INTERVAL,
     )
     schedule_value = db.Column(
-        db.String(100), nullable=False, default="daily"
+        db.String(100), nullable=False,
+        default=IntervalValue.DAILY,
     )
     is_enabled = db.Column(
         db.Boolean, nullable=False, default=True
