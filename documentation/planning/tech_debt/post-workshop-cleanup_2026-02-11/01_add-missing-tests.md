@@ -1,5 +1,8 @@
 # Phase 01: Add Missing Test Coverage
 
+**Status:** 🔧 IN PROGRESS
+**Started:** 2026-02-11
+
 **PR Title:** `test: Add coverage for schedule schemas, scheduler, and algorithm utils`
 **Risk:** Low (tests/ only — no production code changes)
 **Effort:** ~2 hours
@@ -130,7 +133,7 @@ This is a pure function — easy to test in isolation.
 
 ## Item 3: Tests for `shuffle_algorithms/utils.py`
 
-**File to create:** `tests/shuffle_algorithms/test_utils.py`
+**File to create:** `tests/algorithms/test_utils.py`
 
 ### What to test
 
@@ -179,7 +182,7 @@ After implementation:
 
 ```bash
 # Run new tests only
-pytest tests/schemas/test_schedule_requests.py tests/test_scheduler.py tests/shuffle_algorithms/test_utils.py -v
+pytest tests/schemas/test_schedule_requests.py tests/test_scheduler.py tests/algorithms/test_utils.py -v
 
 # Run full suite to confirm no regressions
 pytest tests/ -v
