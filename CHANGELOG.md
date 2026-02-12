@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Login History Tracking** - New `LoginHistory` model records every sign-in event
+  - Captures IP address, user agent, session ID, and login type
+  - `LoginHistoryService` with `record_login()`, `record_logout()`, `get_recent_logins()`, and `get_login_stats()`
+  - Login events recorded automatically during OAuth callback
+  - Logout timestamps recorded during explicit logout
+  - Cascade delete ensures login history is removed when user is deleted
 - **PostgreSQL Support** - Production database support for Neon and Railway
   - Added `psycopg2-binary` (development) and `psycopg2` (production) drivers
   - Automatic `postgres://` to `postgresql://` URL conversion for managed providers
