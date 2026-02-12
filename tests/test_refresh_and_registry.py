@@ -92,8 +92,8 @@ class TestRefreshPlaylistsRoute:
         data = response.get_json()
         assert data["success"] is False
 
-    @patch("shuffify.routes.require_auth")
-    @patch("shuffify.routes.PlaylistService")
+    @patch("shuffify.routes.playlists.require_auth")
+    @patch("shuffify.routes.playlists.PlaylistService")
     def test_refresh_returns_playlists(
         self, mock_playlist_service_cls, mock_auth, client
     ):
@@ -115,8 +115,8 @@ class TestRefreshPlaylistsRoute:
         assert "Playlists refreshed" in data["message"]
         assert len(data["playlists"]) == 2
 
-    @patch("shuffify.routes.require_auth")
-    @patch("shuffify.routes.PlaylistService")
+    @patch("shuffify.routes.playlists.require_auth")
+    @patch("shuffify.routes.playlists.PlaylistService")
     def test_refresh_calls_skip_cache(
         self, mock_playlist_service_cls, mock_auth, client
     ):
@@ -134,8 +134,8 @@ class TestRefreshPlaylistsRoute:
             skip_cache=True
         )
 
-    @patch("shuffify.routes.require_auth")
-    @patch("shuffify.routes.PlaylistService")
+    @patch("shuffify.routes.playlists.require_auth")
+    @patch("shuffify.routes.playlists.PlaylistService")
     def test_refresh_handles_error(
         self, mock_playlist_service_cls, mock_auth, client
     ):

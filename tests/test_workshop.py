@@ -56,9 +56,9 @@ class TestWorkshopPage:
         response = client.get("/workshop/playlist123")
         assert response.status_code in (302, 200)
 
-    @patch("shuffify.routes.AuthService")
-    @patch("shuffify.routes.PlaylistService")
-    @patch("shuffify.routes.ShuffleService")
+    @patch("shuffify.routes.workshop.AuthService")
+    @patch("shuffify.routes.workshop.PlaylistService")
+    @patch("shuffify.routes.workshop.ShuffleService")
     def test_workshop_renders_with_valid_playlist(
         self,
         mock_shuffle_svc,
@@ -100,8 +100,8 @@ class TestWorkshopPage:
 class TestWorkshopPreviewShuffle:
     """Tests for POST /workshop/<playlist_id>/preview-shuffle."""
 
-    @patch("shuffify.routes.AuthService")
-    @patch("shuffify.routes.ShuffleService")
+    @patch("shuffify.routes.workshop.AuthService")
+    @patch("shuffify.routes.workshop.ShuffleService")
     def test_preview_shuffle_returns_shuffled_uris(
         self,
         mock_shuffle_svc,
@@ -147,7 +147,7 @@ class TestWorkshopPreviewShuffle:
         )
         assert response.status_code == 401
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.routes.workshop.AuthService")
     def test_preview_shuffle_requires_json_body(
         self, mock_auth_svc, authenticated_client
     ):
@@ -171,10 +171,10 @@ class TestWorkshopPreviewShuffle:
 class TestWorkshopCommit:
     """Tests for POST /workshop/<playlist_id>/commit."""
 
-    @patch("shuffify.routes.AuthService")
-    @patch("shuffify.routes.PlaylistService")
-    @patch("shuffify.routes.ShuffleService")
-    @patch("shuffify.routes.StateService")
+    @patch("shuffify.routes.workshop.AuthService")
+    @patch("shuffify.routes.workshop.PlaylistService")
+    @patch("shuffify.routes.workshop.ShuffleService")
+    @patch("shuffify.routes.workshop.StateService")
     def test_commit_saves_to_spotify(
         self,
         mock_state_svc,
@@ -216,10 +216,10 @@ class TestWorkshopCommit:
             "playlist123", new_uris
         )
 
-    @patch("shuffify.routes.AuthService")
-    @patch("shuffify.routes.PlaylistService")
-    @patch("shuffify.routes.ShuffleService")
-    @patch("shuffify.routes.StateService")
+    @patch("shuffify.routes.workshop.AuthService")
+    @patch("shuffify.routes.workshop.PlaylistService")
+    @patch("shuffify.routes.workshop.ShuffleService")
+    @patch("shuffify.routes.workshop.StateService")
     def test_commit_unchanged_order_returns_no_op(
         self,
         mock_state_svc,
@@ -263,7 +263,7 @@ class TestWorkshopCommit:
         )
         assert response.status_code == 401
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.routes.workshop.AuthService")
     def test_commit_validates_uri_format(
         self, mock_auth_svc, authenticated_client
     ):
