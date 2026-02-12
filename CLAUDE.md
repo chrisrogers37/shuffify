@@ -183,7 +183,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements/dev.txt
 
 # Configure environment
-cp .env .env  # Create .env file manually (no .env.example provided)
+cp .env.example .env
 # Add your Spotify API credentials to .env
 # Get them from: https://developer.spotify.com/dashboard
 

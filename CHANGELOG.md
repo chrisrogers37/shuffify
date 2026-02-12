@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Routes Split into Modules** - Split monolithic `routes.py` (1509 lines) into `routes/` package
   - 6 feature modules: core, playlists, shuffle, workshop, upstream_sources, schedules
   - Single Blueprint preserved — zero template changes needed
+- **Dependency Updates** - Updated pinned dependencies to latest within-major versions
+  - base: spotipy 2.25.1→2.25.2, python-dotenv 1.1.1→1.2.1
+  - dev: pytest 7.4.0→7.4.4, pytest-mock 3.11.1→3.15.1, isort 5.12.0→5.13.2, mypy 1.5.1→1.19.1, bandit 1.7.5→1.9.3, ipython 8.14.0→8.38.0
+  - prod: sentry-sdk 1.29.2→1.45.1
 
 ### Added
 - **Test Coverage for Untested Modules** - 80 new tests for 3 previously untested modules
@@ -18,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `scheduler.py`: 27 tests covering schedule parsing, init, job management, events
   - `shuffle_algorithms/utils.py`: 23 tests covering utility functions
   - Total test count: 690 → 770
+- **Environment Example File** - Added `.env.example` with all required/optional configuration variables
 - **Schedule Enums** - Extracted hardcoded string literals to `StrEnum` classes
   - `JobType`, `ScheduleType`, `IntervalValue` in `shuffify/enums.py`
   - Single source of truth across schemas, models, services, and scheduler
