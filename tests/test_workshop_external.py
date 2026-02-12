@@ -53,8 +53,8 @@ class TestLoadExternalPlaylistByUrl:
     """Tests for POST /workshop/load-external-playlist with URL."""
 
     @patch("shuffify.routes.AuthService")
-    @patch("shuffify.routes.PlaylistService")
-    @patch("shuffify.routes.parse_spotify_playlist_url")
+    @patch("shuffify.routes.workshop.PlaylistService")
+    @patch("shuffify.routes.workshop.parse_spotify_playlist_url")
     def test_load_by_full_url(
         self,
         mock_parse_url,
@@ -91,7 +91,7 @@ class TestLoadExternalPlaylistByUrl:
         assert len(data["tracks"]) == 5
 
     @patch("shuffify.routes.AuthService")
-    @patch("shuffify.routes.parse_spotify_playlist_url")
+    @patch("shuffify.routes.workshop.parse_spotify_playlist_url")
     def test_load_by_invalid_url_returns_400(
         self, mock_parse_url, mock_auth_svc, authenticated_client
     ):
@@ -113,8 +113,8 @@ class TestLoadExternalPlaylistByUrl:
         assert "Could not parse" in data["message"]
 
     @patch("shuffify.routes.AuthService")
-    @patch("shuffify.routes.PlaylistService")
-    @patch("shuffify.routes.parse_spotify_playlist_url")
+    @patch("shuffify.routes.workshop.PlaylistService")
+    @patch("shuffify.routes.workshop.parse_spotify_playlist_url")
     def test_load_private_playlist_returns_404(
         self,
         mock_parse_url,

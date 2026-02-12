@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Routes Split into Modules** - Split monolithic `routes.py` (1509 lines) into `routes/` package
+  - 6 feature modules: core, playlists, shuffle, workshop, upstream_sources, schedules
+  - Single Blueprint preserved — zero template changes needed
+
 ### Added
 - **Test Coverage for Untested Modules** - 80 new tests for 3 previously untested modules
   - `schedule_requests.py`: 30 tests covering create/update validation, edge cases
