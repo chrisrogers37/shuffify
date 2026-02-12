@@ -41,6 +41,7 @@ env/
 instance/
 .webassets-cache
 .flask_session/
+*.db
 
 # Logs
 *.log

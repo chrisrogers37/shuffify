@@ -1,8 +1,9 @@
 """
 SQLAlchemy database models for Shuffify.
 
-Defines the User, WorkshopSession, and UpstreamSource models
-for persistent storage in SQLite.
+Defines the User, WorkshopSession, UpstreamSource, Schedule, and
+JobExecution models for persistent storage. Supports PostgreSQL
+(production) and SQLite (development/testing).
 """
 
 import json

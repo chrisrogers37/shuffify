@@ -99,12 +99,20 @@ def privacy():
 @main.route("/health")
 def health():
     """Health check endpoint for Docker and monitoring."""
+    from shuffify import is_db_available
+
+    db_healthy = is_db_available()
+    overall_status = "healthy" if db_healthy else "degraded"
+
     return (
         jsonify({
-            "status": "healthy",
+            "status": overall_status,
             "timestamp": datetime.now(
                 timezone.utc
             ).isoformat(),
+            "checks": {
+                "database": "ok" if db_healthy else "unavailable",
+            },
         }),
         200,
     )

@@ -5,9 +5,29 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
       - .:/app
       - flask_session:/app/.flask_session
 
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: shuffify_dev
+      POSTGRES_USER: shuffify
+      POSTGRES_PASSWORD: shuffify_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shuffify -d shuffify_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
-  flask_session: 
+  flask_session:
+  pgdata:
