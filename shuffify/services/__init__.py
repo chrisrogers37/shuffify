@@ -61,6 +61,7 @@ from shuffify.services.user_service import (
     UserService,
     UserServiceError,
     UserNotFoundError,
+    UpsertResult,
 )
 
 # Workshop Session Service
@@ -127,6 +128,7 @@ __all__ = [
     "UserService",
     "UserServiceError",
     "UserNotFoundError",
+    "UpsertResult",
     # Workshop Session Service
     "WorkshopSessionService",
     "WorkshopSessionError",

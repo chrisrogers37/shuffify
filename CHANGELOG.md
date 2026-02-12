@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `db.create_all()` preserved for test fixtures using in-memory SQLite
 - **Database Health Check** - Enhanced `/health` endpoint reports database connectivity
 - **Docker PostgreSQL** - Added PostgreSQL service to `docker-compose.yml`
+- **User Dimension Table Enhancement** - Enriched User model with login tracking and Spotify profile fields
+  - New fields: `last_login_at`, `login_count`, `is_active`, `country`, `spotify_product`, `spotify_uri`
+  - `upsert_from_spotify()` now returns `UpsertResult` with `is_new` flag for create/update distinction
+  - Login count auto-increments on each OAuth login
+  - `is_new_user` flag stored in Flask session for future onboarding flows
+  - Alembic migration for schema changes
 
 ### Changed
 - **Database Config** - `config.py` uses `_resolve_database_url()` helper for DATABASE_URL resolution
