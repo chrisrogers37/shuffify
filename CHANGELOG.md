@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `scheduler.py`: 27 tests covering schedule parsing, init, job management, events
   - `shuffle_algorithms/utils.py`: 23 tests covering utility functions
   - Total test count: 690 → 770
+- **Schedule Enums** - Extracted hardcoded string literals to `StrEnum` classes
+  - `JobType`, `ScheduleType`, `IntervalValue` in `shuffify/enums.py`
+  - Single source of truth across schemas, models, services, and scheduler
 - **Tech Debt Remediation Plans** - Post-Workshop cleanup planning documentation
   - Master inventory of 8 tech debt items with severity scoring and dependency matrix
   - Phase 01: Missing test coverage for schedule schemas, scheduler, algorithm utils

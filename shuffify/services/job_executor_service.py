@@ -23,6 +23,7 @@ from shuffify.spotify.exceptions import (
     SpotifyAPIError,
     SpotifyNotFoundError,
 )
+from shuffify.enums import JobType
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 
 logger = logging.getLogger(__name__)
@@ -264,15 +265,15 @@ class JobExecutorService:
         schedule: Schedule, api: SpotifyAPI
     ) -> dict:
         """Execute the appropriate operation based on job type."""
-        if schedule.job_type == "raid":
+        if schedule.job_type == JobType.RAID:
             return JobExecutorService._execute_raid(
                 schedule, api
             )
-        elif schedule.job_type == "shuffle":
+        elif schedule.job_type == JobType.SHUFFLE:
             return JobExecutorService._execute_shuffle(
                 schedule, api
             )
-        elif schedule.job_type == "raid_and_shuffle":
+        elif schedule.job_type == JobType.RAID_AND_SHUFFLE:
             result = JobExecutorService._execute_raid(
                 schedule, api
             )
