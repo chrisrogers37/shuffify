@@ -62,7 +62,7 @@ class TestApiUserPlaylists:
         assert data["success"] is False
 
     @patch("shuffify.routes.AuthService")
-    @patch("shuffify.routes.PlaylistService")
+    @patch("shuffify.routes.playlists.PlaylistService")
     def test_returns_playlist_list(
         self, mock_playlist_svc, mock_auth_svc, authenticated_client
     ):
@@ -94,7 +94,7 @@ class TestApiUserPlaylists:
         assert no_art["image_url"] is None
 
     @patch("shuffify.routes.AuthService")
-    @patch("shuffify.routes.PlaylistService")
+    @patch("shuffify.routes.playlists.PlaylistService")
     def test_returns_correct_track_count(
         self, mock_playlist_svc, mock_auth_svc, authenticated_client
     ):
@@ -115,7 +115,7 @@ class TestApiUserPlaylists:
         assert source["track_count"] == 10
 
     @patch("shuffify.routes.AuthService")
-    @patch("shuffify.routes.PlaylistService")
+    @patch("shuffify.routes.playlists.PlaylistService")
     def test_handles_empty_playlist_list(
         self, mock_playlist_svc, mock_auth_svc, authenticated_client
     ):
@@ -133,7 +133,7 @@ class TestApiUserPlaylists:
         assert data["playlists"] == []
 
     @patch("shuffify.routes.AuthService")
-    @patch("shuffify.routes.PlaylistService")
+    @patch("shuffify.routes.playlists.PlaylistService")
     def test_handles_service_error(
         self, mock_playlist_svc, mock_auth_svc, authenticated_client
     ):
@@ -167,7 +167,7 @@ class TestSourcePlaylistLoading:
     """
 
     @patch("shuffify.routes.AuthService")
-    @patch("shuffify.routes.PlaylistService")
+    @patch("shuffify.routes.playlists.PlaylistService")
     def test_playlist_endpoint_returns_tracks_with_required_fields(
         self, mock_playlist_svc, mock_auth_svc, authenticated_client
     ):
