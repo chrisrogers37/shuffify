@@ -21,7 +21,8 @@ documentation/
     ├── 01_architecture_evaluation.md
     ├── 02_modularity_assessment.md
     ├── separation_of_concerns_evaluation.md
-    └── tech_debt_q1-2026_2026-02-10/  # Completed tech debt session
+    ├── tech_debt_q1-2026_2026-02-10/  # Completed tech debt session
+    └── post-workshop-cleanup_2026-02-11/  # Post-workshop tech debt (4 phases)
 ```
 
 ---
@@ -49,6 +50,7 @@ Evaluations and plans that have been fully implemented:
 - **[Modularity Assessment](archive/02_modularity_assessment.md)** - All 4 refactoring phases completed
 - **[Separation of Concerns Evaluation](archive/separation_of_concerns_evaluation.md)** - Service layer extracted, all recommendations done
 - **[Tech Debt Q1 2026](archive/tech_debt_q1-2026_2026-02-10/00_TECH_DEBT.md)** - Completed tech debt remediation session (6 items)
+- **[Post-Workshop Cleanup](archive/post-workshop-cleanup_2026-02-11/00_TECH_DEBT.md)** - Post-workshop tech debt (4 phases: tests, enums, route split, housekeeping)
 
 ---
 
