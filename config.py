@@ -3,6 +3,27 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _resolve_database_url(fallback: str) -> str:
+    """
+    Resolve DATABASE_URL with PostgreSQL compatibility fixes.
+
+    Neon and Railway provide DATABASE_URL with the ``postgres://`` scheme,
+    but SQLAlchemy 2.x requires ``postgresql://``.  This function
+    transparently rewrites the prefix.
+
+    Args:
+        fallback: Default database URL if DATABASE_URL env var is not set.
+
+    Returns:
+        Resolved database URL string.
+    """
+    url = os.getenv('DATABASE_URL', fallback)
+    if url and url.startswith('postgres://'):
+        url = url.replace('postgres://', 'postgresql://', 1)
+    return url
+
+
 def validate_required_env_vars():
     """Validate that all required environment variables are present."""
     required_vars = ['SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET']
@@ -41,9 +62,7 @@ class Config:
     CACHE_AUDIO_FEATURES_TTL = 86400  # 24 hours for audio features (rarely change)
 
     # Database configuration
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        'DATABASE_URL', 'sqlite:///shuffify.db'
-    )
+    SQLALCHEMY_DATABASE_URI = _resolve_database_url('sqlite:///shuffify.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Scheduler configuration
@@ -79,10 +98,20 @@ class ProdConfig(Config):
     # Production Redis settings - require REDIS_URL to be set
     REDIS_URL = os.getenv('REDIS_URL')  # Must be explicitly set in production
 
-    # Production database - use explicit path or override via DATABASE_URL
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        'DATABASE_URL', 'sqlite:///shuffify.db'
-    )
+    # Production database - PostgreSQL via Neon or Railway
+    SQLALCHEMY_DATABASE_URI = _resolve_database_url('sqlite:///shuffify.db')
+
+    # PostgreSQL engine options: connection pooling and SSL for managed providers
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_size': 5,
+        'pool_recycle': 300,
+        'pool_pre_ping': True,
+        'connect_args': (
+            {'sslmode': 'require'}
+            if os.getenv('DATABASE_URL', '').startswith('postgres')
+            else {}
+        ),
+    }
 
 
 class DevConfig(Config):
@@ -96,9 +125,9 @@ class DevConfig(Config):
     # Development Redis settings - fallback to localhost
     REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
 
-    # Development database
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        'DATABASE_URL', 'sqlite:///shuffify_dev.db'
+    # Development database - PostgreSQL if DATABASE_URL is set, else SQLite
+    SQLALCHEMY_DATABASE_URI = _resolve_database_url(
+        'sqlite:///shuffify_dev.db'
     )
 
     SCHEDULER_ENABLED = (
