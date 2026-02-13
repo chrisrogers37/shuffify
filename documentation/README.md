@@ -37,6 +37,10 @@ Active evaluation documents for ongoing development planning:
 - **[Future Features Readiness](evaluation/04_future_features_readiness.md)** - Readiness for planned features (database, automations, notifications, UI)
 - **[Brainstorm Enhancements](evaluation/05_brainstorm_enhancements.md)** - Enhancement ideas and tracking
 
+## Guides
+
+- **[Production Database Setup](production-database-setup.md)** - How to connect PostgreSQL (Neon, Railway, Docker, or any instance) to your Shuffify deployment
+
 ## Planning
 
 Development plans for feature implementation:
