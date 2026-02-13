@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List
 
 from flask_sqlalchemy import SQLAlchemy
-from shuffify.enums import ScheduleType, IntervalValue
+from shuffify.enums import ScheduleType, IntervalValue, SnapshotType
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,8 @@ class User(db.Model):
     Spotify user record.
 
     Created or updated on each OAuth login via the upsert pattern.
-    Links to all user-specific data (workshop sessions, upstream sources).
+    Links to all user-specific data (workshop sessions, upstream sources,
+    playlist snapshots).
     Serves as the user dimension table with login tracking and
     extended Spotify profile fields.
     """
@@ -633,4 +634,113 @@ class LoginHistory(db.Model):
             f"<LoginHistory {self.id}: user={self.user_id} "
             f"type={self.login_type} "
             f"at={self.logged_in_at}>"
+        )
+
+
+class PlaylistSnapshot(db.Model):
+    """
+    Point-in-time snapshot of a playlist's track ordering.
+
+    Captured automatically before mutations (shuffle, raid, commit)
+    or manually by the user. Enables restoring a playlist to any
+    previous state, even across sessions.
+    """
+
+    __tablename__ = "playlist_snapshots"
+
+    id = db.Column(
+        db.Integer, primary_key=True, autoincrement=True
+    )
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    playlist_id = db.Column(
+        db.String(255), nullable=False, index=True
+    )
+    playlist_name = db.Column(
+        db.String(255), nullable=False
+    )
+    track_uris_json = db.Column(db.Text, nullable=False)
+    track_count = db.Column(
+        db.Integer, nullable=False, default=0
+    )
+    snapshot_type = db.Column(
+        db.String(30),
+        nullable=False,
+        default=SnapshotType.MANUAL,
+    )
+    trigger_description = db.Column(
+        db.String(500), nullable=True
+    )
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    # Relationships
+    user = db.relationship(
+        "User",
+        backref=db.backref(
+            "playlist_snapshots", lazy="dynamic"
+        ),
+    )
+
+    # Composite index for efficient lookup: "all snapshots for
+    # this user's playlist, ordered by recency"
+    __table_args__ = (
+        db.Index(
+            "ix_snapshot_user_playlist_created",
+            "user_id",
+            "playlist_id",
+            "created_at",
+        ),
+    )
+
+    @property
+    def track_uris(self) -> List[str]:
+        """Deserialize the stored JSON into a list of URI strings."""
+        if not self.track_uris_json:
+            return []
+        try:
+            return json.loads(self.track_uris_json)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning(
+                f"Failed to decode track_uris_json for "
+                f"PlaylistSnapshot {self.id}"
+            )
+            return []
+
+    @track_uris.setter
+    def track_uris(self, uris: List[str]) -> None:
+        """Serialize a list of URI strings to JSON for storage."""
+        self.track_uris_json = json.dumps(uris)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize the PlaylistSnapshot to a dictionary."""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "playlist_id": self.playlist_id,
+            "playlist_name": self.playlist_name,
+            "track_uris": self.track_uris,
+            "track_count": self.track_count,
+            "snapshot_type": self.snapshot_type,
+            "trigger_description": self.trigger_description,
+            "created_at": (
+                self.created_at.isoformat()
+                if self.created_at
+                else None
+            ),
+        }
+
+    def __repr__(self) -> str:
+        return (
+            f"<PlaylistSnapshot {self.id}: "
+            f"{self.snapshot_type} "
+            f"for playlist {self.playlist_id} "
+            f"({self.track_count} tracks)>"
         )

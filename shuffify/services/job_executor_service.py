@@ -23,8 +23,11 @@ from shuffify.spotify.exceptions import (
     SpotifyAPIError,
     SpotifyNotFoundError,
 )
-from shuffify.enums import JobType
+from shuffify.enums import JobType, SnapshotType
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
+from shuffify.services.playlist_snapshot_service import (
+    PlaylistSnapshotService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -320,6 +323,42 @@ class JobExecutorService:
                 if t.get("uri")
             }
 
+            # --- Auto-snapshot before scheduled raid ---
+            try:
+                pre_raid_uris = [
+                    t.get("uri")
+                    for t in target_tracks
+                    if t.get("uri")
+                ]
+                if (
+                    pre_raid_uris
+                    and PlaylistSnapshotService
+                    .is_auto_snapshot_enabled(
+                        schedule.user_id
+                    )
+                ):
+                    PlaylistSnapshotService.create_snapshot(
+                        user_id=schedule.user_id,
+                        playlist_id=target_id,
+                        playlist_name=(
+                            schedule.target_playlist_name
+                            or target_id
+                        ),
+                        track_uris=pre_raid_uris,
+                        snapshot_type=(
+                            SnapshotType.AUTO_PRE_RAID
+                        ),
+                        trigger_description=(
+                            "Before scheduled raid"
+                        ),
+                    )
+            except Exception as snap_err:
+                logger.warning(
+                    "Auto-snapshot before scheduled "
+                    f"raid failed: {snap_err}"
+                )
+            # --- End auto-snapshot ---
+
             new_uris: List[str] = []
             for source_id in source_ids:
                 try:
@@ -399,6 +438,44 @@ class JobExecutorService:
             raw_tracks = api.get_playlist_tracks(target_id)
             if not raw_tracks:
                 return {"tracks_added": 0, "tracks_total": 0}
+
+            # --- Auto-snapshot before scheduled shuffle ---
+            try:
+                pre_shuffle_uris = [
+                    t["uri"]
+                    for t in raw_tracks
+                    if t.get("uri")
+                ]
+                if (
+                    pre_shuffle_uris
+                    and PlaylistSnapshotService
+                    .is_auto_snapshot_enabled(
+                        schedule.user_id
+                    )
+                ):
+                    PlaylistSnapshotService.create_snapshot(
+                        user_id=schedule.user_id,
+                        playlist_id=target_id,
+                        playlist_name=(
+                            schedule.target_playlist_name
+                            or target_id
+                        ),
+                        track_uris=pre_shuffle_uris,
+                        snapshot_type=(
+                            SnapshotType
+                            .SCHEDULED_PRE_EXECUTION
+                        ),
+                        trigger_description=(
+                            "Before scheduled "
+                            f"{algorithm_name}"
+                        ),
+                    )
+            except Exception as snap_err:
+                logger.warning(
+                    "Auto-snapshot before scheduled "
+                    f"shuffle failed: {snap_err}"
+                )
+            # --- End auto-snapshot ---
 
             tracks = []
             for t in raw_tracks:
