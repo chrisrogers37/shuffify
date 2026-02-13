@@ -28,3 +28,12 @@ class IntervalValue(StrEnum):
     DAILY = "daily"
     EVERY_3D = "every_3d"
     WEEKLY = "weekly"
+
+
+class SnapshotType(StrEnum):
+    """Types of playlist snapshots."""
+    AUTO_PRE_SHUFFLE = "auto_pre_shuffle"
+    AUTO_PRE_RAID = "auto_pre_raid"
+    AUTO_PRE_COMMIT = "auto_pre_commit"
+    MANUAL = "manual"
+    SCHEDULED_PRE_EXECUTION = "scheduled_pre_execution"
