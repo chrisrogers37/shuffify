@@ -106,6 +106,12 @@ from shuffify.services.login_history_service import (
     LoginHistoryNotFoundError,
 )
 
+# User Settings Service
+from shuffify.services.user_settings_service import (
+    UserSettingsService,
+    UserSettingsError,
+)
+
 __all__ = [
     # Services
     "AuthService",
@@ -160,4 +166,7 @@ __all__ = [
     "LoginHistoryService",
     "LoginHistoryError",
     "LoginHistoryNotFoundError",
+    # User Settings Service
+    "UserSettingsService",
+    "UserSettingsError",
 ]

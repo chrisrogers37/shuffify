@@ -125,4 +125,5 @@ from shuffify.routes import (  # noqa: E402, F401
     workshop,
     upstream_sources,
     schedules,
+    settings,
 )
