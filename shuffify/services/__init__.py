@@ -119,6 +119,12 @@ from shuffify.services.playlist_snapshot_service import (
     PlaylistSnapshotNotFoundError,
 )
 
+# Activity Log Service
+from shuffify.services.activity_log_service import (
+    ActivityLogService,
+    ActivityLogError,
+)
+
 __all__ = [
     # Services
     "AuthService",
@@ -180,4 +186,7 @@ __all__ = [
     "PlaylistSnapshotService",
     "PlaylistSnapshotError",
     "PlaylistSnapshotNotFoundError",
+    # Activity Log Service
+    "ActivityLogService",
+    "ActivityLogError",
 ]
