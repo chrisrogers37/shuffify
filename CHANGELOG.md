@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Playlist Snapshots** - Persistent point-in-time capture of playlist track orderings
+  - New `PlaylistSnapshot` database model with automatic retention management
+  - Auto-snapshot before shuffle, workshop commit, and scheduled job execution
+  - Manual snapshot creation via API endpoint
+  - Snapshot restoration with pre-restore auto-snapshot for undo safety
+  - Snapshot listing, viewing, and deletion with ownership checks
+  - `SnapshotType` enum for categorizing snapshot triggers
+  - Respects `UserSettings.auto_snapshot_enabled` and `max_snapshots_per_playlist`
+  - New API endpoints: `GET/POST /playlist/<id>/snapshots`, `GET/DELETE /snapshots/<id>`, `POST /snapshots/<id>/restore`
+  - Alembic migration for `playlist_snapshots` table with composite index
 - **User Settings** - Persistent user preferences with settings page
   - New `UserSettings` model with default algorithm, theme, snapshot, and notification preferences
   - Settings page accessible from dashboard with gear icon
