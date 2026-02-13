@@ -15,6 +15,7 @@ from shuffify.routes import (
     clear_session_and_show_login,
     json_error,
     json_success,
+    get_db_user,
 )
 from shuffify.services import (
     AuthService,
@@ -27,7 +28,9 @@ from shuffify.services import (
     WorkshopSessionLimitError,
     AuthenticationError,
     PlaylistError,
+    PlaylistSnapshotService,
 )
+from shuffify.enums import SnapshotType
 from shuffify import is_db_available
 from shuffify.schemas import (
     parse_shuffle_request,
@@ -156,6 +159,34 @@ def workshop_commit(playlist_id):
     current_uris = [
         track["uri"] for track in playlist.tracks
     ]
+
+    # --- Auto-snapshot before commit ---
+    if is_db_available():
+        db_user = get_db_user()
+        if (
+            db_user
+            and PlaylistSnapshotService
+            .is_auto_snapshot_enabled(db_user.id)
+        ):
+            try:
+                PlaylistSnapshotService.create_snapshot(
+                    user_id=db_user.id,
+                    playlist_id=playlist_id,
+                    playlist_name=playlist.name,
+                    track_uris=current_uris,
+                    snapshot_type=(
+                        SnapshotType.AUTO_PRE_COMMIT
+                    ),
+                    trigger_description=(
+                        "Before workshop commit"
+                    ),
+                )
+            except Exception as e:
+                logger.warning(
+                    "Auto-snapshot before commit "
+                    f"failed: {e}"
+                )
+    # --- End auto-snapshot ---
 
     StateService.ensure_playlist_initialized(
         session, playlist_id, current_uris

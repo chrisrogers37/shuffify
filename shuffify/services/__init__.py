@@ -112,6 +112,13 @@ from shuffify.services.user_settings_service import (
     UserSettingsError,
 )
 
+# Playlist Snapshot Service
+from shuffify.services.playlist_snapshot_service import (
+    PlaylistSnapshotService,
+    PlaylistSnapshotError,
+    PlaylistSnapshotNotFoundError,
+)
+
 __all__ = [
     # Services
     "AuthService",
@@ -169,4 +176,8 @@ __all__ = [
     # User Settings Service
     "UserSettingsService",
     "UserSettingsError",
+    # Playlist Snapshot Service
+    "PlaylistSnapshotService",
+    "PlaylistSnapshotError",
+    "PlaylistSnapshotNotFoundError",
 ]

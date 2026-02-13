@@ -18,6 +18,7 @@ from shuffify.models.db import (
     Schedule,
     JobExecution,
     LoginHistory,
+    PlaylistSnapshot,
 )
 from shuffify.models.playlist import Playlist
 
@@ -30,5 +31,6 @@ __all__ = [
     "Schedule",
     "JobExecution",
     "LoginHistory",
+    "PlaylistSnapshot",
     "Playlist",
 ]
