@@ -23,6 +23,9 @@ from .schedule_requests import (
     ScheduleCreateRequest,
     ScheduleUpdateRequest,
 )
+from .settings_requests import (
+    UserSettingsUpdateRequest,
+)
 
 __all__ = [
     # Exceptions
@@ -43,4 +46,6 @@ __all__ = [
     # Schedule schemas
     "ScheduleCreateRequest",
     "ScheduleUpdateRequest",
+    # Settings schemas
+    "UserSettingsUpdateRequest",
 ]
