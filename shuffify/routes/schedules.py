@@ -41,6 +41,8 @@ from shuffify.services.scheduler_service import (
 from shuffify.services.job_executor_service import (
     JobExecutorService,
 )
+from shuffify.services import ActivityLogService
+from shuffify.enums import ActivityType
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +165,30 @@ def create_schedule():
         f"{schedule.target_playlist_name}"
     )
 
+    # Log activity (non-blocking)
+    try:
+        ActivityLogService.log(
+            user_id=db_user.id,
+            activity_type=ActivityType.SCHEDULE_CREATE,
+            description=(
+                f"Created {schedule.job_type} schedule "
+                f"for '{schedule.target_playlist_name}'"
+            ),
+            playlist_id=schedule.target_playlist_id,
+            playlist_name=(
+                schedule.target_playlist_name
+            ),
+            metadata={
+                "schedule_id": schedule.id,
+                "job_type": schedule.job_type,
+                "schedule_value": (
+                    schedule.schedule_value
+                ),
+            },
+        )
+    except Exception:
+        pass
+
     return json_success(
         "Schedule created successfully.",
         schedule=schedule.to_dict(),
@@ -221,6 +247,28 @@ def update_schedule(schedule_id):
 
     logger.info(f"Updated schedule {schedule_id}")
 
+    # Log activity (non-blocking)
+    try:
+        ActivityLogService.log(
+            user_id=db_user.id,
+            activity_type=ActivityType.SCHEDULE_UPDATE,
+            description=(
+                f"Updated schedule {schedule_id}"
+            ),
+            playlist_id=schedule.target_playlist_id,
+            playlist_name=(
+                schedule.target_playlist_name
+            ),
+            metadata={
+                "schedule_id": schedule_id,
+                "updated_fields": list(
+                    update_fields.keys()
+                ),
+            },
+        )
+    except Exception:
+        pass
+
     return json_success(
         "Schedule updated successfully.",
         schedule=schedule.to_dict(),
@@ -251,6 +299,19 @@ def delete_schedule(schedule_id):
     )
 
     logger.info(f"Deleted schedule {schedule_id}")
+
+    # Log activity (non-blocking)
+    try:
+        ActivityLogService.log(
+            user_id=db_user.id,
+            activity_type=ActivityType.SCHEDULE_DELETE,
+            description=(
+                f"Deleted schedule {schedule_id}"
+            ),
+            metadata={"schedule_id": schedule_id},
+        )
+    except Exception:
+        pass
 
     return json_success("Schedule deleted successfully.")
 
@@ -296,6 +357,27 @@ def toggle_schedule(schedule_id):
     status_text = (
         "enabled" if schedule.is_enabled else "disabled"
     )
+
+    # Log activity (non-blocking)
+    try:
+        ActivityLogService.log(
+            user_id=db_user.id,
+            activity_type=ActivityType.SCHEDULE_TOGGLE,
+            description=(
+                f"Schedule {schedule_id} {status_text}"
+            ),
+            playlist_id=schedule.target_playlist_id,
+            playlist_name=(
+                schedule.target_playlist_name
+            ),
+            metadata={
+                "schedule_id": schedule_id,
+                "is_enabled": schedule.is_enabled,
+            },
+        )
+    except Exception:
+        pass
+
     return json_success(
         f"Schedule {status_text}.",
         schedule=schedule.to_dict(),
@@ -320,6 +402,22 @@ def run_schedule_now(schedule_id):
     result = JobExecutorService.execute_now(
         schedule_id, db_user.id
     )
+
+    # Log activity (non-blocking)
+    try:
+        ActivityLogService.log(
+            user_id=db_user.id,
+            activity_type=ActivityType.SCHEDULE_RUN,
+            description=(
+                f"Manually ran schedule {schedule_id}"
+            ),
+            metadata={
+                "schedule_id": schedule_id,
+                "result": result,
+            },
+        )
+    except Exception:
+        pass
 
     return json_success(
         "Schedule executed successfully.",

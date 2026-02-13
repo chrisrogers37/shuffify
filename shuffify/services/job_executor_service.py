@@ -23,7 +23,7 @@ from shuffify.spotify.exceptions import (
     SpotifyAPIError,
     SpotifyNotFoundError,
 )
-from shuffify.enums import JobType, SnapshotType
+from shuffify.enums import JobType, SnapshotType, ActivityType
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 from shuffify.services.playlist_snapshot_service import (
     PlaylistSnapshotService,
@@ -106,6 +106,44 @@ class JobExecutorService:
             schedule.last_error = None
 
             db.session.commit()
+
+            # Log activity (non-blocking)
+            try:
+                from shuffify.services.activity_log_service import (  # noqa: E501
+                    ActivityLogService,
+                )
+
+                ActivityLogService.log(
+                    user_id=schedule.user_id,
+                    activity_type=(
+                        ActivityType.SCHEDULE_RUN
+                    ),
+                    description=(
+                        f"Scheduled "
+                        f"{schedule.job_type} on "
+                        f"'{schedule.target_playlist_name}'"
+                        f" completed"
+                    ),
+                    playlist_id=(
+                        schedule.target_playlist_id
+                    ),
+                    playlist_name=(
+                        schedule.target_playlist_name
+                    ),
+                    metadata={
+                        "schedule_id": schedule_id,
+                        "job_type": schedule.job_type,
+                        "tracks_added": result.get(
+                            "tracks_added", 0
+                        ),
+                        "tracks_total": result.get(
+                            "tracks_total", 0
+                        ),
+                        "triggered_by": "scheduler",
+                    },
+                )
+            except Exception:
+                pass
 
             logger.info(
                 f"Schedule {schedule_id} executed "

@@ -2,8 +2,8 @@
 SQLAlchemy database models for Shuffify.
 
 Defines the User, UserSettings, WorkshopSession, UpstreamSource,
-Schedule, and JobExecution models for persistent storage. Supports PostgreSQL
-(production) and SQLite (development/testing).
+Schedule, JobExecution, and ActivityLog models for persistent storage.
+Supports PostgreSQL (production) and SQLite (development/testing).
 """
 
 import json
@@ -743,4 +743,89 @@ class PlaylistSnapshot(db.Model):
             f"{self.snapshot_type} "
             f"for playlist {self.playlist_id} "
             f"({self.track_count} tracks)>"
+        )
+
+
+class ActivityLog(db.Model):
+    """
+    Unified activity log for tracking all user actions.
+
+    Every significant user action (shuffle, workshop commit, schedule
+    change, etc.) is recorded here for audit and dashboard display.
+    Logging is non-blocking: failures must never prevent the primary
+    operation from succeeding.
+    """
+
+    __tablename__ = "activity_log"
+
+    id = db.Column(
+        db.Integer, primary_key=True, autoincrement=True
+    )
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    activity_type = db.Column(
+        db.String(50), nullable=False, index=True
+    )
+    description = db.Column(
+        db.String(500), nullable=False
+    )
+    playlist_id = db.Column(
+        db.String(255), nullable=True
+    )
+    playlist_name = db.Column(
+        db.String(255), nullable=True
+    )
+    metadata_json = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+
+    # Relationships
+    user = db.relationship(
+        "User",
+        backref=db.backref(
+            "activities",
+            lazy="dynamic",
+            cascade="all, delete-orphan",
+        ),
+    )
+
+    # Composite index for efficient recent activity queries
+    __table_args__ = (
+        db.Index(
+            "ix_activity_user_created",
+            "user_id",
+            "created_at",
+        ),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize the ActivityLog to a dictionary."""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "activity_type": self.activity_type,
+            "description": self.description,
+            "playlist_id": self.playlist_id,
+            "playlist_name": self.playlist_name,
+            "metadata": self.metadata_json,
+            "created_at": (
+                self.created_at.isoformat()
+                if self.created_at
+                else None
+            ),
+        }
+
+    def __repr__(self) -> str:
+        return (
+            f"<ActivityLog {self.id}: "
+            f"{self.activity_type} "
+            f"by user {self.user_id}>"
         )
