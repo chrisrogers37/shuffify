@@ -1,8 +1,8 @@
 """
 SQLAlchemy database models for Shuffify.
 
-Defines the User, WorkshopSession, UpstreamSource, Schedule, and
-JobExecution models for persistent storage. Supports PostgreSQL
+Defines the User, UserSettings, WorkshopSession, UpstreamSource,
+Schedule, and JobExecution models for persistent storage. Supports PostgreSQL
 (production) and SQLite (development/testing).
 """
 
@@ -89,6 +89,12 @@ class User(db.Model):
         cascade="all, delete-orphan",
         order_by="LoginHistory.logged_in_at.desc()",
     )
+    settings = db.relationship(
+        "UserSettings",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the User to a dictionary."""
@@ -122,6 +128,118 @@ class User(db.Model):
 
     def __repr__(self) -> str:
         return f"<User {self.spotify_id} ({self.display_name})>"
+
+
+class UserSettings(db.Model):
+    """
+    User preferences and configuration.
+
+    One-to-one relationship with User. Created automatically on
+    first login via UserService.upsert_from_spotify().
+    """
+
+    __tablename__ = "user_settings"
+
+    id = db.Column(
+        db.Integer, primary_key=True, autoincrement=True
+    )
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+
+    # Shuffle defaults
+    default_algorithm = db.Column(
+        db.String(64), nullable=True
+    )
+    default_algorithm_params = db.Column(
+        db.JSON, nullable=True
+    )
+
+    # UI preferences
+    theme = db.Column(
+        db.String(10), nullable=False, default="system"
+    )
+
+    # Feature toggles
+    notifications_enabled = db.Column(
+        db.Boolean, nullable=False, default=False
+    )
+    auto_snapshot_enabled = db.Column(
+        db.Boolean, nullable=False, default=True
+    )
+    max_snapshots_per_playlist = db.Column(
+        db.Integer, nullable=False, default=10
+    )
+
+    # Dashboard preferences
+    dashboard_show_recent_activity = db.Column(
+        db.Boolean, nullable=False, default=True
+    )
+
+    # Extensible JSON field for future preferences
+    extra = db.Column(db.JSON, nullable=True)
+
+    # Timestamps
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # Relationships
+    user = db.relationship("User", back_populates="settings")
+
+    # Valid theme choices (used by service layer for validation)
+    VALID_THEMES = {"light", "dark", "system"}
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize the UserSettings to a dictionary."""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "default_algorithm": self.default_algorithm,
+            "default_algorithm_params": (
+                self.default_algorithm_params or {}
+            ),
+            "theme": self.theme,
+            "notifications_enabled": self.notifications_enabled,
+            "auto_snapshot_enabled": (
+                self.auto_snapshot_enabled
+            ),
+            "max_snapshots_per_playlist": (
+                self.max_snapshots_per_playlist
+            ),
+            "dashboard_show_recent_activity": (
+                self.dashboard_show_recent_activity
+            ),
+            "extra": self.extra or {},
+            "created_at": (
+                self.created_at.isoformat()
+                if self.created_at
+                else None
+            ),
+            "updated_at": (
+                self.updated_at.isoformat()
+                if self.updated_at
+                else None
+            ),
+        }
+
+    def __repr__(self) -> str:
+        return (
+            f"<UserSettings user_id={self.user_id} "
+            f"theme={self.theme}>"
+        )
 
 
 class WorkshopSession(db.Model):

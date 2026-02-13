@@ -12,6 +12,7 @@ Usage:
 from shuffify.models.db import (
     db,
     User,
+    UserSettings,
     WorkshopSession,
     UpstreamSource,
     Schedule,
@@ -23,6 +24,7 @@ from shuffify.models.playlist import Playlist
 __all__ = [
     "db",
     "User",
+    "UserSettings",
     "WorkshopSession",
     "UpstreamSource",
     "Schedule",

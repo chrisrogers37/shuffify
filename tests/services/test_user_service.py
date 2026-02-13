@@ -343,3 +343,56 @@ class TestUserServiceLookup:
         """Should return None for non-existent ID."""
         user = UserService.get_by_id(99999)
         assert user is None
+
+
+class TestUserServiceSettingsAutoCreate:
+    """Tests for automatic settings creation on new user."""
+
+    def test_new_user_gets_default_settings(
+        self, app_ctx
+    ):
+        """New user should have UserSettings auto-created."""
+        from shuffify.models.db import UserSettings
+
+        user_data = {
+            "id": "auto_settings_user",
+            "display_name": "Auto Settings User",
+            "email": "auto@example.com",
+            "images": [],
+        }
+
+        result = UserService.upsert_from_spotify(user_data)
+
+        settings = UserSettings.query.filter_by(
+            user_id=result.user.id
+        ).first()
+        assert settings is not None
+        assert settings.theme == "system"
+
+    def test_existing_user_keeps_settings(
+        self, app_ctx
+    ):
+        """Existing user re-login should not create duplicate settings."""
+        from shuffify.models.db import UserSettings
+
+        user_data = {
+            "id": "keep_settings_user",
+            "display_name": "Keep User",
+            "images": [],
+        }
+
+        result = UserService.upsert_from_spotify(user_data)
+
+        # Verify settings exist
+        count_before = UserSettings.query.filter_by(
+            user_id=result.user.id
+        ).count()
+        assert count_before == 1
+
+        # Re-login (upsert again)
+        UserService.upsert_from_spotify(user_data)
+
+        count_after = UserSettings.query.filter_by(
+            user_id=result.user.id
+        ).count()
+        assert count_after == 1
