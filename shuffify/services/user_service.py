@@ -135,6 +135,27 @@ class UserService:
                 )
 
             db.session.commit()
+
+            # Auto-create default settings for new users
+            if is_new:
+                try:
+                    from shuffify.services.user_settings_service import (
+                        UserSettingsService,
+                    )
+
+                    UserSettingsService.get_or_create(
+                        user.id
+                    )
+                except Exception as settings_err:
+                    # Settings creation failure should NOT
+                    # block login
+                    logger.warning(
+                        "Failed to create default settings "
+                        "for user %s: %s",
+                        spotify_id,
+                        settings_err,
+                    )
+
             return UpsertResult(user=user, is_new=is_new)
 
         except Exception as e:
