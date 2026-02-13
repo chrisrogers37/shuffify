@@ -125,6 +125,12 @@ from shuffify.services.activity_log_service import (
     ActivityLogError,
 )
 
+# Dashboard Service
+from shuffify.services.dashboard_service import (
+    DashboardService,
+    DashboardError,
+)
+
 __all__ = [
     # Services
     "AuthService",
@@ -189,4 +195,7 @@ __all__ = [
     # Activity Log Service
     "ActivityLogService",
     "ActivityLogError",
+    # Dashboard Service
+    "DashboardService",
+    "DashboardError",
 ]

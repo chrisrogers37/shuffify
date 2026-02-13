@@ -20,6 +20,7 @@ from shuffify.routes import (
     main,
     is_authenticated,
     clear_session_and_show_login,
+    get_db_user,
 )
 from shuffify.services import (
     AuthService,
@@ -27,6 +28,7 @@ from shuffify.services import (
     ShuffleService,
     UserService,
     LoginHistoryService,
+    DashboardService,
     AuthenticationError,
     PlaylistError,
     ActivityLogService,
@@ -63,6 +65,29 @@ def index():
 
             algorithms = ShuffleService.list_algorithms()
 
+            # Fetch personalized dashboard data (non-blocking)
+            dashboard_data = {}
+            try:
+                db_user = get_db_user()
+                if db_user:
+                    dashboard_data = (
+                        DashboardService.get_dashboard_data(
+                            user_id=db_user.id,
+                            last_login_at=getattr(
+                                db_user,
+                                "last_login_at",
+                                None,
+                            ),
+                        )
+                    )
+            except Exception as e:
+                logger.warning(
+                    "Failed to load dashboard data: "
+                    "%s. Rendering without "
+                    "personalization.",
+                    e,
+                )
+
             logger.debug(
                 f"User {user.get('display_name', 'Unknown')} "
                 f"loaded dashboard"
@@ -72,6 +97,7 @@ def index():
                 playlists=playlists,
                 user=user,
                 algorithms=algorithms,
+                dashboard=dashboard_data,
             )
 
         except (AuthenticationError, PlaylistError) as e:

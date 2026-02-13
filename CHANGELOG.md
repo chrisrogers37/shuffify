@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Personalized Dashboard** - Dashboard now shows personalized welcome messaging, quick stats, and recent activity
+  - New `DashboardService` aggregates activity, stats, and schedule data into a single dashboard payload
+  - "Welcome back" messaging distinguishes returning users from first-time visitors
+  - Quick stats cards show total shuffles, active schedules, scheduled runs, and snapshots saved
+  - Collapsible activity feed shows recent actions and "since your last visit" summary
+  - Recent scheduled job execution results displayed in activity section
+  - Onboarding hint for new users with no activity
+  - All dashboard data is non-blocking: failures degrade gracefully to the existing playlist grid
 - **Activity Log** - Unified audit trail for all user actions
   - New `ActivityLog` model with user_id, activity_type, description, playlist context, and JSON metadata
   - New `ActivityLogService` with `log()`, `get_recent()`, `get_activity_since()`, and `get_activity_summary()` methods
