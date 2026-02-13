@@ -15,15 +15,15 @@ documentation/
 │   ├── 04_future_features_readiness.md
 │   └── 05_brainstorm_enhancements.md
 ├── planning/          # Development plans and feature phases
-│   └── phases/
-│       ├── playlist-workshop_2026-02-10/  # Workshop Enhancement Suite (6 phases)
-│       └── user-persistence_2026-02-12/  # User Persistence Suite (7 phases)
+│   └── phases/        # (empty — all completed plans archived)
 └── archive/           # Completed evaluations and legacy documents
     ├── 01_architecture_evaluation.md
     ├── 02_modularity_assessment.md
     ├── separation_of_concerns_evaluation.md
     ├── tech_debt_q1-2026_2026-02-10/  # Completed tech debt session
-    └── post-workshop-cleanup_2026-02-11/  # Post-workshop tech debt (4 phases)
+    ├── post-workshop-cleanup_2026-02-11/  # Post-workshop tech debt (4 phases)
+    ├── playlist-workshop_2026-02-10/  # Workshop Enhancement Suite (6 phases, all complete)
+    └── user-persistence_2026-02-12/  # User Persistence Suite (7 phases, all complete)
 ```
 
 ---
@@ -40,13 +40,16 @@ Active evaluation documents for ongoing development planning:
 ## Guides
 
 - **[Production Database Setup](production-database-setup.md)** - How to connect PostgreSQL (Neon, Railway, Docker, or any instance) to your Shuffify deployment
+- **[Infrastructure Critiques](guides/infrastructure_critiques.md)** - Infrastructure improvement notes and status
+- **[UX Critiques](guides/UX_CRITIQUES.md)** - UX improvement notes for landing page
+- **[Facebook OAuth Troubleshooting](guides/FACEBOOK_OAUTH_TROUBLESHOOTING.md)** - Legacy OAuth troubleshooting guide
 
-## Planning
+## Planning (Archived)
 
-Development plans for feature implementation:
+All development plans have been completed and archived:
 
-- **[Playlist Workshop Enhancement Suite](planning/phases/playlist-workshop_2026-02-10/00_OVERVIEW.md)** - 6-phase plan for workshop features (all phases completed)
-- **[User Persistence Enhancement Suite](planning/phases/user-persistence_2026-02-12/00_OVERVIEW.md)** - 7-phase plan: PostgreSQL, user dimension table, login tracking, settings, snapshots, activity log, dashboard
+- **[Playlist Workshop Enhancement Suite](archive/playlist-workshop_2026-02-10/00_OVERVIEW.md)** - 6-phase plan for workshop features (all phases completed, PRs #43-48)
+- **[User Persistence Enhancement Suite](archive/user-persistence_2026-02-12/00_OVERVIEW.md)** - 7-phase plan: PostgreSQL, user dimension, login tracking, settings, snapshots, activity log, dashboard (all phases completed, PRs #56-62)
 
 ## Archived (Completed)
 
@@ -57,6 +60,8 @@ Evaluations and plans that have been fully implemented:
 - **[Separation of Concerns Evaluation](archive/separation_of_concerns_evaluation.md)** - Service layer extracted, all recommendations done
 - **[Tech Debt Q1 2026](archive/tech_debt_q1-2026_2026-02-10/00_TECH_DEBT.md)** - Completed tech debt remediation session (6 items)
 - **[Post-Workshop Cleanup](archive/post-workshop-cleanup_2026-02-11/00_TECH_DEBT.md)** - Post-workshop tech debt (4 phases: tests, enums, route split, housekeeping)
+- **[Playlist Workshop Plans](archive/playlist-workshop_2026-02-10/00_OVERVIEW.md)** - Workshop feature implementation plans (6 phases)
+- **[User Persistence Plans](archive/user-persistence_2026-02-12/00_OVERVIEW.md)** - User persistence implementation plans (7 phases)
 
 ---
 
@@ -76,9 +81,9 @@ Evaluations and plans that have been fully implemented:
 
 ### Development Guides
 
-- [dev_guides/infrastructure_critiques.md](../dev_guides/infrastructure_critiques.md) - Infrastructure improvement notes
-- [dev_guides/UX_CRITIQUES.md](../dev_guides/UX_CRITIQUES.md) - UX improvement notes
-- [dev_guides/FACEBOOK_OAUTH_TROUBLESHOOTING.md](../dev_guides/FACEBOOK_OAUTH_TROUBLESHOOTING.md) - OAuth troubleshooting
+- [documentation/guides/infrastructure_critiques.md](guides/infrastructure_critiques.md) - Infrastructure improvement notes
+- [documentation/guides/UX_CRITIQUES.md](guides/UX_CRITIQUES.md) - UX improvement notes
+- [documentation/guides/FACEBOOK_OAUTH_TROUBLESHOOTING.md](guides/FACEBOOK_OAUTH_TROUBLESHOOTING.md) - Legacy OAuth troubleshooting
 
 ---
 
@@ -120,4 +125,4 @@ This documentation index should be updated whenever:
 - Documentation is reorganized
 - Documentation is deprecated or archived
 
-Last updated: 2026-02-12
+Last updated: 2026-02-13
