@@ -62,6 +62,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `is_new_user` flag stored in Flask session for future onboarding flows
   - Alembic migration for schema changes
 
+### Fixed
+- **Dockerfile Python Version** - Upgraded base image from `python:3.10-slim` to `python:3.12-slim`
+  - Fixes `ImportError: cannot import name 'StrEnum' from 'enum'` crash on startup (StrEnum requires Python 3.11+)
+
+### Documentation
+- **Production Database Setup Guide** - New guide at `documentation/production-database-setup.md`
+  - Setup instructions for Neon, Railway, Docker Compose, and generic PostgreSQL
+  - Required environment variables, verification steps, migration details, and troubleshooting
+
 ### Changed
 - **Database Config** - `config.py` uses `_resolve_database_url()` helper for DATABASE_URL resolution
 - **App Factory** - Uses Alembic `upgrade()` instead of `db.create_all()` for non-test environments
