@@ -29,8 +29,10 @@ from shuffify.services import (
     AuthenticationError,
     PlaylistError,
     PlaylistSnapshotService,
+    ActivityLogService,
+    UserService,
 )
-from shuffify.enums import SnapshotType
+from shuffify.enums import SnapshotType, ActivityType
 from shuffify import is_db_available
 from shuffify.schemas import (
     parse_shuffle_request,
@@ -211,6 +213,35 @@ def workshop_commit(playlist_id):
         f"Workshop commit for playlist {playlist_id}: "
         f"{len(commit_request.track_uris)} tracks saved"
     )
+
+    # Log activity (non-blocking)
+    try:
+        user_data = session.get("user_data", {})
+        spotify_id = user_data.get("id")
+        if spotify_id:
+            db_user = UserService.get_by_spotify_id(
+                spotify_id
+            )
+            if db_user:
+                ActivityLogService.log(
+                    user_id=db_user.id,
+                    activity_type=(
+                        ActivityType.WORKSHOP_COMMIT
+                    ),
+                    description=(
+                        f"Committed workshop changes "
+                        f"to '{playlist.name}'"
+                    ),
+                    playlist_id=playlist_id,
+                    playlist_name=playlist.name,
+                    metadata={
+                        "track_count": len(
+                            commit_request.track_uris
+                        ),
+                    },
+                )
+    except Exception:
+        pass
 
     return json_success(
         "Playlist saved to Spotify!",
@@ -534,6 +565,32 @@ def save_workshop_session(playlist_id):
             f"User {spotify_id} saved workshop session "
             f"'{session_name}' for playlist {playlist_id}"
         )
+
+        # Log activity (non-blocking)
+        try:
+            db_user = UserService.get_by_spotify_id(
+                spotify_id
+            )
+            if db_user:
+                ActivityLogService.log(
+                    user_id=db_user.id,
+                    activity_type=(
+                        ActivityType
+                        .WORKSHOP_SESSION_SAVE
+                    ),
+                    description=(
+                        f"Saved workshop session "
+                        f"'{session_name}'"
+                    ),
+                    playlist_id=playlist_id,
+                    metadata={
+                        "session_name": session_name,
+                        "track_count": len(track_uris),
+                    },
+                )
+        except Exception:
+            pass
+
         return json_success(
             f"Session '{session_name}' saved.",
             session=ws.to_dict(),
@@ -666,6 +723,27 @@ def delete_workshop_session(session_id):
         WorkshopSessionService.delete_session(
             session_id, spotify_id
         )
+
+        # Log activity (non-blocking)
+        try:
+            db_user = UserService.get_by_spotify_id(
+                spotify_id
+            )
+            if db_user:
+                ActivityLogService.log(
+                    user_id=db_user.id,
+                    activity_type=(
+                        ActivityType
+                        .WORKSHOP_SESSION_DELETE
+                    ),
+                    description=(
+                        f"Deleted workshop session "
+                        f"{session_id}"
+                    ),
+                )
+        except Exception:
+            pass
+
         return json_success("Session deleted.")
     except WorkshopSessionNotFoundError:
         return json_error("Saved session not found.", 404)

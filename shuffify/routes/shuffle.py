@@ -19,8 +19,9 @@ from shuffify.services import (
     StateService,
     PlaylistUpdateError,
     PlaylistSnapshotService,
+    ActivityLogService,
 )
-from shuffify.enums import SnapshotType
+from shuffify.enums import SnapshotType, ActivityType
 from shuffify import is_db_available
 from shuffify.schemas import parse_shuffle_request
 from flask import request
@@ -130,6 +131,29 @@ def shuffle(playlist_id):
         f"Shuffled playlist {playlist_id} with "
         f"{shuffle_request.algorithm}"
     )
+
+    # Log activity (non-blocking)
+    try:
+        db_user = get_db_user()
+        if db_user:
+            ActivityLogService.log(
+                user_id=db_user.id,
+                activity_type=ActivityType.SHUFFLE,
+                description=(
+                    f"Shuffled '{playlist.name}' "
+                    f"using {algorithm.name}"
+                ),
+                playlist_id=playlist_id,
+                playlist_name=playlist.name,
+                metadata={
+                    "algorithm": (
+                        shuffle_request.algorithm
+                    ),
+                    "track_count": len(shuffled_uris),
+                },
+            )
+    except Exception:
+        pass  # Activity logging must never break shuffle
 
     return json_success(
         f"Playlist shuffled with {algorithm.name}.",
