@@ -39,7 +39,7 @@ These documents have been moved to [`documentation/archive/`](../archive/):
 - ArtistSpacingShuffle, AlbumSequenceShuffle (added Feb 2026)
 - TempoGradientShuffle (hidden — requires deprecated Spotify Audio Features API)
 
-**Services:** 10 extracted service classes:
+**Services:** 15 extracted service classes:
 - `AuthService` — OAuth flow and token management
 - `PlaylistService` — Playlist CRUD and validation
 - `ShuffleService` — Algorithm orchestration and execution
@@ -47,19 +47,25 @@ These documents have been moved to [`documentation/archive/`](../archive/):
 - `TokenService` — Fernet encryption/decryption for stored refresh tokens
 - `SchedulerService` — Schedule CRUD operations with APScheduler
 - `JobExecutorService` — Background job execution (shuffle/raid)
-- `UserService` — User CRUD with `get_or_create_from_spotify()`
+- `UserService` — User CRUD with `upsert_from_spotify()`
 - `WorkshopSessionService` — Playlist Workshop session management
 - `UpstreamSourceService` — External playlist source management for raiding
+- `ActivityLogService` — Unified audit trail for all user actions
+- `DashboardService` — Personalized dashboard aggregation
+- `LoginHistoryService` — Sign-in event recording and querying
+- `PlaylistSnapshotService` — Point-in-time playlist capture and restore
+- `UserSettingsService` — User preference CRUD
 
 **Infrastructure:**
 - Redis-based sessions (primary) with filesystem fallback
 - Redis-based Spotify API response caching with configurable TTLs
-- SQLAlchemy database (User, Schedule, JobExecution models)
+- SQLAlchemy database (9 models: User, UserSettings, WorkshopSession, UpstreamSource, Schedule, JobExecution, LoginHistory, PlaylistSnapshot, ActivityLog)
+- PostgreSQL (production via Neon) with Alembic migrations
 - APScheduler for background job execution
 - Fernet symmetric encryption for stored refresh tokens
-- Pydantic v2 request validation schemas
+- Pydantic v2 request validation schemas (4 modules)
 - Retry logic with exponential backoff in Spotify API calls
-- 690 tests across algorithms, services, schemas, models, and Spotify modules
+- 953 tests across algorithms, services, schemas, models, and Spotify modules
 
 **Spotify Module:** Modular architecture with dependency injection:
 - `SpotifyCredentials` — DI for OAuth credentials
@@ -70,30 +76,32 @@ These documents have been moved to [`documentation/archive/`](../archive/):
 - Custom exception hierarchy (`SpotifyError` base → Auth, Token, API, RateLimit, NotFound)
 
 ### Resolved Gaps (previously critical)
-- ~~No service layer~~ → 10 services extracted (Jan-Feb 2026)
+- ~~No service layer~~ → 15 services extracted (Jan-Feb 2026)
 - ~~No validation framework~~ → Pydantic v2 schemas in `shuffify/schemas/`
 - ~~Token refresh bug~~ → Fixed in SpotifyAuthManager
 - ~~No rate limiting~~ → Exponential backoff retry logic in SpotifyAPI
 - ~~No caching~~ → Redis-based caching layer with per-data-type TTLs
-- ~~No database~~ → SQLAlchemy with User, Schedule, JobExecution models (Feb 2026)
+- ~~No database~~ → SQLAlchemy with 9 models + PostgreSQL production (Feb 2026)
 - ~~No background job infrastructure~~ → APScheduler with SchedulerService + JobExecutorService (Feb 2026)
+- ~~No Alembic migrations~~ → Flask-Migrate with Alembic (Feb 2026)
+- ~~No user persistence~~ → Login tracking, settings, snapshots, activity log, dashboard (Feb 2026)
 
 ### Remaining Gaps
 - **No notification system** — Needs external service integrations (Telegram, Twilio, etc.)
 - **No plugin architecture** — Extensibility limited to shuffle algorithms via Registry pattern
 - **No public API** — Internal AJAX only, no versioned REST API
-- **No Alembic migrations** — Schema managed by `db.create_all()` (sufficient for now)
 
 ### Readiness Scores (Updated Feb 2026)
 
 | Feature | Readiness | Status |
 |---------|-----------|--------|
-| Database Persistence | ✅ 10/10 | **COMPLETED** — SQLAlchemy + User/Schedule/JobExecution |
-| User Logins | 5/10 | **PARTIAL** — Spotify-linked User exists, no local auth |
+| Database Persistence | ✅ 10/10 | **COMPLETED** — SQLAlchemy + PostgreSQL, 9 models, Alembic migrations |
+| User Logins | ✅ 9/10 | **COMPLETED** — Spotify-linked User with login tracking, settings, activity log |
 | Spotify Automations | ✅ 10/10 | **COMPLETED** — APScheduler + SchedulerService |
 | Playlist Raiding | ✅ 10/10 | **COMPLETED** — UpstreamSourceService + raid jobs |
+| User Persistence | ✅ 10/10 | **COMPLETED** — Settings, snapshots, activity log, personalized dashboard |
 | Notification System | 2/10 | **PENDING** — Needs external service APIs |
-| Enhanced UI | 7/10 | **PARTIAL** — Refresh button done, WebSocket still needed |
+| Enhanced UI | 8/10 | **PARTIAL** — Settings page, schedules page, workshop, dashboard done; WebSocket still needed |
 | Live Preview | 6/10 | **PENDING** — Preview endpoint needed; caching done |
 
 ## Recommended Reading Order

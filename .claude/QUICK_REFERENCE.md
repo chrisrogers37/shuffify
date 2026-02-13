@@ -17,11 +17,11 @@
 ## Architecture (4-Layer)
 
 ```
-Routes → Services (10) → Business Logic → External APIs
+Routes → Services (15) → Business Logic → External APIs
 ```
 
 **NEVER violate layer boundaries:**
-- Routes call services (auth, playlist, shuffle, state, token, scheduler, job_executor, user, workshop_session, upstream_source)
+- Routes call services (auth, playlist, shuffle, state, token, scheduler, job_executor, user, workshop_session, upstream_source, activity_log, dashboard, login_history, playlist_snapshot, user_settings)
 - Services call business logic (algorithms, spotify client, models)
 - Business logic calls external APIs (Spotify Web API, database)
 - Templates only handle presentation
@@ -33,14 +33,14 @@ Routes → Services (10) → Business Logic → External APIs
 | Path | Purpose |
 |------|---------|
 | `shuffify/` | Main application code |
-| `shuffify/services/` | 10 service modules |
-| `shuffify/schemas/` | Pydantic validation schemas |
+| `shuffify/services/` | 15 service modules |
+| `shuffify/schemas/` | 4 Pydantic validation modules |
 | `shuffify/shuffle_algorithms/` | 7 shuffle algorithms (6 visible, 1 hidden) |
 | `shuffify/spotify/` | Modular Spotify client (credentials, auth, api, cache) |
 | `shuffify/models/` | Data models (playlist.py) + DB models (db.py) |
-| `shuffify/templates/` | Jinja2 templates (5: base, dashboard, index, workshop, schedules) |
+| `shuffify/templates/` | Jinja2 templates (6: base, dashboard, index, workshop, schedules, settings) |
 | `shuffify/static/` | CSS, JS, images |
-| `tests/` | Test suite (690 tests) |
+| `tests/` | Test suite (953 tests) |
 | `documentation/` | All markdown docs |
 | `requirements/` | Dependencies (base, dev, prod) |
 
@@ -66,15 +66,17 @@ Routes → Services (10) → Business Logic → External APIs
 | File | Contains |
 |------|----------|
 | `shuffify/__init__.py` | Flask app factory, Redis/DB/Scheduler init |
-| `shuffify/routes.py` | All HTTP routes |
-| `shuffify/services/` | 10 service layer modules |
+| `shuffify/routes/` | 8 feature-based route modules |
+| `shuffify/services/` | 15 service layer modules |
 | `shuffify/schemas/requests.py` | Pydantic validation schemas |
 | `shuffify/schemas/schedule_requests.py` | Schedule CRUD validation |
+| `shuffify/schemas/settings_requests.py` | Settings CRUD validation |
+| `shuffify/schemas/snapshot_requests.py` | Snapshot CRUD validation |
 | `shuffify/spotify/api.py` | Spotify API with retry logic + caching |
 | `shuffify/spotify/auth.py` | OAuth flow, token management |
 | `shuffify/spotify/client.py` | Facade for backward compat |
 | `shuffify/shuffle_algorithms/registry.py` | Algorithm registration |
-| `shuffify/models/db.py` | SQLAlchemy models (User, Schedule, JobExecution) |
+| `shuffify/models/db.py` | SQLAlchemy models (9 models — User, UserSettings, WorkshopSession, UpstreamSource, Schedule, JobExecution, LoginHistory, PlaylistSnapshot, ActivityLog) |
 | `shuffify/models/playlist.py` | Playlist data model |
 | `shuffify/error_handlers.py` | Global exception handlers |
 | `config.py` | Configuration classes (dev/prod) |
@@ -124,7 +126,7 @@ All in: `shuffify/shuffle_algorithms/`
 ## Testing
 
 ```bash
-# All tests (690 total)
+# All tests (953 total)
 pytest tests/ -v
 
 # Specific test file
@@ -161,14 +163,14 @@ Every PR must update `CHANGELOG.md` under `## [Unreleased]`
 
 ```
 CORRECT:
-routes.py → services/shuffle_service.py → shuffle_algorithms/basic.py
-routes.py → services/playlist_service.py → spotify/api.py → Spotify API
-routes.py → services/auth_service.py → spotify/auth.py
-routes.py → services/scheduler_service.py → models/db.py
+routes/shuffle.py → services/shuffle_service.py → shuffle_algorithms/basic.py
+routes/playlists.py → services/playlist_service.py → spotify/api.py → Spotify API
+routes/core.py → services/auth_service.py → spotify/auth.py
+routes/schedules.py → services/scheduler_service.py → models/db.py
 
 INCORRECT:
-routes.py → Spotify API directly (bypass services and client)
-routes.py → spotify/api.py directly (bypass services)
+routes/ → Spotify API directly (bypass services and client)
+routes/ → spotify/api.py directly (bypass services)
 templates → business logic (should be in services)
 ```
 
@@ -176,9 +178,9 @@ templates → business logic (should be in services)
 
 - **Flask** 3.1.x + **Flask-Session** 0.8.x
 - **Pydantic** v2 for request validation
-- **SQLAlchemy** for database (User, Schedule, JobExecution)
+- **SQLAlchemy** for database (9 models)
 - **APScheduler** for background job execution
 - **spotipy** for Spotify API
-- **690** tests, all passing
+- **953** tests, all passing
 - Retry logic with exponential backoff
 - Fernet encryption for stored tokens
