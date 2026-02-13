@@ -22,14 +22,14 @@ Shuffify is a web application that provides advanced playlist management for Spo
 ```
 ┌─────────────────────────────────────┐
 │  Presentation Layer                 │
-│  • routes.py    - Flask routes     │
+│  • routes/      - Flask routes (8 modules) │
 │  • templates/   - Jinja2 HTML     │
 │  • static/      - CSS, JS          │
 │  • schemas/     - Pydantic schemas │
 └───────────────┬─────────────────────┘
                 │
 ┌───────────────▼─────────────────────┐
-│  Services Layer (10 services)       │
+│  Services Layer (15 services)       │
 │  • auth_service.py    - OAuth flow │
 │  • playlist_service.py - Playlists │
 │  • shuffle_service.py  - Shuffling │
@@ -40,6 +40,11 @@ Shuffify is a web application that provides advanced playlist management for Spo
 │  • user_service.py     - User mgmt│
 │  • workshop_session_service.py     │
 │  • upstream_source_service.py      │
+│  • activity_log_service  - Audit   │
+│  • dashboard_service   - Dashboard │
+│  • login_history_service - Logins  │
+│  • playlist_snapshot_service       │
+│  • user_settings_service - Prefs   │
 └───────────────┬─────────────────────┘
                 │
 ┌───────────────▼─────────────────────┐
@@ -70,7 +75,7 @@ Shuffify is a web application that provides advanced playlist management for Spo
 | **Frontend** | Tailwind CSS, vanilla JavaScript |
 | **API Client** | spotipy (Spotify API wrapper) |
 | **Validation** | Pydantic v2 (request/response validation) |
-| **Database** | SQLAlchemy + SQLite (User, Schedule, JobExecution) |
+| **Database** | SQLAlchemy + PostgreSQL/SQLite (9 models) |
 | **Scheduler** | APScheduler (background job execution) |
 | **Server** | Gunicorn (prod), Flask dev server (local, port 8000) |
 | **Session** | Flask-Session 0.8.x (Redis-based, filesystem fallback) |
@@ -101,13 +106,13 @@ All algorithms inherit from `ShuffleAlgorithm` base class and auto-register via 
 | File | Purpose |
 |------|---------|
 | `shuffify/__init__.py` | Flask app factory, Redis/DB/Scheduler init |
-| `shuffify/routes.py` | All HTTP routes |
-| `shuffify/services/` | 10 service modules |
-| `shuffify/schemas/` | Pydantic validation schemas (requests.py, schedule_requests.py) |
-| `shuffify/spotify/` | Modular Spotify client (credentials, auth, api, cache, client) |
+| `shuffify/routes/` | 8 feature-based route modules (core, playlists, shuffle, workshop, upstream_sources, schedules, settings, snapshots) |
+| `shuffify/services/` | 15 service modules |
+| `shuffify/schemas/` | 4 Pydantic validation modules (requests, schedule_requests, settings_requests, snapshot_requests) |
+| `shuffify/spotify/` | Modular Spotify client (credentials, auth, api, cache, client, exceptions, url_parser) |
 | `shuffify/shuffle_algorithms/registry.py` | Algorithm registration |
 | `shuffify/models/playlist.py` | Playlist data model |
-| `shuffify/models/db.py` | SQLAlchemy models (User, Schedule, JobExecution) |
+| `shuffify/models/db.py` | SQLAlchemy models (User, UserSettings, WorkshopSession, UpstreamSource, Schedule, JobExecution, LoginHistory, PlaylistSnapshot, ActivityLog) |
 | `shuffify/error_handlers.py` | Global exception handlers |
 | `config.py` | Configuration (dev/prod) with Redis/DB/Scheduler settings |
 
@@ -151,21 +156,24 @@ All algorithms inherit from `ShuffleAlgorithm` base class and auto-register via 
 ## Current Status
 
 **Completed:**
-- OAuth 2.0 authentication (Facebook-compatible)
+- OAuth 2.0 authentication (Spotify)
 - 7 shuffle algorithms (6 visible, 1 hidden) with comprehensive tests
 - Multi-level undo system (StateService)
 - Docker containerization with health checks
 - Flask 3.x upgrade (3.1.x)
-- 10 services (auth, playlist, shuffle, state, token, scheduler, job_executor, user, workshop_session, upstream_source)
-- Pydantic validation layer
-- Modular Spotify client (credentials, auth, api, cache)
+- 15 services (auth, playlist, shuffle, state, token, scheduler, job_executor, user, workshop_session, upstream_source, activity_log, dashboard, login_history, playlist_snapshot, user_settings)
+- Pydantic validation layer (4 schema modules)
+- Modular Spotify client (credentials, auth, api, cache, client, exceptions, url_parser)
 - Retry logic with exponential backoff
 - Redis-based sessions and API response caching
-- SQLAlchemy database (User, Schedule, JobExecution models)
+- SQLAlchemy database (9 models — see Key Files)
 - APScheduler for background job execution
 - Fernet token encryption for stored refresh tokens
 - Playlist Workshop (track management, merging, raiding)
-- 690 tests, all passing
+- Route modularization (8 feature-based route modules)
+- PostgreSQL support (production via Neon) with Alembic migrations
+- User persistence (login tracking, settings, snapshots, activity log, dashboard)
+- 953 tests, all passing
 
 **Planned:**
 - Live playlist preview
@@ -178,16 +186,16 @@ All algorithms inherit from `ShuffleAlgorithm` base class and auto-register via 
 ## Common Patterns
 
 **Adding a new route**:
-1. Define in `shuffify/routes.py`
+1. Add to existing module in `shuffify/routes/` or create a new one
 2. Check for `session['access_token']`
 3. Create template in `shuffify/templates/`
 4. Add to navigation if needed
 
 **Adding a new algorithm**:
 1. Create in `shuffify/shuffle_algorithms/`
-2. Use `@register_algorithm` decorator or add to registry dict
+2. Add to `_algorithms` dict in registry.py (no decorator — explicit registration)
 3. Inherit from `ShuffleAlgorithm`
-4. Import in `shuffify/shuffle_algorithms/registry.py`
+4. Add import in `shuffify/shuffle_algorithms/registry.py`
 5. Add tests
 6. Update README.md
 

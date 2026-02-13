@@ -21,14 +21,14 @@
 
 ## Phase Summary
 
-| Phase | Title | PR Title | Impact | Effort | Risk | Est. Days |
-|-------|-------|----------|--------|--------|------|-----------|
-| 01 | Workshop Core | `feat: Add Playlist Workshop with drag-and-drop and shuffle preview` | High | Medium | Low | 3-5 |
-| 02 | Track Management | `feat: Add track search and delete to Workshop` | High | Low-Med | Low | 2-3 |
-| 03 | Playlist Merging | `feat: Add source playlist panel for cross-playlist merging` | High | Medium | Low | 3-4 |
-| 04 | External Raiding | `feat: Add external playlist loading via URL and search` | High | Medium | Med | 3-4 |
-| 05 | User Database | `feat: Add SQLite persistence with user/session/source models` | Medium | High | Med | 4-6 |
-| 06 | Scheduled Ops | `feat: Add APScheduler for automated playlist operations` | Medium | High | High | 5-7 |
+| Phase | Title | PR Title | Impact | Effort | Risk | Est. Days | Status |
+|-------|-------|----------|--------|--------|------|-----------|--------|
+| 01 | Workshop Core | `feat: Add Playlist Workshop with drag-and-drop and shuffle preview` | High | Medium | Low | 3-5 | ✅ COMPLETED (PR #43) |
+| 02 | Track Management | `feat: Add track search and delete to Workshop` | High | Low-Med | Low | 2-3 | ✅ COMPLETED (PR #44) |
+| 03 | Playlist Merging | `feat: Add source playlist panel for cross-playlist merging` | High | Medium | Low | 3-4 | ✅ COMPLETED (PR #45) |
+| 04 | External Raiding | `feat: Add external playlist loading via URL and search` | High | Medium | Med | 3-4 | ✅ COMPLETED (PR #46) |
+| 05 | User Database | `feat: Add SQLite persistence with user/session/source models` | Medium | High | Med | 4-6 | ✅ COMPLETED (PR #47) |
+| 06 | Scheduled Ops | `feat: Add APScheduler for automated playlist operations` | Medium | High | High | 5-7 | ✅ COMPLETED (PR #48) |
 
 **Total estimated effort:** 20-29 engineering days
 

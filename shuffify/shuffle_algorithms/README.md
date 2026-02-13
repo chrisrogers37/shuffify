@@ -254,6 +254,19 @@ The `list_algorithms()` method returns visible algorithms in this order:
 (Tempo Gradient is hidden and not displayed)
 
 
+## Shared Utilities
+
+**Module**: `utils.py`
+
+Common functions used across multiple algorithms:
+
+| Function | Description | Used By |
+|----------|-------------|---------|
+| `extract_uris(tracks)` | Extract track URIs from track dicts, skipping None | Basic, Percentage, Balanced, Stratified |
+| `split_keep_first(uris, keep_first)` | Split URI list into kept (pinned) and shuffleable portions | Basic, Balanced, Stratified |
+| `split_into_sections(items, section_count)` | Divide a list into N roughly equal sections | Balanced, Stratified |
+
+
 ## Adding New Algorithms
 
 To create a new shuffle algorithm:
@@ -297,11 +310,10 @@ To create a new shuffle algorithm:
            return [t['uri'] for t in tracks if t.get('uri')]
    ```
 
-3. Register in `registry.py`:
+3. Register in `registry.py` (no decorator — explicit registration):
    - Add import: `from .my_algorithm import MyAlgorithm`
    - Add to `_algorithms` dict: `"MyAlgorithm": MyAlgorithm`
    - Add to `desired_order` list in `list_algorithms()` for UI positioning
-   - Add `ShuffleRegistry.register(MyAlgorithm)` at the bottom
 
 4. Add tests in `tests/algorithms/test_my_algorithm.py`
 

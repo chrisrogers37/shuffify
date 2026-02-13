@@ -13,15 +13,15 @@ There are **no existing users and no existing database** -- this is a clean slat
 
 ## Phase Summary
 
-| Phase | Document | PR Title | Risk | Effort |
-|-------|----------|----------|------|--------|
-| **0** | [00_persistent-postgresql-database.md](00_persistent-postgresql-database.md) | `feat: Add PostgreSQL support with Alembic migrations` | Medium | 6-8 hrs |
-| **1** | [01_user-dimension-table.md](01_user-dimension-table.md) | `feat: Enrich User model with login tracking and Spotify profile fields` | Low | 2-3 days |
-| **2** | [02_login-session-tracking.md](02_login-session-tracking.md) | `feat: Add LoginHistory model and service for sign-in event tracking` | Low | 3-4 days |
-| **3** | [03_user-settings-preferences.md](03_user-settings-preferences.md) | `feat: Add UserSettings model, service, and settings page` | Low | 8-10 hrs |
-| **4** | [04_playlist-snapshots.md](04_playlist-snapshots.md) | `feat: Add PlaylistSnapshot model with auto/manual snapshot capture` | Medium | 2-3 days |
-| **5** | [05_activity-log.md](05_activity-log.md) | `feat: Add ActivityLog model and service for unified activity tracking` | Low-Medium | 4-6 hrs |
-| **6** | [06_personalized-dashboard.md](06_personalized-dashboard.md) | `feat: Add personalized dashboard with activity feed and stats` | Medium | 1.5-2 days |
+| Phase | Document | PR Title | Risk | Effort | Status |
+|-------|----------|----------|------|--------|--------|
+| **0** | [00_persistent-postgresql-database.md](00_persistent-postgresql-database.md) | `feat: Add PostgreSQL support with Alembic migrations` | Medium | 6-8 hrs | ✅ COMPLETED (PR #56) |
+| **1** | [01_user-dimension-table.md](01_user-dimension-table.md) | `feat: Enrich User model with login tracking and Spotify profile fields` | Low | 2-3 days | ✅ COMPLETED (PR #57) |
+| **2** | [02_login-session-tracking.md](02_login-session-tracking.md) | `feat: Add LoginHistory model and service for sign-in event tracking` | Low | 3-4 days | ✅ COMPLETED (PR #58) |
+| **3** | [03_user-settings-preferences.md](03_user-settings-preferences.md) | `feat: Add UserSettings model, service, and settings page` | Low | 8-10 hrs | ✅ COMPLETED (PR #59) |
+| **4** | [04_playlist-snapshots.md](04_playlist-snapshots.md) | `feat: Add PlaylistSnapshot model with auto/manual snapshot capture` | Medium | 2-3 days | ✅ COMPLETED (PR #60) |
+| **5** | [05_activity-log.md](05_activity-log.md) | `feat: Add ActivityLog model and service for unified activity tracking` | Low-Medium | 4-6 hrs | ✅ COMPLETED (PR #61) |
+| **6** | [06_personalized-dashboard.md](06_personalized-dashboard.md) | `feat: Add personalized dashboard with activity feed and stats` | Medium | 1.5-2 days | ✅ COMPLETED (PR #62) |
 
 ## Dependency Graph
 

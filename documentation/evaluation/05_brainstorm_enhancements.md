@@ -365,7 +365,7 @@ This is a brainstorm document - not all ideas are fully vetted. Ideas are catego
 - Shuffle effectiveness
 
 ### "The Automation" Package
-- Scheduled shuffles
+- ✅ Scheduled shuffles — **COMPLETED** (APScheduler, Feb 2026)
 - Multi-playlist operations
 - New release digest
 - IFTTT integration
