@@ -3,14 +3,14 @@
 {% block content %}
 <div class="min-h-screen bg-gradient-to-br from-spotify-green via-spotify-green/90 to-spotify-dark">
     <div class="absolute inset-0" style="background-image: url('/static/images/hero-pattern.svg'); opacity: 0.15; pointer-events: none;"></div>
-    
-    <!-- User Info -->
+
+    <!-- User Info / Welcome Section -->
     <div class="relative max-w-6xl mx-auto px-4 pt-8">
         <div class="p-6 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20">
             <div class="flex items-center justify-between">
                 <div class="flex items-center">
                     {% if user.images %}
-                        <img src="{{ user.images[0].url }}" alt="{{ user.display_name }}" 
+                        <img src="{{ user.images[0].url }}" alt="{{ user.display_name }}"
                              class="w-16 h-16 rounded-full mr-4 border-2 border-white/20">
                     {% else %}
                         <div class="w-16 h-16 rounded-full bg-white/10 border-2 border-white/20 flex items-center justify-center mr-4">
@@ -18,8 +18,22 @@
                         </div>
                     {% endif %}
                     <div>
-                        <h2 class="text-2xl font-bold text-white">Welcome, {{ user.display_name }}!</h2>
-                        <p class="text-white/80">Select a playlist to shuffle below</p>
+                        {% if dashboard and dashboard.is_returning_user %}
+                            <h2 class="text-2xl font-bold text-white">Welcome back, {{ user.display_name }}!</h2>
+                            {% if dashboard.activity_since_last_login_count > 0 %}
+                                <p class="text-white/80">
+                                    {{ dashboard.activity_since_last_login_count }} thing{{ 's' if dashboard.activity_since_last_login_count != 1 else '' }} happened since your last visit
+                                </p>
+                            {% else %}
+                                <p class="text-white/80">Everything is up to date</p>
+                            {% endif %}
+                        {% elif dashboard %}
+                            <h2 class="text-2xl font-bold text-white">Welcome to Shuffify, {{ user.display_name }}!</h2>
+                            <p class="text-white/80">Select a playlist below to get started</p>
+                        {% else %}
+                            <h2 class="text-2xl font-bold text-white">Welcome, {{ user.display_name }}!</h2>
+                            <p class="text-white/80">Select a playlist to shuffle below</p>
+                        {% endif %}
                     </div>
                 </div>
                 <div class="flex items-center space-x-2">
@@ -66,6 +80,174 @@
         </div>
     </div>
 
+    {% if dashboard %}
+    <!-- Quick Stats Cards -->
+    <div class="relative max-w-6xl mx-auto px-4 pt-6">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <!-- Total Shuffles -->
+            <div class="p-4 rounded-xl backdrop-blur-md bg-white/10 border border-white/20 text-center">
+                <p class="text-3xl font-bold text-white">{{ dashboard.quick_stats.total_shuffles }}</p>
+                <p class="text-white/60 text-sm mt-1">Shuffles</p>
+            </div>
+            <!-- Active Schedules -->
+            <div class="p-4 rounded-xl backdrop-blur-md bg-white/10 border border-white/20 text-center">
+                <p class="text-3xl font-bold text-white">{{ dashboard.quick_stats.active_schedule_count }}</p>
+                <p class="text-white/60 text-sm mt-1">Active Schedules</p>
+            </div>
+            <!-- Scheduled Runs -->
+            <div class="p-4 rounded-xl backdrop-blur-md bg-white/10 border border-white/20 text-center">
+                <p class="text-3xl font-bold text-white">{{ dashboard.quick_stats.total_scheduled_runs }}</p>
+                <p class="text-white/60 text-sm mt-1">Scheduled Runs</p>
+            </div>
+            <!-- Snapshots -->
+            <div class="p-4 rounded-xl backdrop-blur-md bg-white/10 border border-white/20 text-center">
+                <p class="text-3xl font-bold text-white">{{ dashboard.quick_stats.total_snapshots }}</p>
+                <p class="text-white/60 text-sm mt-1">Snapshots Saved</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Since Last Visit / Recent Activity -->
+    {% if dashboard.activity_since_last_login_count > 0 or dashboard.recent_activity %}
+    <div class="relative max-w-6xl mx-auto px-4 pt-6">
+        <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden">
+            <!-- Section Toggle Header -->
+            <button id="activity-toggle-btn"
+                    onclick="toggleActivityFeed()"
+                    class="w-full flex items-center justify-between px-6 py-4 text-white font-bold text-lg hover:bg-white/5 transition duration-150"
+                    aria-expanded="false"
+                    aria-controls="activity-feed-body">
+                <span class="flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg>
+                    {% if dashboard.is_returning_user and dashboard.activity_since_last_login_count > 0 %}
+                        Since Your Last Visit
+                        <span class="ml-2 px-2 py-0.5 rounded-full bg-white/20 text-xs font-semibold">
+                            {{ dashboard.activity_since_last_login_count }}
+                        </span>
+                    {% else %}
+                        Recent Activity
+                    {% endif %}
+                </span>
+                <svg id="activity-chevron" class="w-5 h-5 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+            </button>
+
+            <!-- Activity Feed Body (hidden by default) -->
+            <div id="activity-feed-body" class="hidden border-t border-white/10">
+                {% set activity_list = dashboard.activity_since_last_login if (dashboard.is_returning_user and dashboard.activity_since_last_login) else dashboard.recent_activity %}
+
+                {% if activity_list %}
+                <div class="max-h-64 overflow-y-auto dashboard-scrollbar">
+                    {% for activity in activity_list %}
+                    <div class="flex items-center px-6 py-3 border-b border-white/5 hover:bg-white/5 transition duration-150">
+                        <!-- Activity Icon -->
+                        <div class="w-8 h-8 rounded-full flex items-center justify-center mr-3 flex-shrink-0
+                            {% if activity.activity_type == 'shuffle' %}bg-purple-500/30 text-purple-300
+                            {% elif 'schedule' in activity.activity_type %}bg-blue-500/30 text-blue-300
+                            {% elif 'workshop' in activity.activity_type %}bg-green-500/30 text-green-300
+                            {% elif 'snapshot' in activity.activity_type %}bg-yellow-500/30 text-yellow-300
+                            {% else %}bg-white/10 text-white/60{% endif %}">
+                            {% if activity.activity_type == 'shuffle' %}
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            {% elif 'schedule' in activity.activity_type %}
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            {% elif 'workshop' in activity.activity_type %}
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            {% else %}
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            {% endif %}
+                        </div>
+                        <!-- Activity Details -->
+                        <div class="flex-1 min-w-0">
+                            <p class="text-white text-sm font-medium truncate">
+                                {{ activity.description | default(activity.activity_type | replace('_', ' ') | title) }}
+                            </p>
+                            {% if activity.playlist_name %}
+                            <p class="text-white/50 text-xs truncate">{{ activity.playlist_name }}</p>
+                            {% endif %}
+                        </div>
+                        <!-- Timestamp -->
+                        <span class="text-white/40 text-xs flex-shrink-0 ml-2">
+                            {{ activity.created_at | default('') }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="px-6 py-8 text-center text-white/50">
+                    <p>No recent activity to show.</p>
+                </div>
+                {% endif %}
+
+                <!-- Recent Job Executions (if any) -->
+                {% if dashboard.recent_job_executions %}
+                <div class="border-t border-white/10 px-6 py-3">
+                    <p class="text-white/60 text-xs uppercase tracking-wide font-semibold mb-2">Recent Scheduled Jobs</p>
+                    {% for exec in dashboard.recent_job_executions %}
+                    <div class="flex items-center justify-between py-1.5 text-sm">
+                        <div class="flex items-center min-w-0">
+                            <span class="px-1.5 py-0.5 rounded text-xs font-bold uppercase mr-2
+                                {% if exec.job_type == 'raid' %}bg-blue-500/60
+                                {% elif exec.job_type == 'shuffle' %}bg-purple-500/60
+                                {% else %}bg-orange-500/60{% endif %} text-white">
+                                {{ exec.job_type | replace('_', ' ') }}
+                            </span>
+                            <span class="text-white/80 truncate">{{ exec.schedule_name }}</span>
+                        </div>
+                        <div class="flex items-center flex-shrink-0 ml-2">
+                            {% if exec.status == 'success' %}
+                            <span class="text-green-400 text-xs">
+                                {% if exec.tracks_added and exec.tracks_added > 0 %}+{{ exec.tracks_added }} tracks{% else %}Done{% endif %}
+                            </span>
+                            {% elif exec.status == 'failed' %}
+                            <span class="text-red-400 text-xs">Failed</span>
+                            {% else %}
+                            <span class="text-white/40 text-xs">{{ exec.status }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- No Activity: Onboarding Hint for New Users -->
+    {% if not dashboard.is_returning_user and not dashboard.recent_activity %}
+    <div class="relative max-w-6xl mx-auto px-4 pt-6">
+        <div class="p-5 rounded-2xl backdrop-blur-md bg-white/10 border border-white/20">
+            <div class="flex items-start">
+                <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mr-4 flex-shrink-0">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-white font-bold text-lg">Get Started</h3>
+                    <p class="text-white/70 text-sm mt-1">
+                        Click on any playlist below to shuffle it, or open the Workshop for advanced track management.
+                        Set up <a href="{{ url_for('main.schedules') }}" class="text-white underline font-medium">scheduled operations</a> to keep your playlists fresh automatically.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
+
     <!-- Playlists Grid -->
     <div class="relative max-w-6xl mx-auto px-4 py-8">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
@@ -78,7 +260,7 @@
                                  class="w-full h-full object-cover rounded-t-2xl md:rounded-t-2xl lg:rounded-t-4xl">
                         {% else %}
                             <div class="w-full h-full bg-black/20 flex items-center justify-center rounded-t-2xl md:rounded-t-2xl lg:rounded-t-4xl">
-                                <span class="text-4xl">🎵</span>
+                                <span class="text-4xl">&#127925;</span>
                             </div>
                         {% endif %}
                     </div>
@@ -111,8 +293,8 @@
                     </div>
                     <!-- Playlist Controls: block below info bar, hidden by default, slide open on mouseover -->
                     <div class="shuffle-menu max-h-0 opacity-0 transition-all duration-500 ease-in-out overflow-hidden shuffle-scrollbar mouseover-menu" style="pointer-events:auto;">
-                        <form action="{{ url_for('main.shuffle', playlist_id=playlist.id) }}" 
-                              method="POST" 
+                        <form action="{{ url_for('main.shuffle', playlist_id=playlist.id) }}"
+                              method="POST"
                               class="space-y-4 p-4"
                               data-playlist-id="{{ playlist.id }}"
                               onsubmit="event.preventDefault(); handlePlaylistAction(this, 'shuffle');">
@@ -126,7 +308,7 @@
                                         class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-white/30 focus:border-transparent"
                                         onchange="updateAlgorithmParams(this, '{{ playlist.id }}')">
                                     {% for algo in algorithms %}
-                                        <option value="{{ algo.class_name }}" 
+                                        <option value="{{ algo.class_name }}"
                                                 data-description="{{ algo.description }}"
                                                 data-parameters='{{ algo.parameters|tojson }}'>
                                             {{ algo.name }}
@@ -143,16 +325,16 @@
                             </div>
                             <!-- Action Buttons -->
                             <div class="flex space-x-2">
-                                <button type="submit" 
+                                <button type="submit"
                                         class="flex-1 px-4 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white font-semibold transition duration-150">
                                     Shuffle
                                 </button>
                             </div>
                         </form>
                         <!-- Separate Undo Form -->
-                        <form id="undo-form-{{ playlist.id }}" 
-                              action="{{ url_for('main.undo', playlist_id=playlist.id) }}" 
-                              method="POST" 
+                        <form id="undo-form-{{ playlist.id }}"
+                              action="{{ url_for('main.undo', playlist_id=playlist.id) }}"
+                              method="POST"
                               data-playlist-id="{{ playlist.id }}"
                               onsubmit="event.preventDefault(); handlePlaylistAction(this, 'undo');"
                               class="mt-2 hidden">
@@ -169,38 +351,50 @@
     </div>
 </div>
 
-<!-- JavaScript for Dynamic Algorithm Parameters -->
+<!-- JavaScript -->
 <script>
+/* Activity Feed Toggle */
+function toggleActivityFeed() {
+    const body = document.getElementById('activity-feed-body');
+    const chevron = document.getElementById('activity-chevron');
+    const btn = document.getElementById('activity-toggle-btn');
+    const isHidden = body.classList.contains('hidden');
+
+    body.classList.toggle('hidden');
+    chevron.classList.toggle('rotate-180');
+    btn.setAttribute('aria-expanded', String(isHidden));
+}
+
 function updateAlgorithmParams(selectElement, playlistId) {
     const paramsContainer = document.getElementById(`algorithm-params-${playlistId}`);
     const selectedOption = selectElement.options[selectElement.selectedIndex];
     const parameters = JSON.parse(selectedOption.dataset.parameters);
     const description = selectedOption.dataset.description;
-    
+
     // Update description
     document.querySelector(`.algorithm-description-${playlistId}`).textContent = description;
-    
+
     // Clear existing parameters
     paramsContainer.innerHTML = '';
-    
+
     // Add new parameters
     for (const [paramName, paramInfo] of Object.entries(parameters)) {
         const paramDiv = document.createElement('div');
         paramDiv.className = 'space-y-2';
-        
+
         // Create label
         const label = document.createElement('label');
         label.className = 'block text-sm font-medium text-white/90';
         label.textContent = paramInfo.description;
         paramDiv.appendChild(label);
-        
+
         // Create input based on parameter type
         if (paramInfo.type === 'string' && paramInfo.options) {
             // Create select for string options
             const select = document.createElement('select');
             select.name = paramName;
             select.className = 'w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-white/30 focus:border-transparent';
-            
+
             for (const option of paramInfo.options) {
                 const optionElement = document.createElement('option');
                 optionElement.value = option;
@@ -210,17 +404,17 @@ function updateAlgorithmParams(selectElement, playlistId) {
                 }
                 select.appendChild(optionElement);
             }
-            
+
             paramDiv.appendChild(select);
         } else {
             // Create input for other types
             const input = document.createElement('input');
-            input.type = paramInfo.type === 'float' ? 'number' : 
+            input.type = paramInfo.type === 'float' ? 'number' :
                         paramInfo.type === 'integer' ? 'number' : 'text';
             input.name = paramName;
             input.className = 'w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-white/30 focus:border-transparent';
             input.value = paramInfo.default;
-            
+
             if (paramInfo.min !== undefined) {
                 input.min = paramInfo.min;
             }
@@ -230,10 +424,10 @@ function updateAlgorithmParams(selectElement, playlistId) {
             if (paramInfo.type === 'float') {
                 input.step = '0.1';
             }
-            
+
             paramDiv.appendChild(input);
         }
-        
+
         paramsContainer.appendChild(paramDiv);
     }
 }
@@ -242,11 +436,11 @@ function handlePlaylistAction(form, action) {
     const playlistId = form.dataset.playlistId;
     const submitButton = form.querySelector('button[type="submit"]');
     const originalText = submitButton.textContent;
-    
+
     // Disable button and show loading state
     submitButton.disabled = true;
     submitButton.textContent = action === 'shuffle' ? 'Shuffling...' : 'Undoing...';
-    
+
     // Submit form via AJAX
     fetch(form.action, {
         method: 'POST',
@@ -267,7 +461,7 @@ function handlePlaylistAction(form, action) {
     .then(data => {
         if (data.success) {
             showNotification(data.message, 'success');
-            
+
             // The server sends back the complete, updated state.
             // We use this "single source of truth" to update the UI.
             if (data.playlist_state) {
@@ -304,15 +498,15 @@ function showNotification(message, type) {
     notification.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg backdrop-blur-md ${
         type === 'success' ? 'bg-green-500/90' : 'bg-red-500/90'
     } text-white font-semibold transform transition duration-300 translate-y-16 opacity-0`;
-    
+
     notification.textContent = message;
     document.body.appendChild(notification);
-    
+
     // Show notification
     setTimeout(() => {
         notification.classList.remove('translate-y-16', 'opacity-0');
     }, 100);
-    
+
     // Hide notification after 3 seconds
     setTimeout(() => {
         notification.classList.add('translate-y-16', 'opacity-0');
@@ -393,6 +587,14 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 
 <style>
+/* Dashboard activity scrollbar */
+.dashboard-scrollbar::-webkit-scrollbar { width: 8px; }
+.dashboard-scrollbar::-webkit-scrollbar-thumb { background: rgba(20,120,60,0.5); border-radius: 6px; }
+.dashboard-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.dashboard-scrollbar { scrollbar-color: rgba(20,120,60,0.5) transparent; scrollbar-width: thin; }
+
+.rotate-180 { transform: rotate(180deg); }
+
 /* Custom scrollbar for the shuffle controls */
 .shuffle-scrollbar::-webkit-scrollbar {
   width: 8px;
@@ -418,4 +620,4 @@ document.addEventListener('DOMContentLoaded', () => {
   transition: max-height 0.5s cubic-bezier(0.4,0,0.2,1), opacity 0.5s cubic-bezier(0.4,0,0.2,1);
 }
 </style>
-{% endblock %} 
+{% endblock %}
