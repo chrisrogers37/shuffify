@@ -29,7 +29,10 @@ from shuffify.services import (
     LoginHistoryService,
     AuthenticationError,
     PlaylistError,
+    ActivityLogService,
 )
+from shuffify.enums import ActivityType
+
 logger = logging.getLogger(__name__)
 
 
@@ -271,6 +274,22 @@ def callback():
 
         session.modified = True
 
+        # Log login activity (non-blocking)
+        try:
+            db_user = UserService.get_by_spotify_id(
+                user_data["id"]
+            )
+            if db_user:
+                ActivityLogService.log(
+                    user_id=db_user.id,
+                    activity_type=ActivityType.LOGIN,
+                    description=(
+                        "Logged in via Spotify OAuth"
+                    ),
+                )
+        except Exception:
+            pass
+
         logger.info(
             f"User "
             f"{user_data.get('display_name', 'Unknown')} "
@@ -313,6 +332,23 @@ def logout():
             f"Failed to record logout: {e}. "
             f"Logout continues."
         )
+
+    # Log logout activity (non-blocking)
+    try:
+        user_data = session.get("user_data", {})
+        spotify_id = user_data.get("id")
+        if spotify_id:
+            db_user = UserService.get_by_spotify_id(
+                spotify_id
+            )
+            if db_user:
+                ActivityLogService.log(
+                    user_id=db_user.id,
+                    activity_type=ActivityType.LOGOUT,
+                    description="Logged out",
+                )
+    except Exception:
+        pass
 
     session.clear()
     return redirect(url_for("main.index"))

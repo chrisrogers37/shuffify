@@ -11,7 +11,10 @@ from shuffify.services import (
     UpstreamSourceService,
     UpstreamSourceError,
     UpstreamSourceNotFoundError,
+    ActivityLogService,
+    UserService,
 )
+from shuffify.enums import ActivityType
 from shuffify import is_db_available
 
 logger = logging.getLogger(__name__)
@@ -87,6 +90,35 @@ def add_upstream_source(playlist_id):
             source_url=data.get("source_url"),
             source_name=data.get("source_name"),
         )
+
+        # Log activity (non-blocking)
+        try:
+            db_user = UserService.get_by_spotify_id(
+                spotify_id
+            )
+            if db_user:
+                ActivityLogService.log(
+                    user_id=db_user.id,
+                    activity_type=(
+                        ActivityType.UPSTREAM_SOURCE_ADD
+                    ),
+                    description=(
+                        f"Added upstream source "
+                        f"'{data.get('source_name', source_playlist_id)}'"
+                    ),
+                    playlist_id=playlist_id,
+                    metadata={
+                        "source_playlist_id": (
+                            source_playlist_id
+                        ),
+                        "source_type": data.get(
+                            "source_type", "external"
+                        ),
+                    },
+                )
+        except Exception:
+            pass
+
         return json_success(
             "Source added.",
             source=source.to_dict(),
@@ -119,6 +151,27 @@ def delete_upstream_source(source_id):
         UpstreamSourceService.delete_source(
             source_id, spotify_id
         )
+
+        # Log activity (non-blocking)
+        try:
+            db_user = UserService.get_by_spotify_id(
+                spotify_id
+            )
+            if db_user:
+                ActivityLogService.log(
+                    user_id=db_user.id,
+                    activity_type=(
+                        ActivityType
+                        .UPSTREAM_SOURCE_DELETE
+                    ),
+                    description=(
+                        f"Removed upstream source "
+                        f"{source_id}"
+                    ),
+                )
+        except Exception:
+            pass
+
         return json_success("Source removed.")
     except UpstreamSourceNotFoundError:
         return json_error("Source not found.", 404)

@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Activity Log** - Unified audit trail for all user actions
+  - New `ActivityLog` model with user_id, activity_type, description, playlist context, and JSON metadata
+  - New `ActivityLogService` with `log()`, `get_recent()`, `get_activity_since()`, and `get_activity_summary()` methods
+  - New `ActivityType` enum with 17 activity types covering shuffles, workshop, schedules, snapshots, and auth
+  - Non-blocking activity logging hooked into shuffle, workshop commit, workshop sessions, upstream sources, schedule CRUD, job execution, login, and logout
+  - Composite index on (user_id, created_at) for efficient recent activity queries
 - **Playlist Snapshots** - Persistent point-in-time capture of playlist track orderings
   - New `PlaylistSnapshot` database model with automatic retention management
   - Auto-snapshot before shuffle, workshop commit, and scheduled job execution
