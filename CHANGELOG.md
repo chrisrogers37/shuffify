@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Workshop Powertools Sidebar** - Collapsible tabbed sidebar on the workshop page
+  - Four tab placeholders: Snapshots, Archive, Raids, Schedules
+  - Smooth slide-in/out animation with localStorage state persistence
+  - Responsive design: overlays on mobile with backdrop, side panel on desktop
+  - Self-contained `workshopSidebar` JavaScript namespace (no impact on existing workshop JS)
+  - Foundation for Phases 2-5 of the Workshop Powertools enhancement suite
 - **Personalized Dashboard** - Dashboard now shows personalized welcome messaging, quick stats, and recent activity
   - New `DashboardService` aggregates activity, stats, and schedule data into a single dashboard payload
   - "Welcome back" messaging distinguishes returning users from first-time visitors

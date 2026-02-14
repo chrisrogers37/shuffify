@@ -1,5 +1,8 @@
 # Phase 1: Unified Workshop Sidebar Framework
 
+**Status:** 🔧 IN PROGRESS
+**Started:** 2026-02-14
+
 ## PR Title
 `feat: Add collapsible tabbed sidebar to workshop for powertools framework (#phase-1)`
 
