@@ -344,6 +344,165 @@
     </div>
 </div>
 
+<!-- =========================================================================
+     Workshop Powertools Sidebar
+     A collapsible tabbed panel on the right edge of the viewport.
+     Phases 2-5 will populate each tab with real content.
+     ========================================================================= -->
+
+<!-- Sidebar Toggle Button (visible when sidebar is collapsed) -->
+<button id="sidebar-toggle-btn"
+        onclick="workshopSidebar.toggle()"
+        class="fixed right-0 top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-10 h-24 rounded-l-xl bg-white/15 backdrop-blur-md border border-r-0 border-white/20 text-white/70 hover:text-white hover:bg-white/25 transition-all duration-200 shadow-lg"
+        title="Open Powertools"
+        aria-label="Toggle powertools sidebar"
+        aria-expanded="false"
+        aria-controls="sidebar-panel">
+    <div class="flex flex-col items-center gap-1">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7"></path>
+        </svg>
+        <span class="text-xs font-bold tracking-widest" style="writing-mode: vertical-rl; text-orientation: mixed;">TOOLS</span>
+    </div>
+</button>
+
+<!-- Sidebar Panel -->
+<div id="sidebar-panel"
+     class="fixed top-0 right-0 h-full z-30 flex transition-transform duration-300 ease-in-out translate-x-full"
+     aria-hidden="true">
+
+    <!-- Vertical Tab Bar (left edge of sidebar) -->
+    <div class="flex flex-col items-center py-4 w-14 bg-black/30 backdrop-blur-xl border-l border-white/10 flex-shrink-0">
+        <!-- Close / collapse button -->
+        <button onclick="workshopSidebar.toggle()"
+                class="mb-4 p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition duration-150"
+                title="Close sidebar"
+                aria-label="Close powertools sidebar">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7"></path>
+            </svg>
+        </button>
+
+        <div class="w-8 border-t border-white/10 mb-4"></div>
+
+        <!-- Tab: Snapshots -->
+        <button class="sidebar-tab-btn mb-2 p-2 rounded-lg transition duration-150 text-white/40 hover:text-white hover:bg-white/10"
+                data-tab="snapshots"
+                onclick="workshopSidebar.switchTab('snapshots')"
+                title="Snapshots"
+                aria-label="Snapshots tab"
+                aria-selected="false"
+                role="tab">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            </svg>
+        </button>
+
+        <!-- Tab: Archive -->
+        <button class="sidebar-tab-btn mb-2 p-2 rounded-lg transition duration-150 text-white/40 hover:text-white hover:bg-white/10"
+                data-tab="archive"
+                onclick="workshopSidebar.switchTab('archive')"
+                title="Archive"
+                aria-label="Archive tab"
+                aria-selected="false"
+                role="tab">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
+            </svg>
+        </button>
+
+        <!-- Tab: Raids -->
+        <button class="sidebar-tab-btn mb-2 p-2 rounded-lg transition duration-150 text-white/40 hover:text-white hover:bg-white/10"
+                data-tab="raids"
+                onclick="workshopSidebar.switchTab('raids')"
+                title="Raids"
+                aria-label="Raids tab"
+                aria-selected="false"
+                role="tab">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+            </svg>
+        </button>
+
+        <!-- Tab: Schedules -->
+        <button class="sidebar-tab-btn mb-2 p-2 rounded-lg transition duration-150 text-white/40 hover:text-white hover:bg-white/10"
+                data-tab="schedules"
+                onclick="workshopSidebar.switchTab('schedules')"
+                title="Schedules"
+                aria-label="Schedules tab"
+                aria-selected="false"
+                role="tab">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Tab Content Area -->
+    <div class="w-80 bg-black/40 backdrop-blur-xl border-l border-white/10 overflow-y-auto sidebar-scrollbar">
+
+        <!-- Tab Content: Snapshots -->
+        <div id="sidebar-tab-snapshots" class="sidebar-tab-content hidden p-5" role="tabpanel">
+            <h3 class="text-white font-bold text-lg mb-2">Snapshots</h3>
+            <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                <svg class="w-12 h-12 mx-auto text-white/20 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+                <p class="text-white/60 text-sm mb-1">Browse and restore playlist snapshots</p>
+                <p class="text-white/30 text-xs">View saved states, compare changes, and roll back to any previous version of this playlist.</p>
+                <span class="inline-block mt-3 px-3 py-1 rounded-full bg-white/10 text-white/40 text-xs font-semibold">Coming in Phase 2</span>
+            </div>
+        </div>
+
+        <!-- Tab Content: Archive -->
+        <div id="sidebar-tab-archive" class="sidebar-tab-content hidden p-5" role="tabpanel">
+            <h3 class="text-white font-bold text-lg mb-2">Archive</h3>
+            <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                <svg class="w-12 h-12 mx-auto text-white/20 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
+                </svg>
+                <p class="text-white/60 text-sm mb-1">Pair playlists with archive targets</p>
+                <p class="text-white/30 text-xs">Link this playlist to an archive so removed tracks are automatically preserved instead of lost.</p>
+                <span class="inline-block mt-3 px-3 py-1 rounded-full bg-white/10 text-white/40 text-xs font-semibold">Coming in Phase 3</span>
+            </div>
+        </div>
+
+        <!-- Tab Content: Raids -->
+        <div id="sidebar-tab-raids" class="sidebar-tab-content hidden p-5" role="tabpanel">
+            <h3 class="text-white font-bold text-lg mb-2">Raids</h3>
+            <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                <svg class="w-12 h-12 mx-auto text-white/20 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                </svg>
+                <p class="text-white/60 text-sm mb-1">Smart playlist raids</p>
+                <p class="text-white/30 text-xs">Pull tracks from source playlists with intelligent deduplication, filtering, and one-click raid execution.</p>
+                <span class="inline-block mt-3 px-3 py-1 rounded-full bg-white/10 text-white/40 text-xs font-semibold">Coming in Phase 4</span>
+            </div>
+        </div>
+
+        <!-- Tab Content: Schedules -->
+        <div id="sidebar-tab-schedules" class="sidebar-tab-content hidden p-5" role="tabpanel">
+            <h3 class="text-white font-bold text-lg mb-2">Schedules</h3>
+            <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                <svg class="w-12 h-12 mx-auto text-white/20 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <p class="text-white/60 text-sm mb-1">Schedule automated operations</p>
+                <p class="text-white/30 text-xs">Set up recurring shuffles, raids, and snapshots that run automatically on your chosen schedule.</p>
+                <span class="inline-block mt-3 px-3 py-1 rounded-full bg-white/10 text-white/40 text-xs font-semibold">Coming in Phase 5</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Sidebar Backdrop (mobile overlay) -->
+<div id="sidebar-backdrop"
+     class="fixed inset-0 z-20 bg-black/50 backdrop-blur-sm hidden transition-opacity duration-300 opacity-0 lg:hidden"
+     onclick="workshopSidebar.close()">
+</div>
+
 <!-- SortableJS via CDN -->
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 
@@ -1463,6 +1622,176 @@ function displayExternalTracks(playlistInfo, tracks) {
 }
 </script>
 
+<script>
+// =============================================================================
+// Workshop Powertools Sidebar
+// Self-contained namespace -- does NOT modify any existing workshopState,
+// SortableJS, or search functionality.
+// =============================================================================
+
+const workshopSidebar = {
+    isOpen: false,
+    activeTab: null,
+    _animating: false,
+
+    /** Safely read from localStorage (handles disabled/full storage). */
+    _getStorage(key) {
+        try { return localStorage.getItem(key); } catch (e) { return null; }
+    },
+
+    /** Safely write to localStorage (handles disabled/full storage). */
+    _setStorage(key, value) {
+        try { localStorage.setItem(key, value); } catch (e) { /* silent */ }
+    },
+
+    /** Initialize sidebar on page load. */
+    init() {
+        // Restore collapsed/open state from localStorage
+        const savedState = this._getStorage('shuffify_sidebar_open');
+        const savedTab = this._getStorage('shuffify_sidebar_tab');
+
+        if (savedState === 'true') {
+            this.open(savedTab || 'snapshots', false);
+        }
+
+        // Close sidebar on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.isOpen) {
+                this.close();
+            }
+        });
+    },
+
+    /** Toggle sidebar open/closed. */
+    toggle() {
+        if (this._animating) return;
+        if (this.isOpen) {
+            this.close();
+        } else {
+            this.open(this.activeTab || 'snapshots');
+        }
+    },
+
+    /**
+     * Open the sidebar, optionally selecting a tab.
+     * @param {string} tabName - Tab to activate (snapshots|archive|raids|schedules)
+     * @param {boolean} animate - Whether to animate the transition (default true)
+     */
+    open(tabName, animate) {
+        if (typeof animate === 'undefined') animate = true;
+        const panel = document.getElementById('sidebar-panel');
+        const toggleBtn = document.getElementById('sidebar-toggle-btn');
+        const backdrop = document.getElementById('sidebar-backdrop');
+
+        if (animate) {
+            this._animating = true;
+            setTimeout(() => { this._animating = false; }, 300);
+        }
+
+        // Show panel
+        panel.classList.remove('translate-x-full');
+        panel.setAttribute('aria-hidden', 'false');
+
+        // Hide toggle button
+        toggleBtn.classList.add('opacity-0', 'pointer-events-none');
+        toggleBtn.setAttribute('aria-expanded', 'true');
+
+        // Show backdrop on mobile
+        backdrop.classList.remove('hidden');
+        // Force reflow before adding opacity for transition
+        void backdrop.offsetWidth;
+        backdrop.classList.add('opacity-100');
+        backdrop.classList.remove('opacity-0');
+
+        this.isOpen = true;
+        this.switchTab(tabName || 'snapshots');
+
+        // Persist state
+        this._setStorage('shuffify_sidebar_open', 'true');
+    },
+
+    /** Close the sidebar. */
+    close() {
+        if (this._animating) return;
+        this._animating = true;
+
+        const panel = document.getElementById('sidebar-panel');
+        const toggleBtn = document.getElementById('sidebar-toggle-btn');
+        const backdrop = document.getElementById('sidebar-backdrop');
+
+        // Hide panel
+        panel.classList.add('translate-x-full');
+        panel.setAttribute('aria-hidden', 'true');
+
+        // Show toggle button
+        toggleBtn.classList.remove('opacity-0', 'pointer-events-none');
+        toggleBtn.setAttribute('aria-expanded', 'false');
+
+        // Hide backdrop
+        backdrop.classList.remove('opacity-100');
+        backdrop.classList.add('opacity-0');
+        setTimeout(() => {
+            backdrop.classList.add('hidden');
+        }, 300);
+
+        this.isOpen = false;
+
+        // Persist state
+        this._setStorage('shuffify_sidebar_open', 'false');
+
+        setTimeout(() => { this._animating = false; }, 300);
+    },
+
+    /**
+     * Switch to a specific tab.
+     * @param {string} tabName - Tab to activate
+     */
+    switchTab(tabName) {
+        // Deactivate all tabs
+        document.querySelectorAll('.sidebar-tab-btn').forEach(btn => {
+            btn.classList.remove('bg-white/20', 'text-white');
+            btn.classList.add('text-white/40');
+            btn.setAttribute('aria-selected', 'false');
+        });
+
+        // Hide all tab content
+        document.querySelectorAll('.sidebar-tab-content').forEach(panel => {
+            panel.classList.add('hidden');
+        });
+
+        // Activate selected tab button
+        const activeBtn = document.querySelector('.sidebar-tab-btn[data-tab="' + tabName + '"]');
+        if (activeBtn) {
+            activeBtn.classList.add('bg-white/20', 'text-white');
+            activeBtn.classList.remove('text-white/40');
+            activeBtn.setAttribute('aria-selected', 'true');
+        }
+
+        // Show selected tab content
+        const activePanel = document.getElementById('sidebar-tab-' + tabName);
+        if (activePanel) {
+            activePanel.classList.remove('hidden');
+        }
+
+        this.activeTab = tabName;
+        this._setStorage('shuffify_sidebar_tab', tabName);
+
+        // Fire tab activation hooks for lazy-loading (Phases 2-5)
+        if (tabName === 'snapshots' && typeof onSnapshotsTabActivated === 'function') {
+            onSnapshotsTabActivated();
+        }
+        if (tabName === 'raids' && typeof onRaidsTabActivated === 'function') {
+            onRaidsTabActivated();
+        }
+    },
+};
+
+// Initialize sidebar after DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    workshopSidebar.init();
+});
+</script>
+
 <style>
 .workshop-scrollbar::-webkit-scrollbar { width: 8px; }
 .workshop-scrollbar::-webkit-scrollbar-thumb { background: rgba(20, 120, 60, 0.5); border-radius: 6px; }
@@ -1476,5 +1805,29 @@ function displayExternalTracks(playlistInfo, tracks) {
 .rotate-180 { transform: rotate(180deg); }
 .source-track-item { background: rgba(255, 255, 255, 0.02); }
 .source-track-item:hover { background: rgba(255, 255, 255, 0.06); }
+
+/* Workshop Powertools Sidebar */
+.sidebar-scrollbar::-webkit-scrollbar { width: 6px; }
+.sidebar-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 6px; }
+.sidebar-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.sidebar-scrollbar { scrollbar-color: rgba(255, 255, 255, 0.15) transparent; scrollbar-width: thin; }
+
+#sidebar-toggle-btn {
+    transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+
+/* On mobile/tablet, sidebar overlays the full viewport width area */
+@media (max-width: 1023px) {
+    #sidebar-panel {
+        box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
+    }
+}
+
+/* On desktop (lg+), sidebar sits alongside content without backdrop */
+@media (min-width: 1024px) {
+    #sidebar-panel {
+        box-shadow: -4px 0 16px rgba(0, 0, 0, 0.3);
+    }
+}
 </style>
 {% endblock %}

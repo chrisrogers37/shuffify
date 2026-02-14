@@ -15,7 +15,8 @@ documentation/
 │   ├── 04_future_features_readiness.md
 │   └── 05_brainstorm_enhancements.md
 ├── planning/          # Development plans and feature phases
-│   └── phases/        # (empty — all completed plans archived)
+│   └── phases/
+│       └── workshop-powertools_2026-02-13/  # Workshop Powertools (5 phases)
 └── archive/           # Completed evaluations and legacy documents
     ├── 01_architecture_evaluation.md
     ├── 02_modularity_assessment.md
@@ -43,6 +44,10 @@ Active evaluation documents for ongoing development planning:
 - **[Infrastructure Critiques](guides/infrastructure_critiques.md)** - Infrastructure improvement notes and status
 - **[UX Critiques](guides/UX_CRITIQUES.md)** - UX improvement notes for landing page
 - **[Facebook OAuth Troubleshooting](guides/FACEBOOK_OAUTH_TROUBLESHOOTING.md)** - Legacy OAuth troubleshooting guide
+
+## Planning (Active)
+
+- **[Workshop Powertools Enhancement Suite](planning/phases/workshop-powertools_2026-02-13/00_OVERVIEW.md)** - Multi-phase plan for sidebar powertools framework (Phase 1 in progress)
 
 ## Planning (Archived)
 
