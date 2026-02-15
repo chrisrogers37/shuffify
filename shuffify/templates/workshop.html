@@ -444,15 +444,81 @@
 
         <!-- Tab Content: Snapshots -->
         <div id="sidebar-tab-snapshots" class="sidebar-tab-content hidden p-5" role="tabpanel">
-            <h3 class="text-white font-bold text-lg mb-2">Snapshots</h3>
-            <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
-                <svg class="w-12 h-12 mx-auto text-white/20 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                </svg>
-                <p class="text-white/60 text-sm mb-1">Browse and restore playlist snapshots</p>
-                <p class="text-white/30 text-xs">View saved states, compare changes, and roll back to any previous version of this playlist.</p>
-                <span class="inline-block mt-3 px-3 py-1 rounded-full bg-white/10 text-white/40 text-xs font-semibold">Coming in Phase 2</span>
+            <!-- Header with Take Snapshot button -->
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-white font-bold text-lg">Snapshots</h3>
+                <button id="snapshot-take-btn"
+                        onclick="openManualSnapshotDialog()"
+                        class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-xs font-semibold transition duration-150 flex items-center gap-1.5"
+                        title="Take a snapshot of the current playlist state">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                    Take Snapshot
+                </button>
+            </div>
+
+            <!-- Manual Snapshot Form (hidden by default) -->
+            <div id="snapshot-create-form" class="hidden mb-3">
+                <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                    <label class="block text-white/60 text-xs font-semibold mb-1.5">Description (optional)</label>
+                    <input id="snapshot-description-input"
+                           type="text"
+                           maxlength="500"
+                           placeholder="e.g. Before major cleanup"
+                           class="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/20 transition">
+                    <div class="flex gap-2 mt-3">
+                        <button onclick="confirmManualSnapshot()"
+                                class="flex-1 px-3 py-1.5 rounded-lg bg-green-600/80 hover:bg-green-600 text-white text-xs font-semibold transition duration-150">
+                            Save Snapshot
+                        </button>
+                        <button onclick="cancelManualSnapshot()"
+                                class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-xs font-semibold transition duration-150">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div id="snapshot-loading" class="hidden">
+                <div class="flex items-center justify-center py-8">
+                    <svg class="w-6 h-6 text-white/30 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span class="ml-2 text-white/40 text-sm">Loading snapshots...</span>
+                </div>
+            </div>
+
+            <!-- Error State -->
+            <div id="snapshot-error" class="hidden">
+                <div class="rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-center">
+                    <p id="snapshot-error-message" class="text-red-400/80 text-sm mb-2">Failed to load snapshots</p>
+                    <button onclick="loadSnapshots()"
+                            class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/60 text-xs font-semibold transition duration-150">
+                        Try Again
+                    </button>
+                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div id="snapshot-empty" class="hidden">
+                <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                    <svg class="w-10 h-10 mx-auto text-white/15 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                    <p class="text-white/50 text-sm mb-1">No snapshots yet</p>
+                    <p class="text-white/30 text-xs">Snapshots are created automatically before shuffles, raids, and commits. You can also take one manually.</p>
+                </div>
+            </div>
+
+            <!-- Snapshot Timeline -->
+            <div id="snapshot-timeline" class="hidden relative">
+                <div id="snapshot-list" class="space-y-2 snapshot-timeline-container"></div>
+                <div class="snapshot-timeline-fade pointer-events-none"></div>
             </div>
         </div>
 
@@ -503,6 +569,49 @@
      onclick="workshopSidebar.close()">
 </div>
 
+<!-- Snapshot Restore Confirmation Modal -->
+<div id="snapshot-restore-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="hideRestoreModal()"></div>
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm">
+        <div class="bg-gray-900 border border-white/10 rounded-2xl p-6 shadow-2xl">
+            <h3 class="text-white font-bold text-lg mb-2">Restore Snapshot</h3>
+            <p id="restore-modal-message" class="text-white/60 text-sm mb-1">This will replace the current playlist track order on Spotify.</p>
+            <p id="restore-modal-detail" class="text-white/40 text-xs mb-4"></p>
+            <div class="flex gap-3">
+                <button onclick="executeRestore()"
+                        class="flex-1 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition duration-150">
+                    Restore
+                </button>
+                <button onclick="hideRestoreModal()"
+                        class="flex-1 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-sm font-semibold transition duration-150">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Snapshot Delete Confirmation Modal -->
+<div id="snapshot-delete-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="hideDeleteModal()"></div>
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm">
+        <div class="bg-gray-900 border border-white/10 rounded-2xl p-6 shadow-2xl">
+            <h3 class="text-white font-bold text-lg mb-2">Delete Snapshot</h3>
+            <p id="delete-modal-message" class="text-white/60 text-sm mb-4">This snapshot will be permanently deleted. This cannot be undone.</p>
+            <div class="flex gap-3">
+                <button onclick="executeDelete()"
+                        class="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition duration-150">
+                    Delete
+                </button>
+                <button onclick="hideDeleteModal()"
+                        class="flex-1 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-sm font-semibold transition duration-150">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- SortableJS via CDN -->
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 
@@ -513,6 +622,7 @@
 
 const workshopState = {
     playlistId: {{ playlist.id | tojson }},
+    playlistName: {{ playlist.name | tojson }},
     savedUris: {{ playlist.tracks | map(attribute='uri') | list | tojson }},
     workingUris: {{ playlist.tracks | map(attribute='uri') | list | tojson }},
     isDirty: false,
@@ -715,6 +825,10 @@ function commitToSpotify() {
             markDirty();
             refreshSourceDuplicateIndicators();
             showNotification(data.message || 'Saved to Spotify!', 'success');
+            // Refresh snapshot list to show new auto-snapshot
+            if (typeof snapshotState !== 'undefined' && snapshotState.isLoaded) {
+                setTimeout(function() { loadSnapshots(); }, 500);
+            }
         } else {
             showNotification(data.message || 'Save returned unexpected response.', 'error');
         }
@@ -1792,6 +1906,269 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
+<script>
+// =============================================================================
+// Snapshot Browser Panel
+// Surfaces the existing snapshot API in the workshop sidebar Snapshots tab.
+// =============================================================================
+
+const snapshotState = {
+    isLoaded: false,
+    isCreating: false,
+    snapshots: [],
+    pendingRestoreId: null,
+    pendingDeleteId: null,
+};
+
+const SNAPSHOT_TYPE_CONFIG = {
+    'auto_pre_shuffle': { label: 'Pre-Shuffle', color: 'bg-blue-500/20 text-blue-300' },
+    'auto_pre_raid': { label: 'Pre-Raid', color: 'bg-yellow-500/20 text-yellow-300' },
+    'auto_pre_commit': { label: 'Pre-Commit', color: 'bg-purple-500/20 text-purple-300' },
+    'manual': { label: 'Manual', color: 'bg-green-500/20 text-green-300' },
+    'scheduled_pre_execution': { label: 'Scheduled', color: 'bg-orange-500/20 text-orange-300' },
+};
+
+function formatRelativeTime(dateStr) {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHr = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHr / 24);
+
+    if (diffSec < 60) return 'just now';
+    if (diffMin < 60) return diffMin + 'm ago';
+    if (diffHr < 24) return diffHr + 'h ago';
+    if (diffDay < 7) return diffDay + 'd ago';
+    return date.toLocaleDateString();
+}
+
+function formatFullDate(dateStr) {
+    const date = new Date(dateStr);
+    return date.toLocaleString();
+}
+
+function loadSnapshots() {
+    const loadingEl = document.getElementById('snapshot-loading');
+    const errorEl = document.getElementById('snapshot-error');
+    const emptyEl = document.getElementById('snapshot-empty');
+    const timelineEl = document.getElementById('snapshot-timeline');
+
+    loadingEl.classList.remove('hidden');
+    errorEl.classList.add('hidden');
+    emptyEl.classList.add('hidden');
+    timelineEl.classList.add('hidden');
+
+    fetch('/playlist/' + workshopState.playlistId + '/snapshots?limit=50', {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            if (response.status === 401) throw new Error('Session expired. Please log in again.');
+            throw new Error('Failed to load snapshots');
+        }
+        return response.json();
+    })
+    .then(function(data) {
+        loadingEl.classList.add('hidden');
+        snapshotState.snapshots = data.snapshots || [];
+        snapshotState.isLoaded = true;
+
+        if (snapshotState.snapshots.length === 0) {
+            emptyEl.classList.remove('hidden');
+        } else {
+            renderSnapshotTimeline();
+            timelineEl.classList.remove('hidden');
+        }
+    })
+    .catch(function(error) {
+        loadingEl.classList.add('hidden');
+        var errMsg = document.getElementById('snapshot-error-message');
+        errMsg.textContent = error.message;
+        errorEl.classList.remove('hidden');
+    });
+}
+
+function renderSnapshotTimeline() {
+    var listEl = document.getElementById('snapshot-list');
+    var currentCount = workshopState.workingUris.length;
+    var html = '';
+
+    snapshotState.snapshots.forEach(function(snap) {
+        var typeConfig = SNAPSHOT_TYPE_CONFIG[snap.snapshot_type] || { label: snap.snapshot_type, color: 'bg-white/10 text-white/50' };
+        var diff = snap.track_count - currentCount;
+        var diffText = '';
+        if (diff > 0) diffText = '<span class="text-green-400 text-xs">+' + diff + ' vs current</span>';
+        else if (diff < 0) diffText = '<span class="text-red-400 text-xs">' + diff + ' vs current</span>';
+        else diffText = '<span class="text-white/30 text-xs">same as current</span>';
+
+        var description = snap.trigger_description || '';
+        var descHtml = description ? '<p class="text-white/40 text-xs mt-1 truncate" title="' + description.replace(/"/g, '&quot;') + '">' + description + '</p>' : '';
+
+        html += '<div class="snapshot-card rounded-lg bg-white/5 border border-white/10 p-3 hover:bg-white/8 transition duration-150">'
+            + '<div class="flex items-start justify-between gap-2">'
+            + '<div class="min-w-0 flex-1">'
+            + '<div class="flex items-center gap-2 mb-1">'
+            + '<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ' + typeConfig.color + '">' + typeConfig.label + '</span>'
+            + '<span class="text-white/30 text-xs">' + formatRelativeTime(snap.created_at) + '</span>'
+            + '</div>'
+            + '<div class="flex items-center gap-2 text-sm">'
+            + '<span class="text-white/70">' + snap.track_count + ' tracks</span>'
+            + diffText
+            + '</div>'
+            + descHtml
+            + '</div>'
+            + '<div class="flex items-center gap-1 flex-shrink-0">'
+            + '<button onclick="showRestoreModal(' + snap.id + ', ' + snap.track_count + ')" class="p-1.5 rounded-md text-white/30 hover:text-blue-400 hover:bg-blue-500/10 transition duration-150" title="Restore this snapshot">'
+            + '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>'
+            + '</button>'
+            + '<button onclick="showDeleteModal(' + snap.id + ')" class="p-1.5 rounded-md text-white/30 hover:text-red-400 hover:bg-red-500/10 transition duration-150" title="Delete this snapshot">'
+            + '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>'
+            + '</button>'
+            + '</div>'
+            + '</div>'
+            + '</div>';
+    });
+
+    listEl.innerHTML = html;
+}
+
+// --- Manual Snapshot Creation ---
+
+function openManualSnapshotDialog() {
+    document.getElementById('snapshot-create-form').classList.remove('hidden');
+    document.getElementById('snapshot-description-input').value = '';
+    document.getElementById('snapshot-description-input').focus();
+}
+
+function cancelManualSnapshot() {
+    document.getElementById('snapshot-create-form').classList.add('hidden');
+}
+
+function confirmManualSnapshot() {
+    if (snapshotState.isCreating) return;
+    snapshotState.isCreating = true;
+
+    var desc = document.getElementById('snapshot-description-input').value.trim();
+
+    fetch('/playlist/' + workshopState.playlistId + '/snapshots', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({
+            playlist_name: workshopState.playlistName,
+            track_uris: workshopState.workingUris,
+            trigger_description: desc || 'Manual snapshot',
+        }),
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            return response.json().then(function(data) { throw new Error(data.message || 'Failed to create snapshot'); });
+        }
+        return response.json();
+    })
+    .then(function(data) {
+        cancelManualSnapshot();
+        showNotification('Snapshot created', 'success');
+        loadSnapshots();
+    })
+    .catch(function(error) {
+        showNotification(error.message || 'Failed to create snapshot', 'error');
+    })
+    .finally(function() {
+        snapshotState.isCreating = false;
+    });
+}
+
+// --- Restore Modal ---
+
+function showRestoreModal(snapshotId, trackCount) {
+    snapshotState.pendingRestoreId = snapshotId;
+    var detail = document.getElementById('restore-modal-detail');
+    detail.textContent = 'Snapshot has ' + trackCount + ' tracks. Current playlist has ' + workshopState.workingUris.length + ' tracks.';
+    document.getElementById('snapshot-restore-modal').classList.remove('hidden');
+}
+
+function hideRestoreModal() {
+    document.getElementById('snapshot-restore-modal').classList.add('hidden');
+    snapshotState.pendingRestoreId = null;
+}
+
+function executeRestore() {
+    if (!snapshotState.pendingRestoreId) return;
+
+    fetch('/snapshots/' + snapshotState.pendingRestoreId + '/restore', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            return response.json().then(function(data) { throw new Error(data.message || 'Restore failed'); });
+        }
+        return response.json();
+    })
+    .then(function(data) {
+        hideRestoreModal();
+        showNotification('Snapshot restored! Reloading...', 'success');
+        setTimeout(function() { window.location.reload(); }, 1000);
+    })
+    .catch(function(error) {
+        hideRestoreModal();
+        showNotification(error.message || 'Failed to restore snapshot', 'error');
+    });
+}
+
+// --- Delete Modal ---
+
+function showDeleteModal(snapshotId) {
+    snapshotState.pendingDeleteId = snapshotId;
+    document.getElementById('snapshot-delete-modal').classList.remove('hidden');
+}
+
+function hideDeleteModal() {
+    document.getElementById('snapshot-delete-modal').classList.add('hidden');
+    snapshotState.pendingDeleteId = null;
+}
+
+function executeDelete() {
+    if (!snapshotState.pendingDeleteId) return;
+
+    fetch('/snapshots/' + snapshotState.pendingDeleteId, {
+        method: 'DELETE',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            return response.json().then(function(data) { throw new Error(data.message || 'Delete failed'); });
+        }
+        return response.json();
+    })
+    .then(function(data) {
+        hideDeleteModal();
+        showNotification('Snapshot deleted', 'success');
+        loadSnapshots();
+    })
+    .catch(function(error) {
+        hideDeleteModal();
+        showNotification(error.message || 'Failed to delete snapshot', 'error');
+    });
+}
+
+// --- Tab Activation Hook (called by Phase 1's switchTab) ---
+
+function onSnapshotsTabActivated() {
+    if (!snapshotState.isLoaded) {
+        loadSnapshots();
+    }
+}
+</script>
+
 <style>
 .workshop-scrollbar::-webkit-scrollbar { width: 8px; }
 .workshop-scrollbar::-webkit-scrollbar-thumb { background: rgba(20, 120, 60, 0.5); border-radius: 6px; }
@@ -1805,6 +2182,18 @@ document.addEventListener('DOMContentLoaded', () => {
 .rotate-180 { transform: rotate(180deg); }
 .source-track-item { background: rgba(255, 255, 255, 0.02); }
 .source-track-item:hover { background: rgba(255, 255, 255, 0.06); }
+
+/* Snapshot Browser Panel */
+.snapshot-card:hover { background: rgba(255, 255, 255, 0.08) !important; }
+.snapshot-timeline-container { max-height: calc(100vh - 200px); overflow-y: auto; }
+.snapshot-timeline-fade {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+    background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.4));
+}
 
 /* Workshop Powertools Sidebar */
 .sidebar-scrollbar::-webkit-scrollbar { width: 6px; }
