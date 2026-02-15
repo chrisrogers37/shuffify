@@ -1,5 +1,10 @@
 # Phase 3: Archive Playlist Pairing — Implementation Plan
 
+**Status:** ✅ COMPLETE
+**Started:** 2026-02-14
+**Completed:** 2026-02-14
+**PR:** #66
+
 ## PR Title
 `feat: Add archive playlist pairing for workshop track removal recovery (#phase-3)`
 
@@ -149,17 +154,17 @@ All endpoints require auth, check `is_db_available()`, log activities.
 
 ## Verification Checklist
 
-- [ ] `flake8 shuffify/` passes
-- [ ] `pytest tests/ -v` passes
-- [ ] Migration applies cleanly (`flask db upgrade`) and downgrades cleanly
-- [ ] PlaylistPair model has `to_dict()`, `__repr__()`, unique constraint
-- [ ] All routes require auth and check `is_db_available()`
-- [ ] `deleteTrack()` queues to archive only when pair exists with auto_archive enabled
-- [ ] `undoPreview()` clears archive queue
-- [ ] `commitToSpotify()` flushes archive queue after successful commit only
-- [ ] Archive flush failure puts URIs back in queue
-- [ ] Activity log entries for all four new activity types
-- [ ] CHANGELOG.md updated
+- [x] `flake8 shuffify/` passes
+- [x] `pytest tests/ -v` passes (998 passed)
+- [x] Migration applies cleanly (`flask db upgrade`) and downgrades cleanly
+- [x] PlaylistPair model has `to_dict()`, `__repr__()`, unique constraint
+- [x] All routes require auth and check `is_db_available()`
+- [x] `deleteTrack()` queues to archive only when pair exists with auto_archive enabled
+- [x] `undoPreview()` clears archive queue
+- [x] `commitToSpotify()` flushes archive queue after successful commit only
+- [x] Archive flush failure puts URIs back in queue
+- [x] Activity log entries for all four new activity types
+- [x] CHANGELOG.md updated
 
 ---
 

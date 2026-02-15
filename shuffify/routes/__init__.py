@@ -127,4 +127,5 @@ from shuffify.routes import (  # noqa: E402, F401
     schedules,
     settings,
     snapshots,
+    playlist_pairs,
 )
