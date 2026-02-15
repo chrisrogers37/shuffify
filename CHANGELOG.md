@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Responsive design: overlays on mobile with backdrop, side panel on desktop
   - Self-contained `workshopSidebar` JavaScript namespace (no impact on existing workshop JS)
   - Foundation for Phases 2-5 of the Workshop Powertools enhancement suite
+- **Archive Playlist Pairing** - Link production playlists to archive companions for track removal recovery
+  - New `PlaylistPair` database model with unique constraint per user+playlist
+  - Alembic migration for `playlist_pairs` table
+  - `PlaylistPairService` with CRUD, archive/unarchive, and batch Spotify API calls (100-track batches)
+  - 6 REST endpoints for pair management, track archiving, and archive browsing
+  - Pydantic validation schemas with cross-field mode validation (create-new vs. link-existing)
+  - Workshop sidebar Archive tab with pair creation, archive track list, and restore buttons
+  - Auto-queue removed tracks for archiving on commit (best-effort, non-blocking)
+  - Archive queue cleared on undo to prevent archiving reverted removals
+  - 4 new activity types: `ARCHIVE_TRACKS`, `UNARCHIVE_TRACKS`, `PAIR_CREATE`, `PAIR_DELETE`
 - **Snapshot Browser Panel** - Workshop sidebar panel for browsing, creating, restoring, and deleting playlist snapshots
   - Chronological timeline with color-coded type badges (manual, pre-shuffle, pre-raid, pre-commit, scheduled)
   - Manual snapshot creation with optional description

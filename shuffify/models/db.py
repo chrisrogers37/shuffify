@@ -96,6 +96,11 @@ class User(db.Model):
         uselist=False,
         cascade="all, delete-orphan",
     )
+    playlist_pairs = db.relationship(
+        "PlaylistPair",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the User to a dictionary."""
@@ -828,4 +833,102 @@ class ActivityLog(db.Model):
             f"<ActivityLog {self.id}: "
             f"{self.activity_type} "
             f"by user {self.user_id}>"
+        )
+
+
+class PlaylistPair(db.Model):
+    """
+    Links a production playlist to an archive playlist.
+
+    When tracks are removed from the production playlist in the workshop,
+    they are automatically added to the archive playlist on commit.
+    """
+
+    __tablename__ = "playlist_pairs"
+
+    id = db.Column(
+        db.Integer, primary_key=True, autoincrement=True
+    )
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    production_playlist_id = db.Column(
+        db.String(255), nullable=False
+    )
+    production_playlist_name = db.Column(
+        db.String(255), nullable=True
+    )
+    archive_playlist_id = db.Column(
+        db.String(255), nullable=False
+    )
+    archive_playlist_name = db.Column(
+        db.String(255), nullable=True
+    )
+    auto_archive_on_remove = db.Column(
+        db.Boolean, nullable=False, default=True
+    )
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # Relationships
+    user = db.relationship(
+        "User", back_populates="playlist_pairs"
+    )
+
+    # Unique constraint: one pair per user per production playlist
+    __table_args__ = (
+        db.UniqueConstraint(
+            "user_id",
+            "production_playlist_id",
+            name="uq_user_production_playlist",
+        ),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize the PlaylistPair to a dictionary."""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "production_playlist_id": (
+                self.production_playlist_id
+            ),
+            "production_playlist_name": (
+                self.production_playlist_name
+            ),
+            "archive_playlist_id": self.archive_playlist_id,
+            "archive_playlist_name": (
+                self.archive_playlist_name
+            ),
+            "auto_archive_on_remove": (
+                self.auto_archive_on_remove
+            ),
+            "created_at": (
+                self.created_at.isoformat()
+                if self.created_at
+                else None
+            ),
+            "updated_at": (
+                self.updated_at.isoformat()
+                if self.updated_at
+                else None
+            ),
+        }
+
+    def __repr__(self) -> str:
+        return (
+            f"<PlaylistPair {self.id}: "
+            f"'{self.production_playlist_name}' -> "
+            f"'{self.archive_playlist_name}'>"
         )
