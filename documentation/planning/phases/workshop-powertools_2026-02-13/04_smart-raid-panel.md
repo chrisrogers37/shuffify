@@ -1,5 +1,10 @@
 # Phase 4: Smart Raid Panel -- Implementation Plan
 
+**Status:** ✅ COMPLETE
+**Started:** 2026-02-15
+**Completed:** 2026-02-15
+**PR:** #67
+
 ## PR Title
 `feat: Add smart raid panel with one-click source watching and schedule integration (#phase-4)`
 
@@ -489,21 +494,21 @@ Follow the pattern from `tests/test_snapshot_routes.py`: `db_app` fixture, `auth
 
 ## Verification Checklist
 
-- [ ] `flake8 shuffify/` passes
-- [ ] `pytest tests/ -v` passes
-- [ ] All 5 raid panel endpoints require auth and check `is_db_available()`
-- [ ] `WatchPlaylistRequest` validates schedule_value against `IntervalValue` enum
-- [ ] `watch_playlist()` is idempotent for duplicate sources
-- [ ] `unwatch_playlist()` deletes schedule when last source is removed
-- [ ] `_find_raid_schedule()` matches both `raid` and `raid_and_shuffle` job types
-- [ ] `raid_now()` works without an existing schedule
-- [ ] Panel loads lazily on first Raids tab activation
-- [ ] Panel shows "Database unavailable" when DB is down
-- [ ] "Raid Now" button is disabled during execution
-- [ ] Activity log entries for all three new activity types
-- [ ] Schedule toggle updates APScheduler via `add_job_for_schedule()` / `remove_job_for_schedule()`
-- [ ] CHANGELOG.md updated
-- [ ] No new pip dependencies required
+- [x] `flake8 shuffify/` passes
+- [x] `pytest tests/ -v` passes (1041 passed, 43 new)
+- [x] All 5 raid panel endpoints require auth and check `is_db_available()`
+- [x] `WatchPlaylistRequest` validates schedule_value against `IntervalValue` enum
+- [x] `watch_playlist()` is idempotent for duplicate sources
+- [x] `unwatch_playlist()` deletes schedule when last source is removed
+- [x] `_find_raid_schedule()` matches both `raid` and `raid_and_shuffle` job types
+- [x] `raid_now()` works without an existing schedule
+- [x] Panel loads lazily on first Raids tab activation
+- [x] Panel shows "Database unavailable" when DB is down
+- [x] "Raid Now" button is disabled during execution
+- [x] Activity log entries for all three new activity types
+- [x] Schedule toggle updates APScheduler via `add_job_for_schedule()` / `remove_job_for_schedule()`
+- [x] CHANGELOG.md updated
+- [x] No new pip dependencies required
 
 ---
 

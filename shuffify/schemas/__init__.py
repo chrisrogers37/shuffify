@@ -34,6 +34,11 @@ from .playlist_pair_requests import (
     ArchiveTracksRequest,
     UnarchiveTracksRequest,
 )
+from .raid_requests import (
+    WatchPlaylistRequest,
+    UnwatchPlaylistRequest,
+    RaidNowRequest,
+)
 
 __all__ = [
     # Exceptions
@@ -62,4 +67,8 @@ __all__ = [
     "CreatePairRequest",
     "ArchiveTracksRequest",
     "UnarchiveTracksRequest",
+    # Raid schemas
+    "WatchPlaylistRequest",
+    "UnwatchPlaylistRequest",
+    "RaidNowRequest",
 ]

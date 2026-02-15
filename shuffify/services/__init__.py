@@ -139,6 +139,12 @@ from shuffify.services.playlist_pair_service import (
     PlaylistPairExistsError,
 )
 
+# Raid Sync Service
+from shuffify.services.raid_sync_service import (
+    RaidSyncService,
+    RaidSyncError,
+)
+
 __all__ = [
     # Services
     "AuthService",
@@ -211,4 +217,7 @@ __all__ = [
     "PlaylistPairError",
     "PlaylistPairNotFoundError",
     "PlaylistPairExistsError",
+    # Raid Sync Service
+    "RaidSyncService",
+    "RaidSyncError",
 ]

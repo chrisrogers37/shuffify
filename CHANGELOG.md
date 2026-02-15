@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Smart Raid Panel** - One-click playlist watching and raid management in the workshop sidebar
+  - "Watch Playlist" one-click operation: registers source + auto-creates raid schedule
+  - Source management: view, add, and remove watched playlists with type badges
+  - Schedule control: toggle raid schedule on/off, view last run status and interval
+  - "Raid Now" button for immediate on-demand track sync
+  - New `RaidSyncService` orchestration layer composing UpstreamSourceService + SchedulerService
+  - 5 REST endpoints for raid status, watch/unwatch, raid-now, and schedule toggle
+  - 3 new activity types: `RAID_WATCH_ADD`, `RAID_WATCH_REMOVE`, `RAID_SYNC_NOW`
 - **Workshop Powertools Sidebar** - Collapsible tabbed sidebar on the workshop page
   - Four tab placeholders: Snapshots, Archive, Raids, Schedules
   - Smooth slide-in/out animation with localStorage state persistence

@@ -602,14 +602,92 @@
 
         <!-- Tab Content: Raids -->
         <div id="sidebar-tab-raids" class="sidebar-tab-content hidden p-5" role="tabpanel">
-            <h3 class="text-white font-bold text-lg mb-2">Raids</h3>
-            <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
-                <svg class="w-12 h-12 mx-auto text-white/20 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-white font-bold text-lg">Raids</h3>
+                <button onclick="raidPanel.loadStatus()"
+                        class="text-white/40 hover:text-white/60 transition duration-150"
+                        title="Refresh raid status">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Loading state -->
+            <div id="raid-loading" class="hidden text-center py-6">
+                <svg class="w-8 h-8 mx-auto text-white/30 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                 </svg>
-                <p class="text-white/60 text-sm mb-1">Smart playlist raids</p>
-                <p class="text-white/30 text-xs">Pull tracks from source playlists with intelligent deduplication, filtering, and one-click raid execution.</p>
-                <span class="inline-block mt-3 px-3 py-1 rounded-full bg-white/10 text-white/40 text-xs font-semibold">Coming in Phase 4</span>
+                <p class="text-white/40 text-sm mt-2">Loading raid status...</p>
+            </div>
+
+            <!-- Raid panel content -->
+            <div id="raid-panel-content" class="hidden space-y-4">
+
+                <!-- Quick Watch Section -->
+                <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                    <label class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Watch a playlist</label>
+                    <select id="raid-playlist-select"
+                            class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 mb-2">
+                        <option value="">Select a playlist...</option>
+                    </select>
+                    <button id="raid-watch-btn" onclick="raidPanel.watchPlaylist()"
+                            class="w-full px-4 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                            disabled>
+                        Watch Playlist
+                    </button>
+                    <p class="text-white/30 text-xs mt-2">Watched playlists are checked for new tracks on a schedule.</p>
+                </div>
+
+                <!-- Watched Sources List -->
+                <div>
+                    <span class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Watched Sources</span>
+                    <div id="raid-sources-list" class="space-y-1 max-h-[30vh] overflow-y-auto sidebar-scrollbar">
+                        <!-- Populated by raidPanel.renderSources() -->
+                    </div>
+                    <div id="raid-sources-empty" class="hidden rounded-xl bg-white/5 border border-white/10 p-4 text-center">
+                        <p class="text-white/40 text-sm">No sources watched</p>
+                        <p class="text-white/20 text-xs mt-1">Select a playlist above to start watching.</p>
+                    </div>
+                </div>
+
+                <!-- Schedule Status -->
+                <div id="raid-schedule-section">
+                    <span class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Schedule</span>
+                    <div id="raid-schedule-info" class="hidden rounded-xl bg-white/5 border border-white/10 p-3">
+                        <div class="flex items-center justify-between mb-1">
+                            <span id="raid-schedule-interval" class="text-white text-sm font-medium"></span>
+                            <button onclick="raidPanel.toggleSchedule()" id="raid-schedule-toggle"
+                                    class="px-2 py-0.5 rounded-full text-xs font-semibold transition duration-150">
+                            </button>
+                        </div>
+                        <div class="flex items-center gap-2 text-xs">
+                            <span id="raid-schedule-last-run" class="text-white/40"></span>
+                            <span id="raid-schedule-status-badge" class="px-1.5 py-0.5 rounded-full text-xs font-semibold"></span>
+                        </div>
+                    </div>
+                    <div id="raid-no-schedule" class="hidden text-white/30 text-xs">
+                        No schedule configured. Watch a playlist to auto-create one.
+                    </div>
+                </div>
+
+                <!-- Raid Now -->
+                <button id="raid-now-btn" onclick="raidPanel.raidNow()"
+                        class="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-semibold text-sm transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg>
+                    Raid Now
+                </button>
+            </div>
+
+            <!-- Error state -->
+            <div id="raid-error" class="hidden rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-center">
+                <p class="text-red-300 text-sm">Failed to load raid status</p>
+                <button onclick="raidPanel.loadStatus()"
+                        class="text-red-300/60 hover:text-red-300 text-xs mt-2 underline transition duration-150">
+                    Retry
+                </button>
             </div>
         </div>
 
@@ -2529,6 +2607,321 @@ function updateArchiveQueueBadge() {
 function onArchiveTabActivated() {
     if (!archiveState.isLoaded) {
         loadArchivePairInfo();
+    }
+}
+</script>
+
+<!-- Smart Raid Panel (Phase 4) -->
+<script>
+var raidPanel = {
+    loaded: false,
+    isLoading: false,
+    status: null,
+    playlistsPopulated: false,
+
+    init: function() {
+        this.loadStatus();
+    },
+
+    loadStatus: function() {
+        var self = this;
+        var loading = document.getElementById('raid-loading');
+        var content = document.getElementById('raid-panel-content');
+        var errorEl = document.getElementById('raid-error');
+
+        loading.classList.remove('hidden');
+        content.classList.add('hidden');
+        errorEl.classList.add('hidden');
+        self.isLoading = true;
+
+        fetch('/playlist/' + workshopState.playlistId + '/raid-status')
+        .then(function(response) {
+            if (!response.ok) throw new Error('Failed to load raid status');
+            return response.json();
+        })
+        .then(function(data) {
+            loading.classList.add('hidden');
+            self.status = data.raid_status;
+            self.loaded = true;
+            self.render();
+            content.classList.remove('hidden');
+
+            if (!self.playlistsPopulated) {
+                self.populatePlaylistDropdown();
+            }
+        })
+        .catch(function(error) {
+            loading.classList.add('hidden');
+            errorEl.classList.remove('hidden');
+            console.error('Raid status load error:', error);
+        })
+        .finally(function() {
+            self.isLoading = false;
+        });
+    },
+
+    render: function() {
+        if (!this.status) return;
+        this.renderSources(this.status.sources);
+        this.renderSchedule(this.status.schedule);
+
+        var raidNowBtn = document.getElementById('raid-now-btn');
+        raidNowBtn.disabled = this.status.source_count === 0;
+    },
+
+    renderSources: function(sources) {
+        var listEl = document.getElementById('raid-sources-list');
+        var emptyEl = document.getElementById('raid-sources-empty');
+
+        if (!sources || sources.length === 0) {
+            listEl.innerHTML = '';
+            emptyEl.classList.remove('hidden');
+            return;
+        }
+
+        emptyEl.classList.add('hidden');
+        var html = '';
+        sources.forEach(function(src) {
+            var name = src.source_name || src.source_playlist_id;
+            var typeBadge = src.source_type === 'own'
+                ? '<span class="px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-300 text-xs">own</span>'
+                : '<span class="px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-xs">external</span>';
+
+            html += '<div class="flex items-center p-2 rounded-lg hover:bg-white/5 transition duration-150 group">'
+                + '<div class="flex-1 min-w-0">'
+                + '<p class="text-white text-sm truncate">' + escapeHtml(name) + '</p>'
+                + '<div class="flex items-center gap-1 mt-0.5">' + typeBadge + '</div>'
+                + '</div>'
+                + '<button onclick="raidPanel.unwatchSource(' + src.id + ')" '
+                + 'class="ml-2 p-1.5 rounded-lg text-white/20 hover:text-red-400 hover:bg-white/10 opacity-0 group-hover:opacity-100 transition duration-150 flex-shrink-0" '
+                + 'title="Remove source">'
+                + '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">'
+                + '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>'
+                + '</svg></button>'
+                + '</div>';
+        });
+        listEl.innerHTML = html;
+    },
+
+    renderSchedule: function(schedule) {
+        var infoEl = document.getElementById('raid-schedule-info');
+        var noSched = document.getElementById('raid-no-schedule');
+
+        if (!schedule) {
+            infoEl.classList.add('hidden');
+            noSched.classList.remove('hidden');
+            return;
+        }
+
+        noSched.classList.add('hidden');
+        infoEl.classList.remove('hidden');
+
+        var intervalMap = {
+            'every_6h': 'Every 6 hours',
+            'every_12h': 'Every 12 hours',
+            'daily': 'Every day',
+            'every_3d': 'Every 3 days',
+            'weekly': 'Every week'
+        };
+        var intervalEl = document.getElementById('raid-schedule-interval');
+        intervalEl.textContent = intervalMap[schedule.schedule_value] || schedule.schedule_value;
+
+        var toggleEl = document.getElementById('raid-schedule-toggle');
+        if (schedule.is_enabled) {
+            toggleEl.textContent = 'Enabled';
+            toggleEl.className = 'px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-300 transition duration-150';
+        } else {
+            toggleEl.textContent = 'Disabled';
+            toggleEl.className = 'px-2 py-0.5 rounded-full text-xs font-semibold bg-red-500/20 text-red-300 transition duration-150';
+        }
+
+        var lastRunEl = document.getElementById('raid-schedule-last-run');
+        var badgeEl = document.getElementById('raid-schedule-status-badge');
+        if (schedule.last_run_at) {
+            lastRunEl.textContent = 'Last run: ' + formatRelativeTime(schedule.last_run_at);
+            if (schedule.last_status === 'success') {
+                badgeEl.textContent = 'success';
+                badgeEl.className = 'px-1.5 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-300';
+            } else if (schedule.last_status === 'failed') {
+                badgeEl.textContent = 'failed';
+                badgeEl.className = 'px-1.5 py-0.5 rounded-full text-xs font-semibold bg-red-500/20 text-red-300';
+            } else {
+                badgeEl.textContent = '';
+                badgeEl.className = '';
+            }
+        } else {
+            lastRunEl.textContent = 'Never run';
+            badgeEl.textContent = '';
+            badgeEl.className = '';
+        }
+    },
+
+    populatePlaylistDropdown: function() {
+        var select = document.getElementById('raid-playlist-select');
+        var watchBtn = document.getElementById('raid-watch-btn');
+
+        select.addEventListener('change', function() {
+            watchBtn.disabled = !select.value;
+        });
+
+        // Fetch playlists if not already loaded
+        fetch('/user-playlists')
+        .then(function(response) {
+            if (!response.ok) throw new Error('Failed to fetch playlists');
+            return response.json();
+        })
+        .then(function(data) {
+            var playlists = data.playlists || [];
+            playlists.forEach(function(pl) {
+                if (pl.id === workshopState.playlistId) return;
+                var opt = document.createElement('option');
+                opt.value = pl.id;
+                opt.textContent = pl.name + ' (' + pl.track_count + ' tracks)';
+                opt.dataset.name = pl.name;
+                select.appendChild(opt);
+            });
+            raidPanel.playlistsPopulated = true;
+        })
+        .catch(function(error) {
+            console.error('Failed to load playlists for raid:', error);
+        });
+    },
+
+    watchPlaylist: function() {
+        var select = document.getElementById('raid-playlist-select');
+        var selectedOption = select.options[select.selectedIndex];
+        if (!select.value) return;
+
+        var btn = document.getElementById('raid-watch-btn');
+        btn.disabled = true;
+        btn.textContent = 'Watching...';
+
+        var self = this;
+        fetch('/playlist/' + workshopState.playlistId + '/raid-watch', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify({
+                source_playlist_id: select.value,
+                source_playlist_name: selectedOption.dataset.name || select.value,
+                target_playlist_name: workshopState.playlistName,
+                auto_schedule: true,
+                schedule_value: 'daily',
+            }),
+        })
+        .then(function(response) {
+            if (!response.ok) {
+                return response.json().then(function(d) {
+                    throw new Error(d.message || 'Failed to watch playlist');
+                });
+            }
+            return response.json();
+        })
+        .then(function(data) {
+            showNotification('Now watching ' + (selectedOption.dataset.name || select.value), 'success');
+            select.value = '';
+            btn.textContent = 'Watch Playlist';
+            btn.disabled = true;
+            self.loadStatus();
+        })
+        .catch(function(error) {
+            btn.textContent = 'Watch Playlist';
+            btn.disabled = !select.value;
+            showNotification(error.message || 'Failed to watch playlist', 'error');
+        });
+    },
+
+    unwatchSource: function(sourceId) {
+        var self = this;
+
+        fetch('/playlist/' + workshopState.playlistId + '/raid-unwatch', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify({ source_id: sourceId }),
+        })
+        .then(function(response) {
+            if (!response.ok) throw new Error('Failed to remove source');
+            return response.json();
+        })
+        .then(function() {
+            showNotification('Source removed', 'success');
+            self.loadStatus();
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Failed to remove source', 'error');
+        });
+    },
+
+    raidNow: function() {
+        var btn = document.getElementById('raid-now-btn');
+        var originalHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<svg class="w-4 h-4 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Raiding...';
+
+        var self = this;
+        fetch('/playlist/' + workshopState.playlistId + '/raid-now', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify({}),
+        })
+        .then(function(response) {
+            if (!response.ok) {
+                return response.json().then(function(d) {
+                    throw new Error(d.message || 'Raid failed');
+                });
+            }
+            return response.json();
+        })
+        .then(function(data) {
+            var msg = 'Raid complete: ' + (data.tracks_added || 0) + ' new tracks added';
+            showNotification(msg, 'success');
+            self.loadStatus();
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Raid failed', 'error');
+        })
+        .finally(function() {
+            btn.innerHTML = originalHTML;
+            btn.disabled = self.status && self.status.source_count === 0;
+        });
+    },
+
+    toggleSchedule: function() {
+        var self = this;
+
+        fetch('/playlist/' + workshopState.playlistId + '/raid-schedule-toggle', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        })
+        .then(function(response) {
+            if (!response.ok) throw new Error('Toggle failed');
+            return response.json();
+        })
+        .then(function(data) {
+            var state = data.schedule.is_enabled ? 'enabled' : 'disabled';
+            showNotification('Schedule ' + state, 'success');
+            self.loadStatus();
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Failed to toggle schedule', 'error');
+        });
+    },
+};
+
+function onRaidsTabActivated() {
+    if (!raidPanel.loaded) {
+        raidPanel.init();
     }
 }
 </script>
