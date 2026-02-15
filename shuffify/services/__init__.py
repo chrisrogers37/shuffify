@@ -131,6 +131,14 @@ from shuffify.services.dashboard_service import (
     DashboardError,
 )
 
+# Playlist Pair Service
+from shuffify.services.playlist_pair_service import (
+    PlaylistPairService,
+    PlaylistPairError,
+    PlaylistPairNotFoundError,
+    PlaylistPairExistsError,
+)
+
 __all__ = [
     # Services
     "AuthService",
@@ -198,4 +206,9 @@ __all__ = [
     # Dashboard Service
     "DashboardService",
     "DashboardError",
+    # Playlist Pair Service
+    "PlaylistPairService",
+    "PlaylistPairError",
+    "PlaylistPairNotFoundError",
+    "PlaylistPairExistsError",
 ]

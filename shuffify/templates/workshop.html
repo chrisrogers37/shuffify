@@ -524,14 +524,79 @@
 
         <!-- Tab Content: Archive -->
         <div id="sidebar-tab-archive" class="sidebar-tab-content hidden p-5" role="tabpanel">
-            <h3 class="text-white font-bold text-lg mb-2">Archive</h3>
-            <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
-                <svg class="w-12 h-12 mx-auto text-white/20 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-white font-bold text-lg">Archive</h3>
+                <span id="archive-queue-badge" class="hidden px-2 py-0.5 rounded-full bg-yellow-500/80 text-xs font-semibold text-white">0 queued</span>
+            </div>
+
+            <!-- Loading state -->
+            <div id="archive-loading" class="hidden text-center py-6">
+                <svg class="w-8 h-8 mx-auto text-white/30 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                 </svg>
-                <p class="text-white/60 text-sm mb-1">Pair playlists with archive targets</p>
-                <p class="text-white/30 text-xs">Link this playlist to an archive so removed tracks are automatically preserved instead of lost.</p>
-                <span class="inline-block mt-3 px-3 py-1 rounded-full bg-white/10 text-white/40 text-xs font-semibold">Coming in Phase 3</span>
+                <p class="text-white/40 text-sm mt-2">Loading...</p>
+            </div>
+
+            <!-- No pair state -->
+            <div id="archive-no-pair" class="hidden">
+                <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                    <svg class="w-12 h-12 mx-auto text-white/20 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
+                    </svg>
+                    <p class="text-white/60 text-sm mb-1">No archive linked</p>
+                    <p class="text-white/30 text-xs mb-4">Link an archive playlist so removed tracks are automatically preserved.</p>
+                    <button onclick="createArchivePair()"
+                            class="px-4 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
+                        Create Archive Pair
+                    </button>
+                </div>
+            </div>
+
+            <!-- Paired state -->
+            <div id="archive-paired" class="hidden">
+                <!-- Pair info card -->
+                <div class="rounded-xl bg-white/5 border border-white/10 p-4 mb-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Archive Playlist</span>
+                        <button onclick="deleteArchivePair()"
+                                class="text-red-400/60 hover:text-red-400 text-xs transition duration-150"
+                                title="Remove archive pairing">
+                            Unlink
+                        </button>
+                    </div>
+                    <p id="archive-pair-name" class="text-white font-medium text-sm truncate"></p>
+                    <p id="archive-pair-track-count" class="text-white/40 text-xs mt-1"></p>
+                </div>
+
+                <!-- Archive track list -->
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Archived Tracks</span>
+                    <button onclick="loadArchiveTracks()"
+                            class="text-white/40 hover:text-white/60 transition duration-150"
+                            title="Refresh archive tracks">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <div id="archive-track-list" class="space-y-1 max-h-[50vh] overflow-y-auto sidebar-scrollbar">
+                    <!-- Populated by renderArchiveTrackList() -->
+                </div>
+
+                <div id="archive-tracks-empty" class="hidden rounded-xl bg-white/5 border border-white/10 p-4 text-center">
+                    <p class="text-white/40 text-sm">No archived tracks yet</p>
+                    <p class="text-white/20 text-xs mt-1">Tracks removed from this playlist will appear here after saving.</p>
+                </div>
+            </div>
+
+            <!-- Error state -->
+            <div id="archive-error" class="hidden rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-center">
+                <p class="text-red-300 text-sm">Failed to load archive info</p>
+                <button onclick="loadArchivePairInfo()"
+                        class="text-red-300/60 hover:text-red-300 text-xs mt-2 underline transition duration-150">
+                    Retry
+                </button>
             </div>
         </div>
 
@@ -634,6 +699,10 @@ const workshopState = {
     sourceTracks: [],
     playlistsLoaded: false,
     isLoadingSource: false,
+    // Archive pairing state
+    archiveQueue: [],
+    archivePair: null,
+    archiveTracks: [],
 };
 
 const trackDataByUri = {};
@@ -829,6 +898,10 @@ function commitToSpotify() {
             if (typeof snapshotState !== 'undefined' && snapshotState.isLoaded) {
                 setTimeout(function() { loadSnapshots(); }, 500);
             }
+            // Flush archive queue (best-effort, after commit succeeds)
+            if (workshopState.archiveQueue.length > 0) {
+                flushArchiveQueue();
+            }
         } else {
             showNotification(data.message || 'Save returned unexpected response.', 'error');
         }
@@ -851,6 +924,8 @@ function commitToSpotify() {
 
 function undoPreview() {
     workshopState.workingUris = [...workshopState.savedUris];
+    workshopState.archiveQueue = [];
+    updateArchiveQueueBadge();
     fullRerenderTrackList();
     updateTrackCount();
     markDirty();
@@ -959,6 +1034,12 @@ function deleteTrack(uri, buttonElement) {
 
     // Remove from workingUris at the same index
     workshopState.workingUris.splice(domIndex, 1);
+
+    // Queue for archiving if pair exists with auto-archive enabled
+    if (workshopState.archivePair && workshopState.archivePair.auto_archive_on_remove) {
+        workshopState.archiveQueue.push(uri);
+        updateArchiveQueueBadge();
+    }
 
     // Remove the DOM element with a fade-out animation
     trackItem.style.transition = 'opacity 0.2s ease-out, max-height 0.3s ease-out';
@@ -1894,6 +1975,9 @@ const workshopSidebar = {
         if (tabName === 'snapshots' && typeof onSnapshotsTabActivated === 'function') {
             onSnapshotsTabActivated();
         }
+        if (tabName === 'archive' && typeof onArchiveTabActivated === 'function') {
+            onArchiveTabActivated();
+        }
         if (tabName === 'raids' && typeof onRaidsTabActivated === 'function') {
             onRaidsTabActivated();
         }
@@ -2165,6 +2249,286 @@ function executeDelete() {
 function onSnapshotsTabActivated() {
     if (!snapshotState.isLoaded) {
         loadSnapshots();
+    }
+}
+</script>
+
+<!-- Archive Playlist Pairing (Phase 3) -->
+<script>
+// =============================================================================
+// Archive Pairing State & Functions
+// =============================================================================
+
+var archiveState = {
+    isLoaded: false,
+    isLoadingTracks: false,
+};
+
+function loadArchivePairInfo() {
+    var loading = document.getElementById('archive-loading');
+    var noPair = document.getElementById('archive-no-pair');
+    var paired = document.getElementById('archive-paired');
+    var errorEl = document.getElementById('archive-error');
+
+    loading.classList.remove('hidden');
+    noPair.classList.add('hidden');
+    paired.classList.add('hidden');
+    errorEl.classList.add('hidden');
+
+    fetch('/playlist/' + workshopState.playlistId + '/pair')
+    .then(function(response) {
+        if (!response.ok) throw new Error('Failed to load pair info');
+        return response.json();
+    })
+    .then(function(data) {
+        loading.classList.add('hidden');
+        if (data.paired) {
+            workshopState.archivePair = data.pair;
+            renderArchivePanel();
+            loadArchiveTracks();
+        } else {
+            workshopState.archivePair = null;
+            noPair.classList.remove('hidden');
+        }
+        archiveState.isLoaded = true;
+    })
+    .catch(function(error) {
+        loading.classList.add('hidden');
+        errorEl.classList.remove('hidden');
+        console.error('Archive pair load error:', error);
+    });
+}
+
+function renderArchivePanel() {
+    var noPair = document.getElementById('archive-no-pair');
+    var paired = document.getElementById('archive-paired');
+    noPair.classList.add('hidden');
+
+    if (!workshopState.archivePair) {
+        noPair.classList.remove('hidden');
+        paired.classList.add('hidden');
+        return;
+    }
+
+    var nameEl = document.getElementById('archive-pair-name');
+    nameEl.textContent = workshopState.archivePair.archive_playlist_name || 'Archive';
+    paired.classList.remove('hidden');
+}
+
+function createArchivePair() {
+    var btn = event.target.closest('button');
+    var originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Creating...';
+
+    fetch('/playlist/' + workshopState.playlistId + '/pair', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({
+            create_new: true,
+            production_playlist_name: workshopState.playlistName,
+        }),
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            return response.json().then(function(d) {
+                throw new Error(d.message || 'Failed to create pair');
+            });
+        }
+        return response.json();
+    })
+    .then(function(data) {
+        workshopState.archivePair = data.pair;
+        renderArchivePanel();
+        loadArchiveTracks();
+        showNotification('Archive pair created!', 'success');
+    })
+    .catch(function(error) {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        showNotification(error.message || 'Failed to create archive pair', 'error');
+    });
+}
+
+function deleteArchivePair() {
+    if (!workshopState.archivePair) return;
+
+    if (!confirm('Remove the archive pairing? The archive playlist itself will NOT be deleted.')) {
+        return;
+    }
+
+    fetch('/playlist/' + workshopState.playlistId + '/pair', {
+        method: 'DELETE',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            return response.json().then(function(d) {
+                throw new Error(d.message || 'Failed to remove pair');
+            });
+        }
+        return response.json();
+    })
+    .then(function() {
+        workshopState.archivePair = null;
+        workshopState.archiveTracks = [];
+        workshopState.archiveQueue = [];
+        updateArchiveQueueBadge();
+        renderArchivePanel();
+        showNotification('Archive pairing removed', 'success');
+    })
+    .catch(function(error) {
+        showNotification(error.message || 'Failed to remove pair', 'error');
+    });
+}
+
+function loadArchiveTracks() {
+    if (!workshopState.archivePair) return;
+    archiveState.isLoadingTracks = true;
+
+    var listEl = document.getElementById('archive-track-list');
+    var emptyEl = document.getElementById('archive-tracks-empty');
+    var countEl = document.getElementById('archive-pair-track-count');
+
+    fetch('/playlist/' + workshopState.playlistId + '/pair/archive-tracks')
+    .then(function(response) {
+        if (!response.ok) throw new Error('Failed to load archive tracks');
+        return response.json();
+    })
+    .then(function(data) {
+        workshopState.archiveTracks = data.tracks || [];
+        countEl.textContent = workshopState.archiveTracks.length + ' track' + (workshopState.archiveTracks.length !== 1 ? 's' : '') + ' archived';
+        renderArchiveTrackList();
+    })
+    .catch(function(error) {
+        console.error('Archive tracks load error:', error);
+        listEl.innerHTML = '';
+        emptyEl.classList.add('hidden');
+        countEl.textContent = 'Error loading tracks';
+    })
+    .finally(function() {
+        archiveState.isLoadingTracks = false;
+    });
+}
+
+function renderArchiveTrackList() {
+    var listEl = document.getElementById('archive-track-list');
+    var emptyEl = document.getElementById('archive-tracks-empty');
+
+    if (!workshopState.archiveTracks || workshopState.archiveTracks.length === 0) {
+        listEl.innerHTML = '';
+        emptyEl.classList.remove('hidden');
+        return;
+    }
+
+    emptyEl.classList.add('hidden');
+    var html = '';
+    workshopState.archiveTracks.forEach(function(track) {
+        var artists = (track.artists || []).join(', ');
+        var imgHtml = track.album_image_url
+            ? '<img src="' + escapeHtml(track.album_image_url) + '" alt="" class="w-full h-full object-cover" loading="lazy">'
+            : '<div class="w-full h-full flex items-center justify-center text-white/30"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
+
+        html += '<div class="archive-track-item flex items-center p-2 rounded-lg hover:bg-white/5 transition duration-150 group">'
+            + '<div class="w-8 h-8 rounded overflow-hidden flex-shrink-0 bg-black/20">' + imgHtml + '</div>'
+            + '<div class="ml-2 flex-1 min-w-0">'
+            + '<p class="text-white text-sm truncate">' + escapeHtml(track.name) + '</p>'
+            + '<p class="text-white/40 text-xs truncate">' + escapeHtml(artists) + '</p>'
+            + '</div>'
+            + '<button onclick="unarchiveTrack(\'' + escapeHtml(track.uri) + '\')" '
+            + 'class="ml-2 p-1.5 rounded-lg text-white/20 hover:text-green-400 hover:bg-white/10 opacity-0 group-hover:opacity-100 transition duration-150 flex-shrink-0" '
+            + 'title="Restore to playlist">'
+            + '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">'
+            + '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 015 5v2M3 10l4-4M3 10l4 4"></path>'
+            + '</svg></button>'
+            + '</div>';
+    });
+    listEl.innerHTML = html;
+}
+
+function flushArchiveQueue() {
+    if (workshopState.archiveQueue.length === 0) return;
+    if (!workshopState.archivePair) {
+        workshopState.archiveQueue = [];
+        updateArchiveQueueBadge();
+        return;
+    }
+
+    var uris = [...workshopState.archiveQueue];
+    workshopState.archiveQueue = [];
+    updateArchiveQueueBadge();
+
+    fetch('/playlist/' + workshopState.playlistId + '/pair/archive', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({ track_uris: uris }),
+    })
+    .then(function(response) {
+        if (!response.ok) throw new Error('Archive flush failed');
+        return response.json();
+    })
+    .then(function(data) {
+        showNotification('Archived ' + data.archived_count + ' track' + (data.archived_count !== 1 ? 's' : ''), 'info');
+        if (archiveState.isLoaded) {
+            loadArchiveTracks();
+        }
+    })
+    .catch(function(error) {
+        console.error('Archive flush error:', error);
+        // Put URIs back in queue so they can be retried
+        workshopState.archiveQueue = uris.concat(workshopState.archiveQueue);
+        updateArchiveQueueBadge();
+        showNotification('Failed to archive removed tracks. They remain queued.', 'error');
+    });
+}
+
+function unarchiveTrack(uri) {
+    if (!workshopState.archivePair) return;
+
+    fetch('/playlist/' + workshopState.playlistId + '/pair/unarchive', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({ track_uris: [uri] }),
+    })
+    .then(function(response) {
+        if (!response.ok) throw new Error('Unarchive failed');
+        return response.json();
+    })
+    .then(function(data) {
+        showNotification('Track restored to playlist', 'success');
+        loadArchiveTracks();
+    })
+    .catch(function(error) {
+        showNotification(error.message || 'Failed to restore track', 'error');
+    });
+}
+
+function updateArchiveQueueBadge() {
+    var badge = document.getElementById('archive-queue-badge');
+    if (!badge) return;
+    var count = workshopState.archiveQueue.length;
+    if (count > 0) {
+        badge.textContent = count + ' queued';
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
+}
+
+// --- Tab Activation Hook ---
+
+function onArchiveTabActivated() {
+    if (!archiveState.isLoaded) {
+        loadArchivePairInfo();
     }
 }
 </script>
