@@ -1,5 +1,8 @@
 # Phase 2: Snapshot Browser Panel -- Implementation Plan
 
+**Status:** 🔧 IN PROGRESS
+**Started:** 2026-02-14
+
 ## 1. Header
 
 | Field | Value |
