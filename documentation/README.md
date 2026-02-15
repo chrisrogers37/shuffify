@@ -15,8 +15,7 @@ documentation/
 │   ├── 04_future_features_readiness.md
 │   └── 05_brainstorm_enhancements.md
 ├── planning/          # Development plans and feature phases
-│   └── phases/
-│       └── workshop-powertools_2026-02-13/  # Workshop Powertools (5 phases)
+│   └── phases/        # (empty — all archived)
 └── archive/           # Completed evaluations and legacy documents
     ├── 01_architecture_evaluation.md
     ├── 02_modularity_assessment.md
@@ -24,7 +23,8 @@ documentation/
     ├── tech_debt_q1-2026_2026-02-10/  # Completed tech debt session
     ├── post-workshop-cleanup_2026-02-11/  # Post-workshop tech debt (4 phases)
     ├── playlist-workshop_2026-02-10/  # Workshop Enhancement Suite (6 phases, all complete)
-    └── user-persistence_2026-02-12/  # User Persistence Suite (7 phases, all complete)
+    ├── user-persistence_2026-02-12/  # User Persistence Suite (7 phases, all complete)
+    └── workshop-powertools_2026-02-13/  # Workshop Powertools Suite (5 phases, all complete)
 ```
 
 ---
@@ -47,7 +47,7 @@ Active evaluation documents for ongoing development planning:
 
 ## Planning (Active)
 
-- **[Workshop Powertools Enhancement Suite](planning/phases/workshop-powertools_2026-02-13/00_OVERVIEW.md)** - Multi-phase plan for sidebar powertools framework (Phase 1 in progress)
+No active plans — all sessions archived.
 
 ## Planning (Archived)
 
@@ -55,6 +55,7 @@ All development plans have been completed and archived:
 
 - **[Playlist Workshop Enhancement Suite](archive/playlist-workshop_2026-02-10/00_OVERVIEW.md)** - 6-phase plan for workshop features (all phases completed, PRs #43-48)
 - **[User Persistence Enhancement Suite](archive/user-persistence_2026-02-12/00_OVERVIEW.md)** - 7-phase plan: PostgreSQL, user dimension, login tracking, settings, snapshots, activity log, dashboard (all phases completed, PRs #56-62)
+- **[Workshop Powertools Enhancement Suite](archive/workshop-powertools_2026-02-13/00_OVERVIEW.md)** - 5-phase plan: sidebar framework, snapshot browser, archive pairing, smart raid, scheduled rotation (all phases completed, PRs #64-68)
 
 ## Archived (Completed)
 
@@ -67,6 +68,7 @@ Evaluations and plans that have been fully implemented:
 - **[Post-Workshop Cleanup](archive/post-workshop-cleanup_2026-02-11/00_TECH_DEBT.md)** - Post-workshop tech debt (4 phases: tests, enums, route split, housekeeping)
 - **[Playlist Workshop Plans](archive/playlist-workshop_2026-02-10/00_OVERVIEW.md)** - Workshop feature implementation plans (6 phases)
 - **[User Persistence Plans](archive/user-persistence_2026-02-12/00_OVERVIEW.md)** - User persistence implementation plans (7 phases)
+- **[Workshop Powertools Plans](archive/workshop-powertools_2026-02-13/00_OVERVIEW.md)** - Workshop powertools implementation plans (5 phases)
 
 ---
 
@@ -130,4 +132,4 @@ This documentation index should be updated whenever:
 - Documentation is reorganized
 - Documentation is deprecated or archived
 
-Last updated: 2026-02-13
+Last updated: 2026-02-15
