@@ -128,4 +128,5 @@ from shuffify.routes import (  # noqa: E402, F401
     settings,
     snapshots,
     playlist_pairs,
+    raid_panel,
 )
