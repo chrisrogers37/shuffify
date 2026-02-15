@@ -450,6 +450,50 @@ class SpotifyAPI:
 
         return True
 
+    @api_error_handler
+    def playlist_remove_items(
+        self, playlist_id: str, track_uris: List[str]
+    ) -> bool:
+        """
+        Remove specific tracks from a playlist.
+
+        Args:
+            playlist_id: The Spotify playlist ID.
+            track_uris: List of track URIs to remove.
+
+        Returns:
+            True if removal succeeded.
+
+        Raises:
+            SpotifyNotFoundError: If playlist doesn't exist.
+            SpotifyAPIError: If the removal fails.
+        """
+        self._ensure_valid_token()
+
+        if not track_uris:
+            return True
+
+        for i in range(0, len(track_uris), self.BATCH_SIZE):
+            batch = track_uris[i: i + self.BATCH_SIZE]
+            items = [{"uri": uri} for uri in batch]
+            self._sp.playlist_remove_all_occurrences_of_items(
+                playlist_id, items
+            )
+
+        logger.info(
+            "Removed %d tracks from playlist %s",
+            len(track_uris), playlist_id,
+        )
+
+        if self._cache:
+            self._cache.invalidate_playlist(playlist_id)
+            if self._user_id:
+                self._cache.invalidate_user_playlists(
+                    self._user_id
+                )
+
+        return True
+
     # =========================================================================
     # Audio Features Operations
     # =========================================================================

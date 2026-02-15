@@ -13,6 +13,14 @@ class JobType(StrEnum):
     RAID = "raid"
     SHUFFLE = "shuffle"
     RAID_AND_SHUFFLE = "raid_and_shuffle"
+    ROTATE = "rotate"
+
+
+class RotationMode(StrEnum):
+    """Modes for the scheduled rotation job type."""
+    ARCHIVE_OLDEST = "archive_oldest"
+    REFRESH = "refresh"
+    SWAP = "swap"
 
 
 class ScheduleType(StrEnum):
@@ -35,6 +43,7 @@ class SnapshotType(StrEnum):
     AUTO_PRE_SHUFFLE = "auto_pre_shuffle"
     AUTO_PRE_RAID = "auto_pre_raid"
     AUTO_PRE_COMMIT = "auto_pre_commit"
+    AUTO_PRE_ROTATE = "auto_pre_rotate"
     MANUAL = "manual"
     SCHEDULED_PRE_EXECUTION = "scheduled_pre_execution"
 
