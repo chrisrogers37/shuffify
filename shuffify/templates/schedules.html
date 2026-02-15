@@ -60,6 +60,7 @@
                             <span class="px-2 py-0.5 rounded-full text-xs font-bold uppercase
                                 {% if schedule.job_type == 'raid' %}bg-blue-500/80
                                 {% elif schedule.job_type == 'shuffle' %}bg-purple-500/80
+                                {% elif schedule.job_type == 'rotate' %}bg-teal-500/80
                                 {% else %}bg-orange-500/80{% endif %} text-white">
                                 {{ schedule.job_type | replace('_', ' ') }}
                             </span>
@@ -77,6 +78,9 @@
                             {% endif %}
                             {% if schedule.source_playlist_ids %}
                             &middot; {{ schedule.source_playlist_ids|length }} source{{ 's' if schedule.source_playlist_ids|length != 1 else '' }}
+                            {% endif %}
+                            {% if schedule.job_type == 'rotate' and schedule.algorithm_params %}
+                            &middot; {{ schedule.algorithm_params.get('rotation_mode', 'archive_oldest') | replace('_', ' ') | title }} x{{ schedule.algorithm_params.get('rotation_count', 5) }}
                             {% endif %}
                         </p>
                         {% if schedule.last_run_at %}
@@ -147,6 +151,7 @@
                         <option value="raid">Raid (pull new tracks from sources)</option>
                         <option value="shuffle">Shuffle (reorder playlist)</option>
                         <option value="raid_and_shuffle">Raid + Shuffle (pull then shuffle)</option>
+                        <option value="rotate">Rotate (cycle tracks with archive)</option>
                     </select>
                 </div>
 
@@ -185,6 +190,35 @@
                         <option value="{{ algo.class_name }}">{{ algo.name }}</option>
                         {% endfor %}
                     </select>
+                </div>
+
+                <!-- Rotation Config (shown when job_type is 'rotate') -->
+                <div id="modal-rotation-section" class="hidden space-y-3">
+                    <div>
+                        <label class="block text-sm font-medium text-white/90 mb-1">Rotation Mode</label>
+                        <select id="modal-rotation-mode"
+                                class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                                onchange="updateRotationDesc()">
+                            <option value="archive_oldest">Archive Oldest</option>
+                            <option value="refresh">Refresh from Archive</option>
+                            <option value="swap">Swap with Archive</option>
+                        </select>
+                        <p id="rotation-mode-desc" class="text-white/40 text-xs mt-1">
+                            Move the oldest tracks from your playlist to its archive.
+                        </p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-white/90 mb-1">Tracks per Rotation</label>
+                        <input type="number" id="modal-rotation-count"
+                               value="5" min="1" max="50"
+                               class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white">
+                        <p class="text-white/40 text-xs mt-1">How many tracks to rotate each time (1-50).</p>
+                    </div>
+                    <div class="rounded-lg bg-yellow-500/10 border border-yellow-500/30 p-3">
+                        <p class="text-yellow-200 text-xs">
+                            <strong>Requires Archive Pair:</strong> This playlist must be paired with an archive in the Workshop before rotation will work.
+                        </p>
+                    </div>
                 </div>
 
                 <!-- Schedule Frequency -->
@@ -234,6 +268,7 @@ function updateModalFields() {
     const jobType = document.getElementById('modal-job-type').value;
     const sourcesSection = document.getElementById('modal-sources-section');
     const algorithmSection = document.getElementById('modal-algorithm-section');
+    const rotationSection = document.getElementById('modal-rotation-section');
 
     // Show/hide sections based on job type
     if (jobType === 'raid' || jobType === 'raid_and_shuffle') {
@@ -247,6 +282,23 @@ function updateModalFields() {
     } else {
         algorithmSection.classList.add('hidden');
     }
+
+    if (jobType === 'rotate') {
+        rotationSection.classList.remove('hidden');
+    } else {
+        rotationSection.classList.add('hidden');
+    }
+}
+
+function updateRotationDesc() {
+    const mode = document.getElementById('modal-rotation-mode').value;
+    const desc = document.getElementById('rotation-mode-desc');
+    const descriptions = {
+        'archive_oldest': 'Move the oldest tracks from your playlist to its archive.',
+        'refresh': 'Replace the oldest tracks with the newest from your archive.',
+        'swap': 'Exchange tracks between your playlist and its archive.',
+    };
+    desc.textContent = descriptions[mode] || '';
 }
 
 // =============================================================================
@@ -284,6 +336,14 @@ document.getElementById('create-schedule-form').addEventListener('submit', funct
     if (jobType === 'shuffle' || jobType === 'raid_and_shuffle') {
         body.algorithm_name = document.getElementById('modal-algorithm').value;
         body.algorithm_params = {};
+    }
+
+    // Add rotation params if applicable
+    if (jobType === 'rotate') {
+        body.algorithm_params = {
+            rotation_mode: document.getElementById('modal-rotation-mode').value,
+            rotation_count: parseInt(document.getElementById('modal-rotation-count').value, 10) || 5,
+        };
     }
 
     fetch('/schedules/create', {

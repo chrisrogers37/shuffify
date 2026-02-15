@@ -1,5 +1,10 @@
 # Phase 5: Scheduled Rotation Job Type -- Implementation Plan
 
+**Status:** ✅ COMPLETE
+**Started:** 2026-02-15
+**Completed:** 2026-02-15
+**PR:** #68
+
 ## PR Title
 `feat: Add scheduled rotation job type with archive/refresh/swap modes (#phase-5)`
 
@@ -807,25 +812,25 @@ if (tabName === 'schedules' && typeof onSchedulesTabActivated === 'function') {
 
 ## Verification Checklist
 
-- [ ] `flake8 shuffify/` passes
-- [ ] `pytest tests/ -v` passes (all existing + ~60 new tests)
-- [ ] `JobType.ROTATE` exists in `shuffify/enums.py`
-- [ ] `RotationMode` enum has three members: `ARCHIVE_OLDEST`, `REFRESH`, `SWAP`
-- [ ] `SnapshotType.AUTO_PRE_ROTATE` exists
-- [ ] `SpotifyAPI.playlist_remove_items()` works with batching
-- [ ] `_execute_job_type()` dispatches `ROTATE` to `_execute_rotate()`
-- [ ] `_execute_rotate()` handles all three modes correctly
-- [ ] `_execute_rotate()` creates auto-snapshot before rotation
-- [ ] `_execute_rotate()` raises `JobExecutionError` when no pair exists
-- [ ] Schema validates `rotation_mode` is required for rotate job type
-- [ ] Schema validates `rotation_count` is positive integer when provided
-- [ ] Schema does NOT require `algorithm_name` or `source_playlist_ids` for rotate
-- [ ] Schedules page shows "Rotate" option in job type dropdown
-- [ ] Rotation mode selector appears when "Rotate" is selected
-- [ ] Workshop sidebar Schedules tab shows rotation status
-- [ ] `rotation-status` endpoint returns pair and schedule info
-- [ ] `CHANGELOG.md` updated
-- [ ] No database migration needed (uses `algorithm_params` JSON)
+- [x] `flake8 shuffify/` passes
+- [x] `pytest tests/ -v` passes (1081 passed, 40 new)
+- [x] `JobType.ROTATE` exists in `shuffify/enums.py`
+- [x] `RotationMode` enum has three members: `ARCHIVE_OLDEST`, `REFRESH`, `SWAP`
+- [x] `SnapshotType.AUTO_PRE_ROTATE` exists
+- [x] `SpotifyAPI.playlist_remove_items()` works with batching
+- [x] `_execute_job_type()` dispatches `ROTATE` to `_execute_rotate()`
+- [x] `_execute_rotate()` handles all three modes correctly
+- [x] `_execute_rotate()` creates auto-snapshot before rotation
+- [x] `_execute_rotate()` raises `JobExecutionError` when no pair exists
+- [x] Schema validates `rotation_mode` is required for rotate job type
+- [x] Schema validates `rotation_count` is positive integer when provided
+- [x] Schema does NOT require `algorithm_name` or `source_playlist_ids` for rotate
+- [x] Schedules page shows "Rotate" option in job type dropdown
+- [x] Rotation mode selector appears when "Rotate" is selected
+- [x] Workshop sidebar Schedules tab shows rotation status
+- [x] `rotation-status` endpoint returns pair and schedule info
+- [x] `CHANGELOG.md` updated
+- [x] No database migration needed (uses `algorithm_params` JSON)
 
 ---
 
