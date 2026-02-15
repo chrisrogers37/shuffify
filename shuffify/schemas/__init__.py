@@ -29,6 +29,11 @@ from .settings_requests import (
 from .snapshot_requests import (
     ManualSnapshotRequest,
 )
+from .playlist_pair_requests import (
+    CreatePairRequest,
+    ArchiveTracksRequest,
+    UnarchiveTracksRequest,
+)
 
 __all__ = [
     # Exceptions
@@ -53,4 +58,8 @@ __all__ = [
     "UserSettingsUpdateRequest",
     # Snapshot schemas
     "ManualSnapshotRequest",
+    # Playlist Pair schemas
+    "CreatePairRequest",
+    "ArchiveTracksRequest",
+    "UnarchiveTracksRequest",
 ]
