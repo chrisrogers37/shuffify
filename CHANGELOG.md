@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Scheduled Rotation Job Type** - New `rotate` job type for automated track cycling between paired playlists
+  - Three rotation modes: Archive Oldest, Refresh from Archive, and Swap
+  - Configurable rotation count (tracks per execution, default 5)
+  - Auto-snapshot before rotation with `AUTO_PRE_ROTATE` snapshot type
+  - `playlist_remove_items()` added to Spotify API wrapper
+  - Rotation status endpoint and workshop sidebar Schedules tab panel
+  - Rotation mode selector in schedule creation modal
 - **Smart Raid Panel** - One-click playlist watching and raid management in the workshop sidebar
   - "Watch Playlist" one-click operation: registers source + auto-creates raid schedule
   - Source management: view, add, and remove watched playlists with type badges

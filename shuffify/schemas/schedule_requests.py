@@ -12,12 +12,15 @@ from pydantic import (
     model_validator,
 )
 
-from shuffify.enums import JobType, ScheduleType, IntervalValue
+from shuffify.enums import (
+    JobType, ScheduleType, IntervalValue, RotationMode,
+)
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 
 VALID_JOB_TYPES = set(JobType)
 VALID_SCHEDULE_TYPES = set(ScheduleType)
 VALID_INTERVAL_VALUES = set(IntervalValue)
+VALID_ROTATION_MODES = set(RotationMode)
 
 
 class ScheduleCreateRequest(BaseModel):
@@ -105,6 +108,37 @@ class ScheduleCreateRequest(BaseModel):
                     f"algorithm_name required for "
                     f"job_type '{self.job_type}'"
                 )
+        if self.job_type == JobType.ROTATE:
+            params = self.algorithm_params or {}
+            rotation_mode = params.get("rotation_mode")
+            if not rotation_mode:
+                raise ValueError(
+                    "algorithm_params.rotation_mode "
+                    "required for job_type 'rotate'"
+                )
+            if rotation_mode not in VALID_ROTATION_MODES:
+                raise ValueError(
+                    "Invalid rotation_mode '{}'. "
+                    "Must be one of: {}".format(
+                        rotation_mode,
+                        ", ".join(
+                            sorted(VALID_ROTATION_MODES)
+                        ),
+                    )
+                )
+            rotation_count = params.get(
+                "rotation_count"
+            )
+            if rotation_count is not None:
+                try:
+                    count = int(rotation_count)
+                    if count < 1:
+                        raise ValueError()
+                except (ValueError, TypeError):
+                    raise ValueError(
+                        "rotation_count must be a "
+                        "positive integer"
+                    )
         if self.schedule_type == ScheduleType.INTERVAL:
             if self.schedule_value not in VALID_INTERVAL_VALUES:
                 raise ValueError(

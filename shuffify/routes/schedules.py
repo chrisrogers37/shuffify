@@ -42,7 +42,7 @@ from shuffify.services.job_executor_service import (
     JobExecutorService,
 )
 from shuffify.services import ActivityLogService
-from shuffify.enums import ActivityType
+from shuffify.enums import ActivityType, JobType
 
 logger = logging.getLogger(__name__)
 
@@ -443,3 +443,54 @@ def schedule_history(schedule_id):
     )
 
     return jsonify({"success": True, "history": history})
+
+
+@main.route(
+    "/playlist/<playlist_id>/rotation-status"
+)
+def rotation_status(playlist_id):
+    """Get rotation status for a playlist."""
+    client = require_auth()
+    if not client:
+        return json_error("Please log in first.", 401)
+
+    db_user = get_db_user()
+    if not db_user:
+        return json_error(
+            "User not found. Please log in again.",
+            401,
+        )
+
+    from shuffify.services.playlist_pair_service import (
+        PlaylistPairService,
+    )
+
+    pair_info = None
+    pair = PlaylistPairService.get_pair_for_playlist(
+        user_id=db_user.id,
+        production_playlist_id=playlist_id,
+    )
+    if pair:
+        pair_info = pair.to_dict()
+
+    rotate_schedule = None
+    user_schedules = (
+        SchedulerService.get_user_schedules(db_user.id)
+    )
+    for s in user_schedules:
+        if (
+            s.target_playlist_id == playlist_id
+            and s.job_type == JobType.ROTATE
+        ):
+            rotate_schedule = s.to_dict()
+            break
+
+    return jsonify({
+        "success": True,
+        "has_pair": pair_info is not None,
+        "pair": pair_info,
+        "has_rotation_schedule": (
+            rotate_schedule is not None
+        ),
+        "rotation_schedule": rotate_schedule,
+    })
