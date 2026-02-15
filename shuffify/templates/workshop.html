@@ -691,16 +691,33 @@
             </div>
         </div>
 
-        <!-- Tab Content: Schedules -->
+        <!-- Tab Content: Schedules (Rotation Panel) -->
         <div id="sidebar-tab-schedules" class="sidebar-tab-content hidden p-5" role="tabpanel">
-            <h3 class="text-white font-bold text-lg mb-2">Schedules</h3>
-            <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
-                <svg class="w-12 h-12 mx-auto text-white/20 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                <p class="text-white/60 text-sm mb-1">Schedule automated operations</p>
-                <p class="text-white/30 text-xs">Set up recurring shuffles, raids, and snapshots that run automatically on your chosen schedule.</p>
-                <span class="inline-block mt-3 px-3 py-1 rounded-full bg-white/10 text-white/40 text-xs font-semibold">Coming in Phase 5</span>
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-white font-bold text-lg">Rotation</h3>
+                <button onclick="loadRotationStatus()" class="text-white/40 hover:text-white/70 text-xs transition" title="Refresh">
+                    <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div id="rotation-panel-content">
+                <!-- Loading state -->
+                <div class="text-center py-6">
+                    <div class="inline-block w-6 h-6 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
+                    <p class="text-white/40 text-xs mt-2">Loading rotation status...</p>
+                </div>
+            </div>
+
+            <!-- Manage All Schedules link -->
+            <div class="mt-4 pt-3 border-t border-white/10">
+                <a href="/schedules" class="text-spotify-green hover:text-green-400 text-sm font-medium transition inline-flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    Manage All Schedules
+                </a>
             </div>
         </div>
     </div>
@@ -2059,6 +2076,9 @@ const workshopSidebar = {
         if (tabName === 'raids' && typeof onRaidsTabActivated === 'function') {
             onRaidsTabActivated();
         }
+        if (tabName === 'schedules' && typeof onSchedulesTabActivated === 'function') {
+            onSchedulesTabActivated();
+        }
     },
 };
 
@@ -2923,6 +2943,109 @@ function onRaidsTabActivated() {
     if (!raidPanel.loaded) {
         raidPanel.init();
     }
+}
+</script>
+
+<!-- ==================== Rotation Panel (Phase 5) ==================== -->
+<script>
+const rotationState = {
+    isLoaded: false,
+    isLoading: false,
+};
+
+function onSchedulesTabActivated() {
+    if (!rotationState.isLoaded && !rotationState.isLoading) {
+        loadRotationStatus();
+    }
+}
+
+async function loadRotationStatus() {
+    rotationState.isLoading = true;
+    const container = document.getElementById('rotation-panel-content');
+    container.innerHTML = '<div class="text-center py-4"><div class="inline-block w-6 h-6 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div></div>';
+
+    try {
+        const response = await fetch('/playlist/' + workshopState.playlistId + '/rotation-status');
+        const data = await response.json();
+
+        if (data.success) {
+            renderRotationPanel(data);
+            rotationState.isLoaded = true;
+        } else {
+            container.innerHTML = '<p class="text-red-400 text-sm">Failed to load rotation status.</p>';
+        }
+    } catch (err) {
+        container.innerHTML = '<p class="text-red-400 text-sm">Network error loading rotation status.</p>';
+    } finally {
+        rotationState.isLoading = false;
+    }
+}
+
+function renderRotationPanel(data) {
+    const container = document.getElementById('rotation-panel-content');
+    let html = '';
+
+    // Archive Pair Status
+    if (data.has_pair && data.pair) {
+        html += '<div class="rounded-xl bg-white/5 border border-white/10 p-4 mb-3">';
+        html += '<div class="flex items-center gap-2 mb-2">';
+        html += '<span class="w-2 h-2 rounded-full bg-green-400"></span>';
+        html += '<span class="text-white/80 text-sm font-semibold">Archive Paired</span>';
+        html += '</div>';
+        html += '<p class="text-white/50 text-xs">Archive: ' + (data.pair.archive_playlist_name || data.pair.archive_playlist_id) + '</p>';
+        html += '</div>';
+    } else {
+        html += '<div class="rounded-xl bg-white/5 border border-white/10 p-4 mb-3">';
+        html += '<div class="flex items-center gap-2 mb-2">';
+        html += '<span class="w-2 h-2 rounded-full bg-yellow-400"></span>';
+        html += '<span class="text-white/60 text-sm font-semibold">No Archive Pair</span>';
+        html += '</div>';
+        html += '<p class="text-white/40 text-xs">Create an archive pair in the Archive tab to enable rotation.</p>';
+        html += '</div>';
+    }
+
+    // Active Rotation Schedule
+    if (data.has_rotation_schedule && data.rotation_schedule) {
+        const sched = data.rotation_schedule;
+        const params = sched.algorithm_params || {};
+        const mode = (params.rotation_mode || 'archive_oldest').replace(/_/g, ' ');
+        const count = params.rotation_count || 5;
+        const freq = (sched.schedule_value || 'daily').replace(/_/g, ' ');
+
+        html += '<div class="rounded-xl bg-white/5 border border-white/10 p-4 mb-3">';
+        html += '<div class="flex items-center justify-between mb-2">';
+        html += '<span class="text-white/80 text-sm font-semibold">Active Rotation</span>';
+        if (sched.is_enabled) {
+            html += '<span class="px-2 py-0.5 rounded-full bg-green-500/60 text-white text-xs font-bold">Active</span>';
+        } else {
+            html += '<span class="px-2 py-0.5 rounded-full bg-gray-500/60 text-white/70 text-xs font-bold">Paused</span>';
+        }
+        html += '</div>';
+        html += '<div class="space-y-1 text-xs">';
+        html += '<p class="text-white/60"><span class="text-white/40">Mode:</span> <span class="capitalize">' + mode + '</span></p>';
+        html += '<p class="text-white/60"><span class="text-white/40">Count:</span> ' + count + ' tracks</p>';
+        html += '<p class="text-white/60"><span class="text-white/40">Frequency:</span> <span class="capitalize">' + freq + '</span></p>';
+
+        if (sched.last_run_at) {
+            html += '<p class="text-white/40 mt-1">Last run: ' + sched.last_run_at;
+            if (sched.last_status === 'success') {
+                html += ' <span class="text-green-400">Success</span>';
+            } else if (sched.last_status === 'failed') {
+                html += ' <span class="text-red-400">Failed</span>';
+            }
+            html += '</p>';
+        }
+        html += '</div>';
+        html += '</div>';
+    } else if (data.has_pair) {
+        html += '<div class="rounded-xl bg-white/5 border border-white/10 p-4 mb-3 text-center">';
+        html += '<p class="text-white/50 text-sm mb-2">No rotation schedule configured.</p>';
+        html += '<a href="/schedules" class="inline-block px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition border border-white/20">';
+        html += 'Set Up Rotation</a>';
+        html += '</div>';
+    }
+
+    container.innerHTML = html;
 }
 </script>
 
