@@ -31,13 +31,13 @@
 
 ## Phase Documents
 
-| Phase | Title | Risk | Effort | PR Branch |
-|-------|-------|------|--------|-----------|
-| 01 | [Unified Workshop Sidebar](01_unified-workshop-sidebar.md) | Low | Small | `enhance/workshop-powertools/phase-01-unified-sidebar` |
-| 02 | [Snapshot Browser Panel](02_snapshot-browser-panel.md) | Low | Medium | `enhance/workshop-powertools/phase-02-snapshot-browser` |
-| 03 | [Archive Playlist Pairing](03_archive-playlist-pairing.md) | Medium | Medium | `enhance/workshop-powertools/phase-03-archive-pairing` |
-| 04 | [Smart Raid Panel](04_smart-raid-panel.md) | Low | Medium | `enhance/workshop-powertools/phase-04-smart-raid-panel` |
-| 05 | [Scheduled Rotation Job Type](05_scheduled-rotation-job-type.md) | Medium | Medium-High | `enhance/workshop-powertools/phase-05-scheduled-rotation` |
+| Phase | Title | Risk | Effort | PR | Status |
+|-------|-------|------|--------|----|--------|
+| 01 | [Unified Workshop Sidebar](01_unified-workshop-sidebar.md) | Low | Small | #64 | ✅ Complete |
+| 02 | [Snapshot Browser Panel](02_snapshot-browser-panel.md) | Low | Medium | #65 | ✅ Complete |
+| 03 | [Archive Playlist Pairing](03_archive-playlist-pairing.md) | Medium | Medium | #66 | ✅ Complete |
+| 04 | [Smart Raid Panel](04_smart-raid-panel.md) | Low | Medium | #67 | ✅ Complete |
+| 05 | [Scheduled Rotation Job Type](05_scheduled-rotation-job-type.md) | Medium | Medium-High | #68 | ✅ Complete |
 
 ---
 
