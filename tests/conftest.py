@@ -219,6 +219,7 @@ def app():
     os.environ['SPOTIFY_CLIENT_SECRET'] = 'test_client_secret'
     os.environ['SPOTIFY_REDIRECT_URI'] = 'http://localhost:5000/callback'
     os.environ['SECRET_KEY'] = 'test-secret-key-for-testing'
+    os.environ.pop('DATABASE_URL', None)
 
     from shuffify import create_app
     app = create_app('development')
