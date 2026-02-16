@@ -12,7 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Git History Cleanup** - Removed `.env` from git history using `git filter-repo`
 - **Credential Rotation Guide** - Added `documentation/guides/credential-rotation.md` documenting rotation procedures, side effects, and verification steps
 - **Test Database Isolation** - Test fixtures now clear `DATABASE_URL` before app creation to prevent tests from hitting production databases
-
+- **Dependency CVE Remediation** - Updated production dependencies with known vulnerabilities
+  - `cryptography` >=43.0.1 to >=46.0.5 (CVE-2024-12797, CVE-2026-26007)
+  - Added floor pins for transitive deps: `werkzeug>=3.1.5`, `urllib3>=2.6.3`, `marshmallow>=3.26.2,<4.0`, `pyasn1>=0.6.2`
+  - Added `wheel>=0.46.2` to dev dependencies (CVE-2026-24049)
 
 ### Added
 - **Scheduled Rotation Job Type** - New `rotate` job type for automated track cycling between paired playlists
