@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Credential Rotation** - Rotated all exposed credentials (Spotify API, Neon DB, Flask SECRET_KEY) found in git history
 - **Git History Cleanup** - Removed `.env` from git history using `git filter-repo`
 - **Credential Rotation Guide** - Added `documentation/guides/credential-rotation.md` documenting rotation procedures, side effects, and verification steps
+- **Auth Endpoint Rate Limiting** - Added rate limiting to `/login` (10 req/min) and `/callback` (20 req/min)
+  - Uses Flask-Limiter with Redis storage backend (in-memory fallback)
+  - Returns standard JSON error response on 429 Too Many Requests
+  - Added `Flask-Limiter>=3.5.0` dependency
 - **Test Database Isolation** - Test fixtures now clear `DATABASE_URL` before app creation to prevent tests from hitting production databases
 - **Dependency CVE Remediation** - Updated production dependencies with known vulnerabilities
   - `cryptography` >=43.0.1 to >=46.0.5 (CVE-2024-12797, CVE-2026-26007)

@@ -1,5 +1,10 @@
 # [MEDIUM] Add Rate Limiting to Auth Endpoints
 
+**Status**: ✅ COMPLETE
+**Started**: 2026-02-16
+**Completed**: 2026-02-16
+**PR**: #71
+
 | Field | Value |
 |-------|-------|
 | **PR Title** | `[MEDIUM] Add rate limiting to auth endpoints` |
@@ -133,12 +138,12 @@ After `app.register_blueprint(main_blueprint)`, add:
     # Apply rate limits to auth endpoints
     if _limiter is not None:
         try:
-            _limiter.limit("10/minute")(
-                app.view_functions["main.login"]
-            )
-            _limiter.limit("20/minute")(
-                app.view_functions["main.callback"]
-            )
+            app.view_functions["main.login"] = _limiter.limit(
+                "10/minute"
+            )(app.view_functions["main.login"])
+            app.view_functions["main.callback"] = _limiter.limit(
+                "20/minute"
+            )(app.view_functions["main.callback"])
             logger.info(
                 "Rate limits applied: /login=10/min, /callback=20/min"
             )
@@ -171,7 +176,9 @@ After the 500 error handler and before the final `logger.info`, add:
     def handle_rate_limit_exceeded(error):
         """Handle 429 Too Many Requests from Flask-Limiter."""
         logger.warning(
-            f"Rate limit exceeded: {request.remote_addr} on {request.path}"
+            "Rate limit exceeded: %s on %s",
+            request.remote_addr,
+            request.path,
         )
         return json_error_response(
             "Too many requests. Please wait a moment and try again.",
@@ -210,12 +217,12 @@ def rate_limited_app():
         "http://localhost:5000/callback"
     )
     os.environ["SECRET_KEY"] = "test-secret-key-for-testing"
+    os.environ.pop("DATABASE_URL", None)
 
     from shuffify import create_app
 
     app = create_app("development")
     app.config["TESTING"] = True
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
     app.config["SCHEDULER_ENABLED"] = False
 
     with app.app_context():

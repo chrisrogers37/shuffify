@@ -5,6 +5,7 @@ from typing import Optional
 from flask import Flask
 from flask_session import Session
 import redis
+from flask_limiter import Limiter
 from flask_migrate import Migrate
 from config import config, validate_required_env_vars
 
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 # Global Redis client for caching (initialized in create_app)
 _redis_client: Optional[redis.Redis] = None
 _migrate: Optional[Migrate] = None
+_limiter: Optional[Limiter] = None
 
 
 def _create_redis_client(redis_url: str) -> redis.Redis:
@@ -40,6 +42,16 @@ def get_redis_client() -> Optional[redis.Redis]:
         Redis client if configured, None otherwise.
     """
     return _redis_client
+
+
+def get_limiter() -> Optional[Limiter]:
+    """
+    Get the global Flask-Limiter instance.
+
+    Returns:
+        Limiter instance if initialized, None otherwise.
+    """
+    return _limiter
 
 
 def get_spotify_cache():
@@ -164,6 +176,37 @@ def create_app(config_name=None):
     # Initialize Flask-Session
     Session(app)
 
+    # Initialize Flask-Limiter for rate limiting
+    global _limiter
+    try:
+        from flask_limiter.util import get_remote_address
+
+        if _redis_client is not None:
+            storage_uri = app.config.get("REDIS_URL")
+            logger.info("Rate limiter using Redis storage")
+        else:
+            storage_uri = "memory://"
+            logger.warning(
+                "Rate limiter using in-memory storage. "
+                "Rate limits will not persist across restarts."
+            )
+
+        _limiter = Limiter(
+            app=app,
+            key_func=get_remote_address,
+            storage_uri=storage_uri,
+            default_limits=[],
+            strategy="fixed-window",
+        )
+        logger.info("Flask-Limiter initialized")
+    except Exception as e:
+        logger.warning(
+            "Flask-Limiter initialization failed: %s. "
+            "Rate limiting will be unavailable.",
+            e,
+        )
+        _limiter = None
+
     # Initialize token encryption service
     from shuffify.services.token_service import TokenService
 
@@ -225,6 +268,23 @@ def create_app(config_name=None):
     from shuffify.routes import main as main_blueprint
 
     app.register_blueprint(main_blueprint)
+
+    # Apply rate limits to auth endpoints
+    if _limiter is not None:
+        try:
+            app.view_functions["main.login"] = _limiter.limit(
+                "10/minute"
+            )(app.view_functions["main.login"])
+            app.view_functions["main.callback"] = _limiter.limit(
+                "20/minute"
+            )(app.view_functions["main.callback"])
+            logger.info(
+                "Rate limits applied: /login=10/min, /callback=20/min"
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to apply auth rate limits: %s", e
+            )
 
     # Register global error handlers
     from shuffify.error_handlers import register_error_handlers
