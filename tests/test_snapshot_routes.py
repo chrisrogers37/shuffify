@@ -23,6 +23,7 @@ def db_app():
 
     os.environ["SPOTIFY_CLIENT_ID"] = "test_id"
     os.environ["SPOTIFY_CLIENT_SECRET"] = "test_secret"
+    os.environ.pop("DATABASE_URL", None)
 
     from shuffify import create_app
 

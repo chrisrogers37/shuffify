@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Credential Rotation** - Rotated all exposed credentials (Spotify API, Neon DB, Flask SECRET_KEY) found in git history
 - **Git History Cleanup** - Removed `.env` from git history using `git filter-repo`
 - **Credential Rotation Guide** - Added `documentation/guides/credential-rotation.md` documenting rotation procedures, side effects, and verification steps
+- **Test Database Isolation** - Test fixtures now clear `DATABASE_URL` before app creation to prevent tests from hitting production databases
 
 ### Added
 - **Scheduled Rotation Job Type** - New `rotate` job type for automated track cycling between paired playlists
