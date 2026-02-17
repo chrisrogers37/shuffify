@@ -140,9 +140,6 @@ def health():
             "timestamp": datetime.now(
                 timezone.utc
             ).isoformat(),
-            "checks": {
-                "database": "ok" if db_healthy else "unavailable",
-            },
         }),
         200,
     )

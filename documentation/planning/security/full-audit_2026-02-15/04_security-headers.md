@@ -1,5 +1,8 @@
 # [LOW] Add Security Headers and Harden Health Endpoint
 
+**Status**: 🔧 IN PROGRESS
+**Started**: 2026-02-17
+
 | Field | Value |
 |-------|-------|
 | **PR Title** | `[LOW] Add security headers and harden health endpoint` |
@@ -256,20 +259,22 @@ class TestSecurityHeaders:
 
     def test_hsts_present_in_production_mode(self):
         """HSTS should be sent when debug is False (production)."""
+        import os
         from unittest.mock import patch
+
+        os.environ.pop("DATABASE_URL", None)
 
         with patch.dict("os.environ", {
             "SPOTIFY_CLIENT_ID": "test_id",
             "SPOTIFY_CLIENT_SECRET": "test_secret",
+            "SPOTIFY_REDIRECT_URI": "http://localhost:5000/callback",
+            "SECRET_KEY": "test-secret-key-for-testing",
             "REDIS_URL": "",
         }):
             from shuffify import create_app
 
             app = create_app("production")
             app.config["TESTING"] = True
-            app.config["SQLALCHEMY_DATABASE_URI"] = (
-                "sqlite:///:memory:"
-            )
 
             with app.test_client() as prod_client:
                 response = prod_client.get("/health")

@@ -1,5 +1,5 @@
 """
-Tests for enhanced health check endpoint with database status.
+Tests for health check endpoint.
 """
 
 from unittest.mock import patch
@@ -13,22 +13,14 @@ class TestHealthEndpoint:
         response = client.get("/health")
         assert response.status_code == 200
 
-    def test_health_includes_database_check(self, client):
-        """Health response should include database check."""
-        response = client.get("/health")
-        data = response.get_json()
-        assert "checks" in data
-        assert "database" in data["checks"]
-
-    def test_health_database_ok_when_available(self, client):
-        """Database check should be 'ok' when DB is available."""
+    def test_health_returns_healthy_when_db_available(self, client):
+        """Health should return 'healthy' when DB is up."""
         response = client.get("/health")
         data = response.get_json()
         assert data["status"] == "healthy"
-        assert data["checks"]["database"] == "ok"
 
-    def test_health_database_unavailable(self, client):
-        """Database check should report 'unavailable' on failure."""
+    def test_health_returns_degraded_when_db_unavailable(self, client):
+        """Health should return 'degraded' when DB is down."""
         with patch(
             "shuffify.is_db_available",
             return_value=False,
@@ -36,7 +28,23 @@ class TestHealthEndpoint:
             response = client.get("/health")
             data = response.get_json()
             assert data["status"] == "degraded"
-            assert data["checks"]["database"] == "unavailable"
+
+    def test_health_does_not_expose_subsystem_details(self, client):
+        """Health response must NOT include a 'checks' key."""
+        response = client.get("/health")
+        data = response.get_json()
+        assert "checks" not in data
+
+    def test_health_does_not_expose_subsystem_on_failure(self, client):
+        """Health response must NOT expose details even when degraded."""
+        with patch(
+            "shuffify.is_db_available",
+            return_value=False,
+        ):
+            response = client.get("/health")
+            data = response.get_json()
+            assert "checks" not in data
+            assert "database" not in str(data)
 
     def test_health_includes_timestamp(self, client):
         """Health response should include ISO timestamp."""
@@ -44,3 +52,9 @@ class TestHealthEndpoint:
         data = response.get_json()
         assert "timestamp" in data
         assert "T" in data["timestamp"]
+
+    def test_health_response_has_exactly_two_keys(self, client):
+        """Health response should only contain 'status' and 'timestamp'."""
+        response = client.get("/health")
+        data = response.get_json()
+        assert set(data.keys()) == {"status", "timestamp"}
