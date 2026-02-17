@@ -21,3 +21,4 @@ werkzeug>=3.1.5
 urllib3>=2.6.3
 marshmallow>=3.26.2,<4.0
 pyasn1>=0.6.2
+Flask-Limiter>=3.5.0

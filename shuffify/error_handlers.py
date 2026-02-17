@@ -305,4 +305,29 @@ def register_error_handlers(app):
         logger.error(f"Internal server error: {error}", exc_info=True)
         return json_error_response("An unexpected error occurred.", 500)
 
+    # =========================================================================
+    # Rate Limiting (429)
+    # =========================================================================
+
+    @app.errorhandler(429)
+    def handle_rate_limit_exceeded(error):
+        """Handle 429 Too Many Requests from Flask-Limiter."""
+        logger.warning(
+            "Rate limit exceeded: %s on %s",
+            request.remote_addr,
+            request.path,
+        )
+        response, status = json_error_response(
+            "Too many requests. Please wait a moment and try again.",
+            429,
+        )
+        retry_after = error.description if isinstance(
+            error.description, str
+        ) and error.description.isdigit() else None
+        if retry_after:
+            response.headers["Retry-After"] = retry_after
+        elif hasattr(error, "retry_after"):
+            response.headers["Retry-After"] = str(error.retry_after)
+        return response, status
+
     logger.info("Global error handlers registered")
