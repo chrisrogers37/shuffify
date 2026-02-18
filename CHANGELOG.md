@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
+- **HSTS Header** - Production responses now include `Strict-Transport-Security: max-age=31536000; includeSubDomains`
+  - Only applied when `DEBUG = False`; development on HTTP is unaffected
+- **Security Response Headers** - All responses now include `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`
+- **Health Endpoint Hardened** - `/health` no longer exposes which subsystem is degraded
+  - Returns only `{"status": "healthy"}` or `{"status": "degraded"}` without `checks` object
 - **Credential Rotation** - Rotated all exposed credentials (Spotify API, Neon DB, Flask SECRET_KEY) found in git history
 - **Git History Cleanup** - Removed `.env` from git history using `git filter-repo`
 - **Credential Rotation Guide** - Added `documentation/guides/credential-rotation.md` documenting rotation procedures, side effects, and verification steps

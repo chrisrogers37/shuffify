@@ -306,17 +306,32 @@ def create_app(config_name=None):
 
         shutdown_scheduler()
 
-    # Add a `no-cache` header to responses in development mode. This prevents
-    # the browser from caching assets and not showing changes.
-    if app.debug:
+    # Security headers applied to ALL responses
+    @app.after_request
+    def set_security_headers(response):
+        # Prevent MIME-type sniffing
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        # Prevent clickjacking
+        response.headers["X-Frame-Options"] = "DENY"
+        # Control referrer information leakage
+        response.headers["Referrer-Policy"] = (
+            "strict-origin-when-cross-origin"
+        )
 
-        @app.after_request
-        def after_request(response):
+        # HSTS: only in production (development uses HTTP)
+        if not app.debug:
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
+            )
+
+        # No-cache headers for development mode
+        if app.debug:
             response.headers["Cache-Control"] = (
                 "no-cache, no-store, must-revalidate, public, max-age=0"
             )
             response.headers["Expires"] = 0
             response.headers["Pragma"] = "no-cache"
-            return response
+
+        return response
 
     return app

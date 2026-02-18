@@ -244,3 +244,68 @@ class TestConfigIntegration:
 
         # Should have a default for local development
         assert DevConfig.REDIS_URL is not None or hasattr(DevConfig, 'REDIS_URL')
+
+
+class TestSecurityHeaders:
+    """Tests for security response headers."""
+
+    def test_x_content_type_options_present(self, client):
+        """All responses should include X-Content-Type-Options: nosniff."""
+        response = client.get("/health")
+        assert response.headers.get("X-Content-Type-Options") == "nosniff"
+
+    def test_x_frame_options_present(self, client):
+        """All responses should include X-Frame-Options: DENY."""
+        response = client.get("/health")
+        assert response.headers.get("X-Frame-Options") == "DENY"
+
+    def test_referrer_policy_present(self, client):
+        """All responses should include Referrer-Policy."""
+        response = client.get("/health")
+        assert (
+            response.headers.get("Referrer-Policy")
+            == "strict-origin-when-cross-origin"
+        )
+
+    def test_hsts_not_present_in_debug_mode(self, client):
+        """HSTS should NOT be sent in debug/development mode."""
+        response = client.get("/health")
+        assert "Strict-Transport-Security" not in response.headers
+
+    def test_hsts_present_in_production_mode(self):
+        """HSTS should be sent when debug is False (production)."""
+        import os
+        from unittest.mock import patch
+
+        os.environ.pop("DATABASE_URL", None)
+
+        with patch.dict("os.environ", {
+            "SPOTIFY_CLIENT_ID": "test_id",
+            "SPOTIFY_CLIENT_SECRET": "test_secret",
+            "SPOTIFY_REDIRECT_URI": "http://localhost:5000/callback",
+            "SECRET_KEY": "test-secret-key-for-testing",
+            "REDIS_URL": "",
+        }):
+            from shuffify import create_app
+
+            app = create_app("production")
+            app.config["TESTING"] = True
+
+            with app.test_client() as prod_client:
+                response = prod_client.get("/health")
+                hsts = response.headers.get(
+                    "Strict-Transport-Security"
+                )
+                assert hsts is not None
+                assert "max-age=31536000" in hsts
+                assert "includeSubDomains" in hsts
+
+    def test_security_headers_on_non_health_routes(self, client):
+        """Security headers should be on all routes, not just /health."""
+        response = client.get("/")
+        assert response.headers.get("X-Content-Type-Options") == "nosniff"
+        assert response.headers.get("X-Frame-Options") == "DENY"
+        assert (
+            response.headers.get("Referrer-Policy")
+            == "strict-origin-when-cross-origin"
+        )
