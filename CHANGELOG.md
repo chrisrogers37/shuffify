@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
+- **pip CVE remediation** - Upgraded minimum pip to >=26.0 in Dockerfile (CVE-2025-8869, CVE-2026-1703)
 - **HSTS Header** - Production responses now include `Strict-Transport-Security: max-age=31536000; includeSubDomains`
   - Only applied when `DEBUG = False`; development on HTTP is unaffected
 - **Security Response Headers** - All responses now include `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`
@@ -26,7 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added floor pins for transitive deps: `werkzeug>=3.1.5`, `urllib3>=2.6.3`, `marshmallow>=3.26.2,<4.0`, `pyasn1>=0.6.2`
   - Added `wheel>=0.46.2` to dev dependencies (CVE-2026-24049)
 
+### Changed
+- **Dev dependency updates** - Updated pytest 7.4.4 to 8.3.5, pytest-cov 4.1.0 to 6.0.0
+  - Conservative upgrade within 8.x line to avoid pytest 9.0 breaking changes
+- **Test isolation fix** - Guarded `load_dotenv()` in `config.py` to prevent `.env` from leaking production `DATABASE_URL` into test fixtures
+  - Eliminates 124 test errors caused by attempted Neon PostgreSQL connections during tests
+
 ### Added
+- **Dependabot configuration** - Automated weekly dependency monitoring via `.github/dependabot.yml`
+  - Grouped updates for dev and production dependencies to reduce PR noise
 - **Scheduled Rotation Job Type** - New `rotate` job type for automated track cycling between paired playlists
   - Three rotation modes: Archive Oldest, Refresh from Archive, and Swap
   - Configurable rotation count (tracks per execution, default 5)

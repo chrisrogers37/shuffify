@@ -1,7 +1,13 @@
 import os
+import sys
 from dotenv import load_dotenv
 
-load_dotenv()
+# Don't load .env when running under pytest — test fixtures control the
+# environment.  Without this guard, load_dotenv() injects the production
+# DATABASE_URL from .env at module-import time, before any fixture can
+# override it, causing tests to hang on Neon PostgreSQL connections.
+if 'pytest' not in sys.modules:
+    load_dotenv()
 
 
 def _resolve_database_url(fallback: str) -> str:

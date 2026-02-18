@@ -1,0 +1,50 @@
+# Dependabot configuration for automated dependency updates
+# Docs: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+version: 2
+updates:
+  # Python pip dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "chrisrogers37"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+    # Group minor and patch updates to reduce PR noise
+    groups:
+      dev-dependencies:
+        patterns:
+          - "pytest*"
+          - "flake8"
+          - "black"
+          - "isort"
+          - "mypy"
+          - "safety"
+          - "bandit"
+          - "ipython"
+        update-types:
+          - "minor"
+          - "patch"
+      production-dependencies:
+        patterns:
+          - "Flask*"
+          - "spotipy"
+          - "gunicorn"
+          - "redis"
+          - "pydantic"
+          - "cryptography"
+          - "requests"
+          - "APScheduler"
+          - "psycopg2*"
+          - "sentry-sdk"
+        update-types:
+          - "minor"
+          - "patch"
