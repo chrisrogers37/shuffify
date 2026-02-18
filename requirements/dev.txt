@@ -16,7 +16,7 @@ safety>=3.0.0
 bandit==1.9.3
 
 # Development
-ipython==8.38.0
+ipython==9.10.0
 # python-dotenv version is inherited from base.txt
 
 # Security: pin wheel to patched version (CVE-2026-24049)
