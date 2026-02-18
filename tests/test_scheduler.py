@@ -277,14 +277,15 @@ class TestExecuteScheduledJob:
             _execute_scheduled_job(app, 42)
             mock_executor.execute.assert_called_once_with(42)
 
-    def test_execution_failure_logged(self, app, caplog):
+    @patch("shuffify.scheduler.logger")
+    def test_execution_failure_logged(self, mock_logger, app):
         with patch(
             "shuffify.services.job_executor_service.JobExecutorService"
         ) as mock_executor:
             mock_executor.execute.side_effect = Exception("boom")
-            with caplog.at_level(logging.ERROR):
-                _execute_scheduled_job(app, 42)
-            assert "failed" in caplog.text.lower()
+            _execute_scheduled_job(app, 42)
+        mock_logger.error.assert_called_once()
+        assert "failed" in mock_logger.error.call_args[0][0].lower()
 
 
 # =============================================================================
@@ -294,31 +295,31 @@ class TestExecuteScheduledJob:
 class TestEventListeners:
     """Tests for scheduler event listener functions."""
 
-    def test_on_job_executed(self, caplog):
+    @patch("shuffify.scheduler.logger")
+    def test_on_job_executed(self, mock_logger):
         event = Mock()
         event.job_id = "schedule_1"
-        with caplog.at_level(logging.INFO):
-            _on_job_executed(event)
-        assert "schedule_1" in caplog.text
-        assert "successfully" in caplog.text
+        _on_job_executed(event)
+        mock_logger.info.assert_called_once()
+        assert "schedule_1" in mock_logger.info.call_args[0][0]
 
-    def test_on_job_error(self, caplog):
+    @patch("shuffify.scheduler.logger")
+    def test_on_job_error(self, mock_logger):
         event = Mock()
         event.job_id = "schedule_2"
         event.exception = RuntimeError("test error")
         event.traceback = None
-        with caplog.at_level(logging.ERROR):
-            _on_job_error(event)
-        assert "schedule_2" in caplog.text
-        assert "failed" in caplog.text.lower()
+        _on_job_error(event)
+        mock_logger.error.assert_called_once()
+        assert "schedule_2" in mock_logger.error.call_args[0][0]
 
-    def test_on_job_missed(self, caplog):
+    @patch("shuffify.scheduler.logger")
+    def test_on_job_missed(self, mock_logger):
         event = Mock()
         event.job_id = "schedule_3"
-        with caplog.at_level(logging.WARNING):
-            _on_job_missed(event)
-        assert "schedule_3" in caplog.text
-        assert "missed" in caplog.text.lower()
+        _on_job_missed(event)
+        mock_logger.warning.assert_called_once()
+        assert "schedule_3" in mock_logger.warning.call_args[0][0]
 
 
 # =============================================================================

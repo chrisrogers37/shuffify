@@ -100,7 +100,7 @@ class TestWorkshopPage:
 class TestWorkshopPreviewShuffle:
     """Tests for POST /workshop/<playlist_id>/preview-shuffle."""
 
-    @patch("shuffify.routes.workshop.AuthService")
+    @patch("shuffify.routes.AuthService")
     @patch("shuffify.routes.workshop.ShuffleService")
     def test_preview_shuffle_returns_shuffled_uris(
         self,
@@ -147,7 +147,7 @@ class TestWorkshopPreviewShuffle:
         )
         assert response.status_code == 401
 
-    @patch("shuffify.routes.workshop.AuthService")
+    @patch("shuffify.routes.AuthService")
     def test_preview_shuffle_requires_json_body(
         self, mock_auth_svc, authenticated_client
     ):
@@ -171,7 +171,7 @@ class TestWorkshopPreviewShuffle:
 class TestWorkshopCommit:
     """Tests for POST /workshop/<playlist_id>/commit."""
 
-    @patch("shuffify.routes.workshop.AuthService")
+    @patch("shuffify.routes.AuthService")
     @patch("shuffify.routes.workshop.PlaylistService")
     @patch("shuffify.routes.workshop.ShuffleService")
     @patch("shuffify.routes.workshop.StateService")
@@ -216,7 +216,7 @@ class TestWorkshopCommit:
             "playlist123", new_uris
         )
 
-    @patch("shuffify.routes.workshop.AuthService")
+    @patch("shuffify.routes.AuthService")
     @patch("shuffify.routes.workshop.PlaylistService")
     @patch("shuffify.routes.workshop.ShuffleService")
     @patch("shuffify.routes.workshop.StateService")
@@ -263,7 +263,7 @@ class TestWorkshopCommit:
         )
         assert response.status_code == 401
 
-    @patch("shuffify.routes.workshop.AuthService")
+    @patch("shuffify.routes.AuthService")
     def test_commit_validates_uri_format(
         self, mock_auth_svc, authenticated_client
     ):
