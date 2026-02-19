@@ -69,7 +69,7 @@ def auth_client(db_app):
 class TestListSnapshots:
     """Tests for GET /playlist/<id>/snapshots."""
 
-    @patch("shuffify.routes.snapshots.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_unauthenticated_returns_401(
         self, mock_auth, db_app
     ):
@@ -80,8 +80,8 @@ class TestListSnapshots:
             )
             assert resp.status_code == 401
 
-    @patch("shuffify.routes.snapshots.require_auth")
-    @patch("shuffify.routes.snapshots.is_db_available")
+    @patch("shuffify.routes.require_auth")
+    @patch("shuffify.is_db_available")
     def test_db_unavailable_returns_503(
         self, mock_db, mock_auth, db_app
     ):
@@ -99,7 +99,7 @@ class TestListSnapshots:
             )
             assert resp.status_code == 503
 
-    @patch("shuffify.routes.snapshots.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_list_empty(
         self, mock_auth, auth_client
     ):
@@ -112,7 +112,7 @@ class TestListSnapshots:
         assert data["success"] is True
         assert data["snapshots"] == []
 
-    @patch("shuffify.routes.snapshots.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_list_with_snapshots(
         self, mock_auth, auth_client, db_app
     ):
@@ -138,7 +138,7 @@ class TestListSnapshots:
         data = resp.get_json()
         assert len(data["snapshots"]) == 1
 
-    @patch("shuffify.routes.snapshots.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_list_respects_limit_param(
         self, mock_auth, auth_client, db_app
     ):
@@ -167,7 +167,7 @@ class TestListSnapshots:
 class TestCreateManualSnapshot:
     """Tests for POST /playlist/<id>/snapshots."""
 
-    @patch("shuffify.routes.snapshots.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_unauthenticated_returns_401(
         self, mock_auth, db_app
     ):
@@ -179,7 +179,7 @@ class TestCreateManualSnapshot:
             )
             assert resp.status_code == 401
 
-    @patch("shuffify.routes.snapshots.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_missing_json_body(
         self, mock_auth, auth_client
     ):
@@ -190,7 +190,7 @@ class TestCreateManualSnapshot:
         )
         assert resp.status_code == 400
 
-    @patch("shuffify.routes.snapshots.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_invalid_request_body(
         self, mock_auth, auth_client
     ):
@@ -201,7 +201,7 @@ class TestCreateManualSnapshot:
         )
         assert resp.status_code == 400
 
-    @patch("shuffify.routes.snapshots.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_create_success(
         self, mock_auth, auth_client
     ):
@@ -226,7 +226,7 @@ class TestCreateManualSnapshot:
             == SnapshotType.MANUAL
         )
 
-    @patch("shuffify.routes.snapshots.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_create_empty_track_list(
         self, mock_auth, auth_client
     ):
@@ -246,7 +246,7 @@ class TestCreateManualSnapshot:
 class TestViewSnapshot:
     """Tests for GET /snapshots/<id>."""
 
-    @patch("shuffify.routes.snapshots.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_unauthenticated_returns_401(
         self, mock_auth, db_app
     ):
@@ -255,7 +255,7 @@ class TestViewSnapshot:
             resp = client.get("/snapshots/1")
             assert resp.status_code == 401
 
-    @patch("shuffify.routes.snapshots.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_not_found(
         self, mock_auth, auth_client
     ):
@@ -263,7 +263,7 @@ class TestViewSnapshot:
         resp = auth_client.get("/snapshots/99999")
         assert resp.status_code == 404
 
-    @patch("shuffify.routes.snapshots.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_view_success(
         self, mock_auth, auth_client, db_app
     ):
@@ -294,7 +294,7 @@ class TestViewSnapshot:
 class TestDeleteSnapshot:
     """Tests for DELETE /snapshots/<id>."""
 
-    @patch("shuffify.routes.snapshots.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_unauthenticated_returns_401(
         self, mock_auth, db_app
     ):
@@ -303,7 +303,7 @@ class TestDeleteSnapshot:
             resp = client.delete("/snapshots/1")
             assert resp.status_code == 401
 
-    @patch("shuffify.routes.snapshots.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_not_found(
         self, mock_auth, auth_client
     ):
@@ -311,7 +311,7 @@ class TestDeleteSnapshot:
         resp = auth_client.delete("/snapshots/99999")
         assert resp.status_code == 404
 
-    @patch("shuffify.routes.snapshots.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_delete_success(
         self, mock_auth, auth_client, db_app
     ):
@@ -349,7 +349,7 @@ class TestDeleteSnapshot:
 class TestRestoreSnapshot:
     """Tests for POST /snapshots/<id>/restore."""
 
-    @patch("shuffify.routes.snapshots.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_unauthenticated_returns_401(
         self, mock_auth, db_app
     ):
@@ -360,7 +360,7 @@ class TestRestoreSnapshot:
             )
             assert resp.status_code == 401
 
-    @patch("shuffify.routes.snapshots.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_not_found(
         self, mock_auth, auth_client
     ):
@@ -373,7 +373,7 @@ class TestRestoreSnapshot:
     @patch(
         "shuffify.routes.snapshots.PlaylistService"
     )
-    @patch("shuffify.routes.snapshots.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_restore_success(
         self,
         mock_auth,

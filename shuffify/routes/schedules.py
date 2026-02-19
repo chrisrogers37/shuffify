@@ -18,11 +18,12 @@ from flask import (
 from shuffify.routes import (
     main,
     is_authenticated,
-    require_auth,
+    require_auth_and_db,
     clear_session_and_show_login,
     json_error,
     json_success,
     get_db_user,
+    log_activity,
 )
 from shuffify.services import (
     AuthService,
@@ -41,7 +42,6 @@ from shuffify.services.scheduler_service import (
 from shuffify.services.job_executor_service import (
     JobExecutorService,
 )
-from shuffify.services import ActivityLogService
 from shuffify.enums import ActivityType, JobType
 
 logger = logging.getLogger(__name__)
@@ -100,19 +100,10 @@ def schedules():
 
 
 @main.route("/schedules/create", methods=["POST"])
-def create_schedule():
+@require_auth_and_db
+def create_schedule(client=None, user=None):
     """Create a new scheduled operation."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    db_user = get_db_user()
-    if not db_user:
-        return json_error(
-            "User not found. Please log in again.", 401
-        )
-
-    if not db_user.encrypted_refresh_token:
+    if not user.encrypted_refresh_token:
         return json_error(
             "Your account needs a fresh login to enable "
             "scheduled operations. Please log out and "
@@ -127,7 +118,7 @@ def create_schedule():
     create_request = ScheduleCreateRequest(**data)
 
     schedule = SchedulerService.create_schedule(
-        user_id=db_user.id,
+        user_id=user.id,
         job_type=create_request.job_type,
         target_playlist_id=(
             create_request.target_playlist_id
@@ -160,34 +151,26 @@ def create_schedule():
         )
 
     logger.info(
-        f"User {db_user.spotify_id} created schedule "
+        f"User {user.spotify_id} created schedule "
         f"{schedule.id}: {schedule.job_type} on "
         f"{schedule.target_playlist_name}"
     )
 
-    # Log activity (non-blocking)
-    try:
-        ActivityLogService.log(
-            user_id=db_user.id,
-            activity_type=ActivityType.SCHEDULE_CREATE,
-            description=(
-                f"Created {schedule.job_type} schedule "
-                f"for '{schedule.target_playlist_name}'"
-            ),
-            playlist_id=schedule.target_playlist_id,
-            playlist_name=(
-                schedule.target_playlist_name
-            ),
-            metadata={
-                "schedule_id": schedule.id,
-                "job_type": schedule.job_type,
-                "schedule_value": (
-                    schedule.schedule_value
-                ),
-            },
-        )
-    except Exception:
-        pass
+    log_activity(
+        user_id=user.id,
+        activity_type=ActivityType.SCHEDULE_CREATE,
+        description=(
+            f"Created {schedule.job_type} schedule "
+            f"for '{schedule.target_playlist_name}'"
+        ),
+        playlist_id=schedule.target_playlist_id,
+        playlist_name=schedule.target_playlist_name,
+        metadata={
+            "schedule_id": schedule.id,
+            "job_type": schedule.job_type,
+            "schedule_value": schedule.schedule_value,
+        },
+    )
 
     return json_success(
         "Schedule created successfully.",
@@ -198,18 +181,11 @@ def create_schedule():
 @main.route(
     "/schedules/<int:schedule_id>", methods=["PUT"]
 )
-def update_schedule(schedule_id):
+@require_auth_and_db
+def update_schedule(
+    schedule_id, client=None, user=None
+):
     """Update an existing schedule."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    db_user = get_db_user()
-    if not db_user:
-        return json_error(
-            "User not found. Please log in again.", 401
-        )
-
     data = request.get_json()
     if not data:
         return json_error("Request body must be JSON.", 400)
@@ -223,7 +199,7 @@ def update_schedule(schedule_id):
 
     schedule = SchedulerService.update_schedule(
         schedule_id=schedule_id,
-        user_id=db_user.id,
+        user_id=user.id,
         **update_fields,
     )
 
@@ -247,27 +223,21 @@ def update_schedule(schedule_id):
 
     logger.info(f"Updated schedule {schedule_id}")
 
-    # Log activity (non-blocking)
-    try:
-        ActivityLogService.log(
-            user_id=db_user.id,
-            activity_type=ActivityType.SCHEDULE_UPDATE,
-            description=(
-                f"Updated schedule {schedule_id}"
+    log_activity(
+        user_id=user.id,
+        activity_type=ActivityType.SCHEDULE_UPDATE,
+        description=(
+            f"Updated schedule {schedule_id}"
+        ),
+        playlist_id=schedule.target_playlist_id,
+        playlist_name=schedule.target_playlist_name,
+        metadata={
+            "schedule_id": schedule_id,
+            "updated_fields": list(
+                update_fields.keys()
             ),
-            playlist_id=schedule.target_playlist_id,
-            playlist_name=(
-                schedule.target_playlist_name
-            ),
-            metadata={
-                "schedule_id": schedule_id,
-                "updated_fields": list(
-                    update_fields.keys()
-                ),
-            },
-        )
-    except Exception:
-        pass
+        },
+    )
 
     return json_success(
         "Schedule updated successfully.",
@@ -278,40 +248,29 @@ def update_schedule(schedule_id):
 @main.route(
     "/schedules/<int:schedule_id>", methods=["DELETE"]
 )
-def delete_schedule(schedule_id):
+@require_auth_and_db
+def delete_schedule(
+    schedule_id, client=None, user=None
+):
     """Delete a schedule."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    db_user = get_db_user()
-    if not db_user:
-        return json_error(
-            "User not found. Please log in again.", 401
-        )
-
     from shuffify.scheduler import remove_job_for_schedule
 
     remove_job_for_schedule(schedule_id)
 
     SchedulerService.delete_schedule(
-        schedule_id, db_user.id
+        schedule_id, user.id
     )
 
     logger.info(f"Deleted schedule {schedule_id}")
 
-    # Log activity (non-blocking)
-    try:
-        ActivityLogService.log(
-            user_id=db_user.id,
-            activity_type=ActivityType.SCHEDULE_DELETE,
-            description=(
-                f"Deleted schedule {schedule_id}"
-            ),
-            metadata={"schedule_id": schedule_id},
-        )
-    except Exception:
-        pass
+    log_activity(
+        user_id=user.id,
+        activity_type=ActivityType.SCHEDULE_DELETE,
+        description=(
+            f"Deleted schedule {schedule_id}"
+        ),
+        metadata={"schedule_id": schedule_id},
+    )
 
     return json_success("Schedule deleted successfully.")
 
@@ -320,20 +279,13 @@ def delete_schedule(schedule_id):
     "/schedules/<int:schedule_id>/toggle",
     methods=["POST"],
 )
-def toggle_schedule(schedule_id):
+@require_auth_and_db
+def toggle_schedule(
+    schedule_id, client=None, user=None
+):
     """Toggle a schedule's enabled/disabled state."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    db_user = get_db_user()
-    if not db_user:
-        return json_error(
-            "User not found. Please log in again.", 401
-        )
-
     schedule = SchedulerService.toggle_schedule(
-        schedule_id, db_user.id
+        schedule_id, user.id
     )
 
     try:
@@ -358,25 +310,19 @@ def toggle_schedule(schedule_id):
         "enabled" if schedule.is_enabled else "disabled"
     )
 
-    # Log activity (non-blocking)
-    try:
-        ActivityLogService.log(
-            user_id=db_user.id,
-            activity_type=ActivityType.SCHEDULE_TOGGLE,
-            description=(
-                f"Schedule {schedule_id} {status_text}"
-            ),
-            playlist_id=schedule.target_playlist_id,
-            playlist_name=(
-                schedule.target_playlist_name
-            ),
-            metadata={
-                "schedule_id": schedule_id,
-                "is_enabled": schedule.is_enabled,
-            },
-        )
-    except Exception:
-        pass
+    log_activity(
+        user_id=user.id,
+        activity_type=ActivityType.SCHEDULE_TOGGLE,
+        description=(
+            f"Schedule {schedule_id} {status_text}"
+        ),
+        playlist_id=schedule.target_playlist_id,
+        playlist_name=schedule.target_playlist_name,
+        metadata={
+            "schedule_id": schedule_id,
+            "is_enabled": schedule.is_enabled,
+        },
+    )
 
     return json_success(
         f"Schedule {status_text}.",
@@ -387,37 +333,26 @@ def toggle_schedule(schedule_id):
 @main.route(
     "/schedules/<int:schedule_id>/run", methods=["POST"]
 )
-def run_schedule_now(schedule_id):
+@require_auth_and_db
+def run_schedule_now(
+    schedule_id, client=None, user=None
+):
     """Manually trigger a schedule execution."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    db_user = get_db_user()
-    if not db_user:
-        return json_error(
-            "User not found. Please log in again.", 401
-        )
-
     result = JobExecutorService.execute_now(
-        schedule_id, db_user.id
+        schedule_id, user.id
     )
 
-    # Log activity (non-blocking)
-    try:
-        ActivityLogService.log(
-            user_id=db_user.id,
-            activity_type=ActivityType.SCHEDULE_RUN,
-            description=(
-                f"Manually ran schedule {schedule_id}"
-            ),
-            metadata={
-                "schedule_id": schedule_id,
-                "result": result,
-            },
-        )
-    except Exception:
-        pass
+    log_activity(
+        user_id=user.id,
+        activity_type=ActivityType.SCHEDULE_RUN,
+        description=(
+            f"Manually ran schedule {schedule_id}"
+        ),
+        metadata={
+            "schedule_id": schedule_id,
+            "result": result,
+        },
+    )
 
     return json_success(
         "Schedule executed successfully.",
@@ -426,20 +361,13 @@ def run_schedule_now(schedule_id):
 
 
 @main.route("/schedules/<int:schedule_id>/history")
-def schedule_history(schedule_id):
+@require_auth_and_db
+def schedule_history(
+    schedule_id, client=None, user=None
+):
     """Get execution history for a schedule."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    db_user = get_db_user()
-    if not db_user:
-        return json_error(
-            "User not found. Please log in again.", 401
-        )
-
     history = SchedulerService.get_execution_history(
-        schedule_id, db_user.id, limit=10
+        schedule_id, user.id, limit=10
     )
 
     return jsonify({"success": True, "history": history})
@@ -448,26 +376,18 @@ def schedule_history(schedule_id):
 @main.route(
     "/playlist/<playlist_id>/rotation-status"
 )
-def rotation_status(playlist_id):
+@require_auth_and_db
+def rotation_status(
+    playlist_id, client=None, user=None
+):
     """Get rotation status for a playlist."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    db_user = get_db_user()
-    if not db_user:
-        return json_error(
-            "User not found. Please log in again.",
-            401,
-        )
-
     from shuffify.services.playlist_pair_service import (
         PlaylistPairService,
     )
 
     pair_info = None
     pair = PlaylistPairService.get_pair_for_playlist(
-        user_id=db_user.id,
+        user_id=user.id,
         production_playlist_id=playlist_id,
     )
     if pair:
@@ -475,7 +395,7 @@ def rotation_status(playlist_id):
 
     rotate_schedule = None
     user_schedules = (
-        SchedulerService.get_user_schedules(db_user.id)
+        SchedulerService.get_user_schedules(user.id)
     )
     for s in user_schedules:
         if (

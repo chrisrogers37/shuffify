@@ -16,6 +16,7 @@ from flask import (
     jsonify,
     flash,
 )
+import functools
 import logging
 from datetime import datetime, timezone
 
@@ -99,6 +100,49 @@ def json_success(message: str, **extra) -> dict:
     })
 
 
+def require_auth_and_db(f):
+    """
+    Decorator that enforces authentication and database availability.
+
+    Checks performed in order:
+    1. require_auth() -- returns 401 if not authenticated
+    2. is_db_available() -- returns 503 if DB is down
+    3. get_db_user() -- returns 401 if user not found in DB
+
+    Injects ``client`` (SpotifyClient) and ``user`` (User model)
+    as keyword arguments to the wrapped function.
+
+    Usage::
+
+        @main.route("/endpoint")
+        @require_auth_and_db
+        def my_route(client=None, user=None):
+            # client and user are guaranteed non-None here
+            ...
+    """
+    @functools.wraps(f)
+    def decorated_function(*args, **kwargs):
+        client = require_auth()
+        if not client:
+            return json_error("Please log in first.", 401)
+
+        from shuffify import is_db_available
+        if not is_db_available():
+            return json_error(
+                "Database is unavailable.", 503
+            )
+
+        user = get_db_user()
+        if not user:
+            return json_error("User not found.", 401)
+
+        kwargs["client"] = client
+        kwargs["user"] = user
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
 def get_db_user():
     """
     Get the database User record for the current session user.
@@ -111,6 +155,39 @@ def get_db_user():
         return None
 
     return UserService.get_by_spotify_id(user_data["id"])
+
+
+def log_activity(
+    user_id: int,
+    activity_type,
+    description: str,
+    **kwargs,
+) -> None:
+    """
+    Log a user activity. Never raises -- failures are logged as warnings.
+
+    This is a convenience wrapper around ActivityLogService.log() that
+    silences exceptions so activity logging never disrupts route handlers.
+
+    Args:
+        user_id: The internal database user ID.
+        activity_type: An ActivityType enum value.
+        description: Human-readable description of the action.
+        **kwargs: Additional keyword args passed to ActivityLogService.log()
+            (e.g., playlist_id, playlist_name, metadata).
+    """
+    try:
+        from shuffify.services.activity_log_service import (
+            ActivityLogService,
+        )
+        ActivityLogService.log(
+            user_id=user_id,
+            activity_type=activity_type,
+            description=description,
+            **kwargs,
+        )
+    except Exception as e:
+        logger.warning("Activity logging failed: %s", e)
 
 
 # =============================================================================

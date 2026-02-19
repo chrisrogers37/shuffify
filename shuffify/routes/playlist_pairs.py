@@ -9,21 +9,17 @@ import logging
 from flask import request, jsonify
 from pydantic import ValidationError
 
-from shuffify import is_db_available
 from shuffify.routes import (
     main,
-    require_auth,
-    get_db_user,
+    require_auth_and_db,
     json_error,
     json_success,
+    log_activity,
 )
 from shuffify.services.playlist_pair_service import (
     PlaylistPairService,
     PlaylistPairExistsError,
     PlaylistPairNotFoundError,
-)
-from shuffify.services.activity_log_service import (
-    ActivityLogService,
 )
 from shuffify.enums import ActivityType
 from shuffify.schemas.playlist_pair_requests import (
@@ -38,19 +34,9 @@ logger = logging.getLogger(__name__)
 @main.route(
     "/playlist/<playlist_id>/pair", methods=["GET"]
 )
-def get_pair(playlist_id):
+@require_auth_and_db
+def get_pair(playlist_id, client=None, user=None):
     """Get archive pair info for a playlist."""
-    sp = require_auth()
-    if not sp:
-        return json_error("Authentication required", 401)
-
-    if not is_db_available():
-        return json_error("Database unavailable", 503)
-
-    user = get_db_user()
-    if not user:
-        return json_error("User not found", 404)
-
     pair = PlaylistPairService.get_pair_for_playlist(
         user.id, playlist_id
     )
@@ -67,19 +53,9 @@ def get_pair(playlist_id):
 @main.route(
     "/playlist/<playlist_id>/pair", methods=["POST"]
 )
-def create_pair(playlist_id):
+@require_auth_and_db
+def create_pair(playlist_id, client=None, user=None):
     """Create an archive pair for a playlist."""
-    sp = require_auth()
-    if not sp:
-        return json_error("Authentication required", 401)
-
-    if not is_db_available():
-        return json_error("Database unavailable", 503)
-
-    user = get_db_user()
-    if not user:
-        return json_error("User not found", 404)
-
     data = request.get_json(silent=True)
     if not data:
         return json_error("JSON body required", 400)
@@ -96,7 +72,7 @@ def create_pair(playlist_id):
             )
             archive_id, archive_name = (
                 PlaylistPairService.create_archive_playlist(
-                    sp._sp,
+                    client._sp,
                     user.spotify_id,
                     prod_name,
                 )
@@ -115,7 +91,7 @@ def create_pair(playlist_id):
             archive_playlist_name=archive_name,
         )
 
-        ActivityLogService.log(
+        log_activity(
             user_id=user.id,
             activity_type=ActivityType.PAIR_CREATE,
             description=(
@@ -125,11 +101,10 @@ def create_pair(playlist_id):
             playlist_name=req.production_playlist_name,
         )
 
-        return jsonify({
-            "success": True,
-            "message": "Archive pair created",
-            "pair": pair.to_dict(),
-        })
+        return json_success(
+            "Archive pair created",
+            pair=pair.to_dict(),
+        )
 
     except PlaylistPairExistsError:
         return json_error(
@@ -145,24 +120,14 @@ def create_pair(playlist_id):
 @main.route(
     "/playlist/<playlist_id>/pair", methods=["DELETE"]
 )
-def delete_pair(playlist_id):
+@require_auth_and_db
+def delete_pair(playlist_id, client=None, user=None):
     """Remove the archive pair for a playlist."""
-    sp = require_auth()
-    if not sp:
-        return json_error("Authentication required", 401)
-
-    if not is_db_available():
-        return json_error("Database unavailable", 503)
-
-    user = get_db_user()
-    if not user:
-        return json_error("User not found", 404)
-
     try:
         PlaylistPairService.delete_pair(
             user.id, playlist_id
         )
-        ActivityLogService.log(
+        log_activity(
             user_id=user.id,
             activity_type=ActivityType.PAIR_DELETE,
             description="Removed archive pairing",
@@ -177,19 +142,9 @@ def delete_pair(playlist_id):
     "/playlist/<playlist_id>/pair/archive",
     methods=["POST"],
 )
-def archive_tracks(playlist_id):
+@require_auth_and_db
+def archive_tracks(playlist_id, client=None, user=None):
     """Archive tracks to the paired archive playlist."""
-    sp = require_auth()
-    if not sp:
-        return json_error("Authentication required", 401)
-
-    if not is_db_available():
-        return json_error("Database unavailable", 503)
-
-    user = get_db_user()
-    if not user:
-        return json_error("User not found", 404)
-
     pair = PlaylistPairService.get_pair_for_playlist(
         user.id, playlist_id
     )
@@ -207,9 +162,11 @@ def archive_tracks(playlist_id):
 
     try:
         count = PlaylistPairService.archive_tracks(
-            sp._sp, pair.archive_playlist_id, req.track_uris
+            client._sp,
+            pair.archive_playlist_id,
+            req.track_uris,
         )
-        ActivityLogService.log(
+        log_activity(
             user_id=user.id,
             activity_type=ActivityType.ARCHIVE_TRACKS,
             description=(
@@ -218,11 +175,10 @@ def archive_tracks(playlist_id):
             playlist_id=playlist_id,
             metadata={"track_count": count},
         )
-        return jsonify({
-            "success": True,
-            "message": f"Archived {count} tracks",
-            "archived_count": count,
-        })
+        return json_success(
+            f"Archived {count} tracks",
+            archived_count=count,
+        )
     except Exception as e:
         logger.error("Failed to archive tracks: %s", e)
         return json_error(
@@ -234,19 +190,11 @@ def archive_tracks(playlist_id):
     "/playlist/<playlist_id>/pair/unarchive",
     methods=["POST"],
 )
-def unarchive_tracks(playlist_id):
+@require_auth_and_db
+def unarchive_tracks(
+    playlist_id, client=None, user=None
+):
     """Unarchive tracks back to production playlist."""
-    sp = require_auth()
-    if not sp:
-        return json_error("Authentication required", 401)
-
-    if not is_db_available():
-        return json_error("Database unavailable", 503)
-
-    user = get_db_user()
-    if not user:
-        return json_error("User not found", 404)
-
     pair = PlaylistPairService.get_pair_for_playlist(
         user.id, playlist_id
     )
@@ -264,12 +212,12 @@ def unarchive_tracks(playlist_id):
 
     try:
         count = PlaylistPairService.unarchive_tracks(
-            sp._sp,
+            client._sp,
             pair.production_playlist_id,
             pair.archive_playlist_id,
             req.track_uris,
         )
-        ActivityLogService.log(
+        log_activity(
             user_id=user.id,
             activity_type=ActivityType.UNARCHIVE_TRACKS,
             description=(
@@ -278,11 +226,10 @@ def unarchive_tracks(playlist_id):
             playlist_id=playlist_id,
             metadata={"track_count": count},
         )
-        return jsonify({
-            "success": True,
-            "message": f"Unarchived {count} tracks",
-            "unarchived_count": count,
-        })
+        return json_success(
+            f"Unarchived {count} tracks",
+            unarchived_count=count,
+        )
     except Exception as e:
         logger.error(
             "Failed to unarchive tracks: %s", e
@@ -296,19 +243,11 @@ def unarchive_tracks(playlist_id):
     "/playlist/<playlist_id>/pair/archive-tracks",
     methods=["GET"],
 )
-def list_archive_tracks(playlist_id):
+@require_auth_and_db
+def list_archive_tracks(
+    playlist_id, client=None, user=None
+):
     """List tracks in the archive playlist."""
-    sp = require_auth()
-    if not sp:
-        return json_error("Authentication required", 401)
-
-    if not is_db_available():
-        return json_error("Database unavailable", 503)
-
-    user = get_db_user()
-    if not user:
-        return json_error("User not found", 404)
-
     pair = PlaylistPairService.get_pair_for_playlist(
         user.id, playlist_id
     )
@@ -316,7 +255,7 @@ def list_archive_tracks(playlist_id):
         return json_error("No archive pair found", 404)
 
     try:
-        results = sp._sp.playlist_items(
+        results = client._sp.playlist_items(
             pair.archive_playlist_id,
             fields=(
                 "items(track(id,name,uri,artists(name),"

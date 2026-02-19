@@ -21,6 +21,7 @@ from shuffify.routes import (
     is_authenticated,
     clear_session_and_show_login,
     get_db_user,
+    log_activity,
 )
 from shuffify.services import (
     AuthService,
@@ -31,7 +32,6 @@ from shuffify.services import (
     DashboardService,
     AuthenticationError,
     PlaylistError,
-    ActivityLogService,
 )
 from shuffify.enums import ActivityType
 
@@ -303,7 +303,7 @@ def callback():
                 user_data["id"]
             )
             if db_user:
-                ActivityLogService.log(
+                log_activity(
                     user_id=db_user.id,
                     activity_type=ActivityType.LOGIN,
                     description=(
@@ -365,7 +365,7 @@ def logout():
                 spotify_id
             )
             if db_user:
-                ActivityLogService.log(
+                log_activity(
                     user_id=db_user.id,
                     activity_type=ActivityType.LOGOUT,
                     description="Logged out",
