@@ -8,8 +8,10 @@
 - **Estimated effort**: 2-3 hours
 - **Dependencies**: None
 - **Blocks**: Phase 3 (cleaner services make decomposition easier)
-- **Status**: 🔧 IN PROGRESS
+- **Status**: ✅ COMPLETE
 - **Started**: 2026-02-19
+- **Completed**: 2026-02-19
+- **PR**: #84
 - **Files created**: `shuffify/services/base.py`, `tests/services/test_base.py`
 - **Files modified**: `shuffify/services/upstream_source_service.py`, `shuffify/services/playlist_snapshot_service.py`, `shuffify/services/user_settings_service.py`, `shuffify/services/login_history_service.py`, `shuffify/services/workshop_session_service.py`
 
