@@ -39,6 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `safe_commit()` wraps db commit/rollback/log pattern (replaced 9 occurrences across 5 services)
   - `get_user_or_raise()` standardizes User lookup by spotify_id (replaced 8 occurrences across 2 services)
   - `get_owned_entity()` standardizes entity fetch + ownership check (replaced 3 occurrences across 3 services)
+- **Missing Route Tests** - Added 68 new route-level tests covering 5 previously untested route modules
+  - `tests/routes/test_core_routes.py` (14 tests): /, /login, /callback, /logout, /terms, /privacy
+  - `tests/routes/test_playlists_routes.py` (12 tests): refresh-playlists, get-playlist, get-stats, user-playlists API
+  - `tests/routes/test_shuffle_routes.py` (6 tests): shuffle execution, undo with state revert
+  - `tests/routes/test_upstream_sources_routes.py` (13 tests): upstream source CRUD with `@require_auth_and_db`
+  - `tests/routes/test_schedules_routes.py` (23 tests): schedule CRUD, toggle, manual run, history, rotation status
 - **Complex Function Decomposition** - Decomposed 7 overly complex functions into focused private helpers across 4 files
   - `job_executor_service.py`: Split `execute()`, `_execute_raid()`, `_execute_rotate()` into 8 helper methods; centralized `_batch_add_tracks()` replaces 5 inline batch loops
   - `spotify/api.py`: Split 87-line `api_error_handler` decorator into `_classify_error()`, `_should_retry()`, `_get_retry_delay()`, `_raise_final_error()`
