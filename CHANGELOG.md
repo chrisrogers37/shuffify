@@ -34,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `wheel>=0.46.2` to dev dependencies (CVE-2026-24049)
 
 ### Changed
+- **Schema Tests, Dead Code & Dependency Updates** - Final tech debt cleanup phase
+  - Added 37 new schema validation tests: `test_settings_requests.py` (21 tests), `test_snapshot_requests.py` (16 tests)
+  - Removed dead `count_sources_for_target()` method from `upstream_source_service.py`
+  - Updated dependencies: Flask >=3.1.3, gunicorn 25.0.3, pytest-cov 7.0.0
+  - Added transitive floor pins: certifi >=2026.1.4, MarkupSafe >=3.0.3, PyYAML >=6.0.3
 - **Route Infrastructure Cleanup** - Extracted `@require_auth_and_db` decorator and `log_activity()` helper to reduce auth/DB/logging boilerplate across 10 route modules
 - **Service Layer Deduplication** - Extracted shared CRUD utilities to `shuffify/services/base.py`
   - `safe_commit()` wraps db commit/rollback/log pattern (replaced 9 occurrences across 5 services)
