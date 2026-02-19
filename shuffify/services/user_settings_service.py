@@ -11,6 +11,7 @@ from typing import Any, Optional
 
 from shuffify.models.db import db, UserSettings
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
+from shuffify.services.base import safe_commit
 
 logger = logging.getLogger(__name__)
 
@@ -42,36 +43,20 @@ class UserSettingsService:
         Raises:
             UserSettingsError: If the operation fails.
         """
-        try:
-            settings = UserSettings.query.filter_by(
-                user_id=user_id
-            ).first()
+        settings = UserSettings.query.filter_by(
+            user_id=user_id
+        ).first()
 
-            if settings:
-                return settings
-
-            settings = UserSettings(user_id=user_id)
-            db.session.add(settings)
-            db.session.commit()
-
-            logger.info(
-                "Created default settings for user %d",
-                user_id,
-            )
+        if settings:
             return settings
 
-        except Exception as e:
-            db.session.rollback()
-            logger.error(
-                "Failed to get/create settings for user "
-                "%d: %s",
-                user_id,
-                e,
-                exc_info=True,
-            )
-            raise UserSettingsError(
-                f"Failed to get or create settings: {e}"
-            )
+        settings = UserSettings(user_id=user_id)
+        db.session.add(settings)
+        safe_commit(
+            f"create default settings for user {user_id}",
+            UserSettingsError,
+        )
+        return settings
 
     @staticmethod
     def update(
@@ -155,30 +140,16 @@ class UserSettingsService:
                 setattr(settings, key, value)
 
             settings.updated_at = datetime.now(timezone.utc)
-            db.session.commit()
-
-            logger.info(
-                "Updated settings for user %d: %s",
-                user_id,
-                list(kwargs.keys()),
+            safe_commit(
+                f"update settings for user {user_id}: "
+                f"{list(kwargs.keys())}",
+                UserSettingsError,
             )
             return settings
 
         except UserSettingsError:
             db.session.rollback()
             raise
-        except Exception as e:
-            db.session.rollback()
-            logger.error(
-                "Failed to update settings for user "
-                "%d: %s",
-                user_id,
-                e,
-                exc_info=True,
-            )
-            raise UserSettingsError(
-                f"Failed to update settings: {e}"
-            )
 
     @staticmethod
     def get_default_algorithm(

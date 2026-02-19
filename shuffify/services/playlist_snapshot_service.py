@@ -11,6 +11,7 @@ from typing import List, Optional
 
 from shuffify.models.db import db, PlaylistSnapshot
 from shuffify.enums import SnapshotType  # noqa: F401
+from shuffify.services.base import safe_commit, get_owned_entity
 
 logger = logging.getLogger(__name__)
 
@@ -64,47 +65,35 @@ class PlaylistSnapshotService:
         Raises:
             PlaylistSnapshotError: If creation fails.
         """
-        try:
-            snapshot = PlaylistSnapshot(
-                user_id=user_id,
-                playlist_id=playlist_id,
-                playlist_name=playlist_name,
-                track_count=len(track_uris),
-                snapshot_type=snapshot_type,
-                trigger_description=trigger_description,
-            )
-            snapshot.track_uris = track_uris
+        snapshot = PlaylistSnapshot(
+            user_id=user_id,
+            playlist_id=playlist_id,
+            playlist_name=playlist_name,
+            track_count=len(track_uris),
+            snapshot_type=snapshot_type,
+            trigger_description=trigger_description,
+        )
+        snapshot.track_uris = track_uris
 
-            db.session.add(snapshot)
-            db.session.commit()
+        db.session.add(snapshot)
+        safe_commit(
+            f"create {snapshot_type} snapshot for user "
+            f"{user_id}, playlist {playlist_id} "
+            f"({len(track_uris)} tracks)",
+            PlaylistSnapshotError,
+        )
 
-            logger.info(
-                f"Created {snapshot_type} snapshot for user "
-                f"{user_id}, playlist {playlist_id} "
-                f"({len(track_uris)} tracks)"
+        # Enforce retention limit
+        max_snapshots = (
+            PlaylistSnapshotService._get_max_snapshots(
+                user_id
             )
+        )
+        PlaylistSnapshotService.cleanup_old_snapshots(
+            user_id, playlist_id, max_snapshots
+        )
 
-            # Enforce retention limit
-            max_snapshots = (
-                PlaylistSnapshotService._get_max_snapshots(
-                    user_id
-                )
-            )
-            PlaylistSnapshotService.cleanup_old_snapshots(
-                user_id, playlist_id, max_snapshots
-            )
-
-            return snapshot
-
-        except Exception as e:
-            db.session.rollback()
-            logger.error(
-                f"Failed to create snapshot: {e}",
-                exc_info=True,
-            )
-            raise PlaylistSnapshotError(
-                f"Failed to create snapshot: {e}"
-            )
+        return snapshot
 
     @staticmethod
     def get_snapshots(
@@ -150,14 +139,12 @@ class PlaylistSnapshotService:
             PlaylistSnapshotNotFoundError: If not found or
                 not owned.
         """
-        snapshot = db.session.get(
-            PlaylistSnapshot, snapshot_id
+        return get_owned_entity(
+            PlaylistSnapshot,
+            snapshot_id,
+            user_id,
+            PlaylistSnapshotNotFoundError,
         )
-        if not snapshot or snapshot.user_id != user_id:
-            raise PlaylistSnapshotNotFoundError(
-                f"Snapshot {snapshot_id} not found"
-            )
-        return snapshot
 
     @staticmethod
     def restore_snapshot(
@@ -213,22 +200,12 @@ class PlaylistSnapshotService:
             snapshot_id, user_id
         )
 
-        try:
-            db.session.delete(snapshot)
-            db.session.commit()
-            logger.info(f"Deleted snapshot {snapshot_id}")
-            return True
-
-        except Exception as e:
-            db.session.rollback()
-            logger.error(
-                f"Failed to delete snapshot "
-                f"{snapshot_id}: {e}",
-                exc_info=True,
-            )
-            raise PlaylistSnapshotError(
-                f"Failed to delete snapshot: {e}"
-            )
+        db.session.delete(snapshot)
+        safe_commit(
+            f"delete snapshot {snapshot_id}",
+            PlaylistSnapshotError,
+        )
+        return True
 
     @staticmethod
     def cleanup_old_snapshots(
