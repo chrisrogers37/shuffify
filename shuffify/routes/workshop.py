@@ -132,6 +132,66 @@ def workshop_preview_shuffle(playlist_id):
     })
 
 
+def _auto_snapshot_before_commit(
+    playlist_id, playlist_name, current_uris
+):
+    """Create an auto-snapshot before a workshop commit
+    if enabled."""
+    if is_db_available():
+        db_user = get_db_user()
+        if (
+            db_user
+            and PlaylistSnapshotService
+            .is_auto_snapshot_enabled(db_user.id)
+        ):
+            try:
+                PlaylistSnapshotService.create_snapshot(
+                    user_id=db_user.id,
+                    playlist_id=playlist_id,
+                    playlist_name=playlist_name,
+                    track_uris=current_uris,
+                    snapshot_type=(
+                        SnapshotType.AUTO_PRE_COMMIT
+                    ),
+                    trigger_description=(
+                        "Before workshop commit"
+                    ),
+                )
+            except Exception as e:
+                logger.warning(
+                    "Auto-snapshot before commit "
+                    f"failed: {e}"
+                )
+
+
+def _log_workshop_commit_activity(
+    playlist_id, playlist_name, track_count
+):
+    """Log a workshop commit activity (non-blocking)."""
+    user_data = session.get("user_data", {})
+    spotify_id = user_data.get("id")
+    if spotify_id:
+        db_user = UserService.get_by_spotify_id(
+            spotify_id
+        )
+        if db_user:
+            log_activity(
+                user_id=db_user.id,
+                activity_type=(
+                    ActivityType.WORKSHOP_COMMIT
+                ),
+                description=(
+                    f"Committed workshop changes "
+                    f"to '{playlist_name}'"
+                ),
+                playlist_id=playlist_id,
+                playlist_name=playlist_name,
+                metadata={
+                    "track_count": track_count,
+                },
+            )
+
+
 @main.route(
     "/workshop/<playlist_id>/commit", methods=["POST"]
 )
@@ -162,33 +222,9 @@ def workshop_commit(playlist_id):
         track["uri"] for track in playlist.tracks
     ]
 
-    # --- Auto-snapshot before commit ---
-    if is_db_available():
-        db_user = get_db_user()
-        if (
-            db_user
-            and PlaylistSnapshotService
-            .is_auto_snapshot_enabled(db_user.id)
-        ):
-            try:
-                PlaylistSnapshotService.create_snapshot(
-                    user_id=db_user.id,
-                    playlist_id=playlist_id,
-                    playlist_name=playlist.name,
-                    track_uris=current_uris,
-                    snapshot_type=(
-                        SnapshotType.AUTO_PRE_COMMIT
-                    ),
-                    trigger_description=(
-                        "Before workshop commit"
-                    ),
-                )
-            except Exception as e:
-                logger.warning(
-                    "Auto-snapshot before commit "
-                    f"failed: {e}"
-                )
-    # --- End auto-snapshot ---
+    _auto_snapshot_before_commit(
+        playlist_id, playlist.name, current_uris
+    )
 
     StateService.ensure_playlist_initialized(
         session, playlist_id, current_uris
@@ -214,31 +250,11 @@ def workshop_commit(playlist_id):
         f"{len(commit_request.track_uris)} tracks saved"
     )
 
-    # Log activity (non-blocking)
-    user_data = session.get("user_data", {})
-    spotify_id = user_data.get("id")
-    if spotify_id:
-        db_user = UserService.get_by_spotify_id(
-            spotify_id
-        )
-        if db_user:
-            log_activity(
-                user_id=db_user.id,
-                activity_type=(
-                    ActivityType.WORKSHOP_COMMIT
-                ),
-                description=(
-                    f"Committed workshop changes "
-                    f"to '{playlist.name}'"
-                ),
-                playlist_id=playlist_id,
-                playlist_name=playlist.name,
-                metadata={
-                    "track_count": len(
-                        commit_request.track_uris
-                    ),
-                },
-            )
+    _log_workshop_commit_activity(
+        playlist_id,
+        playlist.name,
+        len(commit_request.track_uris),
+    )
 
     return json_success(
         "Playlist saved to Spotify!",
@@ -359,6 +375,104 @@ def workshop_search_playlists():
         )
 
 
+def _load_playlist_by_url(client, ext_request):
+    """Load tracks from a specific playlist by URL/URI/ID."""
+    playlist_id = parse_spotify_playlist_url(
+        ext_request.url
+    )
+    if not playlist_id:
+        return json_error(
+            "Could not parse a playlist ID from the "
+            "provided URL. Please use a Spotify "
+            "playlist URL, URI, or ID.",
+            400,
+        )
+
+    try:
+        playlist_service = PlaylistService(client)
+        playlist = playlist_service.get_playlist(
+            playlist_id, include_features=False
+        )
+
+        if "external_playlist_history" not in session:
+            session["external_playlist_history"] = []
+
+        history = session["external_playlist_history"]
+        entry = {
+            "id": playlist.id,
+            "name": playlist.name,
+            "owner_id": playlist.owner_id,
+            "track_count": len(playlist),
+        }
+        history = [
+            h for h in history
+            if h["id"] != playlist.id
+        ]
+        history.insert(0, entry)
+        session["external_playlist_history"] = (
+            history[:10]
+        )
+        session.modified = True
+
+        logger.info(
+            f"Loaded external playlist "
+            f"'{playlist.name}' "
+            f"({len(playlist)} tracks)"
+        )
+
+        return jsonify({
+            "success": True,
+            "mode": "tracks",
+            "playlist": {
+                "id": playlist.id,
+                "name": playlist.name,
+                "owner_id": playlist.owner_id,
+                "description": playlist.description,
+                "track_count": len(playlist),
+            },
+            "tracks": playlist.tracks,
+        })
+
+    except PlaylistError as e:
+        logger.error(
+            f"Failed to load external playlist: {e}"
+        )
+        return json_error(
+            "Could not load playlist. "
+            "It may be private or deleted.",
+            404,
+        )
+
+
+def _search_playlists_by_query(client, ext_request):
+    """Search for playlists by query string."""
+    try:
+        results = client.search_playlists(
+            ext_request.query, limit=10
+        )
+
+        logger.info(
+            f"External playlist search for "
+            f"'{ext_request.query}' "
+            f"returned {len(results)} results"
+        )
+
+        return jsonify({
+            "success": True,
+            "mode": "search",
+            "playlists": results,
+        })
+
+    except Exception as e:
+        logger.error(
+            f"Playlist search failed: {e}",
+            exc_info=True,
+        )
+        return json_error(
+            "Search failed. Please try again.", 500
+        )
+
+
 @main.route(
     "/workshop/load-external-playlist", methods=["POST"]
 )
@@ -377,101 +491,13 @@ def workshop_load_external_playlist():
     except Exception as e:
         return json_error(str(e), 400)
 
-    # --- URL mode: load a specific playlist ---
     if ext_request.url:
-        playlist_id = parse_spotify_playlist_url(
-            ext_request.url
-        )
-        if not playlist_id:
-            return json_error(
-                "Could not parse a playlist ID from the "
-                "provided URL. Please use a Spotify "
-                "playlist URL, URI, or ID.",
-                400,
-            )
+        return _load_playlist_by_url(client, ext_request)
 
-        try:
-            playlist_service = PlaylistService(client)
-            playlist = playlist_service.get_playlist(
-                playlist_id, include_features=False
-            )
-
-            if "external_playlist_history" not in session:
-                session["external_playlist_history"] = []
-
-            history = session["external_playlist_history"]
-            entry = {
-                "id": playlist.id,
-                "name": playlist.name,
-                "owner_id": playlist.owner_id,
-                "track_count": len(playlist),
-            }
-            history = [
-                h for h in history
-                if h["id"] != playlist.id
-            ]
-            history.insert(0, entry)
-            session["external_playlist_history"] = (
-                history[:10]
-            )
-            session.modified = True
-
-            logger.info(
-                f"Loaded external playlist "
-                f"'{playlist.name}' "
-                f"({len(playlist)} tracks)"
-            )
-
-            return jsonify({
-                "success": True,
-                "mode": "tracks",
-                "playlist": {
-                    "id": playlist.id,
-                    "name": playlist.name,
-                    "owner_id": playlist.owner_id,
-                    "description": playlist.description,
-                    "track_count": len(playlist),
-                },
-                "tracks": playlist.tracks,
-            })
-
-        except PlaylistError as e:
-            logger.error(
-                f"Failed to load external playlist: {e}"
-            )
-            return json_error(
-                "Could not load playlist. "
-                "It may be private or deleted.",
-                404,
-            )
-
-    # --- Query mode: search for playlists ---
     if ext_request.query:
-        try:
-            results = client.search_playlists(
-                ext_request.query, limit=10
-            )
-
-            logger.info(
-                f"External playlist search for "
-                f"'{ext_request.query}' "
-                f"returned {len(results)} results"
-            )
-
-            return jsonify({
-                "success": True,
-                "mode": "search",
-                "playlists": results,
-            })
-
-        except Exception as e:
-            logger.error(
-                f"Playlist search failed: {e}",
-                exc_info=True,
-            )
-            return json_error(
-                "Search failed. Please try again.", 500
-            )
+        return _search_playlists_by_query(
+            client, ext_request
+        )
 
     return json_error(
         "Either 'url' or 'query' must be provided.", 400

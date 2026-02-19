@@ -39,6 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `safe_commit()` wraps db commit/rollback/log pattern (replaced 9 occurrences across 5 services)
   - `get_user_or_raise()` standardizes User lookup by spotify_id (replaced 8 occurrences across 2 services)
   - `get_owned_entity()` standardizes entity fetch + ownership check (replaced 3 occurrences across 3 services)
+- **Complex Function Decomposition** - Decomposed 7 overly complex functions into focused private helpers across 4 files
+  - `job_executor_service.py`: Split `execute()`, `_execute_raid()`, `_execute_rotate()` into 8 helper methods; centralized `_batch_add_tracks()` replaces 5 inline batch loops
+  - `spotify/api.py`: Split 87-line `api_error_handler` decorator into `_classify_error()`, `_should_retry()`, `_get_retry_delay()`, `_raise_final_error()`
+  - `routes/workshop.py`: Split `workshop_load_external_playlist()` and `workshop_commit()` into 4 focused helpers
+  - `raid_sync_service.py`: Split `raid_now()` into `_execute_raid_via_scheduler()` and `_execute_raid_inline()`, reusing shared helpers from job_executor_service
 - **Dev dependency updates** - Updated pytest 7.4.4 to 8.3.5, pytest-cov 4.1.0 to 6.0.0
   - Conservative upgrade within 8.x line to avoid pytest 9.0 breaking changes
 - **Test isolation fix** - Guarded `load_dotenv()` in `config.py` to prevent `.env` from leaking production `DATABASE_URL` into test fixtures

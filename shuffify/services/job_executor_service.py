@@ -70,16 +70,12 @@ class JobExecutorService:
                 )
                 return
 
-            # Create execution record
-            execution = JobExecution(
-                schedule_id=schedule_id,
-                started_at=datetime.now(timezone.utc),
-                status="running",
+            execution = (
+                JobExecutorService._create_execution_record(
+                    schedule_id
+                )
             )
-            db.session.add(execution)
-            db.session.commit()
 
-            # Load user and get API client
             user = db.session.get(User, schedule.user_id)
             if not user:
                 raise JobExecutionError(
@@ -88,100 +84,135 @@ class JobExecutorService:
 
             api = JobExecutorService._get_spotify_api(user)
 
-            # Execute based on job type
             result = JobExecutorService._execute_job_type(
                 schedule, api
             )
 
-            # Record success
-            execution.status = "success"
-            execution.completed_at = datetime.now(timezone.utc)
-            execution.tracks_added = result.get(
-                "tracks_added", 0
-            )
-            execution.tracks_total = result.get(
-                "tracks_total", 0
-            )
-
-            schedule.last_run_at = datetime.now(timezone.utc)
-            schedule.last_status = "success"
-            schedule.last_error = None
-
-            db.session.commit()
-
-            # Log activity (non-blocking)
-            try:
-                from shuffify.services.activity_log_service import (  # noqa: E501
-                    ActivityLogService,
-                )
-
-                ActivityLogService.log(
-                    user_id=schedule.user_id,
-                    activity_type=(
-                        ActivityType.SCHEDULE_RUN
-                    ),
-                    description=(
-                        f"Scheduled "
-                        f"{schedule.job_type} on "
-                        f"'{schedule.target_playlist_name}'"
-                        f" completed"
-                    ),
-                    playlist_id=(
-                        schedule.target_playlist_id
-                    ),
-                    playlist_name=(
-                        schedule.target_playlist_name
-                    ),
-                    metadata={
-                        "schedule_id": schedule_id,
-                        "job_type": schedule.job_type,
-                        "tracks_added": result.get(
-                            "tracks_added", 0
-                        ),
-                        "tracks_total": result.get(
-                            "tracks_total", 0
-                        ),
-                        "triggered_by": "scheduler",
-                    },
-                )
-            except Exception:
-                pass
-
-            logger.info(
-                f"Schedule {schedule_id} executed "
-                f"successfully: "
-                f"added={result.get('tracks_added', 0)}, "
-                f"total={result.get('tracks_total', 0)}"
+            JobExecutorService._record_success(
+                execution, schedule, result
             )
 
         except Exception as e:
-            logger.error(
-                f"Schedule {schedule_id} execution "
-                f"failed: {e}",
-                exc_info=True,
+            JobExecutorService._record_failure(
+                execution, schedule, e, schedule_id
             )
-            try:
-                if execution:
-                    execution.status = "failed"
-                    execution.completed_at = datetime.now(
-                        timezone.utc
-                    )
-                    execution.error_message = str(e)[:1000]
 
-                if schedule:
-                    schedule.last_run_at = datetime.now(
-                        timezone.utc
-                    )
-                    schedule.last_status = "failed"
-                    schedule.last_error = str(e)[:1000]
+    @staticmethod
+    def _create_execution_record(
+        schedule_id: int,
+    ) -> JobExecution:
+        """Create a running execution record in the database."""
+        execution = JobExecution(
+            schedule_id=schedule_id,
+            started_at=datetime.now(timezone.utc),
+            status="running",
+        )
+        db.session.add(execution)
+        db.session.commit()
+        return execution
 
-                db.session.commit()
-            except Exception as db_err:
-                logger.error(
-                    f"Failed to record execution failure: "
-                    f"{db_err}"
+    @staticmethod
+    def _record_success(
+        execution: JobExecution,
+        schedule: Schedule,
+        result: dict,
+    ) -> None:
+        """Record a successful job execution."""
+        execution.status = "success"
+        execution.completed_at = datetime.now(timezone.utc)
+        execution.tracks_added = result.get(
+            "tracks_added", 0
+        )
+        execution.tracks_total = result.get(
+            "tracks_total", 0
+        )
+
+        schedule.last_run_at = datetime.now(timezone.utc)
+        schedule.last_status = "success"
+        schedule.last_error = None
+
+        db.session.commit()
+
+        # Log activity (non-blocking)
+        try:
+            from shuffify.services.activity_log_service import (  # noqa: E501
+                ActivityLogService,
+            )
+
+            ActivityLogService.log(
+                user_id=schedule.user_id,
+                activity_type=(
+                    ActivityType.SCHEDULE_RUN
+                ),
+                description=(
+                    f"Scheduled "
+                    f"{schedule.job_type} on "
+                    f"'{schedule.target_playlist_name}'"
+                    f" completed"
+                ),
+                playlist_id=(
+                    schedule.target_playlist_id
+                ),
+                playlist_name=(
+                    schedule.target_playlist_name
+                ),
+                metadata={
+                    "schedule_id": schedule.id,
+                    "job_type": schedule.job_type,
+                    "tracks_added": result.get(
+                        "tracks_added", 0
+                    ),
+                    "tracks_total": result.get(
+                        "tracks_total", 0
+                    ),
+                    "triggered_by": "scheduler",
+                },
+            )
+        except Exception:
+            pass
+
+        logger.info(
+            f"Schedule {schedule.id} executed "
+            f"successfully: "
+            f"added={result.get('tracks_added', 0)}, "
+            f"total={result.get('tracks_total', 0)}"
+        )
+
+    @staticmethod
+    def _record_failure(
+        execution,
+        schedule,
+        error: Exception,
+        schedule_id: int,
+    ) -> None:
+        """Record a failed job execution."""
+        logger.error(
+            f"Schedule {schedule_id} execution "
+            f"failed: {error}",
+            exc_info=True,
+        )
+        try:
+            if execution:
+                execution.status = "failed"
+                execution.completed_at = datetime.now(
+                    timezone.utc
                 )
-                db.session.rollback()
+                execution.error_message = str(error)[:1000]
+
+            if schedule:
+                schedule.last_run_at = datetime.now(
+                    timezone.utc
+                )
+                schedule.last_status = "failed"
+                schedule.last_error = str(error)[:1000]
+
+            db.session.commit()
+        except Exception as db_err:
+            logger.error(
+                f"Failed to record execution failure: "
+                f"{db_err}"
+            )
+            db.session.rollback()
 
     @staticmethod
     def execute_now(
@@ -367,62 +398,13 @@ class JobExecutorService:
                 if t.get("uri")
             }
 
-            # --- Auto-snapshot before scheduled raid ---
-            try:
-                pre_raid_uris = [
-                    t.get("uri")
-                    for t in target_tracks
-                    if t.get("uri")
-                ]
-                if (
-                    pre_raid_uris
-                    and PlaylistSnapshotService
-                    .is_auto_snapshot_enabled(
-                        schedule.user_id
-                    )
-                ):
-                    PlaylistSnapshotService.create_snapshot(
-                        user_id=schedule.user_id,
-                        playlist_id=target_id,
-                        playlist_name=(
-                            schedule.target_playlist_name
-                            or target_id
-                        ),
-                        track_uris=pre_raid_uris,
-                        snapshot_type=(
-                            SnapshotType.AUTO_PRE_RAID
-                        ),
-                        trigger_description=(
-                            "Before scheduled raid"
-                        ),
-                    )
-            except Exception as snap_err:
-                logger.warning(
-                    "Auto-snapshot before scheduled "
-                    f"raid failed: {snap_err}"
-                )
-            # --- End auto-snapshot ---
+            JobExecutorService._auto_snapshot_before_raid(
+                schedule, target_tracks
+            )
 
-            new_uris: List[str] = []
-            for source_id in source_ids:
-                try:
-                    source_tracks = api.get_playlist_tracks(
-                        source_id
-                    )
-                    for track in source_tracks:
-                        uri = track.get("uri")
-                        if (
-                            uri
-                            and uri not in target_uris
-                            and uri not in new_uris
-                        ):
-                            new_uris.append(uri)
-                except SpotifyNotFoundError:
-                    logger.warning(
-                        f"Source playlist {source_id} "
-                        f"not found, skipping"
-                    )
-                    continue
+            new_uris = JobExecutorService._fetch_raid_sources(
+                api, source_ids, target_uris
+            )
 
             if not new_uris:
                 logger.info(
@@ -434,12 +416,9 @@ class JobExecutorService:
                     "tracks_total": len(target_tracks),
                 }
 
-            # Add new tracks in batches
-            batch_size = 100
-            for i in range(0, len(new_uris), batch_size):
-                batch = new_uris[i: i + batch_size]
-                api._ensure_valid_token()
-                api._sp.playlist_add_items(target_id, batch)
+            JobExecutorService._batch_add_tracks(
+                api, target_id, new_uris
+            )
 
             total = len(target_tracks) + len(new_uris)
             logger.info(
@@ -463,6 +442,97 @@ class JobExecutorService:
             raise JobExecutionError(
                 f"Spotify API error during raid: {e}"
             )
+
+    @staticmethod
+    def _auto_snapshot_before_raid(
+        schedule: Schedule,
+        target_tracks: list,
+    ) -> None:
+        """Create an auto-snapshot before a scheduled raid
+        if enabled."""
+        try:
+            pre_raid_uris = [
+                t.get("uri")
+                for t in target_tracks
+                if t.get("uri")
+            ]
+            if (
+                pre_raid_uris
+                and PlaylistSnapshotService
+                .is_auto_snapshot_enabled(
+                    schedule.user_id
+                )
+            ):
+                PlaylistSnapshotService.create_snapshot(
+                    user_id=schedule.user_id,
+                    playlist_id=(
+                        schedule.target_playlist_id
+                    ),
+                    playlist_name=(
+                        schedule.target_playlist_name
+                        or schedule.target_playlist_id
+                    ),
+                    track_uris=pre_raid_uris,
+                    snapshot_type=(
+                        SnapshotType.AUTO_PRE_RAID
+                    ),
+                    trigger_description=(
+                        "Before scheduled raid"
+                    ),
+                )
+        except Exception as snap_err:
+            logger.warning(
+                "Auto-snapshot before scheduled "
+                f"raid failed: {snap_err}"
+            )
+
+    @staticmethod
+    def _fetch_raid_sources(
+        api: SpotifyAPI,
+        source_ids: list,
+        target_uris: set,
+    ) -> List[str]:
+        """
+        Fetch new tracks from source playlists not already
+        in target.
+
+        Returns:
+            List of new track URIs (deduplicated).
+        """
+        new_uris: List[str] = []
+        for source_id in source_ids:
+            try:
+                source_tracks = api.get_playlist_tracks(
+                    source_id
+                )
+                for track in source_tracks:
+                    uri = track.get("uri")
+                    if (
+                        uri
+                        and uri not in target_uris
+                        and uri not in new_uris
+                    ):
+                        new_uris.append(uri)
+            except SpotifyNotFoundError:
+                logger.warning(
+                    f"Source playlist {source_id} "
+                    f"not found, skipping"
+                )
+                continue
+        return new_uris
+
+    @staticmethod
+    def _batch_add_tracks(
+        api: SpotifyAPI,
+        playlist_id: str,
+        uris: List[str],
+        batch_size: int = 100,
+    ) -> None:
+        """Add tracks to a playlist in batches."""
+        for i in range(0, len(uris), batch_size):
+            batch = uris[i: i + batch_size]
+            api._ensure_valid_token()
+            api._sp.playlist_add_items(playlist_id, batch)
 
     @staticmethod
     def _execute_shuffle(
@@ -584,46 +654,13 @@ class JobExecutorService:
         """
         Rotate tracks between production and archive
         playlists.
-
-        Supports three modes:
-        - archive_oldest: Move N oldest from production
-          to archive
-        - refresh: Replace N oldest in production with
-          N newest from archive
-        - swap: Exchange N tracks between production and
-          archive
         """
-        from shuffify.services.playlist_pair_service import (
-            PlaylistPairService,
-        )
-
         target_id = schedule.target_playlist_id
-        params = schedule.algorithm_params or {}
-        rotation_mode = params.get(
-            "rotation_mode", RotationMode.ARCHIVE_OLDEST
-        )
-        rotation_count = max(
-            1, int(params.get("rotation_count", 5))
-        )
-
-        valid_modes = set(RotationMode)
-        if rotation_mode not in valid_modes:
-            raise JobExecutionError(
-                "Invalid rotation_mode: "
-                "{}".format(rotation_mode)
+        rotation_mode, rotation_count, pair = (
+            JobExecutorService._validate_rotation_config(
+                schedule
             )
-
-        pair = PlaylistPairService.get_pair_for_playlist(
-            user_id=schedule.user_id,
-            production_playlist_id=target_id,
         )
-        if not pair:
-            raise JobExecutionError(
-                "No archive pair found for playlist "
-                "{}. Create a pair in the workshop "
-                "first.".format(target_id)
-            )
-
         archive_id = pair.archive_playlist_id
 
         try:
@@ -642,38 +679,9 @@ class JobExecutorService:
                 if t.get("uri")
             ]
 
-            # Auto-snapshot before rotation
-            try:
-                if (
-                    prod_uris
-                    and PlaylistSnapshotService
-                    .is_auto_snapshot_enabled(
-                        schedule.user_id
-                    )
-                ):
-                    PlaylistSnapshotService.create_snapshot(
-                        user_id=schedule.user_id,
-                        playlist_id=target_id,
-                        playlist_name=(
-                            schedule.target_playlist_name
-                            or target_id
-                        ),
-                        track_uris=prod_uris,
-                        snapshot_type=(
-                            SnapshotType.AUTO_PRE_ROTATE
-                        ),
-                        trigger_description=(
-                            "Before scheduled "
-                            "{} rotation".format(
-                                rotation_mode
-                            )
-                        ),
-                    )
-            except Exception as snap_err:
-                logger.warning(
-                    "Auto-snapshot before rotation "
-                    "failed: %s", snap_err
-                )
+            JobExecutorService._auto_snapshot_before_rotate(
+                schedule, prod_uris, rotation_mode
+            )
 
             actual_count = min(
                 rotation_count, len(prod_uris)
@@ -732,17 +740,107 @@ class JobExecutorService:
             )
 
     @staticmethod
+    def _validate_rotation_config(
+        schedule: Schedule,
+    ) -> tuple:
+        """
+        Extract and validate rotation parameters from
+        schedule.
+
+        Returns:
+            Tuple of (rotation_mode, rotation_count, pair).
+
+        Raises:
+            JobExecutionError: If mode is invalid or no
+                pair found.
+        """
+        from shuffify.services.playlist_pair_service import (
+            PlaylistPairService,
+        )
+
+        params = schedule.algorithm_params or {}
+        rotation_mode = params.get(
+            "rotation_mode", RotationMode.ARCHIVE_OLDEST
+        )
+        rotation_count = max(
+            1, int(params.get("rotation_count", 5))
+        )
+
+        valid_modes = set(RotationMode)
+        if rotation_mode not in valid_modes:
+            raise JobExecutionError(
+                "Invalid rotation_mode: "
+                "{}".format(rotation_mode)
+            )
+
+        pair = PlaylistPairService.get_pair_for_playlist(
+            user_id=schedule.user_id,
+            production_playlist_id=(
+                schedule.target_playlist_id
+            ),
+        )
+        if not pair:
+            raise JobExecutionError(
+                "No archive pair found for playlist "
+                "{}. Create a pair in the workshop "
+                "first.".format(
+                    schedule.target_playlist_id
+                )
+            )
+
+        return rotation_mode, rotation_count, pair
+
+    @staticmethod
+    def _auto_snapshot_before_rotate(
+        schedule: Schedule,
+        prod_uris: list,
+        rotation_mode: str,
+    ) -> None:
+        """Create an auto-snapshot before rotation if
+        enabled."""
+        try:
+            if (
+                prod_uris
+                and PlaylistSnapshotService
+                .is_auto_snapshot_enabled(
+                    schedule.user_id
+                )
+            ):
+                PlaylistSnapshotService.create_snapshot(
+                    user_id=schedule.user_id,
+                    playlist_id=(
+                        schedule.target_playlist_id
+                    ),
+                    playlist_name=(
+                        schedule.target_playlist_name
+                        or schedule.target_playlist_id
+                    ),
+                    track_uris=prod_uris,
+                    snapshot_type=(
+                        SnapshotType.AUTO_PRE_ROTATE
+                    ),
+                    trigger_description=(
+                        "Before scheduled "
+                        "{} rotation".format(
+                            rotation_mode
+                        )
+                    ),
+                )
+        except Exception as snap_err:
+            logger.warning(
+                "Auto-snapshot before rotation "
+                "failed: %s", snap_err
+            )
+
+    @staticmethod
     def _rotate_archive(
         api, schedule, target_id, archive_id,
         oldest_uris, prod_uris, actual_count,
     ):
         """Archive oldest tracks from production."""
-        api._ensure_valid_token()
-        for i in range(0, len(oldest_uris), 100):
-            batch = oldest_uris[i:i + 100]
-            api._sp.playlist_add_items(
-                archive_id, batch
-            )
+        JobExecutorService._batch_add_tracks(
+            api, archive_id, oldest_uris
+        )
         api.playlist_remove_items(
             target_id, oldest_uris
         )
@@ -792,14 +890,9 @@ class JobExecutorService:
             api.playlist_remove_items(
                 target_id, to_remove
             )
-            api._ensure_valid_token()
-            for i in range(
-                0, len(refresh_uris), 100
-            ):
-                batch = refresh_uris[i:i + 100]
-                api._sp.playlist_add_items(
-                    target_id, batch
-                )
+            JobExecutorService._batch_add_tracks(
+                api, target_id, refresh_uris
+            )
 
         new_total = (
             len(prod_uris) - remove_count
@@ -844,25 +937,16 @@ class JobExecutorService:
         ]
 
         if swap_in_uris and swap_out_uris:
-            api._ensure_valid_token()
-            for i in range(
-                0, len(swap_out_uris), 100
-            ):
-                batch = swap_out_uris[i:i + 100]
-                api._sp.playlist_add_items(
-                    archive_id, batch
-                )
+            JobExecutorService._batch_add_tracks(
+                api, archive_id, swap_out_uris
+            )
             api.playlist_remove_items(
                 target_id, swap_out_uris
             )
 
-            for i in range(
-                0, len(swap_in_uris), 100
-            ):
-                batch = swap_in_uris[i:i + 100]
-                api._sp.playlist_add_items(
-                    target_id, batch
-                )
+            JobExecutorService._batch_add_tracks(
+                api, target_id, swap_in_uris
+            )
             api.playlist_remove_items(
                 archive_id, swap_in_uris
             )
