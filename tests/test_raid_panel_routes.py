@@ -71,7 +71,7 @@ def auth_client(db_app):
 class TestRaidAuthRequired:
     """All raid panel endpoints require authentication."""
 
-    @patch("shuffify.routes.raid_panel.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_status_unauth(self, mock_auth, db_app):
         mock_auth.return_value = None
         with db_app.test_client() as client:
@@ -80,7 +80,7 @@ class TestRaidAuthRequired:
             )
             assert resp.status_code == 401
 
-    @patch("shuffify.routes.raid_panel.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_watch_unauth(self, mock_auth, db_app):
         mock_auth.return_value = None
         with db_app.test_client() as client:
@@ -90,7 +90,7 @@ class TestRaidAuthRequired:
             )
             assert resp.status_code == 401
 
-    @patch("shuffify.routes.raid_panel.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_raid_now_unauth(self, mock_auth, db_app):
         mock_auth.return_value = None
         with db_app.test_client() as client:
@@ -109,7 +109,7 @@ class TestRaidAuthRequired:
 class TestRaidValidation:
     """Request validation tests."""
 
-    @patch("shuffify.routes.raid_panel.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_watch_invalid_body(
         self, mock_auth, auth_client
     ):
@@ -120,7 +120,7 @@ class TestRaidValidation:
         )
         assert resp.status_code == 400
 
-    @patch("shuffify.routes.raid_panel.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_unwatch_missing_source_id(
         self, mock_auth, auth_client
     ):
@@ -131,7 +131,7 @@ class TestRaidValidation:
         )
         assert resp.status_code == 400
 
-    @patch("shuffify.routes.raid_panel.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_raid_now_empty_source_list(
         self, mock_auth, auth_client
     ):
@@ -151,8 +151,8 @@ class TestRaidValidation:
 class TestRaidDbUnavailable:
     """DB unavailable returns 503."""
 
-    @patch("shuffify.routes.raid_panel.require_auth")
-    @patch("shuffify.routes.raid_panel.is_db_available")
+    @patch("shuffify.routes.require_auth")
+    @patch("shuffify.is_db_available")
     def test_status_db_unavailable(
         self, mock_db, mock_auth, db_app
     ):
@@ -170,8 +170,8 @@ class TestRaidDbUnavailable:
             )
             assert resp.status_code == 503
 
-    @patch("shuffify.routes.raid_panel.require_auth")
-    @patch("shuffify.routes.raid_panel.is_db_available")
+    @patch("shuffify.routes.require_auth")
+    @patch("shuffify.is_db_available")
     def test_watch_db_unavailable(
         self, mock_db, mock_auth, db_app
     ):
@@ -199,7 +199,7 @@ class TestRaidDbUnavailable:
 class TestRaidSuccessPaths:
     """Basic success path tests."""
 
-    @patch("shuffify.routes.raid_panel.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_status_returns_structure(
         self, mock_auth, auth_client
     ):

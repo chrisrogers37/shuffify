@@ -70,14 +70,14 @@ def auth_client(db_app):
 class TestPairAuthRequired:
     """All pair endpoints require authentication."""
 
-    @patch("shuffify.routes.playlist_pairs.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_get_pair_unauth(self, mock_auth, db_app):
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.get("/playlist/p1/pair")
             assert resp.status_code == 401
 
-    @patch("shuffify.routes.playlist_pairs.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_create_pair_unauth(self, mock_auth, db_app):
         mock_auth.return_value = None
         with db_app.test_client() as client:
@@ -87,14 +87,14 @@ class TestPairAuthRequired:
             )
             assert resp.status_code == 401
 
-    @patch("shuffify.routes.playlist_pairs.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_delete_pair_unauth(self, mock_auth, db_app):
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.delete("/playlist/p1/pair")
             assert resp.status_code == 401
 
-    @patch("shuffify.routes.playlist_pairs.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_archive_tracks_unauth(
         self, mock_auth, db_app
     ):
@@ -106,7 +106,7 @@ class TestPairAuthRequired:
             )
             assert resp.status_code == 401
 
-    @patch("shuffify.routes.playlist_pairs.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_unarchive_tracks_unauth(
         self, mock_auth, db_app
     ):
@@ -127,7 +127,7 @@ class TestPairAuthRequired:
 class TestGetPair:
     """Tests for GET /playlist/<id>/pair."""
 
-    @patch("shuffify.routes.playlist_pairs.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_no_pair_returns_paired_false(
         self, mock_auth, auth_client
     ):
@@ -147,7 +147,7 @@ class TestGetPair:
 class TestCreatePairRoute:
     """Tests for POST /playlist/<id>/pair."""
 
-    @patch("shuffify.routes.playlist_pairs.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_invalid_body_returns_400(
         self, mock_auth, auth_client
     ):
@@ -158,7 +158,7 @@ class TestCreatePairRoute:
         )
         assert resp.status_code == 400
 
-    @patch("shuffify.routes.playlist_pairs.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_no_json_returns_400(
         self, mock_auth, auth_client
     ):

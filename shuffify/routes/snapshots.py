@@ -10,10 +10,9 @@ from pydantic import ValidationError
 
 from shuffify.routes import (
     main,
-    require_auth,
+    require_auth_and_db,
     json_error,
     json_success,
-    get_db_user,
 )
 from shuffify.services import (
     PlaylistService,
@@ -22,7 +21,6 @@ from shuffify.services import (
     PlaylistSnapshotNotFoundError,
     StateService,
 )
-from shuffify import is_db_available
 from shuffify.schemas import ManualSnapshotRequest
 from shuffify.enums import SnapshotType
 
@@ -32,25 +30,9 @@ logger = logging.getLogger(__name__)
 @main.route(
     "/playlist/<playlist_id>/snapshots", methods=["GET"]
 )
-def list_snapshots(playlist_id):
+@require_auth_and_db
+def list_snapshots(playlist_id, client=None, user=None):
     """List all snapshots for a playlist."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    if not is_db_available():
-        return json_error(
-            "Database is unavailable. "
-            "Cannot load snapshots.",
-            503,
-        )
-
-    user = get_db_user()
-    if not user:
-        return json_error(
-            "User data not found in session.", 401
-        )
-
     limit = request.args.get("limit", 20, type=int)
     limit = max(1, min(limit, 100))
 
@@ -66,19 +48,11 @@ def list_snapshots(playlist_id):
 @main.route(
     "/playlist/<playlist_id>/snapshots", methods=["POST"]
 )
-def create_manual_snapshot(playlist_id):
+@require_auth_and_db
+def create_manual_snapshot(
+    playlist_id, client=None, user=None
+):
     """Create a manual snapshot of a playlist."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    if not is_db_available():
-        return json_error(
-            "Database is unavailable. "
-            "Cannot create snapshot.",
-            503,
-        )
-
     data = request.get_json()
     if not data:
         return json_error(
@@ -92,12 +66,6 @@ def create_manual_snapshot(playlist_id):
             f"Invalid request: {e.error_count()} "
             f"validation error(s).",
             400,
-        )
-
-    user = get_db_user()
-    if not user:
-        return json_error(
-            "User data not found in session.", 401
         )
 
     try:
@@ -126,23 +94,9 @@ def create_manual_snapshot(playlist_id):
 @main.route(
     "/snapshots/<int:snapshot_id>", methods=["GET"]
 )
-def view_snapshot(snapshot_id):
+@require_auth_and_db
+def view_snapshot(snapshot_id, client=None, user=None):
     """View a snapshot's details."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    if not is_db_available():
-        return json_error(
-            "Database is unavailable.", 503
-        )
-
-    user = get_db_user()
-    if not user:
-        return json_error(
-            "User data not found in session.", 401
-        )
-
     try:
         snapshot = PlaylistSnapshotService.get_snapshot(
             snapshot_id, user.id
@@ -159,23 +113,11 @@ def view_snapshot(snapshot_id):
     "/snapshots/<int:snapshot_id>/restore",
     methods=["POST"],
 )
-def restore_snapshot(snapshot_id):
+@require_auth_and_db
+def restore_snapshot(
+    snapshot_id, client=None, user=None
+):
     """Restore a playlist from a snapshot."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    if not is_db_available():
-        return json_error(
-            "Database is unavailable.", 503
-        )
-
-    user = get_db_user()
-    if not user:
-        return json_error(
-            "User data not found in session.", 401
-        )
-
     try:
         # Get the snapshot's track URIs
         snapshot = PlaylistSnapshotService.get_snapshot(
@@ -265,23 +207,11 @@ def restore_snapshot(snapshot_id):
 @main.route(
     "/snapshots/<int:snapshot_id>", methods=["DELETE"]
 )
-def delete_snapshot(snapshot_id):
+@require_auth_and_db
+def delete_snapshot(
+    snapshot_id, client=None, user=None
+):
     """Delete a snapshot."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    if not is_db_available():
-        return json_error(
-            "Database is unavailable.", 503
-        )
-
-    user = get_db_user()
-    if not user:
-        return json_error(
-            "User data not found in session.", 401
-        )
-
     try:
         PlaylistSnapshotService.delete_snapshot(
             snapshot_id, user.id

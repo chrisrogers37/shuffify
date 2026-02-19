@@ -16,6 +16,7 @@ from shuffify.routes import (
     json_error,
     json_success,
     get_db_user,
+    log_activity,
 )
 from shuffify.services import (
     AuthService,
@@ -29,7 +30,6 @@ from shuffify.services import (
     AuthenticationError,
     PlaylistError,
     PlaylistSnapshotService,
-    ActivityLogService,
     UserService,
 )
 from shuffify.enums import SnapshotType, ActivityType
@@ -215,33 +215,30 @@ def workshop_commit(playlist_id):
     )
 
     # Log activity (non-blocking)
-    try:
-        user_data = session.get("user_data", {})
-        spotify_id = user_data.get("id")
-        if spotify_id:
-            db_user = UserService.get_by_spotify_id(
-                spotify_id
+    user_data = session.get("user_data", {})
+    spotify_id = user_data.get("id")
+    if spotify_id:
+        db_user = UserService.get_by_spotify_id(
+            spotify_id
+        )
+        if db_user:
+            log_activity(
+                user_id=db_user.id,
+                activity_type=(
+                    ActivityType.WORKSHOP_COMMIT
+                ),
+                description=(
+                    f"Committed workshop changes "
+                    f"to '{playlist.name}'"
+                ),
+                playlist_id=playlist_id,
+                playlist_name=playlist.name,
+                metadata={
+                    "track_count": len(
+                        commit_request.track_uris
+                    ),
+                },
             )
-            if db_user:
-                ActivityLogService.log(
-                    user_id=db_user.id,
-                    activity_type=(
-                        ActivityType.WORKSHOP_COMMIT
-                    ),
-                    description=(
-                        f"Committed workshop changes "
-                        f"to '{playlist.name}'"
-                    ),
-                    playlist_id=playlist_id,
-                    playlist_name=playlist.name,
-                    metadata={
-                        "track_count": len(
-                            commit_request.track_uris
-                        ),
-                    },
-                )
-    except Exception:
-        pass
 
     return json_success(
         "Playlist saved to Spotify!",
@@ -567,29 +564,26 @@ def save_workshop_session(playlist_id):
         )
 
         # Log activity (non-blocking)
-        try:
-            db_user = UserService.get_by_spotify_id(
-                spotify_id
+        db_user = UserService.get_by_spotify_id(
+            spotify_id
+        )
+        if db_user:
+            log_activity(
+                user_id=db_user.id,
+                activity_type=(
+                    ActivityType
+                    .WORKSHOP_SESSION_SAVE
+                ),
+                description=(
+                    f"Saved workshop session "
+                    f"'{session_name}'"
+                ),
+                playlist_id=playlist_id,
+                metadata={
+                    "session_name": session_name,
+                    "track_count": len(track_uris),
+                },
             )
-            if db_user:
-                ActivityLogService.log(
-                    user_id=db_user.id,
-                    activity_type=(
-                        ActivityType
-                        .WORKSHOP_SESSION_SAVE
-                    ),
-                    description=(
-                        f"Saved workshop session "
-                        f"'{session_name}'"
-                    ),
-                    playlist_id=playlist_id,
-                    metadata={
-                        "session_name": session_name,
-                        "track_count": len(track_uris),
-                    },
-                )
-        except Exception:
-            pass
 
         return json_success(
             f"Session '{session_name}' saved.",
@@ -725,24 +719,21 @@ def delete_workshop_session(session_id):
         )
 
         # Log activity (non-blocking)
-        try:
-            db_user = UserService.get_by_spotify_id(
-                spotify_id
+        db_user = UserService.get_by_spotify_id(
+            spotify_id
+        )
+        if db_user:
+            log_activity(
+                user_id=db_user.id,
+                activity_type=(
+                    ActivityType
+                    .WORKSHOP_SESSION_DELETE
+                ),
+                description=(
+                    f"Deleted workshop session "
+                    f"{session_id}"
+                ),
             )
-            if db_user:
-                ActivityLogService.log(
-                    user_id=db_user.id,
-                    activity_type=(
-                        ActivityType
-                        .WORKSHOP_SESSION_DELETE
-                    ),
-                    description=(
-                        f"Deleted workshop session "
-                        f"{session_id}"
-                    ),
-                )
-        except Exception:
-            pass
 
         return json_success("Session deleted.")
     except WorkshopSessionNotFoundError:
