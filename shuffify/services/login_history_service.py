@@ -12,6 +12,7 @@ from typing import Dict, Any, List, Optional
 from flask import Request
 
 from shuffify.models.db import db, LoginHistory
+from shuffify.services.base import safe_commit
 
 logger = logging.getLogger(__name__)
 
@@ -71,33 +72,20 @@ class LoginHistoryService:
         if len(user_agent) > 512:
             user_agent = user_agent[:512]
 
-        try:
-            entry = LoginHistory(
-                user_id=user_id,
-                ip_address=ip_address,
-                user_agent=user_agent,
-                session_id=session_id,
-                login_type=login_type,
-            )
-            db.session.add(entry)
-            db.session.commit()
-
-            logger.info(
-                f"Recorded login for user_id={user_id}, "
-                f"type={login_type}, ip={ip_address}"
-            )
-            return entry
-
-        except Exception as e:
-            db.session.rollback()
-            logger.error(
-                f"Failed to record login for user_id="
-                f"{user_id}: {e}",
-                exc_info=True,
-            )
-            raise LoginHistoryError(
-                f"Failed to record login: {e}"
-            )
+        entry = LoginHistory(
+            user_id=user_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            session_id=session_id,
+            login_type=login_type,
+        )
+        db.session.add(entry)
+        safe_commit(
+            f"record login for user_id={user_id}, "
+            f"type={login_type}, ip={ip_address}",
+            LoginHistoryError,
+        )
+        return entry
 
     @staticmethod
     def record_logout(

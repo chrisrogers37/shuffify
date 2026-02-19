@@ -34,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `wheel>=0.46.2` to dev dependencies (CVE-2026-24049)
 
 ### Changed
+- **Route Infrastructure Cleanup** - Extracted `@require_auth_and_db` decorator and `log_activity()` helper to reduce auth/DB/logging boilerplate across 10 route modules
+- **Service Layer Deduplication** - Extracted shared CRUD utilities to `shuffify/services/base.py`
+  - `safe_commit()` wraps db commit/rollback/log pattern (replaced 9 occurrences across 5 services)
+  - `get_user_or_raise()` standardizes User lookup by spotify_id (replaced 8 occurrences across 2 services)
+  - `get_owned_entity()` standardizes entity fetch + ownership check (replaced 3 occurrences across 3 services)
 - **Dev dependency updates** - Updated pytest 7.4.4 to 8.3.5, pytest-cov 4.1.0 to 6.0.0
   - Conservative upgrade within 8.x line to avoid pytest 9.0 breaking changes
 - **Test isolation fix** - Guarded `load_dotenv()` in `config.py` to prevent `.env` from leaking production `DATABASE_URL` into test fixtures

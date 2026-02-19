@@ -8,8 +8,12 @@
 - **Estimated effort**: 2-3 hours
 - **Dependencies**: None
 - **Blocks**: Phase 3 (cleaner services make decomposition easier)
+- **Status**: ✅ COMPLETE
+- **Started**: 2026-02-19
+- **Completed**: 2026-02-19
+- **PR**: #84
 - **Files created**: `shuffify/services/base.py`, `tests/services/test_base.py`
-- **Files modified**: `shuffify/services/upstream_source_service.py`, `shuffify/services/playlist_snapshot_service.py`, `shuffify/services/user_settings_service.py`, `shuffify/services/user_service.py`, `shuffify/services/login_history_service.py`, `shuffify/services/workshop_session_service.py`, `shuffify/services/__init__.py`
+- **Files modified**: `shuffify/services/upstream_source_service.py`, `shuffify/services/playlist_snapshot_service.py`, `shuffify/services/user_settings_service.py`, `shuffify/services/login_history_service.py`, `shuffify/services/workshop_session_service.py`
 
 ---
 
@@ -329,26 +333,9 @@ def get_owned_entity(
     return entity
 ```
 
-### Step 2: Update `shuffify/services/__init__.py`
+### Step 2: ~~Update `shuffify/services/__init__.py`~~ SKIPPED
 
-Add exports for the new base utilities at the top of the file, after the docstring and before the existing imports. Add the following block:
-
-```python
-# Base utilities
-from shuffify.services.base import (
-    safe_commit,
-    get_user_or_raise,
-    get_owned_entity,
-)
-```
-
-Also add to the `__all__` list:
-
-```python
-"safe_commit",
-"get_user_or_raise",
-"get_owned_entity",
-```
+**SKIPPED**: Base utilities are internal infrastructure for the services layer, not public API. All consumers import directly from `shuffify.services.base`. Re-exporting in `__init__.py` would create dead imports.
 
 ### Step 3: Refactor `upstream_source_service.py`
 

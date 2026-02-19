@@ -8,7 +8,12 @@ playlist to a target playlist for a specific user.
 import logging
 from typing import List, Optional
 
-from shuffify.models.db import db, UpstreamSource, User
+from shuffify.models.db import db, UpstreamSource
+from shuffify.services.base import (
+    safe_commit,
+    get_user_or_raise,
+    get_owned_entity,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,11 +65,9 @@ class UpstreamSourceService:
                 f"Must be 'own' or 'external'."
             )
 
-        user = User.query.filter_by(spotify_id=spotify_id).first()
-        if not user:
-            raise UpstreamSourceError(
-                f"User not found for spotify_id: {spotify_id}"
-            )
+        user = get_user_or_raise(
+            spotify_id, UpstreamSourceError
+        )
 
         # Check for duplicate: same user, target, and source
         existing = UpstreamSource.query.filter_by(
@@ -81,35 +84,23 @@ class UpstreamSourceService:
             )
             return existing
 
-        try:
-            source = UpstreamSource(
-                user_id=user.id,
-                target_playlist_id=target_playlist_id,
-                source_playlist_id=source_playlist_id,
-                source_url=source_url,
-                source_type=source_type,
-                source_name=source_name,
-            )
-            db.session.add(source)
-            db.session.commit()
-
-            logger.info(
-                f"Added upstream source: "
-                f"{source_playlist_id} -> "
-                f"{target_playlist_id} for user {spotify_id} "
-                f"(type={source_type})"
-            )
-            return source
-
-        except Exception as e:
-            db.session.rollback()
-            logger.error(
-                f"Failed to add upstream source: {e}",
-                exc_info=True,
-            )
-            raise UpstreamSourceError(
-                f"Failed to add source: {e}"
-            )
+        source = UpstreamSource(
+            user_id=user.id,
+            target_playlist_id=target_playlist_id,
+            source_playlist_id=source_playlist_id,
+            source_url=source_url,
+            source_type=source_type,
+            source_name=source_name,
+        )
+        db.session.add(source)
+        safe_commit(
+            f"add upstream source: "
+            f"{source_playlist_id} -> "
+            f"{target_playlist_id} for user {spotify_id} "
+            f"(type={source_type})",
+            UpstreamSourceError,
+        )
+        return source
 
     @staticmethod
     def list_sources(
@@ -125,7 +116,7 @@ class UpstreamSourceService:
         Returns:
             List of UpstreamSource instances.
         """
-        user = User.query.filter_by(spotify_id=spotify_id).first()
+        user = get_user_or_raise(spotify_id)
         if not user:
             return []
 
@@ -155,16 +146,15 @@ class UpstreamSourceService:
         Raises:
             UpstreamSourceNotFoundError: If not found or not owned.
         """
-        user = User.query.filter_by(spotify_id=spotify_id).first()
-        if not user:
-            raise UpstreamSourceNotFoundError("User not found")
-
-        source = db.session.get(UpstreamSource, source_id)
-        if not source or source.user_id != user.id:
-            raise UpstreamSourceNotFoundError(
-                f"Upstream source {source_id} not found"
-            )
-        return source
+        user = get_user_or_raise(
+            spotify_id, UpstreamSourceNotFoundError
+        )
+        return get_owned_entity(
+            UpstreamSource,
+            source_id,
+            user.id,
+            UpstreamSourceNotFoundError,
+        )
 
     @staticmethod
     def delete_source(
@@ -188,33 +178,19 @@ class UpstreamSourceService:
             source_id, spotify_id
         )
 
-        try:
-            db.session.delete(source)
-            db.session.commit()
-            logger.info(
-                f"Deleted upstream source {source_id}"
-            )
-            return True
-
-        except Exception as e:
-            db.session.rollback()
-            logger.error(
-                f"Failed to delete upstream source "
-                f"{source_id}: {e}",
-                exc_info=True,
-            )
-            raise UpstreamSourceError(
-                f"Failed to delete source: {e}"
-            )
+        db.session.delete(source)
+        safe_commit(
+            f"delete upstream source {source_id}",
+            UpstreamSourceError,
+        )
+        return True
 
     @staticmethod
     def count_sources_for_target(
         spotify_id: str, target_playlist_id: str
     ) -> int:
         """Count upstream sources for a target playlist."""
-        user = User.query.filter_by(
-            spotify_id=spotify_id
-        ).first()
+        user = get_user_or_raise(spotify_id)
         if not user:
             return 0
         return UpstreamSource.query.filter_by(
@@ -235,7 +211,7 @@ class UpstreamSourceService:
         Returns:
             List of UpstreamSource instances.
         """
-        user = User.query.filter_by(spotify_id=spotify_id).first()
+        user = get_user_or_raise(spotify_id)
         if not user:
             return []
 

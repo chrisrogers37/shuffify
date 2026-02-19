@@ -8,7 +8,12 @@ to save their track arrangements and resume later.
 import logging
 from typing import List, Optional
 
-from shuffify.models.db import db, WorkshopSession, User
+from shuffify.models.db import db, WorkshopSession
+from shuffify.services.base import (
+    safe_commit,
+    get_user_or_raise,
+    get_owned_entity,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,12 +73,9 @@ class WorkshopSessionService:
 
         session_name = session_name.strip()
 
-        user = User.query.filter_by(spotify_id=spotify_id).first()
-        if not user:
-            raise WorkshopSessionError(
-                f"User not found for spotify_id: {spotify_id}. "
-                f"User must be logged in first."
-            )
+        user = get_user_or_raise(
+            spotify_id, WorkshopSessionError
+        )
 
         # Check session limit per playlist
         existing_count = WorkshopSession.query.filter_by(
@@ -87,33 +89,21 @@ class WorkshopSessionService:
                 f"Delete an existing session first."
             )
 
-        try:
-            ws = WorkshopSession(
-                user_id=user.id,
-                playlist_id=playlist_id,
-                session_name=session_name,
-            )
-            ws.track_uris = track_uris
+        ws = WorkshopSession(
+            user_id=user.id,
+            playlist_id=playlist_id,
+            session_name=session_name,
+        )
+        ws.track_uris = track_uris
 
-            db.session.add(ws)
-            db.session.commit()
-
-            logger.info(
-                f"Saved workshop session '{session_name}' for user "
-                f"{spotify_id}, playlist {playlist_id} "
-                f"({len(track_uris)} tracks)"
-            )
-            return ws
-
-        except Exception as e:
-            db.session.rollback()
-            logger.error(
-                f"Failed to save workshop session: {e}",
-                exc_info=True,
-            )
-            raise WorkshopSessionError(
-                f"Failed to save session: {e}"
-            )
+        db.session.add(ws)
+        safe_commit(
+            f"save workshop session '{session_name}' for "
+            f"user {spotify_id}, playlist {playlist_id} "
+            f"({len(track_uris)} tracks)",
+            WorkshopSessionError,
+        )
+        return ws
 
     @staticmethod
     def list_sessions(
@@ -129,7 +119,7 @@ class WorkshopSessionService:
         Returns:
             List of WorkshopSession instances, most recent first.
         """
-        user = User.query.filter_by(spotify_id=spotify_id).first()
+        user = get_user_or_raise(spotify_id)
         if not user:
             return []
 
@@ -158,17 +148,15 @@ class WorkshopSessionService:
         Raises:
             WorkshopSessionNotFoundError: If not found or not owned.
         """
-        user = User.query.filter_by(spotify_id=spotify_id).first()
-        if not user:
-            raise WorkshopSessionNotFoundError("User not found")
-
-        ws = db.session.get(WorkshopSession, session_id)
-        if not ws or ws.user_id != user.id:
-            raise WorkshopSessionNotFoundError(
-                f"Workshop session {session_id} not found"
-            )
-
-        return ws
+        user = get_user_or_raise(
+            spotify_id, WorkshopSessionNotFoundError
+        )
+        return get_owned_entity(
+            WorkshopSession,
+            session_id,
+            user.id,
+            WorkshopSessionNotFoundError,
+        )
 
     @staticmethod
     def update_session(
@@ -197,28 +185,15 @@ class WorkshopSessionService:
             session_id, spotify_id
         )
 
-        try:
-            ws.track_uris = track_uris
-            if session_name is not None:
-                ws.session_name = session_name.strip()
-            db.session.commit()
-
-            logger.info(
-                f"Updated workshop session {session_id}: "
-                f"'{ws.session_name}' ({len(track_uris)} tracks)"
-            )
-            return ws
-
-        except Exception as e:
-            db.session.rollback()
-            logger.error(
-                f"Failed to update workshop session "
-                f"{session_id}: {e}",
-                exc_info=True,
-            )
-            raise WorkshopSessionError(
-                f"Failed to update session: {e}"
-            )
+        ws.track_uris = track_uris
+        if session_name is not None:
+            ws.session_name = session_name.strip()
+        safe_commit(
+            f"update workshop session {session_id}: "
+            f"'{ws.session_name}' ({len(track_uris)} tracks)",
+            WorkshopSessionError,
+        )
+        return ws
 
     @staticmethod
     def delete_session(
@@ -242,21 +217,9 @@ class WorkshopSessionService:
             session_id, spotify_id
         )
 
-        try:
-            db.session.delete(ws)
-            db.session.commit()
-            logger.info(
-                f"Deleted workshop session {session_id}"
-            )
-            return True
-
-        except Exception as e:
-            db.session.rollback()
-            logger.error(
-                f"Failed to delete workshop session "
-                f"{session_id}: {e}",
-                exc_info=True,
-            )
-            raise WorkshopSessionError(
-                f"Failed to delete session: {e}"
-            )
+        db.session.delete(ws)
+        safe_commit(
+            f"delete workshop session {session_id}",
+            WorkshopSessionError,
+        )
+        return True
