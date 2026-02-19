@@ -75,6 +75,14 @@
             outline-offset: 2px;
         }
 
+        /* Fix native dropdown option visibility on dark backgrounds.
+           Options inherit text-white from select but OS renders
+           dropdown with white background, making text invisible. */
+        select option {
+            background-color: #1a1a2e;
+            color: #ffffff;
+        }
+
         /* Smooth scrolling */
         html {
             scroll-behavior: smooth;

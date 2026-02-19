@@ -15,10 +15,7 @@ from typing import Dict, List, Any, Optional, TYPE_CHECKING
 from .auth import SpotifyAuthManager, TokenInfo
 from .api import SpotifyAPI
 from .credentials import SpotifyCredentials
-from .exceptions import (
-    SpotifyTokenError,
-    SpotifyAPIError,
-)
+from .exceptions import SpotifyTokenError
 
 if TYPE_CHECKING:
     from .cache import SpotifyCache
@@ -271,17 +268,15 @@ class SpotifyClient:
             track_uris: List of track URIs in desired order.
 
         Returns:
-            True if update succeeded, False otherwise.
+            True if update succeeded.
 
         Raises:
             RuntimeError: If not authenticated.
+            SpotifyAPIError: If the Spotify API call fails.
+            SpotifyTokenExpiredError: If the token has expired.
         """
         self._ensure_authenticated()
-        try:
-            return self._api.update_playlist_tracks(playlist_id, track_uris)
-        except SpotifyAPIError as e:
-            logger.error(f"Failed to update playlist: {e}")
-            return False
+        return self._api.update_playlist_tracks(playlist_id, track_uris)
 
     def search_playlists(
         self, query: str, limit: int = 10
