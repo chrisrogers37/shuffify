@@ -169,6 +169,6 @@ Phase 5: Schema Tests, Dead Code & Dependencies
 |----------|-------|--------|
 | [01_route-infrastructure-cleanup.md](01_route-infrastructure-cleanup.md) | Route Infrastructure & Boilerplate Cleanup | ✅ COMPLETE (PR #83) |
 | [02_service-layer-deduplication.md](02_service-layer-deduplication.md) | Service Layer Deduplication | ✅ COMPLETE (PR #84) |
-| [03_complex-function-decomposition.md](03_complex-function-decomposition.md) | Complex Function Decomposition | Planned |
+| [03_complex-function-decomposition.md](03_complex-function-decomposition.md) | Complex Function Decomposition | 🔧 IN PROGRESS |
 | [04_missing-route-tests.md](04_missing-route-tests.md) | Missing Route Tests | Planned |
 | [05_schema-tests-dead-code-deps.md](05_schema-tests-dead-code-deps.md) | Schema Tests, Dead Code & Dependencies | Planned |

@@ -1,5 +1,7 @@
 # Phase 3: Complex Function Decomposition
 
+**Status**: 🔧 IN PROGRESS
+**Started**: 2026-02-19
 **Date**: 2026-02-19
 **Codebase**: Shuffify (1081 tests, 32,574 LOC Python)
 **Session**: `tech-debt-cleanup_2026-02-19`
@@ -1110,7 +1112,7 @@ Extracts lines 277-288.
 
 Extracts lines 290-343.
 
-**After**:
+**After** (reuses `_fetch_raid_sources` and `_batch_add_tracks` from JobExecutorService to eliminate duplication):
 ```python
     @staticmethod
     def _execute_raid_inline(
@@ -1132,32 +1134,14 @@ Extracts lines 290-343.
                 if t.get("uri")
             }
 
-            new_uris = []
-            for src_id in source_playlist_ids:
-                try:
-                    src_tracks = api.get_playlist_tracks(src_id)
-                    for track in src_tracks:
-                        uri = track.get("uri")
-                        if (
-                            uri
-                            and uri not in target_uris
-                            and uri not in new_uris
-                        ):
-                            new_uris.append(uri)
-                except Exception:
-                    logger.warning(
-                        "Source %s not accessible, "
-                        "skipping", src_id
-                    )
-                    continue
+            new_uris = JobExecutorService._fetch_raid_sources(
+                api, source_playlist_ids, target_uris
+            )
 
             if new_uris:
-                for i in range(0, len(new_uris), 100):
-                    batch = new_uris[i:i + 100]
-                    api._ensure_valid_token()
-                    api._sp.playlist_add_items(
-                        target_playlist_id, batch
-                    )
+                JobExecutorService._batch_add_tracks(
+                    api, target_playlist_id, new_uris
+                )
 
             return {
                 "tracks_added": len(new_uris),

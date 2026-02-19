@@ -243,10 +243,6 @@ class RaidSyncService:
         from shuffify.services.upstream_source_service import (
             UpstreamSourceService,
         )
-        from shuffify.services.job_executor_service import (
-            JobExecutorService,
-            JobExecutionError,
-        )
 
         user = User.query.filter_by(
             spotify_id=spotify_id
@@ -268,79 +264,84 @@ class RaidSyncService:
                 "Watch a playlist first."
             )
 
-        # Find existing schedule or execute inline
         schedule = RaidSyncService._find_raid_schedule(
             user.id, target_playlist_id
         )
 
         if schedule:
-            try:
-                result = JobExecutorService.execute_now(
-                    schedule.id, user.id
-                )
-                db.session.refresh(schedule)
-                return {
-                    "tracks_added": 0,
-                    "tracks_total": 0,
-                    "status": result.get("status", "success"),
-                }
-            except JobExecutionError as e:
-                raise RaidSyncError(str(e))
+            return RaidSyncService._execute_raid_via_scheduler(
+                schedule, user
+            )
         else:
-            # No schedule — execute raid inline
-            try:
-                api = JobExecutorService._get_spotify_api(user)
-                target_tracks = api.get_playlist_tracks(
-                    target_playlist_id
+            return RaidSyncService._execute_raid_inline(
+                user, target_playlist_id,
+                source_playlist_ids,
+            )
+
+    @staticmethod
+    def _execute_raid_via_scheduler(schedule, user):
+        """Execute raid through existing schedule's job
+        executor."""
+        from shuffify.services.job_executor_service import (
+            JobExecutorService,
+            JobExecutionError,
+        )
+
+        try:
+            result = JobExecutorService.execute_now(
+                schedule.id, user.id
+            )
+            db.session.refresh(schedule)
+            return {
+                "tracks_added": 0,
+                "tracks_total": 0,
+                "status": result.get("status", "success"),
+            }
+        except JobExecutionError as e:
+            raise RaidSyncError(str(e))
+
+    @staticmethod
+    def _execute_raid_inline(
+        user, target_playlist_id, source_playlist_ids
+    ):
+        """Execute raid without a schedule (inline)."""
+        from shuffify.services.job_executor_service import (
+            JobExecutorService,
+        )
+
+        try:
+            api = JobExecutorService._get_spotify_api(user)
+            target_tracks = api.get_playlist_tracks(
+                target_playlist_id
+            )
+            target_uris = {
+                t.get("uri")
+                for t in target_tracks
+                if t.get("uri")
+            }
+
+            new_uris = JobExecutorService._fetch_raid_sources(
+                api, source_playlist_ids, target_uris
+            )
+
+            if new_uris:
+                JobExecutorService._batch_add_tracks(
+                    api, target_playlist_id, new_uris
                 )
-                target_uris = {
-                    t.get("uri")
-                    for t in target_tracks
-                    if t.get("uri")
-                }
 
-                new_uris = []
-                for src_id in source_playlist_ids:
-                    try:
-                        src_tracks = api.get_playlist_tracks(
-                            src_id
-                        )
-                        for track in src_tracks:
-                            uri = track.get("uri")
-                            if (
-                                uri
-                                and uri not in target_uris
-                                and uri not in new_uris
-                            ):
-                                new_uris.append(uri)
-                    except Exception:
-                        logger.warning(
-                            "Source %s not accessible, "
-                            "skipping", src_id
-                        )
-                        continue
-
-                if new_uris:
-                    for i in range(0, len(new_uris), 100):
-                        batch = new_uris[i:i + 100]
-                        api._ensure_valid_token()
-                        api._sp.playlist_add_items(
-                            target_playlist_id, batch
-                        )
-
-                return {
-                    "tracks_added": len(new_uris),
-                    "tracks_total": (
-                        len(target_tracks) + len(new_uris)
-                    ),
-                    "status": "success",
-                }
-            except RaidSyncError:
-                raise
-            except Exception as e:
-                raise RaidSyncError(
-                    f"Raid execution failed: {e}"
-                )
+            return {
+                "tracks_added": len(new_uris),
+                "tracks_total": (
+                    len(target_tracks) + len(new_uris)
+                ),
+                "status": "success",
+            }
+        except RaidSyncError:
+            raise
+        except Exception as e:
+            raise RaidSyncError(
+                f"Raid execution failed: {e}"
+            )
 
     @staticmethod
     def _find_raid_schedule(user_id, target_playlist_id):
