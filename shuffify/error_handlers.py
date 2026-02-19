@@ -34,6 +34,14 @@ from shuffify.services import (
     ScheduleLimitError,
     JobExecutionError,
 )
+from shuffify.spotify.exceptions import (
+    SpotifyError,
+    SpotifyAPIError,
+    SpotifyAuthError,
+    SpotifyTokenExpiredError,
+    SpotifyRateLimitError,
+    SpotifyNotFoundError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -274,6 +282,78 @@ def register_error_handlers(app):
         logger.error(f"Job execution error: {error}")
         return json_error_response(
             f"Job execution failed: {error}", 500
+        )
+
+    # =========================================================================
+    # Spotify API Errors (catch-all for exceptions escaping service layer)
+    # =========================================================================
+
+    @app.errorhandler(SpotifyTokenExpiredError)
+    def handle_spotify_token_expired(
+        error: SpotifyTokenExpiredError,
+    ):
+        """Handle expired Spotify tokens."""
+        logger.warning(f"Spotify token expired: {error}")
+        return json_error_response(
+            "Session expired. Please log in again.", 401
+        )
+
+    @app.errorhandler(SpotifyRateLimitError)
+    def handle_spotify_rate_limit(
+        error: SpotifyRateLimitError,
+    ):
+        """Handle Spotify API rate limiting."""
+        logger.warning(f"Spotify rate limit: {error}")
+        response, status = json_error_response(
+            "Spotify is rate limiting requests. "
+            "Please wait a moment and try again.",
+            429,
+        )
+        if hasattr(error, "retry_after") and error.retry_after:
+            response.headers["Retry-After"] = str(
+                error.retry_after
+            )
+        return response, status
+
+    @app.errorhandler(SpotifyNotFoundError)
+    def handle_spotify_not_found(
+        error: SpotifyNotFoundError,
+    ):
+        """Handle Spotify resource not found."""
+        logger.info(f"Spotify resource not found: {error}")
+        return json_error_response(
+            "Spotify resource not found.", 404
+        )
+
+    @app.errorhandler(SpotifyAuthError)
+    def handle_spotify_auth_error(
+        error: SpotifyAuthError,
+    ):
+        """Handle Spotify authentication errors."""
+        logger.warning(f"Spotify auth error: {error}")
+        return json_error_response(
+            "Spotify authentication failed. "
+            "Please log in again.",
+            401,
+        )
+
+    @app.errorhandler(SpotifyAPIError)
+    def handle_spotify_api_error(
+        error: SpotifyAPIError,
+    ):
+        """Handle general Spotify API errors."""
+        logger.error(f"Spotify API error: {error}")
+        return json_error_response(
+            "Spotify API error. Please try again.", 500
+        )
+
+    @app.errorhandler(SpotifyError)
+    def handle_spotify_error(error: SpotifyError):
+        """Handle any other Spotify errors."""
+        logger.error(f"Spotify error: {error}")
+        return json_error_response(
+            "A Spotify error occurred. Please try again.",
+            500,
         )
 
     # =========================================================================

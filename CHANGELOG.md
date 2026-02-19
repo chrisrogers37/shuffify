@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Shuffle/Save "unexpected error" on production** - Registered full `SpotifyError` exception hierarchy in global error handlers
+  - `SpotifyAPIError`, `SpotifyTokenExpiredError`, `SpotifyRateLimitError`, `SpotifyNotFoundError`, `SpotifyAuthError` now return proper user-facing messages instead of generic "An unexpected error occurred"
+- **Silent playlist update failures** - Removed error-swallowing `try/except` in `SpotifyClient.update_playlist_tracks()` that caught `SpotifyAPIError` and returned `False`, masking the real error from the service layer
+- **Blank algorithm labels in dropdowns** - Added global CSS rule for `select option` elements to fix white-on-white text in native OS dropdowns (Windows Chrome/Edge)
+
 ### Security
 - **pip CVE remediation** - Upgraded minimum pip to >=26.0 in Dockerfile (CVE-2025-8869, CVE-2026-1703)
 - **HSTS Header** - Production responses now include `Strict-Transport-Security: max-age=31536000; includeSubDomains`
