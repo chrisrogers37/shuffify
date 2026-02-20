@@ -171,4 +171,4 @@ Phase 5: Schema Tests, Dead Code & Dependencies
 | [02_service-layer-deduplication.md](02_service-layer-deduplication.md) | Service Layer Deduplication | ✅ COMPLETE (PR #84) |
 | [03_complex-function-decomposition.md](03_complex-function-decomposition.md) | Complex Function Decomposition | ✅ COMPLETE (PR #85) |
 | [04_missing-route-tests.md](04_missing-route-tests.md) | Missing Route Tests | ✅ COMPLETE (PR #86) |
-| [05_schema-tests-dead-code-deps.md](05_schema-tests-dead-code-deps.md) | Schema Tests, Dead Code & Dependencies | Planned |
+| [05_schema-tests-dead-code-deps.md](05_schema-tests-dead-code-deps.md) | Schema Tests, Dead Code & Dependencies | ✅ COMPLETE (PR #87) |
