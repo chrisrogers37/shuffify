@@ -17,6 +17,7 @@ documentation/
 ├── planning/          # Development plans and feature phases
 │   └── phases/        # (empty — all archived)
 └── archive/           # Completed evaluations and legacy documents
+    ├── tech-debt-cleanup_2026-02-19/  # Tech debt cleanup (5 phases, all complete)
     ├── 01_architecture_evaluation.md
     ├── 02_modularity_assessment.md
     ├── separation_of_concerns_evaluation.md
@@ -56,6 +57,7 @@ All development plans have been completed and archived:
 - **[Playlist Workshop Enhancement Suite](archive/playlist-workshop_2026-02-10/00_OVERVIEW.md)** - 6-phase plan for workshop features (all phases completed, PRs #43-48)
 - **[User Persistence Enhancement Suite](archive/user-persistence_2026-02-12/00_OVERVIEW.md)** - 7-phase plan: PostgreSQL, user dimension, login tracking, settings, snapshots, activity log, dashboard (all phases completed, PRs #56-62)
 - **[Workshop Powertools Enhancement Suite](archive/workshop-powertools_2026-02-13/00_OVERVIEW.md)** - 5-phase plan: sidebar framework, snapshot browser, archive pairing, smart raid, scheduled rotation (all phases completed, PRs #64-68)
+- **[Tech Debt Cleanup](archive/tech-debt-cleanup_2026-02-19/00_TECH_DEBT.md)** - 5-phase plan: route cleanup, service deduplication, function decomposition, route tests, schema tests (all phases completed, PRs #83-87)
 
 ## Archived (Completed)
 
@@ -69,6 +71,7 @@ Evaluations and plans that have been fully implemented:
 - **[Playlist Workshop Plans](archive/playlist-workshop_2026-02-10/00_OVERVIEW.md)** - Workshop feature implementation plans (6 phases)
 - **[User Persistence Plans](archive/user-persistence_2026-02-12/00_OVERVIEW.md)** - User persistence implementation plans (7 phases)
 - **[Workshop Powertools Plans](archive/workshop-powertools_2026-02-13/00_OVERVIEW.md)** - Workshop powertools implementation plans (5 phases)
+- **[Tech Debt Cleanup](archive/tech-debt-cleanup_2026-02-19/00_TECH_DEBT.md)** - Tech debt remediation (5 phases, PRs #83-87)
 
 ---
 
@@ -132,4 +135,4 @@ This documentation index should be updated whenever:
 - Documentation is reorganized
 - Documentation is deprecated or archived
 
-Last updated: 2026-02-15
+Last updated: 2026-02-22
