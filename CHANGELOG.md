@@ -34,6 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `wheel>=0.46.2` to dev dependencies (CVE-2026-24049)
 
 ### Changed
+- **Batch Dependency Updates** - Updated 5 development and production dependencies
+  - `gunicorn` 25.0.3 → 25.1.0 (control interface, ASGI stable)
+  - `flake8` 6.1.0 → 7.3.0 (Python 3.14 support, new pyflakes/pycodestyle)
+  - `pytest` 8.3.5 → 9.0.2 (terminal progress, CLI reference docs)
+  - `isort` 5.13.2 → 7.0.0 (Python 3.14 support, noqa fix)
+  - `ipython` 8.38.0 → 9.10.0 (autoreload debug, history fixes)
 - **Schema Tests, Dead Code & Dependency Updates** - Final tech debt cleanup phase
   - Added 37 new schema validation tests: `test_settings_requests.py` (21 tests), `test_snapshot_requests.py` (16 tests)
   - Removed dead `count_sources_for_target()` method from `upstream_source_service.py`
