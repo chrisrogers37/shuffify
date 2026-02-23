@@ -1,6 +1,7 @@
 # Phase 01: Standardize DB Commit Handling
-**Status:** 🔧 IN PROGRESS
+**Status:** ✅ COMPLETE
 **Started:** 2026-02-23
+**Completed:** 2026-02-23
 
 ## Header
 
@@ -857,19 +858,19 @@ The existing code wraps the query + commit in a single try/except. After refacto
 
 ## Verification Checklist
 
-1. [ ] Import `safe_commit` added to `user_service.py`, `activity_log_service.py`, `scheduler_service.py`, `playlist_pair_service.py`
-2. [ ] Import NOT needed for `login_history_service.py` and `playlist_snapshot_service.py` (already imported)
-3. [ ] `user_service.py`: outer try/except removed, `safe_commit()` replaces `db.session.commit()` + manual rollback
-4. [ ] `activity_log_service.py`: `safe_commit()` inside existing try/except, outer except still returns `None`
-5. [ ] `login_history_service.py`: outer try/except removed from `record_logout()`, `safe_commit()` replaces commit + rollback
-6. [ ] `scheduler_service.py`: all 4 methods (`create`, `update`, `delete`, `toggle`) use `safe_commit()`, all manual try/except removed
-7. [ ] `playlist_pair_service.py`: both methods (`create_pair`, `delete_pair`) use `safe_commit()`, manual `logger.info` calls removed
-8. [ ] `playlist_snapshot_service.py`: `cleanup_old_snapshots()` uses `safe_commit()` inside try/except that returns 0 on failure
-9. [ ] `job_executor_service.py` is NOT modified (reserved for Phase 03)
-10. [ ] `routes/core.py` is NOT modified (reserved for Phase 03)
-11. [ ] Run `flake8 shuffify/` — 0 errors
-12. [ ] Run `pytest tests/ -v` — all tests pass
-13. [ ] Run grep to confirm no bare `db.session.commit()` in modified files
+1. [x] Import `safe_commit` added to `user_service.py`, `activity_log_service.py`, `scheduler_service.py`, `playlist_pair_service.py`
+2. [x] Import NOT needed for `login_history_service.py` and `playlist_snapshot_service.py` (already imported)
+3. [x] `user_service.py`: outer try/except removed, `safe_commit()` replaces `db.session.commit()` + manual rollback
+4. [x] `activity_log_service.py`: `safe_commit()` inside existing try/except, outer except still returns `None`
+5. [x] `login_history_service.py`: outer try/except removed from `record_logout()`, `safe_commit()` replaces commit + rollback
+6. [x] `scheduler_service.py`: all 4 methods (`create`, `update`, `delete`, `toggle`) use `safe_commit()`, all manual try/except removed
+7. [x] `playlist_pair_service.py`: both methods (`create_pair`, `delete_pair`) use `safe_commit()`, manual `logger.info` calls removed
+8. [x] `playlist_snapshot_service.py`: `cleanup_old_snapshots()` uses `safe_commit()` inside try/except that returns 0 on failure
+9. [x] `job_executor_service.py` is NOT modified (reserved for Phase 03)
+10. [x] `routes/core.py` is NOT modified (reserved for Phase 03)
+11. [x] Run `flake8 shuffify/` — 0 errors
+12. [x] Run `pytest tests/ -v` — all 1220 tests pass
+13. [x] Run grep to confirm no bare `db.session.commit()` in modified files
 
 ---
 
