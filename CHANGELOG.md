@@ -32,6 +32,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Trust Indicators: neon gradient divider, green icon glows, 2-column mobile layout
   - Scroll reveal animation system with staggered delays (CSS transitions + IntersectionObserver)
   - Updated consent card disclosure to accurately reflect data storage practices
+- **Mobile Responsive + Performance Fixes** - Responsive layout, accessibility, and animation performance improvements
+  - Responsive title/subtitle/description sizing (`text-4xl md:text-5xl lg:text-6xl` etc.)
+  - Mobile card padding reduction (`p-4 md:p-6`) across all glassmorphism cards
+  - Viewport-based playlist animation: 5 tracks on mobile vs 8 on desktop, longer shuffle intervals
+  - Mobile-optimized track item sizing (smaller art, font, and padding below 768px)
+  - Consent checkbox wrapped in `<label>` with 44px minimum touch target
+  - `prefers-reduced-motion` CSS media query disables all animations and transitions globally
+  - GPU acceleration hints (`will-change`) with automatic cleanup after scroll-reveal completes
+  - Compositor-safe hover effects: `.cta-button`, `.glass-card`, `.step-circle` box-shadow animations replaced with pseudo-element opacity technique
+  - IntersectionObserver `unobserve()` cleanup in base.html to free memory after animation
 
 ### Fixed
 - **Shuffle/Save "unexpected error" on production** - Registered full `SpotifyError` exception hierarchy in global error handlers
