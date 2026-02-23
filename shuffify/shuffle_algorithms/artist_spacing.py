@@ -116,9 +116,9 @@ class ArtistSpacingShuffle(ShuffleAlgorithm):
                 # spacing. Pick the one that comes off cooldown soonest.
                 cooldown.sort(key=lambda x: x[0])
                 _, entry = cooldown.pop(0)
-                neg_count, tiebreaker, artist = entry
+                neg_count, _, artist = entry
             else:
-                neg_count, tiebreaker, artist = heapq.heappop(heap)
+                neg_count, _, artist = heapq.heappop(heap)
 
             # Take one track from this artist
             chosen = artist_tracks[artist].pop()

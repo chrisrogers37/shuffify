@@ -9,8 +9,8 @@ JobExecutorService.
 import logging
 from typing import List, Optional, Dict, Any
 
-from shuffify.models.db import db, Schedule
-from shuffify.services.base import safe_commit
+from shuffify.models.db import db, Schedule, JobExecution
+from shuffify.services.base import safe_commit, get_owned_entity
 
 logger = logging.getLogger(__name__)
 
@@ -62,17 +62,10 @@ class SchedulerService:
         Raises:
             ScheduleNotFoundError: If not found or wrong user.
         """
-        schedule = Schedule.query.filter_by(
-            id=schedule_id, user_id=user_id
-        ).first()
-
-        if not schedule:
-            raise ScheduleNotFoundError(
-                f"Schedule {schedule_id} not found "
-                f"for user {user_id}"
-            )
-
-        return schedule
+        return get_owned_entity(
+            Schedule, schedule_id, user_id,
+            ScheduleNotFoundError,
+        )
 
     @staticmethod
     def create_schedule(
@@ -184,8 +177,6 @@ class SchedulerService:
             schedule_id, user_id
         )
 
-        from shuffify.models.db import JobExecution
-
         JobExecution.query.filter_by(
             schedule_id=schedule_id
         ).delete()
@@ -224,8 +215,6 @@ class SchedulerService:
         """Get recent execution history for a schedule."""
         # Verify ownership
         SchedulerService.get_schedule(schedule_id, user_id)
-
-        from shuffify.models.db import JobExecution
 
         executions = (
             JobExecution.query.filter_by(
