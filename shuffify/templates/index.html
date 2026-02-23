@@ -92,7 +92,7 @@
                                 </div>
                                 <div>
                                     <div class="text-white text-sm font-semibold">My Playlist</div>
-                                    <div class="text-white/40 text-xs">8 tracks</div>
+                                    <div class="text-white/40 text-xs"><span class="hidden md:inline">8</span><span class="md:hidden">5</span> tracks</div>
                                 </div>
                             </div>
                             <div id="shuffle-indicator" class="text-xs font-medium px-2 py-1 rounded-full text-spotify-green opacity-0 transition-opacity duration-300" style="background: rgba(29,185,84,0.1);">
@@ -604,6 +604,15 @@
     .shuffle-track.moving-down {
         transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
     }
+
+    /* Mobile-optimized track sizing */
+    @media (max-width: 767px) {
+        .shuffle-track { padding: 6px 12px; }
+        .shuffle-track-art { width: 32px; height: 32px; margin-right: 8px; }
+        .shuffle-track-name { font-size: 12px; max-width: 140px; }
+        .shuffle-track-artist { font-size: 10px; max-width: 140px; }
+        .shuffle-track-duration { font-size: 10px; padding-left: 8px; }
+    }
 </style>
 
 <script>
@@ -675,13 +684,16 @@
         { name: 'Shadow Dance',     artist: 'Phantom Beat',   duration: '4:48', gradient: 'linear-gradient(135deg, #a1c4fd, #c2e9fb)' }
     ];
 
-    var TRACK_HEIGHT = 56;
-    var SETTLE_DURATION = 2500;
+    var isMobile = window.innerWidth < 768;
+    var TRACK_HEIGHT = isMobile ? 48 : 56;
+    var VISIBLE_TRACK_COUNT = isMobile ? 5 : TRACKS.length;
+    var SETTLE_DURATION = isMobile ? 3500 : 2500;
     var SHUFFLE_ANIMATION_DURATION = 1000;
     var GLOW_DURATION = 500;
     var INITIAL_DELAY = 1500;
 
-    var currentOrder = TRACKS.map(function(_, i) { return i; });
+    var visibleTracks = TRACKS.slice(0, VISIBLE_TRACK_COUNT);
+    var currentOrder = visibleTracks.map(function(_, i) { return i; });
     var trackElements = [];
     var isAnimating = false;
     var animationTimer = null;
@@ -691,10 +703,10 @@
         if (!container) return;
 
         container.innerHTML = '';
-        container.style.height = (TRACKS.length * TRACK_HEIGHT) + 'px';
+        container.style.height = (visibleTracks.length * TRACK_HEIGHT) + 'px';
         container.style.position = 'relative';
 
-        trackElements = TRACKS.map(function(track, index) {
+        trackElements = visibleTracks.map(function(track, index) {
             var el = document.createElement('div');
             el.className = 'shuffle-track';
             el.setAttribute('data-index', index);
@@ -749,7 +761,7 @@
         setTimeout(function() {
             var newOrder = generateNewOrder();
 
-            for (var trackIndex = 0; trackIndex < TRACKS.length; trackIndex++) {
+            for (var trackIndex = 0; trackIndex < visibleTracks.length; trackIndex++) {
                 var currentPosition = currentOrder.indexOf(trackIndex);
                 var newPosition = newOrder.indexOf(trackIndex);
                 var el = trackElements[trackIndex];
