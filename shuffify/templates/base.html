@@ -13,6 +13,9 @@
                     colors: {
                         'spotify-green': '#1DB954',
                         'spotify-dark': '#191414',
+                        'dark-base': '#0a0a0f',
+                        'dark-surface': '#0f0f17',
+                        'dark-card': '#141420',
                     },
                     animation: {
                         'fade-in': 'fadeIn 0.6s ease-out',
@@ -102,6 +105,20 @@
         ::-webkit-scrollbar-thumb:hover {
             background: rgba(29, 185, 84, 0.7);
         }
+
+        /* Neon glow utilities for dark theme */
+        .neon-glow-sm {
+            box-shadow: 0 0 10px rgba(29, 185, 84, 0.2);
+        }
+        .neon-glow {
+            box-shadow: 0 0 20px rgba(29, 185, 84, 0.3);
+        }
+        .neon-glow-lg {
+            box-shadow: 0 0 40px rgba(29, 185, 84, 0.4);
+        }
+        .neon-text-glow {
+            text-shadow: 0 0 40px rgba(29, 185, 84, 0.5);
+        }
     </style>
 </head>
 <body>
@@ -119,10 +136,10 @@
     </main>
 
     <!-- Footer -->
-    <footer class="bg-black/30 text-white py-4 backdrop-blur-sm">
+    <footer class="bg-dark-base border-t border-white/10 text-white py-4">
         <div class="container mx-auto text-center text-sm">
-            <p>Built with Flask and Spotify API</p>
-            <p class="text-gray-400 mt-1">© {{ current_year }} Shuffify. All rights reserved.</p>
+            <p class="text-white/50">Built with Flask and Spotify API</p>
+            <p class="text-white/30 mt-1">© {{ current_year }} Shuffify. All rights reserved.</p>
         </div>
     </footer>
 
