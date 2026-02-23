@@ -13,7 +13,8 @@ import spotipy
 
 from requests.exceptions import ConnectionError, Timeout
 
-from shuffify.spotify.api import SpotifyAPI, api_error_handler, _calculate_backoff_delay, MAX_RETRIES
+from shuffify.spotify.api import SpotifyAPI
+from shuffify.spotify.error_handling import api_error_handler, _calculate_backoff_delay, MAX_RETRIES
 from shuffify.spotify.auth import SpotifyAuthManager, TokenInfo
 from shuffify.spotify.cache import SpotifyCache
 from shuffify.spotify.credentials import SpotifyCredentials
@@ -498,7 +499,7 @@ class TestApiErrorHandlerRetry:
                 raise error
             return 'success'
 
-        with patch('shuffify.spotify.api.time.sleep'):  # Don't actually sleep
+        with patch('shuffify.spotify.error_handling.time.sleep'):  # Don't actually sleep
             result = rate_limited_func()
 
         assert result == 'success'
@@ -516,7 +517,7 @@ class TestApiErrorHandlerRetry:
                 raise spotipy.SpotifyException(503, -1, 'Service unavailable')
             return 'success'
 
-        with patch('shuffify.spotify.api.time.sleep'):
+        with patch('shuffify.spotify.error_handling.time.sleep'):
             result = server_error_func()
 
         assert result == 'success'
@@ -534,7 +535,7 @@ class TestApiErrorHandlerRetry:
                 raise ConnectionError('Connection refused')
             return 'success'
 
-        with patch('shuffify.spotify.api.time.sleep'):
+        with patch('shuffify.spotify.error_handling.time.sleep'):
             result = connection_error_func()
 
         assert result == 'success'
@@ -552,7 +553,7 @@ class TestApiErrorHandlerRetry:
                 raise Timeout('Request timed out')
             return 'success'
 
-        with patch('shuffify.spotify.api.time.sleep'):
+        with patch('shuffify.spotify.error_handling.time.sleep'):
             result = timeout_func()
 
         assert result == 'success'
@@ -596,7 +597,7 @@ class TestApiErrorHandlerRetry:
             error.headers = {'Retry-After': '0'}
             raise error
 
-        with patch('shuffify.spotify.api.time.sleep'):
+        with patch('shuffify.spotify.error_handling.time.sleep'):
             with pytest.raises(SpotifyRateLimitError):
                 always_rate_limited()
 
@@ -606,7 +607,7 @@ class TestApiErrorHandlerRetry:
         def always_503():
             raise spotipy.SpotifyException(503, -1, 'Service unavailable')
 
-        with patch('shuffify.spotify.api.time.sleep'):
+        with patch('shuffify.spotify.error_handling.time.sleep'):
             with pytest.raises(SpotifyAPIError):
                 always_503()
 
@@ -616,7 +617,7 @@ class TestApiErrorHandlerRetry:
         def always_fails():
             raise ConnectionError('Connection refused')
 
-        with patch('shuffify.spotify.api.time.sleep'):
+        with patch('shuffify.spotify.error_handling.time.sleep'):
             with pytest.raises(SpotifyAPIError):
                 always_fails()
 
