@@ -41,7 +41,7 @@
                                 <div class="flex-1">
                                     <h4 class="text-lg font-semibold text-white mb-2">Quick & Secure</h4>
                                     <p class="text-white/80 text-sm mb-4">
-                                        We use Spotify's secure OAuth to access your playlists. Your data stays with Spotify - we never store it.
+                                        We use Spotify's secure OAuth to access your playlists. We store your settings and playlist information to power features like snapshots, scheduling, and undo.
                                     </p>
                                     <div class="flex items-start space-x-3">
                                         <input type="checkbox" id="legal-consent" name="legal_consent" required 
@@ -78,59 +78,80 @@
     </div>
 
     <!-- How It Works Section -->
-    <div class="relative pt-12 pb-12">
+    <div class="relative pt-16 pb-16">
         <div class="w-full max-w-6xl mx-auto px-4">
-            <h3 class="text-3xl font-bold text-white text-center mb-12">How It Works</h3>
-            
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <h3 class="scroll-reveal text-3xl font-bold text-white text-center mb-16">How It Works</h3>
+
+            <div class="relative grid grid-cols-1 md:grid-cols-3 gap-12 md:gap-8">
+                <!-- Timeline connector line (horizontal on desktop, vertical on mobile) -->
+                <div class="timeline-connector" aria-hidden="true"></div>
+                <div class="timeline-connector-vertical" aria-hidden="true"></div>
+
                 <!-- Step 1: Connect -->
-                <div class="text-center">
-                    <div class="step-number bg-spotify-green text-dark-base rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-4 font-bold text-xl">1</div>
+                <div class="scroll-reveal scroll-reveal-delay-1 text-center relative z-10">
+                    <div class="step-circle bg-spotify-dark border-2 border-spotify-green text-spotify-green rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-5 font-bold text-xl">
+                        <!-- Link/chain icon -->
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                        </svg>
+                    </div>
                     <h4 class="text-xl font-semibold text-white mb-3">Connect</h4>
-                    <p class="text-white/80">Link your Spotify account in one click</p>
+                    <p class="text-white/70 max-w-xs mx-auto">Link your Spotify account in one click</p>
                 </div>
-                
+
                 <!-- Step 2: Choose -->
-                <div class="text-center">
-                    <div class="step-number bg-spotify-green text-dark-base rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-4 font-bold text-xl">2</div>
+                <div class="scroll-reveal scroll-reveal-delay-2 text-center relative z-10">
+                    <div class="step-circle bg-spotify-dark border-2 border-spotify-green text-spotify-green rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-5 font-bold text-xl">
+                        <!-- Sliders/settings icon -->
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                        </svg>
+                    </div>
                     <h4 class="text-xl font-semibold text-white mb-3">Choose</h4>
-                    <p class="text-white/80">Pick your playlist and reordering algorithm</p>
+                    <p class="text-white/70 max-w-xs mx-auto">Pick your playlist and reordering algorithm</p>
                 </div>
-                
-                <!-- Step 3: Enjoy -->
-                <div class="text-center">
-                    <div class="step-number bg-spotify-green text-dark-base rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-4 font-bold text-xl">3</div>
+
+                <!-- Step 3: Reorder -->
+                <div class="scroll-reveal scroll-reveal-delay-3 text-center relative z-10">
+                    <div class="step-circle bg-spotify-dark border-2 border-spotify-green text-spotify-green rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-5 font-bold text-xl">
+                        <!-- Shuffle arrows icon -->
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                        </svg>
+                    </div>
                     <h4 class="text-xl font-semibold text-white mb-3">Reorder</h4>
-                    <p class="text-white/80">Enjoy a fresh playlist flow in seconds</p>
+                    <p class="text-white/70 max-w-xs mx-auto">Enjoy a fresh playlist flow in seconds</p>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Developer Testimonial Section -->
-    <div class="relative py-12">
+    <div class="relative py-16">
         <div class="w-full max-w-4xl mx-auto px-4 text-center">
-            <h3 class="text-2xl font-semibold text-white mb-8">Why I Built This</h3>
-            
+            <h3 class="scroll-reveal text-2xl font-semibold text-white mb-10">Why I Built This</h3>
+
             <!-- Developer Testimonial -->
-            <div class="max-w-3xl mx-auto">
-                <div class="bg-dark-card rounded-2xl p-6 border border-white/10 hover:border-spotify-green/30 transition duration-300">
-                    <div class="flex items-start space-x-4">
+            <div class="scroll-reveal scroll-reveal-delay-1 max-w-3xl mx-auto">
+                <div class="relative bg-white/5 backdrop-blur-xl rounded-2xl p-8 border border-white/10 quote-accent-bar text-left">
+                    <!-- Decorative quotation mark -->
+                    <div class="quote-decoration" aria-hidden="true">&ldquo;</div>
+
+                    <div class="flex items-start space-x-5">
                         <div class="flex-shrink-0">
                             <div class="w-12 h-12 bg-spotify-green rounded-full flex items-center justify-center">
                                 <span class="text-white font-bold text-lg">C</span>
                             </div>
                         </div>
                         <div class="flex-1">
-                            <blockquote class="text-white/90 text-lg leading-relaxed italic">
+                            <blockquote class="text-white/90 text-lg leading-relaxed italic relative z-10">
                                 "I curate many large playlists and shuffify allows me to easily rearrange them to keep them feeling fresh, especially after I spend hours crate-digging and dumping new finds in at the bottom!"
                             </blockquote>
-                            <div class="mt-4 flex items-end justify-end space-x-3">
+                            <div class="mt-5 flex items-end justify-end space-x-3">
                                 <div class="text-right">
                                     <div class="text-white font-semibold">Chris</div>
                                     <div class="text-white/70 text-sm">Developer & Playlist Curator</div>
                                 </div>
-                                <div class="text-2xl">🎵</div>
                             </div>
                         </div>
                     </div>
@@ -140,55 +161,122 @@
     </div>
 
     <!-- Use Cases Section -->
-    <div class="relative py-12 bg-dark-surface">
+    <div class="relative py-16 bg-dark-surface">
         <div class="w-full max-w-6xl mx-auto px-4">
-            <h3 class="text-3xl font-bold text-white text-center mb-12">Perfect For</h3>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div class="use-case-card p-6 rounded-2xl bg-dark-card border border-white/10 transform transition duration-300 hover:scale-105">
-                    <div class="text-3xl mb-4">🎵</div>
+            <h3 class="scroll-reveal text-3xl font-bold text-white text-center mb-12">Perfect For</h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Card 1: Curated Collections -->
+                <div class="scroll-reveal scroll-reveal-delay-1 glass-card p-6 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10">
+                    <div class="w-10 h-10 mb-4 text-spotify-green">
+                        <!-- Music notes SVG -->
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
+                        </svg>
+                    </div>
                     <h4 class="text-xl font-semibold text-white mb-3">Curated Collections</h4>
-                    <p class="text-white/80">Keep your curated playlists fresh, especially after adding new songs.</p>
+                    <p class="text-white/70">Keep your curated playlists fresh, especially after adding new songs.</p>
                 </div>
-                
-                <div class="use-case-card p-6 rounded-2xl bg-dark-card border border-white/10 transform transition duration-300 hover:scale-105">
-                    <div class="text-3xl mb-4">🎧</div>
+
+                <!-- Card 2: Tastemaker Playlists -->
+                <div class="scroll-reveal scroll-reveal-delay-2 glass-card p-6 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10">
+                    <div class="w-10 h-10 mb-4 text-spotify-green">
+                        <!-- Headphones SVG -->
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 14v3a2 2 0 01-2 2h-1a2 2 0 01-2-2v-1a2 2 0 012-2h3zm0 0V9a7 7 0 00-14 0v5m0 0h3a2 2 0 012 2v1a2 2 0 01-2 2H6a2 2 0 01-2-2v-3z" />
+                        </svg>
+                    </div>
                     <h4 class="text-xl font-semibold text-white mb-3">Tastemaker Playlists</h4>
-                    <p class="text-white/80">Perfect for tastemakers who want to mix it up and get those new adds to the top for their followers.</p>
+                    <p class="text-white/70">Perfect for tastemakers who want to mix it up and get those new adds to the top for their followers.</p>
                 </div>
-                
-                <div class="use-case-card p-6 rounded-2xl bg-dark-card border border-white/10 transform transition duration-300 hover:scale-105">
-                    <div class="text-3xl mb-4">🔄</div>
+
+                <!-- Card 3: New Perspectives -->
+                <div class="scroll-reveal scroll-reveal-delay-3 glass-card p-6 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10">
+                    <div class="w-10 h-10 mb-4 text-spotify-green">
+                        <!-- Refresh/rotate SVG -->
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </div>
                     <h4 class="text-xl font-semibold text-white mb-3">New Perspectives</h4>
-                    <p class="text-white/80">Make your playlists feel new with a quick shuffle.</p>
+                    <p class="text-white/70">Make your playlists feel new with a quick shuffle.</p>
                 </div>
-                
-                <div class="use-case-card p-6 rounded-2xl bg-dark-card border border-white/10 transform transition duration-300 hover:scale-105">
-                    <div class="text-3xl mb-4">✨</div>
+
+                <!-- Card 4: Playlist Maintenance -->
+                <div class="scroll-reveal scroll-reveal-delay-4 glass-card p-6 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10">
+                    <div class="w-10 h-10 mb-4 text-spotify-green">
+                        <!-- Wrench/settings SVG -->
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                    </div>
                     <h4 class="text-xl font-semibold text-white mb-3">Playlist Maintenance</h4>
-                    <p class="text-white/80">Reorder that massive playlist that you've been meaning to update with one click.</p>
+                    <p class="text-white/70">Reorder that massive playlist that you've been meaning to update with one click.</p>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Features Section -->
-    <div class="relative py-12">
+    <div class="relative py-16">
         <div class="w-full max-w-6xl mx-auto px-4">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div class="feature-card p-6 rounded-2xl bg-dark-card border border-white/10 transform transition duration-300 hover:scale-105">
-                    <div class="text-4xl mb-4">🎵</div>
-                    <h3 class="text-xl font-semibold mb-3 text-white">Intelligent Reordering</h3>
-                    <p class="text-white/80">
-                        Choose from multiple intelligent algorithms to reorder your playlist while maintaining the perfect flow.
+            <h3 class="scroll-reveal text-3xl font-bold text-white text-center mb-12">Powerful Features</h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Feature 1: 7 Shuffle Algorithms -->
+                <div class="scroll-reveal scroll-reveal-delay-1 glass-card p-6 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10">
+                    <div class="w-10 h-10 mb-4 text-spotify-green">
+                        <!-- Grid/algorithm SVG -->
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                        </svg>
+                    </div>
+                    <h4 class="text-xl font-semibold mb-3 text-white">7 Shuffle Algorithms</h4>
+                    <p class="text-white/70">
+                        From artist spacing to album sequencing, choose the perfect strategy to reorder your playlist.
                     </p>
                 </div>
-                
-                <div class="feature-card p-6 rounded-2xl bg-dark-card border border-white/10 transform transition duration-300 hover:scale-105">
-                    <div class="text-4xl mb-4">↩️</div>
-                    <h3 class="text-xl font-semibold mb-3 text-white">Easy Undo</h3>
-                    <p class="text-white/80">
-                        Not happy with the reorder? Instantly revert to your previous playlist order.
+
+                <!-- Feature 2: Instant Undo -->
+                <div class="scroll-reveal scroll-reveal-delay-2 glass-card p-6 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10">
+                    <div class="w-10 h-10 mb-4 text-spotify-green">
+                        <!-- Undo arrow SVG -->
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a5 5 0 015 5v2M3 10l4-4m-4 4l4 4" />
+                        </svg>
+                    </div>
+                    <h4 class="text-xl font-semibold mb-3 text-white">Instant Undo</h4>
+                    <p class="text-white/70">
+                        Not happy with the reorder? Revert to your previous playlist order with one click.
+                    </p>
+                </div>
+
+                <!-- Feature 3: Playlist Workshop -->
+                <div class="scroll-reveal scroll-reveal-delay-3 glass-card p-6 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10">
+                    <div class="w-10 h-10 mb-4 text-spotify-green">
+                        <!-- Workshop/beaker SVG -->
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                        </svg>
+                    </div>
+                    <h4 class="text-xl font-semibold mb-3 text-white">Playlist Workshop</h4>
+                    <p class="text-white/70">
+                        Merge, raid, and craft playlists from multiple sources in an interactive workspace.
+                    </p>
+                </div>
+
+                <!-- Feature 4: Scheduled Shuffles -->
+                <div class="scroll-reveal scroll-reveal-delay-4 glass-card p-6 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10">
+                    <div class="w-10 h-10 mb-4 text-spotify-green">
+                        <!-- Clock/schedule SVG -->
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    <h4 class="text-xl font-semibold mb-3 text-white">Scheduled Shuffles</h4>
+                    <p class="text-white/70">
+                        Set it and forget it. Automate reordering on your schedule so your playlists stay fresh.
                     </p>
                 </div>
             </div>
@@ -196,29 +284,32 @@
     </div>
 
     <!-- Trust Indicators -->
-    <div class="relative py-12 bg-dark-surface border-t border-white/10">
+    <div class="relative py-12">
+        <!-- Neon divider line replacing border-t -->
+        <div class="neon-divider mb-12" aria-hidden="true"></div>
+
         <div class="w-full max-w-4xl mx-auto px-4 text-center">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 text-sm text-white/70">
+            <div class="scroll-reveal grid grid-cols-2 md:grid-cols-4 gap-6 text-sm text-white/70">
                 <div class="flex items-center justify-center">
-                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <svg class="trust-icon w-5 h-5 mr-2 text-spotify-green" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
                     </svg>
                     Secure OAuth
                 </div>
                 <div class="flex items-center justify-center">
-                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <svg class="trust-icon w-5 h-5 mr-2 text-spotify-green" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
                     </svg>
                     No Data Stored
                 </div>
                 <div class="flex items-center justify-center">
-                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <svg class="trust-icon w-5 h-5 mr-2 text-spotify-green" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/>
                     </svg>
                     Instant Results
                 </div>
                 <div class="flex items-center justify-center">
-                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <svg class="trust-icon w-5 h-5 mr-2 text-spotify-green" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
                     </svg>
                     Free Forever
@@ -258,19 +349,123 @@
         animation: fadeIn 1s ease-out;
     }
 
-    /* Step number animation */
-    .step-number {
+    /* ===== SCROLL REVEAL ANIMATION SYSTEM ===== */
+    .scroll-reveal {
+        opacity: 0;
+        transform: translateY(30px);
+        transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+                    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .scroll-reveal.visible {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    /* Stagger delay classes for sequential card/element animation */
+    .scroll-reveal-delay-1 { transition-delay: 100ms; }
+    .scroll-reveal-delay-2 { transition-delay: 200ms; }
+    .scroll-reveal-delay-3 { transition-delay: 300ms; }
+    .scroll-reveal-delay-4 { transition-delay: 400ms; }
+
+    /* ===== TIMELINE CONNECTOR ===== */
+    .timeline-connector {
+        position: absolute;
+        top: 28px; /* center of the 56px (w-14) step circles */
+        left: calc(16.67% + 28px); /* start after first circle center */
+        right: calc(16.67% + 28px); /* end before last circle center */
+        height: 2px;
+        background: linear-gradient(90deg,
+            #1DB954 0%,
+            rgba(29, 185, 84, 0.4) 50%,
+            #1DB954 100%);
+        box-shadow: 0 0 8px rgba(29, 185, 84, 0.4);
+    }
+
+    /* Vertical timeline connector for mobile */
+    .timeline-connector-vertical {
+        display: none;
+    }
+
+    @media (max-width: 767px) {
+        .timeline-connector {
+            display: none;
+        }
+        .timeline-connector-vertical {
+            display: block;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            top: 80px; /* below first circle */
+            bottom: 80px; /* above last circle */
+            width: 2px;
+            background: linear-gradient(180deg,
+                #1DB954 0%,
+                rgba(29, 185, 84, 0.4) 50%,
+                #1DB954 100%);
+            box-shadow: 0 0 8px rgba(29, 185, 84, 0.4);
+        }
+    }
+
+    /* ===== STEP CIRCLE GLOW ===== */
+    .step-circle {
+        box-shadow: 0 0 15px rgba(29, 185, 84, 0.5),
+                    0 0 30px rgba(29, 185, 84, 0.2);
         transition: all 0.3s ease;
     }
-    .step-number:hover {
+    .step-circle:hover {
+        box-shadow: 0 0 20px rgba(29, 185, 84, 0.7),
+                    0 0 40px rgba(29, 185, 84, 0.3);
         transform: scale(1.1);
     }
 
-    /* Card hover effects — neon glow on dark theme */
-    .use-case-card:hover,
-    .feature-card:hover {
-        border-color: rgba(29, 185, 84, 0.3);
-        box-shadow: 0 0 20px rgba(29, 185, 84, 0.15);
+    /* ===== GLASS CARD HOVER ===== */
+    .glass-card {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .glass-card:hover {
+        transform: translateY(-4px);
+        border-color: rgba(29, 185, 84, 0.4);
+        box-shadow: 0 0 20px rgba(29, 185, 84, 0.15),
+                    0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    /* ===== NEON SECTION DIVIDER ===== */
+    .neon-divider {
+        height: 1px;
+        background: linear-gradient(90deg,
+            transparent 0%,
+            rgba(29, 185, 84, 0.6) 50%,
+            transparent 100%);
+        box-shadow: 0 0 8px rgba(29, 185, 84, 0.3);
+    }
+
+    /* ===== TRUST ICON GLOW ===== */
+    .trust-icon {
+        filter: drop-shadow(0 0 4px rgba(29, 185, 84, 0.4));
+        transition: filter 0.3s ease;
+    }
+    .trust-icon:hover {
+        filter: drop-shadow(0 0 8px rgba(29, 185, 84, 0.6));
+    }
+
+    /* ===== TESTIMONIAL QUOTE MARK ===== */
+    .quote-decoration {
+        position: absolute;
+        top: -10px;
+        left: 20px;
+        font-size: 6rem;
+        line-height: 1;
+        color: rgba(29, 185, 84, 0.15);
+        font-family: Georgia, serif;
+        pointer-events: none;
+        user-select: none;
+    }
+
+    /* ===== TESTIMONIAL LEFT ACCENT BAR ===== */
+    .quote-accent-bar {
+        border-left: 3px solid #1DB954;
+        box-shadow: -4px 0 12px rgba(29, 185, 84, 0.3);
     }
 </style>
 
@@ -302,23 +497,27 @@
             updateButtonState(); // Initial state
         }
 
-        // Add scroll-triggered animations
-        const observerOptions = {
+        // ===== SCROLL REVEAL ANIMATION SYSTEM =====
+        // Observe all .scroll-reveal elements and add .visible when they enter viewport.
+        // Stagger delays are handled by CSS transition-delay classes on individual elements.
+        const scrollObserverOptions = {
             threshold: 0.1,
-            rootMargin: '0px 0px -50px 0px'
+            rootMargin: '0px 0px -60px 0px'
         };
 
-        const observer = new IntersectionObserver((entries) => {
+        const scrollObserver = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
-                    entry.target.classList.add('animate-in');
+                    entry.target.classList.add('visible');
+                    // Stop observing once revealed (one-shot animation)
+                    scrollObserver.unobserve(entry.target);
                 }
             });
-        }, observerOptions);
+        }, scrollObserverOptions);
 
-        // Observe elements for animation
-        document.querySelectorAll('.use-case-card, .step-number').forEach(el => {
-            observer.observe(el);
+        // Observe every element with the .scroll-reveal class
+        document.querySelectorAll('.scroll-reveal').forEach(el => {
+            scrollObserver.observe(el);
         });
     });
 </script>
