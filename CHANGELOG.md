@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added neon glow CSS utilities (`neon-glow-sm`, `neon-glow`, `neon-glow-lg`, `neon-text-glow`)
   - Section alternation using `dark-base`/`dark-surface` for visual separation
   - Step number circles now neon green with dark text (was white with green text)
+- **Landing Page Section Redesign** - Redesigned all below-hero sections with glassmorphism cards, timeline, and scroll-triggered animations
+  - How It Works: replaced numbered circles with SVG icon circles connected by a neon gradient timeline
+  - Perfect For / Features: replaced all emoji with inline SVG icons, glassmorphism card treatments (`bg-white/5 backdrop-blur-xl`)
+  - Features expanded from 2 to 4 cards (7 Algorithms, Instant Undo, Playlist Workshop, Scheduled Shuffles)
+  - Testimonial: added decorative quotation mark and neon green left accent bar
+  - Trust Indicators: neon gradient divider, green icon glows, 2-column mobile layout
+  - Scroll reveal animation system with staggered delays (CSS transitions + IntersectionObserver)
+  - Updated consent card disclosure to accurately reflect data storage practices
 
 ### Fixed
 - **Shuffle/Save "unexpected error" on production** - Registered full `SpotifyError` exception hierarchy in global error handlers
