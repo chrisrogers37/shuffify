@@ -44,16 +44,16 @@
                                         <p class="text-white/80 text-sm mb-4">
                                             We use Spotify's secure OAuth to access your playlists. We store your settings and playlist information to power features like snapshots, scheduling, and undo.
                                         </p>
-                                        <div class="flex items-start space-x-3">
+                                        <label for="legal-consent" class="flex items-start gap-3 cursor-pointer p-2 -m-2 rounded-lg hover:bg-white/5 transition-colors min-h-[44px]">
                                             <input type="checkbox" id="legal-consent" name="legal_consent" required
-                                                   class="mt-1 h-4 w-4 text-spotify-green bg-white border-white/30 rounded focus:ring-spotify-green focus:ring-2">
-                                            <label for="legal-consent" class="text-sm text-white/90 leading-relaxed legal-links">
+                                                   class="mt-1 h-5 w-5 flex-shrink-0 text-spotify-green bg-white/20 border-2 border-white/40 rounded focus:ring-spotify-green focus:ring-2 cursor-pointer">
+                                            <span class="text-sm text-white/90 leading-relaxed legal-links">
                                                 I agree to the
                                                 <a href="{{ url_for('main.terms') }}" target="_blank" class="text-spotify-green hover:underline font-medium">Terms of Service</a>
                                                 and
                                                 <a href="{{ url_for('main.privacy') }}" target="_blank" class="text-spotify-green hover:underline font-medium">Privacy Policy</a>
-                                            </label>
-                                        </div>
+                                            </span>
+                                        </label>
                                     </div>
                                 </div>
                             </div>
