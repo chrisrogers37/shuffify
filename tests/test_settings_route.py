@@ -104,17 +104,12 @@ class TestSettingsGetRoute:
 class TestSettingsPostRoute:
     """Tests for POST /settings."""
 
-    @patch("shuffify.routes.settings.AuthService")
+    @patch("shuffify.routes.require_auth")
     def test_update_settings_via_form(
         self, mock_auth, auth_client, db_app, test_user
     ):
         """Should update settings from form submission."""
-        mock_auth.validate_session_token.return_value = (
-            True
-        )
-        mock_auth.get_authenticated_client.return_value = (
-            MagicMock()
-        )
+        mock_auth.return_value = MagicMock()
 
         with db_app.app_context():
             response = auth_client.post(

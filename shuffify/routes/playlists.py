@@ -6,7 +6,12 @@ import logging
 
 from flask import request, jsonify
 
-from shuffify.routes import main, require_auth, json_error, json_success
+from shuffify.routes import (
+    main,
+    require_auth_and_db,
+    json_error,
+    json_success,
+)
 from shuffify.services import PlaylistService, PlaylistError
 from shuffify.schemas import PlaylistQueryParams
 
@@ -14,12 +19,9 @@ logger = logging.getLogger(__name__)
 
 
 @main.route("/refresh-playlists", methods=["POST"])
-def refresh_playlists():
+@require_auth_and_db
+def refresh_playlists(client=None, user=None):
     """Refresh playlists from Spotify without losing undo state."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
     try:
         playlist_service = PlaylistService(client)
         playlists = playlist_service.get_user_playlists(
@@ -42,12 +44,9 @@ def refresh_playlists():
 
 
 @main.route("/playlist/<playlist_id>")
-def get_playlist(playlist_id):
+@require_auth_and_db
+def get_playlist(playlist_id, client=None, user=None):
     """Get playlist data with optional audio features."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
     query_params = PlaylistQueryParams(
         features=request.args.get("features", "false")
     )
@@ -60,24 +59,20 @@ def get_playlist(playlist_id):
 
 
 @main.route("/playlist/<playlist_id>/stats")
-def get_playlist_stats(playlist_id):
+@require_auth_and_db
+def get_playlist_stats(
+    playlist_id, client=None, user=None
+):
     """Get playlist audio feature statistics."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
     playlist_service = PlaylistService(client)
     stats = playlist_service.get_playlist_stats(playlist_id)
     return jsonify(stats)
 
 
 @main.route("/api/user-playlists")
-def api_user_playlists():
+@require_auth_and_db
+def api_user_playlists(client=None, user=None):
     """Return the user's editable playlists as JSON."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
     try:
         playlist_service = PlaylistService(client)
         playlists = playlist_service.get_user_playlists()

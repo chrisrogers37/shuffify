@@ -5,7 +5,7 @@ Covers the new POST /refresh-playlists endpoint and hidden algorithm filtering.
 """
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, MagicMock, patch
 
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 
@@ -92,14 +92,25 @@ class TestRefreshPlaylistsRoute:
         data = response.get_json()
         assert data["success"] is False
 
-    @patch("shuffify.routes.playlists.require_auth")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     @patch("shuffify.routes.playlists.PlaylistService")
     def test_refresh_returns_playlists(
-        self, mock_playlist_service_cls, mock_auth, client
+        self,
+        mock_playlist_service_cls,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        client,
     ):
         """Should return refreshed playlists on success."""
         mock_client = Mock()
         mock_auth.return_value = mock_client
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         mock_service = Mock()
         mock_service.get_user_playlists.return_value = [
@@ -115,14 +126,25 @@ class TestRefreshPlaylistsRoute:
         assert "Playlists refreshed" in data["message"]
         assert len(data["playlists"]) == 2
 
-    @patch("shuffify.routes.playlists.require_auth")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     @patch("shuffify.routes.playlists.PlaylistService")
     def test_refresh_calls_skip_cache(
-        self, mock_playlist_service_cls, mock_auth, client
+        self,
+        mock_playlist_service_cls,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        client,
     ):
         """Should call get_user_playlists with skip_cache=True."""
         mock_client = Mock()
         mock_auth.return_value = mock_client
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         mock_service = Mock()
         mock_service.get_user_playlists.return_value = []
@@ -134,16 +156,27 @@ class TestRefreshPlaylistsRoute:
             skip_cache=True
         )
 
-    @patch("shuffify.routes.playlists.require_auth")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     @patch("shuffify.routes.playlists.PlaylistService")
     def test_refresh_handles_error(
-        self, mock_playlist_service_cls, mock_auth, client
+        self,
+        mock_playlist_service_cls,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        client,
     ):
         """Should return 500 on PlaylistError."""
         from shuffify.services import PlaylistError
 
         mock_client = Mock()
         mock_auth.return_value = mock_client
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         mock_service = Mock()
         mock_service.get_user_playlists.side_effect = PlaylistError(

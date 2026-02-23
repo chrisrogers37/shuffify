@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from shuffify.routes import (
     main,
     is_authenticated,
+    require_auth_and_db,
     get_db_user,
     clear_session_and_show_login,
     json_error,
@@ -75,17 +76,9 @@ def settings():
 
 
 @main.route("/settings", methods=["POST"])
-def update_settings():
+@require_auth_and_db
+def update_settings(client=None, user=None):
     """Update user settings from form submission."""
-    if not is_authenticated():
-        return json_error("Please log in first.", 401)
-
-    db_user = get_db_user()
-    if not db_user:
-        return json_error(
-            "User not found. Please log in again.", 401
-        )
-
     # Handle both JSON and form-encoded data
     if request.is_json:
         data = request.get_json()
@@ -132,9 +125,13 @@ def update_settings():
     try:
         update_request = UserSettingsUpdateRequest(**data)
     except ValidationError as e:
-        errors = e.errors()
-        msg = errors[0]["msg"] if errors else "Invalid input"
-        return json_error(str(msg), 400)
+        first_error = (
+            e.errors()[0] if e.errors() else {}
+        )
+        msg = first_error.get("msg", "Invalid input")
+        return json_error(
+            f"Validation error: {msg}", 400
+        )
 
     # Build kwargs from non-None fields only
     update_kwargs = {
@@ -145,7 +142,7 @@ def update_settings():
 
     try:
         updated = UserSettingsService.update(
-            db_user.id, **update_kwargs
+            user.id, **update_kwargs
         )
     except UserSettingsError as e:
         return json_error(str(e), 400)

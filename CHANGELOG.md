@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Route Auth Standardization** - Migrated 16 routes across playlists, shuffle, workshop, and settings to use `@require_auth_and_db` decorator
+  - Eliminates manual `require_auth()` + None check boilerplate
+  - Ensures consistent 401/503 error responses across all API routes
+- **JSON Validation Helper** - Added `validate_json()` helper to standardize Pydantic validation across 11 routes
+  - Consistent error message format: `"Validation error: {message}"`
+  - Replaces 4 different validation patterns (error_count, errors[0], bare Exception, no handling)
 - **Template Decomposition** - Extracted reusable Jinja2 macros for glass cards, form fields, and empty states
   - Created `shuffify/templates/macros/cards.html`, `forms.html`, and `states.html`
   - Applied macros to `settings.html`, `dashboard.html`, and `schedules.html`
