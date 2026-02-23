@@ -10,6 +10,7 @@ import logging
 from typing import List, Optional, Dict, Any
 
 from shuffify.models.db import db, Schedule
+from shuffify.services.base import safe_commit
 
 logger = logging.getLogger(__name__)
 
@@ -105,41 +106,26 @@ class SchedulerService:
                 f"schedules per user reached"
             )
 
-        try:
-            schedule = Schedule(
-                user_id=user_id,
-                job_type=job_type,
-                target_playlist_id=target_playlist_id,
-                target_playlist_name=target_playlist_name,
-                source_playlist_ids=source_playlist_ids or [],
-                algorithm_name=algorithm_name,
-                algorithm_params=algorithm_params or {},
-                schedule_type=schedule_type,
-                schedule_value=schedule_value,
-                is_enabled=True,
-            )
+        schedule = Schedule(
+            user_id=user_id,
+            job_type=job_type,
+            target_playlist_id=target_playlist_id,
+            target_playlist_name=target_playlist_name,
+            source_playlist_ids=source_playlist_ids or [],
+            algorithm_name=algorithm_name,
+            algorithm_params=algorithm_params or {},
+            schedule_type=schedule_type,
+            schedule_value=schedule_value,
+            is_enabled=True,
+        )
 
-            db.session.add(schedule)
-            db.session.commit()
-
-            logger.info(
-                f"Created schedule {schedule.id} for user "
-                f"{user_id}: {job_type} on "
-                f"{target_playlist_name}"
-            )
-            return schedule
-
-        except ScheduleLimitError:
-            raise
-        except Exception as e:
-            db.session.rollback()
-            logger.error(
-                f"Failed to create schedule: {e}",
-                exc_info=True,
-            )
-            raise ScheduleError(
-                f"Failed to create schedule: {e}"
-            )
+        db.session.add(schedule)
+        safe_commit(
+            f"create schedule for user {user_id}: "
+            f"{job_type} on {target_playlist_name}",
+            ScheduleError,
+        )
+        return schedule
 
     @staticmethod
     def update_schedule(
@@ -173,25 +159,15 @@ class SchedulerService:
             "is_enabled",
         }
 
-        try:
-            for key, value in kwargs.items():
-                if key in allowed_fields:
-                    setattr(schedule, key, value)
+        for key, value in kwargs.items():
+            if key in allowed_fields:
+                setattr(schedule, key, value)
 
-            db.session.commit()
-            logger.info(f"Updated schedule {schedule_id}")
-            return schedule
-
-        except Exception as e:
-            db.session.rollback()
-            logger.error(
-                f"Failed to update schedule "
-                f"{schedule_id}: {e}",
-                exc_info=True,
-            )
-            raise ScheduleError(
-                f"Failed to update schedule: {e}"
-            )
+        safe_commit(
+            f"update schedule {schedule_id}",
+            ScheduleError,
+        )
+        return schedule
 
     @staticmethod
     def delete_schedule(
@@ -208,28 +184,17 @@ class SchedulerService:
             schedule_id, user_id
         )
 
-        try:
-            from shuffify.models.db import JobExecution
+        from shuffify.models.db import JobExecution
 
-            JobExecution.query.filter_by(
-                schedule_id=schedule_id
-            ).delete()
+        JobExecution.query.filter_by(
+            schedule_id=schedule_id
+        ).delete()
 
-            db.session.delete(schedule)
-            db.session.commit()
-
-            logger.info(f"Deleted schedule {schedule_id}")
-
-        except Exception as e:
-            db.session.rollback()
-            logger.error(
-                f"Failed to delete schedule "
-                f"{schedule_id}: {e}",
-                exc_info=True,
-            )
-            raise ScheduleError(
-                f"Failed to delete schedule: {e}"
-            )
+        db.session.delete(schedule)
+        safe_commit(
+            f"delete schedule {schedule_id}",
+            ScheduleError,
+        )
 
     @staticmethod
     def toggle_schedule(
@@ -245,23 +210,12 @@ class SchedulerService:
             schedule_id, user_id
         )
         schedule.is_enabled = not schedule.is_enabled
-
-        try:
-            db.session.commit()
-            logger.info(
-                f"Schedule {schedule_id} "
-                f"{'enabled' if schedule.is_enabled else 'disabled'}"
-            )
-            return schedule
-        except Exception as e:
-            db.session.rollback()
-            logger.error(
-                f"Failed to toggle schedule "
-                f"{schedule_id}: {e}"
-            )
-            raise ScheduleError(
-                f"Failed to toggle schedule: {e}"
-            )
+        safe_commit(
+            f"toggle schedule {schedule_id} to "
+            f"{'enabled' if schedule.is_enabled else 'disabled'}",
+            ScheduleError,
+        )
+        return schedule
 
     @staticmethod
     def get_execution_history(

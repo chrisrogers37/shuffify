@@ -241,25 +241,21 @@ class PlaylistSnapshotService:
         to_delete = all_snapshots[max_count:]
         deleted_count = 0
 
+        for snapshot in to_delete:
+            db.session.delete(snapshot)
+            deleted_count += 1
+
         try:
-            for snapshot in to_delete:
-                db.session.delete(snapshot)
-                deleted_count += 1
-            db.session.commit()
-
-            logger.info(
-                f"Cleaned up {deleted_count} old snapshots "
-                f"for user {user_id}, playlist {playlist_id}"
+            safe_commit(
+                f"cleanup {deleted_count} old snapshots "
+                f"for user {user_id}, "
+                f"playlist {playlist_id}",
+                PlaylistSnapshotError,
             )
-            return deleted_count
-
-        except Exception as e:
-            db.session.rollback()
-            logger.error(
-                f"Failed to cleanup snapshots: {e}",
-                exc_info=True,
-            )
+        except PlaylistSnapshotError:
             return 0
+
+        return deleted_count
 
     @staticmethod
     def _get_max_snapshots(user_id: int) -> int:

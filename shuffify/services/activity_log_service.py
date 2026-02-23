@@ -11,6 +11,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
 from shuffify.models.db import db, ActivityLog
+from shuffify.services.base import safe_commit
 
 logger = logging.getLogger(__name__)
 
@@ -58,22 +59,15 @@ class ActivityLogService:
                 metadata_json=metadata,
             )
             db.session.add(activity)
-            db.session.commit()
-            logger.debug(
-                "Activity logged: %s for user %s",
-                activity_type,
-                user_id,
+            safe_commit(
+                f"log activity {activity_type} "
+                f"for user {user_id}",
+                ActivityLogError,
             )
             return activity
-        except Exception as e:
-            db.session.rollback()
-            logger.warning(
-                "Failed to log activity "
-                "(%s for user %s): %s",
-                activity_type,
-                user_id,
-                e,
-            )
+        except Exception:
+            # Non-blocking: activity logging must never
+            # propagate errors to callers
             return None
 
     @staticmethod

@@ -111,47 +111,33 @@ class LoginHistoryService:
         Raises:
             LoginHistoryError: If the update fails.
         """
-        try:
-            query = LoginHistory.query.filter_by(
-                user_id=user_id
-            ).filter(
-                LoginHistory.logged_out_at.is_(None)
+        query = LoginHistory.query.filter_by(
+            user_id=user_id
+        ).filter(
+            LoginHistory.logged_out_at.is_(None)
+        )
+
+        if session_id:
+            query = query.filter_by(session_id=session_id)
+
+        # Get the most recent open login record
+        entry = query.order_by(
+            LoginHistory.logged_in_at.desc()
+        ).first()
+
+        if not entry:
+            logger.debug(
+                f"No open login record found for "
+                f"user_id={user_id} to mark as logged out"
             )
+            return False
 
-            if session_id:
-                query = query.filter_by(session_id=session_id)
-
-            # Get the most recent open login record
-            entry = query.order_by(
-                LoginHistory.logged_in_at.desc()
-            ).first()
-
-            if not entry:
-                logger.debug(
-                    f"No open login record found for "
-                    f"user_id={user_id} to mark as logged out"
-                )
-                return False
-
-            entry.logged_out_at = datetime.now(timezone.utc)
-            db.session.commit()
-
-            logger.info(
-                f"Recorded logout for user_id={user_id}, "
-                f"login_history_id={entry.id}"
-            )
-            return True
-
-        except Exception as e:
-            db.session.rollback()
-            logger.error(
-                f"Failed to record logout for user_id="
-                f"{user_id}: {e}",
-                exc_info=True,
-            )
-            raise LoginHistoryError(
-                f"Failed to record logout: {e}"
-            )
+        entry.logged_out_at = datetime.now(timezone.utc)
+        safe_commit(
+            f"record logout for user_id={user_id}",
+            LoginHistoryError,
+        )
+        return True
 
     @staticmethod
     def get_recent_logins(
