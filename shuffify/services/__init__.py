@@ -94,7 +94,7 @@ from shuffify.services.scheduler_service import (
 )
 
 # Job Executor Service
-from shuffify.services.job_executor_service import (
+from shuffify.services.executors import (
     JobExecutorService,
     JobExecutionError,
 )

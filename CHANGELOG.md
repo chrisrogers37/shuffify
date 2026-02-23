@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Job Executor Service** - Split monolithic 969-line `job_executor_service.py` into focused `executors/` package
+  - `base_executor.py`: Lifecycle, token management, dispatch, shared utilities
+  - `raid_executor.py`: Raid-specific operations
+  - `shuffle_executor.py`: Shuffle-specific operations with extracted auto-snapshot
+  - `rotate_executor.py`: Rotation modes and pairing logic
+  - Public API unchanged: `JobExecutorService.execute()` and `JobExecutorService.execute_now()`
 - **Route Auth Standardization** - Migrated 16 routes across playlists, shuffle, workshop, and settings to use `@require_auth_and_db` decorator
   - Eliminates manual `require_auth()` + None check boilerplate
   - Ensures consistent 401/503 error responses across all API routes

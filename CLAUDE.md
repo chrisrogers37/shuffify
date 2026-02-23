@@ -857,7 +857,8 @@ if session.get('undo_stack'):
 |------|----------|
 | `shuffify/__init__.py` | Flask app factory, Redis/DB/Scheduler initialization |
 | `shuffify/routes/` | 10 feature-based route modules (core, playlists, shuffle, workshop, upstream_sources, schedules, settings, snapshots, playlist_pairs, raid_panel) |
-| `shuffify/services/` | 17 service modules (auth, playlist, shuffle, state, token, scheduler, job_executor, user, workshop_session, upstream_source, activity_log, dashboard, login_history, playlist_snapshot, user_settings, playlist_pair, raid_sync) |
+| `shuffify/services/` | 17 service modules (auth, playlist, shuffle, state, token, scheduler, user, workshop_session, upstream_source, activity_log, dashboard, login_history, playlist_snapshot, user_settings, playlist_pair, raid_sync) + executors package |
+| `shuffify/services/executors/` | Job executor package (base_executor, raid_executor, shuffle_executor, rotate_executor) |
 | `shuffify/schemas/` | 6 Pydantic validation modules (requests, schedule_requests, settings_requests, snapshot_requests, playlist_pair_requests, raid_requests) |
 | `shuffify/spotify/client.py` | Spotify API wrapper (facade) |
 | `shuffify/spotify/api.py` | Spotify Web API data operations with caching support |

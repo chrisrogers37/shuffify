@@ -1,5 +1,5 @@
 """
-Tests for JobExecutorService._execute_rotate().
+Tests for execute_rotate().
 
 Tests cover all three rotation modes (archive_oldest, refresh,
 swap), parameter validation, edge cases, and dispatch.
@@ -8,9 +8,12 @@ swap), parameter validation, edge cases, and dispatch.
 import pytest
 from unittest.mock import patch, MagicMock, PropertyMock
 
-from shuffify.services.job_executor_service import (
+from shuffify.services.executors import (
     JobExecutorService,
     JobExecutionError,
+)
+from shuffify.services.executors.rotate_executor import (
+    execute_rotate,
 )
 from shuffify.enums import JobType, RotationMode
 
@@ -78,7 +81,7 @@ class TestExecuteRotateArchiveOldest:
     """Tests for archive_oldest rotation mode."""
 
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.rotate_executor"
         ".PlaylistSnapshotService"
     )
     @patch(
@@ -101,7 +104,7 @@ class TestExecuteRotateArchiveOldest:
             rotation_count=3
         )
 
-        result = JobExecutorService._execute_rotate(
+        result = execute_rotate(
             schedule, api
         )
 
@@ -115,7 +118,7 @@ class TestExecuteRotateArchiveOldest:
         )
 
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.rotate_executor"
         ".PlaylistSnapshotService"
     )
     @patch(
@@ -136,7 +139,7 @@ class TestExecuteRotateArchiveOldest:
             rotation_count=10
         )
 
-        result = JobExecutorService._execute_rotate(
+        result = execute_rotate(
             schedule, api
         )
 
@@ -146,7 +149,7 @@ class TestExecuteRotateArchiveOldest:
         )
 
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.rotate_executor"
         ".PlaylistSnapshotService"
     )
     @patch(
@@ -164,7 +167,7 @@ class TestExecuteRotateArchiveOldest:
         api = _make_api(prod_tracks=[])
         schedule = _make_schedule()
 
-        result = JobExecutorService._execute_rotate(
+        result = execute_rotate(
             schedule, api
         )
 
@@ -172,7 +175,7 @@ class TestExecuteRotateArchiveOldest:
         assert result["tracks_total"] == 0
 
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.rotate_executor"
         ".PlaylistSnapshotService"
     )
     @patch(
@@ -193,14 +196,14 @@ class TestExecuteRotateArchiveOldest:
             rotation_count=1
         )
 
-        JobExecutorService._execute_rotate(
+        execute_rotate(
             schedule, api
         )
 
         mock_snap.create_snapshot.assert_called_once()
 
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.rotate_executor"
         ".PlaylistSnapshotService"
     )
     @patch(
@@ -221,7 +224,7 @@ class TestExecuteRotateArchiveOldest:
             rotation_count=1
         )
 
-        JobExecutorService._execute_rotate(
+        execute_rotate(
             schedule, api
         )
 
@@ -241,7 +244,7 @@ class TestExecuteRotateArchiveOldest:
             JobExecutionError,
             match="No archive pair found",
         ):
-            JobExecutorService._execute_rotate(
+            execute_rotate(
                 schedule, api
             )
 
@@ -255,7 +258,7 @@ class TestExecuteRotateRefresh:
     """Tests for refresh rotation mode."""
 
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.rotate_executor"
         ".PlaylistSnapshotService"
     )
     @patch(
@@ -285,7 +288,7 @@ class TestExecuteRotateRefresh:
             rotation_count=2,
         )
 
-        result = JobExecutorService._execute_rotate(
+        result = execute_rotate(
             schedule, api
         )
 
@@ -296,7 +299,7 @@ class TestExecuteRotateRefresh:
         )
 
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.rotate_executor"
         ".PlaylistSnapshotService"
     )
     @patch(
@@ -322,7 +325,7 @@ class TestExecuteRotateRefresh:
             rotation_count=2,
         )
 
-        result = JobExecutorService._execute_rotate(
+        result = execute_rotate(
             schedule, api
         )
 
@@ -330,7 +333,7 @@ class TestExecuteRotateRefresh:
         assert result["tracks_added"] == 1
 
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.rotate_executor"
         ".PlaylistSnapshotService"
     )
     @patch(
@@ -355,7 +358,7 @@ class TestExecuteRotateRefresh:
             rotation_count=2,
         )
 
-        result = JobExecutorService._execute_rotate(
+        result = execute_rotate(
             schedule, api
         )
 
@@ -363,7 +366,7 @@ class TestExecuteRotateRefresh:
         api.playlist_remove_items.assert_not_called()
 
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.rotate_executor"
         ".PlaylistSnapshotService"
     )
     @patch(
@@ -390,7 +393,7 @@ class TestExecuteRotateRefresh:
             rotation_count=5,
         )
 
-        result = JobExecutorService._execute_rotate(
+        result = execute_rotate(
             schedule, api
         )
 
@@ -407,7 +410,7 @@ class TestExecuteRotateSwap:
     """Tests for swap rotation mode."""
 
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.rotate_executor"
         ".PlaylistSnapshotService"
     )
     @patch(
@@ -433,7 +436,7 @@ class TestExecuteRotateSwap:
             rotation_count=2,
         )
 
-        result = JobExecutorService._execute_rotate(
+        result = execute_rotate(
             schedule, api
         )
 
@@ -441,7 +444,7 @@ class TestExecuteRotateSwap:
         assert result["tracks_total"] == 3
 
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.rotate_executor"
         ".PlaylistSnapshotService"
     )
     @patch(
@@ -469,7 +472,7 @@ class TestExecuteRotateSwap:
             rotation_count=3,
         )
 
-        result = JobExecutorService._execute_rotate(
+        result = execute_rotate(
             schedule, api
         )
 
@@ -477,7 +480,7 @@ class TestExecuteRotateSwap:
         assert result["tracks_added"] == 1
 
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.rotate_executor"
         ".PlaylistSnapshotService"
     )
     @patch(
@@ -502,7 +505,7 @@ class TestExecuteRotateSwap:
             rotation_count=2,
         )
 
-        result = JobExecutorService._execute_rotate(
+        result = execute_rotate(
             schedule, api
         )
 
@@ -536,12 +539,12 @@ class TestExecuteRotateValidation:
             JobExecutionError,
             match="Invalid rotation_mode",
         ):
-            JobExecutorService._execute_rotate(
+            execute_rotate(
                 schedule, api
             )
 
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.rotate_executor"
         ".PlaylistSnapshotService"
     )
     @patch(
@@ -561,7 +564,7 @@ class TestExecuteRotateValidation:
         schedule = _make_schedule()
         schedule.algorithm_params = {}
 
-        result = JobExecutorService._execute_rotate(
+        result = execute_rotate(
             schedule, api
         )
 
@@ -570,7 +573,7 @@ class TestExecuteRotateValidation:
         assert result["tracks_total"] == 0
 
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.rotate_executor"
         ".PlaylistSnapshotService"
     )
     @patch(
@@ -595,14 +598,14 @@ class TestExecuteRotateValidation:
             "rotation_mode": "archive_oldest",
         }
 
-        result = JobExecutorService._execute_rotate(
+        result = execute_rotate(
             schedule, api
         )
 
         assert result["tracks_total"] == 5
 
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.rotate_executor"
         ".PlaylistSnapshotService"
     )
     @patch(
@@ -623,7 +626,7 @@ class TestExecuteRotateValidation:
             rotation_count=0
         )
 
-        result = JobExecutorService._execute_rotate(
+        result = execute_rotate(
             schedule, api
         )
 
@@ -635,9 +638,9 @@ class TestExecuteRotateValidation:
         schedule = _make_schedule()
         api = MagicMock()
 
-        with patch.object(
-            JobExecutorService,
-            "_execute_rotate",
+        with patch(
+            "shuffify.services.executors.rotate_executor"
+            ".execute_rotate",
             return_value={"tracks_added": 0},
         ) as mock_rotate:
             JobExecutorService._execute_job_type(
@@ -662,7 +665,7 @@ class TestExecuteRotateValidation:
             )
 
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.rotate_executor"
         ".PlaylistSnapshotService"
     )
     @patch(
@@ -687,7 +690,7 @@ class TestExecuteRotateValidation:
         )
 
         # Should not raise despite snapshot failure
-        result = JobExecutorService._execute_rotate(
+        result = execute_rotate(
             schedule, api
         )
         assert result["tracks_total"] == 1

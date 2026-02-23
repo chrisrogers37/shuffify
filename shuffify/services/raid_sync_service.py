@@ -282,7 +282,7 @@ class RaidSyncService:
     def _execute_raid_via_scheduler(schedule, user):
         """Execute raid through existing schedule's job
         executor."""
-        from shuffify.services.job_executor_service import (
+        from shuffify.services.executors import (
             JobExecutorService,
             JobExecutionError,
         )
@@ -305,7 +305,7 @@ class RaidSyncService:
         user, target_playlist_id, source_playlist_ids
     ):
         """Execute raid without a schedule (inline)."""
-        from shuffify.services.job_executor_service import (
+        from shuffify.services.executors import (
             JobExecutorService,
         )
 
