@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Sentry SDK** - Updated sentry-sdk pin from 1.45.1 to 2.x (>=2.53.0,<3.0) in production requirements
 - **DB Commit Standardization** - Replaced 11 manual commit patterns across 6 service files with the shared `safe_commit()` helper for consistent error handling, rollback, and logging
 - **Landing Page Dark Theme** - Complete visual overhaul of the landing page with dark background (`#0a0a0f`), neon green accents, and typographic wordmark
   - Replaced green gradient wall with dark foundation (`dark-base`, `dark-surface`, `dark-card` color tokens)
