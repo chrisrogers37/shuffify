@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/cards.html" import glass_card %}
 
 {% block content %}
 <div class="min-h-screen bg-gradient-to-br from-spotify-green via-spotify-green/90 to-spotify-dark">
@@ -6,7 +7,7 @@
 
     <!-- User Info / Welcome Section -->
     <div class="relative max-w-6xl mx-auto px-4 pt-8">
-        <div class="p-6 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20">
+        {% call glass_card() %}
             <div class="flex items-center justify-between">
                 <div class="flex items-center">
                     {% if user.images %}
@@ -77,7 +78,7 @@
                     </a>
                 </div>
             </div>
-        </div>
+        {% endcall %}
     </div>
 
     {% if dashboard %}
@@ -490,28 +491,6 @@ function handlePlaylistAction(form, action) {
         submitButton.disabled = false;
         submitButton.textContent = originalText;
     });
-}
-
-function showNotification(message, type) {
-    // Create notification element
-    const notification = document.createElement('div');
-    notification.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg backdrop-blur-md ${
-        type === 'success' ? 'bg-green-500/90' : 'bg-red-500/90'
-    } text-white font-semibold transform transition duration-300 translate-y-16 opacity-0`;
-
-    notification.textContent = message;
-    document.body.appendChild(notification);
-
-    // Show notification
-    setTimeout(() => {
-        notification.classList.remove('translate-y-16', 'opacity-0');
-    }, 100);
-
-    // Hide notification after 3 seconds
-    setTimeout(() => {
-        notification.classList.add('translate-y-16', 'opacity-0');
-        setTimeout(() => notification.remove(), 3000);
-    }, 3000);
 }
 
 function refreshPlaylists() {

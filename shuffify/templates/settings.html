@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% from "macros/cards.html" import glass_card %}
+{% from "macros/forms.html" import select_field, toggle_field %}
 
 {% block title %}Settings - Shuffify{% endblock %}
 
@@ -8,7 +10,7 @@
 
     <!-- Header -->
     <div class="relative max-w-3xl mx-auto px-4 pt-8">
-        <div class="p-6 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20">
+        {% call glass_card() %}
             <div class="flex items-center">
                 <a href="{{ url_for('main.index') }}"
                    class="mr-4 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition duration-150 border border-white/20"
@@ -22,7 +24,7 @@
                     <p class="text-white/70 text-sm">Customize your Shuffify experience</p>
                 </div>
             </div>
-        </div>
+        {% endcall %}
     </div>
 
     <!-- Settings Form -->
@@ -30,83 +32,50 @@
         <form id="settings-form" method="POST" action="{{ url_for('main.update_settings') }}" class="space-y-6">
 
             <!-- Shuffle Defaults Section -->
-            <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-6">
-                <h2 class="text-lg font-bold text-white mb-4">Shuffle Defaults</h2>
-
+            {% call glass_card('Shuffle Defaults') %}
                 <div class="space-y-4">
-                    <!-- Default Algorithm -->
-                    <div>
-                        <label for="default_algorithm" class="block text-sm font-medium text-white/90 mb-1">
-                            Default Shuffle Algorithm
-                        </label>
-                        <select id="default_algorithm" name="default_algorithm"
-                                class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-white/30 focus:border-transparent">
-                            <option value="">No default (choose each time)</option>
-                            {% for algo in algorithms %}
-                            <option value="{{ algo.class_name }}"
-                                    {% if settings.default_algorithm == algo.class_name %}selected{% endif %}>
-                                {{ algo.name }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                        <p class="mt-1 text-xs text-white/50">
-                            Pre-selects this algorithm when shuffling playlists.
-                        </p>
-                    </div>
+                    {{ select_field(
+                        label='Default Shuffle Algorithm',
+                        field_id='default_algorithm',
+                        field_name='default_algorithm',
+                        options=[{'value': '', 'label': 'No default (choose each time)'}] + [
+                            {'value': algo.class_name, 'label': algo.name}
+                            for algo in algorithms
+                        ],
+                        selected=settings.default_algorithm or '',
+                        help_text='Pre-selects this algorithm when shuffling playlists.'
+                    ) }}
                 </div>
-            </div>
+            {% endcall %}
 
             <!-- Appearance Section -->
-            <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-6">
-                <h2 class="text-lg font-bold text-white mb-4">Appearance</h2>
-
-                <div>
-                    <label for="theme" class="block text-sm font-medium text-white/90 mb-1">
-                        Theme
-                    </label>
-                    <select id="theme" name="theme"
-                            class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-white/30 focus:border-transparent">
-                        <option value="system" {% if settings.theme == 'system' %}selected{% endif %}>
-                            System (follow OS setting)
-                        </option>
-                        <option value="light" {% if settings.theme == 'light' %}selected{% endif %}>
-                            Light
-                        </option>
-                        <option value="dark" {% if settings.theme == 'dark' %}selected{% endif %}>
-                            Dark
-                        </option>
-                    </select>
-                    <p class="mt-1 text-xs text-white/50">
-                        Theme support is planned for a future release.
-                    </p>
-                </div>
-            </div>
+            {% call glass_card('Appearance') %}
+                {{ select_field(
+                    label='Theme',
+                    field_id='theme',
+                    field_name='theme',
+                    options=[
+                        {'value': 'system', 'label': 'System (follow OS setting)'},
+                        {'value': 'light', 'label': 'Light'},
+                        {'value': 'dark', 'label': 'Dark'}
+                    ],
+                    selected=settings.theme,
+                    help_text='Theme support is planned for a future release.'
+                ) }}
+            {% endcall %}
 
             <!-- Snapshots & History Section -->
-            <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-6">
-                <h2 class="text-lg font-bold text-white mb-4">Snapshots &amp; History</h2>
-
+            {% call glass_card('Snapshots &amp; History') %}
                 <div class="space-y-4">
-                    <!-- Auto Snapshot -->
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <label for="auto_snapshot_enabled" class="text-sm font-medium text-white/90">
-                                Auto-snapshot before shuffle
-                            </label>
-                            <p class="text-xs text-white/50">
-                                Automatically save playlist state before each shuffle.
-                            </p>
-                        </div>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="hidden" name="auto_snapshot_enabled" value="false">
-                            <input type="checkbox" id="auto_snapshot_enabled" name="auto_snapshot_enabled"
-                                   value="true" class="sr-only peer"
-                                   {% if settings.auto_snapshot_enabled %}checked{% endif %}>
-                            <div class="w-11 h-6 bg-white/20 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-white/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-spotify-green"></div>
-                        </label>
-                    </div>
+                    {{ toggle_field(
+                        label='Auto-snapshot before shuffle',
+                        field_id='auto_snapshot_enabled',
+                        field_name='auto_snapshot_enabled',
+                        checked=settings.auto_snapshot_enabled,
+                        description='Automatically save playlist state before each shuffle.'
+                    ) }}
 
-                    <!-- Max Snapshots -->
+                    <!-- Max Snapshots (number input - only one usage, not macro-worthy) -->
                     <div>
                         <label for="max_snapshots_per_playlist" class="block text-sm font-medium text-white/90 mb-1">
                             Max snapshots per playlist
@@ -120,53 +89,29 @@
                         </p>
                     </div>
                 </div>
-            </div>
+            {% endcall %}
 
             <!-- Dashboard Section -->
-            <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-6">
-                <h2 class="text-lg font-bold text-white mb-4">Dashboard</h2>
-
-                <div class="flex items-center justify-between">
-                    <div>
-                        <label for="dashboard_show_recent_activity" class="text-sm font-medium text-white/90">
-                            Show recent activity
-                        </label>
-                        <p class="text-xs text-white/50">
-                            Display recent shuffle and raid activity on the dashboard.
-                        </p>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="hidden" name="dashboard_show_recent_activity" value="false">
-                        <input type="checkbox" id="dashboard_show_recent_activity" name="dashboard_show_recent_activity"
-                               value="true" class="sr-only peer"
-                               {% if settings.dashboard_show_recent_activity %}checked{% endif %}>
-                        <div class="w-11 h-6 bg-white/20 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-white/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-spotify-green"></div>
-                    </label>
-                </div>
-            </div>
+            {% call glass_card('Dashboard') %}
+                {{ toggle_field(
+                    label='Show recent activity',
+                    field_id='dashboard_show_recent_activity',
+                    field_name='dashboard_show_recent_activity',
+                    checked=settings.dashboard_show_recent_activity,
+                    description='Display recent shuffle and raid activity on the dashboard.'
+                ) }}
+            {% endcall %}
 
             <!-- Notifications Section -->
-            <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-6">
-                <h2 class="text-lg font-bold text-white mb-4">Notifications</h2>
-
-                <div class="flex items-center justify-between">
-                    <div>
-                        <label for="notifications_enabled" class="text-sm font-medium text-white/90">
-                            Enable notifications
-                        </label>
-                        <p class="text-xs text-white/50">
-                            Receive notifications about scheduled operations (coming soon).
-                        </p>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="hidden" name="notifications_enabled" value="false">
-                        <input type="checkbox" id="notifications_enabled" name="notifications_enabled"
-                               value="true" class="sr-only peer"
-                               {% if settings.notifications_enabled %}checked{% endif %}>
-                        <div class="w-11 h-6 bg-white/20 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-white/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-spotify-green"></div>
-                    </label>
-                </div>
-            </div>
+            {% call glass_card('Notifications') %}
+                {{ toggle_field(
+                    label='Enable notifications',
+                    field_id='notifications_enabled',
+                    field_name='notifications_enabled',
+                    checked=settings.notifications_enabled,
+                    description='Receive notifications about scheduled operations (coming soon).'
+                ) }}
+            {% endcall %}
 
             <!-- Save Button -->
             <div class="flex justify-end">
@@ -221,23 +166,5 @@ document.getElementById('settings-form').addEventListener('submit', function(e) 
         submitBtn.textContent = originalText;
     });
 });
-
-function showNotification(message, type) {
-    const notification = document.createElement('div');
-    const bgColor = type === 'success' ? 'bg-green-500/90' :
-                    type === 'info' ? 'bg-blue-500/90' : 'bg-red-500/90';
-    notification.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg backdrop-blur-md ${bgColor} text-white font-semibold transform transition duration-300 translate-y-16 opacity-0 z-50`;
-    notification.textContent = message;
-    document.body.appendChild(notification);
-
-    setTimeout(() => {
-        notification.classList.remove('translate-y-16', 'opacity-0');
-    }, 100);
-
-    setTimeout(() => {
-        notification.classList.add('translate-y-16', 'opacity-0');
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
-}
 </script>
 {% endblock %}
