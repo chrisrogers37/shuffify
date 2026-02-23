@@ -361,12 +361,27 @@
 
     /* Enhanced CTA button styles */
     .cta-button {
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .cta-button::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        box-shadow: 0 10px 25px rgba(29, 185, 84, 0.4);
+        opacity: 0;
+        transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        pointer-events: none;
     }
 
     .cta-button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 10px 25px rgba(29, 185, 84, 0.4);
+    }
+
+    .cta-button:hover::after {
+        opacity: 1;
     }
 
     .cta-button:focus {
@@ -443,25 +458,53 @@
 
     /* ===== STEP CIRCLE GLOW ===== */
     .step-circle {
+        position: relative;
         box-shadow: 0 0 15px rgba(29, 185, 84, 0.5),
                     0 0 30px rgba(29, 185, 84, 0.2);
-        transition: all 0.3s ease;
+        transition: transform 0.3s ease;
     }
-    .step-circle:hover {
+    .step-circle::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
         box-shadow: 0 0 20px rgba(29, 185, 84, 0.7),
                     0 0 40px rgba(29, 185, 84, 0.3);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        pointer-events: none;
+    }
+    .step-circle:hover {
         transform: scale(1.1);
+    }
+    .step-circle:hover::after {
+        opacity: 1;
     }
 
     /* ===== GLASS CARD HOVER ===== */
     .glass-card {
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                    border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .glass-card::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        box-shadow: 0 0 20px rgba(29, 185, 84, 0.15),
+                    0 8px 32px rgba(0, 0, 0, 0.3);
+        opacity: 0;
+        transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        pointer-events: none;
+        z-index: -1;
     }
     .glass-card:hover {
         transform: translateY(-4px);
         border-color: rgba(29, 185, 84, 0.4);
-        box-shadow: 0 0 20px rgba(29, 185, 84, 0.15),
-                    0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+    .glass-card:hover::after {
+        opacity: 1;
     }
 
     /* ===== NEON SECTION DIVIDER ===== */
