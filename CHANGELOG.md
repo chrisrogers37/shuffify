@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added neon glow CSS utilities (`neon-glow-sm`, `neon-glow`, `neon-glow-lg`, `neon-text-glow`)
   - Section alternation using `dark-base`/`dark-surface` for visual separation
   - Step number circles now neon green with dark text (was white with green text)
+- **Animated Playlist Shuffle Hero** - Added animated playlist visualization to the landing page hero section
+  - Two-column hero layout: text content left, animated playlist card right (stacks on mobile)
+  - Mock playlist card with 8 tracks that continuously shuffle with smooth CSS transitions
+  - Card border glow pulse, staggered track movement, directional easing (bounce down, smooth up)
+  - Respects `prefers-reduced-motion`: renders static tracks when reduced motion is preferred
+  - Pauses animation when tab is hidden to save CPU
+  - Form left-aligned on desktop (`lg:mx-0`), centered on mobile
 - **Landing Page Section Redesign** - Redesigned all below-hero sections with glassmorphism cards, timeline, and scroll-triggered animations
   - How It Works: replaced numbered circles with SVG icon circles connected by a neon gradient timeline
   - Perfect For / Features: replaced all emoji with inline SVG icons, glassmorphism card treatments (`bg-white/5 backdrop-blur-xl`)
