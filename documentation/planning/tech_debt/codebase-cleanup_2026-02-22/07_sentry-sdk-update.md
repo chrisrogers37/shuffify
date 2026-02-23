@@ -4,7 +4,8 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | :wrench: IN PROGRESS |
+| **Status** | :white_check_mark: COMPLETE |
+| **PR** | [#94](https://github.com/chrisrogers37/shuffify/pull/94) |
 | **PR Title** | `chore: update sentry-sdk pin from 1.45.1 to 2.x` |
 | **Risk Level** | Low |
 | **Effort** | Low (15 minutes) |
@@ -195,14 +196,14 @@ These are informational notes only; no action needed in this phase.
 
 ## Verification Checklist
 
-- [ ] `requirements/prod.txt` shows `sentry-sdk>=2.53.0,<3.0` (not `==1.45.1`)
-- [ ] `pip install -r requirements/prod.txt` succeeds without errors
-- [ ] `pip show sentry-sdk` shows version 2.53.0 or higher
-- [ ] `pytest tests/ -v` — all tests pass
-- [ ] `flake8 shuffify/` — 0 errors
-- [ ] `python run.py` — app starts without sentry-related errors
-- [ ] `curl http://localhost:8000/health` — returns `{"status": "healthy"}`
-- [ ] CHANGELOG.md updated with entry under `[Unreleased]`
+- [x] `requirements/prod.txt` shows `sentry-sdk>=2.53.0,<3.0` (not `==1.45.1`)
+- [x] `pip install -r requirements/prod.txt` succeeds without errors
+- [x] `pip show sentry-sdk` shows version 2.53.0
+- [x] `pytest tests/ -v` — all 1220 tests pass
+- [x] `flake8 shuffify/` — 0 errors
+- [ ] `python run.py` — app starts without sentry-related errors (manual verification)
+- [ ] `curl http://localhost:8000/health` — returns `{"status": "healthy"}` (manual verification)
+- [x] CHANGELOG.md updated with entry under `[Unreleased]`
 
 ---
 
