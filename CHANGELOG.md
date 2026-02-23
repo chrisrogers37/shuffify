@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Template Decomposition** - Extracted reusable Jinja2 macros for glass cards, form fields, and empty states
+  - Created `shuffify/templates/macros/cards.html`, `forms.html`, and `states.html`
+  - Applied macros to `settings.html`, `dashboard.html`, and `schedules.html`
+  - Extracted shared `showNotification()` function to `static/js/notifications.js`
 - **Spotify API Error Handling** - Extracted ~200 lines of error handling code from `api.py` into new `error_handling.py` module
   - Moved retry constants, backoff calculation, error classification, and `api_error_handler` decorator
   - No behavior changes; pure structural extraction for improved readability

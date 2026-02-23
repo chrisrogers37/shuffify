@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% from "macros/cards.html" import glass_card %}
+{% from "macros/states.html" import state_empty %}
 
 {% block title %}Schedules - Shuffify{% endblock %}
 
@@ -8,7 +10,7 @@
 
     <!-- Header -->
     <div class="relative max-w-5xl mx-auto px-4 pt-8">
-        <div class="p-6 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20">
+        {% call glass_card() %}
             <div class="flex items-center justify-between flex-wrap gap-4">
                 <div class="flex items-center">
                     <a href="{{ url_for('main.index') }}"
@@ -35,19 +37,17 @@
                     New Schedule
                 </button>
             </div>
-        </div>
+        {% endcall %}
     </div>
 
     <!-- Schedule List -->
     <div class="relative max-w-5xl mx-auto px-4 py-6">
         {% if not schedules %}
-        <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-8 text-center">
-            <svg class="w-16 h-16 mx-auto text-white/30 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <p class="text-white/60 text-lg mb-2">No scheduled operations yet.</p>
-            <p class="text-white/40 text-sm">Create a schedule to automatically raid playlists or run shuffles on a recurring basis.</p>
-        </div>
+        {{ state_empty(
+            icon_svg='<svg class="w-16 h-16 mx-auto text-white/30 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>',
+            title='No scheduled operations yet.',
+            description='Create a schedule to automatically raid playlists or run shuffles on a recurring basis.'
+        ) }}
         {% else %}
         <div class="space-y-4" id="schedule-list">
             {% for schedule in schedules %}
@@ -440,26 +440,5 @@ function deleteSchedule(scheduleId) {
     });
 }
 
-// =============================================================================
-// Notifications (reused from dashboard pattern)
-// =============================================================================
-
-function showNotification(message, type) {
-    const notification = document.createElement('div');
-    const bgColor = type === 'success' ? 'bg-green-500/90' :
-                    type === 'info' ? 'bg-blue-500/90' : 'bg-red-500/90';
-    notification.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg backdrop-blur-md ${bgColor} text-white font-semibold transform transition duration-300 translate-y-16 opacity-0 z-50`;
-    notification.textContent = message;
-    document.body.appendChild(notification);
-
-    setTimeout(() => {
-        notification.classList.remove('translate-y-16', 'opacity-0');
-    }, 100);
-
-    setTimeout(() => {
-        notification.classList.add('translate-y-16', 'opacity-0');
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
-}
 </script>
 {% endblock %}

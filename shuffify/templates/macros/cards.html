@@ -1,0 +1,13 @@
+{# macros/cards.html - Reusable card component macros #}
+
+{% macro glass_card(title='', subtitle='', padding='p-6') %}
+<div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 {{ padding }}">
+  {% if title %}
+  <h2 class="text-lg font-bold text-white mb-4">{{ title }}</h2>
+  {% endif %}
+  {% if subtitle %}
+  <p class="text-white/60 text-sm mb-4">{{ subtitle }}</p>
+  {% endif %}
+  {{ caller() }}
+</div>
+{% endmacro %}
