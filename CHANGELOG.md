@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Scheduler Service** - Adopted `get_owned_entity()` helper for ownership verification, consolidated duplicate `JobExecution` imports to module level
+- **Test Organization** - Moved 7 route test files from `tests/` root to `tests/routes/` for consistent organization
+
+### Fixed
+- **Unused Variables** - Replaced unused `client` in `routes/core.py` and unused `tiebreaker` in `artist_spacing.py` with `_`
+
+### Changed
 - **Job Executor Service** - Split monolithic 969-line `job_executor_service.py` into focused `executors/` package
   - `base_executor.py`: Lifecycle, token management, dispatch, shared utilities
   - `raid_executor.py`: Raid-specific operations

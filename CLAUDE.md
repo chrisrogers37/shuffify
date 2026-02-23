@@ -468,19 +468,17 @@ tests/
 ├── schemas/                # Pydantic schema validation tests
 ├── services/               # Service layer tests (17 services)
 ├── models/                 # Database model tests
+├── routes/                 # All route tests (13 files)
 ├── test_app_factory.py     # App initialization tests
 ├── test_error_handlers.py  # Error handler tests
 ├── test_health_db.py       # Database health check tests
 ├── test_integration.py     # Integration tests
 ├── test_models.py          # Model unit tests
-├── test_settings_route.py  # Settings route tests
-├── test_snapshot_routes.py # Snapshot route tests
-├── test_workshop*.py       # Workshop feature tests (4 files)
 ├── test_scheduler.py       # Scheduler tests
 └── conftest.py             # Shared fixtures (app context, db, mocks)
 ```
 
-**1081 tests** covering all modules.
+**1227 tests** covering all modules.
 
 **Test Template**:
 
