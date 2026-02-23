@@ -125,6 +125,23 @@ class TestIndexRoute:
         resp = auth_client.get("/")
         assert resp.status_code == 200
 
+    def test_unauthenticated_landing_has_shuffle_demo(self, db_app):
+        """Landing page contains the animated shuffle demo component."""
+        with db_app.test_client() as client:
+            resp = client.get("/")
+            html = resp.data.decode()
+            assert resp.status_code == 200
+            assert 'id="shuffle-demo"' in html
+            assert 'id="shuffle-track-list"' in html
+
+    def test_unauthenticated_landing_has_two_column_hero(self, db_app):
+        """Landing page hero uses two-column flex layout."""
+        with db_app.test_client() as client:
+            resp = client.get("/")
+            html = resp.data.decode()
+            assert "lg:flex-row" in html
+            assert "shuffle-demo-card" in html
+
 
 class TestLoginRoute:
     """Tests for GET /login."""
