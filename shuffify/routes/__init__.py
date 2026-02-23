@@ -12,6 +12,7 @@ register routes on it.
 from flask import (
     Blueprint,
     render_template,
+    request,
     session,
     jsonify,
     flash,
@@ -19,6 +20,8 @@ from flask import (
 import functools
 import logging
 from datetime import datetime, timezone
+
+from pydantic import ValidationError
 
 from shuffify.services import (
     AuthService,
@@ -98,6 +101,37 @@ def json_success(message: str, **extra) -> dict:
         "category": "success",
         **extra,
     })
+
+
+def validate_json(schema_class):
+    """
+    Parse and validate the JSON request body against a Pydantic schema.
+
+    Returns:
+        (parsed_model, None) on success.
+        (None, error_response_tuple) on failure.
+
+    Usage::
+
+        parsed, err = validate_json(MySchema)
+        if err:
+            return err
+        # use parsed.field ...
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return None, json_error(
+            "Request body must be JSON.", 400
+        )
+
+    try:
+        return schema_class(**data), None
+    except ValidationError as e:
+        first_error = e.errors()[0] if e.errors() else {}
+        msg = first_error.get("msg", "Invalid input")
+        return None, json_error(
+            f"Validation error: {msg}", 400
+        )
 
 
 def require_auth_and_db(f):

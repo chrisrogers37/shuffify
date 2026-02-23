@@ -5,7 +5,7 @@ Covers URL loading, playlist search, session history, and error handling.
 """
 
 import json
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, MagicMock
 
 from shuffify.models.playlist import Playlist
 
@@ -52,19 +52,27 @@ def _make_external_playlist():
 class TestLoadExternalPlaylistByUrl:
     """Tests for POST /workshop/load-external-playlist with URL."""
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     @patch("shuffify.routes.workshop.PlaylistService")
     @patch("shuffify.routes.workshop.parse_spotify_playlist_url")
     def test_load_by_full_url(
         self,
         mock_parse_url,
         mock_playlist_svc,
-        mock_auth_svc,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
         authenticated_client,
     ):
         """Loading by full Spotify URL should return tracks."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.spotify_id = "user123"
+        mock_get_db_user.return_value = mock_user
 
         mock_parse_url.return_value = "ext_playlist_abc"
 
@@ -90,14 +98,24 @@ class TestLoadExternalPlaylistByUrl:
         assert data["playlist"]["name"] == "Jazz Vibes"
         assert len(data["tracks"]) == 5
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     @patch("shuffify.routes.workshop.parse_spotify_playlist_url")
     def test_load_by_invalid_url_returns_400(
-        self, mock_parse_url, mock_auth_svc, authenticated_client
+        self,
+        mock_parse_url,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
     ):
         """Invalid URL that cannot be parsed should return 400."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         mock_parse_url.return_value = None
 
@@ -112,21 +130,28 @@ class TestLoadExternalPlaylistByUrl:
         assert data["success"] is False
         assert "Could not parse" in data["message"]
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     @patch("shuffify.routes.workshop.PlaylistService")
     @patch("shuffify.routes.workshop.parse_spotify_playlist_url")
     def test_load_private_playlist_returns_404(
         self,
         mock_parse_url,
         mock_playlist_svc,
-        mock_auth_svc,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
         authenticated_client,
     ):
         """Loading a private/deleted playlist should return 404."""
         from shuffify.services import PlaylistError
 
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         mock_parse_url.return_value = "private_playlist_id"
 
@@ -151,13 +176,22 @@ class TestLoadExternalPlaylistByUrl:
         )
         assert response.status_code == 401
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     def test_load_external_requires_json(
-        self, mock_auth_svc, authenticated_client
+        self,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
     ):
         """Non-JSON request should return 400."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
             "/workshop/load-external-playlist",
@@ -166,13 +200,22 @@ class TestLoadExternalPlaylistByUrl:
         )
         assert response.status_code == 400
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     def test_load_external_requires_url_or_query(
-        self, mock_auth_svc, authenticated_client
+        self,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
     ):
         """Request without url or query should return 400."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
             "/workshop/load-external-playlist",
@@ -190,12 +233,17 @@ class TestLoadExternalPlaylistByUrl:
 class TestLoadExternalPlaylistBySearch:
     """Tests for POST /workshop/load-external-playlist with query."""
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     def test_search_returns_playlist_list(
-        self, mock_auth_svc, authenticated_client
+        self,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
     ):
         """Search query should return a list of playlists."""
-        mock_auth_svc.validate_session_token.return_value = True
         mock_client = Mock()
         mock_client.search_playlists.return_value = [
             {
@@ -206,7 +254,11 @@ class TestLoadExternalPlaylistBySearch:
                 "total_tracks": 50,
             }
         ]
-        mock_auth_svc.get_authenticated_client.return_value = mock_client
+        mock_auth.return_value = mock_client
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
             "/workshop/load-external-playlist",
@@ -230,12 +282,17 @@ class TestLoadExternalPlaylistBySearch:
 class TestSearchPlaylistsRoute:
     """Tests for POST /workshop/search-playlists."""
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     def test_search_returns_results(
-        self, mock_auth_svc, authenticated_client
+        self,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
     ):
         """Search should return playlist results."""
-        mock_auth_svc.validate_session_token.return_value = True
         mock_client = Mock()
         mock_client.search_playlists.return_value = [
             {
@@ -246,7 +303,11 @@ class TestSearchPlaylistsRoute:
                 "total_tracks": 10,
             }
         ]
-        mock_auth_svc.get_authenticated_client.return_value = mock_client
+        mock_auth.return_value = mock_client
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
             "/workshop/search-playlists",
@@ -259,13 +320,22 @@ class TestSearchPlaylistsRoute:
         assert data["success"] is True
         assert len(data["playlists"]) == 1
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     def test_search_empty_query_returns_400(
-        self, mock_auth_svc, authenticated_client
+        self,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
     ):
         """Empty search query should return 400."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
             "/workshop/search-playlists",
@@ -275,13 +345,22 @@ class TestSearchPlaylistsRoute:
 
         assert response.status_code == 400
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     def test_search_too_long_query_returns_400(
-        self, mock_auth_svc, authenticated_client
+        self,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
     ):
         """Query exceeding 200 characters should return 400."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
             "/workshop/search-playlists",

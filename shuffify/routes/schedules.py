@@ -8,7 +8,6 @@ from flask import (
     session,
     redirect,
     url_for,
-    request,
     flash,
     jsonify,
     render_template,
@@ -24,6 +23,7 @@ from shuffify.routes import (
     json_success,
     get_db_user,
     log_activity,
+    validate_json,
 )
 from shuffify.services import (
     AuthService,
@@ -111,11 +111,11 @@ def create_schedule(client=None, user=None):
             400,
         )
 
-    data = request.get_json()
-    if not data:
-        return json_error("Request body must be JSON.", 400)
-
-    create_request = ScheduleCreateRequest(**data)
+    create_request, err = validate_json(
+        ScheduleCreateRequest
+    )
+    if err:
+        return err
 
     schedule = SchedulerService.create_schedule(
         user_id=user.id,
@@ -186,11 +186,12 @@ def update_schedule(
     schedule_id, client=None, user=None
 ):
     """Update an existing schedule."""
-    data = request.get_json()
-    if not data:
-        return json_error("Request body must be JSON.", 400)
+    update_request, err = validate_json(
+        ScheduleUpdateRequest
+    )
+    if err:
+        return err
 
-    update_request = ScheduleUpdateRequest(**data)
     update_fields = {
         k: v
         for k, v in update_request.model_dump().items()

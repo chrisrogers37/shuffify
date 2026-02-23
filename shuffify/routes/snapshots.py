@@ -6,13 +6,13 @@ playlist snapshots.
 import logging
 
 from flask import session, request, jsonify
-from pydantic import ValidationError
 
 from shuffify.routes import (
     main,
     require_auth_and_db,
     json_error,
     json_success,
+    validate_json,
 )
 from shuffify.services import (
     PlaylistService,
@@ -53,20 +53,11 @@ def create_manual_snapshot(
     playlist_id, client=None, user=None
 ):
     """Create a manual snapshot of a playlist."""
-    data = request.get_json()
-    if not data:
-        return json_error(
-            "Request body must be JSON.", 400
-        )
-
-    try:
-        snap_request = ManualSnapshotRequest(**data)
-    except ValidationError as e:
-        return json_error(
-            f"Invalid request: {e.error_count()} "
-            f"validation error(s).",
-            400,
-        )
+    snap_request, err = validate_json(
+        ManualSnapshotRequest
+    )
+    if err:
+        return err
 
     try:
         snapshot = PlaylistSnapshotService.create_snapshot(

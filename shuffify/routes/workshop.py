@@ -6,17 +6,16 @@ search, external playlist loading, and session persistence.
 import logging
 
 from flask import session, redirect, url_for, request, jsonify
-from pydantic import ValidationError
 
 from shuffify.routes import (
     main,
     is_authenticated,
-    require_auth,
+    require_auth_and_db,
     clear_session_and_show_login,
     json_error,
     json_success,
-    get_db_user,
     log_activity,
+    validate_json,
 )
 from shuffify.services import (
     AuthService,
@@ -30,10 +29,8 @@ from shuffify.services import (
     AuthenticationError,
     PlaylistError,
     PlaylistSnapshotService,
-    UserService,
 )
 from shuffify.enums import SnapshotType, ActivityType
-from shuffify import is_db_available
 from shuffify.schemas import (
     parse_shuffle_request,
     WorkshopCommitRequest,
@@ -91,15 +88,14 @@ def workshop(playlist_id):
     "/workshop/<playlist_id>/preview-shuffle",
     methods=["POST"],
 )
-def workshop_preview_shuffle(playlist_id):
+@require_auth_and_db
+def workshop_preview_shuffle(
+    playlist_id, client=None, user=None
+):
     """
     Run a shuffle algorithm on client-provided tracks and
     return the new order WITHOUT saving to Spotify.
     """
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
     data = request.get_json()
     if not data:
         return json_error("Request body must be JSON.", 400)
@@ -133,86 +129,68 @@ def workshop_preview_shuffle(playlist_id):
 
 
 def _auto_snapshot_before_commit(
-    playlist_id, playlist_name, current_uris
+    user_id, playlist_id, playlist_name, current_uris
 ):
     """Create an auto-snapshot before a workshop commit
     if enabled."""
-    if is_db_available():
-        db_user = get_db_user()
-        if (
-            db_user
-            and PlaylistSnapshotService
-            .is_auto_snapshot_enabled(db_user.id)
-        ):
-            try:
-                PlaylistSnapshotService.create_snapshot(
-                    user_id=db_user.id,
-                    playlist_id=playlist_id,
-                    playlist_name=playlist_name,
-                    track_uris=current_uris,
-                    snapshot_type=(
-                        SnapshotType.AUTO_PRE_COMMIT
-                    ),
-                    trigger_description=(
-                        "Before workshop commit"
-                    ),
-                )
-            except Exception as e:
-                logger.warning(
-                    "Auto-snapshot before commit "
-                    f"failed: {e}"
-                )
+    if (
+        PlaylistSnapshotService
+        .is_auto_snapshot_enabled(user_id)
+    ):
+        try:
+            PlaylistSnapshotService.create_snapshot(
+                user_id=user_id,
+                playlist_id=playlist_id,
+                playlist_name=playlist_name,
+                track_uris=current_uris,
+                snapshot_type=(
+                    SnapshotType.AUTO_PRE_COMMIT
+                ),
+                trigger_description=(
+                    "Before workshop commit"
+                ),
+            )
+        except Exception as e:
+            logger.warning(
+                "Auto-snapshot before commit "
+                f"failed: {e}"
+            )
 
 
 def _log_workshop_commit_activity(
-    playlist_id, playlist_name, track_count
+    user_id, playlist_id, playlist_name, track_count
 ):
     """Log a workshop commit activity (non-blocking)."""
-    user_data = session.get("user_data", {})
-    spotify_id = user_data.get("id")
-    if spotify_id:
-        db_user = UserService.get_by_spotify_id(
-            spotify_id
-        )
-        if db_user:
-            log_activity(
-                user_id=db_user.id,
-                activity_type=(
-                    ActivityType.WORKSHOP_COMMIT
-                ),
-                description=(
-                    f"Committed workshop changes "
-                    f"to '{playlist_name}'"
-                ),
-                playlist_id=playlist_id,
-                playlist_name=playlist_name,
-                metadata={
-                    "track_count": track_count,
-                },
-            )
+    log_activity(
+        user_id=user_id,
+        activity_type=(
+            ActivityType.WORKSHOP_COMMIT
+        ),
+        description=(
+            f"Committed workshop changes "
+            f"to '{playlist_name}'"
+        ),
+        playlist_id=playlist_id,
+        playlist_name=playlist_name,
+        metadata={
+            "track_count": track_count,
+        },
+    )
 
 
 @main.route(
     "/workshop/<playlist_id>/commit", methods=["POST"]
 )
-def workshop_commit(playlist_id):
+@require_auth_and_db
+def workshop_commit(
+    playlist_id, client=None, user=None
+):
     """Save the workshop's staged track order to Spotify."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    data = request.get_json()
-    if not data:
-        return json_error("Request body must be JSON.", 400)
-
-    try:
-        commit_request = WorkshopCommitRequest(**data)
-    except ValidationError as e:
-        return json_error(
-            f"Invalid request: {e.error_count()} "
-            f"validation error(s).",
-            400,
-        )
+    commit_request, err = validate_json(
+        WorkshopCommitRequest
+    )
+    if err:
+        return err
 
     playlist_service = PlaylistService(client)
     playlist = playlist_service.get_playlist(
@@ -223,7 +201,7 @@ def workshop_commit(playlist_id):
     ]
 
     _auto_snapshot_before_commit(
-        playlist_id, playlist.name, current_uris
+        user.id, playlist_id, playlist.name, current_uris
     )
 
     StateService.ensure_playlist_initialized(
@@ -251,6 +229,7 @@ def workshop_commit(playlist_id):
     )
 
     _log_workshop_commit_activity(
+        user.id,
         playlist_id,
         playlist.name,
         len(commit_request.track_uris),
@@ -263,24 +242,14 @@ def workshop_commit(playlist_id):
 
 
 @main.route("/workshop/search", methods=["POST"])
-def workshop_search():
+@require_auth_and_db
+def workshop_search(client=None, user=None):
     """Search Spotify's catalog for tracks."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    data = request.get_json()
-    if not data:
-        return json_error("Request body must be JSON.", 400)
-
-    try:
-        search_request = WorkshopSearchRequest(**data)
-    except ValidationError as e:
-        return json_error(
-            f"Invalid request: {e.error_count()} "
-            f"validation error(s).",
-            400,
-        )
+    search_request, err = validate_json(
+        WorkshopSearchRequest
+    )
+    if err:
+        return err
 
     raw_tracks = client.search_tracks(
         query=search_request.query,
@@ -333,12 +302,11 @@ def workshop_search():
 @main.route(
     "/workshop/search-playlists", methods=["POST"]
 )
-def workshop_search_playlists():
+@require_auth_and_db
+def workshop_search_playlists(
+    client=None, user=None
+):
     """Search for public playlists by name."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
     data = request.get_json()
     if not data:
         return json_error("Request body must be JSON.", 400)
@@ -476,20 +444,16 @@ def _search_playlists_by_query(client, ext_request):
 @main.route(
     "/workshop/load-external-playlist", methods=["POST"]
 )
-def workshop_load_external_playlist():
+@require_auth_and_db
+def workshop_load_external_playlist(
+    client=None, user=None
+):
     """Load tracks from an external playlist."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    data = request.get_json()
-    if not data:
-        return json_error("Request body must be JSON.", 400)
-
-    try:
-        ext_request = ExternalPlaylistRequest(**data)
-    except Exception as e:
-        return json_error(str(e), 400)
+    ext_request, err = validate_json(
+        ExternalPlaylistRequest
+    )
+    if err:
+        return err
 
     if ext_request.url:
         return _load_playlist_by_url(client, ext_request)
@@ -512,28 +476,13 @@ def workshop_load_external_playlist():
 @main.route(
     "/workshop/<playlist_id>/sessions", methods=["GET"]
 )
-def list_workshop_sessions(playlist_id):
+@require_auth_and_db
+def list_workshop_sessions(
+    playlist_id, client=None, user=None
+):
     """List all saved workshop sessions for a playlist."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    if not is_db_available():
-        return json_error(
-            "Database is unavailable. "
-            "Cannot load saved sessions.",
-            503,
-        )
-
-    user_data = session.get("user_data", {})
-    spotify_id = user_data.get("id")
-    if not spotify_id:
-        return json_error(
-            "User data not found in session.", 401
-        )
-
     sessions = WorkshopSessionService.list_sessions(
-        spotify_id, playlist_id
+        user.spotify_id, playlist_id
     )
     return jsonify({
         "success": True,
@@ -544,19 +493,11 @@ def list_workshop_sessions(playlist_id):
 @main.route(
     "/workshop/<playlist_id>/sessions", methods=["POST"]
 )
-def save_workshop_session(playlist_id):
+@require_auth_and_db
+def save_workshop_session(
+    playlist_id, client=None, user=None
+):
     """Save the current workshop state as a named session."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    if not is_db_available():
-        return json_error(
-            "Database is unavailable. "
-            "Cannot save session.",
-            503,
-        )
-
     data = request.get_json()
     if not data:
         return json_error("Request body must be JSON.", 400)
@@ -570,46 +511,36 @@ def save_workshop_session(playlist_id):
     if not isinstance(track_uris, list):
         return json_error("track_uris must be a list.", 400)
 
-    user_data = session.get("user_data", {})
-    spotify_id = user_data.get("id")
-    if not spotify_id:
-        return json_error(
-            "User data not found in session.", 401
-        )
-
     try:
         ws = WorkshopSessionService.save_session(
-            spotify_id=spotify_id,
+            spotify_id=user.spotify_id,
             playlist_id=playlist_id,
             session_name=session_name,
             track_uris=track_uris,
         )
         logger.info(
-            f"User {spotify_id} saved workshop session "
-            f"'{session_name}' for playlist {playlist_id}"
+            f"User {user.spotify_id} saved workshop "
+            f"session '{session_name}' for playlist "
+            f"{playlist_id}"
         )
 
         # Log activity (non-blocking)
-        db_user = UserService.get_by_spotify_id(
-            spotify_id
+        log_activity(
+            user_id=user.id,
+            activity_type=(
+                ActivityType
+                .WORKSHOP_SESSION_SAVE
+            ),
+            description=(
+                f"Saved workshop session "
+                f"'{session_name}'"
+            ),
+            playlist_id=playlist_id,
+            metadata={
+                "session_name": session_name,
+                "track_count": len(track_uris),
+            },
         )
-        if db_user:
-            log_activity(
-                user_id=db_user.id,
-                activity_type=(
-                    ActivityType
-                    .WORKSHOP_SESSION_SAVE
-                ),
-                description=(
-                    f"Saved workshop session "
-                    f"'{session_name}'"
-                ),
-                playlist_id=playlist_id,
-                metadata={
-                    "session_name": session_name,
-                    "track_count": len(track_uris),
-                },
-            )
 
         return json_success(
             f"Session '{session_name}' saved.",
@@ -624,29 +555,14 @@ def save_workshop_session(playlist_id):
 @main.route(
     "/workshop/sessions/<int:session_id>", methods=["GET"]
 )
-def load_workshop_session(session_id):
+@require_auth_and_db
+def load_workshop_session(
+    session_id, client=None, user=None
+):
     """Load a saved workshop session by ID."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    if not is_db_available():
-        return json_error(
-            "Database is unavailable. "
-            "Cannot load session.",
-            503,
-        )
-
-    user_data = session.get("user_data", {})
-    spotify_id = user_data.get("id")
-    if not spotify_id:
-        return json_error(
-            "User data not found in session.", 401
-        )
-
     try:
         ws = WorkshopSessionService.get_session(
-            session_id, spotify_id
+            session_id, user.spotify_id
         )
         return jsonify({
             "success": True,
@@ -660,19 +576,11 @@ def load_workshop_session(session_id):
     "/workshop/sessions/<int:session_id>",
     methods=["PUT"],
 )
-def update_workshop_session(session_id):
+@require_auth_and_db
+def update_workshop_session(
+    session_id, client=None, user=None
+):
     """Update an existing saved workshop session."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    if not is_db_available():
-        return json_error(
-            "Database is unavailable. "
-            "Cannot update session.",
-            503,
-        )
-
     data = request.get_json()
     if not data:
         return json_error("Request body must be JSON.", 400)
@@ -687,17 +595,10 @@ def update_workshop_session(session_id):
             "track_uris must be a list.", 400
         )
 
-    user_data = session.get("user_data", {})
-    spotify_id = user_data.get("id")
-    if not spotify_id:
-        return json_error(
-            "User data not found in session.", 401
-        )
-
     try:
         ws = WorkshopSessionService.update_session(
             session_id=session_id,
-            spotify_id=spotify_id,
+            spotify_id=user.spotify_id,
             track_uris=(
                 track_uris
                 if track_uris is not None
@@ -719,47 +620,28 @@ def update_workshop_session(session_id):
     "/workshop/sessions/<int:session_id>",
     methods=["DELETE"],
 )
-def delete_workshop_session(session_id):
+@require_auth_and_db
+def delete_workshop_session(
+    session_id, client=None, user=None
+):
     """Delete a saved workshop session."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
-    if not is_db_available():
-        return json_error(
-            "Database is unavailable. "
-            "Cannot delete session.",
-            503,
-        )
-
-    user_data = session.get("user_data", {})
-    spotify_id = user_data.get("id")
-    if not spotify_id:
-        return json_error(
-            "User data not found in session.", 401
-        )
-
     try:
         WorkshopSessionService.delete_session(
-            session_id, spotify_id
+            session_id, user.spotify_id
         )
 
         # Log activity (non-blocking)
-        db_user = UserService.get_by_spotify_id(
-            spotify_id
+        log_activity(
+            user_id=user.id,
+            activity_type=(
+                ActivityType
+                .WORKSHOP_SESSION_DELETE
+            ),
+            description=(
+                f"Deleted workshop session "
+                f"{session_id}"
+            ),
         )
-        if db_user:
-            log_activity(
-                user_id=db_user.id,
-                activity_type=(
-                    ActivityType
-                    .WORKSHOP_SESSION_DELETE
-                ),
-                description=(
-                    f"Deleted workshop session "
-                    f"{session_id}"
-                ),
-            )
 
         return json_success("Session deleted.")
     except WorkshopSessionNotFoundError:

@@ -6,7 +6,7 @@ source playlists and the existing /playlist/<id> endpoint.
 """
 
 import json
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, MagicMock
 
 from shuffify.models.playlist import Playlist
 
@@ -61,14 +61,24 @@ class TestApiUserPlaylists:
         data = response.get_json()
         assert data["success"] is False
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     @patch("shuffify.routes.playlists.PlaylistService")
     def test_returns_playlist_list(
-        self, mock_playlist_svc, mock_auth_svc, authenticated_client
+        self,
+        mock_playlist_svc,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
     ):
         """Should return JSON list with id, name, track_count, image_url."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         mock_ps_instance = Mock()
         mock_ps_instance.get_user_playlists.return_value = _sample_playlists()
@@ -93,14 +103,24 @@ class TestApiUserPlaylists:
         )
         assert no_art["image_url"] is None
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     @patch("shuffify.routes.playlists.PlaylistService")
     def test_returns_correct_track_count(
-        self, mock_playlist_svc, mock_auth_svc, authenticated_client
+        self,
+        mock_playlist_svc,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
     ):
         """Track count should be extracted from tracks.total."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         mock_ps_instance = Mock()
         mock_ps_instance.get_user_playlists.return_value = _sample_playlists()
@@ -114,14 +134,24 @@ class TestApiUserPlaylists:
         )
         assert source["track_count"] == 10
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     @patch("shuffify.routes.playlists.PlaylistService")
     def test_handles_empty_playlist_list(
-        self, mock_playlist_svc, mock_auth_svc, authenticated_client
+        self,
+        mock_playlist_svc,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
     ):
         """Should return empty list when user has no playlists."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         mock_ps_instance = Mock()
         mock_ps_instance.get_user_playlists.return_value = []
@@ -132,16 +162,26 @@ class TestApiUserPlaylists:
         assert data["success"] is True
         assert data["playlists"] == []
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     @patch("shuffify.routes.playlists.PlaylistService")
     def test_handles_service_error(
-        self, mock_playlist_svc, mock_auth_svc, authenticated_client
+        self,
+        mock_playlist_svc,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
     ):
         """Should return 500 when PlaylistService raises."""
         from shuffify.services import PlaylistError
 
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         mock_ps_instance = Mock()
         mock_ps_instance.get_user_playlists.side_effect = PlaylistError(
@@ -166,14 +206,24 @@ class TestSourcePlaylistLoading:
     panel JS needs.
     """
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     @patch("shuffify.routes.playlists.PlaylistService")
     def test_playlist_endpoint_returns_tracks_with_required_fields(
-        self, mock_playlist_svc, mock_auth_svc, authenticated_client
+        self,
+        mock_playlist_svc,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
     ):
         """GET /playlist/<id> must include uri, name, artists, album_image_url, duration_ms, id."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         mock_playlist = Playlist(
             id="source_pl",

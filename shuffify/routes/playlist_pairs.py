@@ -6,8 +6,7 @@ Manages production-archive playlist pairings and archive operations.
 
 import logging
 
-from flask import request, jsonify
-from pydantic import ValidationError
+from flask import jsonify
 
 from shuffify.routes import (
     main,
@@ -15,6 +14,7 @@ from shuffify.routes import (
     json_error,
     json_success,
     log_activity,
+    validate_json,
 )
 from shuffify.services.playlist_pair_service import (
     PlaylistPairService,
@@ -56,14 +56,9 @@ def get_pair(playlist_id, client=None, user=None):
 @require_auth_and_db
 def create_pair(playlist_id, client=None, user=None):
     """Create an archive pair for a playlist."""
-    data = request.get_json(silent=True)
-    if not data:
-        return json_error("JSON body required", 400)
-
-    try:
-        req = CreatePairRequest(**data)
-    except ValidationError as e:
-        return json_error(str(e.errors()[0]["msg"]), 400)
+    req, err = validate_json(CreatePairRequest)
+    if err:
+        return err
 
     try:
         if req.create_new:
@@ -151,14 +146,9 @@ def archive_tracks(playlist_id, client=None, user=None):
     if not pair:
         return json_error("No archive pair found", 404)
 
-    data = request.get_json(silent=True)
-    if not data:
-        return json_error("JSON body required", 400)
-
-    try:
-        req = ArchiveTracksRequest(**data)
-    except ValidationError as e:
-        return json_error(str(e.errors()[0]["msg"]), 400)
+    req, err = validate_json(ArchiveTracksRequest)
+    if err:
+        return err
 
     try:
         count = PlaylistPairService.archive_tracks(
@@ -201,14 +191,9 @@ def unarchive_tracks(
     if not pair:
         return json_error("No archive pair found", 404)
 
-    data = request.get_json(silent=True)
-    if not data:
-        return json_error("JSON body required", 400)
-
-    try:
-        req = UnarchiveTracksRequest(**data)
-    except ValidationError as e:
-        return json_error(str(e.errors()[0]["msg"]), 400)
+    req, err = validate_json(UnarchiveTracksRequest)
+    if err:
+        return err
 
     try:
         count = PlaylistPairService.unarchive_tracks(

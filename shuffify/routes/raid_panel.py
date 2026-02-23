@@ -8,7 +8,6 @@ and manage raid schedules from the workshop sidebar.
 import logging
 
 from flask import request
-from pydantic import ValidationError
 
 from shuffify.routes import (
     main,
@@ -16,6 +15,7 @@ from shuffify.routes import (
     json_error,
     json_success,
     log_activity,
+    validate_json,
 )
 from shuffify.services.raid_sync_service import (
     RaidSyncService,
@@ -60,15 +60,11 @@ def raid_status(playlist_id, client=None, user=None):
 @require_auth_and_db
 def raid_watch(playlist_id, client=None, user=None):
     """Watch a playlist as a raid source."""
+    req, err = validate_json(WatchPlaylistRequest)
+    if err:
+        return err
+
     data = request.get_json(silent=True)
-    if not data:
-        return json_error("JSON body required", 400)
-
-    try:
-        req = WatchPlaylistRequest(**data)
-    except ValidationError as e:
-        return json_error(str(e.errors()[0]["msg"]), 400)
-
     try:
         result = RaidSyncService.watch_playlist(
             spotify_id=user.spotify_id,
@@ -116,14 +112,9 @@ def raid_watch(playlist_id, client=None, user=None):
 @require_auth_and_db
 def raid_unwatch(playlist_id, client=None, user=None):
     """Unwatch a source playlist."""
-    data = request.get_json(silent=True)
-    if not data:
-        return json_error("JSON body required", 400)
-
-    try:
-        req = UnwatchPlaylistRequest(**data)
-    except ValidationError as e:
-        return json_error(str(e.errors()[0]["msg"]), 400)
+    req, err = validate_json(UnwatchPlaylistRequest)
+    if err:
+        return err
 
     try:
         RaidSyncService.unwatch_playlist(
@@ -159,10 +150,7 @@ def raid_unwatch(playlist_id, client=None, user=None):
 def raid_now(playlist_id, client=None, user=None):
     """Trigger an immediate raid."""
     data = request.get_json(silent=True) or {}
-    try:
-        req = RaidNowRequest(**data)
-    except ValidationError as e:
-        return json_error(str(e.errors()[0]["msg"]), 400)
+    req = RaidNowRequest(**data)
 
     try:
         result = RaidSyncService.raid_now(

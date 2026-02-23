@@ -6,7 +6,7 @@ and commit endpoint.
 """
 
 import json
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, MagicMock
 
 from shuffify.models.playlist import Playlist
 
@@ -100,17 +100,25 @@ class TestWorkshopPage:
 class TestWorkshopPreviewShuffle:
     """Tests for POST /workshop/<playlist_id>/preview-shuffle."""
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     @patch("shuffify.routes.workshop.ShuffleService")
     def test_preview_shuffle_returns_shuffled_uris(
         self,
         mock_shuffle_svc,
-        mock_auth_svc,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
         authenticated_client,
     ):
         """Preview shuffle should return reordered URIs without API call."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.spotify_id = "user123"
+        mock_get_db_user.return_value = mock_user
 
         mock_playlist = _make_mock_playlist()
         shuffled = [
@@ -147,13 +155,22 @@ class TestWorkshopPreviewShuffle:
         )
         assert response.status_code == 401
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     def test_preview_shuffle_requires_json_body(
-        self, mock_auth_svc, authenticated_client
+        self,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
     ):
         """Preview without JSON body should return 400."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
             "/workshop/playlist123/preview-shuffle",
@@ -171,7 +188,10 @@ class TestWorkshopPreviewShuffle:
 class TestWorkshopCommit:
     """Tests for POST /workshop/<playlist_id>/commit."""
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.routes.workshop.PlaylistSnapshotService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     @patch("shuffify.routes.workshop.PlaylistService")
     @patch("shuffify.routes.workshop.ShuffleService")
     @patch("shuffify.routes.workshop.StateService")
@@ -180,12 +200,22 @@ class TestWorkshopCommit:
         mock_state_svc,
         mock_shuffle_svc,
         mock_playlist_svc,
-        mock_auth_svc,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        mock_snap,
         authenticated_client,
     ):
         """Commit should call update_playlist_tracks on Spotify."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.spotify_id = "user123"
+        mock_get_db_user.return_value = mock_user
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
 
         mock_playlist = _make_mock_playlist()
         mock_ps_instance = Mock()
@@ -216,7 +246,10 @@ class TestWorkshopCommit:
             "playlist123", new_uris
         )
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.routes.workshop.PlaylistSnapshotService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     @patch("shuffify.routes.workshop.PlaylistService")
     @patch("shuffify.routes.workshop.ShuffleService")
     @patch("shuffify.routes.workshop.StateService")
@@ -225,12 +258,22 @@ class TestWorkshopCommit:
         mock_state_svc,
         mock_shuffle_svc,
         mock_playlist_svc,
-        mock_auth_svc,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        mock_snap,
         authenticated_client,
     ):
         """Committing an unchanged order should not call Spotify API."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.spotify_id = "user123"
+        mock_get_db_user.return_value = mock_user
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
 
         mock_playlist = _make_mock_playlist()
         mock_ps_instance = Mock()
@@ -263,13 +306,22 @@ class TestWorkshopCommit:
         )
         assert response.status_code == 401
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     def test_commit_validates_uri_format(
-        self, mock_auth_svc, authenticated_client
+        self,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
     ):
         """Commit with invalid URI format should return 400."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
             "/workshop/playlist123/commit",

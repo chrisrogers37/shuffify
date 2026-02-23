@@ -8,10 +8,8 @@ from flask import session, jsonify
 
 from shuffify.routes import (
     main,
-    require_auth,
-    json_error,
+    require_auth_and_db,
     json_success,
-    get_db_user,
     log_activity,
 )
 from shuffify.services import (
@@ -22,7 +20,6 @@ from shuffify.services import (
     PlaylistSnapshotService,
 )
 from shuffify.enums import SnapshotType, ActivityType
-from shuffify import is_db_available
 from shuffify.schemas import parse_shuffle_request
 from flask import request
 
@@ -30,12 +27,9 @@ logger = logging.getLogger(__name__)
 
 
 @main.route("/shuffle/<playlist_id>", methods=["POST"])
-def shuffle(playlist_id):
+@require_auth_and_db
+def shuffle(playlist_id, client=None, user=None):
     """Shuffle a playlist using the selected algorithm."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
     shuffle_request = parse_shuffle_request(
         request.form.to_dict()
     )
@@ -54,32 +48,29 @@ def shuffle(playlist_id):
     current_uris = [track["uri"] for track in playlist.tracks]
 
     # --- Auto-snapshot before shuffle ---
-    if is_db_available():
-        db_user = get_db_user()
-        if (
-            db_user
-            and PlaylistSnapshotService
-            .is_auto_snapshot_enabled(db_user.id)
-        ):
-            try:
-                PlaylistSnapshotService.create_snapshot(
-                    user_id=db_user.id,
-                    playlist_id=playlist_id,
-                    playlist_name=playlist.name,
-                    track_uris=current_uris,
-                    snapshot_type=(
-                        SnapshotType.AUTO_PRE_SHUFFLE
-                    ),
-                    trigger_description=(
-                        f"Before "
-                        f"{shuffle_request.algorithm}"
-                    ),
-                )
-            except Exception as e:
-                logger.warning(
-                    "Auto-snapshot before shuffle "
-                    f"failed: {e}"
-                )
+    if (
+        PlaylistSnapshotService
+        .is_auto_snapshot_enabled(user.id)
+    ):
+        try:
+            PlaylistSnapshotService.create_snapshot(
+                user_id=user.id,
+                playlist_id=playlist_id,
+                playlist_name=playlist.name,
+                track_uris=current_uris,
+                snapshot_type=(
+                    SnapshotType.AUTO_PRE_SHUFFLE
+                ),
+                trigger_description=(
+                    f"Before "
+                    f"{shuffle_request.algorithm}"
+                ),
+            )
+        except Exception as e:
+            logger.warning(
+                "Auto-snapshot before shuffle "
+                f"failed: {e}"
+            )
     # --- End auto-snapshot ---
 
     StateService.ensure_playlist_initialized(
@@ -133,24 +124,22 @@ def shuffle(playlist_id):
     )
 
     # Log activity (non-blocking)
-    db_user = get_db_user()
-    if db_user:
-        log_activity(
-            user_id=db_user.id,
-            activity_type=ActivityType.SHUFFLE,
-            description=(
-                f"Shuffled '{playlist.name}' "
-                f"using {algorithm.name}"
+    log_activity(
+        user_id=user.id,
+        activity_type=ActivityType.SHUFFLE,
+        description=(
+            f"Shuffled '{playlist.name}' "
+            f"using {algorithm.name}"
+        ),
+        playlist_id=playlist_id,
+        playlist_name=playlist.name,
+        metadata={
+            "algorithm": (
+                shuffle_request.algorithm
             ),
-            playlist_id=playlist_id,
-            playlist_name=playlist.name,
-            metadata={
-                "algorithm": (
-                    shuffle_request.algorithm
-                ),
-                "track_count": len(shuffled_uris),
-            },
-        )
+            "track_count": len(shuffled_uris),
+        },
+    )
 
     return json_success(
         f"Playlist shuffled with {algorithm.name}.",
@@ -160,12 +149,9 @@ def shuffle(playlist_id):
 
 
 @main.route("/undo/<playlist_id>", methods=["POST"])
-def undo(playlist_id):
+@require_auth_and_db
+def undo(playlist_id, client=None, user=None):
     """Undo the last shuffle for a playlist."""
-    client = require_auth()
-    if not client:
-        return json_error("Please log in first.", 401)
-
     restore_uris = StateService.undo(session, playlist_id)
 
     logger.info(

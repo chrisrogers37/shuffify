@@ -159,13 +159,22 @@ class TestWorkshopSearchRoute:
         )
         assert response.status_code == 401
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     def test_search_requires_json_body(
-        self, mock_auth_svc, authenticated_client
+        self,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
     ):
         """Search without JSON body should return 400."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
             "/workshop/search",
@@ -174,13 +183,22 @@ class TestWorkshopSearchRoute:
         )
         assert response.status_code == 400
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     def test_search_validates_empty_query(
-        self, mock_auth_svc, authenticated_client
+        self,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
     ):
         """Empty query should return validation error."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
             "/workshop/search",
@@ -189,9 +207,15 @@ class TestWorkshopSearchRoute:
         )
         assert response.status_code == 400
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     def test_search_returns_tracks(
-        self, mock_auth_svc, authenticated_client
+        self,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
     ):
         """Valid search should return transformed track list."""
         mock_client = Mock()
@@ -215,8 +239,11 @@ class TestWorkshopSearchRoute:
             }
         ]
 
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = mock_client
+        mock_auth.return_value = mock_client
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
             "/workshop/search",
@@ -234,16 +261,25 @@ class TestWorkshopSearchRoute:
         assert data["tracks"][0]["album_name"] == "Help!"
         assert data["tracks"][0]["album_image_url"] == "https://example.com/help.jpg"
 
-    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
     def test_search_returns_empty_for_no_results(
-        self, mock_auth_svc, authenticated_client
+        self,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
     ):
         """Search with no Spotify results should return empty tracks array."""
         mock_client = Mock()
         mock_client.search_tracks.return_value = []
 
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = mock_client
+        mock_auth.return_value = mock_client
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
             "/workshop/search",

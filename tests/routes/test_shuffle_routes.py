@@ -65,7 +65,7 @@ def auth_client(db_app):
 class TestShuffleAuth:
     """Auth guard tests for shuffle endpoints."""
 
-    @patch("shuffify.routes.shuffle.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_shuffle_unauth(self, mock_auth, db_app):
         mock_auth.return_value = None
         with db_app.test_client() as client:
@@ -75,7 +75,7 @@ class TestShuffleAuth:
             )
             assert resp.status_code == 401
 
-    @patch("shuffify.routes.shuffle.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_undo_unauth(self, mock_auth, db_app):
         mock_auth.return_value = None
         with db_app.test_client() as client:
@@ -86,22 +86,26 @@ class TestShuffleAuth:
 class TestShuffleEndpoint:
     """Tests for POST /shuffle/<playlist_id>."""
 
-    @patch("shuffify.routes.shuffle.is_db_available")
+    @patch(
+        "shuffify.routes.shuffle.PlaylistSnapshotService"
+    )
     @patch("shuffify.routes.shuffle.StateService")
     @patch("shuffify.routes.shuffle.ShuffleService")
     @patch("shuffify.routes.shuffle.PlaylistService")
-    @patch("shuffify.routes.shuffle.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_successful_shuffle(
         self,
         mock_auth,
         mock_ps_class,
         mock_ss,
         mock_state,
-        mock_db_avail,
+        mock_snap,
         auth_client,
     ):
         mock_auth.return_value = MagicMock()
-        mock_db_avail.return_value = False
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
 
         mock_playlist = MagicMock()
         mock_playlist.name = "Test Playlist"
@@ -150,20 +154,28 @@ class TestShuffleEndpoint:
         assert data["success"] is True
         mock_ps.update_playlist_tracks.assert_called_once()
 
+    @patch(
+        "shuffify.routes.shuffle.PlaylistSnapshotService"
+    )
     @patch("shuffify.routes.shuffle.StateService")
     @patch("shuffify.routes.shuffle.ShuffleService")
     @patch("shuffify.routes.shuffle.PlaylistService")
-    @patch("shuffify.routes.shuffle.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_shuffle_no_change_returns_info(
         self,
         mock_auth,
         mock_ps_class,
         mock_ss,
         mock_state,
+        mock_snap,
         auth_client,
     ):
-        """When shuffle produces same order, returns success=False."""
+        """When shuffle produces same order, returns
+        success=False."""
         mock_auth.return_value = MagicMock()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
 
         mock_playlist = MagicMock()
         mock_playlist.tracks = [
@@ -196,7 +208,7 @@ class TestUndoEndpoint:
 
     @patch("shuffify.routes.shuffle.StateService")
     @patch("shuffify.routes.shuffle.PlaylistService")
-    @patch("shuffify.routes.shuffle.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_successful_undo(
         self,
         mock_auth,
@@ -230,7 +242,7 @@ class TestUndoEndpoint:
 
     @patch("shuffify.routes.shuffle.StateService")
     @patch("shuffify.routes.shuffle.PlaylistService")
-    @patch("shuffify.routes.shuffle.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_undo_update_fails_reverts_state(
         self,
         mock_auth,
@@ -238,9 +250,12 @@ class TestUndoEndpoint:
         mock_state,
         auth_client,
     ):
-        """When Spotify update fails, state should be reverted."""
+        """When Spotify update fails, state should be
+        reverted."""
         mock_auth.return_value = MagicMock()
-        mock_state.undo.return_value = ["spotify:track:t1"]
+        mock_state.undo.return_value = [
+            "spotify:track:t1"
+        ]
 
         from shuffify.services import PlaylistUpdateError
 

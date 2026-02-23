@@ -66,7 +66,7 @@ def auth_client(db_app):
 class TestRefreshPlaylists:
     """Tests for POST /refresh-playlists."""
 
-    @patch("shuffify.routes.playlists.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_unauth_returns_401(self, mock_auth, db_app):
         mock_auth.return_value = None
         with db_app.test_client() as client:
@@ -74,7 +74,7 @@ class TestRefreshPlaylists:
             assert resp.status_code == 401
 
     @patch("shuffify.routes.playlists.PlaylistService")
-    @patch("shuffify.routes.playlists.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_success_returns_playlists(
         self, mock_auth, mock_ps_class, auth_client
     ):
@@ -95,7 +95,7 @@ class TestRefreshPlaylists:
         )
 
     @patch("shuffify.routes.playlists.PlaylistService")
-    @patch("shuffify.routes.playlists.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_playlist_error_returns_500(
         self, mock_auth, mock_ps_class, auth_client
     ):
@@ -115,7 +115,7 @@ class TestRefreshPlaylists:
 class TestGetPlaylist:
     """Tests for GET /playlist/<playlist_id>."""
 
-    @patch("shuffify.routes.playlists.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_unauth_returns_401(self, mock_auth, db_app):
         mock_auth.return_value = None
         with db_app.test_client() as client:
@@ -123,7 +123,7 @@ class TestGetPlaylist:
             assert resp.status_code == 401
 
     @patch("shuffify.routes.playlists.PlaylistService")
-    @patch("shuffify.routes.playlists.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_returns_playlist_dict(
         self, mock_auth, mock_ps_class, auth_client
     ):
@@ -143,7 +143,7 @@ class TestGetPlaylist:
         assert data["id"] == "p1"
 
     @patch("shuffify.routes.playlists.PlaylistService")
-    @patch("shuffify.routes.playlists.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_features_param_passed_through(
         self, mock_auth, mock_ps_class, auth_client
     ):
@@ -163,7 +163,7 @@ class TestGetPlaylist:
 class TestGetPlaylistStats:
     """Tests for GET /playlist/<playlist_id>/stats."""
 
-    @patch("shuffify.routes.playlists.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_unauth_returns_401(self, mock_auth, db_app):
         mock_auth.return_value = None
         with db_app.test_client() as client:
@@ -171,7 +171,7 @@ class TestGetPlaylistStats:
             assert resp.status_code == 401
 
     @patch("shuffify.routes.playlists.PlaylistService")
-    @patch("shuffify.routes.playlists.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_returns_stats(
         self, mock_auth, mock_ps_class, auth_client
     ):
@@ -191,7 +191,7 @@ class TestGetPlaylistStats:
 class TestApiUserPlaylists:
     """Tests for GET /api/user-playlists."""
 
-    @patch("shuffify.routes.playlists.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_unauth_returns_401(self, mock_auth, db_app):
         mock_auth.return_value = None
         with db_app.test_client() as client:
@@ -199,7 +199,7 @@ class TestApiUserPlaylists:
             assert resp.status_code == 401
 
     @patch("shuffify.routes.playlists.PlaylistService")
-    @patch("shuffify.routes.playlists.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_returns_formatted_playlists(
         self, mock_auth, mock_ps_class, auth_client
     ):
@@ -228,7 +228,7 @@ class TestApiUserPlaylists:
         )
 
     @patch("shuffify.routes.playlists.PlaylistService")
-    @patch("shuffify.routes.playlists.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_playlist_without_images(
         self, mock_auth, mock_ps_class, auth_client
     ):
@@ -248,7 +248,7 @@ class TestApiUserPlaylists:
         assert data["playlists"][0]["image_url"] is None
 
     @patch("shuffify.routes.playlists.PlaylistService")
-    @patch("shuffify.routes.playlists.require_auth")
+    @patch("shuffify.routes.require_auth")
     def test_playlist_error_returns_500(
         self, mock_auth, mock_ps_class, auth_client
     ):
