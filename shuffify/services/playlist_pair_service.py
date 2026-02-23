@@ -5,6 +5,7 @@ Service for managing playlist pairs (production + archive).
 import logging
 
 from shuffify.models.db import db, PlaylistPair
+from shuffify.services.base import safe_commit
 
 logger = logging.getLogger(__name__)
 
@@ -56,12 +57,11 @@ class PlaylistPairService:
             archive_playlist_name=archive_playlist_name,
         )
         db.session.add(pair)
-        db.session.commit()
-        logger.info(
-            "Created playlist pair %s -> %s for user %s",
-            production_playlist_id,
-            archive_playlist_id,
-            user_id,
+        safe_commit(
+            f"create playlist pair "
+            f"{production_playlist_id} -> "
+            f"{archive_playlist_id} for user {user_id}",
+            PlaylistPairError,
         )
         return pair
 
@@ -95,11 +95,10 @@ class PlaylistPairService:
                 "No pair found for this playlist"
             )
         db.session.delete(pair)
-        db.session.commit()
-        logger.info(
-            "Deleted playlist pair for %s (user %s)",
-            production_playlist_id,
-            user_id,
+        safe_commit(
+            f"delete playlist pair for "
+            f"{production_playlist_id} (user {user_id})",
+            PlaylistPairError,
         )
 
     @staticmethod
