@@ -8,6 +8,7 @@ Architecture:
     - credentials.py: SpotifyCredentials for config/DI
     - auth.py: SpotifyAuthManager for OAuth and token management
     - api.py: SpotifyAPI for data operations
+    - error_handling.py: Retry logic, backoff, error classification
     - cache.py: SpotifyCache for Redis-based response caching
     - client.py: SpotifyClient facade (combines auth + api)
     - exceptions.py: Exception hierarchy
