@@ -1,14 +1,21 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="min-h-screen bg-gradient-to-br from-spotify-green via-spotify-green/90 to-spotify-dark">
-    <div class="absolute inset-0" style="background-image: url('/static/images/hero-pattern.svg'); opacity: 0.15; pointer-events: none;"></div>
+<div class="relative min-h-screen bg-dark-base">
+    <!-- Development Mode Notice — slim top bar -->
+    <div class="absolute top-0 left-0 right-0 z-10 bg-dark-surface/90 border-b border-amber-500/20 py-2 px-4 text-center">
+        <p class="text-amber-400/80 text-xs font-medium">
+            Development Mode — Contact <a href="mailto:christophertrogers37@gmail.com" class="underline hover:text-amber-300">christophertrogers37@gmail.com</a> for access
+        </p>
+    </div>
+
+    <div class="absolute inset-0" style="background-image: url('/static/images/hero-pattern.svg'); opacity: 0.3; pointer-events: none;"></div>
     
     <!-- Hero Section -->
-    <div class="relative flex items-center justify-center pt-16 pb-8">
+    <div class="relative flex items-center justify-center pt-24 pb-8">
         <div class="w-full max-w-6xl mx-auto px-4 text-center">
             <div class="animate-fade-in space-y-6">
-                <h1 class="text-6xl font-bold text-white">🎵 Shuffify</h1>
+                <h1 class="text-6xl font-bold neon-text-glow"><span class="text-white">Shuff</span><span class="text-spotify-green">ify</span></h1>
                 <h2 class="text-3xl font-semibold text-white/90">Playlist Perfection</h2>
                 <p class="text-xl text-white/80 max-w-3xl mx-auto leading-relaxed">
                     Reorder your carefully curated Spotify playlists with intelligent shuffling algorithms. 
@@ -22,7 +29,7 @@
                     <!-- Enhanced Legal Consent Form -->
                     <form action="{{ url_for('main.login') }}" method="GET" class="max-w-lg mx-auto">
                         <!-- Enhanced Consent Card -->
-                        <div class="consent-card bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 mb-6">
+                        <div class="consent-card bg-dark-card rounded-2xl p-6 border border-spotify-green/20 mb-6">
                             <div class="flex items-start space-x-4">
                                 <div class="flex-shrink-0">
                                     <div class="w-8 h-8 bg-spotify-green rounded-full flex items-center justify-center">
@@ -52,7 +59,7 @@
                         
                         <!-- Enhanced CTA Button -->
                         <button type="submit" 
-                                class="w-full inline-flex items-center justify-center px-8 py-4 rounded-full bg-white text-spotify-dark font-bold transition-all duration-300 text-lg hover:bg-white/90 hover:scale-105 hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed cta-button"
+                                class="w-full inline-flex items-center justify-center px-8 py-4 rounded-full bg-white text-spotify-dark font-bold transition-all duration-300 text-lg hover:bg-white/90 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed cta-button"
                                 id="login-button"
                                 aria-label="Connect with Spotify to start shuffling playlists">
                             <svg class="w-6 h-6 mr-3" viewBox="0 0 24 24" fill="currentColor">
@@ -78,40 +85,23 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <!-- Step 1: Connect -->
                 <div class="text-center">
-                    <div class="step-number bg-white text-spotify-green rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-4 font-bold text-xl">1</div>
+                    <div class="step-number bg-spotify-green text-dark-base rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-4 font-bold text-xl">1</div>
                     <h4 class="text-xl font-semibold text-white mb-3">Connect</h4>
                     <p class="text-white/80">Link your Spotify account in one click</p>
                 </div>
                 
                 <!-- Step 2: Choose -->
                 <div class="text-center">
-                    <div class="step-number bg-white text-spotify-green rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-4 font-bold text-xl">2</div>
+                    <div class="step-number bg-spotify-green text-dark-base rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-4 font-bold text-xl">2</div>
                     <h4 class="text-xl font-semibold text-white mb-3">Choose</h4>
                     <p class="text-white/80">Pick your playlist and reordering algorithm</p>
                 </div>
                 
                 <!-- Step 3: Enjoy -->
                 <div class="text-center">
-                    <div class="step-number bg-white text-spotify-green rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-4 font-bold text-xl">3</div>
+                    <div class="step-number bg-spotify-green text-dark-base rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-4 font-bold text-xl">3</div>
                     <h4 class="text-xl font-semibold text-white mb-3">Reorder</h4>
                     <p class="text-white/80">Enjoy a fresh playlist flow in seconds</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Development Mode Notice -->
-    <div class="relative py-8">
-        <div class="w-full max-w-4xl mx-auto px-4">
-            <div class="p-6 bg-yellow-500/20 border border-yellow-500/30 rounded-2xl">
-                <div class="flex items-center">
-                    <svg class="w-6 h-6 text-yellow-400 mr-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                    </svg>
-                    <div>
-                        <h4 class="text-yellow-200 font-semibold text-lg mb-2">Development Mode</h4>
-                        <p class="text-yellow-100">This app is currently in development. To check it out, please contact <a href="mailto:christophertrogers37@gmail.com" class="underline font-medium">christophertrogers37@gmail.com</a> to request user whitelisting.</p>
-                    </div>
                 </div>
             </div>
         </div>
@@ -124,7 +114,7 @@
             
             <!-- Developer Testimonial -->
             <div class="max-w-3xl mx-auto">
-                <div class="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
+                <div class="bg-dark-card rounded-2xl p-6 border border-white/10 hover:border-spotify-green/30 transition duration-300">
                     <div class="flex items-start space-x-4">
                         <div class="flex-shrink-0">
                             <div class="w-12 h-12 bg-spotify-green rounded-full flex items-center justify-center">
@@ -150,30 +140,30 @@
     </div>
 
     <!-- Use Cases Section -->
-    <div class="relative py-12 bg-white/5">
+    <div class="relative py-12 bg-dark-surface">
         <div class="w-full max-w-6xl mx-auto px-4">
             <h3 class="text-3xl font-bold text-white text-center mb-12">Perfect For</h3>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div class="use-case-card p-6 rounded-2xl bg-white/10 border border-white/20 transform transition duration-300 hover:scale-105 hover:shadow-2xl">
+                <div class="use-case-card p-6 rounded-2xl bg-dark-card border border-white/10 transform transition duration-300 hover:scale-105">
                     <div class="text-3xl mb-4">🎵</div>
                     <h4 class="text-xl font-semibold text-white mb-3">Curated Collections</h4>
                     <p class="text-white/80">Keep your curated playlists fresh, especially after adding new songs.</p>
                 </div>
                 
-                <div class="use-case-card p-6 rounded-2xl bg-white/10 border border-white/20 transform transition duration-300 hover:scale-105 hover:shadow-2xl">
+                <div class="use-case-card p-6 rounded-2xl bg-dark-card border border-white/10 transform transition duration-300 hover:scale-105">
                     <div class="text-3xl mb-4">🎧</div>
                     <h4 class="text-xl font-semibold text-white mb-3">Tastemaker Playlists</h4>
                     <p class="text-white/80">Perfect for tastemakers who want to mix it up and get those new adds to the top for their followers.</p>
                 </div>
                 
-                <div class="use-case-card p-6 rounded-2xl bg-white/10 border border-white/20 transform transition duration-300 hover:scale-105 hover:shadow-2xl">
+                <div class="use-case-card p-6 rounded-2xl bg-dark-card border border-white/10 transform transition duration-300 hover:scale-105">
                     <div class="text-3xl mb-4">🔄</div>
                     <h4 class="text-xl font-semibold text-white mb-3">New Perspectives</h4>
                     <p class="text-white/80">Make your playlists feel new with a quick shuffle.</p>
                 </div>
                 
-                <div class="use-case-card p-6 rounded-2xl bg-white/10 border border-white/20 transform transition duration-300 hover:scale-105 hover:shadow-2xl">
+                <div class="use-case-card p-6 rounded-2xl bg-dark-card border border-white/10 transform transition duration-300 hover:scale-105">
                     <div class="text-3xl mb-4">✨</div>
                     <h4 class="text-xl font-semibold text-white mb-3">Playlist Maintenance</h4>
                     <p class="text-white/80">Reorder that massive playlist that you've been meaning to update with one click.</p>
@@ -186,7 +176,7 @@
     <div class="relative py-12">
         <div class="w-full max-w-6xl mx-auto px-4">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div class="p-6 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 transform transition duration-300 hover:scale-105 hover:shadow-2xl">
+                <div class="feature-card p-6 rounded-2xl bg-dark-card border border-white/10 transform transition duration-300 hover:scale-105">
                     <div class="text-4xl mb-4">🎵</div>
                     <h3 class="text-xl font-semibold mb-3 text-white">Intelligent Reordering</h3>
                     <p class="text-white/80">
@@ -194,7 +184,7 @@
                     </p>
                 </div>
                 
-                <div class="p-6 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 transform transition duration-300 hover:scale-105 hover:shadow-2xl">
+                <div class="feature-card p-6 rounded-2xl bg-dark-card border border-white/10 transform transition duration-300 hover:scale-105">
                     <div class="text-4xl mb-4">↩️</div>
                     <h3 class="text-xl font-semibold mb-3 text-white">Easy Undo</h3>
                     <p class="text-white/80">
@@ -206,7 +196,7 @@
     </div>
 
     <!-- Trust Indicators -->
-    <div class="relative py-12 border-t border-white/20">
+    <div class="relative py-12 bg-dark-surface border-t border-white/10">
         <div class="w-full max-w-4xl mx-auto px-4 text-center">
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6 text-sm text-white/70">
                 <div class="flex items-center justify-center">
@@ -251,7 +241,7 @@
 
     .cta-button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 10px 25px rgba(29, 185, 84, 0.3);
+        box-shadow: 0 10px 25px rgba(29, 185, 84, 0.4);
     }
 
     .cta-button:focus {
@@ -276,9 +266,11 @@
         transform: scale(1.1);
     }
 
-    /* Use case card hover effects */
-    .use-case-card:hover {
-        background: rgba(255, 255, 255, 0.15);
+    /* Card hover effects — neon glow on dark theme */
+    .use-case-card:hover,
+    .feature-card:hover {
+        border-color: rgba(29, 185, 84, 0.3);
+        box-shadow: 0 0 20px rgba(29, 185, 84, 0.15);
     }
 </style>
 

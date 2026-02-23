@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Landing Page Dark Theme** - Complete visual overhaul of the landing page with dark background (`#0a0a0f`), neon green accents, and typographic wordmark
+  - Replaced green gradient wall with dark foundation (`dark-base`, `dark-surface`, `dark-card` color tokens)
+  - Replaced emoji `🎵 Shuffify` with split-color typographic wordmark (white "Shuff" + green "ify" with neon text glow)
+  - Restyled all cards from `bg-white/10` to `bg-dark-card` with neon green hover glow effects
+  - Converted dev mode banner from large yellow card to slim amber top bar
+  - Updated hero pattern SVG from white to green-tinted strokes
+  - Added neon glow CSS utilities (`neon-glow-sm`, `neon-glow`, `neon-glow-lg`, `neon-text-glow`)
+  - Section alternation using `dark-base`/`dark-surface` for visual separation
+  - Step number circles now neon green with dark text (was white with green text)
+
 ### Fixed
 - **Shuffle/Save "unexpected error" on production** - Registered full `SpotifyError` exception hierarchy in global error handlers
   - `SpotifyAPIError`, `SpotifyTokenExpiredError`, `SpotifyRateLimitError`, `SpotifyNotFoundError`, `SpotifyAuthError` now return proper user-facing messages instead of generic "An unexpected error occurred"
