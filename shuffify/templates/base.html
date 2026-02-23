@@ -119,6 +119,37 @@
         .neon-text-glow {
             text-shadow: 0 0 40px rgba(29, 185, 84, 0.5);
         }
+
+        /* GPU acceleration for animated elements */
+        .scroll-reveal,
+        .shuffle-track {
+            will-change: transform, opacity;
+        }
+
+        /* Remove will-change after animation completes to free GPU memory */
+        .scroll-reveal.visible {
+            will-change: auto;
+        }
+
+        /* Accessibility: respect reduced motion preferences */
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+            .scroll-reveal {
+                opacity: 1 !important;
+                transform: none !important;
+            }
+            .shuffle-track {
+                animation: none !important;
+                transform: none !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -209,10 +240,11 @@
                 rootMargin: '0px 0px -50px 0px'
             };
 
-            const observer = new IntersectionObserver((entries) => {
+            const observer = new IntersectionObserver((entries, obs) => {
                 entries.forEach(entry => {
                     if (entry.isIntersecting) {
                         entry.target.classList.add('animate-fade-in');
+                        obs.unobserve(entry.target);
                     }
                 });
             }, observerOptions);
