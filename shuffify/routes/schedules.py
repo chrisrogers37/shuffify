@@ -39,7 +39,7 @@ from shuffify.schemas import (
 from shuffify.services.scheduler_service import (
     SchedulerService,
 )
-from shuffify.services.job_executor_service import (
+from shuffify.services.executors import (
     JobExecutorService,
 )
 from shuffify.enums import ActivityType, JobType

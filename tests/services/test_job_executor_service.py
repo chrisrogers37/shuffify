@@ -7,9 +7,15 @@ Tests the job execution logic with mocked Spotify API calls.
 import pytest
 from unittest.mock import patch, Mock
 
-from shuffify.services.job_executor_service import (
+from shuffify.services.executors import (
     JobExecutorService,
     JobExecutionError,
+)
+from shuffify.services.executors.raid_executor import (
+    execute_raid,
+)
+from shuffify.services.executors.shuffle_executor import (
+    execute_shuffle,
 )
 
 
@@ -93,7 +99,7 @@ class TestExecuteRaid:
             ],
         ]
 
-        result = JobExecutorService._execute_raid(
+        result = execute_raid(
             mock_schedule, mock_api
         )
 
@@ -119,7 +125,7 @@ class TestExecuteRaid:
             same_tracks,
         ]
 
-        result = JobExecutorService._execute_raid(
+        result = execute_raid(
             mock_schedule, mock_api
         )
         assert result["tracks_added"] == 0
@@ -129,7 +135,7 @@ class TestExecuteRaid:
     ):
         """Should skip when no source playlists."""
         mock_schedule.source_playlist_ids = []
-        result = JobExecutorService._execute_raid(
+        result = execute_raid(
             mock_schedule, mock_api
         )
         assert result["tracks_added"] == 0
@@ -142,7 +148,7 @@ class TestExecuteShuffle:
         self, mock_schedule, mock_api
     ):
         """Should call update_playlist_tracks."""
-        result = JobExecutorService._execute_shuffle(
+        result = execute_shuffle(
             mock_schedule, mock_api
         )
 
@@ -164,7 +170,7 @@ class TestExecuteShuffle:
             JobExecutionError,
             match="no algorithm configured",
         ):
-            JobExecutorService._execute_shuffle(
+            execute_shuffle(
                 mock_schedule, mock_api
             )
 
@@ -173,7 +179,7 @@ class TestExecuteShuffle:
     ):
         """Should handle empty playlists gracefully."""
         mock_api.get_playlist_tracks.return_value = []
-        result = JobExecutorService._execute_shuffle(
+        result = execute_shuffle(
             mock_schedule, mock_api
         )
         assert result["tracks_total"] == 0
@@ -183,19 +189,19 @@ class TestGetSpotifyApi:
     """Tests for _get_spotify_api token management."""
 
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.base_executor"
         ".TokenService"
     )
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.base_executor"
         ".SpotifyAPI"
     )
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.base_executor"
         ".SpotifyAuthManager"
     )
     @patch(
-        "shuffify.services.job_executor_service"
+        "shuffify.services.executors.base_executor"
         ".SpotifyCredentials"
     )
     def test_creates_api_with_decrypted_token(

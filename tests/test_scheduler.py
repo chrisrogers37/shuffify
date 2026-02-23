@@ -272,7 +272,7 @@ class TestExecuteScheduledJob:
 
     def test_successful_execution(self, app):
         with patch(
-            "shuffify.services.job_executor_service.JobExecutorService"
+            "shuffify.services.executors.JobExecutorService"
         ) as mock_executor:
             _execute_scheduled_job(app, 42)
             mock_executor.execute.assert_called_once_with(42)
@@ -280,7 +280,7 @@ class TestExecuteScheduledJob:
     @patch("shuffify.scheduler.logger")
     def test_execution_failure_logged(self, mock_logger, app):
         with patch(
-            "shuffify.services.job_executor_service.JobExecutorService"
+            "shuffify.services.executors.JobExecutorService"
         ) as mock_executor:
             mock_executor.execute.side_effect = Exception("boom")
             _execute_scheduled_job(app, 42)

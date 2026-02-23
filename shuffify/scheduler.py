@@ -305,7 +305,7 @@ def _execute_scheduled_job(app, schedule_id: int):
     """
     with app.app_context():
         try:
-            from shuffify.services.job_executor_service import (
+            from shuffify.services.executors import (
                 JobExecutorService,
             )
 
