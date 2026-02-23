@@ -221,7 +221,7 @@ def callback():
         session["spotify_token"] = token_data
 
         # Validate by fetching user data
-        client, user_data = (
+        _, user_data = (
             AuthService.authenticate_and_get_user(token_data)
         )
         session["user_data"] = user_data
