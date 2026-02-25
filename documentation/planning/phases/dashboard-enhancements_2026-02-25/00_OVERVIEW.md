@@ -30,7 +30,7 @@ These were consolidated into 4 enhancements addressing all 6 issues.
 |-------|-------|--------|--------|------|----|
 | 01 | [Fix Error Handling & Route Resilience](01_error-handling-resilience.md) | High | Medium (3-4h) | Low | #101 ✅ |
 | 02 | [Fix Playlist Tile Layout Overflow](02_tile-layout-overflow.md) | Medium | Low (15min) | Low | #102 ✅ |
-| 03 | [Redesign Shuffle as Hover Overlay](03_shuffle-hover-overlay.md) | High | High (6-8h) | High | 🔧 IN PROGRESS |
+| 03 | [Redesign Shuffle as Hover Overlay](03_shuffle-hover-overlay.md) | High | High (6-8h) | High | ✅ |
 | 04 | [Playlist Tile Management](04_playlist-tile-management.md) | High | High (3-4 days) | Medium | — |
 
 ---
