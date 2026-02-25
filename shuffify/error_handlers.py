@@ -6,7 +6,7 @@ service-layer exceptions and Pydantic validation errors.
 """
 
 import logging
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, render_template, request
 from pydantic import ValidationError
 
 from shuffify.services import (
@@ -382,8 +382,26 @@ def register_error_handlers(app):
     @app.errorhandler(500)
     def handle_internal_error(error):
         """Handle 500 Internal Server Error."""
-        logger.error(f"Internal server error: {error}", exc_info=True)
-        return json_error_response("An unexpected error occurred.", 500)
+        logger.error(
+            "Internal server error on %s %s: %s [type=%s]",
+            request.method,
+            request.path,
+            error,
+            type(error).__name__,
+            exc_info=True,
+        )
+        # Return JSON for API routes and AJAX requests
+        if (
+            request.path.startswith("/api/")
+            or request.is_json
+            or request.headers.get("X-Requested-With")
+            == "XMLHttpRequest"
+        ):
+            return json_error_response(
+                "An unexpected error occurred.", 500
+            )
+        # Render HTML error page for browser navigation
+        return render_template("errors/500.html"), 500
 
     # =========================================================================
     # Rate Limiting (429)

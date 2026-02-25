@@ -507,11 +507,19 @@ function refreshPlaylists() {
             'X-Requested-With': 'XMLHttpRequest'
         }
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            return response.json().catch(() => {
+                return { success: false, message: 'Server error (' + response.status + '). Please try again.' };
+            }).then(data => {
+                throw new Error(data.message || 'Failed to refresh playlists.');
+            });
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
             showNotification(data.message, 'success');
-            // Reload page to show updated playlists (preserves session/undo state)
             window.location.reload();
         } else {
             showNotification(data.message || 'Failed to refresh playlists.', 'error');
@@ -519,7 +527,7 @@ function refreshPlaylists() {
     })
     .catch(error => {
         console.error('Error refreshing playlists:', error);
-        showNotification('Failed to refresh playlists. Please try again.', 'error');
+        showNotification(error.message || 'Failed to refresh playlists. Please try again.', 'error');
     })
     .finally(() => {
         btn.disabled = false;

@@ -31,6 +31,7 @@ from shuffify.services import (
     ShuffleService,
     AuthenticationError,
     PlaylistError,
+    ScheduleError,
 )
 from shuffify.schemas import (
     ScheduleCreateRequest,
@@ -91,12 +92,37 @@ def schedules():
 
     except (AuthenticationError, PlaylistError) as e:
         logger.error(
-            f"Error loading schedules page: {e}"
+            "Auth/playlist error loading schedules: %s", e
         )
         return clear_session_and_show_login(
             "Your session has expired. "
             "Please log in again."
         )
+    except ScheduleError as e:
+        logger.error(
+            "Schedule service error loading schedules page: %s",
+            e,
+        )
+        flash(
+            "Could not load schedule data. "
+            "Please try again.",
+            "error",
+        )
+        return redirect(url_for("main.index"))
+    except Exception as e:
+        logger.error(
+            "Unexpected error loading schedules page: %s "
+            "[type=%s]",
+            e,
+            type(e).__name__,
+            exc_info=True,
+        )
+        flash(
+            "Something went wrong loading schedules. "
+            "Please try again.",
+            "error",
+        )
+        return redirect(url_for("main.index"))
 
 
 @main.route("/schedules/create", methods=["POST"])

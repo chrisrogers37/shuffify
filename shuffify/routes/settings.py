@@ -75,11 +75,36 @@ def settings():
         )
 
     except AuthenticationError as e:
-        logger.error("Error loading settings page: %s", e)
+        logger.error("Auth error loading settings page: %s", e)
         return clear_session_and_show_login(
             "Your session has expired. "
             "Please log in again."
         )
+    except UserSettingsError as e:
+        logger.error(
+            "Settings service error loading settings page: %s",
+            e,
+        )
+        flash(
+            "Could not load your settings. "
+            "Please try again.",
+            "error",
+        )
+        return redirect(url_for("main.index"))
+    except Exception as e:
+        logger.error(
+            "Unexpected error loading settings page: %s "
+            "[type=%s]",
+            e,
+            type(e).__name__,
+            exc_info=True,
+        )
+        flash(
+            "Something went wrong loading settings. "
+            "Please try again.",
+            "error",
+        )
+        return redirect(url_for("main.index"))
 
 
 @main.route("/settings", methods=["POST"])
