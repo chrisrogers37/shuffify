@@ -105,7 +105,7 @@ black shuffify/
 - **Backend**: Flask 3.1.x (Python 3.12+)
 - **Frontend**: Tailwind CSS with custom animations, vanilla JavaScript
 - **API**: Spotify Web API (via spotipy library)
-- **Database**: SQLAlchemy + PostgreSQL/SQLite (10 models — see Models section)
+- **Database**: SQLAlchemy + PostgreSQL/SQLite (11 models — see Models section)
 - **Scheduler**: APScheduler for background job execution
 - **Server**: Gunicorn (production), Flask dev server (local)
 - **Containerization**: Docker with health checks
@@ -123,12 +123,12 @@ black shuffify/
 │  Presentation Layer                     │
 │  • templates/     - Jinja2 templates   │
 │  • static/        - CSS, JS, images    │
-│  • routes/        - Flask routes (10 modules) │
+│  • routes/        - Flask routes (11 modules) │
 │  • schemas/       - Pydantic validation │
 └─────────────────┬───────────────────────┘
                   │
 ┌─────────────────▼───────────────────────┐
-│  Services Layer (17 services)           │
+│  Services Layer (18 services)           │
 │  • auth_service.py      - OAuth flow   │
 │  • playlist_service.py  - Playlist ops │
 │  • shuffle_service.py   - Algorithms   │
@@ -146,6 +146,7 @@ black shuffify/
 │  • user_settings_service - Preferences │
 │  • playlist_pair_service   - Archives  │
 │  • raid_sync_service       - Raid sync │
+│  • playlist_preference_service         │
 └─────────────────┬───────────────────────┘
                   │
 ┌─────────────────▼───────────────────────┐
@@ -165,9 +166,9 @@ black shuffify/
 └─────────────────────────────────────────┘
 ```
 
-### Route Endpoints (53 total)
+### Route Endpoints (57 total)
 
-Routes are split across 10 modules in `shuffify/routes/`:
+Routes are split across 11 modules in `shuffify/routes/`:
 
 | Module | Routes | Purpose |
 |--------|--------|---------|
@@ -181,6 +182,7 @@ Routes are split across 10 modules in `shuffify/routes/`:
 | `snapshots.py` | 5 | List/create/view/restore/delete playlist snapshots |
 | `playlist_pairs.py` | 6 | Archive playlist pairing CRUD, list pairs |
 | `raid_panel.py` | 5 | Raid status, watch/unwatch, raid-now, schedule toggle |
+| `playlist_preferences.py` | 4 | Save order, toggle hidden/pinned, reset preferences |
 
 ### Key Design Principle: SEPARATION OF CONCERNS
 
@@ -291,6 +293,7 @@ All algorithms implement the `ShuffleAlgorithm` protocol and are registered in `
 - `PlaylistSnapshot` — Point-in-time playlist track orderings with retention management
 - `ActivityLog` — Unified audit trail for all user actions (17 activity types)
 - `PlaylistPair` — Production/archive playlist pairing for track rotation
+- `PlaylistPreference` — Per-user playlist display ordering, visibility, and pinning
 
 ---
 
@@ -478,7 +481,7 @@ tests/
 └── conftest.py             # Shared fixtures (app context, db, mocks)
 ```
 
-**1227 tests** covering all modules.
+**1296 tests** covering all modules.
 
 **Test Template**:
 
@@ -816,11 +819,11 @@ if session.get('undo_stack'):
 - ~~Flask 3.x upgrade~~ (v3.1.x)
 - ~~Redis session storage~~
 - ~~Caching layer for Spotify API responses~~
-- ~~Service layer extraction~~ (17 services)
-- ~~Pydantic validation layer~~ (6 schema modules)
+- ~~Service layer extraction~~ (18 services)
+- ~~Pydantic validation layer~~ (7 schema modules)
 - ~~7 shuffle algorithms~~ (6 visible + 1 hidden, 1081 tests)
 - ~~Playlist Workshop~~ (track management, merging, raiding)
-- ~~SQLAlchemy database~~ (10 models — see Models section)
+- ~~SQLAlchemy database~~ (11 models — see Models section)
 - ~~APScheduler background jobs~~ (scheduled shuffle/raid operations)
 - ~~Fernet token encryption~~ (secure refresh token storage)
 - ~~Refresh playlists button~~
@@ -854,16 +857,16 @@ if session.get('undo_stack'):
 | File | Contains |
 |------|----------|
 | `shuffify/__init__.py` | Flask app factory, Redis/DB/Scheduler initialization |
-| `shuffify/routes/` | 10 feature-based route modules (core, playlists, shuffle, workshop, upstream_sources, schedules, settings, snapshots, playlist_pairs, raid_panel) |
-| `shuffify/services/` | 17 service modules (auth, playlist, shuffle, state, token, scheduler, user, workshop_session, upstream_source, activity_log, dashboard, login_history, playlist_snapshot, user_settings, playlist_pair, raid_sync) + executors package |
+| `shuffify/routes/` | 11 feature-based route modules (core, playlists, shuffle, workshop, upstream_sources, schedules, settings, snapshots, playlist_pairs, raid_panel, playlist_preferences) |
+| `shuffify/services/` | 18 service modules (auth, playlist, shuffle, state, token, scheduler, user, workshop_session, upstream_source, activity_log, dashboard, login_history, playlist_snapshot, user_settings, playlist_pair, raid_sync, playlist_preference) + executors package |
 | `shuffify/services/executors/` | Job executor package (base_executor, raid_executor, shuffle_executor, rotate_executor) |
-| `shuffify/schemas/` | 6 Pydantic validation modules (requests, schedule_requests, settings_requests, snapshot_requests, playlist_pair_requests, raid_requests) |
+| `shuffify/schemas/` | 7 Pydantic validation modules (requests, schedule_requests, settings_requests, snapshot_requests, playlist_pair_requests, raid_requests, playlist_preference_requests) |
 | `shuffify/spotify/client.py` | Spotify API wrapper (facade) |
 | `shuffify/spotify/api.py` | Spotify Web API data operations with caching support |
 | `shuffify/spotify/cache.py` | Redis caching layer for Spotify API responses |
 | `shuffify/shuffle_algorithms/registry.py` | Algorithm registration system (7 algorithms) |
 | `shuffify/models/playlist.py` | Playlist data model |
-| `shuffify/models/db.py` | SQLAlchemy models (10 models — User, UserSettings, WorkshopSession, UpstreamSource, Schedule, JobExecution, LoginHistory, PlaylistSnapshot, ActivityLog, PlaylistPair) |
+| `shuffify/models/db.py` | SQLAlchemy models (11 models — User, UserSettings, WorkshopSession, UpstreamSource, Schedule, JobExecution, LoginHistory, PlaylistSnapshot, ActivityLog, PlaylistPair, PlaylistPreference) |
 | `shuffify/enums.py` | Shared enums (ScheduleFrequency, JobType, SnapshotType, ActivityType, RotationMode) |
 | `shuffify/scheduler.py` | APScheduler initialization and startup |
 | `shuffify/error_handlers.py` | Global exception handlers |
@@ -891,7 +894,7 @@ if session.get('undo_stack'):
 - View routes: `flask routes`
 - All documentation: See `documentation/` directory
 - Algorithm docs: `shuffify/shuffle_algorithms/README.md`
-- 1081 tests across all modules
+- 1296 tests across all modules
 
 ---
 

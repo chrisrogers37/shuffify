@@ -145,6 +145,13 @@ from shuffify.services.raid_sync_service import (
     RaidSyncError,
 )
 
+# Playlist Preference Service
+from shuffify.services.playlist_preference_service import (
+    PlaylistPreferenceService,
+    PlaylistPreferenceError,
+    PlaylistPreferenceNotFoundError,
+)
+
 __all__ = [
     # Services
     "AuthService",
@@ -220,4 +227,8 @@ __all__ = [
     # Raid Sync Service
     "RaidSyncService",
     "RaidSyncError",
+    # Playlist Preference Service
+    "PlaylistPreferenceService",
+    "PlaylistPreferenceError",
+    "PlaylistPreferenceNotFoundError",
 ]

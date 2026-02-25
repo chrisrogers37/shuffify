@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Playlist Tile Management** - Reorder, hide, and pin playlists on the dashboard
+  - New PlaylistPreference model for persistent per-user arrangement
+  - Drag-and-drop reordering with HTML5 Drag and Drop API
+  - Pin-to-top and hide/show controls with immediate AJAX persistence
+  - Management mode toggle with toolbar and "Show Hidden" reveal
+  - Reset button to restore default Spotify ordering
+  - 4 new API endpoints for preference CRUD operations
+
 ### Changed
 - **Dashboard Shuffle UX** - Replaced click-to-expand shuffle panel with hover overlay on playlist artwork
   - Algorithm selection changed from dropdown to icon grid (6 visible algorithms)

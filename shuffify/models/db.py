@@ -2,7 +2,8 @@
 SQLAlchemy database models for Shuffify.
 
 Defines the User, UserSettings, WorkshopSession, UpstreamSource,
-Schedule, JobExecution, and ActivityLog models for persistent storage.
+Schedule, JobExecution, ActivityLog, PlaylistPair, and
+PlaylistPreference models for persistent storage.
 Supports PostgreSQL (production) and SQLite (development/testing).
 """
 
@@ -931,4 +932,96 @@ class PlaylistPair(db.Model):
             f"<PlaylistPair {self.id}: "
             f"'{self.production_playlist_name}' -> "
             f"'{self.archive_playlist_name}'>"
+        )
+
+
+class PlaylistPreference(db.Model):
+    """
+    Per-user playlist display preferences.
+
+    Controls the ordering, visibility, and pinning of playlists
+    on the dashboard. Created on-demand when a user customizes
+    their playlist arrangement.
+    """
+
+    __tablename__ = "playlist_preferences"
+
+    id = db.Column(
+        db.Integer, primary_key=True, autoincrement=True
+    )
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    spotify_playlist_id = db.Column(
+        db.String(255), nullable=False
+    )
+    sort_order = db.Column(
+        db.Integer, nullable=False, default=0
+    )
+    is_hidden = db.Column(
+        db.Boolean, nullable=False, default=False
+    )
+    is_pinned = db.Column(
+        db.Boolean, nullable=False, default=False
+    )
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    user = db.relationship(
+        "User",
+        backref=db.backref(
+            "playlist_preferences",
+            lazy="dynamic",
+            cascade="all, delete-orphan",
+        ),
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "user_id",
+            "spotify_playlist_id",
+            name="uq_user_spotify_playlist",
+        ),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize to dictionary."""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "spotify_playlist_id": self.spotify_playlist_id,
+            "sort_order": self.sort_order,
+            "is_hidden": self.is_hidden,
+            "is_pinned": self.is_pinned,
+            "created_at": (
+                self.created_at.isoformat()
+                if self.created_at
+                else None
+            ),
+            "updated_at": (
+                self.updated_at.isoformat()
+                if self.updated_at
+                else None
+            ),
+        }
+
+    def __repr__(self) -> str:
+        return (
+            f"<PlaylistPreference {self.id}: "
+            f"playlist={self.spotify_playlist_id} "
+            f"order={self.sort_order} "
+            f"{'hidden' if self.is_hidden else 'visible'} "
+            f"{'pinned' if self.is_pinned else 'unpinned'}>"
         )
