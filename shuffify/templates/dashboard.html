@@ -57,6 +57,16 @@
                         </svg>
                         Settings
                     </a>
+                    <!-- Manage Button -->
+                    <button id="manage-btn"
+                            onclick="toggleManageMode()"
+                            class="inline-flex items-center px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition duration-150 border border-white/20 hover:border-white/30"
+                            title="Manage playlist tiles">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                        </svg>
+                        <span id="manage-btn-text">Manage</span>
+                    </button>
                     <!-- Refresh Playlists Button -->
                     <button id="refresh-playlists-btn"
                             onclick="refreshPlaylists()"
@@ -249,12 +259,91 @@
     {% endif %}
     {% endif %}
 
+    <!-- Management Toolbar (hidden by default) -->
+    <div id="manage-toolbar" class="hidden relative max-w-6xl mx-auto px-4 pt-6">
+        <div class="rounded-xl backdrop-blur-md bg-white/10 border border-white/20 px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <p class="text-white/80 text-sm">
+                    <span class="font-semibold text-white">Manage mode:</span>
+                    Drag tiles to reorder. Click icons to pin or hide playlists.
+                </p>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button id="show-hidden-btn"
+                        onclick="toggleShowHidden()"
+                        class="inline-flex items-center px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition border border-white/20"
+                        title="Show hidden playlists">
+                    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                    </svg>
+                    <span id="show-hidden-text">Show Hidden</span>
+                </button>
+                <button onclick="resetPreferences()"
+                        class="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-200 text-sm font-medium transition border border-red-500/30"
+                        title="Reset all tile preferences">
+                    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                    </svg>
+                    Reset All
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Playlists Grid -->
     <div class="relative max-w-6xl mx-auto px-4 py-8">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
+        <div id="playlist-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
             {% for playlist in playlists %}
+                {% set pref = preferences.get(playlist.id) if preferences else None %}
                 <div class="rounded-2xl shadow-xl bg-spotify-green/90 border border-white/20 overflow-hidden transform transition duration-300 hover:scale-105 hover:shadow-2xl relative card-tile"
-                     data-playlist-id="{{ playlist.id }}">
+                     data-playlist-id="{{ playlist.id }}"
+                     data-pinned="{{ 'true' if pref and pref.is_pinned else 'false' }}"
+                     data-hidden="false">
+                    <!-- Management Controls (shown in manage mode) -->
+                    <div class="manage-controls hidden absolute top-2 left-2 right-2 z-30 flex items-center justify-between pointer-events-none">
+                        <div class="flex items-center space-x-1 pointer-events-auto">
+                            <!-- Drag Handle -->
+                            <div class="drag-handle cursor-grab active:cursor-grabbing w-7 h-7 rounded-full bg-black/60 flex items-center justify-center text-white/80 hover:text-white hover:bg-black/80 transition"
+                                 title="Drag to reorder">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-1 pointer-events-auto">
+                            <!-- Pin Button -->
+                            <button type="button"
+                                    class="manage-pin-btn w-7 h-7 rounded-full bg-black/60 flex items-center justify-center transition hover:bg-black/80"
+                                    data-playlist-id="{{ playlist.id }}"
+                                    onclick="event.stopPropagation(); togglePin('{{ playlist.id }}')"
+                                    title="{{ 'Unpin' if pref and pref.is_pinned else 'Pin to top' }}">
+                                <svg class="w-4 h-4 {{ 'text-yellow-400' if pref and pref.is_pinned else 'text-white/80 hover:text-yellow-400' }}" fill="{{ 'currentColor' if pref and pref.is_pinned else 'none' }}" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path>
+                                </svg>
+                            </button>
+                            <!-- Hide Button -->
+                            <button type="button"
+                                    class="manage-hide-btn w-7 h-7 rounded-full bg-black/60 flex items-center justify-center text-white/80 hover:text-red-400 hover:bg-black/80 transition"
+                                    data-playlist-id="{{ playlist.id }}"
+                                    onclick="event.stopPropagation(); toggleHide('{{ playlist.id }}')"
+                                    title="Hide playlist">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Pinned Badge -->
+                    {% if pref and pref.is_pinned %}
+                    <div class="pinned-badge absolute top-2 left-2 z-20 px-2 py-0.5 rounded-full bg-yellow-500/90 text-xs font-bold text-black flex items-center space-x-1">
+                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path>
+                        </svg>
+                        <span>Pinned</span>
+                    </div>
+                    {% endif %}
+
                     <!-- Playlist Artwork with Hover Overlay -->
                     <div class="relative h-48 group">
                         {% if playlist.images %}
@@ -433,6 +522,48 @@
                 </div>
             {% endfor %}
         </div>
+
+        <!-- Hidden Playlists Grid (shown when "Show Hidden" is toggled in manage mode) -->
+        {% if hidden_playlists %}
+        <div id="hidden-playlists-section" class="hidden mt-8">
+            <h3 class="text-white/60 text-sm font-semibold uppercase tracking-wider mb-4">
+                Hidden Playlists ({{ hidden_playlists|length }})
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
+                {% for playlist in hidden_playlists %}
+                <div class="rounded-2xl shadow-xl bg-spotify-green/40 border border-white/10 overflow-hidden relative opacity-50 card-tile-hidden"
+                     data-playlist-id="{{ playlist.id }}">
+                    <div class="relative h-32">
+                        {% if playlist.images %}
+                            <img src="{{ playlist.images[0].url }}" alt="{{ playlist.name }}"
+                                 class="w-full h-full object-cover rounded-t-2xl grayscale">
+                        {% else %}
+                            <div class="w-full h-full bg-black/20 flex items-center justify-center rounded-t-2xl">
+                                <span class="text-4xl">&#127925;</span>
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="px-4 py-3 flex items-center justify-between">
+                        <div class="min-w-0">
+                            <h3 class="text-white/60 text-lg font-bold truncate">{{ playlist.name }}</h3>
+                            <p class="text-white/40 text-sm">{{ playlist.tracks.total }} tracks</p>
+                        </div>
+                        <button type="button"
+                                class="flex-shrink-0 ml-2 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 text-sm font-medium transition border border-white/20"
+                                onclick="toggleHide('{{ playlist.id }}')"
+                                title="Unhide playlist">
+                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                            </svg>
+                            Unhide
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 
@@ -728,8 +859,207 @@ function refreshPlaylists() {
     });
 }
 
+/* --- Playlist Tile Management --- */
+let manageMode = false;
+
+function toggleManageMode() {
+    manageMode = !manageMode;
+    const toolbar = document.getElementById('manage-toolbar');
+    const btnText = document.getElementById('manage-btn-text');
+    const grid = document.getElementById('playlist-grid');
+
+    toolbar.classList.toggle('hidden', !manageMode);
+    btnText.textContent = manageMode ? 'Done' : 'Manage';
+
+    // Show/hide management controls on each tile
+    document.querySelectorAll('.manage-controls').forEach(el => {
+        el.classList.toggle('hidden', !manageMode);
+    });
+
+    // Hide pinned badges in manage mode (controls replace them)
+    document.querySelectorAll('.pinned-badge').forEach(el => {
+        el.classList.toggle('hidden', manageMode);
+    });
+
+    // Toggle draggable on tiles
+    document.querySelectorAll('#playlist-grid .card-tile').forEach(tile => {
+        tile.draggable = manageMode;
+        tile.classList.toggle('manage-mode-active', manageMode);
+    });
+
+    // Hide the hidden playlists section when exiting manage mode
+    if (!manageMode) {
+        const hiddenSection = document.getElementById('hidden-playlists-section');
+        if (hiddenSection) hiddenSection.classList.add('hidden');
+        const hiddenText = document.getElementById('show-hidden-text');
+        if (hiddenText) hiddenText.textContent = 'Show Hidden';
+    }
+}
+
+function toggleShowHidden() {
+    const section = document.getElementById('hidden-playlists-section');
+    const text = document.getElementById('show-hidden-text');
+    if (!section) {
+        showNotification('No hidden playlists', 'info');
+        return;
+    }
+    const isHidden = section.classList.contains('hidden');
+    section.classList.toggle('hidden', !isHidden);
+    if (text) text.textContent = isHidden ? 'Hide Hidden' : 'Show Hidden';
+}
+
+function togglePin(playlistId) {
+    fetch(`/api/playlist-preferences/${playlistId}/toggle-pinned`, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            window.location.reload();
+        } else {
+            showNotification(data.message || 'Failed to update pin state', 'error');
+        }
+    })
+    .catch(err => {
+        console.error('Pin toggle error:', err);
+        showNotification('Failed to update pin state', 'error');
+    });
+}
+
+function toggleHide(playlistId) {
+    fetch(`/api/playlist-preferences/${playlistId}/toggle-hidden`, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            window.location.reload();
+        } else {
+            showNotification(data.message || 'Failed to update visibility', 'error');
+        }
+    })
+    .catch(err => {
+        console.error('Hide toggle error:', err);
+        showNotification('Failed to update visibility', 'error');
+    });
+}
+
+function resetPreferences() {
+    if (!confirm('Reset all playlist preferences? This will restore the default Spotify ordering.')) {
+        return;
+    }
+    fetch('/api/playlist-preferences/reset', {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            window.location.reload();
+        } else {
+            showNotification(data.message || 'Failed to reset preferences', 'error');
+        }
+    })
+    .catch(err => {
+        console.error('Reset error:', err);
+        showNotification('Failed to reset preferences', 'error');
+    });
+}
+
+function saveCurrentOrder() {
+    const tiles = document.querySelectorAll('#playlist-grid .card-tile');
+    const playlistIds = Array.from(tiles).map(t => t.dataset.playlistId);
+
+    fetch('/api/playlist-preferences/order', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({ playlist_ids: playlistIds })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Order saved', 'success');
+        } else {
+            showNotification(data.message || 'Failed to save order', 'error');
+        }
+    })
+    .catch(err => {
+        console.error('Save order error:', err);
+        showNotification('Failed to save order', 'error');
+    });
+}
+
+/* --- HTML5 Drag and Drop --- */
+function initDragAndDrop() {
+    const grid = document.getElementById('playlist-grid');
+    let draggedTile = null;
+
+    grid.addEventListener('dragstart', (e) => {
+        const tile = e.target.closest('.card-tile');
+        if (!tile || !manageMode) return;
+        draggedTile = tile;
+        tile.style.opacity = '0.4';
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', tile.dataset.playlistId);
+    });
+
+    grid.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const tile = e.target.closest('.card-tile');
+        if (tile && tile !== draggedTile) {
+            tile.classList.add('drag-over');
+        }
+    });
+
+    grid.addEventListener('dragleave', (e) => {
+        const tile = e.target.closest('.card-tile');
+        if (tile) {
+            tile.classList.remove('drag-over');
+        }
+    });
+
+    grid.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const targetTile = e.target.closest('.card-tile');
+        if (!targetTile || !draggedTile || targetTile === draggedTile) return;
+
+        targetTile.classList.remove('drag-over');
+
+        // Determine insert position
+        const tiles = Array.from(grid.querySelectorAll('.card-tile'));
+        const dragIdx = tiles.indexOf(draggedTile);
+        const dropIdx = tiles.indexOf(targetTile);
+
+        if (dragIdx < dropIdx) {
+            targetTile.parentNode.insertBefore(draggedTile, targetTile.nextSibling);
+        } else {
+            targetTile.parentNode.insertBefore(draggedTile, targetTile);
+        }
+
+        saveCurrentOrder();
+    });
+
+    grid.addEventListener('dragend', (e) => {
+        if (draggedTile) {
+            draggedTile.style.opacity = '1';
+            draggedTile = null;
+        }
+        grid.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+    });
+}
+
 /* --- Event Delegation Setup --- */
 document.addEventListener('DOMContentLoaded', () => {
+    initDragAndDrop();
     // Mobile tap-to-toggle: on touch devices, tap the artwork area to toggle overlay
     document.querySelectorAll('.card-tile').forEach(tile => {
         const overlay = tile.querySelector('.shuffle-overlay');
@@ -901,6 +1231,18 @@ document.addEventListener('DOMContentLoaded', () => {
 }
 .keep-first-input[type=number] {
     -moz-appearance: textfield;
+}
+
+/* Management mode: disable hover scale, enable grab cursor */
+.manage-mode-active { cursor: grab; }
+.manage-mode-active:active { cursor: grabbing; }
+.manage-mode-active:hover { transform: scale(1) !important; }
+
+/* Drag over target highlight */
+.drag-over {
+    border-color: rgba(255,255,255,0.6) !important;
+    box-shadow: 0 0 0 2px rgba(29,185,84,0.5);
+    transform: scale(1.02) !important;
 }
 
 /* Accessibility: respect reduced motion */

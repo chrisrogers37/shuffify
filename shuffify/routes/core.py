@@ -33,6 +33,9 @@ from shuffify.services import (
     AuthenticationError,
     PlaylistError,
 )
+from shuffify.services.playlist_preference_service import (
+    PlaylistPreferenceService,
+)
 from shuffify.enums import ActivityType
 
 logger = logging.getLogger(__name__)
@@ -67,6 +70,9 @@ def index():
 
             # Fetch personalized dashboard data (non-blocking)
             dashboard_data = {}
+            preferences = {}
+            visible_playlists = playlists
+            hidden_playlists = []
             try:
                 db_user = get_db_user()
                 if db_user:
@@ -80,6 +86,17 @@ def index():
                             ),
                         )
                     )
+                    preferences = (
+                        PlaylistPreferenceService
+                        .get_user_preferences(db_user.id)
+                    )
+                    if preferences:
+                        visible_playlists, hidden_playlists = (
+                            PlaylistPreferenceService
+                            .apply_preferences(
+                                playlists, preferences
+                            )
+                        )
             except Exception as e:
                 logger.warning(
                     "Failed to load dashboard data: "
@@ -94,10 +111,12 @@ def index():
             )
             return render_template(
                 "dashboard.html",
-                playlists=playlists,
+                playlists=visible_playlists,
+                hidden_playlists=hidden_playlists,
                 user=user,
                 algorithms=algorithms,
                 dashboard=dashboard_data,
+                preferences=preferences,
             )
 
         except (AuthenticationError, PlaylistError) as e:

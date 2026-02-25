@@ -39,6 +39,9 @@ from .raid_requests import (
     UnwatchPlaylistRequest,
     RaidNowRequest,
 )
+from .playlist_preference_requests import (
+    SaveOrderRequest,
+)
 
 __all__ = [
     # Exceptions
@@ -71,4 +74,6 @@ __all__ = [
     "WatchPlaylistRequest",
     "UnwatchPlaylistRequest",
     "RaidNowRequest",
+    # Playlist Preference schemas
+    "SaveOrderRequest",
 ]
