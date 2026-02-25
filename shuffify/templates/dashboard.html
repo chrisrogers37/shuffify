@@ -253,98 +253,182 @@
     <div class="relative max-w-6xl mx-auto px-4 py-8">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
             {% for playlist in playlists %}
-                <div class="rounded-2xl shadow-xl bg-spotify-green/90 border border-white/20 overflow-hidden transform transition duration-300 hover:scale-105 hover:shadow-2xl relative card-tile">
-                    <!-- Playlist Artwork -->
-                    <div class="relative h-48">
+                <div class="rounded-2xl shadow-xl bg-spotify-green/90 border border-white/20 overflow-hidden transform transition duration-300 hover:scale-105 hover:shadow-2xl relative card-tile"
+                     data-playlist-id="{{ playlist.id }}">
+                    <!-- Playlist Artwork with Hover Overlay -->
+                    <div class="relative h-48 group">
                         {% if playlist.images %}
                             <img src="{{ playlist.images[0].url }}" alt="{{ playlist.name }}"
-                                 class="w-full h-full object-cover rounded-t-2xl md:rounded-t-2xl lg:rounded-t-4xl">
+                                 class="w-full h-full object-cover rounded-t-2xl">
                         {% else %}
-                            <div class="w-full h-full bg-black/20 flex items-center justify-center rounded-t-2xl md:rounded-t-2xl lg:rounded-t-4xl">
+                            <div class="w-full h-full bg-black/20 flex items-center justify-center rounded-t-2xl">
                                 <span class="text-4xl">&#127925;</span>
                             </div>
                         {% endif %}
+
+                        <!-- Shuffle Overlay (appears on hover/tap) -->
+                        <div class="shuffle-overlay absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col justify-between p-3 rounded-t-2xl opacity-0 pointer-events-none transition-opacity duration-200"
+                             aria-label="Shuffle options for {{ playlist.name }}">
+
+                            <!-- Top: Keep First N Stepper -->
+                            <div class="flex items-center justify-center space-x-2">
+                                <label class="text-white/80 text-xs font-medium" for="keep-first-{{ playlist.id }}">Keep first</label>
+                                <button type="button"
+                                        class="keep-first-decrement w-6 h-6 rounded bg-white/20 hover:bg-white/30 text-white text-sm font-bold flex items-center justify-center transition"
+                                        data-playlist-id="{{ playlist.id }}"
+                                        aria-label="Decrease tracks to keep">-</button>
+                                <input type="number"
+                                       id="keep-first-{{ playlist.id }}"
+                                       class="keep-first-input w-10 h-6 text-center text-white text-sm bg-white/10 border border-white/20 rounded focus:ring-1 focus:ring-white/40"
+                                       value="0" min="0" max="{{ playlist.tracks.total }}"
+                                       data-playlist-id="{{ playlist.id }}">
+                                <button type="button"
+                                        class="keep-first-increment w-6 h-6 rounded bg-white/20 hover:bg-white/30 text-white text-sm font-bold flex items-center justify-center transition"
+                                        data-playlist-id="{{ playlist.id }}"
+                                        aria-label="Increase tracks to keep">+</button>
+                            </div>
+
+                            <!-- Center: Algorithm Icon Grid (3x2) -->
+                            <div class="grid grid-cols-3 gap-2 my-2">
+                                {% for algo in algorithms %}
+                                <div class="relative algo-button-wrapper">
+                                    <button type="button"
+                                            class="algo-icon-btn w-full aspect-square rounded-lg bg-white/15 hover:bg-white/30 border border-white/20 hover:border-white/40 flex flex-col items-center justify-center transition duration-150 group/algo"
+                                            data-algorithm="{{ algo.class_name }}"
+                                            data-playlist-id="{{ playlist.id }}"
+                                            data-parameters='{{ algo.parameters|tojson }}'
+                                            data-algo-name="{{ algo.name }}"
+                                            title="{{ algo.name }}: {{ algo.description }}"
+                                            aria-label="Shuffle with {{ algo.name }} algorithm">
+                                        <!-- Algorithm Icon -->
+                                        <span class="algo-icon">
+                                            {% if algo.class_name == 'BasicShuffle' %}
+                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m-8 6H4m0 0l4-4m-4 4l4 4"/>
+                                            </svg>
+                                            {% elif algo.class_name == 'PercentageShuffle' %}
+                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 5L5 19M6.5 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5zm11 11a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"/>
+                                            </svg>
+                                            {% elif algo.class_name == 'BalancedShuffle' %}
+                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v18m-7-4l3-8h8l3 8M5 17h4m6 0h4"/>
+                                            </svg>
+                                            {% elif algo.class_name == 'StratifiedShuffle' %}
+                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                                            </svg>
+                                            {% elif algo.class_name == 'ArtistSpacingShuffle' %}
+                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                                            </svg>
+                                            {% elif algo.class_name == 'AlbumSequenceShuffle' %}
+                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 7a3 3 0 100 6 3 3 0 000-6z"/>
+                                            </svg>
+                                            {% endif %}
+                                        </span>
+                                        <!-- Algorithm Name (tiny label) -->
+                                        <span class="text-white/70 text-[10px] mt-0.5 leading-tight text-center">{{ algo.name }}</span>
+                                    </button>
+                                    <!-- Gear icon for algorithms with configurable params -->
+                                    {% if algo.parameters|length > 1 or (algo.parameters|length == 1 and 'keep_first' not in algo.parameters) %}
+                                    <button type="button"
+                                            class="algo-settings-btn absolute -top-1 -right-1 w-5 h-5 rounded-full bg-white/30 hover:bg-white/50 flex items-center justify-center transition z-10"
+                                            data-algorithm="{{ algo.class_name }}"
+                                            data-playlist-id="{{ playlist.id }}"
+                                            data-parameters='{{ algo.parameters|tojson }}'
+                                            title="Configure {{ algo.name }} settings"
+                                            aria-label="Settings for {{ algo.name }}">
+                                        <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                        </svg>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                                {% endfor %}
+                            </div>
+
+                            <!-- Bottom: Workshop + Undo -->
+                            <div class="flex items-center space-x-2">
+                                <a href="{{ url_for('main.workshop', playlist_id=playlist.id) }}"
+                                   class="flex-1 inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 border border-white/20"
+                                   title="Open Playlist Workshop"
+                                   onclick="event.stopPropagation();">
+                                    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                    </svg>
+                                    Workshop
+                                </a>
+                                <button type="button"
+                                        id="undo-overlay-btn-{{ playlist.id }}"
+                                        class="undo-overlay-btn hidden flex-shrink-0 px-3 py-1.5 rounded-lg bg-black/40 hover:bg-black/60 text-white/90 text-sm font-semibold transition duration-150 border border-white/10"
+                                        data-playlist-id="{{ playlist.id }}"
+                                        title="Undo last shuffle">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 010 10H9m-6-10l4-4m-4 4l4 4"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Algorithm Parameter Popover (hidden, positioned absolute) -->
+                        <div class="algo-params-popover hidden absolute inset-x-3 top-1/2 -translate-y-1/2 bg-black/90 backdrop-blur-md rounded-lg border border-white/20 p-3 z-20 shadow-xl"
+                             data-playlist-id="{{ playlist.id }}">
+                            <div class="flex items-center justify-between mb-2">
+                                <h4 class="algo-popover-title text-white text-sm font-bold"></h4>
+                                <button type="button" class="algo-popover-close text-white/60 hover:text-white transition">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="algo-popover-params space-y-2">
+                                <!-- Dynamic params rendered by JS -->
+                            </div>
+                            <button type="button"
+                                    class="algo-popover-shuffle w-full mt-2 px-3 py-1.5 rounded-lg bg-spotify-green hover:bg-spotify-green/80 text-white text-sm font-bold transition"
+                                    data-playlist-id="{{ playlist.id }}">
+                                Shuffle with Settings
+                            </button>
+                        </div>
+
+                        <!-- Hidden form for AJAX shuffle submission -->
+                        <form class="shuffle-form hidden"
+                              action="{{ url_for('main.shuffle', playlist_id=playlist.id) }}"
+                              method="POST"
+                              data-playlist-id="{{ playlist.id }}">
+                            <input type="hidden" name="algorithm" class="shuffle-algorithm-input" value="BasicShuffle">
+                        </form>
+
+                        <!-- Hidden form for AJAX undo submission -->
+                        <form class="undo-form hidden"
+                              id="undo-form-{{ playlist.id }}"
+                              action="{{ url_for('main.undo', playlist_id=playlist.id) }}"
+                              method="POST"
+                              data-playlist-id="{{ playlist.id }}">
+                        </form>
                     </div>
-                    <!-- Playlist Info (below artwork, with Spotify logo) -->
+
+                    <!-- Playlist Info Bar (simplified: name, count, Spotify link) -->
                     <div class="bg-spotify-green px-4 py-3 flex items-center justify-between">
                         <div class="min-w-0">
                             <h3 class="text-white text-xl font-bold truncate">{{ playlist.name }}</h3>
                             <p class="text-white/80 text-sm">{{ playlist.tracks.total }} tracks</p>
                         </div>
-                        <div class="flex items-center space-x-2 ml-2 flex-shrink-0">
-                            <a href="{{ url_for('main.workshop', playlist_id=playlist.id) }}"
-                               class="inline-flex items-center px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-sm font-semibold transition duration-150 border border-white/20"
-                               title="Open Playlist Workshop"
-                               onclick="event.stopPropagation();">
-                                <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                                </svg>
-                                Workshop
-                            </a>
+                        <div class="flex items-center ml-2">
                             <a href="{{ playlist.external_urls.spotify }}"
                                target="_blank"
                                rel="noopener noreferrer"
                                class="bg-black/50 rounded-full p-2 transform transition-all duration-300 hover:scale-110 hover:bg-spotify-green"
-                               onclick="event.stopPropagation();">
+                               onclick="event.stopPropagation();"
+                               aria-label="Open {{ playlist.name }} on Spotify">
                                 <svg class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
                                     <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
                                 </svg>
                             </a>
                         </div>
-                    </div>
-                    <!-- Playlist Controls: block below info bar, hidden by default, slide open on mouseover -->
-                    <div class="shuffle-menu max-h-0 opacity-0 transition-all duration-500 ease-in-out overflow-hidden shuffle-scrollbar mouseover-menu" style="pointer-events:auto;">
-                        <form action="{{ url_for('main.shuffle', playlist_id=playlist.id) }}"
-                              method="POST"
-                              class="space-y-4 p-4"
-                              data-playlist-id="{{ playlist.id }}"
-                              onsubmit="event.preventDefault(); handlePlaylistAction(this, 'shuffle');">
-                            <!-- Algorithm Selection -->
-                            <div>
-                                <label for="algorithm-{{ playlist.id }}" class="block text-sm font-medium text-white/90 mb-2">
-                                    Shuffle Algorithm:
-                                </label>
-                                <select id="algorithm-{{ playlist.id }}"
-                                        name="algorithm"
-                                        class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-white/30 focus:border-transparent"
-                                        onchange="updateAlgorithmParams(this, '{{ playlist.id }}')">
-                                    {% for algo in algorithms %}
-                                        <option value="{{ algo.class_name }}"
-                                                data-description="{{ algo.description }}"
-                                                data-parameters='{{ algo.parameters|tojson }}'>
-                                            {{ algo.name }}
-                                        </option>
-                                    {% endfor %}
-                                </select>
-                                <p class="mt-1 text-sm text-white/60 algorithm-description-{{ playlist.id }}">
-                                    {{ algorithms[0].description }}
-                                </p>
-                            </div>
-                            <!-- Dynamic Algorithm Parameters -->
-                            <div id="algorithm-params-{{ playlist.id }}" class="space-y-4">
-                                <!-- Parameters will be dynamically inserted here -->
-                            </div>
-                            <!-- Action Buttons -->
-                            <div class="flex space-x-2">
-                                <button type="submit"
-                                        class="flex-1 px-4 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white font-semibold transition duration-150">
-                                    Shuffle
-                                </button>
-                            </div>
-                        </form>
-                        <!-- Separate Undo Form -->
-                        <form id="undo-form-{{ playlist.id }}"
-                              action="{{ url_for('main.undo', playlist_id=playlist.id) }}"
-                              method="POST"
-                              data-playlist-id="{{ playlist.id }}"
-                              onsubmit="event.preventDefault(); handlePlaylistAction(this, 'undo');"
-                              class="mt-2 hidden">
-                            <button type="submit"
-                                    id="undo-button-{{ playlist.id }}"
-                                    class="w-full px-4 py-2 rounded-lg bg-black/30 hover:bg-black/40 text-white/90 font-semibold transition duration-150">
-                                Undo Last Shuffle
-                            </button>
-                        </form>
                     </div>
                 </div>
             {% endfor %}
@@ -366,93 +450,85 @@ function toggleActivityFeed() {
     btn.setAttribute('aria-expanded', String(isHidden));
 }
 
-function updateAlgorithmParams(selectElement, playlistId) {
-    const paramsContainer = document.getElementById(`algorithm-params-${playlistId}`);
-    const selectedOption = selectElement.options[selectElement.selectedIndex];
-    const parameters = JSON.parse(selectedOption.dataset.parameters);
-    const description = selectedOption.dataset.description;
+/**
+ * Shuffle Overlay Interaction System
+ *
+ * Handles: overlay visibility on mobile (tap-to-toggle),
+ * algorithm icon click-to-shuffle, keep-first stepper,
+ * algorithm parameter popover, undo button.
+ */
 
-    // Update description
-    document.querySelector(`.algorithm-description-${playlistId}`).textContent = description;
+/* --- Keep First Stepper --- */
+function getKeepFirstValue(playlistId) {
+    const input = document.querySelector(`#keep-first-${playlistId}`);
+    return input ? parseInt(input.value, 10) || 0 : 0;
+}
 
-    // Clear existing parameters
-    paramsContainer.innerHTML = '';
-
-    // Add new parameters
-    for (const [paramName, paramInfo] of Object.entries(parameters)) {
-        const paramDiv = document.createElement('div');
-        paramDiv.className = 'space-y-2';
-
-        // Create label
-        const label = document.createElement('label');
-        label.className = 'block text-sm font-medium text-white/90';
-        label.textContent = paramInfo.description;
-        paramDiv.appendChild(label);
-
-        // Create input based on parameter type
-        if (paramInfo.type === 'string' && paramInfo.options) {
-            // Create select for string options
-            const select = document.createElement('select');
-            select.name = paramName;
-            select.className = 'w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-white/30 focus:border-transparent';
-
-            for (const option of paramInfo.options) {
-                const optionElement = document.createElement('option');
-                optionElement.value = option;
-                optionElement.textContent = option;
-                if (option === paramInfo.default) {
-                    optionElement.selected = true;
-                }
-                select.appendChild(optionElement);
-            }
-
-            paramDiv.appendChild(select);
-        } else {
-            // Create input for other types
-            const input = document.createElement('input');
-            input.type = paramInfo.type === 'float' ? 'number' :
-                        paramInfo.type === 'integer' ? 'number' : 'text';
-            input.name = paramName;
-            input.className = 'w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-white/30 focus:border-transparent';
-            input.value = paramInfo.default;
-
-            if (paramInfo.min !== undefined) {
-                input.min = paramInfo.min;
-            }
-            if (paramInfo.max !== undefined) {
-                input.max = paramInfo.max;
-            }
-            if (paramInfo.type === 'float') {
-                input.step = '0.1';
-            }
-
-            paramDiv.appendChild(input);
-        }
-
-        paramsContainer.appendChild(paramDiv);
+function setKeepFirstValue(playlistId, value) {
+    const input = document.querySelector(`#keep-first-${playlistId}`);
+    if (input) {
+        const max = parseInt(input.max, 10) || 999;
+        input.value = Math.max(0, Math.min(value, max));
     }
 }
 
-function handlePlaylistAction(form, action) {
-    const playlistId = form.dataset.playlistId;
-    const submitButton = form.querySelector('button[type="submit"]');
-    const originalText = submitButton.textContent;
+/* --- Algorithm Shuffle via AJAX --- */
+function shuffleWithAlgorithm(playlistId, algorithmName, extraParams) {
+    const form = document.querySelector(
+        `.shuffle-form[data-playlist-id="${playlistId}"]`
+    );
+    if (!form) return;
 
-    // Disable button and show loading state
-    submitButton.disabled = true;
-    submitButton.textContent = action === 'shuffle' ? 'Shuffling...' : 'Undoing...';
+    // Set algorithm
+    form.querySelector('.shuffle-algorithm-input').value = algorithmName;
 
-    // Submit form via AJAX
+    // Remove any previously added dynamic hidden inputs
+    form.querySelectorAll('.dynamic-param').forEach(el => el.remove());
+
+    // Add keep_first (always included for algorithms that accept it)
+    const keepFirst = getKeepFirstValue(playlistId);
+    if (keepFirst > 0) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'keep_first';
+        input.value = keepFirst;
+        input.className = 'dynamic-param';
+        form.appendChild(input);
+    }
+
+    // Add extra params from popover (if any)
+    if (extraParams) {
+        for (const [key, value] of Object.entries(extraParams)) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = value;
+            input.className = 'dynamic-param';
+            form.appendChild(input);
+        }
+    }
+
+    // Find the clicked algorithm button and show loading state
+    const algoBtn = document.querySelector(
+        `.algo-icon-btn[data-algorithm="${algorithmName}"][data-playlist-id="${playlistId}"]`
+    );
+    if (algoBtn) {
+        algoBtn.classList.add('shuffling');
+    }
+
+    // Disable all algo buttons for this playlist during request
+    document.querySelectorAll(
+        `.algo-icon-btn[data-playlist-id="${playlistId}"]`
+    ).forEach(btn => btn.disabled = true);
+
+    // Submit via AJAX
     fetch(form.action, {
         method: 'POST',
         body: new FormData(form),
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest'
-        }
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
     })
     .then(response => {
         if (!response.ok) {
-            // Try to parse error JSON, but fall back to status text if that fails
             return response.json().catch(() => {
                 throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
             });
@@ -462,35 +538,152 @@ function handlePlaylistAction(form, action) {
     .then(data => {
         if (data.success) {
             showNotification(data.message, 'success');
-
-            // The server sends back the complete, updated state.
-            // We use this "single source of truth" to update the UI.
+            // Update undo button visibility
             if (data.playlist_state) {
-                const undoForm = document.getElementById(`undo-form-${playlistId}`);
+                const undoBtn = document.getElementById(`undo-overlay-btn-${playlistId}`);
                 const canUndo = data.playlist_state.current_index > 0;
-
-                if (canUndo) {
-                    undoForm.classList.remove('hidden');
-                } else {
-                    undoForm.classList.add('hidden');
+                if (undoBtn) {
+                    undoBtn.classList.toggle('hidden', !canUndo);
                 }
             }
         } else {
-            // If the server explicitly returns success: false, show the message.
-            showNotification(data.message || 'An operation failed.', data.category || 'error');
+            showNotification(data.message || 'Shuffle did not change the order.', data.category || 'info');
         }
     })
     .catch(error => {
-        console.error('Error during playlist action:', error);
-        // This will catch network errors or errors from the !response.ok block
-        const errorMessage = error.message || 'An unknown network error occurred. Please try again.';
-        showNotification(errorMessage, 'error');
+        console.error('Shuffle error:', error);
+        showNotification(error.message || 'An error occurred. Please try again.', 'error');
     })
     .finally(() => {
-        // Reset button state
-        submitButton.disabled = false;
-        submitButton.textContent = originalText;
+        if (algoBtn) {
+            algoBtn.classList.remove('shuffling');
+        }
+        document.querySelectorAll(
+            `.algo-icon-btn[data-playlist-id="${playlistId}"]`
+        ).forEach(btn => btn.disabled = false);
     });
+}
+
+/* --- Undo via AJAX --- */
+function undoShuffle(playlistId) {
+    const form = document.getElementById(`undo-form-${playlistId}`);
+    if (!form) return;
+
+    const undoBtn = document.getElementById(`undo-overlay-btn-${playlistId}`);
+    if (undoBtn) {
+        undoBtn.disabled = true;
+        undoBtn.classList.add('opacity-50');
+    }
+
+    fetch(form.action, {
+        method: 'POST',
+        body: new FormData(form),
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().catch(() => {
+                throw new Error(`Server responded with ${response.status}`);
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            if (data.playlist_state) {
+                const canUndo = data.playlist_state.current_index > 0;
+                if (undoBtn) {
+                    undoBtn.classList.toggle('hidden', !canUndo);
+                }
+            }
+        } else {
+            showNotification(data.message || 'Undo failed.', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Undo error:', error);
+        showNotification(error.message || 'Undo failed. Please try again.', 'error');
+    })
+    .finally(() => {
+        if (undoBtn) {
+            undoBtn.disabled = false;
+            undoBtn.classList.remove('opacity-50');
+        }
+    });
+}
+
+/* --- Algorithm Parameters Popover --- */
+function openAlgoPopover(playlistId, algorithmName, parameters) {
+    const popover = document.querySelector(
+        `.algo-params-popover[data-playlist-id="${playlistId}"]`
+    );
+    if (!popover) return;
+
+    // Set title
+    const algoBtn = document.querySelector(
+        `.algo-icon-btn[data-algorithm="${algorithmName}"][data-playlist-id="${playlistId}"]`
+    );
+    const algoName = algoBtn ? algoBtn.dataset.algoName : algorithmName;
+    popover.querySelector('.algo-popover-title').textContent = `${algoName} Settings`;
+
+    // Build parameter form fields
+    const paramsContainer = popover.querySelector('.algo-popover-params');
+    paramsContainer.innerHTML = '';
+
+    for (const [paramName, paramInfo] of Object.entries(parameters)) {
+        // Skip keep_first — handled by the stepper at the top of the overlay
+        if (paramName === 'keep_first') continue;
+
+        const wrapper = document.createElement('div');
+
+        const label = document.createElement('label');
+        label.className = 'block text-white/80 text-xs font-medium mb-0.5';
+        label.textContent = paramInfo.description;
+        wrapper.appendChild(label);
+
+        if (paramInfo.type === 'string' && paramInfo.options) {
+            const select = document.createElement('select');
+            select.name = paramName;
+            select.className = 'w-full px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm focus:ring-1 focus:ring-white/40';
+            for (const option of paramInfo.options) {
+                const opt = document.createElement('option');
+                opt.value = option;
+                opt.textContent = option;
+                if (option === paramInfo.default) opt.selected = true;
+                select.appendChild(opt);
+            }
+            wrapper.appendChild(select);
+        } else {
+            const input = document.createElement('input');
+            input.type = paramInfo.type === 'float' ? 'number' :
+                         paramInfo.type === 'integer' ? 'number' : 'text';
+            input.name = paramName;
+            input.value = paramInfo.default;
+            input.className = 'w-full px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm focus:ring-1 focus:ring-white/40';
+            if (paramInfo.min !== undefined) input.min = paramInfo.min;
+            if (paramInfo.max !== undefined) input.max = paramInfo.max;
+            if (paramInfo.type === 'float') input.step = '0.1';
+            wrapper.appendChild(input);
+        }
+
+        paramsContainer.appendChild(wrapper);
+    }
+
+    // Store current algorithm on the shuffle button
+    popover.querySelector('.algo-popover-shuffle').dataset.algorithm = algorithmName;
+
+    // Show popover
+    popover.classList.remove('hidden');
+}
+
+function closeAlgoPopover(playlistId) {
+    const popover = document.querySelector(
+        `.algo-params-popover[data-playlist-id="${playlistId}"]`
+    );
+    if (popover) {
+        popover.classList.add('hidden');
+    }
 }
 
 function refreshPlaylists() {
@@ -535,40 +728,115 @@ function refreshPlaylists() {
     });
 }
 
-// Initialize algorithm parameters for each playlist
+/* --- Event Delegation Setup --- */
 document.addEventListener('DOMContentLoaded', () => {
-    const algorithmSelects = document.querySelectorAll('select[name="algorithm"]');
-    algorithmSelects.forEach(select => {
-        const playlistId = select.closest('form').dataset.playlistId;
-        updateAlgorithmParams(select, playlistId);
-    });
+    // Mobile tap-to-toggle: on touch devices, tap the artwork area to toggle overlay
+    document.querySelectorAll('.card-tile').forEach(tile => {
+        const overlay = tile.querySelector('.shuffle-overlay');
+        if (!overlay) return;
 
-    // Click-to-toggle for shuffle menu on all devices
-    document.querySelectorAll('.card-tile').forEach(function(card) {
-        card.addEventListener('click', function(e) {
-            // Don't toggle if a click is on an interactive element inside the menu
-            if (e.target.closest('.shuffle-menu, a')) {
-                // Allow clicks on links and inside the menu itself
-                if (!e.target.closest('a')) {
-                     // If it's inside the menu but not a link, do nothing.
-                    return;
-                }
+        tile.addEventListener('click', (e) => {
+            // If the click is on an interactive element inside the overlay, let it through
+            if (e.target.closest('.algo-icon-btn, .algo-settings-btn, .algo-popover-close, .algo-popover-shuffle, .undo-overlay-btn, a, button, input, select')) {
+                return;
             }
+            // If click is on the Spotify link in the info bar, let it through
+            if (e.target.closest("a[href*='spotify.com']")) return;
 
-            // If the click is on the card but outside the interactive menu area, toggle it.
-            // But if the target is the spotify link, let it through.
-            if(e.target.closest("a[href*='spotify.com']")) return;
+            // Toggle overlay-active for mobile/touch
+            const isActive = tile.classList.contains('overlay-active');
 
-            // Close any other open menus
-            document.querySelectorAll('.card-tile.menu-open').forEach(function(openCard) {
-                if (openCard !== card) {
-                    openCard.classList.remove('menu-open');
+            // Close all other active overlays
+            document.querySelectorAll('.card-tile.overlay-active').forEach(other => {
+                if (other !== tile) {
+                    other.classList.remove('overlay-active');
+                    closeAlgoPopover(other.dataset.playlistId);
                 }
             });
 
-            // Toggle the current card
-            card.classList.toggle('menu-open');
+            tile.classList.toggle('overlay-active', !isActive);
+            if (isActive) {
+                closeAlgoPopover(tile.dataset.playlistId);
+            }
         });
+    });
+
+    // Algorithm icon click: trigger shuffle with default params
+    document.querySelectorAll('.algo-icon-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const playlistId = btn.dataset.playlistId;
+            const algorithm = btn.dataset.algorithm;
+            closeAlgoPopover(playlistId);
+            shuffleWithAlgorithm(playlistId, algorithm, null);
+        });
+    });
+
+    // Gear/settings icon click: open parameter popover
+    document.querySelectorAll('.algo-settings-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const playlistId = btn.dataset.playlistId;
+            const algorithm = btn.dataset.algorithm;
+            const parameters = JSON.parse(btn.dataset.parameters);
+            openAlgoPopover(playlistId, algorithm, parameters);
+        });
+    });
+
+    // Popover close button
+    document.querySelectorAll('.algo-popover-close').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const popover = btn.closest('.algo-params-popover');
+            const playlistId = popover.dataset.playlistId;
+            closeAlgoPopover(playlistId);
+        });
+    });
+
+    // Popover shuffle button: collect params and shuffle
+    document.querySelectorAll('.algo-popover-shuffle').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const playlistId = btn.dataset.playlistId;
+            const algorithm = btn.dataset.algorithm;
+            const popover = btn.closest('.algo-params-popover');
+            const paramsContainer = popover.querySelector('.algo-popover-params');
+            const extraParams = {};
+            paramsContainer.querySelectorAll('input, select').forEach(input => {
+                extraParams[input.name] = input.value;
+            });
+            closeAlgoPopover(playlistId);
+            shuffleWithAlgorithm(playlistId, algorithm, extraParams);
+        });
+    });
+
+    // Undo buttons
+    document.querySelectorAll('.undo-overlay-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            undoShuffle(btn.dataset.playlistId);
+        });
+    });
+
+    // Keep first stepper: increment/decrement
+    document.querySelectorAll('.keep-first-increment').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const playlistId = btn.dataset.playlistId;
+            setKeepFirstValue(playlistId, getKeepFirstValue(playlistId) + 1);
+        });
+    });
+    document.querySelectorAll('.keep-first-decrement').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const playlistId = btn.dataset.playlistId;
+            setKeepFirstValue(playlistId, getKeepFirstValue(playlistId) - 1);
+        });
+    });
+
+    // Prevent keep-first input clicks from toggling overlay
+    document.querySelectorAll('.keep-first-input').forEach(input => {
+        input.addEventListener('click', (e) => e.stopPropagation());
     });
 });
 </script>
@@ -582,29 +850,70 @@ document.addEventListener('DOMContentLoaded', () => {
 
 .rotate-180 { transform: rotate(180deg); }
 
-/* Custom scrollbar for the shuffle controls */
-.shuffle-scrollbar::-webkit-scrollbar {
-  width: 8px;
+/* Shuffle overlay: fade in on hover (desktop) or active state (mobile) */
+.card-tile:hover .shuffle-overlay,
+.card-tile.overlay-active .shuffle-overlay {
+    opacity: 1 !important;
+    pointer-events: auto !important;
 }
-.shuffle-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(20, 120, 60, 0.5); /* Slightly darker green, semi-transparent */
-  border-radius: 6px;
+
+/* Smooth opacity transition for overlay */
+.shuffle-overlay {
+    transition: opacity 200ms ease-in-out;
 }
-.shuffle-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+
+/* Algorithm icon button hover effect */
+.algo-icon-btn:hover {
+    transform: scale(1.05);
 }
-.shuffle-scrollbar {
-  scrollbar-color: rgba(20,120,60,0.5) transparent; /* For Firefox */
-  scrollbar-width: thin;
+.algo-icon-btn:active {
+    transform: scale(0.95);
 }
-/* Slide/fade animation for expanding shuffle menu below info bar */
-.menu-open .shuffle-menu {
-  max-height: 1000px !important; /* Large enough to fit all content */
-  opacity: 1 !important;
-  transition: max-height 0.5s cubic-bezier(0.4,0,0.2,1), opacity 0.5s cubic-bezier(0.4,0,0.2,1);
+
+/* Loading state for algorithm buttons */
+.algo-icon-btn.shuffling {
+    opacity: 0.5;
+    pointer-events: none;
 }
-.shuffle-menu {
-  transition: max-height 0.5s cubic-bezier(0.4,0,0.2,1), opacity 0.5s cubic-bezier(0.4,0,0.2,1);
+.algo-icon-btn.shuffling .algo-icon {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Popover slide-in */
+.algo-params-popover {
+    transition: opacity 150ms ease, transform 150ms ease;
+}
+.algo-params-popover.hidden {
+    opacity: 0;
+    transform: translate(0, -50%) scale(0.95);
+}
+
+/* Keep first stepper: hide spin buttons on number input */
+.keep-first-input::-webkit-outer-spin-button,
+.keep-first-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.keep-first-input[type=number] {
+    -moz-appearance: textfield;
+}
+
+/* Accessibility: respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .shuffle-overlay {
+        transition: none !important;
+    }
+    .algo-icon-btn {
+        transform: none !important;
+    }
+    .algo-icon-btn.shuffling .algo-icon {
+        animation: none !important;
+    }
 }
 </style>
 {% endblock %}
