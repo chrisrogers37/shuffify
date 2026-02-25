@@ -38,10 +38,7 @@
                         label='Default Shuffle Algorithm',
                         field_id='default_algorithm',
                         field_name='default_algorithm',
-                        options=[{'value': '', 'label': 'No default (choose each time)'}] + [
-                            {'value': algo.class_name, 'label': algo.name}
-                            for algo in algorithms
-                        ],
+                        options=algorithm_options,
                         selected=settings.default_algorithm or '',
                         help_text='Pre-selects this algorithm when shuffling playlists.'
                     ) }}

@@ -59,12 +59,19 @@ def settings():
             db_user.id
         )
         algorithms = ShuffleService.list_algorithms()
+        algorithm_options = [
+            {"value": "", "label": "No default (choose each time)"}
+        ] + [
+            {"value": a["class_name"], "label": a["name"]}
+            for a in algorithms
+        ]
 
         return render_template(
             "settings.html",
             user=user,
             settings=user_settings.to_dict(),
             algorithms=algorithms,
+            algorithm_options=algorithm_options,
         )
 
     except AuthenticationError as e:
