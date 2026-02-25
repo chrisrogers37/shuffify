@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Dashboard Shuffle UX** - Replaced click-to-expand shuffle panel with hover overlay on playlist artwork
+  - Algorithm selection changed from dropdown to icon grid (6 visible algorithms)
+  - Each algorithm has a distinct SVG icon for quick identification
+  - One-click shuffle with default parameters; gear icon for parameter customization
+  - Workshop button moved from info bar to overlay
+  - Undo button appears on overlay after shuffle
+  - "Keep first N tracks" stepper integrated at top of overlay
+  - Mobile support via tap-to-toggle fallback
+  - Info bar simplified to playlist name, track count, and Spotify link
+
 ### Fixed
 - **500 Error Page** - Global 500 handler now returns an HTML error page for browser navigation instead of raw JSON
   - API routes and AJAX requests continue to receive JSON error responses
