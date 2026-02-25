@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Schedules Page Error Handling** - Added broader exception handling to prevent raw JSON errors when schedule data fails to load
 - **Settings Page Error Handling** - Added UserSettingsError and general fallback catches to settings page route
 - **Refresh Button Error Handling** - Added general exception fallback to refresh endpoint and fixed JavaScript to check response.ok before parsing JSON
+- **Playlist Tile Overflow** - Fixed Workshop button being pushed off-screen when playlist names are long
+  - Added `min-w-0` to info bar left flex child to enable text truncation
+  - Added `flex-shrink-0` to right flex child to protect button visibility
 
 ### Changed
 - **Scheduler Service** - Adopted `get_owned_entity()` helper for ownership verification, consolidated duplicate `JobExecution` imports to module level
