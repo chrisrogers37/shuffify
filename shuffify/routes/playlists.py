@@ -36,9 +36,22 @@ def refresh_playlists(client=None, user=None):
             playlists=playlists,
         )
     except PlaylistError as e:
-        logger.error(f"Failed to refresh playlists: {e}")
+        logger.error("Failed to refresh playlists: %s", e)
         return json_error(
             "Failed to refresh playlists. Please try again.",
+            500,
+        )
+    except Exception as e:
+        logger.error(
+            "Unexpected error refreshing playlists: %s "
+            "[type=%s]",
+            e,
+            type(e).__name__,
+            exc_info=True,
+        )
+        return json_error(
+            "An unexpected error occurred while refreshing "
+            "playlists. Please try again.",
             500,
         )
 

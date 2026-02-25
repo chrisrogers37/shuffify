@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **500 Error Page** - Global 500 handler now returns an HTML error page for browser navigation instead of raw JSON
+  - API routes and AJAX requests continue to receive JSON error responses
+  - Added structured logging with exception type for production diagnostics
+- **Schedules Page Error Handling** - Added broader exception handling to prevent raw JSON errors when schedule data fails to load
+- **Settings Page Error Handling** - Added UserSettingsError and general fallback catches to settings page route
+- **Refresh Button Error Handling** - Added general exception fallback to refresh endpoint and fixed JavaScript to check response.ok before parsing JSON
+
 ### Changed
 - **Scheduler Service** - Adopted `get_owned_entity()` helper for ownership verification, consolidated duplicate `JobExecution` imports to module level
 - **Test Organization** - Moved 7 route test files from `tests/` root to `tests/routes/` for consistent organization
