@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Test Fixture Consolidation** - Deduplicated `db_app`, `auth_client`, and `app_ctx` test fixtures
+  - Moved shared fixtures from 25 individual test files into `tests/conftest.py`
+  - Eliminated ~970 lines of duplicated fixture code
+  - Added `SCHEDULER_ENABLED = False` to shared `db_app` for consistency
+
 ### Added
 - **Playlist Tile Management** - Reorder, hide, and pin playlists on the dashboard
   - New PlaylistPreference model for persistent per-user arrangement
