@@ -7,6 +7,8 @@ toggle, manual run, execution history, and rotation status.
 
 from unittest.mock import patch, MagicMock
 
+from shuffify.services.user_service import UserService
+
 
 
 # Note: Schedule routes use two auth patterns:

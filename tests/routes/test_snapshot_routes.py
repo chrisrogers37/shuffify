@@ -7,6 +7,7 @@ Tests cover list, create, view, restore, and delete endpoints.
 import time
 from unittest.mock import patch, MagicMock
 
+from shuffify.services.user_service import UserService
 from shuffify.services.playlist_snapshot_service import (
     PlaylistSnapshotService,
 )
