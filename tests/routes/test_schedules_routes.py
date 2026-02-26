@@ -7,6 +7,7 @@ toggle, manual run, execution history, and rotation status.
 
 from unittest.mock import patch, MagicMock
 
+from shuffify.models.db import db
 from shuffify.services.user_service import UserService
 
 
