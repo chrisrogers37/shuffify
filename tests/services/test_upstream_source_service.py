@@ -6,35 +6,12 @@ Tests cover add, list, get, delete, and duplicate detection.
 
 import pytest
 
-from shuffify.models.db import db
 from shuffify.services.user_service import UserService
 from shuffify.services.upstream_source_service import (
     UpstreamSourceService,
     UpstreamSourceError,
     UpstreamSourceNotFoundError,
 )
-
-
-@pytest.fixture
-def db_app():
-    """Create a Flask app with in-memory SQLite for testing."""
-    import os
-
-    os.environ["SPOTIFY_CLIENT_ID"] = "test_id"
-    os.environ["SPOTIFY_CLIENT_SECRET"] = "test_secret"
-
-    from shuffify import create_app
-
-    app = create_app("development")
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
-    app.config["TESTING"] = True
-
-    with app.app_context():
-        db.drop_all()
-        db.create_all()
-        yield app
-        db.session.remove()
-        db.drop_all()
 
 
 @pytest.fixture

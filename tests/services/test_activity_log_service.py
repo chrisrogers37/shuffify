@@ -17,30 +17,6 @@ from shuffify.enums import ActivityType
 
 
 @pytest.fixture
-def db_app():
-    """Create a Flask app with in-memory SQLite for testing."""
-    import os
-
-    os.environ["SPOTIFY_CLIENT_ID"] = "test_id"
-    os.environ["SPOTIFY_CLIENT_SECRET"] = "test_secret"
-
-    from shuffify import create_app
-
-    app = create_app("development")
-    app.config["SQLALCHEMY_DATABASE_URI"] = (
-        "sqlite:///:memory:"
-    )
-    app.config["TESTING"] = True
-
-    with app.app_context():
-        db.drop_all()
-        db.create_all()
-        yield app
-        db.session.remove()
-        db.drop_all()
-
-
-@pytest.fixture
 def app_ctx(db_app):
     """Provide app context with a test user."""
     with db_app.app_context():

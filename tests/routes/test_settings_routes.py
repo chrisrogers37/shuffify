@@ -11,31 +11,6 @@ from shuffify.models.db import db, User, UserSettings
 
 
 @pytest.fixture
-def db_app():
-    """Create a Flask app with in-memory SQLite for testing."""
-    import os
-
-    os.environ["SPOTIFY_CLIENT_ID"] = "test_id"
-    os.environ["SPOTIFY_CLIENT_SECRET"] = "test_secret"
-
-    from shuffify import create_app
-
-    app = create_app("development")
-    app.config["SQLALCHEMY_DATABASE_URI"] = (
-        "sqlite:///:memory:"
-    )
-    app.config["TESTING"] = True
-    app.config["SCHEDULER_ENABLED"] = False
-
-    with app.app_context():
-        db.drop_all()
-        db.create_all()
-        yield app
-        db.session.remove()
-        db.drop_all()
-
-
-@pytest.fixture
 def test_user(db_app):
     """Create a test user."""
     with db_app.app_context():

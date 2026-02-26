@@ -6,7 +6,6 @@ Tests cover save, list, get, update, delete, and limit enforcement.
 
 import pytest
 
-from shuffify.models.db import db
 from shuffify.services.user_service import UserService
 from shuffify.services.workshop_session_service import (
     WorkshopSessionService,
@@ -15,29 +14,6 @@ from shuffify.services.workshop_session_service import (
     WorkshopSessionLimitError,
     MAX_SESSIONS_PER_PLAYLIST,
 )
-
-
-@pytest.fixture
-def db_app():
-    """Create a Flask app with in-memory SQLite for testing."""
-    import os
-
-    os.environ["SPOTIFY_CLIENT_ID"] = "test_id"
-    os.environ["SPOTIFY_CLIENT_SECRET"] = "test_secret"
-    os.environ.pop("DATABASE_URL", None)
-
-    from shuffify import create_app
-
-    app = create_app("development")
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
-    app.config["TESTING"] = True
-
-    with app.app_context():
-        db.drop_all()
-        db.create_all()
-        yield app
-        db.session.remove()
-        db.drop_all()
 
 
 @pytest.fixture

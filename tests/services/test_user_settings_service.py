@@ -16,38 +16,6 @@ from shuffify.services.user_settings_service import (
 
 
 @pytest.fixture
-def db_app():
-    """Create a Flask app with in-memory SQLite for testing."""
-    import os
-
-    os.environ["SPOTIFY_CLIENT_ID"] = "test_id"
-    os.environ["SPOTIFY_CLIENT_SECRET"] = "test_secret"
-    os.environ.pop("DATABASE_URL", None)
-
-    from shuffify import create_app
-
-    app = create_app("development")
-    app.config["SQLALCHEMY_DATABASE_URI"] = (
-        "sqlite:///:memory:"
-    )
-    app.config["TESTING"] = True
-
-    with app.app_context():
-        db.drop_all()
-        db.create_all()
-        yield app
-        db.session.remove()
-        db.drop_all()
-
-
-@pytest.fixture
-def app_ctx(db_app):
-    """Provide app context."""
-    with db_app.app_context():
-        yield
-
-
-@pytest.fixture
 def test_user(app_ctx):
     """Create a test user in the database."""
     user = User(
