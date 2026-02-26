@@ -6,6 +6,7 @@ and the broadened exception handling in schedules, settings,
 and refresh routes.
 """
 
+import pytest
 from unittest.mock import patch, MagicMock
 
 from shuffify.services import (

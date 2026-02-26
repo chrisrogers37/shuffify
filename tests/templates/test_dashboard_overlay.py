@@ -6,6 +6,7 @@ algorithm icon buttons, gear icons, keep-first stepper,
 workshop/undo placement, info bar simplification, and hidden forms.
 """
 
+import pytest
 from unittest.mock import patch, MagicMock
 
 MOCK_ALGORITHMS = [
