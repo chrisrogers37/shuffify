@@ -265,6 +265,85 @@ def authenticated_client(app):
 # Algorithm Fixtures
 # =============================================================================
 
+# =============================================================================
+# Database App Fixtures (shared across route/service/model tests)
+# =============================================================================
+
+
+@pytest.fixture
+def db_app():
+    """Create a Flask app with in-memory SQLite for DB-dependent tests.
+
+    This fixture creates a fresh database for each test, ensuring
+    complete isolation. Use this instead of the lighter `app` fixture
+    when tests need to write to the database.
+    """
+    import os
+
+    os.environ["SPOTIFY_CLIENT_ID"] = "test_id"
+    os.environ["SPOTIFY_CLIENT_SECRET"] = "test_secret"
+    os.environ.pop("DATABASE_URL", None)
+
+    from shuffify import create_app
+    from shuffify.models.db import db
+
+    app = create_app("development")
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
+    app.config["TESTING"] = True
+    app.config["SCHEDULER_ENABLED"] = False
+
+    with app.app_context():
+        db.drop_all()
+        db.create_all()
+        yield app
+        db.session.remove()
+        db.drop_all()
+
+
+@pytest.fixture
+def app_ctx(db_app):
+    """Provide app context for service/model tests."""
+    with db_app.app_context():
+        yield
+
+
+@pytest.fixture
+def auth_client(db_app):
+    """Authenticated test client with valid session and pre-seeded user.
+
+    Includes a pre-seeded user in the database matching the session
+    user_data. Use for route tests that require authentication.
+    """
+    from shuffify.services.user_service import UserService
+
+    with db_app.app_context():
+        UserService.upsert_from_spotify({
+            "id": "user123",
+            "display_name": "Test User",
+            "images": [],
+        })
+
+    with db_app.test_client() as client:
+        with client.session_transaction() as sess:
+            sess["spotify_token"] = {
+                "access_token": "test_token",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "expires_at": time.time() + 3600,
+                "refresh_token": "test_refresh",
+            }
+            sess["user_data"] = {
+                "id": "user123",
+                "display_name": "Test User",
+            }
+        yield client
+
+
+# =============================================================================
+# Algorithm Fixtures
+# =============================================================================
+
+
 @pytest.fixture
 def basic_algorithm():
     """An instance of BasicShuffle algorithm."""
