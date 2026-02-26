@@ -6,47 +6,12 @@ and the broadened exception handling in schedules, settings,
 and refresh routes.
 """
 
-import time
-import pytest
 from unittest.mock import patch, MagicMock
 
-from shuffify.models.db import db, User
 from shuffify.services import (
     ScheduleError,
     UserSettingsError,
 )
-
-
-@pytest.fixture
-def db_app():
-    """Create a Flask app with in-memory SQLite for testing."""
-    import os
-
-    os.environ["SPOTIFY_CLIENT_ID"] = "test_id"
-    os.environ["SPOTIFY_CLIENT_SECRET"] = "test_secret"
-    os.environ.pop("DATABASE_URL", None)
-
-    from shuffify import create_app
-
-    app = create_app("development")
-    app.config["SQLALCHEMY_DATABASE_URI"] = (
-        "sqlite:///:memory:"
-    )
-    app.config["TESTING"] = True
-    app.config["SCHEDULER_ENABLED"] = False
-
-    with app.app_context():
-        db.drop_all()
-        db.create_all()
-        user = User(
-            spotify_id="user123",
-            display_name="Test User",
-        )
-        db.session.add(user)
-        db.session.commit()
-        yield app
-        db.session.remove()
-        db.drop_all()
 
 
 @pytest.fixture
@@ -55,26 +20,6 @@ def error_app(db_app):
     db_app.config["PROPAGATE_EXCEPTIONS"] = False
     db_app.testing = False
     return db_app
-
-
-@pytest.fixture
-def auth_client(db_app):
-    """Authenticated test client with session user data."""
-    with db_app.test_client() as client:
-        with client.session_transaction() as sess:
-            sess["spotify_token"] = {
-                "access_token": "test_token",
-                "token_type": "Bearer",
-                "expires_in": 3600,
-                "expires_at": time.time() + 3600,
-                "refresh_token": "test_refresh",
-            }
-            sess["user_data"] = {
-                "id": "user123",
-                "display_name": "Test User",
-                "images": [],
-            }
-        yield client
 
 
 class TestGlobal500Handler:
