@@ -378,3 +378,321 @@ class TestSearchPlaylistsRoute:
             content_type="application/json",
         )
         assert response.status_code == 401
+
+
+# =============================================================================
+# Restricted Playlist Detection Tests (Spotify Feb 2026 API)
+# =============================================================================
+
+
+def _make_restricted_playlist():
+    """A Playlist with total_tracks > 0 but no actual tracks."""
+    return Playlist(
+        id="restricted_pl_123",
+        name="Top Hits 2026",
+        owner_id="spotify_editorial",
+        description="The hottest tracks",
+        total_tracks=50,
+        tracks=[],
+    )
+
+
+def _make_genuinely_empty_playlist():
+    """A Playlist with total_tracks=0 and no actual tracks."""
+    return Playlist(
+        id="empty_pl_456",
+        name="Empty Playlist",
+        owner_id="other_user",
+        description="Nothing here",
+        total_tracks=0,
+        tracks=[],
+    )
+
+
+def _make_owned_playlist_with_tracks():
+    """A Playlist owned by the current user with tracks."""
+    return Playlist(
+        id="owned_pl_789",
+        name="My Playlist",
+        owner_id="user123",
+        description="My music",
+        total_tracks=5,
+        tracks=[
+            {
+                "id": f"track{i}",
+                "name": f"Track {i}",
+                "uri": f"spotify:track:track{i}",
+                "duration_ms": 200000,
+                "is_local": False,
+                "artists": [f"Artist {i}"],
+                "artist_urls": [
+                    f"https://open.spotify.com/artist/a{i}"
+                ],
+                "album_name": f"Album {i}",
+                "album_image_url": (
+                    f"https://example.com/img{i}.jpg"
+                ),
+                "track_url": (
+                    f"https://open.spotify.com/track/track{i}"
+                ),
+            }
+            for i in range(1, 6)
+        ],
+    )
+
+
+def _make_owned_empty_playlist():
+    """A Playlist owned by the current user with no tracks."""
+    return Playlist(
+        id="owned_empty_pl",
+        name="My Empty Playlist",
+        owner_id="user123",
+        description="Nothing yet",
+        total_tracks=0,
+        tracks=[],
+    )
+
+
+class TestRestrictedPlaylistDetection:
+    """Tests for restricted playlist detection (Feb 2026 API)."""
+
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
+    @patch("shuffify.routes.workshop.PlaylistService")
+    @patch(
+        "shuffify.routes.workshop.parse_spotify_playlist_url"
+    )
+    def test_restricted_playlist_returns_restricted_mode(
+        self,
+        mock_parse_url,
+        mock_playlist_svc,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
+    ):
+        """Non-owned playlist with declared tracks but
+        0 returned should return mode: restricted."""
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.spotify_id = "user123"
+        mock_get_db_user.return_value = mock_user
+
+        mock_parse_url.return_value = "restricted_pl_123"
+
+        mock_ps = Mock()
+        mock_ps.get_playlist.return_value = (
+            _make_restricted_playlist()
+        )
+        mock_playlist_svc.return_value = mock_ps
+
+        response = authenticated_client.post(
+            "/workshop/load-external-playlist",
+            data=json.dumps({
+                "url": "restricted_pl_123"
+            }),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["success"] is True
+        assert data["mode"] == "restricted"
+        assert data["playlist"]["id"] == (
+            "restricted_pl_123"
+        )
+        assert data["playlist"]["track_count"] == 50
+        assert len(data["tracks"]) == 0
+        assert "message" in data
+        assert "suggested_search" in data
+        assert data["suggested_search"] == "Top Hits 2026"
+
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
+    @patch("shuffify.routes.workshop.PlaylistService")
+    @patch(
+        "shuffify.routes.workshop.parse_spotify_playlist_url"
+    )
+    def test_genuinely_empty_playlist_returns_tracks_mode(
+        self,
+        mock_parse_url,
+        mock_playlist_svc,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
+    ):
+        """Non-owned playlist with 0 declared tracks and
+        0 returned should return mode: tracks (not restricted)."""
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.spotify_id = "user123"
+        mock_get_db_user.return_value = mock_user
+
+        mock_parse_url.return_value = "empty_pl_456"
+
+        mock_ps = Mock()
+        mock_ps.get_playlist.return_value = (
+            _make_genuinely_empty_playlist()
+        )
+        mock_playlist_svc.return_value = mock_ps
+
+        response = authenticated_client.post(
+            "/workshop/load-external-playlist",
+            data=json.dumps({
+                "url": "empty_pl_456"
+            }),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["success"] is True
+        assert data["mode"] == "tracks"
+
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
+    @patch("shuffify.routes.workshop.PlaylistService")
+    @patch(
+        "shuffify.routes.workshop.parse_spotify_playlist_url"
+    )
+    def test_owned_playlist_with_tracks_returns_tracks_mode(
+        self,
+        mock_parse_url,
+        mock_playlist_svc,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
+    ):
+        """Owned playlist with tracks should return
+        mode: tracks."""
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.spotify_id = "user123"
+        mock_get_db_user.return_value = mock_user
+
+        mock_parse_url.return_value = "owned_pl_789"
+
+        mock_ps = Mock()
+        mock_ps.get_playlist.return_value = (
+            _make_owned_playlist_with_tracks()
+        )
+        mock_playlist_svc.return_value = mock_ps
+
+        response = authenticated_client.post(
+            "/workshop/load-external-playlist",
+            data=json.dumps({
+                "url": "owned_pl_789"
+            }),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["success"] is True
+        assert data["mode"] == "tracks"
+        assert len(data["tracks"]) == 5
+
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
+    @patch("shuffify.routes.workshop.PlaylistService")
+    @patch(
+        "shuffify.routes.workshop.parse_spotify_playlist_url"
+    )
+    def test_owned_empty_playlist_returns_tracks_mode(
+        self,
+        mock_parse_url,
+        mock_playlist_svc,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
+    ):
+        """Owned playlist with 0 tracks should return
+        mode: tracks (not restricted)."""
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.spotify_id = "user123"
+        mock_get_db_user.return_value = mock_user
+
+        mock_parse_url.return_value = "owned_empty_pl"
+
+        mock_ps = Mock()
+        mock_ps.get_playlist.return_value = (
+            _make_owned_empty_playlist()
+        )
+        mock_playlist_svc.return_value = mock_ps
+
+        response = authenticated_client.post(
+            "/workshop/load-external-playlist",
+            data=json.dumps({
+                "url": "owned_empty_pl"
+            }),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["success"] is True
+        assert data["mode"] == "tracks"
+
+
+class TestSearchPlaylistsOwnerIdField:
+    """Tests for owner_id field in search results."""
+
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
+    def test_search_playlists_includes_owner_id(
+        self,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
+    ):
+        """Search results should include owner_id field."""
+        mock_client = Mock()
+        mock_client.search_playlists.return_value = [
+            {
+                "id": "pl1",
+                "name": "Jazz Mix",
+                "owner_display_name": "Spotify",
+                "owner_id": "spotify",
+                "image_url": (
+                    "https://example.com/img.jpg"
+                ),
+                "total_tracks": 50,
+            }
+        ]
+        mock_auth.return_value = mock_client
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
+
+        response = authenticated_client.post(
+            "/workshop/search-playlists",
+            data=json.dumps({"query": "jazz"}),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["success"] is True
+        assert len(data["playlists"]) == 1
+        assert data["playlists"][0]["owner_id"] == (
+            "spotify"
+        )

@@ -343,7 +343,9 @@ def workshop_search_playlists(
         )
 
 
-def _load_playlist_by_url(client, ext_request):
+def _load_playlist_by_url(
+    client, ext_request, current_user_id=None
+):
     """Load tracks from a specific playlist by URL/URI/ID."""
     playlist_id = parse_spotify_playlist_url(
         ext_request.url
@@ -362,15 +364,29 @@ def _load_playlist_by_url(client, ext_request):
             playlist_id, include_features=False
         )
 
+        # Detect restricted playlists: non-owned
+        # playlists that report tracks but return none
+        # (Spotify Feb 2026 API change).
+        is_restricted = (
+            len(playlist.tracks) == 0
+            and (playlist.total_tracks or 0) > 0
+            and playlist.owner_id != current_user_id
+        )
+
         if "external_playlist_history" not in session:
             session["external_playlist_history"] = []
 
         history = session["external_playlist_history"]
+        track_count = (
+            playlist.total_tracks
+            if is_restricted
+            else len(playlist)
+        )
         entry = {
             "id": playlist.id,
             "name": playlist.name,
             "owner_id": playlist.owner_id,
-            "track_count": len(playlist),
+            "track_count": track_count,
         }
         history = [
             h for h in history
@@ -381,6 +397,33 @@ def _load_playlist_by_url(client, ext_request):
             history[:10]
         )
         session.modified = True
+
+        if is_restricted:
+            logger.info(
+                f"External playlist "
+                f"'{playlist.name}' is restricted "
+                f"({playlist.total_tracks} declared "
+                f"tracks, 0 returned)"
+            )
+            return jsonify({
+                "success": True,
+                "mode": "restricted",
+                "playlist": {
+                    "id": playlist.id,
+                    "name": playlist.name,
+                    "owner_id": playlist.owner_id,
+                    "description": playlist.description,
+                    "track_count": playlist.total_tracks,
+                },
+                "tracks": [],
+                "message": (
+                    "Track listing unavailable for "
+                    "this playlist. You can still "
+                    "search for individual tracks "
+                    "to add."
+                ),
+                "suggested_search": playlist.name,
+            })
 
         logger.info(
             f"Loaded external playlist "
@@ -456,7 +499,10 @@ def workshop_load_external_playlist(
         return err
 
     if ext_request.url:
-        return _load_playlist_by_url(client, ext_request)
+        return _load_playlist_by_url(
+            client, ext_request,
+            current_user_id=user.spotify_id,
+        )
 
     if ext_request.query:
         return _search_playlists_by_query(
