@@ -268,6 +268,129 @@ class TestUserServiceUpsert:
         assert result.user.spotify_uri is None
 
 
+class TestUserServicePreserveOnAbsent:
+    """Tests for preserve-on-absent pattern (Spotify Feb 2026 API changes)."""
+
+    def test_update_preserves_email_when_absent(
+        self, app_ctx
+    ):
+        """When API response lacks 'email' key, existing DB value is preserved."""
+        user_data = {
+            "id": "preserve_email_user",
+            "display_name": "Preserve Email",
+            "email": "old@example.com",
+            "images": [],
+        }
+        UserService.upsert_from_spotify(user_data)
+
+        # Re-login without email key in response
+        updated_data = {
+            "id": "preserve_email_user",
+            "display_name": "Preserve Email",
+            "images": [],
+        }
+        result = UserService.upsert_from_spotify(
+            updated_data
+        )
+
+        assert result.user.email == "old@example.com"
+
+    def test_update_preserves_country_when_absent(
+        self, app_ctx
+    ):
+        """When API response lacks 'country' key, existing DB value is preserved."""
+        user_data = {
+            "id": "preserve_country_user",
+            "display_name": "Preserve Country",
+            "images": [],
+            "country": "US",
+        }
+        UserService.upsert_from_spotify(user_data)
+
+        # Re-login without country key
+        updated_data = {
+            "id": "preserve_country_user",
+            "display_name": "Preserve Country",
+            "images": [],
+        }
+        result = UserService.upsert_from_spotify(
+            updated_data
+        )
+
+        assert result.user.country == "US"
+
+    def test_update_preserves_product_when_absent(
+        self, app_ctx
+    ):
+        """When API response lacks 'product' key, existing DB value is preserved."""
+        user_data = {
+            "id": "preserve_product_user",
+            "display_name": "Preserve Product",
+            "images": [],
+            "product": "premium",
+        }
+        UserService.upsert_from_spotify(user_data)
+
+        # Re-login without product key
+        updated_data = {
+            "id": "preserve_product_user",
+            "display_name": "Preserve Product",
+            "images": [],
+        }
+        result = UserService.upsert_from_spotify(
+            updated_data
+        )
+
+        assert result.user.spotify_product == "premium"
+
+    def test_update_allows_explicit_none_for_email(
+        self, app_ctx
+    ):
+        """When 'email' key IS present with None, it DOES overwrite."""
+        user_data = {
+            "id": "explicit_none_email",
+            "display_name": "Explicit None",
+            "email": "old@example.com",
+            "images": [],
+        }
+        UserService.upsert_from_spotify(user_data)
+
+        # Re-login with email key explicitly set to None
+        updated_data = {
+            "id": "explicit_none_email",
+            "display_name": "Explicit None",
+            "email": None,
+            "images": [],
+        }
+        result = UserService.upsert_from_spotify(
+            updated_data
+        )
+
+        assert result.user.email is None
+
+    def test_create_without_removed_fields(
+        self, app_ctx
+    ):
+        """New user without email/country/product gets None for those fields."""
+        user_data = {
+            "id": "no_removed_fields",
+            "display_name": "No Removed",
+            "images": [],
+            "uri": "spotify:user:no_removed_fields",
+        }
+
+        result = UserService.upsert_from_spotify(
+            user_data
+        )
+
+        assert result.user.email is None
+        assert result.user.country is None
+        assert result.user.spotify_product is None
+        assert result.user.spotify_uri == (
+            "spotify:user:no_removed_fields"
+        )
+
+
 class TestUserServiceLookup:
     """Tests for get_by_spotify_id and get_by_id."""
 

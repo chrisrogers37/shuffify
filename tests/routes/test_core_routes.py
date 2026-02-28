@@ -236,5 +236,100 @@ class TestPrivacyRoute:
             assert resp.status_code == 200
 
 
+class TestDashboardDisplayNameFallback:
+    """Tests for dashboard rendering when display_name is None."""
+
+    @patch("shuffify.routes.core.DashboardService")
+    @patch("shuffify.routes.core.ShuffleService")
+    @patch("shuffify.routes.core.PlaylistService")
+    @patch("shuffify.routes.core.AuthService")
+    @patch("shuffify.routes.core.is_authenticated")
+    def test_dashboard_renders_without_display_name(
+        self,
+        mock_is_auth,
+        mock_auth_svc,
+        mock_ps_class,
+        mock_shuffle_svc,
+        mock_dash_svc,
+        auth_client,
+    ):
+        """Dashboard shows 'Welcome!' when display_name is None."""
+        mock_is_auth.return_value = True
+        mock_client = MagicMock()
+        mock_auth_svc.get_authenticated_client.return_value = (
+            mock_client
+        )
+        mock_auth_svc.get_user_data.return_value = {
+            "id": "user_no_name",
+            "display_name": None,
+            "images": [],
+        }
+
+        mock_ps = MagicMock()
+        mock_ps.get_user_playlists.return_value = []
+        mock_ps_class.return_value = mock_ps
+
+        mock_shuffle_svc.list_algorithms.return_value = []
+        mock_dash_svc.get_dashboard_data.return_value = {}
+
+        resp = auth_client.get("/")
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        assert "Welcome!" in html
+        assert "Welcome, None!" not in html
+
+    @patch("shuffify.routes.core.DashboardService")
+    @patch("shuffify.routes.core.ShuffleService")
+    @patch("shuffify.routes.core.PlaylistService")
+    @patch("shuffify.routes.core.AuthService")
+    @patch("shuffify.routes.core.is_authenticated")
+    def test_dashboard_returning_user_without_display_name(
+        self,
+        mock_is_auth,
+        mock_auth_svc,
+        mock_ps_class,
+        mock_shuffle_svc,
+        mock_dash_svc,
+        auth_client,
+    ):
+        """Returning user sees 'Welcome back!' not 'Welcome back, None!'."""
+        mock_is_auth.return_value = True
+        mock_client = MagicMock()
+        mock_auth_svc.get_authenticated_client.return_value = (
+            mock_client
+        )
+        mock_auth_svc.get_user_data.return_value = {
+            "id": "user_no_name_returning",
+            "display_name": None,
+            "images": [],
+        }
+
+        mock_ps = MagicMock()
+        mock_ps.get_user_playlists.return_value = []
+        mock_ps_class.return_value = mock_ps
+
+        mock_shuffle_svc.list_algorithms.return_value = []
+        mock_dash_svc.get_dashboard_data.return_value = {
+            "is_returning_user": True,
+            "recent_activity": [],
+            "activity_since_last_login": [],
+            "activity_since_last_login_count": 0,
+            "quick_stats": {
+                "total_shuffles": 0,
+                "total_scheduled_runs": 0,
+                "total_snapshots": 0,
+                "active_schedule_count": 0,
+            },
+            "active_schedules": [],
+            "recent_job_executions": [],
+        }
+
+        resp = auth_client.get("/")
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        assert "Welcome back!" in html
+        assert "Welcome back, None!" not in html
+
+
 # NOTE: /health endpoint tests are in tests/test_health_db.py (7 tests).
 # No duplicate tests here.

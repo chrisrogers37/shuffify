@@ -87,17 +87,24 @@ class UserService:
         ).first()
 
         if user:
-            # Update existing user
+            # Always update fields Spotify still returns
             user.display_name = user_data.get(
                 "display_name"
             )
-            user.email = user_data.get("email")
             user.profile_image_url = profile_image_url
-            user.country = user_data.get("country")
-            user.spotify_product = user_data.get(
-                "product"
-            )
             user.spotify_uri = user_data.get("uri")
+
+            # Preserve existing DB values when API fields
+            # are absent (Spotify Feb 2026 removed email,
+            # country, product from GET /v1/me)
+            if "email" in user_data:
+                user.email = user_data["email"]
+            if "country" in user_data:
+                user.country = user_data["country"]
+            if "product" in user_data:
+                user.spotify_product = user_data[
+                    "product"
+                ]
             user.last_login_at = now
             user.login_count = (
                 user.login_count or 0
