@@ -46,8 +46,6 @@ def _make_tracks(uris):
 def _make_api(prod_tracks=None, archive_tracks=None):
     """Create a mock SpotifyAPI."""
     api = MagicMock()
-    api._sp = MagicMock()
-    api._ensure_valid_token = MagicMock()
 
     def get_tracks(playlist_id):
         if playlist_id == "target1":
@@ -61,6 +59,9 @@ def _make_api(prod_tracks=None, archive_tracks=None):
     )
     api.playlist_remove_items = MagicMock(
         return_value=True
+    )
+    api.playlist_add_items = MagicMock(
+        return_value=None
     )
     return api
 
@@ -110,7 +111,7 @@ class TestExecuteRotateArchiveOldest:
 
         assert result["tracks_added"] == 0
         assert result["tracks_total"] == 3
-        api._sp.playlist_add_items.assert_called_once_with(
+        api.playlist_add_items.assert_called_once_with(
             "archive1", ["u1", "u2", "u3"]
         )
         api.playlist_remove_items.assert_called_once_with(

@@ -102,31 +102,26 @@ class PlaylistPairService:
         )
 
     @staticmethod
-    def archive_tracks(sp, archive_playlist_id, track_uris):
+    def archive_tracks(api, archive_playlist_id, track_uris):
         """Add tracks to the archive playlist on Spotify.
 
-        Batches in groups of 100.
         Returns the number of tracks added.
         """
         if not track_uris:
             return 0
 
-        added = 0
-        for i in range(0, len(track_uris), 100):
-            batch = track_uris[i:i + 100]
-            sp.playlist_add_items(archive_playlist_id, batch)
-            added += len(batch)
+        api.playlist_add_items(archive_playlist_id, track_uris)
 
         logger.info(
             "Archived %d tracks to %s",
-            added,
+            len(track_uris),
             archive_playlist_id,
         )
-        return added
+        return len(track_uris)
 
     @staticmethod
     def unarchive_tracks(
-        sp,
+        api,
         production_playlist_id,
         archive_playlist_id,
         track_uris,
@@ -134,25 +129,17 @@ class PlaylistPairService:
         """Move tracks from archive back to production.
 
         Adds to production, removes from archive.
-        Batches in groups of 100.
         Returns the number of tracks moved.
         """
         if not track_uris:
             return 0
 
-        # Add to production
-        for i in range(0, len(track_uris), 100):
-            batch = track_uris[i:i + 100]
-            sp.playlist_add_items(
-                production_playlist_id, batch
-            )
-
-        # Remove from archive
-        for i in range(0, len(track_uris), 100):
-            batch = track_uris[i:i + 100]
-            sp.playlist_remove_all_occurrences_of_items(
-                archive_playlist_id, batch
-            )
+        api.playlist_add_items(
+            production_playlist_id, track_uris
+        )
+        api.playlist_remove_items(
+            archive_playlist_id, track_uris
+        )
 
         logger.info(
             "Unarchived %d tracks from %s to %s",
@@ -163,13 +150,13 @@ class PlaylistPairService:
         return len(track_uris)
 
     @staticmethod
-    def create_archive_playlist(sp, user_id, name):
+    def create_archive_playlist(api, user_id, name):
         """Create a new private Spotify playlist for archiving.
 
         Returns (playlist_id, playlist_name).
         """
         archive_name = f"{name} [Archive]"
-        result = sp.user_playlist_create(
+        result = api.create_user_playlist(
             user_id,
             archive_name,
             public=False,

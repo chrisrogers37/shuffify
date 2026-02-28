@@ -148,6 +148,11 @@ class SpotifyClient:
         """Check if client has a valid token."""
         return self._api is not None
 
+    @property
+    def api(self) -> Optional[SpotifyAPI]:
+        """Get the underlying SpotifyAPI instance."""
+        return self._api
+
     # =========================================================================
     # Authentication Methods
     # =========================================================================

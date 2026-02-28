@@ -42,16 +42,16 @@ def user2(db_app):
 
 
 @pytest.fixture
-def mock_sp():
-    """Mock Spotify API client."""
-    sp = MagicMock()
-    sp.playlist_add_items.return_value = None
-    sp.playlist_remove_all_occurrences_of_items.return_value = None
-    sp.user_playlist_create.return_value = {
+def mock_api():
+    """Mock SpotifyAPI client."""
+    api = MagicMock()
+    api.playlist_add_items.return_value = None
+    api.playlist_remove_items.return_value = None
+    api.create_user_playlist.return_value = {
         "id": "new_archive_id",
         "name": "My Playlist [Archive]",
     }
-    return sp
+    return api
 
 
 # =============================================================================
@@ -252,37 +252,35 @@ class TestDeletePair:
 class TestArchiveTracks:
     """Tests for PlaylistPairService.archive_tracks."""
 
-    def test_archive_success(self, mock_sp):
+    def test_archive_success(self, mock_api):
         uris = ["spotify:track:a1b2c3d4e5f6g7h8i9j0k1"]
         count = PlaylistPairService.archive_tracks(
-            mock_sp, "arch1", uris
+            mock_api, "arch1", uris
         )
         assert count == 1
-        mock_sp.playlist_add_items.assert_called_once_with(
+        mock_api.playlist_add_items.assert_called_once_with(
             "arch1", uris
         )
 
-    def test_archive_empty_list(self, mock_sp):
+    def test_archive_empty_list(self, mock_api):
         count = PlaylistPairService.archive_tracks(
-            mock_sp, "arch1", []
+            mock_api, "arch1", []
         )
         assert count == 0
-        mock_sp.playlist_add_items.assert_not_called()
+        mock_api.playlist_add_items.assert_not_called()
 
-    def test_archive_large_batch(self, mock_sp):
+    def test_archive_large_batch(self, mock_api):
         uris = [
             f"spotify:track:{'x' * 22}"
             for _ in range(150)
         ]
         count = PlaylistPairService.archive_tracks(
-            mock_sp, "arch1", uris
+            mock_api, "arch1", uris
         )
         assert count == 150
-        assert mock_sp.playlist_add_items.call_count == 2
-        first_call = mock_sp.playlist_add_items.call_args_list[0]
-        assert len(first_call[0][1]) == 100
-        second_call = mock_sp.playlist_add_items.call_args_list[1]
-        assert len(second_call[0][1]) == 50
+        mock_api.playlist_add_items.assert_called_once_with(
+            "arch1", uris
+        )
 
 
 # =============================================================================
@@ -293,24 +291,24 @@ class TestArchiveTracks:
 class TestUnarchiveTracks:
     """Tests for PlaylistPairService.unarchive_tracks."""
 
-    def test_unarchive_success(self, mock_sp):
+    def test_unarchive_success(self, mock_api):
         uris = ["spotify:track:a1b2c3d4e5f6g7h8i9j0k1"]
         count = PlaylistPairService.unarchive_tracks(
-            mock_sp, "prod1", "arch1", uris
+            mock_api, "prod1", "arch1", uris
         )
         assert count == 1
-        mock_sp.playlist_add_items.assert_called_once_with(
+        mock_api.playlist_add_items.assert_called_once_with(
             "prod1", uris
         )
-        mock_sp.playlist_remove_all_occurrences_of_items \
+        mock_api.playlist_remove_items \
             .assert_called_once_with("arch1", uris)
 
-    def test_unarchive_empty_list(self, mock_sp):
+    def test_unarchive_empty_list(self, mock_api):
         count = PlaylistPairService.unarchive_tracks(
-            mock_sp, "prod1", "arch1", []
+            mock_api, "prod1", "arch1", []
         )
         assert count == 0
-        mock_sp.playlist_add_items.assert_not_called()
+        mock_api.playlist_add_items.assert_not_called()
 
 
 # =============================================================================
@@ -321,26 +319,26 @@ class TestUnarchiveTracks:
 class TestCreateArchivePlaylist:
     """Tests for PlaylistPairService.create_archive_playlist."""
 
-    def test_create_success(self, mock_sp):
+    def test_create_success(self, mock_api):
         pid, pname = PlaylistPairService.create_archive_playlist(
-            mock_sp, "user123", "My Playlist"
+            mock_api, "user123", "My Playlist"
         )
         assert pid == "new_archive_id"
         assert pname == "My Playlist [Archive]"
-        mock_sp.user_playlist_create.assert_called_once_with(
+        mock_api.create_user_playlist.assert_called_once_with(
             "user123",
             "My Playlist [Archive]",
             public=False,
             description="Archive playlist for removed tracks",
         )
 
-    def test_create_api_error(self, mock_sp):
-        mock_sp.user_playlist_create.side_effect = Exception(
+    def test_create_api_error(self, mock_api):
+        mock_api.create_user_playlist.side_effect = Exception(
             "API error"
         )
         with pytest.raises(Exception, match="API error"):
             PlaylistPairService.create_archive_playlist(
-                mock_sp, "user123", "Test"
+                mock_api, "user123", "Test"
             )
 
 

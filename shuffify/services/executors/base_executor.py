@@ -371,7 +371,4 @@ class JobExecutorService:
         batch_size: int = 100,
     ) -> None:
         """Add tracks to a playlist in batches."""
-        for i in range(0, len(uris), batch_size):
-            batch = uris[i: i + batch_size]
-            api._ensure_valid_token()
-            api._sp.playlist_add_items(playlist_id, batch)
+        api.playlist_add_items(playlist_id, uris)

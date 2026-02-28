@@ -111,77 +111,54 @@ def is_db_available() -> bool:
         return False
 
 
-def create_app(config_name=None):
-    """Create and configure the Flask application."""
-    if config_name is None:
-        config_name = os.getenv("FLASK_ENV", "production")
+# =============================================================================
+# App Factory Helpers
+# =============================================================================
 
-    # Ensure config_name is a string
-    if not isinstance(config_name, str):
-        config_name = "production"  # Default to production if not a string
 
-    logger.info("Creating app with config: %s", config_name)
+def _init_redis(app):
+    """Configure Redis for session storage and caching.
 
-    # Validate required environment variables
-    try:
-        validate_required_env_vars()
-        logger.info("Environment validation passed")
-    except ValueError as e:
-        logger.error("Environment validation failed: %s", str(e))
-        if config_name == "production":
-            raise  # Fail fast in production
-        else:
-            logger.warning(
-                "Continuing in development mode with missing environment variables"
-            )
-
-    app = Flask(__name__)
-
-    # Load config
-    app.config.from_object(config[config_name])
-
-    # Log important config values
-    logger.info("SPOTIFY_REDIRECT_URI: %s", app.config.get("SPOTIFY_REDIRECT_URI"))
-    logger.info("CONFIG_NAME: %s", app.config.get("CONFIG_NAME", config_name))
-
-    # Configure Redis for session storage and caching
-    global _redis_client
+    Returns Redis client if available, None otherwise.
+    """
     redis_url = app.config.get("REDIS_URL")
     if redis_url:
         try:
-            redis_client = _create_redis_client(redis_url)
-            # Test the connection
-            redis_client.ping()
-            app.config["SESSION_REDIS"] = redis_client
-            _redis_client = redis_client
+            client = _create_redis_client(redis_url)
+            client.ping()
+            app.config["SESSION_REDIS"] = client
             logger.info(
-                "Redis session storage configured: %s", redis_url.split("@")[-1]
+                "Redis session storage configured: %s",
+                redis_url.split("@")[-1],
             )
             logger.info("Redis caching enabled")
+            return client
         except redis.ConnectionError as e:
             logger.warning(
-                "Redis connection failed: %s. Falling back to filesystem sessions.", e
+                "Redis connection failed: %s. "
+                "Falling back to filesystem sessions.",
+                e,
             )
-            app.config["SESSION_TYPE"] = "filesystem"
-            app.config["SESSION_FILE_DIR"] = "./.flask_session/"
-            os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)
-            _redis_client = None
     else:
-        logger.warning("REDIS_URL not configured. Using filesystem sessions.")
-        app.config["SESSION_TYPE"] = "filesystem"
-        app.config["SESSION_FILE_DIR"] = "./.flask_session/"
-        os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)
-        _redis_client = None
+        logger.warning(
+            "REDIS_URL not configured. Using filesystem sessions."
+        )
 
-    # Initialize Flask-Session
-    Session(app)
+    app.config["SESSION_TYPE"] = "filesystem"
+    app.config["SESSION_FILE_DIR"] = "./.flask_session/"
+    os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)
+    return None
 
-    # Initialize Flask-Limiter for rate limiting
-    global _limiter
+
+def _init_limiter(app, redis_client):
+    """Initialize Flask-Limiter for rate limiting.
+
+    Returns Limiter instance if successful, None otherwise.
+    """
     try:
         from flask_limiter.util import get_remote_address
 
-        if _redis_client is not None:
+        if redis_client is not None:
             storage_uri = app.config.get("REDIS_URL")
             logger.info("Rate limiter using Redis storage")
         else:
@@ -191,7 +168,7 @@ def create_app(config_name=None):
                 "Rate limits will not persist across restarts."
             )
 
-        _limiter = Limiter(
+        limiter = Limiter(
             app=app,
             key_func=get_remote_address,
             storage_uri=storage_uri,
@@ -199,15 +176,18 @@ def create_app(config_name=None):
             strategy="fixed-window",
         )
         logger.info("Flask-Limiter initialized")
+        return limiter
     except Exception as e:
         logger.warning(
             "Flask-Limiter initialization failed: %s. "
             "Rate limiting will be unavailable.",
             e,
         )
-        _limiter = None
+        return None
 
-    # Initialize token encryption service
+
+def _init_token_encryption(app):
+    """Initialize Fernet token encryption service."""
     from shuffify.services.token_service import TokenService
 
     try:
@@ -220,13 +200,14 @@ def create_app(config_name=None):
             e,
         )
 
-    # Initialize SQLAlchemy database
+
+def _init_database(app):
+    """Initialize SQLAlchemy database and run Alembic migrations."""
+    global _migrate
     try:
         from shuffify.models.db import db
 
         db.init_app(app)
-
-        global _migrate
         _migrate = Migrate(app, db)
 
         with app.app_context():
@@ -263,6 +244,82 @@ def create_app(config_name=None):
             "Persistence features will be unavailable.",
             e,
         )
+
+
+def _apply_security_headers(app):
+    """Register security headers on all responses."""
+
+    @app.after_request
+    def set_security_headers(response):
+        # Prevent MIME-type sniffing
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        # Prevent clickjacking
+        response.headers["X-Frame-Options"] = "DENY"
+        # Control referrer information leakage
+        response.headers["Referrer-Policy"] = (
+            "strict-origin-when-cross-origin"
+        )
+
+        # HSTS: only in production (development uses HTTP)
+        if not app.debug:
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
+            )
+
+        # No-cache headers for development mode
+        if app.debug:
+            response.headers["Cache-Control"] = (
+                "no-cache, no-store, must-revalidate, public, max-age=0"
+            )
+            response.headers["Expires"] = 0
+            response.headers["Pragma"] = "no-cache"
+
+        return response
+
+
+# =============================================================================
+# App Factory
+# =============================================================================
+
+
+def create_app(config_name=None):
+    """Create and configure the Flask application."""
+    if config_name is None:
+        config_name = os.getenv("FLASK_ENV", "production")
+
+    # Ensure config_name is a string
+    if not isinstance(config_name, str):
+        config_name = "production"  # Default to production if not a string
+
+    logger.info("Creating app with config: %s", config_name)
+
+    # Validate required environment variables
+    try:
+        validate_required_env_vars()
+        logger.info("Environment validation passed")
+    except ValueError as e:
+        logger.error("Environment validation failed: %s", str(e))
+        if config_name == "production":
+            raise  # Fail fast in production
+        else:
+            logger.warning(
+                "Continuing in development mode with missing environment variables"
+            )
+
+    app = Flask(__name__)
+    app.config.from_object(config[config_name])
+
+    # Log important config values
+    logger.info("SPOTIFY_REDIRECT_URI: %s", app.config.get("SPOTIFY_REDIRECT_URI"))
+    logger.info("CONFIG_NAME: %s", app.config.get("CONFIG_NAME", config_name))
+
+    # Initialize extensions
+    global _redis_client, _limiter
+    _redis_client = _init_redis(app)
+    Session(app)
+    _limiter = _init_limiter(app, _redis_client)
+    _init_token_encryption(app)
+    _init_database(app)
 
     # Register blueprints
     from shuffify.routes import main as main_blueprint
@@ -306,32 +363,6 @@ def create_app(config_name=None):
 
         shutdown_scheduler()
 
-    # Security headers applied to ALL responses
-    @app.after_request
-    def set_security_headers(response):
-        # Prevent MIME-type sniffing
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        # Prevent clickjacking
-        response.headers["X-Frame-Options"] = "DENY"
-        # Control referrer information leakage
-        response.headers["Referrer-Policy"] = (
-            "strict-origin-when-cross-origin"
-        )
-
-        # HSTS: only in production (development uses HTTP)
-        if not app.debug:
-            response.headers["Strict-Transport-Security"] = (
-                "max-age=31536000; includeSubDomains"
-            )
-
-        # No-cache headers for development mode
-        if app.debug:
-            response.headers["Cache-Control"] = (
-                "no-cache, no-store, must-revalidate, public, max-age=0"
-            )
-            response.headers["Expires"] = 0
-            response.headers["Pragma"] = "no-cache"
-
-        return response
+    _apply_security_headers(app)
 
     return app

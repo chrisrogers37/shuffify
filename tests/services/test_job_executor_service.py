@@ -63,8 +63,7 @@ def mock_api():
         for i in range(1, 6)
     ]
     api.update_playlist_tracks.return_value = True
-    api._ensure_valid_token.return_value = None
-    api._sp = Mock()
+    api.playlist_add_items.return_value = None
     api.token_info = Mock()
     api.token_info.refresh_token = "original_refresh"
     return api
