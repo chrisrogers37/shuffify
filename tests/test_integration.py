@@ -118,33 +118,29 @@ class TestAuthFlowIntegration:
         """Should generate a valid Spotify auth URL."""
         auth_manager = SpotifyAuthManager(credentials)
 
-        with patch.object(auth_manager, '_create_oauth') as mock_oauth:
-            mock_oauth.return_value.get_authorize_url.return_value = (
-                'https://accounts.spotify.com/authorize?client_id=test&...'
-            )
+        url = auth_manager.get_auth_url()
 
-            url = auth_manager.get_auth_url()
-
-            assert url.startswith('https://accounts.spotify.com/authorize')
+        assert url.startswith('https://accounts.spotify.com/authorize')
 
     def test_token_exchange_and_client_creation(self, credentials, valid_token_data, sample_user):
         """Should exchange code for token and create working client."""
         auth_manager = SpotifyAuthManager(credentials)
 
-        with patch.object(auth_manager, '_create_oauth') as mock_oauth:
-            mock_oauth.return_value.get_access_token.return_value = valid_token_data
+        with patch('shuffify.spotify.auth.requests.post') as mock_post:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = valid_token_data
+            mock_post.return_value = mock_response
 
-            # Exchange code for token
             token_info = auth_manager.exchange_code('test_code')
 
             assert isinstance(token_info, TokenInfo)
             assert token_info.access_token == valid_token_data['access_token']
 
         # Create API client with token
-        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify:
-            mock_sp = Mock()
-            mock_sp.current_user.return_value = sample_user
-            mock_spotify.return_value = mock_sp
+        with patch('shuffify.spotify.api.SpotifyHTTPClient') as MockHTTP:
+            mock_http = MockHTTP.return_value
+            mock_http.get.return_value = sample_user
 
             api = SpotifyAPI(token_info, auth_manager)
             user = api.get_current_user()
@@ -161,19 +157,12 @@ class TestPlaylistServiceIntegration:
 
     def test_get_and_update_playlist(self, valid_token_data, sample_playlist, sample_tracks):
         """Should get playlist, shuffle, and update."""
-        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify:
-            mock_sp = Mock()
-            mock_sp.playlist.return_value = sample_playlist
-            mock_sp.playlist_items.return_value = {
-                'items': [{'track': t} for t in sample_tracks],
-                'next': None
-            }
-            mock_sp.current_user.return_value = {'id': 'user123'}
-            mock_sp.current_user_playlists.return_value = {
-                'items': [sample_playlist],
-                'next': None
-            }
-            mock_spotify.return_value = mock_sp
+        with patch('shuffify.spotify.api.SpotifyHTTPClient') as MockHTTP:
+            mock_http = MockHTTP.return_value
+            mock_http.get.return_value = sample_playlist
+            mock_http.get_all_pages.return_value = [
+                {'item': t} for t in sample_tracks
+            ]
 
             # Create SpotifyClient
             credentials_dict = {
@@ -347,17 +336,14 @@ class TestFullFlowIntegration:
         mock_session
     ):
         """Test the complete flow: auth -> get playlist -> shuffle -> undo."""
-        # Setup mock Spotify API
-        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify:
-            mock_sp = Mock()
-            mock_sp.current_user.return_value = {'id': 'user123', 'display_name': 'Test'}
-            mock_sp.playlist.return_value = sample_playlist
-            mock_sp.playlist_items.return_value = {
-                'items': [{'track': t} for t in sample_tracks],
-                'next': None
-            }
-            mock_sp.playlist_replace_items.return_value = None
-            mock_spotify.return_value = mock_sp
+        # Setup mock Spotify HTTP client
+        with patch('shuffify.spotify.api.SpotifyHTTPClient') as MockHTTP:
+            mock_http = MockHTTP.return_value
+            mock_http.get.return_value = sample_playlist
+            mock_http.get_all_pages.return_value = [
+                {'item': t} for t in sample_tracks
+            ]
+            mock_http.put.return_value = None
 
             # 1. Create authenticated client
             credentials_dict = {
@@ -419,24 +405,22 @@ class TestSpotifyModuleIntegration:
 
     def test_credentials_to_auth_manager_to_api(self, credentials, valid_token_data, sample_user):
         """Test flow from credentials through auth manager to API."""
-        # Create auth manager from credentials
         auth_manager = SpotifyAuthManager(credentials)
 
-        # Mock OAuth exchange
-        with patch.object(auth_manager, '_create_oauth') as mock_oauth:
-            mock_oauth.return_value.get_access_token.return_value = valid_token_data
+        with patch('shuffify.spotify.auth.requests.post') as mock_post:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = valid_token_data
+            mock_post.return_value = mock_response
 
             token_info = auth_manager.exchange_code('test_code')
 
-        # Create API with token and auth manager
-        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify:
-            mock_sp = Mock()
-            mock_sp.current_user.return_value = sample_user
-            mock_spotify.return_value = mock_sp
+        with patch('shuffify.spotify.api.SpotifyHTTPClient') as MockHTTP:
+            mock_http = MockHTTP.return_value
+            mock_http.get.return_value = sample_user
 
             api = SpotifyAPI(token_info, auth_manager)
 
-            # Verify API works
             user = api.get_current_user()
             assert user['display_name'] == 'Test User'
 
@@ -448,14 +432,11 @@ class TestSpotifyModuleIntegration:
             'redirect_uri': 'http://localhost/callback'
         }
 
-        with patch('shuffify.spotify.api.spotipy.Spotify') as mock_spotify:
-            mock_sp = Mock()
-            mock_sp.current_user.return_value = sample_user
-            mock_spotify.return_value = mock_sp
+        with patch('shuffify.spotify.api.SpotifyHTTPClient') as MockHTTP:
+            mock_http = MockHTTP.return_value
+            mock_http.get.return_value = sample_user
 
-            # Old usage pattern
             client = SpotifyClient(token=valid_token_data, credentials=credentials_dict)
 
-            # Old methods still work
             user = client.get_current_user()
             assert user['id'] == 'user123'

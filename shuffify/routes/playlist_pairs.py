@@ -67,7 +67,7 @@ def create_pair(playlist_id, client=None, user=None):
             )
             archive_id, archive_name = (
                 PlaylistPairService.create_archive_playlist(
-                    client._sp,
+                    client.api,
                     user.spotify_id,
                     prod_name,
                 )
@@ -152,7 +152,7 @@ def archive_tracks(playlist_id, client=None, user=None):
 
     try:
         count = PlaylistPairService.archive_tracks(
-            client._sp,
+            client.api,
             pair.archive_playlist_id,
             req.track_uris,
         )
@@ -197,7 +197,7 @@ def unarchive_tracks(
 
     try:
         count = PlaylistPairService.unarchive_tracks(
-            client._sp,
+            client.api,
             pair.production_playlist_id,
             pair.archive_playlist_id,
             req.track_uris,
@@ -240,17 +240,17 @@ def list_archive_tracks(
         return json_error("No archive pair found", 404)
 
     try:
-        results = client._sp.playlist_items(
+        results = client.api.get_playlist_items_raw(
             pair.archive_playlist_id,
             fields=(
-                "items(track(id,name,uri,artists(name),"
+                "items(item(id,name,uri,artists(name),"
                 "album(name,images),duration_ms))"
             ),
             limit=100,
         )
         tracks = []
         for item in results.get("items", []):
-            track = item.get("track")
+            track = item.get("item")
             if not track or not track.get("uri"):
                 continue
             artists = [

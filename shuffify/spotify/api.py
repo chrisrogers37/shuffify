@@ -11,21 +11,17 @@ Supports optional Redis caching for improved performance.
 import logging
 from typing import Dict, List, Any, Optional, TYPE_CHECKING
 
-import spotipy
-
 from .auth import TokenInfo, SpotifyAuthManager
 from .error_handling import api_error_handler
 from .exceptions import (
     SpotifyTokenExpiredError,
 )
+from .http_client import SpotifyHTTPClient
 
 if TYPE_CHECKING:
     from .cache import SpotifyCache
 
 logger = logging.getLogger(__name__)
-
-# Silence spotipy's verbose logging
-logging.getLogger("spotipy").setLevel(logging.WARNING)
 
 
 class SpotifyAPI:
@@ -91,12 +87,26 @@ class SpotifyAPI:
                 raise SpotifyTokenExpiredError("Token is expired")
 
         self._token_info = token_info
-        self._sp = spotipy.Spotify(auth=token_info.access_token)
+        self._http = SpotifyHTTPClient(
+            token_info.access_token,
+            on_token_refresh=(
+                self._handle_token_refresh
+                if self._auto_refresh
+                else None
+            ),
+        )
         self._user_id: Optional[str] = None
         logger.debug(
             "SpotifyAPI initialized with valid token%s",
             " (with cache)" if cache else "",
         )
+
+    def _handle_token_refresh(self) -> str:
+        """Callback for SpotifyHTTPClient on 401 responses."""
+        self._token_info = self._auth_manager.ensure_valid_token(
+            self._token_info
+        )
+        return self._token_info.access_token
 
     @property
     def token_info(self) -> TokenInfo:
@@ -119,11 +129,15 @@ class SpotifyAPI:
             return
 
         if not self._auto_refresh:
-            raise SpotifyTokenExpiredError("Token expired and auto-refresh disabled")
+            raise SpotifyTokenExpiredError(
+                "Token expired and auto-refresh disabled"
+            )
 
         logger.info("Token expired, refreshing...")
-        self._token_info = self._auth_manager.ensure_valid_token(self._token_info)
-        self._sp = spotipy.Spotify(auth=self._token_info.access_token)
+        self._token_info = self._auth_manager.ensure_valid_token(
+            self._token_info
+        )
+        self._http.update_token(self._token_info.access_token)
 
     def _get_user_id(self) -> str:
         """Get the current user's ID, caching the result."""
@@ -155,8 +169,10 @@ class SpotifyAPI:
             if cached:
                 return cached
 
-        user = self._sp.current_user()
-        logger.debug(f"Retrieved user: {user.get('display_name', 'Unknown')}")
+        user = self._http.get("/me")
+        logger.debug(
+            f"Retrieved user: {user.get('display_name', 'Unknown')}"
+        )
 
         # Cache the result
         if self._cache and user:
@@ -170,7 +186,9 @@ class SpotifyAPI:
     # =========================================================================
 
     @api_error_handler
-    def get_user_playlists(self, skip_cache: bool = False) -> List[Dict[str, Any]]:
+    def get_user_playlists(
+        self, skip_cache: bool = False
+    ) -> List[Dict[str, Any]]:
         """
         Get all playlists the user can edit.
 
@@ -194,15 +212,18 @@ class SpotifyAPI:
 
         playlists = []
 
-        results = self._sp.current_user_playlists()
-        while results:
-            for playlist in results["items"]:
-                # Include playlists the user owns or can collaborate on
-                if playlist["owner"]["id"] == user_id or playlist.get("collaborative"):
-                    playlists.append(playlist)
-            results = self._sp.next(results) if results["next"] else None
+        all_items = self._http.get_all_pages("/me/playlists")
+        for playlist in all_items:
+            # Include playlists the user owns or can collaborate on
+            if (
+                playlist["owner"]["id"] == user_id
+                or playlist.get("collaborative")
+            ):
+                playlists.append(playlist)
 
-        logger.debug(f"Retrieved {len(playlists)} editable playlists")
+        logger.debug(
+            f"Retrieved {len(playlists)} editable playlists"
+        )
 
         # Cache the result
         if self._cache:
@@ -236,8 +257,10 @@ class SpotifyAPI:
             if cached is not None:
                 return cached
 
-        playlist = self._sp.playlist(playlist_id)
-        logger.debug(f"Retrieved playlist: {playlist.get('name', 'Unknown')}")
+        playlist = self._http.get(f"/playlists/{playlist_id}")
+        logger.debug(
+            f"Retrieved playlist: {playlist.get('name', 'Unknown')}"
+        )
 
         # Cache the result
         if self._cache:
@@ -273,16 +296,20 @@ class SpotifyAPI:
 
         tracks = []
 
-        results = self._sp.playlist_items(playlist_id)
-        while results:
-            for item in results["items"]:
-                # Only include valid tracks (not None, not local-only)
-                track = item.get("track")
-                if track and track.get("uri"):
-                    tracks.append(track)
-            results = self._sp.next(results) if results["next"] else None
+        all_items = self._http.get_all_pages(
+            f"/playlists/{playlist_id}/items"
+        )
+        for item in all_items:
+            # Spotify Feb 2026: nested key renamed from "track" to "item"
+            track = item.get("item")
+            # Only include valid tracks (not None, not local-only)
+            if track and track.get("uri"):
+                tracks.append(track)
 
-        logger.debug(f"Retrieved {len(tracks)} tracks from playlist {playlist_id}")
+        logger.debug(
+            f"Retrieved {len(tracks)} tracks from playlist "
+            f"{playlist_id}"
+        )
 
         # Cache the result
         if self._cache:
@@ -291,7 +318,9 @@ class SpotifyAPI:
         return tracks
 
     @api_error_handler
-    def update_playlist_tracks(self, playlist_id: str, track_uris: List[str]) -> bool:
+    def update_playlist_tracks(
+        self, playlist_id: str, track_uris: List[str]
+    ) -> bool:
         """
         Replace all tracks in a playlist with a new list.
 
@@ -310,7 +339,10 @@ class SpotifyAPI:
 
         # Handle empty playlist
         if not track_uris:
-            self._sp.playlist_replace_items(playlist_id, [])
+            self._http.put(
+                f"/playlists/{playlist_id}/items",
+                json={"uris": []},
+            )
             logger.info(f"Cleared playlist {playlist_id}")
             # Invalidate cache after modification
             if self._cache:
@@ -318,23 +350,56 @@ class SpotifyAPI:
             return True
 
         # Replace first batch (up to 100 tracks)
-        self._sp.playlist_replace_items(playlist_id, track_uris[: self.BATCH_SIZE])
+        self._http.put(
+            f"/playlists/{playlist_id}/items",
+            json={"uris": track_uris[: self.BATCH_SIZE]},
+        )
 
         # Add remaining tracks in batches
-        for i in range(self.BATCH_SIZE, len(track_uris), self.BATCH_SIZE):
-            batch = track_uris[i : i + self.BATCH_SIZE]
-            self._sp.playlist_add_items(playlist_id, batch)
+        for i in range(
+            self.BATCH_SIZE, len(track_uris), self.BATCH_SIZE
+        ):
+            batch = track_uris[i: i + self.BATCH_SIZE]
+            self._http.post(
+                f"/playlists/{playlist_id}/items",
+                json={"uris": batch},
+            )
 
-        logger.info(f"Updated playlist {playlist_id} with {len(track_uris)} tracks")
+        logger.info(
+            f"Updated playlist {playlist_id} with "
+            f"{len(track_uris)} tracks"
+        )
 
         # Invalidate cache after modification
         if self._cache:
             self._cache.invalidate_playlist(playlist_id)
-            # Also invalidate the user's playlist list since it may have changed
             if self._user_id:
                 self._cache.invalidate_user_playlists(self._user_id)
 
         return True
+
+    @api_error_handler
+    def playlist_add_items(
+        self, playlist_id: str, track_uris: List[str]
+    ) -> None:
+        """
+        Add tracks to a playlist in batches.
+
+        Args:
+            playlist_id: The Spotify playlist ID.
+            track_uris: List of track URIs to add.
+        """
+        self._ensure_valid_token()
+
+        for i in range(0, len(track_uris), self.BATCH_SIZE):
+            batch = track_uris[i: i + self.BATCH_SIZE]
+            self._http.post(
+                f"/playlists/{playlist_id}/items",
+                json={"uris": batch},
+            )
+
+        if self._cache:
+            self._cache.invalidate_playlist(playlist_id)
 
     @api_error_handler
     def playlist_remove_items(
@@ -362,8 +427,9 @@ class SpotifyAPI:
         for i in range(0, len(track_uris), self.BATCH_SIZE):
             batch = track_uris[i: i + self.BATCH_SIZE]
             items = [{"uri": uri} for uri in batch]
-            self._sp.playlist_remove_all_occurrences_of_items(
-                playlist_id, items
+            self._http.delete(
+                f"/playlists/{playlist_id}/items",
+                json={"tracks": items},
             )
 
         logger.info(
@@ -379,6 +445,75 @@ class SpotifyAPI:
                 )
 
         return True
+
+    @api_error_handler
+    def create_user_playlist(
+        self,
+        user_id: str,
+        name: str,
+        public: bool = False,
+        description: str = "",
+    ) -> Dict[str, Any]:
+        """
+        Create a new playlist for a user.
+
+        Args:
+            user_id: The Spotify user ID.
+            name: Playlist name.
+            public: Whether the playlist is public.
+            description: Playlist description.
+
+        Returns:
+            The created playlist dictionary.
+        """
+        self._ensure_valid_token()
+
+        result = self._http.post(
+            f"/users/{user_id}/playlists",
+            json={
+                "name": name,
+                "public": public,
+                "description": description,
+            },
+        )
+
+        if self._cache and self._user_id:
+            self._cache.invalidate_user_playlists(self._user_id)
+
+        return result
+
+    @api_error_handler
+    def get_playlist_items_raw(
+        self,
+        playlist_id: str,
+        fields: Optional[str] = None,
+        limit: int = 100,
+    ) -> Dict[str, Any]:
+        """
+        Get playlist items with optional field filtering.
+
+        Uses Spotify's field filtering to reduce response size.
+        Note: Field filters use 'item(...)' not 'track(...)' per
+        the Feb 2026 API changes.
+
+        Args:
+            playlist_id: The Spotify playlist ID.
+            fields: Spotify field filter string.
+            limit: Max items per page.
+
+        Returns:
+            Raw API response dictionary.
+        """
+        self._ensure_valid_token()
+
+        params = {"limit": limit}
+        if fields:
+            params["fields"] = fields
+
+        return self._http.get(
+            f"/playlists/{playlist_id}/items",
+            params=params,
+        )
 
     # =========================================================================
     # Audio Features Operations
@@ -408,8 +543,9 @@ class SpotifyAPI:
         valid_ids = []
         for tid in track_ids:
             if tid:
-                # Handle both URI format and plain ID
-                clean_id = tid.split(":")[-1] if ":" in tid else tid
+                clean_id = (
+                    tid.split(":")[-1] if ":" in tid else tid
+                )
                 valid_ids.append(clean_id)
 
         if not valid_ids:
@@ -418,20 +554,40 @@ class SpotifyAPI:
         # Check cache first
         ids_to_fetch = valid_ids
         if self._cache and not skip_cache:
-            cached_features = self._cache.get_audio_features(valid_ids)
+            cached_features = self._cache.get_audio_features(
+                valid_ids
+            )
             features.update(cached_features)
-            # Only fetch IDs not in cache
-            ids_to_fetch = [tid for tid in valid_ids if tid not in cached_features]
+            ids_to_fetch = [
+                tid
+                for tid in valid_ids
+                if tid not in cached_features
+            ]
             if not ids_to_fetch:
-                logger.debug(f"All {len(valid_ids)} audio features from cache")
+                logger.debug(
+                    f"All {len(valid_ids)} audio features "
+                    f"from cache"
+                )
                 return features
 
         # Fetch uncached in batches
         new_features = {}
-        for i in range(0, len(ids_to_fetch), self.AUDIO_FEATURES_BATCH_SIZE):
-            batch = ids_to_fetch[i : i + self.AUDIO_FEATURES_BATCH_SIZE]
-            results = self._sp.audio_features(batch)
+        for i in range(
+            0, len(ids_to_fetch), self.AUDIO_FEATURES_BATCH_SIZE
+        ):
+            batch = ids_to_fetch[
+                i: i + self.AUDIO_FEATURES_BATCH_SIZE
+            ]
+            result = self._http.get(
+                "/audio-features",
+                params={"ids": ",".join(batch)},
+            )
 
+            results = (
+                result.get("audio_features", [])
+                if result
+                else []
+            )
             if results:
                 for track_id, feature in zip(batch, results):
                     if feature:
@@ -439,7 +595,8 @@ class SpotifyAPI:
                         new_features[track_id] = feature
 
         logger.debug(
-            f"Retrieved audio features for {len(new_features)} tracks (from API)"
+            f"Retrieved audio features for "
+            f"{len(new_features)} tracks (from API)"
         )
 
         # Cache the new results
@@ -454,7 +611,10 @@ class SpotifyAPI:
 
     @api_error_handler
     def search_playlists(
-        self, query: str, limit: int = 10, skip_cache: bool = False
+        self,
+        query: str,
+        limit: int = 10,
+        skip_cache: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         Search for playlists by name.
@@ -482,7 +642,10 @@ class SpotifyAPI:
             if cached is not None:
                 return cached
 
-        results = self._sp.search(q=query, type="playlist", limit=limit)
+        results = self._http.get(
+            "/search",
+            params={"q": query, "type": "playlist", "limit": limit},
+        )
 
         playlists = []
         if (
@@ -493,19 +656,25 @@ class SpotifyAPI:
             for item in results["playlists"]["items"]:
                 if item is None:
                     continue
+                # Defensive fallback: search response may use
+                # "items" or "tracks" for the total count depending
+                # on API version. Handle both safely.
+                total_key = item.get(
+                    "items", item.get("tracks", {})
+                )
                 playlists.append(
                     {
                         "id": item["id"],
                         "name": item["name"],
-                        "owner_display_name": item.get("owner", {}).get(
-                            "display_name", "Unknown"
-                        ),
+                        "owner_display_name": item.get(
+                            "owner", {}
+                        ).get("display_name", "Unknown"),
                         "image_url": (
                             item["images"][0]["url"]
                             if item.get("images")
                             else None
                         ),
-                        "total_tracks": item.get("tracks", {}).get(
+                        "total_tracks": total_key.get(
                             "total", 0
                         ),
                     }
@@ -518,7 +687,9 @@ class SpotifyAPI:
 
         # Cache the results
         if self._cache and playlists:
-            self._cache.set_search_playlists(query, limit, playlists)
+            self._cache.set_search_playlists(
+                query, limit, playlists
+            )
 
         return playlists
 
@@ -535,10 +706,10 @@ class SpotifyAPI:
         Search Spotify's catalog for tracks.
 
         Args:
-            query: Search query string (e.g., artist name, track title).
+            query: Search query string.
             limit: Maximum number of results (1-50, default 20).
             offset: Result offset for pagination (default 0).
-            market: ISO 3166-1 alpha-2 country code for market filtering.
+            market: ISO 3166-1 alpha-2 country code.
             skip_cache: If True, bypass cache and fetch fresh data.
 
         Returns:
@@ -559,12 +730,23 @@ class SpotifyAPI:
             if cached is not None:
                 return cached
 
-        results = self._sp.search(
-            q=query, limit=limit, offset=offset, type="track", market=market
-        )
+        params = {
+            "q": query,
+            "type": "track",
+            "limit": limit,
+            "offset": offset,
+        }
+        if market:
+            params["market"] = market
+
+        results = self._http.get("/search", params=params)
 
         tracks = []
-        if results and "tracks" in results and "items" in results["tracks"]:
+        if (
+            results
+            and "tracks" in results
+            and "items" in results["tracks"]
+        ):
             for item in results["tracks"]["items"]:
                 if item and item.get("uri"):
                     tracks.append(item)
