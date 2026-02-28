@@ -31,7 +31,7 @@ The app depends on `spotipy==2.25.2`, which hardcodes old endpoint paths and has
 
 | # | Phase | Impact | Effort | Risk | PR Type |
 |---|-------|--------|--------|------|---------|
-| 01 | [Replace spotipy with Direct HTTP Client](01_direct-http-client.md) | Critical | High (6-10h) | High | `feat` | 🔧 IN PROGRESS |
+| 01 | [Replace spotipy with Direct HTTP Client](01_direct-http-client.md) | Critical | High (6-10h) | High | `feat` | ✅ PR #106 |
 | 02 | [Fix Search Endpoint Limits](02_search-limit-fix.md) | High | Low (1-2h) | Low | `fix` |
 | 03 | [Raid System Pivot — Multi-Pathway Source Resolver](03_raid-system-pivot.md) | High | High (6-8h) | Medium | `feat` |
 | 04 | [Workshop Graceful Degradation](04_workshop-graceful-degradation.md) | Medium | Medium (2-3h) | Low | `feat` |
