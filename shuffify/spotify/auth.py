@@ -24,7 +24,12 @@ from .exceptions import (
 logger = logging.getLogger(__name__)
 
 
-# Default OAuth scopes for Shuffify
+# NOTE: user-read-private and user-read-email are retained even
+# though Spotify's Feb 2026 API changes removed country, email,
+# product, and explicit_content from GET /v1/me. Removing these
+# scopes would invalidate all existing refresh tokens, forcing
+# every user to re-authenticate. The scopes remain valid — they
+# simply return fewer fields now.
 DEFAULT_SCOPES = [
     "playlist-read-private",
     "playlist-read-collaborative",
