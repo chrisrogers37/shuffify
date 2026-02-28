@@ -220,7 +220,7 @@ class WorkshopSearchRequest(BaseModel):
     query: str = Field(
         ..., min_length=1, max_length=200, description="Search query string"
     )
-    limit: Annotated[int, Field(ge=1, le=50)] = 20
+    limit: Annotated[int, Field(ge=1, le=10)] = 10
     offset: Annotated[int, Field(ge=0)] = 0
 
     @field_validator("query")

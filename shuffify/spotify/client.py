@@ -291,7 +291,7 @@ class SpotifyClient:
 
         Args:
             query: Search query string.
-            limit: Maximum number of results (1-50).
+            limit: Maximum number of results (1-10).
 
         Returns:
             List of playlist summary dictionaries.
@@ -333,7 +333,7 @@ class SpotifyClient:
     def search_tracks(
         self,
         query: str,
-        limit: int = 20,
+        limit: int = 10,
         offset: int = 0,
         market: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
@@ -342,7 +342,7 @@ class SpotifyClient:
 
         Args:
             query: Search query string.
-            limit: Maximum number of results (1-50, default 20).
+            limit: Maximum number of results (1-10, default 10).
             offset: Pagination offset (default 0).
             market: Optional ISO 3166-1 alpha-2 country code.
 

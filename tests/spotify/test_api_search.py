@@ -235,7 +235,7 @@ class TestSearchPlaylists:
     def test_search_clamps_limit_max(
         self, api, mock_http
     ):
-        """Limit above 50 should be clamped to 50."""
+        """Limit above 10 should be clamped to 10."""
         mock_http.get.return_value = {
             "playlists": {"items": []}
         }
@@ -247,7 +247,7 @@ class TestSearchPlaylists:
             params={
                 "q": "test",
                 "type": "playlist",
-                "limit": 50,
+                "limit": 10,
             },
         )
 

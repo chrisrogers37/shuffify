@@ -621,7 +621,7 @@ class SpotifyAPI:
 
         Args:
             query: Search query string.
-            limit: Maximum number of results (1-50, default 10).
+            limit: Maximum number of results (1-10, default 10).
             skip_cache: If True, bypass cache and fetch fresh data.
 
         Returns:
@@ -634,7 +634,7 @@ class SpotifyAPI:
         self._ensure_valid_token()
 
         # Clamp limit to Spotify's allowed range
-        limit = max(1, min(limit, 50))
+        limit = max(1, min(limit, 10))
 
         # Check cache first
         if self._cache and not skip_cache:
@@ -697,7 +697,7 @@ class SpotifyAPI:
     def search_tracks(
         self,
         query: str,
-        limit: int = 20,
+        limit: int = 10,
         offset: int = 0,
         market: Optional[str] = None,
         skip_cache: bool = False,
@@ -707,7 +707,7 @@ class SpotifyAPI:
 
         Args:
             query: Search query string.
-            limit: Maximum number of results (1-50, default 20).
+            limit: Maximum number of results (1-10, default 10).
             offset: Result offset for pagination (default 0).
             market: ISO 3166-1 alpha-2 country code.
             skip_cache: If True, bypass cache and fetch fresh data.
@@ -721,7 +721,7 @@ class SpotifyAPI:
         self._ensure_valid_token()
 
         # Clamp limit to Spotify's maximum
-        limit = max(1, min(limit, 50))
+        limit = max(1, min(limit, 10))
         offset = max(0, offset)
 
         # Check cache first
