@@ -27,7 +27,7 @@ class TestWorkshopSearchRequestSchema:
         """Valid query string should pass validation."""
         req = WorkshopSearchRequest(query="the beatles")
         assert req.query == "the beatles"
-        assert req.limit == 20
+        assert req.limit == 10
         assert req.offset == 0
 
     def test_query_is_stripped(self):
@@ -62,9 +62,14 @@ class TestWorkshopSearchRequestSchema:
             WorkshopSearchRequest(query="test", limit=0)
 
     def test_limit_above_maximum_rejected(self):
-        """Limit above 50 should be rejected."""
+        """Limit above 10 should be rejected."""
         with pytest.raises(Exception):
-            WorkshopSearchRequest(query="test", limit=51)
+            WorkshopSearchRequest(query="test", limit=11)
+
+    def test_limit_at_new_maximum_accepted(self):
+        """Limit of 10 (new Spotify max) should be accepted."""
+        req = WorkshopSearchRequest(query="test", limit=10)
+        assert req.limit == 10
 
     def test_negative_offset_rejected(self):
         """Negative offset should be rejected."""
