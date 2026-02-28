@@ -14,6 +14,7 @@ class Playlist:
     name: str
     owner_id: str
     description: Optional[str] = None
+    total_tracks: Optional[int] = None
     tracks: List[Dict[str, Any]] = field(default_factory=list)
     audio_features: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
@@ -65,11 +66,21 @@ class Playlist:
             if track_ids:
                 audio_features = spotify_client.get_track_audio_features(track_ids)
 
+        total_tracks_meta = playlist_data.get(
+            "tracks", playlist_data.get("items", {})
+        )
+        total_tracks = (
+            total_tracks_meta.get("total")
+            if isinstance(total_tracks_meta, dict)
+            else None
+        )
+
         return cls(
             id=playlist_data["id"],
             name=playlist_data["name"],
             owner_id=playlist_data["owner"]["id"],
             description=playlist_data.get("description"),
+            total_tracks=total_tracks,
             tracks=tracks,
             audio_features=audio_features,
         )
@@ -119,6 +130,7 @@ class Playlist:
             "name": self.name,
             "owner_id": self.owner_id,
             "description": self.description,
+            "total_tracks": self.total_tracks,
             "tracks": self.tracks,
             "audio_features": self.audio_features,
         }

@@ -783,6 +783,7 @@
 const workshopState = {
     playlistId: {{ playlist.id | tojson }},
     playlistName: {{ playlist.name | tojson }},
+    currentUserId: {{ user.id | tojson }},
     savedUris: {{ playlist.tracks | map(attribute='uri') | list | tojson }},
     workingUris: {{ playlist.tracks | map(attribute='uri') | list | tojson }},
     isDirty: false,
@@ -1822,6 +1823,9 @@ function loadExternalPlaylist() {
                 'success'
             );
             input.value = '';
+        } else if (data.success && data.mode === 'restricted') {
+            displayRestrictedPlaylist(data.playlist, data.message, data.suggested_search);
+            input.value = '';
         } else if (data.success && data.mode === 'search') {
             displayExternalSearchResults(data.playlists);
         } else {
@@ -1868,16 +1872,52 @@ function displayExternalSearchResults(playlists) {
                   '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>' +
               '</div>';
 
+        const isNonOwned = pl.owner_id && pl.owner_id !== workshopState.currentUserId;
+        const lockIcon = isNonOwned
+            ? '<svg class="w-3 h-3 inline-block ml-1 text-yellow-400/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+                '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>' +
+              '</svg>'
+            : '';
+
         btn.innerHTML =
             imgHtml +
             '<div class="ml-2 min-w-0 flex-1">' +
-                '<p class="text-white text-sm font-medium truncate">' + escapeHtml(pl.name) + '</p>' +
+                '<p class="text-white text-sm font-medium truncate">' + escapeHtml(pl.name) + lockIcon + '</p>' +
                 '<p class="text-white/50 text-xs truncate">' + escapeHtml(pl.owner_display_name) + ' &middot; ' + pl.total_tracks + ' tracks</p>' +
             '</div>';
         container.appendChild(btn);
     });
 
     container.classList.remove('hidden');
+}
+
+function displayRestrictedPlaylist(playlistInfo, message, suggestedSearch) {
+    const container = document.getElementById('external-search-results');
+    if (!container) return;
+
+    container.innerHTML =
+        '<div class="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-6 text-center">' +
+            '<svg class="w-12 h-12 mx-auto mb-3 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+                '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>' +
+            '</svg>' +
+            '<h3 class="text-lg font-semibold text-white mb-1">' + escapeHtml(playlistInfo.name) + '</h3>' +
+            '<p class="text-sm text-white/50 mb-3">' + (playlistInfo.track_count || 0) + ' tracks</p>' +
+            '<p class="text-sm text-white/70 mb-4">' + escapeHtml(message) + '</p>' +
+            '<button onclick="suggestSearch(\'' + escapeHtml(suggestedSearch).replace(/'/g, "\\'") + '\')" ' +
+                'class="px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/40 rounded-lg text-yellow-300 text-sm transition-colors">' +
+                'Search for &ldquo;' + escapeHtml(suggestedSearch) + '&rdquo; tracks' +
+            '</button>' +
+        '</div>';
+    container.classList.remove('hidden');
+}
+
+function suggestSearch(query) {
+    const searchInput = document.getElementById('spotify-search-input');
+    if (searchInput) {
+        searchInput.value = query;
+        searchInput.dispatchEvent(new Event('input'));
+        searchSpotify();
+    }
 }
 
 function displayExternalTracks(playlistInfo, tracks) {

@@ -669,6 +669,9 @@ class SpotifyAPI:
                         "owner_display_name": item.get(
                             "owner", {}
                         ).get("display_name", "Unknown"),
+                        "owner_id": item.get(
+                            "owner", {}
+                        ).get("id", ""),
                         "image_url": (
                             item["images"][0]["url"]
                             if item.get("images")
