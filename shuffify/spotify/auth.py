@@ -10,8 +10,9 @@ import logging
 import time
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional
+from urllib.parse import urlencode
 
-from spotipy.oauth2 import SpotifyOAuth
+import requests
 
 from .credentials import SpotifyCredentials
 from .exceptions import (
@@ -173,21 +174,9 @@ class SpotifyAuthManager:
         self._scopes = scopes or DEFAULT_SCOPES
         self._scope_string = " ".join(self._scopes)
 
-    def _create_oauth(self) -> SpotifyOAuth:
-        """
-        Create a SpotifyOAuth instance.
-
-        Returns:
-            Configured SpotifyOAuth instance.
-        """
-        return SpotifyOAuth(
-            client_id=self._credentials.client_id,
-            client_secret=self._credentials.client_secret,
-            redirect_uri=self._credentials.redirect_uri,
-            scope=self._scope_string,
-            open_browser=False,
-            cache_handler=None,  # We manage our own token storage
-        )
+    # Spotify OAuth endpoints
+    _AUTHORIZE_URL = "https://accounts.spotify.com/authorize"
+    _TOKEN_URL = "https://accounts.spotify.com/api/token"
 
     def get_auth_url(self, state: Optional[str] = None) -> str:
         """
@@ -203,13 +192,23 @@ class SpotifyAuthManager:
             SpotifyAuthError: If URL generation fails.
         """
         try:
-            oauth = self._create_oauth()
-            url = oauth.get_authorize_url(state=state)
+            params = {
+                "client_id": self._credentials.client_id,
+                "response_type": "code",
+                "redirect_uri": self._credentials.redirect_uri,
+                "scope": self._scope_string,
+            }
+            if state:
+                params["state"] = state
+
+            url = f"{self._AUTHORIZE_URL}?{urlencode(params)}"
             logger.debug(f"Generated auth URL: {url[:50]}...")
             return url
         except Exception as e:
             logger.error(f"Failed to generate auth URL: {e}")
-            raise SpotifyAuthError(f"Failed to generate authorization URL: {e}")
+            raise SpotifyAuthError(
+                f"Failed to generate authorization URL: {e}"
+            )
 
     def exchange_code(self, code: str) -> TokenInfo:
         """
@@ -229,11 +228,33 @@ class SpotifyAuthManager:
             raise SpotifyAuthError("Authorization code is required")
 
         try:
-            oauth = self._create_oauth()
-            token_data = oauth.get_access_token(code, as_dict=True, check_cache=False)
+            response = requests.post(
+                self._TOKEN_URL,
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": self._credentials.redirect_uri,
+                },
+                auth=(
+                    self._credentials.client_id,
+                    self._credentials.client_secret,
+                ),
+                timeout=30,
+            )
 
+            if response.status_code != 200:
+                error_msg = response.json().get(
+                    "error_description", response.text
+                )
+                raise SpotifyTokenError(
+                    f"Token exchange failed: {error_msg}"
+                )
+
+            token_data = response.json()
             if not token_data:
-                raise SpotifyTokenError("No token returned from Spotify")
+                raise SpotifyTokenError(
+                    "No token returned from Spotify"
+                )
 
             token_info = TokenInfo.from_dict(token_data)
             logger.info("Successfully exchanged code for token")
@@ -241,9 +262,15 @@ class SpotifyAuthManager:
 
         except SpotifyTokenError:
             raise
+        except SpotifyAuthError:
+            raise
         except Exception as e:
-            logger.error(f"Token exchange failed: {e}", exc_info=True)
-            raise SpotifyTokenError(f"Token exchange failed: {e}")
+            logger.error(
+                f"Token exchange failed: {e}", exc_info=True
+            )
+            raise SpotifyTokenError(
+                f"Token exchange failed: {e}"
+            )
 
     def refresh_token(self, token_info: TokenInfo) -> TokenInfo:
         """
@@ -259,14 +286,44 @@ class SpotifyAuthManager:
             SpotifyTokenError: If refresh fails or no refresh_token available.
         """
         if not token_info.refresh_token:
-            raise SpotifyTokenError("Cannot refresh: no refresh_token available")
+            raise SpotifyTokenError(
+                "Cannot refresh: no refresh_token available"
+            )
 
         try:
-            oauth = self._create_oauth()
-            new_token_data = oauth.refresh_access_token(token_info.refresh_token)
+            response = requests.post(
+                self._TOKEN_URL,
+                data={
+                    "grant_type": "refresh_token",
+                    "refresh_token": token_info.refresh_token,
+                },
+                auth=(
+                    self._credentials.client_id,
+                    self._credentials.client_secret,
+                ),
+                timeout=30,
+            )
 
+            if response.status_code != 200:
+                error_msg = response.json().get(
+                    "error_description", response.text
+                )
+                raise SpotifyTokenError(
+                    f"Token refresh failed: {error_msg}"
+                )
+
+            new_token_data = response.json()
             if not new_token_data:
-                raise SpotifyTokenError("No token returned from refresh")
+                raise SpotifyTokenError(
+                    "No token returned from refresh"
+                )
+
+            # Spotify may not return a new refresh_token.
+            # Preserve the original so we can refresh again later.
+            if "refresh_token" not in new_token_data:
+                new_token_data["refresh_token"] = (
+                    token_info.refresh_token
+                )
 
             new_token_info = TokenInfo.from_dict(new_token_data)
             logger.info("Successfully refreshed token")
@@ -275,8 +332,12 @@ class SpotifyAuthManager:
         except SpotifyTokenError:
             raise
         except Exception as e:
-            logger.error(f"Token refresh failed: {e}", exc_info=True)
-            raise SpotifyTokenError(f"Token refresh failed: {e}")
+            logger.error(
+                f"Token refresh failed: {e}", exc_info=True
+            )
+            raise SpotifyTokenError(
+                f"Token refresh failed: {e}"
+            )
 
     def ensure_valid_token(self, token_info: TokenInfo) -> TokenInfo:
         """

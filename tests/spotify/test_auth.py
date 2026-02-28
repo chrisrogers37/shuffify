@@ -65,6 +65,15 @@ def expired_token_data():
     }
 
 
+def _mock_response(status_code=200, json_data=None):
+    """Create a mock requests.Response."""
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.json.return_value = json_data or {}
+    resp.text = str(json_data) if json_data else ""
+    return resp
+
+
 # =============================================================================
 # TokenInfo Tests
 # =============================================================================
@@ -214,43 +223,63 @@ class TestSpotifyAuthManagerGetAuthUrl:
 
     def test_get_auth_url_returns_url(self, auth_manager):
         """Should return a Spotify authorization URL."""
-        with patch.object(auth_manager, '_create_oauth') as mock_oauth:
-            mock_oauth.return_value.get_authorize_url.return_value = 'https://accounts.spotify.com/authorize?...'
+        url = auth_manager.get_auth_url()
+        assert url.startswith('https://accounts.spotify.com/authorize')
 
-            url = auth_manager.get_auth_url()
+    def test_get_auth_url_includes_client_id(self, auth_manager):
+        """Should include the client_id parameter."""
+        url = auth_manager.get_auth_url()
+        assert 'client_id=test_client_id' in url
 
-            assert url.startswith('https://accounts.spotify.com/authorize')
+    def test_get_auth_url_includes_redirect_uri(self, auth_manager):
+        """Should include the redirect_uri parameter."""
+        url = auth_manager.get_auth_url()
+        assert 'redirect_uri=' in url
+
+    def test_get_auth_url_includes_response_type(self, auth_manager):
+        """Should include response_type=code."""
+        url = auth_manager.get_auth_url()
+        assert 'response_type=code' in url
 
     def test_get_auth_url_with_state(self, auth_manager):
-        """Should pass state parameter to OAuth."""
-        with patch.object(auth_manager, '_create_oauth') as mock_oauth:
-            mock_oauth.return_value.get_authorize_url.return_value = 'https://accounts.spotify.com/authorize?state=abc'
+        """Should include state parameter when provided."""
+        url = auth_manager.get_auth_url(state='abc123')
+        assert 'state=abc123' in url
 
-            url = auth_manager.get_auth_url(state='abc')
-
-            mock_oauth.return_value.get_authorize_url.assert_called_with(state='abc')
-
-    def test_get_auth_url_raises_on_failure(self, auth_manager):
-        """Should raise SpotifyAuthError on failure."""
-        with patch.object(auth_manager, '_create_oauth') as mock_oauth:
-            mock_oauth.return_value.get_authorize_url.side_effect = Exception('OAuth error')
-
-            with pytest.raises(SpotifyAuthError):
-                auth_manager.get_auth_url()
+    def test_get_auth_url_without_state(self, auth_manager):
+        """Should not include state when not provided."""
+        url = auth_manager.get_auth_url()
+        assert 'state=' not in url
 
 
 class TestSpotifyAuthManagerExchangeCode:
     """Tests for exchange_code method."""
 
-    def test_exchange_code_success(self, auth_manager, valid_token_data):
+    @patch('shuffify.spotify.auth.requests.post')
+    def test_exchange_code_success(
+        self, mock_post, auth_manager, valid_token_data,
+    ):
         """Should exchange code for token successfully."""
-        with patch.object(auth_manager, '_create_oauth') as mock_oauth:
-            mock_oauth.return_value.get_access_token.return_value = valid_token_data
+        mock_post.return_value = _mock_response(200, valid_token_data)
 
-            token = auth_manager.exchange_code('test_code')
+        token = auth_manager.exchange_code('test_code')
 
-            assert isinstance(token, TokenInfo)
-            assert token.access_token == valid_token_data['access_token']
+        assert isinstance(token, TokenInfo)
+        assert token.access_token == valid_token_data['access_token']
+        mock_post.assert_called_once()
+
+    @patch('shuffify.spotify.auth.requests.post')
+    def test_exchange_code_sends_correct_data(
+        self, mock_post, auth_manager, valid_token_data,
+    ):
+        """Should send correct grant_type and code."""
+        mock_post.return_value = _mock_response(200, valid_token_data)
+
+        auth_manager.exchange_code('test_code')
+
+        call_kwargs = mock_post.call_args
+        assert call_kwargs[1]['data']['grant_type'] == 'authorization_code'
+        assert call_kwargs[1]['data']['code'] == 'test_code'
 
     def test_exchange_code_with_empty_code(self, auth_manager):
         """Should raise SpotifyAuthError for empty code."""
@@ -263,38 +292,65 @@ class TestSpotifyAuthManagerExchangeCode:
         with pytest.raises(SpotifyAuthError):
             auth_manager.exchange_code(None)
 
-    def test_exchange_code_returns_none_from_api(self, auth_manager):
-        """Should raise SpotifyTokenError when API returns None."""
-        with patch.object(auth_manager, '_create_oauth') as mock_oauth:
-            mock_oauth.return_value.get_access_token.return_value = None
+    @patch('shuffify.spotify.auth.requests.post')
+    def test_exchange_code_api_returns_error(
+        self, mock_post, auth_manager,
+    ):
+        """Should raise SpotifyTokenError on non-200 response."""
+        mock_post.return_value = _mock_response(
+            400, {"error_description": "Invalid code"},
+        )
 
-            with pytest.raises(SpotifyTokenError) as exc_info:
-                auth_manager.exchange_code('test_code')
-            assert 'No token returned' in str(exc_info.value)
+        with pytest.raises(SpotifyTokenError, match="Invalid code"):
+            auth_manager.exchange_code('bad_code')
 
-    def test_exchange_code_api_failure(self, auth_manager):
-        """Should raise SpotifyTokenError on API failure."""
-        with patch.object(auth_manager, '_create_oauth') as mock_oauth:
-            mock_oauth.return_value.get_access_token.side_effect = Exception('API error')
+    @patch('shuffify.spotify.auth.requests.post')
+    def test_exchange_code_network_failure(
+        self, mock_post, auth_manager,
+    ):
+        """Should raise SpotifyTokenError on network failure."""
+        mock_post.side_effect = Exception('Connection refused')
 
-            with pytest.raises(SpotifyTokenError):
-                auth_manager.exchange_code('test_code')
+        with pytest.raises(SpotifyTokenError):
+            auth_manager.exchange_code('test_code')
 
 
 class TestSpotifyAuthManagerRefreshToken:
     """Tests for refresh_token method."""
 
-    def test_refresh_token_success(self, auth_manager, valid_token_data):
+    @patch('shuffify.spotify.auth.requests.post')
+    def test_refresh_token_success(
+        self, mock_post, auth_manager, valid_token_data,
+    ):
         """Should refresh token successfully."""
         token = TokenInfo.from_dict(valid_token_data)
-        new_token_data = {**valid_token_data, 'access_token': 'new_access_token'}
+        new_token_data = {
+            **valid_token_data,
+            'access_token': 'new_access_token',
+        }
+        mock_post.return_value = _mock_response(200, new_token_data)
 
-        with patch.object(auth_manager, '_create_oauth') as mock_oauth:
-            mock_oauth.return_value.refresh_access_token.return_value = new_token_data
+        new_token = auth_manager.refresh_token(token)
 
-            new_token = auth_manager.refresh_token(token)
+        assert new_token.access_token == 'new_access_token'
 
-            assert new_token.access_token == 'new_access_token'
+    @patch('shuffify.spotify.auth.requests.post')
+    def test_refresh_preserves_refresh_token_when_absent(
+        self, mock_post, auth_manager, valid_token_data,
+    ):
+        """Should preserve original refresh_token when not in response."""
+        token = TokenInfo.from_dict(valid_token_data)
+        # Response without refresh_token
+        new_token_data = {
+            'access_token': 'new_access',
+            'token_type': 'Bearer',
+            'expires_in': 3600,
+        }
+        mock_post.return_value = _mock_response(200, new_token_data)
+
+        new_token = auth_manager.refresh_token(token)
+
+        assert new_token.refresh_token == 'test_refresh_token'
 
     def test_refresh_token_without_refresh_token(self, auth_manager):
         """Should raise SpotifyTokenError when no refresh_token."""
@@ -309,15 +365,29 @@ class TestSpotifyAuthManagerRefreshToken:
             auth_manager.refresh_token(token)
         assert 'no refresh_token' in str(exc_info.value)
 
-    def test_refresh_token_api_failure(self, auth_manager, valid_token_data):
+    @patch('shuffify.spotify.auth.requests.post')
+    def test_refresh_token_api_failure(
+        self, mock_post, auth_manager, valid_token_data,
+    ):
         """Should raise SpotifyTokenError on API failure."""
         token = TokenInfo.from_dict(valid_token_data)
+        mock_post.return_value = _mock_response(
+            400, {"error_description": "Invalid refresh token"},
+        )
 
-        with patch.object(auth_manager, '_create_oauth') as mock_oauth:
-            mock_oauth.return_value.refresh_access_token.side_effect = Exception('API error')
+        with pytest.raises(SpotifyTokenError):
+            auth_manager.refresh_token(token)
 
-            with pytest.raises(SpotifyTokenError):
-                auth_manager.refresh_token(token)
+    @patch('shuffify.spotify.auth.requests.post')
+    def test_refresh_token_network_error(
+        self, mock_post, auth_manager, valid_token_data,
+    ):
+        """Should raise SpotifyTokenError on network error."""
+        token = TokenInfo.from_dict(valid_token_data)
+        mock_post.side_effect = Exception('Connection refused')
+
+        with pytest.raises(SpotifyTokenError):
+            auth_manager.refresh_token(token)
 
 
 class TestSpotifyAuthManagerEnsureValidToken:
@@ -331,7 +401,10 @@ class TestSpotifyAuthManagerEnsureValidToken:
 
         assert result.access_token == token.access_token
 
-    def test_ensure_valid_token_refreshes_expired_token(self, auth_manager, expired_token_data):
+    @patch('shuffify.spotify.auth.requests.post')
+    def test_ensure_valid_token_refreshes_expired_token(
+        self, mock_post, auth_manager, expired_token_data,
+    ):
         """Should refresh expired token."""
         token = TokenInfo.from_dict(expired_token_data)
         new_token_data = {
@@ -340,14 +413,12 @@ class TestSpotifyAuthManagerEnsureValidToken:
             'expires_at': time.time() + 3600,
             'refresh_token': 'new_refresh'
         }
+        mock_post.return_value = _mock_response(200, new_token_data)
 
-        with patch.object(auth_manager, '_create_oauth') as mock_oauth:
-            mock_oauth.return_value.refresh_access_token.return_value = new_token_data
+        result = auth_manager.ensure_valid_token(token)
 
-            result = auth_manager.ensure_valid_token(token)
-
-            assert result.access_token == 'new_token'
-            assert not result.is_expired
+        assert result.access_token == 'new_token'
+        assert not result.is_expired
 
 
 class TestSpotifyAuthManagerValidateToken:
