@@ -57,6 +57,43 @@ class WatchPlaylistRequest(BaseModel):
         return v
 
 
+class WatchSearchQueryRequest(BaseModel):
+    """Request to watch a search query as a raid source."""
+
+    model_config = {"extra": "ignore"}
+
+    search_query: str
+    source_name: Optional[str] = None
+    auto_schedule: bool = True
+    schedule_value: str = "daily"
+
+    @field_validator("search_query")
+    @classmethod
+    def validate_search_query(cls, v):
+        v = v.strip()
+        if not v:
+            raise ValueError(
+                "search_query must not be empty"
+            )
+        if len(v) > 500:
+            raise ValueError(
+                "search_query must be 500 chars or fewer"
+            )
+        return v
+
+    @field_validator("schedule_value")
+    @classmethod
+    def validate_schedule_value(cls, v):
+        v = v.strip().lower()
+        valid = [e.value for e in IntervalValue]
+        if v not in valid:
+            raise ValueError(
+                f"schedule_value must be one of: "
+                f"{', '.join(valid)}"
+            )
+        return v
+
+
 class UnwatchPlaylistRequest(BaseModel):
     """Request to remove a source from the watch list."""
 
