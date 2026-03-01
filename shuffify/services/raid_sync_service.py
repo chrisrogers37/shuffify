@@ -308,6 +308,9 @@ class RaidSyncService:
         from shuffify.services.executors import (
             JobExecutorService,
         )
+        from shuffify.services.executors.raid_executor import (
+            _fetch_raid_sources,
+        )
 
         try:
             api = JobExecutorService._get_spotify_api(user)
@@ -320,8 +323,9 @@ class RaidSyncService:
                 if t.get("uri")
             }
 
-            new_uris = JobExecutorService._fetch_raid_sources(
-                api, source_playlist_ids, target_uris
+            new_uris = _fetch_raid_sources(
+                api, source_playlist_ids, target_uris,
+                user_id=user.id,
             )
 
             if new_uris:

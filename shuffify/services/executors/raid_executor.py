@@ -3,9 +3,10 @@ Raid executor: pull new tracks from source playlists into target.
 """
 
 import logging
-from typing import List
+from datetime import datetime, timezone
+from typing import List, Optional
 
-from shuffify.models.db import Schedule
+from shuffify.models.db import Schedule, UpstreamSource, db
 from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.exceptions import (
     SpotifyAPIError,
@@ -15,6 +16,7 @@ from shuffify.enums import SnapshotType
 from shuffify.services.playlist_snapshot_service import (
     PlaylistSnapshotService,
 )
+from shuffify.services.source_resolver import SourceResolver
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +59,8 @@ def execute_raid(
         )
 
         new_uris = _fetch_raid_sources(
-            api, source_ids, target_uris
+            api, source_ids, target_uris,
+            user_id=schedule.user_id,
         )
 
         if not new_uris:
@@ -145,32 +148,84 @@ def _fetch_raid_sources(
     api: SpotifyAPI,
     source_ids: list,
     target_uris: set,
+    user_id: Optional[int] = None,
 ) -> List[str]:
     """
     Fetch new tracks from source playlists not already
-    in target.
+    in target using multi-pathway resolution.
 
     Returns:
         List of new track URIs (deduplicated).
     """
-    new_uris: List[str] = []
-    for source_id in source_ids:
+    resolver = SourceResolver()
+
+    # Load full UpstreamSource records if user_id available
+    sources = None
+    if user_id:
         try:
-            source_tracks = api.get_playlist_tracks(
-                source_id
+            sources = UpstreamSource.query.filter(
+                UpstreamSource.user_id == user_id,
+            ).filter(
+                db.or_(
+                    UpstreamSource.source_playlist_id.in_(
+                        source_ids
+                    ),
+                    UpstreamSource.source_type
+                    == "search_query",
+                )
+            ).all()
+            # Include any source_ids not in DB
+            found_ids = {
+                s.source_playlist_id
+                for s in sources
+                if s.source_playlist_id
+            }
+            for sid in source_ids:
+                if sid not in found_ids:
+                    sources.append(
+                        UpstreamSource(
+                            source_playlist_id=sid,
+                            source_type="external",
+                        )
+                    )
+        except Exception as e:
+            logger.debug(
+                "DB lookup for sources failed, "
+                "using source_ids directly: %s",
+                e,
             )
-            for track in source_tracks:
-                uri = track.get("uri")
-                if (
-                    uri
-                    and uri not in target_uris
-                    and uri not in new_uris
-                ):
-                    new_uris.append(uri)
-        except SpotifyNotFoundError:
-            logger.warning(
-                f"Source playlist {source_id} "
-                f"not found, skipping"
+            sources = None
+
+    if sources is None:
+        sources = [
+            UpstreamSource(
+                source_playlist_id=sid,
+                source_type="external",
             )
-            continue
-    return new_uris
+            for sid in source_ids
+        ]
+
+    results = resolver.resolve_all(
+        sources, api, exclude_uris=target_uris
+    )
+
+    # Update tracking fields on resolved sources
+    now = datetime.now(timezone.utc)
+    for source, result in results.source_results:
+        if source.id:  # Only update persisted sources
+            source.last_resolved_at = now
+            source.last_resolve_pathway = result.pathway_name
+            if result.success:
+                source.last_resolve_status = "success"
+            elif result.partial:
+                source.last_resolve_status = "partial"
+            else:
+                source.last_resolve_status = "failed"
+    try:
+        db.session.commit()
+    except Exception as e:
+        logger.warning(
+            "Failed to update source tracking: %s", e
+        )
+
+    return results.new_uris
