@@ -33,7 +33,7 @@ The app depends on `spotipy==2.25.2`, which hardcodes old endpoint paths and has
 |---|-------|--------|--------|------|---------|
 | 01 | [Replace spotipy with Direct HTTP Client](01_direct-http-client.md) | Critical | High (6-10h) | High | `feat` | ✅ PR #106 |
 | 02 | [Fix Search Endpoint Limits](02_search-limit-fix.md) | High | Low (1-2h) | Low | `fix` | ✅ PR #107 |
-| 03 | [Raid System Pivot — Multi-Pathway Source Resolver](03_raid-system-pivot.md) | High | High (6-8h) | Medium | `feat` |
+| 03 | [Raid System Pivot — Multi-Pathway Source Resolver](03_raid-system-pivot.md) | High | High (6-8h) | Medium | `feat` | ✅ PR #110 |
 | 04 | [Workshop Graceful Degradation](04_workshop-graceful-degradation.md) | Medium | Medium (2-3h) | Low | `feat` | ✅ PR #108 |
 | 05 | [User Profile Fallbacks](05_user-profile-fallbacks.md) | Medium | Low (1-2h) | Low | `fix` | ✅ PR #109 |
 | 06 | [Extended Quota Mode Preparation](06_extended-quota-mode-prep.md) | Low | Low (docs + 1 change) | Low | Business/process |

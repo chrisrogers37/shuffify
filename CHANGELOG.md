@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Multi-Pathway Raid Source Resolver** - New source resolver package for resilient track fetching
+  - Direct API pathway (primary, for owned/collaborative playlists)
+  - Search pathway (discovers tracks via Spotify search API, 20 tracks max)
+  - Public scraper pathway (last resort, extracts tracks from public web pages with Redis caching)
+  - Stateless resolver design with configurable pathway chain
+  - Search-query raid sources: watch a search term instead of a specific playlist
+  - New `POST /playlist/<id>/raid-watch-search` endpoint
+  - DB migration: resolver tracking fields on UpstreamSource (search_query, last_resolved_at, last_resolve_pathway, last_resolve_status)
+  - 60 new tests for source resolver package
+
+### Fixed
+- **Raid Inline Execution Bug** - Fixed `_execute_raid_inline` calling nonexistent `JobExecutorService._fetch_raid_sources`
+
 ### Changed
 - **Test Fixture Consolidation** - Deduplicated `db_app`, `auth_client`, and `app_ctx` test fixtures
   - Moved shared fixtures from 25 individual test files into `tests/conftest.py`

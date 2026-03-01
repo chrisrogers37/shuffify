@@ -357,12 +357,18 @@ class UpstreamSource(db.Model):
     target_playlist_id = db.Column(
         db.String(255), nullable=False, index=True
     )
-    source_playlist_id = db.Column(db.String(255), nullable=False)
+    source_playlist_id = db.Column(db.String(255), nullable=True)
     source_url = db.Column(db.String(1024), nullable=True)
     source_type = db.Column(
         db.String(20), nullable=False, default="external"
     )
     source_name = db.Column(db.String(255), nullable=True)
+    search_query = db.Column(db.String(500), nullable=True)
+    last_resolved_at = db.Column(db.DateTime, nullable=True)
+    last_resolve_pathway = db.Column(db.String(30), nullable=True)
+    last_resolve_status = db.Column(
+        db.String(20), nullable=True
+    )  # "success", "partial", "failed"
     created_at = db.Column(
         db.DateTime,
         nullable=False,
@@ -391,6 +397,14 @@ class UpstreamSource(db.Model):
             "source_url": self.source_url,
             "source_type": self.source_type,
             "source_name": self.source_name,
+            "search_query": self.search_query,
+            "last_resolved_at": (
+                self.last_resolved_at.isoformat()
+                if self.last_resolved_at
+                else None
+            ),
+            "last_resolve_pathway": self.last_resolve_pathway,
+            "last_resolve_status": self.last_resolve_status,
             "created_at": (
                 self.created_at.isoformat()
                 if self.created_at

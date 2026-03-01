@@ -308,6 +308,9 @@ class RaidSyncService:
         from shuffify.services.executors import (
             JobExecutorService,
         )
+        from shuffify.services.executors.raid_executor import (
+            _fetch_raid_sources,
+        )
 
         try:
             api = JobExecutorService._get_spotify_api(user)
@@ -320,8 +323,9 @@ class RaidSyncService:
                 if t.get("uri")
             }
 
-            new_uris = JobExecutorService._fetch_raid_sources(
-                api, source_playlist_ids, target_uris
+            new_uris = _fetch_raid_sources(
+                api, source_playlist_ids, target_uris,
+                user_id=user.id,
             )
 
             if new_uris:
@@ -342,6 +346,70 @@ class RaidSyncService:
             raise RaidSyncError(
                 f"Raid execution failed: {e}"
             )
+
+    @staticmethod
+    def watch_search_query(
+        spotify_id,
+        target_playlist_id,
+        target_playlist_name,
+        search_query,
+        source_name=None,
+        auto_schedule=True,
+        schedule_value="daily",
+    ):
+        """
+        Register a search query as a raid source.
+
+        Returns dict with 'source' and 'schedule' keys.
+        """
+        from shuffify.services.upstream_source_service import (
+            UpstreamSourceService,
+        )
+        from shuffify.services.scheduler_service import (
+            SchedulerService,
+        )
+
+        user = User.query.filter_by(
+            spotify_id=spotify_id
+        ).first()
+        if not user:
+            raise RaidSyncError("User not found")
+
+        source = UpstreamSourceService.add_search_source(
+            spotify_id=spotify_id,
+            target_playlist_id=target_playlist_id,
+            search_query=search_query,
+            source_name=source_name,
+        )
+
+        schedule = None
+        if auto_schedule:
+            schedule = RaidSyncService._find_raid_schedule(
+                user.id, target_playlist_id
+            )
+            if not schedule:
+                schedule = SchedulerService.create_schedule(
+                    user_id=user.id,
+                    job_type=JobType.RAID,
+                    schedule_type=ScheduleType.INTERVAL,
+                    schedule_value=schedule_value,
+                    target_playlist_id=target_playlist_id,
+                    target_playlist_name=(
+                        target_playlist_name
+                    ),
+                    source_playlist_ids=[],
+                    is_enabled=True,
+                )
+
+        return {
+            "source": source,
+            "schedule": schedule,
+            "source_playlist_ids": (
+                schedule.source_playlist_ids
+                if schedule
+                else []
+            ),
+        }
 
     @staticmethod
     def _find_raid_schedule(user_id, target_playlist_id):

@@ -1,6 +1,6 @@
 # Phase 03: Raid System Pivot — Multi-Pathway Source Resolution
 
-`PENDING` Target: 2026-03-01
+`✅ COMPLETE` Started: 2026-03-01 | Completed: 2026-03-01 | PR: #110
 
 ---
 
@@ -130,7 +130,8 @@ class ResolvePathway(Protocol):
 Orchestrates pathways in priority order. Key methods:
 - `resolve(source, api)` → tries each applicable pathway until one succeeds
 - `resolve_all(sources, api, exclude_uris)` → resolves all sources, deduplicating
-- `_update_source_status(source, pathway_name, status)` → tracks which pathway worked
+
+**Stateless design:** The resolver returns `ResolveResult` objects only. It does NOT write to the database. The caller (raid_executor) is responsible for updating `UpstreamSource` tracking fields (`last_resolved_at`, `last_resolve_pathway`, `last_resolve_status`) after resolution completes.
 
 ### `direct_api_pathway.py` — Pathway 1
 
@@ -143,7 +144,7 @@ Orchestrates pathways in priority order. Key methods:
 ### `search_pathway.py` — Pathway 2
 
 - Calls `api.search_tracks(query=source.search_query, limit=10)`
-- Paginates to collect up to 50 tracks (5 pages of 10)
+- Paginates to collect up to 20 tracks (2 pages of 10)
 - Returns `partial=True` (search results are inherently a subset)
 - `can_handle()`: True only for `"search_query"` source type
 
@@ -166,7 +167,7 @@ r'"(spotify:track:[a-zA-Z0-9]{22})"'
 r'/track/([a-zA-Z0-9]{22})'
 ```
 
-**Caching:** Results cached in Redis with 1-hour TTL (`shuffify:scrape:{playlist_id}`)
+**Caching:** Results cached via `SpotifyCache` with 1-hour TTL using the `scrape` namespace (key pattern: `shuffify:cache:scrape:{playlist_id}`). This reuses the existing cache infrastructure's error resilience and key management.
 
 **Safety:**
 - `timeout=10` on all requests
@@ -222,7 +223,7 @@ new_uris = _fetch_raid_sources(api, source_playlist_ids, target_uris)
 
 - Expand `source_type` validation: `("own", "external")` → `("own", "external", "search_query")`
 - Add `add_search_source()` method:
-  - Generates synthetic `source_playlist_id` from query hash: `f"search:{md5(query)[:12]}"`
+  - Sets `source_playlist_id` to `NULL` (search sources have no Spotify playlist ID)
   - Deduplicates on `(user_id, target_playlist_id, search_query)`
   - Stores query in new `search_query` column
 
@@ -295,7 +296,7 @@ Add route: `POST /playlist/<playlist_id>/raid-watch-search`
 - External playlist (empty API) → falls through to PublicScraperPathway
 - Search query source → routes to SearchPathway
 - `resolve_all()` deduplication
-- Source tracking field updates
+- `resolve_all()` returns both new_uris and per-source results
 
 ### Regression
 

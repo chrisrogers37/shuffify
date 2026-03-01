@@ -59,10 +59,13 @@ class UpstreamSourceService:
         Raises:
             UpstreamSourceError: If user not found or creation fails.
         """
-        if source_type not in ("own", "external"):
+        if source_type not in (
+            "own", "external", "search_query"
+        ):
             raise UpstreamSourceError(
                 f"Invalid source_type: {source_type}. "
-                f"Must be 'own' or 'external'."
+                f"Must be 'own', 'external', or "
+                f"'search_query'."
             )
 
         user = get_user_or_raise(
@@ -98,6 +101,65 @@ class UpstreamSourceService:
             f"{source_playlist_id} -> "
             f"{target_playlist_id} for user {spotify_id} "
             f"(type={source_type})",
+            UpstreamSourceError,
+        )
+        return source
+
+    @staticmethod
+    def add_search_source(
+        spotify_id: str,
+        target_playlist_id: str,
+        search_query: str,
+        source_name: Optional[str] = None,
+    ) -> UpstreamSource:
+        """
+        Add a search-query upstream source.
+
+        Args:
+            spotify_id: The Spotify user ID.
+            target_playlist_id: The target playlist ID.
+            search_query: The Spotify search query string.
+            source_name: Optional display name.
+
+        Returns:
+            The created UpstreamSource instance.
+
+        Raises:
+            UpstreamSourceError: If user not found or creation fails.
+        """
+        user = get_user_or_raise(
+            spotify_id, UpstreamSourceError
+        )
+
+        # Deduplicate on (user, target, search_query)
+        existing = UpstreamSource.query.filter_by(
+            user_id=user.id,
+            target_playlist_id=target_playlist_id,
+            search_query=search_query,
+        ).first()
+
+        if existing:
+            logger.info(
+                "Search source already exists: "
+                "'%s' -> %s for user %s",
+                search_query,
+                target_playlist_id,
+                spotify_id,
+            )
+            return existing
+
+        source = UpstreamSource(
+            user_id=user.id,
+            target_playlist_id=target_playlist_id,
+            source_playlist_id=None,
+            source_type="search_query",
+            search_query=search_query,
+            source_name=source_name or search_query,
+        )
+        db.session.add(source)
+        safe_commit(
+            f"add search source: '{search_query}' -> "
+            f"{target_playlist_id} for user {spotify_id}",
             UpstreamSourceError,
         )
         return source
