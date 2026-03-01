@@ -31,6 +31,7 @@ from shuffify.services.scheduler_service import (
 from shuffify.enums import ActivityType
 from shuffify.schemas.raid_requests import (
     WatchPlaylistRequest,
+    WatchSearchQueryRequest,
     UnwatchPlaylistRequest,
     RaidNowRequest,
 )
@@ -102,6 +103,61 @@ def raid_watch(playlist_id, client=None, user=None):
         logger.error("Failed to watch playlist: %s", e)
         return json_error(
             "Failed to watch playlist", 500
+        )
+
+
+@main.route(
+    "/playlist/<playlist_id>/raid-watch-search",
+    methods=["POST"],
+)
+@require_auth_and_db
+def raid_watch_search(
+    playlist_id, client=None, user=None
+):
+    """Watch a search query as a raid source."""
+    req, err = validate_json(WatchSearchQueryRequest)
+    if err:
+        return err
+
+    data = request.get_json(silent=True)
+    try:
+        result = RaidSyncService.watch_search_query(
+            spotify_id=user.spotify_id,
+            target_playlist_id=playlist_id,
+            target_playlist_name=data.get(
+                "target_playlist_name", playlist_id
+            ),
+            search_query=req.search_query,
+            source_name=req.source_name,
+            auto_schedule=req.auto_schedule,
+            schedule_value=req.schedule_value,
+        )
+
+        log_activity(
+            user_id=user.id,
+            activity_type=ActivityType.RAID_WATCH_ADD,
+            description=(
+                f"Watching search: "
+                f"'{req.search_query}'"
+            ),
+            playlist_id=playlist_id,
+        )
+
+        return json_success(
+            "Search source watched.",
+            source=result["source"],
+            schedule=result["schedule"],
+        )
+    except ScheduleLimitError:
+        return json_error("Schedule limit reached.", 400)
+    except RaidSyncError as e:
+        return json_error(str(e), 400)
+    except Exception as e:
+        logger.error(
+            "Failed to watch search query: %s", e
+        )
+        return json_error(
+            "Failed to watch search query", 500
         )
 
 
