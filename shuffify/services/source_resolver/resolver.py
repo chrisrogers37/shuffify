@@ -5,6 +5,7 @@ from typing import Any, List, Optional, Set
 
 from .base import ResolveAllResult, ResolvePathway, ResolveResult
 from .direct_api_pathway import DirectAPIPathway
+from .search_pathway import SearchPathway
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ class SourceResolver:
         """Default pathway chain in priority order."""
         return [
             DirectAPIPathway(),
+            SearchPathway(),
         ]
 
     def resolve(self, source: Any, api: Any = None) -> ResolveResult:
