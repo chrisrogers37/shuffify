@@ -5,6 +5,7 @@ from typing import Any, List, Optional, Set
 
 from .base import ResolveAllResult, ResolvePathway, ResolveResult
 from .direct_api_pathway import DirectAPIPathway
+from .public_scraper_pathway import PublicScraperPathway
 from .search_pathway import SearchPathway
 
 logger = logging.getLogger(__name__)
@@ -20,18 +21,24 @@ class SourceResolver:
     def __init__(
         self,
         pathways: Optional[List[ResolvePathway]] = None,
+        redis_client: Any = None,
     ):
         if pathways is not None:
             self._pathways = pathways
         else:
-            self._pathways = self._default_pathways()
+            self._pathways = self._default_pathways(
+                redis_client=redis_client
+            )
 
     @staticmethod
-    def _default_pathways() -> List[ResolvePathway]:
+    def _default_pathways(
+        redis_client: Any = None,
+    ) -> List[ResolvePathway]:
         """Default pathway chain in priority order."""
         return [
             DirectAPIPathway(),
             SearchPathway(),
+            PublicScraperPathway(redis_client=redis_client),
         ]
 
     def resolve(self, source: Any, api: Any = None) -> ResolveResult:
