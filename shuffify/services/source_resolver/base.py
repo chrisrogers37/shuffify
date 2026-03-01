@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Protocol, Tuple, TYPE_CHECKING
+from typing import Any, List, Optional, Protocol, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from shuffify.models.db import UpstreamSource
