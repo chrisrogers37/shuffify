@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Playlist Tile Spotify Button Accessibility** - Fixed Spotify button being unclickable due to overlay covering the green info bar
+  - Changed flip trigger zone to only activate on album art hover, not the entire card
+  - Green info bar (with Spotify button, title, track count) remains interactive when not flipped
+  - Mobile tap-to-toggle also restricted to artwork area and overlay only
+  - Styled Spotify link in overlay header as a visible button with background for better discoverability
+  - Overlay correctly suppressed during manage mode (drag-and-drop)
 - **Tile Menu Bottom Content Cut Off** - Fixed shuffle overlay content overflowing the card bounds, causing the "Keep first" stepper and Workshop/Undo buttons to be clipped
   - Replaced `aspect-square` on algorithm buttons with compact `py-1.5` padding to reduce grid height
   - Reduced grid gap from `gap-2` to `gap-1` and overlay padding from `p-3` to `p-2`
