@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **OAuth Scope Reduction** - Reduced OAuth scopes from 10 to 5, dropping all unused scopes
+  - Removed: `user-read-email`, `user-read-playback-state`, `user-read-currently-playing`, `user-read-recently-played`, `user-top-read`
+  - Existing refresh tokens unaffected; reduced set applies on next fresh login
+- **Privacy Policy Update** - Corrected false "No Permanent Storage" claim to accurately describe PostgreSQL data storage, encrypted token handling, and data retention
+- **Terms of Service Update** - Updated service description to reflect current feature set (workshop, snapshots, scheduled operations)
+
 ### Added
 - **Multi-Pathway Raid Source Resolver** - New source resolver package for resilient track fetching
   - Direct API pathway (primary, for owned/collaborative playlists)
