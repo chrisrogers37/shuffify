@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Favorites & Hidden Sections** - Dashboard now shows dedicated Favorites and Hidden playlist sections
+  - Star button on hover to favorite/unfavorite playlists (repurposes existing pin functionality)
+  - Favorites section with star icon header at top of dashboard, only shown when favorites exist
+  - Collapsible Hidden section at bottom with playlist count, always accessible (not just in manage mode)
+  - Hide button (X) on hover to hide playlists from the main grid
+  - Unhide button (eye icon) on hidden playlist cards to restore them
+  - Full playlist functionality (shuffle, workshop, undo) preserved in all sections including hidden
+  - Extracted reusable `playlist_card` Jinja2 macro for DRY card rendering across all three sections
+  - `apply_preferences()` now returns 3-tuple `(favorites, regular, hidden)` for proper section separation
+  - Toggle-pinned API response now includes `is_favorited` field alongside `is_pinned`
+
 ### Changed
 - **OAuth Scope Reduction** - Reduced OAuth scopes from 10 to 5, dropping all unused scopes
   - Removed: `user-read-email`, `user-read-playback-state`, `user-read-currently-playing`, `user-read-recently-played`, `user-top-read`

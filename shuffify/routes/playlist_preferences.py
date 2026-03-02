@@ -97,10 +97,15 @@ def toggle_playlist_pinned(
                 user.id, playlist_id
             )
         )
-        action = "pinned" if is_pinned else "unpinned"
+        action = (
+            "added to Favorites"
+            if is_pinned
+            else "removed from Favorites"
+        )
         return json_success(
             f"Playlist {action}",
             is_pinned=is_pinned,
+            is_favorited=is_pinned,
         )
     except PlaylistPreferenceError as e:
         logger.error(

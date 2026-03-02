@@ -71,6 +71,7 @@ def index():
             # Fetch personalized dashboard data (non-blocking)
             dashboard_data = {}
             preferences = {}
+            favorite_playlists = []
             visible_playlists = playlists
             hidden_playlists = []
             try:
@@ -91,7 +92,11 @@ def index():
                         .get_user_preferences(db_user.id)
                     )
                     if preferences:
-                        visible_playlists, hidden_playlists = (
+                        (
+                            favorite_playlists,
+                            visible_playlists,
+                            hidden_playlists,
+                        ) = (
                             PlaylistPreferenceService
                             .apply_preferences(
                                 playlists, preferences
@@ -111,6 +116,7 @@ def index():
             )
             return render_template(
                 "dashboard.html",
+                favorite_playlists=favorite_playlists,
                 playlists=visible_playlists,
                 hidden_playlists=hidden_playlists,
                 user=user,
