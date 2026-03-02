@@ -110,8 +110,8 @@
         {% endif %}
     </div>
 
-    <!-- Playlist Artwork -->
-    <div class="relative h-48">
+    <!-- Playlist Artwork (flip-trigger: only this area triggers overlay on hover) -->
+    <div class="relative h-48 flip-trigger">
         {% if playlist.images %}
             <img src="{{ playlist.images[0].url }}" alt="{{ playlist.name }}"
                  class="w-full h-full object-cover rounded-t-2xl {{ 'grayscale' if section == 'hidden' else '' }}">
@@ -168,7 +168,7 @@
             <a href="{{ playlist.external_urls.spotify }}"
                target="_blank"
                rel="noopener noreferrer"
-               class="flex-shrink-0 ml-2 text-white/70 hover:text-white transition duration-150"
+               class="flex-shrink-0 ml-2 bg-black/40 rounded-full p-1 text-white/80 hover:text-white hover:bg-spotify-green/80 transition duration-150"
                onclick="event.stopPropagation();"
                title="Open on Spotify"
                aria-label="Open {{ playlist.name }} on Spotify">

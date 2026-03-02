@@ -939,7 +939,25 @@ function initDragAndDrop() {
 /* --- Event Delegation Setup --- */
 document.addEventListener('DOMContentLoaded', () => {
     initDragAndDrop();
-    // Mobile tap-to-toggle: on touch devices, tap the artwork area to toggle overlay
+
+    // Desktop: only trigger overlay when hovering over the artwork area (flip-trigger),
+    // NOT the green info bar. This keeps the Spotify button in the info bar clickable.
+    document.querySelectorAll('.card-tile').forEach(tile => {
+        const artwork = tile.querySelector('.flip-trigger');
+        if (!artwork) return;
+
+        artwork.addEventListener('mouseenter', () => {
+            if (!tile.classList.contains('manage-mode-active')) {
+                tile.classList.add('overlay-visible');
+            }
+        });
+
+        tile.addEventListener('mouseleave', () => {
+            tile.classList.remove('overlay-visible');
+        });
+    });
+
+    // Mobile tap-to-toggle: tap the artwork area to toggle overlay
     document.querySelectorAll('.card-tile').forEach(tile => {
         const overlay = tile.querySelector('.shuffle-overlay');
         if (!overlay) return;
@@ -951,6 +969,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             // If click is on the Spotify link in the info bar, let it through
             if (e.target.closest("a[href*='spotify.com']")) return;
+            // Only toggle overlay when tapping the artwork area or the overlay itself
+            if (!e.target.closest('.flip-trigger') && !e.target.closest('.shuffle-overlay')) {
+                return;
+            }
 
             // Toggle overlay-active for mobile/touch
             const isActive = tile.classList.contains('overlay-active');
@@ -1059,27 +1081,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
 .rotate-180 { transform: rotate(180deg); }
 
-/* Shuffle overlay: fade in on hover (desktop) or active state (mobile) */
-.card-tile:hover .shuffle-overlay,
+/* Shuffle overlay: fade in on artwork hover (desktop) or active state (mobile) */
+.card-tile.overlay-visible .shuffle-overlay,
 .card-tile.overlay-active .shuffle-overlay {
     opacity: 1 !important;
     pointer-events: auto !important;
 }
 
-/* Hover action buttons: visible on card hover or mobile tap */
-.card-tile:hover .hover-actions,
+/* Hover action buttons: visible when overlay is shown or mobile tap */
+.card-tile.overlay-visible .hover-actions,
 .card-tile.overlay-active .hover-actions {
     opacity: 1;
 }
 
 /* Hide playlist info bar when overlay is shown (title moves into overlay) */
-.card-tile:hover .playlist-info-bar,
+.card-tile.overlay-visible .playlist-info-bar,
 .card-tile.overlay-active .playlist-info-bar {
     opacity: 0 !important;
 }
 
-/* Override card green background on hover so it doesn't bleed through hidden info bar */
-.card-tile:hover,
+/* Override card green background when overlay is shown so it doesn't bleed through hidden info bar */
+.card-tile.overlay-visible,
 .card-tile.overlay-active {
     background-color: rgb(23, 23, 23) !important;
 }
