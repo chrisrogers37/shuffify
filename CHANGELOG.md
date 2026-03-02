@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Playlist Card Overlay Layout** - Reordered shuffle overlay for better UX
+  - Moved "Keep first" stepper below the algorithm grid, grouping it with Workshop/Undo buttons at the bottom
+  - Added Spotify link icon to overlay title row so playlist remains accessible when info bar is hidden on hover
+  - New layout: Title + Spotify link (top) → Algorithm grid (middle) → Keep first + Workshop/Undo (bottom)
+
+### Fixed
+- **Favorite/Hide Buttons Not Clickable** - Bumped hover-actions z-index above the full-card shuffle overlay so Favorite and Hide buttons are visible and clickable on hover
+- **Spotify Button Inaccessible** - Added Spotify link inside the overlay to restore access after the full-card overlay change hid the info bar on hover
+
 ### Added
 - **Favorites & Hidden Sections** - Dashboard now shows dedicated Favorites and Hidden playlist sections
   - Star button on hover to favorite/unfavorite playlists (repurposes existing pin functionality)
