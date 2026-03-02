@@ -24,23 +24,20 @@ from .exceptions import (
 logger = logging.getLogger(__name__)
 
 
-# NOTE: user-read-private and user-read-email are retained even
-# though Spotify's Feb 2026 API changes removed country, email,
-# product, and explicit_content from GET /v1/me. Removing these
-# scopes would invalidate all existing refresh tokens, forcing
-# every user to re-authenticate. The scopes remain valid — they
-# simply return fewer fields now.
+# Minimal scopes — every scope maps to a core feature.
+# user-read-private is retained for user ID and display_name
+# (needed for dashboard, ownership checks). Scopes removed in
+# March 2026: user-read-email (field dropped from API),
+# user-read-playback-state, user-read-currently-playing,
+# user-read-recently-played, user-top-read (all unused).
+# Removing scopes from the auth URL does not invalidate existing
+# refresh tokens — users get the reduced set on next fresh login.
 DEFAULT_SCOPES = [
     "playlist-read-private",
     "playlist-read-collaborative",
     "playlist-modify-private",
     "playlist-modify-public",
     "user-read-private",
-    "user-read-playback-state",
-    "user-read-email",
-    "user-read-currently-playing",
-    "user-read-recently-played",
-    "user-top-read",
 ]
 
 
