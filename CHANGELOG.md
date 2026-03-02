@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Workshop Shortcut on Playlist Cards** - Added a Workshop button (cog icon) to the hover-actions row on playlist cards
+  - Appears as the first button before Favorite and Hide, visible on hover at z-[25]
+  - Links directly to the Workshop for that playlist without opening the shuffle overlay
+  - Matches existing hover-action button styling with `text-white/80 hover:text-spotify-green`
+
 ### Changed
 - **Playlist Card Overlay Layout** - Reordered shuffle overlay for better UX
   - Moved "Keep first" stepper below the algorithm grid, grouping it with Workshop/Undo buttons at the bottom

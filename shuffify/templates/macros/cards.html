@@ -64,6 +64,17 @@
 
     <!-- Hover Action Buttons (always visible on hover, not just manage mode) -->
     <div class="hover-actions absolute top-2 right-2 z-[25] flex items-center space-x-1 pointer-events-none opacity-0 transition-opacity duration-200">
+        {# Workshop shortcut #}
+        <a href="{{ url_for('main.workshop', playlist_id=playlist.id) }}"
+           class="pointer-events-auto w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition duration-150 text-white/80 hover:text-spotify-green"
+           onclick="event.stopPropagation();"
+           title="Open Workshop"
+           aria-label="Open {{ playlist.name }} in Workshop">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+        </a>
         {# Star/Favorite toggle #}
         <button type="button"
                 class="fav-btn pointer-events-auto w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition duration-150"
