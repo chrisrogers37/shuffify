@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Tile Menu Bottom Content Cut Off** - Fixed shuffle overlay content overflowing the card bounds, causing the "Keep first" stepper and Workshop/Undo buttons to be clipped
+  - Replaced `aspect-square` on algorithm buttons with compact `py-1.5` padding to reduce grid height
+  - Reduced grid gap from `gap-2` to `gap-1` and overlay padding from `p-3` to `p-2`
+  - Scaled algorithm icons from `w-6 h-6` to `w-5 h-5`
+  - Tightened bottom group spacing from `space-y-2` to `space-y-1.5`
+
 ### Changed
 - **Smaller Hover-Action Buttons** - Shrunk playlist card hover-action buttons to reduce crowding
   - Buttons reduced from w-8 h-8 to w-6 h-6, icons from w-4 h-4 to w-3 h-3

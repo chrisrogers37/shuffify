@@ -159,7 +159,7 @@
     </div>
 
     <!-- Shuffle Overlay (covers full card on hover/tap) -->
-    <div class="shuffle-overlay absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col justify-between p-3 rounded-2xl opacity-0 pointer-events-none transition-opacity duration-200 z-20"
+    <div class="shuffle-overlay absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col justify-between p-2 rounded-2xl opacity-0 pointer-events-none transition-opacity duration-200 z-20"
          aria-label="Shuffle options for {{ playlist.name }}">
 
         <!-- Top: Playlist title with Spotify link -->
@@ -179,11 +179,11 @@
         </div>
 
         <!-- Middle: Algorithm Icon Grid (3x2) -->
-        <div class="grid grid-cols-3 gap-2 my-1">
+        <div class="grid grid-cols-3 gap-1 my-0.5">
             {% for algo in algorithms %}
             <div class="relative algo-button-wrapper">
                 <button type="button"
-                        class="algo-icon-btn w-full aspect-square rounded-lg bg-white/15 hover:bg-white/30 border border-white/20 hover:border-white/40 flex flex-col items-center justify-center transition duration-150 group/algo"
+                        class="algo-icon-btn w-full py-1.5 rounded-lg bg-white/15 hover:bg-white/30 border border-white/20 hover:border-white/40 flex flex-col items-center justify-center transition duration-150 group/algo"
                         data-algorithm="{{ algo.class_name }}"
                         data-playlist-id="{{ playlist.id }}"
                         data-parameters='{{ algo.parameters|tojson }}'
@@ -193,27 +193,27 @@
                     <!-- Algorithm Icon -->
                     <span class="algo-icon">
                         {% if algo.class_name == 'BasicShuffle' %}
-                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m-8 6H4m0 0l4-4m-4 4l4 4"/>
                         </svg>
                         {% elif algo.class_name == 'PercentageShuffle' %}
-                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 5L5 19M6.5 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5zm11 11a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"/>
                         </svg>
                         {% elif algo.class_name == 'BalancedShuffle' %}
-                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v18m-7-4l3-8h8l3 8M5 17h4m6 0h4"/>
                         </svg>
                         {% elif algo.class_name == 'StratifiedShuffle' %}
-                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
                         </svg>
                         {% elif algo.class_name == 'ArtistSpacingShuffle' %}
-                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
                         </svg>
                         {% elif algo.class_name == 'AlbumSequenceShuffle' %}
-                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 7a3 3 0 100 6 3 3 0 000-6z"/>
                         </svg>
                         {% endif %}
@@ -241,7 +241,7 @@
         </div>
 
         <!-- Bottom group: Keep First stepper + Workshop/Undo -->
-        <div class="flex-shrink-0 space-y-2">
+        <div class="flex-shrink-0 space-y-1.5">
             <!-- Keep First N Stepper -->
             <div class="flex items-center justify-center space-x-2">
                 <label class="text-white/80 text-xs font-medium" for="keep-first-{{ playlist.id }}">Keep first</label>
