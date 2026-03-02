@@ -377,6 +377,9 @@
                         <div class="shuffle-overlay absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col justify-between p-3 rounded-t-2xl opacity-0 pointer-events-none transition-opacity duration-200"
                              aria-label="Shuffle options for {{ playlist.name }}">
 
+                            <!-- Playlist title (shown in overlay on hover) -->
+                            <p class="text-white/70 text-xs text-center truncate font-medium">{{ playlist.name }} &middot; {{ playlist.tracks.total }} tracks</p>
+
                             <!-- Top: Keep First N Stepper -->
                             <div class="flex items-center justify-center space-x-2">
                                 <label class="text-white/80 text-xs font-medium" for="keep-first-{{ playlist.id }}">Keep first</label>
@@ -519,7 +522,7 @@
                     </div>
 
                     <!-- Playlist Info Bar (simplified: name, count, Spotify link) -->
-                    <div class="bg-spotify-green px-4 py-3 flex items-center justify-between">
+                    <div class="playlist-info-bar bg-spotify-green px-4 py-3 flex items-center justify-between transition-opacity duration-200">
                         <div class="min-w-0">
                             <h3 class="text-white text-xl font-bold truncate">{{ playlist.name }}</h3>
                             <p class="text-white/80 text-sm">{{ playlist.tracks.total }} tracks</p>
@@ -1203,6 +1206,12 @@ document.addEventListener('DOMContentLoaded', () => {
 .card-tile.overlay-active .shuffle-overlay {
     opacity: 1 !important;
     pointer-events: auto !important;
+}
+
+/* Hide playlist info bar when overlay is shown (title moves into overlay) */
+.card-tile:hover .playlist-info-bar,
+.card-tile.overlay-active .playlist-info-bar {
+    opacity: 0;
 }
 
 /* Smooth opacity transition for overlay */
