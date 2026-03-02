@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros/cards.html" import glass_card %}
+{% from "macros/cards.html" import glass_card, playlist_card %}
 
 {% block content %}
 <div class="min-h-screen bg-gradient-to-br from-spotify-green via-spotify-green/90 to-spotify-dark">
@@ -309,279 +309,60 @@
         </div>
     </div>
 
+    <!-- Favorites Section (shown only when there are favorites) -->
+    {% if favorite_playlists %}
+    <div class="relative max-w-6xl mx-auto px-4 pt-8" id="favorites-section">
+        <div class="flex items-center mb-4">
+            <svg class="w-5 h-5 text-yellow-400 mr-2" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path>
+            </svg>
+            <h2 class="text-white font-bold text-lg">Favorites</h2>
+            <span class="ml-2 px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-300 text-xs font-semibold" id="favorites-count">{{ favorite_playlists|length }}</span>
+        </div>
+        <div id="favorites-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
+            {% for playlist in favorite_playlists %}
+                {% set pref = preferences.get(playlist.id) if preferences else None %}
+                {{ playlist_card(playlist, pref, algorithms, 'favorites') }}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Playlists Grid -->
     <div class="relative max-w-6xl mx-auto px-4 py-8">
         <div id="playlist-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
             {% for playlist in playlists %}
                 {% set pref = preferences.get(playlist.id) if preferences else None %}
-                <div class="rounded-2xl shadow-xl bg-spotify-green/90 border border-white/20 overflow-hidden transform transition duration-300 hover:scale-105 hover:shadow-2xl relative card-tile"
-                     data-playlist-id="{{ playlist.id }}"
-                     data-pinned="{{ 'true' if pref and pref.is_pinned else 'false' }}"
-                     data-hidden="false">
-                    <!-- Management Controls (shown in manage mode) -->
-                    <div class="manage-controls hidden absolute top-2 left-2 right-2 z-30 flex items-center justify-between pointer-events-none">
-                        <div class="flex items-center space-x-1 pointer-events-auto">
-                            <!-- Drag Handle -->
-                            <div class="drag-handle cursor-grab active:cursor-grabbing w-7 h-7 rounded-full bg-black/60 flex items-center justify-center text-white/80 hover:text-white hover:bg-black/80 transition"
-                                 title="Drag to reorder">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path>
-                                </svg>
-                            </div>
-                        </div>
-                        <div class="flex items-center space-x-1 pointer-events-auto">
-                            <!-- Pin Button -->
-                            <button type="button"
-                                    class="manage-pin-btn w-7 h-7 rounded-full bg-black/60 flex items-center justify-center transition hover:bg-black/80"
-                                    data-playlist-id="{{ playlist.id }}"
-                                    onclick="event.stopPropagation(); togglePin('{{ playlist.id }}')"
-                                    title="{{ 'Unpin' if pref and pref.is_pinned else 'Pin to top' }}">
-                                <svg class="w-4 h-4 {{ 'text-yellow-400' if pref and pref.is_pinned else 'text-white/80 hover:text-yellow-400' }}" fill="{{ 'currentColor' if pref and pref.is_pinned else 'none' }}" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path>
-                                </svg>
-                            </button>
-                            <!-- Hide Button -->
-                            <button type="button"
-                                    class="manage-hide-btn w-7 h-7 rounded-full bg-black/60 flex items-center justify-center text-white/80 hover:text-red-400 hover:bg-black/80 transition"
-                                    data-playlist-id="{{ playlist.id }}"
-                                    onclick="event.stopPropagation(); toggleHide('{{ playlist.id }}')"
-                                    title="Hide playlist">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21"></path>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                    <!-- Pinned Badge -->
-                    {% if pref and pref.is_pinned %}
-                    <div class="pinned-badge absolute top-2 left-2 z-20 px-2 py-0.5 rounded-full bg-yellow-500/90 text-xs font-bold text-black flex items-center space-x-1">
-                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path>
-                        </svg>
-                        <span>Pinned</span>
-                    </div>
-                    {% endif %}
-
-                    <!-- Playlist Artwork with Hover Overlay -->
-                    <div class="relative h-48 group">
-                        {% if playlist.images %}
-                            <img src="{{ playlist.images[0].url }}" alt="{{ playlist.name }}"
-                                 class="w-full h-full object-cover rounded-t-2xl">
-                        {% else %}
-                            <div class="w-full h-full bg-black/20 flex items-center justify-center rounded-t-2xl">
-                                <span class="text-4xl">&#127925;</span>
-                            </div>
-                        {% endif %}
-
-                        <!-- Shuffle Overlay (appears on hover/tap) -->
-                        <div class="shuffle-overlay absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col justify-between p-3 rounded-t-2xl opacity-0 pointer-events-none transition-opacity duration-200"
-                             aria-label="Shuffle options for {{ playlist.name }}">
-
-                            <!-- Playlist title (shown in overlay on hover, top-left) -->
-                            <p class="text-white/90 text-xs text-left truncate font-semibold">{{ playlist.name }} &middot; {{ playlist.tracks.total }} tracks</p>
-
-                            <!-- Top: Keep First N Stepper -->
-                            <div class="flex items-center justify-center space-x-2">
-                                <label class="text-white/80 text-xs font-medium" for="keep-first-{{ playlist.id }}">Keep first</label>
-                                <button type="button"
-                                        class="keep-first-decrement w-6 h-6 rounded bg-white/20 hover:bg-white/30 text-white text-sm font-bold flex items-center justify-center transition"
-                                        data-playlist-id="{{ playlist.id }}"
-                                        aria-label="Decrease tracks to keep">-</button>
-                                <input type="number"
-                                       id="keep-first-{{ playlist.id }}"
-                                       class="keep-first-input w-10 h-6 text-center text-white text-sm bg-white/10 border border-white/20 rounded focus:ring-1 focus:ring-white/40"
-                                       value="0" min="0" max="{{ playlist.tracks.total }}"
-                                       data-playlist-id="{{ playlist.id }}">
-                                <button type="button"
-                                        class="keep-first-increment w-6 h-6 rounded bg-white/20 hover:bg-white/30 text-white text-sm font-bold flex items-center justify-center transition"
-                                        data-playlist-id="{{ playlist.id }}"
-                                        aria-label="Increase tracks to keep">+</button>
-                            </div>
-
-                            <!-- Center: Algorithm Icon Grid (3x2) -->
-                            <div class="grid grid-cols-3 gap-2 my-2">
-                                {% for algo in algorithms %}
-                                <div class="relative algo-button-wrapper">
-                                    <button type="button"
-                                            class="algo-icon-btn w-full aspect-square rounded-lg bg-white/15 hover:bg-white/30 border border-white/20 hover:border-white/40 flex flex-col items-center justify-center transition duration-150 group/algo"
-                                            data-algorithm="{{ algo.class_name }}"
-                                            data-playlist-id="{{ playlist.id }}"
-                                            data-parameters='{{ algo.parameters|tojson }}'
-                                            data-algo-name="{{ algo.name }}"
-                                            title="{{ algo.name }}: {{ algo.description }}"
-                                            aria-label="Shuffle with {{ algo.name }} algorithm">
-                                        <!-- Algorithm Icon -->
-                                        <span class="algo-icon">
-                                            {% if algo.class_name == 'BasicShuffle' %}
-                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m-8 6H4m0 0l4-4m-4 4l4 4"/>
-                                            </svg>
-                                            {% elif algo.class_name == 'PercentageShuffle' %}
-                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 5L5 19M6.5 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5zm11 11a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"/>
-                                            </svg>
-                                            {% elif algo.class_name == 'BalancedShuffle' %}
-                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v18m-7-4l3-8h8l3 8M5 17h4m6 0h4"/>
-                                            </svg>
-                                            {% elif algo.class_name == 'StratifiedShuffle' %}
-                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
-                                            </svg>
-                                            {% elif algo.class_name == 'ArtistSpacingShuffle' %}
-                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
-                                            </svg>
-                                            {% elif algo.class_name == 'AlbumSequenceShuffle' %}
-                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 7a3 3 0 100 6 3 3 0 000-6z"/>
-                                            </svg>
-                                            {% endif %}
-                                        </span>
-                                        <!-- Algorithm Name (tiny label) -->
-                                        <span class="text-white/70 text-[10px] mt-0.5 leading-tight text-center">{{ algo.name }}</span>
-                                    </button>
-                                    <!-- Gear icon for algorithms with configurable params -->
-                                    {% if algo.parameters|length > 1 or (algo.parameters|length == 1 and 'keep_first' not in algo.parameters) %}
-                                    <button type="button"
-                                            class="algo-settings-btn absolute -top-1 -right-1 w-5 h-5 rounded-full bg-white/30 hover:bg-white/50 flex items-center justify-center transition z-10"
-                                            data-algorithm="{{ algo.class_name }}"
-                                            data-playlist-id="{{ playlist.id }}"
-                                            data-parameters='{{ algo.parameters|tojson }}'
-                                            title="Configure {{ algo.name }} settings"
-                                            aria-label="Settings for {{ algo.name }}">
-                                        <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                                        </svg>
-                                    </button>
-                                    {% endif %}
-                                </div>
-                                {% endfor %}
-                            </div>
-
-                            <!-- Bottom: Workshop + Undo -->
-                            <div class="flex items-center space-x-2">
-                                <a href="{{ url_for('main.workshop', playlist_id=playlist.id) }}"
-                                   class="flex-1 inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 border border-white/20"
-                                   title="Open Playlist Workshop"
-                                   onclick="event.stopPropagation();">
-                                    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                                    </svg>
-                                    Workshop
-                                </a>
-                                <button type="button"
-                                        id="undo-overlay-btn-{{ playlist.id }}"
-                                        class="undo-overlay-btn hidden flex-shrink-0 px-3 py-1.5 rounded-lg bg-black/40 hover:bg-black/60 text-white/90 text-sm font-semibold transition duration-150 border border-white/10"
-                                        data-playlist-id="{{ playlist.id }}"
-                                        title="Undo last shuffle">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 010 10H9m-6-10l4-4m-4 4l4 4"/>
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Algorithm Parameter Popover (hidden, positioned absolute) -->
-                        <div class="algo-params-popover hidden absolute inset-x-3 top-1/2 -translate-y-1/2 bg-black/90 backdrop-blur-md rounded-lg border border-white/20 p-3 z-20 shadow-xl"
-                             data-playlist-id="{{ playlist.id }}">
-                            <div class="flex items-center justify-between mb-2">
-                                <h4 class="algo-popover-title text-white text-sm font-bold"></h4>
-                                <button type="button" class="algo-popover-close text-white/60 hover:text-white transition">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                                    </svg>
-                                </button>
-                            </div>
-                            <div class="algo-popover-params space-y-2">
-                                <!-- Dynamic params rendered by JS -->
-                            </div>
-                            <button type="button"
-                                    class="algo-popover-shuffle w-full mt-2 px-3 py-1.5 rounded-lg bg-spotify-green hover:bg-spotify-green/80 text-white text-sm font-bold transition"
-                                    data-playlist-id="{{ playlist.id }}">
-                                Shuffle with Settings
-                            </button>
-                        </div>
-
-                        <!-- Hidden form for AJAX shuffle submission -->
-                        <form class="shuffle-form hidden"
-                              action="{{ url_for('main.shuffle', playlist_id=playlist.id) }}"
-                              method="POST"
-                              data-playlist-id="{{ playlist.id }}">
-                            <input type="hidden" name="algorithm" class="shuffle-algorithm-input" value="BasicShuffle">
-                        </form>
-
-                        <!-- Hidden form for AJAX undo submission -->
-                        <form class="undo-form hidden"
-                              id="undo-form-{{ playlist.id }}"
-                              action="{{ url_for('main.undo', playlist_id=playlist.id) }}"
-                              method="POST"
-                              data-playlist-id="{{ playlist.id }}">
-                        </form>
-                    </div>
-
-                    <!-- Playlist Info Bar (simplified: name, count, Spotify link) -->
-                    <div class="playlist-info-bar bg-spotify-green px-4 py-3 flex items-center justify-between transition-opacity duration-200">
-                        <div class="min-w-0">
-                            <h3 class="text-white text-xl font-bold truncate">{{ playlist.name }}</h3>
-                            <p class="text-white/80 text-sm">{{ playlist.tracks.total }} tracks</p>
-                        </div>
-                        <div class="flex items-center ml-2">
-                            <a href="{{ playlist.external_urls.spotify }}"
-                               target="_blank"
-                               rel="noopener noreferrer"
-                               class="bg-black/50 rounded-full p-2 transform transition-all duration-300 hover:scale-110 hover:bg-spotify-green"
-                               onclick="event.stopPropagation();"
-                               aria-label="Open {{ playlist.name }} on Spotify">
-                                <svg class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
-                                </svg>
-                            </a>
-                        </div>
-                    </div>
-                </div>
+                {{ playlist_card(playlist, pref, algorithms, 'regular') }}
             {% endfor %}
         </div>
 
-        <!-- Hidden Playlists Grid (shown when "Show Hidden" is toggled in manage mode) -->
+        <!-- Hidden Playlists Section (collapsible, always accessible) -->
         {% if hidden_playlists %}
-        <div id="hidden-playlists-section" class="hidden mt-8">
-            <h3 class="text-white/60 text-sm font-semibold uppercase tracking-wider mb-4">
-                Hidden Playlists ({{ hidden_playlists|length }})
-            </h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
-                {% for playlist in hidden_playlists %}
-                <div class="rounded-2xl shadow-xl bg-spotify-green/40 border border-white/10 overflow-hidden relative opacity-50 card-tile-hidden"
-                     data-playlist-id="{{ playlist.id }}">
-                    <div class="relative h-32">
-                        {% if playlist.images %}
-                            <img src="{{ playlist.images[0].url }}" alt="{{ playlist.name }}"
-                                 class="w-full h-full object-cover rounded-t-2xl grayscale">
-                        {% else %}
-                            <div class="w-full h-full bg-black/20 flex items-center justify-center rounded-t-2xl">
-                                <span class="text-4xl">&#127925;</span>
-                            </div>
-                        {% endif %}
-                    </div>
-                    <div class="px-4 py-3 flex items-center justify-between">
-                        <div class="min-w-0">
-                            <h3 class="text-white/60 text-lg font-bold truncate">{{ playlist.name }}</h3>
-                            <p class="text-white/40 text-sm">{{ playlist.tracks.total }} tracks</p>
-                        </div>
-                        <button type="button"
-                                class="flex-shrink-0 ml-2 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 text-sm font-medium transition border border-white/20"
-                                onclick="toggleHide('{{ playlist.id }}')"
-                                title="Unhide playlist">
-                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                            </svg>
-                            Unhide
-                        </button>
-                    </div>
+        <div id="hidden-playlists-section" class="mt-8">
+            <button id="hidden-toggle-btn"
+                    onclick="toggleHiddenSection()"
+                    class="w-full flex items-center justify-between px-4 py-3 rounded-xl backdrop-blur-md bg-white/5 border border-white/10 hover:bg-white/10 transition duration-150 cursor-pointer"
+                    aria-expanded="false"
+                    aria-controls="hidden-grid-wrapper">
+                <span class="flex items-center">
+                    <svg class="w-4 h-4 text-white/40 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21"></path>
+                    </svg>
+                    <span class="text-white/50 text-sm font-semibold">Hidden</span>
+                    <span class="ml-2 px-2 py-0.5 rounded-full bg-white/10 text-white/40 text-xs font-semibold" id="hidden-count">{{ hidden_playlists|length }}</span>
+                </span>
+                <svg id="hidden-chevron" class="w-4 h-4 text-white/40 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+            </button>
+            <div id="hidden-grid-wrapper" class="hidden mt-4 transition-all duration-300">
+                <div id="hidden-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
+                    {% for playlist in hidden_playlists %}
+                        {% set pref = preferences.get(playlist.id) if preferences else None %}
+                        {{ playlist_card(playlist, pref, algorithms, 'hidden') }}
+                    {% endfor %}
                 </div>
-                {% endfor %}
             </div>
         </div>
         {% endif %}
@@ -908,28 +689,40 @@ function toggleManageMode() {
         tile.classList.toggle('manage-mode-active', manageMode);
     });
 
-    // Hide the hidden playlists section when exiting manage mode
+    // Collapse the hidden playlists section when exiting manage mode
     if (!manageMode) {
-        const hiddenSection = document.getElementById('hidden-playlists-section');
-        if (hiddenSection) hiddenSection.classList.add('hidden');
+        const hiddenWrapper = document.getElementById('hidden-grid-wrapper');
+        const hiddenChevron = document.getElementById('hidden-chevron');
+        const hiddenBtn = document.getElementById('hidden-toggle-btn');
+        if (hiddenWrapper && !hiddenWrapper.classList.contains('hidden')) {
+            hiddenWrapper.classList.add('hidden');
+            if (hiddenChevron) hiddenChevron.classList.remove('rotate-180');
+            if (hiddenBtn) hiddenBtn.setAttribute('aria-expanded', 'false');
+        }
         const hiddenText = document.getElementById('show-hidden-text');
         if (hiddenText) hiddenText.textContent = 'Show Hidden';
     }
 }
 
-function toggleShowHidden() {
-    const section = document.getElementById('hidden-playlists-section');
-    const text = document.getElementById('show-hidden-text');
-    if (!section) {
-        showNotification('No hidden playlists', 'info');
-        return;
-    }
-    const isHidden = section.classList.contains('hidden');
-    section.classList.toggle('hidden', !isHidden);
-    if (text) text.textContent = isHidden ? 'Hide Hidden' : 'Show Hidden';
+function toggleHiddenSection() {
+    const wrapper = document.getElementById('hidden-grid-wrapper');
+    const chevron = document.getElementById('hidden-chevron');
+    const btn = document.getElementById('hidden-toggle-btn');
+    if (!wrapper) return;
+    const isHidden = wrapper.classList.contains('hidden');
+    wrapper.classList.toggle('hidden');
+    chevron.classList.toggle('rotate-180');
+    btn.setAttribute('aria-expanded', String(isHidden));
 }
 
-function togglePin(playlistId) {
+function toggleShowHidden() {
+    toggleHiddenSection();
+}
+
+function toggleFavorite(playlistId) {
+    const tile = document.querySelector(`.card-tile[data-playlist-id="${playlistId}"]`);
+    if (!tile) return;
+
     fetch(`/api/playlist-preferences/${playlistId}/toggle-pinned`, {
         method: 'POST',
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
@@ -937,36 +730,101 @@ function togglePin(playlistId) {
     .then(r => r.json())
     .then(data => {
         if (data.success) {
-            showNotification(data.message, 'success');
+            showNotification(data.is_pinned ? 'Added to Favorites' : 'Removed from Favorites', 'success');
+            // Reload to re-render sections correctly
             window.location.reload();
         } else {
-            showNotification(data.message || 'Failed to update pin state', 'error');
+            showNotification(data.message || 'Failed to update favorite state', 'error');
         }
     })
     .catch(err => {
-        console.error('Pin toggle error:', err);
-        showNotification('Failed to update pin state', 'error');
+        console.error('Favorite toggle error:', err);
+        showNotification('Failed to update favorite state', 'error');
     });
 }
 
-function toggleHide(playlistId) {
+/* Backward compatibility aliases */
+function togglePin(playlistId) { toggleFavorite(playlistId); }
+
+function hidePlaylist(playlistId) {
+    const tile = document.querySelector(`.card-tile[data-playlist-id="${playlistId}"]`);
+    if (!tile) return;
+
+    // Optimistic: animate card out
+    tile.style.transition = 'opacity 300ms ease, transform 300ms ease';
+    tile.style.opacity = '0';
+    tile.style.transform = 'scale(0.95)';
+
     fetch(`/api/playlist-preferences/${playlistId}/toggle-hidden`, {
         method: 'POST',
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
     })
     .then(r => r.json())
     .then(data => {
-        if (data.success) {
-            showNotification(data.message, 'success');
+        if (data.success && data.is_hidden) {
+            showNotification('Playlist hidden', 'success');
+            // Reload to re-render sections
+            window.location.reload();
+        } else if (data.success) {
+            // Was already hidden and got unhidden — shouldn't happen from this function
+            showNotification('Playlist shown', 'success');
             window.location.reload();
         } else {
-            showNotification(data.message || 'Failed to update visibility', 'error');
+            tile.style.opacity = '1';
+            tile.style.transform = '';
+            showNotification(data.message || 'Failed to hide playlist', 'error');
         }
     })
     .catch(err => {
-        console.error('Hide toggle error:', err);
-        showNotification('Failed to update visibility', 'error');
+        tile.style.opacity = '1';
+        tile.style.transform = '';
+        console.error('Hide error:', err);
+        showNotification('Failed to hide playlist', 'error');
     });
+}
+
+function unhidePlaylist(playlistId) {
+    const tile = document.querySelector(`.card-tile[data-playlist-id="${playlistId}"]`);
+    if (!tile) return;
+
+    tile.style.transition = 'opacity 300ms ease, transform 300ms ease';
+    tile.style.opacity = '0';
+    tile.style.transform = 'scale(0.95)';
+
+    fetch(`/api/playlist-preferences/${playlistId}/toggle-hidden`, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success && !data.is_hidden) {
+            showNotification('Playlist restored', 'success');
+            window.location.reload();
+        } else if (data.success) {
+            showNotification('Playlist hidden', 'success');
+            window.location.reload();
+        } else {
+            tile.style.opacity = '1';
+            tile.style.transform = '';
+            showNotification(data.message || 'Failed to unhide playlist', 'error');
+        }
+    })
+    .catch(err => {
+        tile.style.opacity = '1';
+        tile.style.transform = '';
+        console.error('Unhide error:', err);
+        showNotification('Failed to unhide playlist', 'error');
+    });
+}
+
+function toggleHide(playlistId) {
+    // Backward compat: determine if this is a hide or unhide
+    const tile = document.querySelector(`.card-tile[data-playlist-id="${playlistId}"]`);
+    if (tile && tile.dataset.hidden === 'true') {
+        unhidePlaylist(playlistId);
+    } else {
+        hidePlaylist(playlistId);
+    }
 }
 
 function resetPreferences() {
@@ -1206,6 +1064,12 @@ document.addEventListener('DOMContentLoaded', () => {
 .card-tile.overlay-active .shuffle-overlay {
     opacity: 1 !important;
     pointer-events: auto !important;
+}
+
+/* Hover action buttons: visible on card hover or mobile tap */
+.card-tile:hover .hover-actions,
+.card-tile.overlay-active .hover-actions {
+    opacity: 1;
 }
 
 /* Hide playlist info bar when overlay is shown (title moves into overlay) */

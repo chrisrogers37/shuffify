@@ -184,6 +184,7 @@ class TestTogglePinned:
         data = resp.get_json()
         assert data["success"] is True
         assert data["is_pinned"] is True
+        assert data["is_favorited"] is True
 
 
 # =============================================================

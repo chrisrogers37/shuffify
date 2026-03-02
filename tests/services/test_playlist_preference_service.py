@@ -346,10 +346,12 @@ class TestResetPreferences:
 
 
 class TestApplyPreferences:
-    """Tests for apply_preferences."""
+    """Tests for apply_preferences (3-tuple return)."""
 
-    def test_pinned_first(self, app_ctx, test_user):
-        """Pinned playlists should appear first."""
+    def test_favorites_separated(
+        self, app_ctx, test_user
+    ):
+        """Pinned playlists should appear in favorites."""
         playlists = [
             {"id": "pl1", "name": "A"},
             {"id": "pl2", "name": "B"},
@@ -367,15 +369,18 @@ class TestApplyPreferences:
             PlaylistPreferenceService
             .get_user_preferences(test_user.id)
         )
-        visible, hidden = (
+        favorites, regular, hidden = (
             PlaylistPreferenceService
             .apply_preferences(playlists, prefs)
         )
 
-        assert visible[0]["id"] == "pl3"
+        assert len(favorites) == 1
+        assert favorites[0]["id"] == "pl3"
+        assert len(regular) == 2
+        assert "pl3" not in [p["id"] for p in regular]
 
     def test_hidden_excluded(self, app_ctx, test_user):
-        """Hidden playlists not in visible list."""
+        """Hidden playlists not in visible lists."""
         playlists = [
             {"id": "pl1", "name": "A"},
             {"id": "pl2", "name": "B"},
@@ -388,13 +393,14 @@ class TestApplyPreferences:
             PlaylistPreferenceService
             .get_user_preferences(test_user.id)
         )
-        visible, hidden = (
+        favorites, regular, hidden = (
             PlaylistPreferenceService
             .apply_preferences(playlists, prefs)
         )
 
-        assert len(visible) == 1
-        assert visible[0]["id"] == "pl1"
+        assert len(favorites) == 0
+        assert len(regular) == 1
+        assert regular[0]["id"] == "pl1"
         assert len(hidden) == 1
         assert hidden[0]["id"] == "pl2"
 
@@ -413,14 +419,14 @@ class TestApplyPreferences:
             PlaylistPreferenceService
             .get_user_preferences(test_user.id)
         )
-        visible, hidden = (
+        favorites, regular, hidden = (
             PlaylistPreferenceService
             .apply_preferences(playlists, prefs)
         )
 
-        assert visible[0]["id"] == "pl1"
-        assert visible[1]["id"] == "pl2"
-        assert visible[2]["id"] == "pl3"
+        assert regular[0]["id"] == "pl1"
+        assert regular[1]["id"] == "pl2"
+        assert regular[2]["id"] == "pl3"
 
     def test_sort_order_respected(
         self, app_ctx, test_user
@@ -439,23 +445,89 @@ class TestApplyPreferences:
             PlaylistPreferenceService
             .get_user_preferences(test_user.id)
         )
-        visible, hidden = (
+        favorites, regular, hidden = (
             PlaylistPreferenceService
             .apply_preferences(playlists, prefs)
         )
 
-        ids = [p["id"] for p in visible]
+        ids = [p["id"] for p in regular]
         assert ids == ["pl3", "pl1", "pl2"]
 
     def test_empty_prefs_returns_original(self):
-        """Empty prefs should return playlists as-is."""
+        """Empty prefs returns empty favorites."""
         playlists = [
             {"id": "pl1"},
             {"id": "pl2"},
         ]
-        visible, hidden = (
+        favorites, regular, hidden = (
             PlaylistPreferenceService
             .apply_preferences(playlists, {})
         )
-        assert len(visible) == 2
+        assert len(favorites) == 0
+        assert len(regular) == 2
         assert len(hidden) == 0
+
+    def test_hidden_pinned_goes_to_hidden(
+        self, app_ctx, test_user
+    ):
+        """A playlist that is both pinned and hidden
+        should go to hidden, not favorites."""
+        playlists = [
+            {"id": "pl1", "name": "A"},
+        ]
+
+        PlaylistPreferenceService.toggle_pinned(
+            test_user.id, "pl1"
+        )
+        PlaylistPreferenceService.toggle_hidden(
+            test_user.id, "pl1"
+        )
+        prefs = (
+            PlaylistPreferenceService
+            .get_user_preferences(test_user.id)
+        )
+        favorites, regular, hidden = (
+            PlaylistPreferenceService
+            .apply_preferences(playlists, prefs)
+        )
+
+        assert len(favorites) == 0
+        assert len(regular) == 0
+        assert len(hidden) == 1
+        assert hidden[0]["id"] == "pl1"
+
+    def test_multiple_favorites_sorted(
+        self, app_ctx, test_user
+    ):
+        """Multiple favorites should be sorted by
+        sort_order."""
+        playlists = [
+            {"id": "pl1", "name": "A"},
+            {"id": "pl2", "name": "B"},
+            {"id": "pl3", "name": "C"},
+        ]
+
+        PlaylistPreferenceService.toggle_pinned(
+            test_user.id, "pl1"
+        )
+        PlaylistPreferenceService.toggle_pinned(
+            test_user.id, "pl3"
+        )
+        PlaylistPreferenceService.save_order(
+            test_user.id, ["pl3", "pl1", "pl2"]
+        )
+
+        prefs = (
+            PlaylistPreferenceService
+            .get_user_preferences(test_user.id)
+        )
+        favorites, regular, hidden = (
+            PlaylistPreferenceService
+            .apply_preferences(playlists, prefs)
+        )
+
+        assert len(favorites) == 2
+        assert favorites[0]["id"] == "pl3"
+        assert favorites[1]["id"] == "pl1"
+        assert len(regular) == 1
+        assert regular[0]["id"] == "pl2"

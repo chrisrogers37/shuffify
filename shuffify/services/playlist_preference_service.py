@@ -204,16 +204,16 @@ class PlaylistPreferenceService:
         playlist list.
 
         Ordering logic:
-        1. Pinned playlists first, sorted by sort_order
-        2. Unpinned playlists, sorted by sort_order
+        1. Favorited (pinned) playlists sorted by sort_order
+        2. Regular playlists sorted by sort_order
         3. Unknown playlists last, in original order
-        4. Hidden playlists excluded from visible result
+        4. Hidden playlists separated into their own list
 
         Returns:
-            Tuple of (visible_playlists, hidden_playlists).
+            Tuple of (favorites, regular, hidden).
         """
         if not preferences:
-            return list(playlists), []
+            return [], list(playlists), []
 
         known = []
         unknown = []
@@ -229,21 +229,29 @@ class PlaylistPreferenceService:
             else:
                 unknown.append(pl)
 
-        visible_known = [
+        favorites = [
             (p, pref)
             for p, pref in known
-            if not pref.is_hidden
+            if pref.is_pinned and not pref.is_hidden
+        ]
+        regular = [
+            (p, pref)
+            for p, pref in known
+            if not pref.is_pinned and not pref.is_hidden
         ]
         hidden = [
             p for p, pref in known if pref.is_hidden
         ]
 
-        visible_known.sort(
-            key=lambda pair: (
-                not pair[1].is_pinned,
-                pair[1].sort_order,
-            )
+        favorites.sort(
+            key=lambda pair: pair[1].sort_order
+        )
+        regular.sort(
+            key=lambda pair: pair[1].sort_order
         )
 
-        visible = [p for p, _ in visible_known] + unknown
-        return visible, hidden
+        return (
+            [p for p, _ in favorites],
+            [p for p, _ in regular] + unknown,
+            hidden,
+        )
