@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Smaller Hover-Action Buttons** - Shrunk playlist card hover-action buttons to reduce crowding
+  - Buttons reduced from w-8 h-8 to w-6 h-6, icons from w-4 h-4 to w-3 h-3
+  - Gap between buttons reduced from space-x-1 to space-x-0.5
+  - Workshop icon changed from gear to hammer for better Workshop metaphor
+
 ### Added
-- **Workshop Shortcut on Playlist Cards** - Added a Workshop button (cog icon) to the hover-actions row on playlist cards
+- **Workshop Shortcut on Playlist Cards** - Added a Workshop button to the hover-actions row on playlist cards
   - Appears as the first button before Favorite and Hide, visible on hover at z-[25]
   - Links directly to the Workshop for that playlist without opening the shuffle overlay
   - Matches existing hover-action button styling with `text-white/80 hover:text-spotify-green`
