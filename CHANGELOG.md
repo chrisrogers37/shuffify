@@ -27,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Raid Inline Execution Bug** - Fixed `_execute_raid_inline` calling nonexistent `JobExecutorService._fetch_raid_sources`
+- **Playlist Tile Hover Overlay** - Fixed overlay not covering full card and playlist title not visible
+  - Moved shuffle overlay from artwork container to card-tile level so it covers both artwork and info bar
+  - Added `flex-shrink-0` to title and action rows to prevent flex collapse
+  - Bumped z-index layers: overlay z-20, popover z-30, manage controls z-40
 
 ### Changed
 - **Test Fixture Consolidation** - Deduplicated `db_app`, `auth_client`, and `app_ctx` test fixtures

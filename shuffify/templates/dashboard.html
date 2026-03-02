@@ -319,7 +319,7 @@
                      data-pinned="{{ 'true' if pref and pref.is_pinned else 'false' }}"
                      data-hidden="false">
                     <!-- Management Controls (shown in manage mode) -->
-                    <div class="manage-controls hidden absolute top-2 left-2 right-2 z-30 flex items-center justify-between pointer-events-none">
+                    <div class="manage-controls hidden absolute top-2 left-2 right-2 z-40 flex items-center justify-between pointer-events-none">
                         <div class="flex items-center space-x-1 pointer-events-auto">
                             <!-- Drag Handle -->
                             <div class="drag-handle cursor-grab active:cursor-grabbing w-7 h-7 rounded-full bg-black/60 flex items-center justify-center text-white/80 hover:text-white hover:bg-black/80 transition"
@@ -373,137 +373,6 @@
                             </div>
                         {% endif %}
 
-                        <!-- Shuffle Overlay (appears on hover/tap) -->
-                        <div class="shuffle-overlay absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col justify-between p-3 rounded-t-2xl opacity-0 pointer-events-none transition-opacity duration-200"
-                             aria-label="Shuffle options for {{ playlist.name }}">
-
-                            <!-- Playlist title (shown in overlay on hover, top-left) -->
-                            <p class="text-white/90 text-xs text-left truncate font-semibold">{{ playlist.name }} &middot; {{ playlist.tracks.total }} tracks</p>
-
-                            <!-- Top: Keep First N Stepper -->
-                            <div class="flex items-center justify-center space-x-2">
-                                <label class="text-white/80 text-xs font-medium" for="keep-first-{{ playlist.id }}">Keep first</label>
-                                <button type="button"
-                                        class="keep-first-decrement w-6 h-6 rounded bg-white/20 hover:bg-white/30 text-white text-sm font-bold flex items-center justify-center transition"
-                                        data-playlist-id="{{ playlist.id }}"
-                                        aria-label="Decrease tracks to keep">-</button>
-                                <input type="number"
-                                       id="keep-first-{{ playlist.id }}"
-                                       class="keep-first-input w-10 h-6 text-center text-white text-sm bg-white/10 border border-white/20 rounded focus:ring-1 focus:ring-white/40"
-                                       value="0" min="0" max="{{ playlist.tracks.total }}"
-                                       data-playlist-id="{{ playlist.id }}">
-                                <button type="button"
-                                        class="keep-first-increment w-6 h-6 rounded bg-white/20 hover:bg-white/30 text-white text-sm font-bold flex items-center justify-center transition"
-                                        data-playlist-id="{{ playlist.id }}"
-                                        aria-label="Increase tracks to keep">+</button>
-                            </div>
-
-                            <!-- Center: Algorithm Icon Grid (3x2) -->
-                            <div class="grid grid-cols-3 gap-2 my-2">
-                                {% for algo in algorithms %}
-                                <div class="relative algo-button-wrapper">
-                                    <button type="button"
-                                            class="algo-icon-btn w-full aspect-square rounded-lg bg-white/15 hover:bg-white/30 border border-white/20 hover:border-white/40 flex flex-col items-center justify-center transition duration-150 group/algo"
-                                            data-algorithm="{{ algo.class_name }}"
-                                            data-playlist-id="{{ playlist.id }}"
-                                            data-parameters='{{ algo.parameters|tojson }}'
-                                            data-algo-name="{{ algo.name }}"
-                                            title="{{ algo.name }}: {{ algo.description }}"
-                                            aria-label="Shuffle with {{ algo.name }} algorithm">
-                                        <!-- Algorithm Icon -->
-                                        <span class="algo-icon">
-                                            {% if algo.class_name == 'BasicShuffle' %}
-                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m-8 6H4m0 0l4-4m-4 4l4 4"/>
-                                            </svg>
-                                            {% elif algo.class_name == 'PercentageShuffle' %}
-                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 5L5 19M6.5 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5zm11 11a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"/>
-                                            </svg>
-                                            {% elif algo.class_name == 'BalancedShuffle' %}
-                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v18m-7-4l3-8h8l3 8M5 17h4m6 0h4"/>
-                                            </svg>
-                                            {% elif algo.class_name == 'StratifiedShuffle' %}
-                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
-                                            </svg>
-                                            {% elif algo.class_name == 'ArtistSpacingShuffle' %}
-                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
-                                            </svg>
-                                            {% elif algo.class_name == 'AlbumSequenceShuffle' %}
-                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 7a3 3 0 100 6 3 3 0 000-6z"/>
-                                            </svg>
-                                            {% endif %}
-                                        </span>
-                                        <!-- Algorithm Name (tiny label) -->
-                                        <span class="text-white/70 text-[10px] mt-0.5 leading-tight text-center">{{ algo.name }}</span>
-                                    </button>
-                                    <!-- Gear icon for algorithms with configurable params -->
-                                    {% if algo.parameters|length > 1 or (algo.parameters|length == 1 and 'keep_first' not in algo.parameters) %}
-                                    <button type="button"
-                                            class="algo-settings-btn absolute -top-1 -right-1 w-5 h-5 rounded-full bg-white/30 hover:bg-white/50 flex items-center justify-center transition z-10"
-                                            data-algorithm="{{ algo.class_name }}"
-                                            data-playlist-id="{{ playlist.id }}"
-                                            data-parameters='{{ algo.parameters|tojson }}'
-                                            title="Configure {{ algo.name }} settings"
-                                            aria-label="Settings for {{ algo.name }}">
-                                        <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                                        </svg>
-                                    </button>
-                                    {% endif %}
-                                </div>
-                                {% endfor %}
-                            </div>
-
-                            <!-- Bottom: Workshop + Undo -->
-                            <div class="flex items-center space-x-2">
-                                <a href="{{ url_for('main.workshop', playlist_id=playlist.id) }}"
-                                   class="flex-1 inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 border border-white/20"
-                                   title="Open Playlist Workshop"
-                                   onclick="event.stopPropagation();">
-                                    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                                    </svg>
-                                    Workshop
-                                </a>
-                                <button type="button"
-                                        id="undo-overlay-btn-{{ playlist.id }}"
-                                        class="undo-overlay-btn hidden flex-shrink-0 px-3 py-1.5 rounded-lg bg-black/40 hover:bg-black/60 text-white/90 text-sm font-semibold transition duration-150 border border-white/10"
-                                        data-playlist-id="{{ playlist.id }}"
-                                        title="Undo last shuffle">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 010 10H9m-6-10l4-4m-4 4l4 4"/>
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Algorithm Parameter Popover (hidden, positioned absolute) -->
-                        <div class="algo-params-popover hidden absolute inset-x-3 top-1/2 -translate-y-1/2 bg-black/90 backdrop-blur-md rounded-lg border border-white/20 p-3 z-20 shadow-xl"
-                             data-playlist-id="{{ playlist.id }}">
-                            <div class="flex items-center justify-between mb-2">
-                                <h4 class="algo-popover-title text-white text-sm font-bold"></h4>
-                                <button type="button" class="algo-popover-close text-white/60 hover:text-white transition">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                                    </svg>
-                                </button>
-                            </div>
-                            <div class="algo-popover-params space-y-2">
-                                <!-- Dynamic params rendered by JS -->
-                            </div>
-                            <button type="button"
-                                    class="algo-popover-shuffle w-full mt-2 px-3 py-1.5 rounded-lg bg-spotify-green hover:bg-spotify-green/80 text-white text-sm font-bold transition"
-                                    data-playlist-id="{{ playlist.id }}">
-                                Shuffle with Settings
-                            </button>
-                        </div>
-
                         <!-- Hidden form for AJAX shuffle submission -->
                         <form class="shuffle-form hidden"
                               action="{{ url_for('main.shuffle', playlist_id=playlist.id) }}"
@@ -539,6 +408,137 @@
                                 </svg>
                             </a>
                         </div>
+                    </div>
+
+                    <!-- Shuffle Overlay (covers full card on hover/tap) -->
+                    <div class="shuffle-overlay absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col justify-between p-3 rounded-2xl opacity-0 pointer-events-none transition-opacity duration-200 z-20"
+                         aria-label="Shuffle options for {{ playlist.name }}">
+
+                        <!-- Playlist title (top-left of overlay) -->
+                        <p class="text-white/90 text-xs text-left truncate font-semibold flex-shrink-0">{{ playlist.name }} &middot; {{ playlist.tracks.total }} tracks</p>
+
+                        <!-- Keep First N Stepper -->
+                        <div class="flex items-center justify-center space-x-2 flex-shrink-0">
+                            <label class="text-white/80 text-xs font-medium" for="keep-first-{{ playlist.id }}">Keep first</label>
+                            <button type="button"
+                                    class="keep-first-decrement w-6 h-6 rounded bg-white/20 hover:bg-white/30 text-white text-sm font-bold flex items-center justify-center transition"
+                                    data-playlist-id="{{ playlist.id }}"
+                                    aria-label="Decrease tracks to keep">-</button>
+                            <input type="number"
+                                   id="keep-first-{{ playlist.id }}"
+                                   class="keep-first-input w-10 h-6 text-center text-white text-sm bg-white/10 border border-white/20 rounded focus:ring-1 focus:ring-white/40"
+                                   value="0" min="0" max="{{ playlist.tracks.total }}"
+                                   data-playlist-id="{{ playlist.id }}">
+                            <button type="button"
+                                    class="keep-first-increment w-6 h-6 rounded bg-white/20 hover:bg-white/30 text-white text-sm font-bold flex items-center justify-center transition"
+                                    data-playlist-id="{{ playlist.id }}"
+                                    aria-label="Increase tracks to keep">+</button>
+                        </div>
+
+                        <!-- Algorithm Icon Grid (3x2) -->
+                        <div class="grid grid-cols-3 gap-2 my-1">
+                            {% for algo in algorithms %}
+                            <div class="relative algo-button-wrapper">
+                                <button type="button"
+                                        class="algo-icon-btn w-full aspect-square rounded-lg bg-white/15 hover:bg-white/30 border border-white/20 hover:border-white/40 flex flex-col items-center justify-center transition duration-150 group/algo"
+                                        data-algorithm="{{ algo.class_name }}"
+                                        data-playlist-id="{{ playlist.id }}"
+                                        data-parameters='{{ algo.parameters|tojson }}'
+                                        data-algo-name="{{ algo.name }}"
+                                        title="{{ algo.name }}: {{ algo.description }}"
+                                        aria-label="Shuffle with {{ algo.name }} algorithm">
+                                    <!-- Algorithm Icon -->
+                                    <span class="algo-icon">
+                                        {% if algo.class_name == 'BasicShuffle' %}
+                                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m-8 6H4m0 0l4-4m-4 4l4 4"/>
+                                        </svg>
+                                        {% elif algo.class_name == 'PercentageShuffle' %}
+                                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 5L5 19M6.5 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5zm11 11a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"/>
+                                        </svg>
+                                        {% elif algo.class_name == 'BalancedShuffle' %}
+                                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v18m-7-4l3-8h8l3 8M5 17h4m6 0h4"/>
+                                        </svg>
+                                        {% elif algo.class_name == 'StratifiedShuffle' %}
+                                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                                        </svg>
+                                        {% elif algo.class_name == 'ArtistSpacingShuffle' %}
+                                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                                        </svg>
+                                        {% elif algo.class_name == 'AlbumSequenceShuffle' %}
+                                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 7a3 3 0 100 6 3 3 0 000-6z"/>
+                                        </svg>
+                                        {% endif %}
+                                    </span>
+                                    <!-- Algorithm Name (tiny label) -->
+                                    <span class="text-white/70 text-[10px] mt-0.5 leading-tight text-center">{{ algo.name }}</span>
+                                </button>
+                                <!-- Gear icon for algorithms with configurable params -->
+                                {% if algo.parameters|length > 1 or (algo.parameters|length == 1 and 'keep_first' not in algo.parameters) %}
+                                <button type="button"
+                                        class="algo-settings-btn absolute -top-1 -right-1 w-5 h-5 rounded-full bg-white/30 hover:bg-white/50 flex items-center justify-center transition z-10"
+                                        data-algorithm="{{ algo.class_name }}"
+                                        data-playlist-id="{{ playlist.id }}"
+                                        data-parameters='{{ algo.parameters|tojson }}'
+                                        title="Configure {{ algo.name }} settings"
+                                        aria-label="Settings for {{ algo.name }}">
+                                    <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                    </svg>
+                                </button>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <!-- Bottom: Workshop + Undo -->
+                        <div class="flex items-center space-x-2 flex-shrink-0">
+                            <a href="{{ url_for('main.workshop', playlist_id=playlist.id) }}"
+                               class="flex-1 inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 border border-white/20"
+                               title="Open Playlist Workshop"
+                               onclick="event.stopPropagation();">
+                                <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                </svg>
+                                Workshop
+                            </a>
+                            <button type="button"
+                                    id="undo-overlay-btn-{{ playlist.id }}"
+                                    class="undo-overlay-btn hidden flex-shrink-0 px-3 py-1.5 rounded-lg bg-black/40 hover:bg-black/60 text-white/90 text-sm font-semibold transition duration-150 border border-white/10"
+                                    data-playlist-id="{{ playlist.id }}"
+                                    title="Undo last shuffle">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 010 10H9m-6-10l4-4m-4 4l4 4"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Algorithm Parameter Popover (hidden, positioned absolute over full card) -->
+                    <div class="algo-params-popover hidden absolute inset-x-3 top-1/2 -translate-y-1/2 bg-black/90 backdrop-blur-md rounded-lg border border-white/20 p-3 z-30 shadow-xl"
+                         data-playlist-id="{{ playlist.id }}">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="algo-popover-title text-white text-sm font-bold"></h4>
+                            <button type="button" class="algo-popover-close text-white/60 hover:text-white transition">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="algo-popover-params space-y-2">
+                            <!-- Dynamic params rendered by JS -->
+                        </div>
+                        <button type="button"
+                                class="algo-popover-shuffle w-full mt-2 px-3 py-1.5 rounded-lg bg-spotify-green hover:bg-spotify-green/80 text-white text-sm font-bold transition"
+                                data-playlist-id="{{ playlist.id }}">
+                            Shuffle with Settings
+                        </button>
                     </div>
                 </div>
             {% endfor %}
