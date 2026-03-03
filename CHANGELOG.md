@@ -26,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `count_sources()` method added to `UpstreamSourceService`
 - **last_track_count Column** - UpstreamSource model tracks source playlist size
 
+- **Scheduler-Workshop Linkage** - Scheduler form now consumes Workshop configuration data
+  - Raid source checkboxes dynamically populated from Workshop UpstreamSource records (no longer shows user's own playlists)
+  - Rotation pair status dynamically shows archive pair info or "Set up in Workshop" link
+  - Create button disabled when prerequisites (raid sources or archive pair) are missing
+  - Workshop deep-links (`?setup=raids`, `?setup=archive`) auto-open sidebar to correct tab
+  - Backend validation rejects raid schedules with unconfigured sources and rotate schedules without archive pair
+
 ### Changed
 - **Schedule Limit Removed** - Users can now create unlimited schedules (previously capped at 5)
   - Removed `MAX_SCHEDULES_PER_USER` enforcement, `ScheduleLimitError` class, and all associated handlers
