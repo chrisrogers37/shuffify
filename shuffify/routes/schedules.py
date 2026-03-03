@@ -167,6 +167,47 @@ def create_schedule(client=None, user=None):
     if err:
         return err
 
+    # Defense-in-depth: validate raid sources exist in Workshop
+    if create_request.job_type in ("raid", "raid_and_shuffle"):
+        if create_request.source_playlist_ids:
+            sources = (
+                UpstreamSourceService.list_sources(
+                    user.spotify_id,
+                    create_request.target_playlist_id,
+                )
+            )
+            valid_ids = {
+                s.source_playlist_id for s in sources
+            }
+            invalid = [
+                sid
+                for sid in create_request.source_playlist_ids
+                if sid not in valid_ids
+            ]
+            if invalid:
+                return json_error(
+                    "Some raid sources are not configured "
+                    "in the Workshop. Please set them up "
+                    "first.",
+                    400,
+                )
+
+    # Defense-in-depth: validate rotation pair exists
+    if create_request.job_type == "rotate":
+        pair = PlaylistPairService.get_pair_for_playlist(
+            user_id=user.id,
+            production_playlist_id=(
+                create_request.target_playlist_id
+            ),
+        )
+        if not pair:
+            return json_error(
+                "This playlist needs an archive pair "
+                "configured in the Workshop before "
+                "rotation can be scheduled.",
+                400,
+            )
+
     schedule = SchedulerService.create_schedule(
         user_id=user.id,
         job_type=create_request.job_type,
