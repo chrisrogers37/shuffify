@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Schedule Limit Removed** - Users can now create unlimited schedules (previously capped at 5)
+  - Removed `MAX_SCHEDULES_PER_USER` enforcement, `ScheduleLimitError` class, and all associated handlers
+  - Template now shows "N schedule(s) configured" with proper pluralization
+
+### Fixed
+- **Schedule Creation Error-But-Success Bug** - Fixed "An unexpected error occurred" toast appearing when schedules were actually created successfully
+  - APScheduler job registration could throw non-RuntimeError exceptions (KeyError, TypeError, etc.) that escaped the catch block and hit the global 500 handler
+  - Broadened exception handling to catch all APScheduler registration failures as non-critical warnings
+  - Schedule creation, update, and toggle routes all now correctly return success even when APScheduler job registration fails
+
 ### Added
 - **Keep Top Songs in Scheduled Shuffles** - Added ability to configure "keep top N songs" when creating shuffle schedules
   - New "Keep Top Songs" number input in the schedule creation modal for shuffle and raid+shuffle job types

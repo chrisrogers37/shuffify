@@ -73,7 +73,6 @@ class Config:
 
     # Scheduler configuration
     SCHEDULER_ENABLED = True
-    SCHEDULER_MAX_SCHEDULES_PER_USER = 5
 
     # Application settings
     DEBUG = False

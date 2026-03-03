@@ -26,7 +26,6 @@ from shuffify.services.upstream_source_service import (
 )
 from shuffify.services.scheduler_service import (
     SchedulerService,
-    ScheduleLimitError,
 )
 from shuffify.enums import ActivityType
 from shuffify.schemas.raid_requests import (
@@ -95,8 +94,6 @@ def raid_watch(playlist_id, client=None, user=None):
             source=result["source"],
             schedule=result["schedule"],
         )
-    except ScheduleLimitError:
-        return json_error("Schedule limit reached.", 400)
     except RaidSyncError as e:
         return json_error(str(e), 400)
     except Exception as e:
@@ -148,8 +145,6 @@ def raid_watch_search(
             source=result["source"],
             schedule=result["schedule"],
         )
-    except ScheduleLimitError:
-        return json_error("Schedule limit reached.", 400)
     except RaidSyncError as e:
         return json_error(str(e), 400)
     except Exception as e:

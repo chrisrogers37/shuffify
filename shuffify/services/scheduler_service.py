@@ -27,16 +27,8 @@ class ScheduleNotFoundError(ScheduleError):
     pass
 
 
-class ScheduleLimitError(ScheduleError):
-    """Raised when user exceeds max schedule limit."""
-
-    pass
-
-
 class SchedulerService:
     """Service for managing scheduled job configurations."""
-
-    MAX_SCHEDULES_PER_USER = 5
 
     @staticmethod
     def get_user_schedules(user_id: int) -> List[Schedule]:
@@ -83,22 +75,8 @@ class SchedulerService:
         Create a new scheduled job.
 
         Raises:
-            ScheduleLimitError: If user has reached max schedules.
             ScheduleError: If creation fails.
         """
-        existing_count = Schedule.query.filter_by(
-            user_id=user_id
-        ).count()
-        if (
-            existing_count
-            >= SchedulerService.MAX_SCHEDULES_PER_USER
-        ):
-            raise ScheduleLimitError(
-                f"Maximum of "
-                f"{SchedulerService.MAX_SCHEDULES_PER_USER} "
-                f"schedules per user reached"
-            )
-
         schedule = Schedule(
             user_id=user_id,
             job_type=job_type,

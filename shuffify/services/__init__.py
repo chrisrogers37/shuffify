@@ -90,7 +90,6 @@ from shuffify.services.scheduler_service import (
     SchedulerService,
     ScheduleError,
     ScheduleNotFoundError,
-    ScheduleLimitError,
 )
 
 # Job Executor Service
@@ -198,7 +197,6 @@ __all__ = [
     "SchedulerService",
     "ScheduleError",
     "ScheduleNotFoundError",
-    "ScheduleLimitError",
     # Job Executor Service
     "JobExecutorService",
     "JobExecutionError",
