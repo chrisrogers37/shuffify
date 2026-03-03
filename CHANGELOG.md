@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **SVG Empty State on Schedules Page** - Fixed raw SVG markup displaying as text instead of rendering as an icon on the Schedules empty state
+  - Added `| safe` filter to `icon_svg` parameter in `state_empty` macro to allow trusted hardcoded SVG to render as HTML
 - **Playlist Tile Spotify Button Accessibility** - Fixed Spotify button being unclickable due to overlay covering the green info bar
   - Changed flip trigger zone to only activate on album art hover, not the entire card
   - Green info bar (with Spotify button, title, track count) remains interactive when not flipped
