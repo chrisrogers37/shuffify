@@ -2053,12 +2053,20 @@ const workshopSidebar = {
 
     /** Initialize sidebar on page load. */
     init() {
-        // Restore collapsed/open state from localStorage
-        const savedState = this._getStorage('shuffify_sidebar_open');
-        const savedTab = this._getStorage('shuffify_sidebar_tab');
+        // Check for deep-link query params (e.g., ?setup=raids or ?setup=archive)
+        const params = new URLSearchParams(window.location.search);
+        const setupTab = params.get('setup');
 
-        if (savedState === 'true') {
-            this.open(savedTab || 'snapshots', false);
+        if (setupTab && ['raids', 'archive'].includes(setupTab)) {
+            this.open(setupTab, false);
+        } else {
+            // Restore collapsed/open state from localStorage
+            const savedState = this._getStorage('shuffify_sidebar_open');
+            const savedTab = this._getStorage('shuffify_sidebar_tab');
+
+            if (savedState === 'true') {
+                this.open(savedTab || 'snapshots', false);
+            }
         }
 
         // Close sidebar on Escape key
