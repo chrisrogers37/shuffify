@@ -9,7 +9,6 @@ import pytest
 from shuffify.services.scheduler_service import (
     SchedulerService,
     ScheduleNotFoundError,
-    ScheduleLimitError,
 )
 
 
@@ -79,14 +78,12 @@ class TestSchedulerServiceCreate:
         assert schedule.is_enabled is True
         assert len(schedule.source_playlist_ids) == 2
 
-    def test_create_schedule_limit_enforced(
+    def test_create_many_schedules_succeeds(
         self, db_user, app_context
     ):
-        """Should raise ScheduleLimitError at limit."""
-        for i in range(
-            SchedulerService.MAX_SCHEDULES_PER_USER
-        ):
-            SchedulerService.create_schedule(
+        """Should allow creating many schedules with no limit."""
+        for i in range(10):
+            schedule = SchedulerService.create_schedule(
                 user_id=db_user.id,
                 job_type="shuffle",
                 target_playlist_id=f"pl_{i}",
@@ -95,17 +92,12 @@ class TestSchedulerServiceCreate:
                 schedule_value="daily",
                 algorithm_name="BasicShuffle",
             )
+            assert schedule.id is not None
 
-        with pytest.raises(ScheduleLimitError):
-            SchedulerService.create_schedule(
-                user_id=db_user.id,
-                job_type="shuffle",
-                target_playlist_id="pl_extra",
-                target_playlist_name="Extra Playlist",
-                schedule_type="interval",
-                schedule_value="daily",
-                algorithm_name="BasicShuffle",
-            )
+        schedules = SchedulerService.get_user_schedules(
+            db_user.id
+        )
+        assert len(schedules) == 10
 
 
 class TestSchedulerServiceRead:

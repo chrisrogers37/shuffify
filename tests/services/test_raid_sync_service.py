@@ -16,7 +16,6 @@ from shuffify.services.upstream_source_service import (
 )
 from shuffify.services.scheduler_service import (
     SchedulerService,
-    ScheduleLimitError,
 )
 from shuffify.services.raid_sync_service import (
     RaidSyncService,

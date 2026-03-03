@@ -31,7 +31,6 @@ from shuffify.services import (
     UpstreamSourceNotFoundError,
     ScheduleError,
     ScheduleNotFoundError,
-    ScheduleLimitError,
     JobExecutionError,
 )
 from shuffify.spotify.exceptions import (
@@ -257,16 +256,6 @@ def handle_schedule_not_found(
     )
 
 
-def handle_schedule_limit(
-    error: ScheduleLimitError,
-):
-    """Handle schedule limit exceeded errors."""
-    logger.warning(
-        f"Schedule limit exceeded: {error}"
-    )
-    return json_error_response(str(error), 400)
-
-
 def handle_schedule_error(error: ScheduleError):
     """Handle general schedule errors."""
     logger.error(f"Schedule error: {error}")
@@ -459,7 +448,6 @@ def register_error_handlers(app):
         (UpstreamSourceNotFoundError, handle_upstream_source_not_found),
         (UpstreamSourceError, handle_upstream_source_error),
         (ScheduleNotFoundError, handle_schedule_not_found),
-        (ScheduleLimitError, handle_schedule_limit),
         (ScheduleError, handle_schedule_error),
         (JobExecutionError, handle_job_execution_error),
         (SpotifyTokenExpiredError, handle_spotify_token_expired),

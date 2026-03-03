@@ -85,9 +85,6 @@ def schedules():
             ],
             playlists=playlists,
             algorithms=algorithms,
-            max_schedules=(
-                SchedulerService.MAX_SCHEDULES_PER_USER
-            ),
         )
 
     except (AuthenticationError, PlaylistError) as e:
