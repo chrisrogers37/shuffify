@@ -31,6 +31,7 @@ class RaidSyncService:
         source_url=None,
         auto_schedule=True,
         schedule_value="daily",
+        source_type="own",
     ):
         """
         One-click watch: register source + optionally
@@ -56,7 +57,7 @@ class RaidSyncService:
             spotify_id=spotify_id,
             target_playlist_id=target_playlist_id,
             source_playlist_id=source_playlist_id,
-            source_type="own",
+            source_type=source_type,
             source_url=source_url,
             source_name=source_playlist_name,
         )
@@ -188,6 +189,10 @@ class RaidSyncService:
             UpstreamSourceService,
         )
 
+        max_sources = (
+            UpstreamSourceService.MAX_SOURCES_PER_TARGET
+        )
+
         user = User.query.filter_by(
             spotify_id=spotify_id
         ).first()
@@ -196,6 +201,7 @@ class RaidSyncService:
                 "sources": [],
                 "schedule": None,
                 "source_count": 0,
+                "max_sources": max_sources,
                 "has_schedule": False,
                 "is_schedule_enabled": False,
                 "last_run_at": None,
@@ -215,6 +221,7 @@ class RaidSyncService:
                 schedule.to_dict() if schedule else None
             ),
             "source_count": len(sources),
+            "max_sources": max_sources,
             "has_schedule": schedule is not None,
             "is_schedule_enabled": (
                 schedule.is_enabled if schedule else False

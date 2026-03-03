@@ -77,6 +77,7 @@ from shuffify.services.upstream_source_service import (
     UpstreamSourceService,
     UpstreamSourceError,
     UpstreamSourceNotFoundError,
+    UpstreamSourceLimitError,
 )
 
 # Token Service
@@ -190,6 +191,7 @@ __all__ = [
     "UpstreamSourceService",
     "UpstreamSourceError",
     "UpstreamSourceNotFoundError",
+    "UpstreamSourceLimitError",
     # Token Service
     "TokenService",
     "TokenEncryptionError",

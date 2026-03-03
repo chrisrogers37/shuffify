@@ -72,6 +72,20 @@ class CreatePairRequest(BaseModel):
         return self
 
 
+class UpdatePairRequest(BaseModel):
+    """Request to update a playlist pair's settings."""
+
+    auto_archive_on_remove: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def validate_has_field(self):
+        if self.auto_archive_on_remove is None:
+            raise ValueError(
+                "At least one field must be provided"
+            )
+        return self
+
+
 class ArchiveTracksRequest(BaseModel):
     """Request to archive tracks to the paired archive playlist."""
 

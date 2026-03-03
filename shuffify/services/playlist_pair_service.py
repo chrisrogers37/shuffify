@@ -81,6 +81,32 @@ class PlaylistPairService:
         ).order_by(PlaylistPair.created_at.desc()).all()
 
     @staticmethod
+    def update_pair(user_id, production_playlist_id, **kwargs):
+        """Update a playlist pair's settings.
+
+        Raises PlaylistPairNotFoundError if not found.
+        """
+        pair = PlaylistPair.query.filter_by(
+            user_id=user_id,
+            production_playlist_id=production_playlist_id,
+        ).first()
+        if not pair:
+            raise PlaylistPairNotFoundError(
+                "No pair found for this playlist"
+            )
+
+        for key, value in kwargs.items():
+            if hasattr(pair, key) and value is not None:
+                setattr(pair, key, value)
+
+        safe_commit(
+            f"update playlist pair for "
+            f"{production_playlist_id} (user {user_id})",
+            PlaylistPairError,
+        )
+        return pair
+
+    @staticmethod
     def delete_pair(user_id, production_playlist_id):
         """Delete a playlist pair.
 

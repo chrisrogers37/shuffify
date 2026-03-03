@@ -24,6 +24,7 @@ from shuffify.services.playlist_pair_service import (
 from shuffify.enums import ActivityType
 from shuffify.schemas.playlist_pair_requests import (
     CreatePairRequest,
+    UpdatePairRequest,
     ArchiveTracksRequest,
     UnarchiveTracksRequest,
 )
@@ -109,6 +110,37 @@ def create_pair(playlist_id, client=None, user=None):
         logger.error("Failed to create pair: %s", e)
         return json_error(
             "Failed to create archive pair", 500
+        )
+
+
+@main.route(
+    "/playlist/<playlist_id>/pair", methods=["PATCH"]
+)
+@require_auth_and_db
+def update_pair(playlist_id, client=None, user=None):
+    """Update archive pair settings."""
+    req, err = validate_json(UpdatePairRequest)
+    if err:
+        return err
+
+    try:
+        pair = PlaylistPairService.update_pair(
+            user.id,
+            playlist_id,
+            auto_archive_on_remove=(
+                req.auto_archive_on_remove
+            ),
+        )
+        return json_success(
+            "Pair settings updated",
+            pair=pair.to_dict(),
+        )
+    except PlaylistPairNotFoundError:
+        return json_error("No pair found", 404)
+    except Exception as e:
+        logger.error("Failed to update pair: %s", e)
+        return json_error(
+            "Failed to update pair settings", 500
         )
 
 

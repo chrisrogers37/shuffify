@@ -1,8 +1,8 @@
 """
 Tests for raid panel request validation schemas.
 
-Tests WatchPlaylistRequest, UnwatchPlaylistRequest, and
-RaidNowRequest Pydantic models.
+Tests WatchPlaylistRequest, UnwatchPlaylistRequest,
+AddRaidUrlRequest, and RaidNowRequest Pydantic models.
 """
 
 import pytest
@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from shuffify.schemas.raid_requests import (
     WatchPlaylistRequest,
     UnwatchPlaylistRequest,
+    AddRaidUrlRequest,
     RaidNowRequest,
 )
 
@@ -152,3 +153,78 @@ class TestRaidNowRequestInvalid:
     def test_empty_string_element_raises(self):
         with pytest.raises(ValidationError):
             RaidNowRequest(source_playlist_ids=[""])
+
+
+# =============================================================================
+# AddRaidUrlRequest
+# =============================================================================
+
+
+class TestAddRaidUrlRequestValid:
+    """Tests for valid AddRaidUrlRequest payloads."""
+
+    def test_minimal_request(self):
+        req = AddRaidUrlRequest(
+            url="https://open.spotify.com/playlist/abc123",
+        )
+        assert "abc123" in req.url
+        assert req.auto_schedule is True
+        assert req.schedule_value == "daily"
+
+    def test_full_request(self):
+        req = AddRaidUrlRequest(
+            url="https://open.spotify.com/playlist/abc123",
+            auto_schedule=False,
+            schedule_value="weekly",
+        )
+        assert req.auto_schedule is False
+        assert req.schedule_value == "weekly"
+
+    def test_url_whitespace_stripped(self):
+        req = AddRaidUrlRequest(
+            url="  https://open.spotify.com/playlist/abc  "
+        )
+        assert req.url == (
+            "https://open.spotify.com/playlist/abc"
+        )
+
+    def test_extra_fields_ignored(self):
+        req = AddRaidUrlRequest(
+            url="https://open.spotify.com/playlist/abc",
+            unknown_field="ignored",
+        )
+        assert req.url is not None
+
+    def test_valid_schedule_values(self):
+        for val in [
+            "daily", "weekly", "every_6h",
+            "every_12h", "every_3d",
+        ]:
+            req = AddRaidUrlRequest(
+                url="https://example.com/p",
+                schedule_value=val,
+            )
+            assert req.schedule_value == val
+
+
+class TestAddRaidUrlRequestInvalid:
+    """Tests for invalid AddRaidUrlRequest payloads."""
+
+    def test_missing_url_raises(self):
+        with pytest.raises(ValidationError):
+            AddRaidUrlRequest()
+
+    def test_empty_url_raises(self):
+        with pytest.raises(ValidationError):
+            AddRaidUrlRequest(url="   ")
+
+    def test_url_too_long_raises(self):
+        with pytest.raises(ValidationError):
+            AddRaidUrlRequest(url="x" * 1025)
+
+    def test_invalid_schedule_value_raises(self):
+        with pytest.raises(ValidationError):
+            AddRaidUrlRequest(
+                url="https://example.com/p",
+                schedule_value="every_minute",
+            )

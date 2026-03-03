@@ -367,3 +367,75 @@ class TestPlaylistPairToDict:
         assert d["auto_archive_on_remove"] is True
         assert "created_at" in d
         assert "updated_at" in d
+
+
+# =============================================================================
+# Update Pair
+# =============================================================================
+
+
+class TestUpdatePair:
+    """Tests for PlaylistPairService.update_pair."""
+
+    def test_update_auto_archive_true(self, user):
+        PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+        )
+        pair = PlaylistPairService.update_pair(
+            user.id, "prod1",
+            auto_archive_on_remove=False,
+        )
+        assert pair.auto_archive_on_remove is False
+
+    def test_update_auto_archive_false(self, user):
+        pair = PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+        )
+        # Default is True, toggle to False then True
+        PlaylistPairService.update_pair(
+            user.id, "prod1",
+            auto_archive_on_remove=False,
+        )
+        pair = PlaylistPairService.update_pair(
+            user.id, "prod1",
+            auto_archive_on_remove=True,
+        )
+        assert pair.auto_archive_on_remove is True
+
+    def test_update_nonexistent_raises(self, user):
+        with pytest.raises(PlaylistPairNotFoundError):
+            PlaylistPairService.update_pair(
+                user.id, "nonexistent",
+                auto_archive_on_remove=True,
+            )
+
+    def test_update_wrong_user_raises(
+        self, user, user2
+    ):
+        PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+        )
+        with pytest.raises(PlaylistPairNotFoundError):
+            PlaylistPairService.update_pair(
+                user2.id, "prod1",
+                auto_archive_on_remove=False,
+            )
+
+    def test_update_none_skips_field(self, user):
+        PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+        )
+        pair = PlaylistPairService.update_pair(
+            user.id, "prod1",
+            auto_archive_on_remove=None,
+        )
+        # None values are skipped, default remains True
+        assert pair.auto_archive_on_remove is True
