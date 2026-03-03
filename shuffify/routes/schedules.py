@@ -170,10 +170,13 @@ def create_schedule(client=None, user=None):
             schedule,
             current_app._get_current_object(),
         )
-    except RuntimeError as e:
+    except Exception as e:
         logger.warning(
-            f"Could not register schedule with "
-            f"APScheduler: {e}"
+            "Could not register schedule %d with "
+            "APScheduler: %s [type=%s]",
+            schedule.id,
+            e,
+            type(e).__name__,
         )
 
     logger.info(
@@ -243,9 +246,13 @@ def update_schedule(
             )
         else:
             remove_job_for_schedule(schedule_id)
-    except RuntimeError as e:
+    except Exception as e:
         logger.warning(
-            f"Could not update APScheduler job: {e}"
+            "Could not update APScheduler job for "
+            "schedule %d: %s [type=%s]",
+            schedule_id,
+            e,
+            type(e).__name__,
         )
 
     logger.info(f"Updated schedule {schedule_id}")
@@ -328,9 +335,13 @@ def toggle_schedule(
             )
         else:
             remove_job_for_schedule(schedule_id)
-    except RuntimeError as e:
+    except Exception as e:
         logger.warning(
-            f"Could not update APScheduler job: {e}"
+            "Could not update APScheduler job for "
+            "schedule %d: %s [type=%s]",
+            schedule_id,
+            e,
+            type(e).__name__,
         )
 
     status_text = (

@@ -258,6 +258,191 @@ class TestCreateSchedule:
         assert resp.status_code == 400
 
 
+class TestAPSchedulerErrorHandling:
+    """Tests that APScheduler failures don't mask route success."""
+
+    def _make_schedule_mock(self):
+        """Helper to create a mock schedule."""
+        mock_schedule = MagicMock()
+        mock_schedule.id = 1
+        mock_schedule.job_type = "shuffle"
+        mock_schedule.target_playlist_name = "My Playlist"
+        mock_schedule.target_playlist_id = "p1"
+        mock_schedule.is_enabled = True
+        mock_schedule.schedule_value = "daily"
+        mock_schedule.to_dict.return_value = {"id": 1}
+        return mock_schedule
+
+    @patch(
+        "shuffify.routes.schedules.SchedulerService"
+    )
+    @patch("shuffify.routes.require_auth")
+    def test_create_succeeds_despite_key_error(
+        self,
+        mock_auth,
+        mock_sched_svc,
+        auth_client,
+    ):
+        """Non-RuntimeError from APScheduler must not mask success."""
+        mock_auth.return_value = MagicMock()
+
+        user = UserService.get_by_spotify_id("user123")
+        user.encrypted_refresh_token = "enc_token"
+        db.session.commit()
+
+        mock_sched_svc.create_schedule.return_value = (
+            self._make_schedule_mock()
+        )
+
+        with patch(
+            "shuffify.scheduler.add_job_for_schedule",
+            side_effect=KeyError("ConflictingId"),
+        ):
+            resp = auth_client.post(
+                "/schedules/create",
+                json={
+                    "job_type": "shuffle",
+                    "target_playlist_id": "p1",
+                    "target_playlist_name": "My Playlist",
+                    "algorithm_name": "BasicShuffle",
+                },
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["success"] is True
+
+    @patch(
+        "shuffify.routes.schedules.SchedulerService"
+    )
+    @patch("shuffify.routes.require_auth")
+    def test_create_succeeds_despite_runtime_error(
+        self,
+        mock_auth,
+        mock_sched_svc,
+        auth_client,
+    ):
+        """RuntimeError from APScheduler still handled (regression)."""
+        mock_auth.return_value = MagicMock()
+
+        user = UserService.get_by_spotify_id("user123")
+        user.encrypted_refresh_token = "enc_token"
+        db.session.commit()
+
+        mock_sched_svc.create_schedule.return_value = (
+            self._make_schedule_mock()
+        )
+
+        with patch(
+            "shuffify.scheduler.add_job_for_schedule",
+            side_effect=RuntimeError("Scheduler not init"),
+        ):
+            resp = auth_client.post(
+                "/schedules/create",
+                json={
+                    "job_type": "shuffle",
+                    "target_playlist_id": "p1",
+                    "target_playlist_name": "My Playlist",
+                    "algorithm_name": "BasicShuffle",
+                },
+            )
+            assert resp.status_code == 200
+
+    @patch(
+        "shuffify.routes.schedules.SchedulerService"
+    )
+    @patch("shuffify.routes.require_auth")
+    def test_update_succeeds_despite_apscheduler_error(
+        self,
+        mock_auth,
+        mock_sched_svc,
+        auth_client,
+    ):
+        """Update route catches non-RuntimeError from APScheduler."""
+        mock_auth.return_value = MagicMock()
+
+        mock_schedule = self._make_schedule_mock()
+        mock_sched_svc.update_schedule.return_value = (
+            mock_schedule
+        )
+
+        with patch(
+            "shuffify.scheduler.add_job_for_schedule",
+            side_effect=TypeError("bad trigger"),
+        ):
+            resp = auth_client.put(
+                "/schedules/1",
+                json={"schedule_value": "weekly"},
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["success"] is True
+
+    @patch(
+        "shuffify.routes.schedules.SchedulerService"
+    )
+    @patch("shuffify.routes.require_auth")
+    def test_toggle_succeeds_despite_apscheduler_error(
+        self,
+        mock_auth,
+        mock_sched_svc,
+        auth_client,
+    ):
+        """Toggle route catches non-RuntimeError from APScheduler."""
+        mock_auth.return_value = MagicMock()
+
+        mock_schedule = self._make_schedule_mock()
+        mock_sched_svc.toggle_schedule.return_value = (
+            mock_schedule
+        )
+
+        with patch(
+            "shuffify.scheduler.add_job_for_schedule",
+            side_effect=KeyError("ConflictingId"),
+        ):
+            resp = auth_client.post(
+                "/schedules/1/toggle"
+            )
+            assert resp.status_code == 200
+
+    @patch(
+        "shuffify.routes.schedules.SchedulerService"
+    )
+    @patch("shuffify.routes.require_auth")
+    def test_apscheduler_failure_logs_warning(
+        self,
+        mock_auth,
+        mock_sched_svc,
+        auth_client,
+    ):
+        """APScheduler failure should log a warning."""
+        mock_auth.return_value = MagicMock()
+
+        user = UserService.get_by_spotify_id("user123")
+        user.encrypted_refresh_token = "enc_token"
+        db.session.commit()
+
+        mock_sched_svc.create_schedule.return_value = (
+            self._make_schedule_mock()
+        )
+
+        with patch(
+            "shuffify.scheduler.add_job_for_schedule",
+            side_effect=KeyError("ConflictingId"),
+        ), patch(
+            "shuffify.routes.schedules.logger"
+        ) as mock_logger:
+            auth_client.post(
+                "/schedules/create",
+                json={
+                    "job_type": "shuffle",
+                    "target_playlist_id": "p1",
+                    "target_playlist_name": "My Playlist",
+                    "algorithm_name": "BasicShuffle",
+                },
+            )
+            mock_logger.warning.assert_called()
+
+
 class TestUpdateSchedule:
     """Tests for PUT /schedules/<int:schedule_id>."""
 
