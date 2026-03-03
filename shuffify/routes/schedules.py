@@ -29,6 +29,8 @@ from shuffify.services import (
     AuthService,
     PlaylistService,
     ShuffleService,
+    UpstreamSourceService,
+    PlaylistPairService,
     AuthenticationError,
     PlaylistError,
     ScheduleError,
@@ -77,6 +79,29 @@ def schedules():
 
         algorithms = ShuffleService.list_algorithms()
 
+        # Load Workshop data for dynamic form rendering
+        upstream_sources = (
+            UpstreamSourceService.list_all_sources_for_user(
+                db_user.spotify_id
+            )
+        )
+        upstream_sources_map = {}
+        for src in upstream_sources:
+            target_id = src.target_playlist_id
+            if target_id not in upstream_sources_map:
+                upstream_sources_map[target_id] = []
+            upstream_sources_map[target_id].append(
+                src.to_dict()
+            )
+
+        pairs = PlaylistPairService.get_pairs_for_user(
+            db_user.id
+        )
+        pairs_by_playlist = {
+            p.production_playlist_id: p.to_dict()
+            for p in pairs
+        }
+
         return render_template(
             "schedules.html",
             user=user,
@@ -85,6 +110,8 @@ def schedules():
             ],
             playlists=playlists,
             algorithms=algorithms,
+            upstream_sources_map=upstream_sources_map,
+            pairs_by_playlist=pairs_by_playlist,
         )
 
     except (AuthenticationError, PlaylistError) as e:

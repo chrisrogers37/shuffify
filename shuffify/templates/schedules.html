@@ -161,6 +161,7 @@
                 <div>
                     <label class="block text-sm font-medium text-white/90 mb-1">Target Playlist</label>
                     <select id="modal-target-playlist" name="target_playlist"
+                            onchange="onTargetPlaylistChange()"
                             class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white">
                         {% for pl in playlists %}
                         <option value="{{ pl.id }}" data-name="{{ pl.name }}">{{ pl.name }}</option>
@@ -170,16 +171,10 @@
 
                 <!-- Source Playlists (shown for raid types) -->
                 <div id="modal-sources-section">
-                    <label class="block text-sm font-medium text-white/90 mb-1">Source Playlists</label>
-                    <p class="text-white/50 text-xs mb-2">Select playlists to pull new tracks from.</p>
-                    <div class="max-h-40 overflow-y-auto space-y-1 bg-white/5 rounded-lg p-2">
-                        {% for pl in playlists %}
-                        <label class="flex items-center space-x-2 px-2 py-1 rounded hover:bg-white/5 cursor-pointer">
-                            <input type="checkbox" name="source_playlist" value="{{ pl.id }}"
-                                   class="rounded border-white/30 bg-white/10 text-spotify-green focus:ring-spotify-green">
-                            <span class="text-white/80 text-sm truncate">{{ pl.name }}</span>
-                        </label>
-                        {% endfor %}
+                    <label class="block text-sm font-medium text-white/90 mb-1">Raid Sources</label>
+                    <p class="text-white/50 text-xs mb-2">External playlists configured in the Workshop.</p>
+                    <div id="raid-sources-container" class="max-h-40 overflow-y-auto space-y-1 bg-white/5 rounded-lg p-2">
+                        <!-- Populated dynamically by renderRaidSources() -->
                     </div>
                 </div>
 
@@ -205,30 +200,31 @@
 
                 <!-- Rotation Config (shown when job_type is 'rotate') -->
                 <div id="modal-rotation-section" class="hidden space-y-3">
-                    <div>
-                        <label class="block text-sm font-medium text-white/90 mb-1">Rotation Mode</label>
-                        <select id="modal-rotation-mode"
-                                class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
-                                onchange="updateRotationDesc()">
-                            <option value="archive_oldest">Archive Oldest</option>
-                            <option value="refresh">Refresh from Archive</option>
-                            <option value="swap">Swap with Archive</option>
-                        </select>
-                        <p id="rotation-mode-desc" class="text-white/40 text-xs mt-1">
-                            Move the oldest tracks from your playlist to its archive.
-                        </p>
+                    <!-- Dynamic pair status -->
+                    <div id="pair-status-container">
+                        <!-- Populated dynamically by renderPairStatus() -->
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-white/90 mb-1">Tracks per Rotation</label>
-                        <input type="number" id="modal-rotation-count"
-                               value="5" min="1" max="50"
-                               class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white">
-                        <p class="text-white/40 text-xs mt-1">How many tracks to rotate each time (1-50).</p>
-                    </div>
-                    <div class="rounded-lg bg-yellow-500/10 border border-yellow-500/30 p-3">
-                        <p class="text-yellow-200 text-xs">
-                            <strong>Requires Archive Pair:</strong> This playlist must be paired with an archive in the Workshop before rotation will work.
-                        </p>
+                    <div id="rotation-controls" class="hidden space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium text-white/90 mb-1">Rotation Mode</label>
+                            <select id="modal-rotation-mode"
+                                    class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                                    onchange="updateRotationDesc()">
+                                <option value="archive_oldest">Archive Oldest</option>
+                                <option value="refresh">Refresh from Archive</option>
+                                <option value="swap">Swap with Archive</option>
+                            </select>
+                            <p id="rotation-mode-desc" class="text-white/40 text-xs mt-1">
+                                Move the oldest tracks from your playlist to its archive.
+                            </p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-white/90 mb-1">Tracks per Rotation</label>
+                            <input type="number" id="modal-rotation-count"
+                                   value="5" min="1" max="50"
+                                   class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white">
+                            <p class="text-white/40 text-xs mt-1">How many tracks to rotate each time (1-50).</p>
+                        </div>
                     </div>
                 </div>
 
@@ -251,8 +247,8 @@
                             class="flex-1 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition border border-white/20">
                         Cancel
                     </button>
-                    <button type="submit"
-                            class="flex-1 px-4 py-2 rounded-lg bg-white text-spotify-dark font-bold transition hover:bg-green-100 shadow-lg">
+                    <button type="submit" id="create-schedule-btn"
+                            class="flex-1 px-4 py-2 rounded-lg bg-white text-spotify-dark font-bold transition hover:bg-green-100 shadow-lg disabled:opacity-40 disabled:cursor-not-allowed">
                         Create Schedule
                     </button>
                 </div>
@@ -263,16 +259,31 @@
 
 <script>
 // =============================================================================
+// Workshop Data Maps
+// =============================================================================
+
+const UPSTREAM_SOURCES = {{ upstream_sources_map | tojson }};
+const PLAYLIST_PAIRS = {{ pairs_by_playlist | tojson }};
+
+// =============================================================================
 // Modal Management
 // =============================================================================
 
 function showCreateModal() {
     document.getElementById('create-modal').classList.remove('hidden');
     updateModalFields();
+    onTargetPlaylistChange();
 }
 
 function hideCreateModal() {
     document.getElementById('create-modal').classList.add('hidden');
+}
+
+function onTargetPlaylistChange() {
+    const targetId = document.getElementById('modal-target-playlist').value;
+    renderRaidSources(targetId);
+    renderPairStatus(targetId);
+    updateCreateButtonState();
 }
 
 function updateModalFields() {
@@ -302,6 +313,105 @@ function updateModalFields() {
     } else {
         rotationSection.classList.add('hidden');
     }
+
+    updateCreateButtonState();
+}
+
+// =============================================================================
+// Dynamic Rendering: Raid Sources
+// =============================================================================
+
+function renderRaidSources(targetId) {
+    const container = document.getElementById('raid-sources-container');
+    const sources = UPSTREAM_SOURCES[targetId] || [];
+
+    if (sources.length === 0) {
+        container.innerHTML = `
+            <div class="rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 text-center">
+                <p class="text-amber-200 text-xs mb-2">
+                    No raid sources configured for this playlist.
+                </p>
+                <a href="/workshop/${targetId}?setup=raids"
+                   class="inline-block px-3 py-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-xs font-medium transition border border-amber-500/30">
+                    Set up in Workshop
+                </a>
+            </div>`;
+        return;
+    }
+
+    container.innerHTML = sources.map(src => `
+        <label class="flex items-center space-x-2 px-2 py-1 rounded hover:bg-white/5 cursor-pointer">
+            <input type="checkbox" name="source_playlist" value="${src.source_playlist_id}"
+                   class="rounded border-white/30 bg-white/10 text-spotify-green focus:ring-spotify-green"
+                   onchange="updateCreateButtonState()">
+            <span class="text-white/80 text-sm truncate">${src.source_name || src.source_playlist_id}</span>
+            <span class="ml-auto px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30">external</span>
+        </label>
+    `).join('');
+}
+
+// =============================================================================
+// Dynamic Rendering: Pair Status
+// =============================================================================
+
+function renderPairStatus(targetId) {
+    const container = document.getElementById('pair-status-container');
+    const rotationControls = document.getElementById('rotation-controls');
+    const pair = PLAYLIST_PAIRS[targetId];
+
+    if (!pair) {
+        container.innerHTML = `
+            <div class="rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 text-center">
+                <p class="text-amber-200 text-xs mb-2">
+                    No archive pair configured for this playlist.
+                </p>
+                <a href="/workshop/${targetId}?setup=archive"
+                   class="inline-block px-3 py-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-xs font-medium transition border border-amber-500/30">
+                    Set up in Workshop
+                </a>
+            </div>`;
+        rotationControls.classList.add('hidden');
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="rounded-lg bg-green-500/10 border border-green-500/30 p-3">
+            <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+                <p class="text-green-200 text-xs">
+                    Paired with <strong>${pair.archive_playlist_name || 'Archive'}</strong>
+                </p>
+            </div>
+        </div>`;
+    rotationControls.classList.remove('hidden');
+}
+
+// =============================================================================
+// Create Button State
+// =============================================================================
+
+function updateCreateButtonState() {
+    const btn = document.getElementById('create-schedule-btn');
+    const jobType = document.getElementById('modal-job-type').value;
+    const targetId = document.getElementById('modal-target-playlist').value;
+    let disabled = false;
+
+    if (jobType === 'raid' || jobType === 'raid_and_shuffle') {
+        const sources = UPSTREAM_SOURCES[targetId] || [];
+        if (sources.length === 0) {
+            disabled = true;
+        }
+    }
+
+    if (jobType === 'rotate') {
+        if (!PLAYLIST_PAIRS[targetId]) {
+            disabled = true;
+        }
+    }
+
+    btn.disabled = disabled;
 }
 
 function updateRotationDesc() {
