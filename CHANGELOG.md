@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Keep Top Songs in Scheduled Shuffles** - Added ability to configure "keep top N songs" when creating shuffle schedules
+  - New "Keep Top Songs" number input in the schedule creation modal for shuffle and raid+shuffle job types
+  - Value is stored in `algorithm_params.keep_first` and passed through to the shuffle algorithm at execution time
+  - Schedule cards display the keep-top count when configured (e.g., "Keep top 5")
+  - Backend validation rejects negative or non-integer `keep_first` values
+  - Works with BasicShuffle, BalancedShuffle, and StratifiedShuffle algorithms
+
 ### Fixed
 - **SVG Empty State on Schedules Page** - Fixed raw SVG markup displaying as text instead of rendering as an icon on the Schedules empty state
   - Added `| safe` filter to `icon_svg` parameter in `state_empty` macro to allow trusted hardcoded SVG to render as HTML

@@ -108,6 +108,21 @@ class ScheduleCreateRequest(BaseModel):
                     f"algorithm_name required for "
                     f"job_type '{self.job_type}'"
                 )
+        if self.job_type in (
+            JobType.SHUFFLE, JobType.RAID_AND_SHUFFLE
+        ):
+            params = self.algorithm_params or {}
+            keep_first = params.get("keep_first")
+            if keep_first is not None:
+                try:
+                    kf = int(keep_first)
+                    if kf < 0:
+                        raise ValueError()
+                except (ValueError, TypeError):
+                    raise ValueError(
+                        "keep_first must be a non-negative "
+                        "integer"
+                    )
         if self.job_type == JobType.ROTATE:
             params = self.algorithm_params or {}
             rotation_mode = params.get("rotation_mode")
