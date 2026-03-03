@@ -1,8 +1,9 @@
 """
 Tests for playlist pair request validation schemas.
 
-Tests CreatePairRequest, ArchiveTracksRequest, and
-UnarchiveTracksRequest Pydantic models.
+Tests CreatePairRequest, UpdatePairRequest,
+ArchiveTracksRequest, and UnarchiveTracksRequest
+Pydantic models.
 """
 
 import pytest
@@ -10,6 +11,7 @@ from pydantic import ValidationError
 
 from shuffify.schemas.playlist_pair_requests import (
     CreatePairRequest,
+    UpdatePairRequest,
     ArchiveTracksRequest,
     UnarchiveTracksRequest,
 )
@@ -144,4 +146,39 @@ class TestUnarchiveTracksRequestInvalid:
         with pytest.raises(ValidationError):
             UnarchiveTracksRequest(
                 track_uris=["not:a:valid:uri"]
+            )
+
+
+# =============================================================================
+# UpdatePairRequest
+# =============================================================================
+
+
+class TestUpdatePairRequestValid:
+    """Tests for valid UpdatePairRequest payloads."""
+
+    def test_auto_archive_true(self):
+        req = UpdatePairRequest(
+            auto_archive_on_remove=True,
+        )
+        assert req.auto_archive_on_remove is True
+
+    def test_auto_archive_false(self):
+        req = UpdatePairRequest(
+            auto_archive_on_remove=False,
+        )
+        assert req.auto_archive_on_remove is False
+
+
+class TestUpdatePairRequestInvalid:
+    """Tests for invalid UpdatePairRequest payloads."""
+
+    def test_no_fields_raises(self):
+        with pytest.raises(ValidationError):
+            UpdatePairRequest()
+
+    def test_none_field_raises(self):
+        with pytest.raises(ValidationError):
+            UpdatePairRequest(
+                auto_archive_on_remove=None,
             )

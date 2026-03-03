@@ -31,11 +31,13 @@ from .snapshot_requests import (
 )
 from .playlist_pair_requests import (
     CreatePairRequest,
+    UpdatePairRequest,
     ArchiveTracksRequest,
     UnarchiveTracksRequest,
 )
 from .raid_requests import (
     WatchPlaylistRequest,
+    AddRaidUrlRequest,
     UnwatchPlaylistRequest,
     RaidNowRequest,
 )
@@ -68,10 +70,12 @@ __all__ = [
     "ManualSnapshotRequest",
     # Playlist Pair schemas
     "CreatePairRequest",
+    "UpdatePairRequest",
     "ArchiveTracksRequest",
     "UnarchiveTracksRequest",
     # Raid schemas
     "WatchPlaylistRequest",
+    "AddRaidUrlRequest",
     "UnwatchPlaylistRequest",
     "RaidNowRequest",
     # Playlist Preference schemas

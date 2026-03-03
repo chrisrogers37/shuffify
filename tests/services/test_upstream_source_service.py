@@ -1,7 +1,8 @@
 """
 Tests for UpstreamSourceService.
 
-Tests cover add, list, get, delete, and duplicate detection.
+Tests cover add, list, get, delete, duplicate detection,
+and source count limits.
 """
 
 import pytest
@@ -11,6 +12,7 @@ from shuffify.services.upstream_source_service import (
     UpstreamSourceService,
     UpstreamSourceError,
     UpstreamSourceNotFoundError,
+    UpstreamSourceLimitError,
 )
 
 
@@ -190,3 +192,88 @@ class TestUpstreamSourceServiceDelete:
             UpstreamSourceService.delete_source(
                 99999, "user123"
             )
+
+
+class TestUpstreamSourceServiceLimits:
+    """Tests for source count limits."""
+
+    def test_count_sources(self, app_ctx):
+        """Should count sources per target."""
+        UpstreamSourceService.add_source(
+            "user123", "target_1", "src_a"
+        )
+        UpstreamSourceService.add_source(
+            "user123", "target_1", "src_b"
+        )
+        count = UpstreamSourceService.count_sources(
+            "user123", "target_1"
+        )
+        assert count == 2
+
+    def test_count_sources_empty(self, app_ctx):
+        """Should return 0 for no sources."""
+        count = UpstreamSourceService.count_sources(
+            "user123", "target_1"
+        )
+        assert count == 0
+
+    def test_add_source_at_limit_raises(self, app_ctx):
+        """Should raise UpstreamSourceLimitError at limit."""
+        limit = (
+            UpstreamSourceService.MAX_SOURCES_PER_TARGET
+        )
+        for i in range(limit):
+            UpstreamSourceService.add_source(
+                "user123",
+                "target_1",
+                f"src_{i}",
+            )
+
+        with pytest.raises(UpstreamSourceLimitError):
+            UpstreamSourceService.add_source(
+                "user123",
+                "target_1",
+                f"src_{limit}",
+            )
+
+    def test_limit_per_target_not_global(self, app_ctx):
+        """Limit applies per target, not globally."""
+        limit = (
+            UpstreamSourceService.MAX_SOURCES_PER_TARGET
+        )
+        for i in range(limit):
+            UpstreamSourceService.add_source(
+                "user123",
+                "target_1",
+                f"src_{i}",
+            )
+
+        # Different target should work
+        source = UpstreamSourceService.add_source(
+            "user123",
+            "target_2",
+            "src_0",
+        )
+        assert source.id is not None
+
+    def test_duplicate_at_limit_returns_existing(
+        self, app_ctx
+    ):
+        """Duplicate at limit returns existing, no error."""
+        limit = (
+            UpstreamSourceService.MAX_SOURCES_PER_TARGET
+        )
+        for i in range(limit):
+            UpstreamSourceService.add_source(
+                "user123",
+                "target_1",
+                f"src_{i}",
+            )
+
+        # Re-adding existing source should return it
+        existing = UpstreamSourceService.add_source(
+            "user123",
+            "target_1",
+            "src_0",
+        )
+        assert existing is not None

@@ -114,3 +114,73 @@ class TestCreatePairRoute:
             content_type="text/plain",
         )
         assert resp.status_code == 400
+
+
+# =============================================================================
+# PATCH /playlist/<id>/pair
+# =============================================================================
+
+
+class TestUpdatePairAuth:
+    """Authentication tests for PATCH pair endpoint."""
+
+    @patch("shuffify.routes.require_auth")
+    def test_update_pair_unauth(
+        self, mock_auth, db_app
+    ):
+        mock_auth.return_value = None
+        with db_app.test_client() as client:
+            resp = client.patch(
+                "/playlist/p1/pair",
+                json={"auto_archive_on_remove": True},
+            )
+            assert resp.status_code == 401
+
+
+class TestUpdatePairValidation:
+    """Validation tests for PATCH pair endpoint."""
+
+    @patch("shuffify.routes.require_auth")
+    def test_no_fields_returns_400(
+        self, mock_auth, auth_client
+    ):
+        mock_auth.return_value = MagicMock()
+        resp = auth_client.patch(
+            "/playlist/p1/pair",
+            json={},
+        )
+        assert resp.status_code == 400
+
+    @patch("shuffify.routes.require_auth")
+    def test_no_json_returns_400(
+        self, mock_auth, auth_client
+    ):
+        mock_auth.return_value = MagicMock()
+        resp = auth_client.patch(
+            "/playlist/p1/pair",
+            data="not json",
+            content_type="text/plain",
+        )
+        assert resp.status_code == 400
+
+    @patch("shuffify.routes.require_auth")
+    @patch(
+        "shuffify.routes.playlist_pairs"
+        ".PlaylistPairService"
+    )
+    def test_pair_not_found_returns_404(
+        self, mock_svc, mock_auth, auth_client
+    ):
+        from shuffify.services.playlist_pair_service import (
+            PlaylistPairNotFoundError,
+        )
+
+        mock_auth.return_value = MagicMock()
+        mock_svc.update_pair.side_effect = (
+            PlaylistPairNotFoundError("No pair found")
+        )
+        resp = auth_client.patch(
+            "/playlist/p1/pair",
+            json={"auto_archive_on_remove": True},
+        )
+        assert resp.status_code == 404

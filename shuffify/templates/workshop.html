@@ -522,10 +522,10 @@
             </div>
         </div>
 
-        <!-- Tab Content: Archive -->
+        <!-- Tab Content: Archive & Rotation -->
         <div id="sidebar-tab-archive" class="sidebar-tab-content hidden p-5" role="tabpanel">
             <div class="flex items-center justify-between mb-3">
-                <h3 class="text-white font-bold text-lg">Archive</h3>
+                <h3 class="text-white font-bold text-lg">Archive & Rotation</h3>
                 <span id="archive-queue-badge" class="hidden px-2 py-0.5 rounded-full bg-yellow-500/80 text-xs font-semibold text-white">0 queued</span>
             </div>
 
@@ -546,8 +546,21 @@
                     <p class="text-white/60 text-sm mb-1">No archive linked</p>
                     <p class="text-white/30 text-xs mb-4">Link an archive playlist so removed tracks are automatically preserved.</p>
                     <button onclick="createArchivePair()"
-                            class="px-4 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
-                        Create Archive Pair
+                            class="w-full px-4 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 mb-2">
+                        Create New Archive
+                    </button>
+                    <div class="relative my-3">
+                        <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-white/10"></div></div>
+                        <div class="relative flex justify-center"><span class="bg-[#1a1a2e] px-2 text-white/30 text-xs">or</span></div>
+                    </div>
+                    <select id="archive-link-select"
+                            class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 mb-2">
+                        <option value="">Link existing playlist...</option>
+                    </select>
+                    <button id="archive-link-btn" onclick="linkExistingArchive()"
+                            class="w-full px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                            disabled>
+                        Link as Archive
                     </button>
                 </div>
             </div>
@@ -566,6 +579,66 @@
                     </div>
                     <p id="archive-pair-name" class="text-white font-medium text-sm truncate"></p>
                     <p id="archive-pair-track-count" class="text-white/40 text-xs mt-1"></p>
+                    <!-- Auto-archive toggle -->
+                    <div class="flex items-center justify-between mt-3 pt-3 border-t border-white/10">
+                        <span class="text-white/60 text-xs">Auto-archive on remove</span>
+                        <button id="auto-archive-toggle" onclick="toggleAutoArchive()"
+                                class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200">
+                            <span class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Rotation Schedule Section -->
+                <div class="mb-4">
+                    <span class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Rotation Schedule</span>
+
+                    <!-- No rotation schedule -->
+                    <div id="rotation-no-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
+                        <p class="text-white/40 text-xs mb-3">Set up automatic track rotation between this playlist and the archive.</p>
+                        <div class="space-y-2">
+                            <select id="rotation-mode-select" class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
+                                <option value="archive_oldest">Archive oldest</option>
+                                <option value="refresh">Refresh</option>
+                                <option value="swap">Swap</option>
+                            </select>
+                            <div class="flex gap-2">
+                                <input id="rotation-count-input" type="number" min="1" max="50" value="5"
+                                       class="w-20 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
+                                       placeholder="#">
+                                <select id="rotation-freq-select" class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
+                                    <option value="daily">Daily</option>
+                                    <option value="every_3d">Every 3 days</option>
+                                    <option value="weekly">Weekly</option>
+                                </select>
+                            </div>
+                            <button onclick="createRotationSchedule()"
+                                    class="w-full px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
+                                Enable Rotation
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Existing rotation schedule -->
+                    <div id="rotation-has-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <div>
+                                <span id="rotation-schedule-mode" class="text-white text-sm font-medium"></span>
+                                <span id="rotation-schedule-detail" class="text-white/40 text-xs ml-1"></span>
+                            </div>
+                            <span id="rotation-schedule-badge" class="px-2 py-0.5 rounded-full text-xs font-semibold"></span>
+                        </div>
+                        <div class="flex gap-2 mt-3">
+                            <button onclick="toggleRotationSchedule()"
+                                    id="rotation-toggle-btn"
+                                    class="flex-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition duration-150 border border-white/20">
+                            </button>
+                            <button onclick="deleteRotationSchedule()"
+                                    class="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-semibold transition duration-150 border border-red-500/20">
+                                Delete
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Archive track list -->
@@ -580,7 +653,7 @@
                     </button>
                 </div>
 
-                <div id="archive-track-list" class="space-y-1 max-h-[50vh] overflow-y-auto sidebar-scrollbar">
+                <div id="archive-track-list" class="space-y-1 max-h-[40vh] overflow-y-auto sidebar-scrollbar">
                     <!-- Populated by renderArchiveTrackList() -->
                 </div>
 
@@ -624,30 +697,35 @@
             <!-- Raid panel content -->
             <div id="raid-panel-content" class="hidden space-y-4">
 
-                <!-- Quick Watch Section -->
+                <!-- Add External Source Section -->
                 <div class="rounded-xl bg-white/5 border border-white/10 p-4">
-                    <label class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Watch a playlist</label>
-                    <select id="raid-playlist-select"
-                            class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 mb-2">
-                        <option value="">Select a playlist...</option>
-                    </select>
-                    <button id="raid-watch-btn" onclick="raidPanel.watchPlaylist()"
-                            class="w-full px-4 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                            disabled>
-                        Watch Playlist
-                    </button>
-                    <p class="text-white/30 text-xs mt-2">Watched playlists are checked for new tracks on a schedule.</p>
+                    <label class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Add External Source</label>
+                    <div class="flex gap-2">
+                        <input id="raid-url-input" type="text"
+                               placeholder="Paste Spotify playlist URL..."
+                               class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 placeholder-white/30"
+                               onkeydown="if(event.key==='Enter'){raidPanel.addExternalUrl();}">
+                        <button id="raid-add-url-btn" onclick="raidPanel.addExternalUrl()"
+                                class="px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
+                            +
+                        </button>
+                    </div>
+                    <div id="raid-url-feedback" class="hidden mt-2 text-xs"></div>
+                    <p class="text-white/30 text-xs mt-2">Paste a playlist URL from a curator or tastemaker to watch for new tracks.</p>
                 </div>
 
                 <!-- Watched Sources List -->
                 <div>
-                    <span class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Watched Sources</span>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Watched Sources</span>
+                        <span id="raid-source-count" class="text-white/30 text-xs"></span>
+                    </div>
                     <div id="raid-sources-list" class="space-y-1 max-h-[30vh] overflow-y-auto sidebar-scrollbar">
                         <!-- Populated by raidPanel.renderSources() -->
                     </div>
                     <div id="raid-sources-empty" class="hidden rounded-xl bg-white/5 border border-white/10 p-4 text-center">
                         <p class="text-white/40 text-sm">No sources watched</p>
-                        <p class="text-white/20 text-xs mt-1">Select a playlist above to start watching.</p>
+                        <p class="text-white/20 text-xs mt-1">Paste a Spotify playlist URL above to start watching.</p>
                     </div>
                 </div>
 
@@ -691,23 +769,22 @@
             </div>
         </div>
 
-        <!-- Tab Content: Schedules (Rotation Panel) -->
+        <!-- Tab Content: Schedules (Rotation Panel) — Simplified -->
         <div id="sidebar-tab-schedules" class="sidebar-tab-content hidden p-5" role="tabpanel">
             <div class="flex items-center justify-between mb-3">
                 <h3 class="text-white font-bold text-lg">Rotation</h3>
-                <button onclick="loadRotationStatus()" class="text-white/40 hover:text-white/70 text-xs transition" title="Refresh">
-                    <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                    </svg>
-                </button>
             </div>
 
-            <div id="rotation-panel-content">
-                <!-- Loading state -->
-                <div class="text-center py-6">
-                    <div class="inline-block w-6 h-6 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
-                    <p class="text-white/40 text-xs mt-2">Loading rotation status...</p>
-                </div>
+            <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                <svg class="w-10 h-10 mx-auto text-white/20 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+                <p class="text-white/60 text-sm mb-1">Rotation is configured in the Archive tab</p>
+                <p class="text-white/30 text-xs mb-4">Set up an archive pair, then configure rotation schedules in one place.</p>
+                <button onclick="workshopSidebar.switchTab('archive')"
+                        class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition duration-150 border border-white/20">
+                    Go to Archive & Rotation
+                </button>
             </div>
 
             <!-- Manage All Schedules link -->
@@ -2400,6 +2477,8 @@ function onSnapshotsTabActivated() {
 var archiveState = {
     isLoaded: false,
     isLoadingTracks: false,
+    rotationSchedule: null,
+    playlistsPopulated: false,
 };
 
 function loadArchivePairInfo() {
@@ -2424,9 +2503,11 @@ function loadArchivePairInfo() {
             workshopState.archivePair = data.pair;
             renderArchivePanel();
             loadArchiveTracks();
+            loadRotationConfig();
         } else {
             workshopState.archivePair = null;
             noPair.classList.remove('hidden');
+            populateArchiveLinkSelect();
         }
         archiveState.isLoaded = true;
     })
@@ -2451,6 +2532,17 @@ function renderArchivePanel() {
     var nameEl = document.getElementById('archive-pair-name');
     nameEl.textContent = workshopState.archivePair.archive_playlist_name || 'Archive';
     paired.classList.remove('hidden');
+
+    // Set auto-archive toggle state
+    var toggleBtn = document.getElementById('auto-archive-toggle');
+    var dot = toggleBtn.querySelector('span');
+    if (workshopState.archivePair.auto_archive_on_remove) {
+        toggleBtn.className = 'relative inline-flex h-5 w-9 items-center rounded-full bg-spotify-green transition-colors duration-200';
+        dot.className = 'inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200 translate-x-4';
+    } else {
+        toggleBtn.className = 'relative inline-flex h-5 w-9 items-center rounded-full bg-white/20 transition-colors duration-200';
+        dot.className = 'inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200 translate-x-1';
+    }
 }
 
 function createArchivePair() {
@@ -2482,6 +2574,7 @@ function createArchivePair() {
         workshopState.archivePair = data.pair;
         renderArchivePanel();
         loadArchiveTracks();
+        loadRotationConfig();
         showNotification('Archive pair created!', 'success');
     })
     .catch(function(error) {
@@ -2514,12 +2607,292 @@ function deleteArchivePair() {
         workshopState.archivePair = null;
         workshopState.archiveTracks = [];
         workshopState.archiveQueue = [];
+        archiveState.rotationSchedule = null;
         updateArchiveQueueBadge();
         renderArchivePanel();
         showNotification('Archive pairing removed', 'success');
     })
     .catch(function(error) {
         showNotification(error.message || 'Failed to remove pair', 'error');
+    });
+}
+
+function populateArchiveLinkSelect() {
+    if (archiveState.playlistsPopulated) return;
+    var select = document.getElementById('archive-link-select');
+    var linkBtn = document.getElementById('archive-link-btn');
+
+    fetch('/api/user-playlists', {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+    .then(function(response) {
+        if (!response.ok) throw new Error('Failed to load playlists');
+        return response.json();
+    })
+    .then(function(data) {
+        if (!data.success || !data.playlists) return;
+
+        select.innerHTML = '<option value="">Link existing playlist...</option>';
+        data.playlists.forEach(function(p) {
+            if (p.id === workshopState.playlistId) return;
+            var opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.name + ' (' + p.track_count + ' tracks)';
+            opt.dataset.name = p.name;
+            select.appendChild(opt);
+        });
+
+        select.addEventListener('change', function() {
+            linkBtn.disabled = !select.value;
+        });
+        archiveState.playlistsPopulated = true;
+    })
+    .catch(function(error) {
+        console.error('Error populating archive link select:', error);
+    });
+}
+
+function linkExistingArchive() {
+    var select = document.getElementById('archive-link-select');
+    var btn = document.getElementById('archive-link-btn');
+    var archiveId = select.value;
+    if (!archiveId) return;
+
+    var selectedOpt = select.options[select.selectedIndex];
+    var archiveName = selectedOpt.dataset.name || selectedOpt.textContent;
+
+    btn.disabled = true;
+    btn.textContent = 'Linking...';
+
+    fetch('/playlist/' + workshopState.playlistId + '/pair', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({
+            create_new: false,
+            archive_playlist_id: archiveId,
+            archive_playlist_name: archiveName,
+            production_playlist_name: workshopState.playlistName,
+        }),
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            return response.json().then(function(d) {
+                throw new Error(d.message || 'Failed to link archive');
+            });
+        }
+        return response.json();
+    })
+    .then(function(data) {
+        workshopState.archivePair = data.pair;
+        renderArchivePanel();
+        loadArchiveTracks();
+        loadRotationConfig();
+        showNotification('Linked existing playlist as archive!', 'success');
+    })
+    .catch(function(error) {
+        btn.disabled = false;
+        btn.textContent = 'Link as Archive';
+        showNotification(error.message || 'Failed to link archive', 'error');
+    });
+}
+
+function toggleAutoArchive() {
+    if (!workshopState.archivePair) return;
+
+    var current = workshopState.archivePair.auto_archive_on_remove;
+    var newVal = !current;
+
+    fetch('/playlist/' + workshopState.playlistId + '/pair', {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({ auto_archive_on_remove: newVal }),
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            return response.json().then(function(d) {
+                throw new Error(d.message || 'Failed to update setting');
+            });
+        }
+        return response.json();
+    })
+    .then(function(data) {
+        workshopState.archivePair = data.pair;
+        renderArchivePanel();
+        showNotification('Auto-archive ' + (newVal ? 'enabled' : 'disabled'), 'success');
+    })
+    .catch(function(error) {
+        showNotification(error.message || 'Failed to toggle auto-archive', 'error');
+    });
+}
+
+function loadRotationConfig() {
+    if (!workshopState.archivePair) return;
+
+    fetch('/playlist/' + workshopState.playlistId + '/rotation-status')
+    .then(function(response) {
+        if (!response.ok) throw new Error('Failed to load rotation status');
+        return response.json();
+    })
+    .then(function(data) {
+        if (data.has_rotation_schedule && data.rotation_schedule) {
+            archiveState.rotationSchedule = data.rotation_schedule;
+        } else {
+            archiveState.rotationSchedule = null;
+        }
+        renderRotationConfig();
+    })
+    .catch(function(error) {
+        console.error('Rotation config load error:', error);
+        archiveState.rotationSchedule = null;
+        renderRotationConfig();
+    });
+}
+
+function renderRotationConfig() {
+    var noSched = document.getElementById('rotation-no-schedule');
+    var hasSched = document.getElementById('rotation-has-schedule');
+
+    if (!archiveState.rotationSchedule) {
+        noSched.classList.remove('hidden');
+        hasSched.classList.add('hidden');
+        return;
+    }
+
+    noSched.classList.add('hidden');
+    hasSched.classList.remove('hidden');
+
+    var sched = archiveState.rotationSchedule;
+    var params = sched.algorithm_params || {};
+    var modeMap = {
+        'archive_oldest': 'Archive oldest',
+        'refresh': 'Refresh',
+        'swap': 'Swap',
+    };
+    var freqMap = {
+        'daily': 'Daily',
+        'every_3d': 'Every 3 days',
+        'weekly': 'Weekly',
+        'every_6h': 'Every 6 hours',
+        'every_12h': 'Every 12 hours',
+    };
+
+    var modeEl = document.getElementById('rotation-schedule-mode');
+    modeEl.textContent = modeMap[params.rotation_mode] || params.rotation_mode || 'Rotate';
+
+    var detailEl = document.getElementById('rotation-schedule-detail');
+    var count = params.rotation_count || 5;
+    var freq = freqMap[sched.schedule_value] || sched.schedule_value;
+    detailEl.textContent = count + ' tracks \u00b7 ' + freq;
+
+    var badge = document.getElementById('rotation-schedule-badge');
+    var toggleBtn = document.getElementById('rotation-toggle-btn');
+    if (sched.is_enabled) {
+        badge.textContent = 'Active';
+        badge.className = 'px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-300';
+        toggleBtn.textContent = 'Pause';
+    } else {
+        badge.textContent = 'Paused';
+        badge.className = 'px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-500/20 text-white/50';
+        toggleBtn.textContent = 'Resume';
+    }
+}
+
+function createRotationSchedule() {
+    var modeSelect = document.getElementById('rotation-mode-select');
+    var countInput = document.getElementById('rotation-count-input');
+    var freqSelect = document.getElementById('rotation-freq-select');
+
+    var mode = modeSelect.value;
+    var count = parseInt(countInput.value, 10) || 5;
+    var freq = freqSelect.value;
+
+    fetch('/schedules/create', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({
+            job_type: 'rotate',
+            target_playlist_id: workshopState.playlistId,
+            target_playlist_name: workshopState.playlistName,
+            schedule_type: 'interval',
+            schedule_value: freq,
+            algorithm_params: {
+                rotation_mode: mode,
+                rotation_count: count,
+            },
+        }),
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            return response.json().then(function(d) {
+                throw new Error(d.message || 'Failed to create rotation schedule');
+            });
+        }
+        return response.json();
+    })
+    .then(function(data) {
+        archiveState.rotationSchedule = data.schedule;
+        renderRotationConfig();
+        showNotification('Rotation schedule created!', 'success');
+    })
+    .catch(function(error) {
+        showNotification(error.message || 'Failed to create rotation schedule', 'error');
+    });
+}
+
+function toggleRotationSchedule() {
+    if (!archiveState.rotationSchedule) return;
+    var schedId = archiveState.rotationSchedule.id;
+
+    fetch('/schedules/' + schedId + '/toggle', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+    })
+    .then(function(response) {
+        if (!response.ok) throw new Error('Toggle failed');
+        return response.json();
+    })
+    .then(function(data) {
+        archiveState.rotationSchedule = data.schedule;
+        renderRotationConfig();
+        var state = data.schedule.is_enabled ? 'resumed' : 'paused';
+        showNotification('Rotation schedule ' + state, 'success');
+    })
+    .catch(function(error) {
+        showNotification(error.message || 'Failed to toggle rotation', 'error');
+    });
+}
+
+function deleteRotationSchedule() {
+    if (!archiveState.rotationSchedule) return;
+    var schedId = archiveState.rotationSchedule.id;
+
+    fetch('/schedules/' + schedId, {
+        method: 'DELETE',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+    .then(function(response) {
+        if (!response.ok) throw new Error('Delete failed');
+        return response.json();
+    })
+    .then(function() {
+        archiveState.rotationSchedule = null;
+        renderRotationConfig();
+        showNotification('Rotation schedule deleted', 'success');
+    })
+    .catch(function(error) {
+        showNotification(error.message || 'Failed to delete rotation schedule', 'error');
     });
 }
 
@@ -2677,7 +3050,6 @@ var raidPanel = {
     loaded: false,
     isLoading: false,
     status: null,
-    playlistsPopulated: false,
 
     init: function() {
         this.loadStatus();
@@ -2705,10 +3077,6 @@ var raidPanel = {
             self.loaded = true;
             self.render();
             content.classList.remove('hidden');
-
-            if (!self.playlistsPopulated) {
-                self.populatePlaylistDropdown();
-            }
         })
         .catch(function(error) {
             loading.classList.add('hidden');
@@ -2724,6 +3092,15 @@ var raidPanel = {
         if (!this.status) return;
         this.renderSources(this.status.sources);
         this.renderSchedule(this.status.schedule);
+
+        // Source count badge
+        var countEl = document.getElementById('raid-source-count');
+        var maxSources = this.status.max_sources || 10;
+        countEl.textContent = this.status.source_count + ' / ' + maxSources;
+
+        // Disable add button at limit
+        var addBtn = document.getElementById('raid-add-url-btn');
+        addBtn.disabled = this.status.source_count >= maxSources;
 
         var raidNowBtn = document.getElementById('raid-now-btn');
         raidNowBtn.disabled = this.status.source_count === 0;
@@ -2742,15 +3119,25 @@ var raidPanel = {
         emptyEl.classList.add('hidden');
         var html = '';
         sources.forEach(function(src) {
-            var name = src.source_name || src.source_playlist_id;
-            var typeBadge = src.source_type === 'own'
-                ? '<span class="px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-300 text-xs">own</span>'
-                : '<span class="px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-xs">external</span>';
+            var name = src.source_name || src.source_playlist_id || src.search_query || 'Unknown';
+            var typeBadge = '';
+            if (src.source_type === 'search_query') {
+                typeBadge = '<span class="px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-xs">search</span>';
+            } else if (src.source_type === 'external') {
+                typeBadge = '<span class="px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-xs">external</span>';
+            } else {
+                typeBadge = '<span class="px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-300 text-xs">own</span>';
+            }
+
+            var trackInfo = '';
+            if (src.last_track_count != null) {
+                trackInfo = '<span class="text-white/30 text-xs ml-1">' + src.last_track_count + ' tracks</span>';
+            }
 
             html += '<div class="flex items-center p-2 rounded-lg hover:bg-white/5 transition duration-150 group">'
                 + '<div class="flex-1 min-w-0">'
                 + '<p class="text-white text-sm truncate">' + escapeHtml(name) + '</p>'
-                + '<div class="flex items-center gap-1 mt-0.5">' + typeBadge + '</div>'
+                + '<div class="flex items-center gap-1 mt-0.5">' + typeBadge + trackInfo + '</div>'
                 + '</div>'
                 + '<button onclick="raidPanel.unwatchSource(' + src.id + ')" '
                 + 'class="ml-2 p-1.5 rounded-lg text-white/20 hover:text-red-400 hover:bg-white/10 opacity-0 group-hover:opacity-100 transition duration-150 flex-shrink-0" '
@@ -2816,80 +3203,66 @@ var raidPanel = {
         }
     },
 
-    populatePlaylistDropdown: function() {
-        var select = document.getElementById('raid-playlist-select');
-        var watchBtn = document.getElementById('raid-watch-btn');
+    addExternalUrl: function() {
+        var input = document.getElementById('raid-url-input');
+        var btn = document.getElementById('raid-add-url-btn');
+        var feedback = document.getElementById('raid-url-feedback');
+        var url = input.value.trim();
 
-        select.addEventListener('change', function() {
-            watchBtn.disabled = !select.value;
-        });
+        if (!url) {
+            feedback.textContent = 'Please paste a Spotify playlist URL';
+            feedback.className = 'mt-2 text-xs text-red-300';
+            feedback.classList.remove('hidden');
+            return;
+        }
 
-        // Fetch playlists if not already loaded
-        fetch('/user-playlists')
-        .then(function(response) {
-            if (!response.ok) throw new Error('Failed to fetch playlists');
-            return response.json();
-        })
-        .then(function(data) {
-            var playlists = data.playlists || [];
-            playlists.forEach(function(pl) {
-                if (pl.id === workshopState.playlistId) return;
-                var opt = document.createElement('option');
-                opt.value = pl.id;
-                opt.textContent = pl.name + ' (' + pl.track_count + ' tracks)';
-                opt.dataset.name = pl.name;
-                select.appendChild(opt);
-            });
-            raidPanel.playlistsPopulated = true;
-        })
-        .catch(function(error) {
-            console.error('Failed to load playlists for raid:', error);
-        });
-    },
+        // Client-side URL pre-validation
+        var isValid = url.match(/open\.spotify\.com\/playlist\//) ||
+                      url.match(/^spotify:playlist:/) ||
+                      url.match(/^[a-zA-Z0-9]{22}$/);
+        if (!isValid) {
+            feedback.textContent = 'Not a valid Spotify playlist URL';
+            feedback.className = 'mt-2 text-xs text-red-300';
+            feedback.classList.remove('hidden');
+            return;
+        }
 
-    watchPlaylist: function() {
-        var select = document.getElementById('raid-playlist-select');
-        var selectedOption = select.options[select.selectedIndex];
-        if (!select.value) return;
-
-        var btn = document.getElementById('raid-watch-btn');
         btn.disabled = true;
-        btn.textContent = 'Watching...';
+        feedback.textContent = 'Adding source...';
+        feedback.className = 'mt-2 text-xs text-white/40';
+        feedback.classList.remove('hidden');
 
         var self = this;
-        fetch('/playlist/' + workshopState.playlistId + '/raid-watch', {
+        fetch('/playlist/' + workshopState.playlistId + '/raid-add-url', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest',
             },
             body: JSON.stringify({
-                source_playlist_id: select.value,
-                source_playlist_name: selectedOption.dataset.name || select.value,
+                url: url,
                 target_playlist_name: workshopState.playlistName,
                 auto_schedule: true,
                 schedule_value: 'daily',
             }),
         })
         .then(function(response) {
-            if (!response.ok) {
-                return response.json().then(function(d) {
-                    throw new Error(d.message || 'Failed to watch playlist');
-                });
-            }
-            return response.json();
+            return response.json().then(function(d) {
+                if (!response.ok) throw new Error(d.message || 'Failed to add source');
+                return d;
+            });
         })
         .then(function(data) {
-            showNotification('Now watching ' + (selectedOption.dataset.name || select.value), 'success');
-            select.value = '';
-            btn.textContent = 'Watch Playlist';
-            btn.disabled = true;
+            input.value = '';
+            feedback.classList.add('hidden');
+            showNotification('Now watching external source', 'success');
             self.loadStatus();
         })
         .catch(function(error) {
-            btn.textContent = 'Watch Playlist';
-            btn.disabled = !select.value;
-            showNotification(error.message || 'Failed to watch playlist', 'error');
+            feedback.textContent = error.message || 'Failed to add source';
+            feedback.className = 'mt-2 text-xs text-red-300';
+            feedback.classList.remove('hidden');
+            btn.disabled = false;
         });
     },
 

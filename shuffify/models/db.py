@@ -369,6 +369,7 @@ class UpstreamSource(db.Model):
     last_resolve_status = db.Column(
         db.String(20), nullable=True
     )  # "success", "partial", "failed"
+    last_track_count = db.Column(db.Integer, nullable=True)
     created_at = db.Column(
         db.DateTime,
         nullable=False,
@@ -405,6 +406,7 @@ class UpstreamSource(db.Model):
             ),
             "last_resolve_pathway": self.last_resolve_pathway,
             "last_resolve_status": self.last_resolve_status,
+            "last_track_count": self.last_track_count,
             "created_at": (
                 self.created_at.isoformat()
                 if self.created_at

@@ -109,6 +109,40 @@ class UnwatchPlaylistRequest(BaseModel):
         return v
 
 
+class AddRaidUrlRequest(BaseModel):
+    """Request to add an external playlist by URL."""
+
+    model_config = {"extra": "ignore"}
+
+    url: str
+    auto_schedule: bool = True
+    schedule_value: str = "daily"
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v):
+        v = v.strip()
+        if not v:
+            raise ValueError("url must not be empty")
+        if len(v) > 1024:
+            raise ValueError(
+                "url must be 1024 chars or fewer"
+            )
+        return v
+
+    @field_validator("schedule_value")
+    @classmethod
+    def validate_schedule_value(cls, v):
+        v = v.strip().lower()
+        valid = [e.value for e in IntervalValue]
+        if v not in valid:
+            raise ValueError(
+                f"schedule_value must be one of: "
+                f"{', '.join(valid)}"
+            )
+        return v
+
+
 class RaidNowRequest(BaseModel):
     """Request to trigger an immediate raid."""
 

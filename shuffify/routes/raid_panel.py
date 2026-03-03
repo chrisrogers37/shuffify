@@ -23,14 +23,23 @@ from shuffify.services.raid_sync_service import (
 )
 from shuffify.services.upstream_source_service import (
     UpstreamSourceNotFoundError,
+    UpstreamSourceLimitError,
 )
 from shuffify.services.scheduler_service import (
     SchedulerService,
+)
+from shuffify.services.playlist_service import (
+    PlaylistService,
+    PlaylistNotFoundError,
+)
+from shuffify.spotify.url_parser import (
+    parse_spotify_playlist_url,
 )
 from shuffify.enums import ActivityType
 from shuffify.schemas.raid_requests import (
     WatchPlaylistRequest,
     WatchSearchQueryRequest,
+    AddRaidUrlRequest,
     UnwatchPlaylistRequest,
     RaidNowRequest,
 )
@@ -153,6 +162,119 @@ def raid_watch_search(
         )
         return json_error(
             "Failed to watch search query", 500
+        )
+
+
+@main.route(
+    "/playlist/<playlist_id>/raid-add-url",
+    methods=["POST"],
+)
+@require_auth_and_db
+def raid_add_url(playlist_id, client=None, user=None):
+    """Add an external playlist as a raid source by URL."""
+    req, err = validate_json(AddRaidUrlRequest)
+    if err:
+        return err
+
+    # 1. Parse URL to playlist ID
+    source_playlist_id = parse_spotify_playlist_url(req.url)
+    if not source_playlist_id:
+        return json_error(
+            "Invalid Spotify playlist URL", 400
+        )
+
+    # 2. Guard: not self-referencing
+    if source_playlist_id == playlist_id:
+        return json_error(
+            "Cannot raid from the same playlist", 400
+        )
+
+    # 3. Get playlist metadata for ownership check
+    try:
+        playlist_svc = PlaylistService(client)
+        playlist_info = playlist_svc.get_playlist(
+            source_playlist_id
+        )
+    except PlaylistNotFoundError:
+        return json_error("Playlist not found", 404)
+    except Exception as e:
+        logger.warning(
+            "Could not fetch playlist metadata for %s: %s",
+            source_playlist_id, e,
+        )
+        return json_error(
+            "Could not access playlist", 400
+        )
+
+    # 4. Guard: owner is not current user (external-only)
+    if playlist_info.owner_id == user.spotify_id:
+        return json_error(
+            "Cannot raid your own playlist. "
+            "Use rotation instead.",
+            400,
+        )
+
+    # 5. Best-effort track count via playlist metadata
+    track_count = playlist_info.total_tracks
+
+    # 6. Register source
+    data = request.get_json(silent=True)
+    try:
+        result = RaidSyncService.watch_playlist(
+            spotify_id=user.spotify_id,
+            target_playlist_id=playlist_id,
+            target_playlist_name=data.get(
+                "target_playlist_name", playlist_id
+            ),
+            source_playlist_id=source_playlist_id,
+            source_playlist_name=playlist_info.name,
+            source_url=req.url,
+            auto_schedule=req.auto_schedule,
+            schedule_value=req.schedule_value,
+            source_type="external",
+        )
+
+        # Update track count on source record
+        if track_count is not None:
+            from shuffify.models.db import (
+                db,
+                UpstreamSource,
+            )
+            src = UpstreamSource.query.filter_by(
+                user_id=user.id,
+                target_playlist_id=playlist_id,
+                source_playlist_id=source_playlist_id,
+            ).first()
+            if src:
+                src.last_track_count = track_count
+                db.session.commit()
+
+        log_activity(
+            user_id=user.id,
+            activity_type=ActivityType.RAID_WATCH_ADD,
+            description=(
+                f"Watching external: "
+                f"'{playlist_info.name}'"
+            ),
+            playlist_id=playlist_id,
+        )
+
+        return json_success(
+            "External source added.",
+            source=result["source"],
+            schedule=result["schedule"],
+            track_count=track_count,
+        )
+    except UpstreamSourceLimitError as e:
+        return json_error(str(e), 400)
+    except RaidSyncError as e:
+        return json_error(str(e), 400)
+    except Exception as e:
+        logger.error(
+            "Failed to add external source: %s", e
+        )
+        return json_error(
+            "Failed to add external source", 500
         )
 
 

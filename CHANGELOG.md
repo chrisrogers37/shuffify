@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Workshop Raid URL Input** - Raids tab now uses URL-based external playlist input instead of own-playlist dropdown
+  - Paste a Spotify playlist URL to add external sources for raiding
+  - Self-referencing and own-playlist guards prevent misconfiguration
+  - Source count badge shows usage vs limit (10 per target)
+  - Track count displayed per source when available
+- **Archive & Rotation Configuration Hub** - Archive tab enhanced into unified config hub
+  - "Link Existing Playlist" option alongside "Create New Archive"
+  - Auto-archive toggle (on/off) directly in the archive pair card
+  - Inline rotation schedule CRUD (create/pause/resume/delete) without leaving Workshop
+  - Rotation tab simplified to point to Archive tab as the single config surface
+- **PATCH /playlist/<id>/pair Endpoint** - New endpoint to update archive pair settings
+  - Supports toggling `auto_archive_on_remove` field
+- **AddRaidUrlRequest Schema** - New Pydantic validation for URL-based raid source addition
+- **Source Count Limits** - Upstream sources capped at 10 per target playlist
+  - `UpstreamSourceLimitError` raised when limit exceeded
+  - `count_sources()` method added to `UpstreamSourceService`
+- **last_track_count Column** - UpstreamSource model tracks source playlist size
+
 ### Changed
 - **Schedule Limit Removed** - Users can now create unlimited schedules (previously capped at 5)
   - Removed `MAX_SCHEDULES_PER_USER` enforcement, `ScheduleLimitError` class, and all associated handlers
