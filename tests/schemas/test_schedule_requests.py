@@ -94,6 +94,33 @@ class TestScheduleCreateRequestValid:
         ))
         assert req.algorithm_params == {"keep_first": 5}
 
+    def test_keep_first_zero_accepted(self):
+        req = ScheduleCreateRequest(**_base_create_kwargs(
+            algorithm_params={"keep_first": 0},
+        ))
+        assert req.algorithm_params == {"keep_first": 0}
+
+    def test_keep_first_large_value_accepted(self):
+        req = ScheduleCreateRequest(**_base_create_kwargs(
+            algorithm_params={"keep_first": 100},
+        ))
+        assert req.algorithm_params["keep_first"] == 100
+
+    def test_keep_first_absent_accepted(self):
+        req = ScheduleCreateRequest(**_base_create_kwargs(
+            algorithm_params={},
+        ))
+        assert req.algorithm_params == {}
+
+    def test_keep_first_with_raid_and_shuffle(self):
+        req = ScheduleCreateRequest(**_base_create_kwargs(
+            job_type="raid_and_shuffle",
+            source_playlist_ids=["src_1"],
+            algorithm_name="BasicShuffle",
+            algorithm_params={"keep_first": 10},
+        ))
+        assert req.algorithm_params["keep_first"] == 10
+
 
 # =============================================================================
 # ScheduleCreateRequest — Invalid inputs
@@ -174,6 +201,22 @@ class TestScheduleCreateRequestInvalid:
             ScheduleCreateRequest(**_base_create_kwargs(
                 target_playlist_name="",
             ))
+
+    def test_negative_keep_first_rejected(self):
+        with pytest.raises(ValidationError) as exc_info:
+            ScheduleCreateRequest(**_base_create_kwargs(
+                algorithm_params={"keep_first": -1},
+            ))
+        errors = exc_info.value.errors()
+        assert any("keep_first" in str(e) for e in errors)
+
+    def test_non_integer_keep_first_rejected(self):
+        with pytest.raises(ValidationError) as exc_info:
+            ScheduleCreateRequest(**_base_create_kwargs(
+                algorithm_params={"keep_first": "abc"},
+            ))
+        errors = exc_info.value.errors()
+        assert any("keep_first" in str(e) for e in errors)
 
     def test_whitespace_job_type_normalized(self):
         req = ScheduleCreateRequest(**_base_create_kwargs(

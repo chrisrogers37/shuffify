@@ -79,6 +79,9 @@
                             {% if schedule.source_playlist_ids %}
                             &middot; {{ schedule.source_playlist_ids|length }} source{{ 's' if schedule.source_playlist_ids|length != 1 else '' }}
                             {% endif %}
+                            {% if schedule.algorithm_params and schedule.algorithm_params.get('keep_first') %}
+                            &middot; Keep top {{ schedule.algorithm_params.get('keep_first') }}
+                            {% endif %}
                             {% if schedule.job_type == 'rotate' and schedule.algorithm_params %}
                             &middot; {{ schedule.algorithm_params.get('rotation_mode', 'archive_oldest') | replace('_', ' ') | title }} x{{ schedule.algorithm_params.get('rotation_count', 5) }}
                             {% endif %}
@@ -192,6 +195,15 @@
                     </select>
                 </div>
 
+                <!-- Keep Top Songs (shown for shuffle types) -->
+                <div id="modal-keep-top-section" class="hidden">
+                    <label class="block text-sm font-medium text-white/90 mb-1">Keep Top Songs</label>
+                    <input type="number" id="modal-keep-first"
+                           value="0" min="0" max="500"
+                           class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white">
+                    <p class="text-white/40 text-xs mt-1">Number of songs to keep fixed at the top of the playlist (0 = shuffle all).</p>
+                </div>
+
                 <!-- Rotation Config (shown when job_type is 'rotate') -->
                 <div id="modal-rotation-section" class="hidden space-y-3">
                     <div>
@@ -268,6 +280,7 @@ function updateModalFields() {
     const jobType = document.getElementById('modal-job-type').value;
     const sourcesSection = document.getElementById('modal-sources-section');
     const algorithmSection = document.getElementById('modal-algorithm-section');
+    const keepTopSection = document.getElementById('modal-keep-top-section');
     const rotationSection = document.getElementById('modal-rotation-section');
 
     // Show/hide sections based on job type
@@ -279,8 +292,10 @@ function updateModalFields() {
 
     if (jobType === 'shuffle' || jobType === 'raid_and_shuffle') {
         algorithmSection.classList.remove('hidden');
+        keepTopSection.classList.remove('hidden');
     } else {
         algorithmSection.classList.add('hidden');
+        keepTopSection.classList.add('hidden');
     }
 
     if (jobType === 'rotate') {
@@ -335,7 +350,11 @@ document.getElementById('create-schedule-form').addEventListener('submit', funct
     // Add algorithm if applicable
     if (jobType === 'shuffle' || jobType === 'raid_and_shuffle') {
         body.algorithm_name = document.getElementById('modal-algorithm').value;
+        const keepFirst = parseInt(document.getElementById('modal-keep-first').value, 10) || 0;
         body.algorithm_params = {};
+        if (keepFirst > 0) {
+            body.algorithm_params.keep_first = keepFirst;
+        }
     }
 
     // Add rotation params if applicable
