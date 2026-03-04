@@ -6,6 +6,7 @@ _execute_scheduled_job, and event listeners.
 """
 
 import logging
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch, MagicMock
 
 import pytest
@@ -22,6 +23,9 @@ from shuffify.scheduler import (
     _execute_scheduled_job,
     shutdown_scheduler,
     get_scheduler,
+    get_scheduler_metrics,
+    _try_acquire_scheduler_lock,
+    _cleanup_stale_executions,
 )
 
 
@@ -33,6 +37,13 @@ from shuffify.scheduler import (
 def reset_scheduler():
     """Reset global scheduler state between tests."""
     scheduler_module._scheduler = None
+    scheduler_module._lock_connection = None
+    scheduler_module._metrics = {
+        "jobs_executed": 0,
+        "jobs_failed": 0,
+        "jobs_missed": 0,
+        "last_execution_at": None,
+    }
     yield
     if (
         scheduler_module._scheduler is not None
@@ -44,6 +55,12 @@ def reset_scheduler():
         except Exception:
             pass
     scheduler_module._scheduler = None
+    if scheduler_module._lock_connection is not None:
+        try:
+            scheduler_module._lock_connection.close()
+        except Exception:
+            pass
+        scheduler_module._lock_connection = None
 
 
 # =============================================================================
@@ -163,6 +180,8 @@ class TestInitScheduler:
 
         with patch.object(
             scheduler_module, '_register_existing_jobs'
+        ), patch.object(
+            scheduler_module, '_cleanup_stale_executions'
         ):
             result = init_scheduler(app)
 
@@ -175,6 +194,8 @@ class TestInitScheduler:
 
         with patch.object(
             scheduler_module, '_register_existing_jobs'
+        ), patch.object(
+            scheduler_module, '_cleanup_stale_executions'
         ):
             first = init_scheduler(app)
             second = init_scheduler(app)
@@ -188,6 +209,8 @@ class TestInitScheduler:
 
         with patch.object(
             scheduler_module, '_register_existing_jobs'
+        ), patch.object(
+            scheduler_module, '_cleanup_stale_executions'
         ):
             result = init_scheduler(app)
 
@@ -252,6 +275,8 @@ class TestAddRemoveJob:
 
         with patch.object(
             scheduler_module, '_register_existing_jobs'
+        ), patch.object(
+            scheduler_module, '_cleanup_stale_executions'
         ):
             init_scheduler(app)
 
@@ -336,6 +361,8 @@ class TestShutdownScheduler:
 
         with patch.object(
             scheduler_module, '_register_existing_jobs'
+        ), patch.object(
+            scheduler_module, '_cleanup_stale_executions'
         ):
             init_scheduler(app)
 
@@ -347,3 +374,293 @@ class TestShutdownScheduler:
         """Shutdown with no scheduler should not raise."""
         shutdown_scheduler()
         assert scheduler_module._scheduler is None
+
+    def test_shutdown_releases_lock_connection(self):
+        """Shutdown should close the advisory lock connection."""
+        mock_conn = MagicMock()
+        scheduler_module._lock_connection = mock_conn
+
+        mock_sched = MagicMock()
+        mock_sched.running = True
+        scheduler_module._scheduler = mock_sched
+
+        shutdown_scheduler()
+
+        mock_conn.close.assert_called_once()
+        assert scheduler_module._lock_connection is None
+
+
+# =============================================================================
+# Configurable thread pool
+# =============================================================================
+
+class TestConfigurablePool:
+    """Tests for configurable thread pool size."""
+
+    def test_uses_config_pool_size(self, app, monkeypatch):
+        """Pool size should come from config."""
+        app.config["SCHEDULER_ENABLED"] = True
+        app.config["SCHEDULER_THREAD_POOL_SIZE"] = 15
+        app.debug = False
+        monkeypatch.setenv("WERKZEUG_RUN_MAIN", "true")
+
+        with patch.object(
+            scheduler_module, '_register_existing_jobs'
+        ), patch.object(
+            scheduler_module, '_cleanup_stale_executions'
+        ), patch(
+            "shuffify.scheduler.ThreadPoolExecutor"
+        ) as mock_pool:
+            init_scheduler(app)
+            mock_pool.assert_called_once_with(max_workers=15)
+
+    def test_defaults_to_10(self, app, monkeypatch):
+        """Pool size should default to 10 if not configured."""
+        app.config["SCHEDULER_ENABLED"] = True
+        app.config.pop("SCHEDULER_THREAD_POOL_SIZE", None)
+        app.debug = False
+        monkeypatch.setenv("WERKZEUG_RUN_MAIN", "true")
+
+        with patch.object(
+            scheduler_module, '_register_existing_jobs'
+        ), patch.object(
+            scheduler_module, '_cleanup_stale_executions'
+        ), patch(
+            "shuffify.scheduler.ThreadPoolExecutor"
+        ) as mock_pool:
+            init_scheduler(app)
+            mock_pool.assert_called_once_with(max_workers=10)
+
+
+# =============================================================================
+# Advisory lock
+# =============================================================================
+
+class TestAdvisoryLock:
+    """Tests for _try_acquire_scheduler_lock."""
+
+    def test_sqlite_returns_true(self):
+        """SQLite URLs bypass advisory lock."""
+        assert _try_acquire_scheduler_lock(
+            "sqlite:///shuffify.db"
+        ) is True
+
+    def test_postgresql_lock_acquired(self):
+        """Should return True when lock is acquired."""
+        mock_conn = MagicMock()
+        mock_result = MagicMock()
+        mock_result.scalar.return_value = True
+        mock_conn.execute.return_value = mock_result
+
+        mock_engine = MagicMock()
+        mock_engine.connect.return_value = mock_conn
+
+        with patch(
+            "sqlalchemy.create_engine",
+            return_value=mock_engine,
+        ):
+            result = _try_acquire_scheduler_lock(
+                "postgresql://localhost/shuffify"
+            )
+
+        assert result is True
+        assert scheduler_module._lock_connection is mock_conn
+
+    def test_postgresql_lock_not_acquired(self):
+        """Should return False when another process holds lock."""
+        mock_conn = MagicMock()
+        mock_result = MagicMock()
+        mock_result.scalar.return_value = False
+        mock_conn.execute.return_value = mock_result
+
+        mock_engine = MagicMock()
+        mock_engine.connect.return_value = mock_conn
+
+        with patch(
+            "sqlalchemy.create_engine",
+            return_value=mock_engine,
+        ):
+            result = _try_acquire_scheduler_lock(
+                "postgresql://localhost/shuffify"
+            )
+
+        assert result is False
+        mock_conn.close.assert_called_once()
+
+    def test_fail_open_on_exception(self):
+        """Should return True (fail-open) on database errors."""
+        with patch(
+            "sqlalchemy.create_engine",
+            side_effect=Exception("connection refused"),
+        ):
+            result = _try_acquire_scheduler_lock(
+                "postgresql://localhost/shuffify"
+            )
+
+        assert result is True
+
+
+# =============================================================================
+# Scheduler metrics
+# =============================================================================
+
+class TestSchedulerMetrics:
+    """Tests for scheduler health metrics."""
+
+    def test_get_metrics_default_values(self):
+        """Metrics should start at zero."""
+        metrics = get_scheduler_metrics()
+        assert metrics["jobs_executed"] == 0
+        assert metrics["jobs_failed"] == 0
+        assert metrics["jobs_missed"] == 0
+        assert metrics["last_execution_at"] is None
+        assert metrics["scheduler_running"] is False
+
+    def test_executed_event_increments_counter(self):
+        """Successful execution should increment counter."""
+        event = Mock()
+        event.job_id = "schedule_1"
+        _on_job_executed(event)
+        assert scheduler_module._metrics["jobs_executed"] == 1
+        assert (
+            scheduler_module._metrics["last_execution_at"]
+            is not None
+        )
+
+    def test_error_event_increments_counter(self):
+        """Failed execution should increment counter."""
+        event = Mock()
+        event.job_id = "schedule_2"
+        event.exception = RuntimeError("test")
+        event.traceback = None
+        _on_job_error(event)
+        assert scheduler_module._metrics["jobs_failed"] == 1
+
+    def test_missed_event_increments_counter(self):
+        """Missed execution should increment counter."""
+        event = Mock()
+        event.job_id = "schedule_3"
+        _on_job_missed(event)
+        assert scheduler_module._metrics["jobs_missed"] == 1
+
+    def test_scheduler_running_reflects_state(
+        self, app, monkeypatch
+    ):
+        """scheduler_running should reflect actual state."""
+        assert get_scheduler_metrics()[
+            "scheduler_running"
+        ] is False
+
+        app.config["SCHEDULER_ENABLED"] = True
+        app.debug = False
+        monkeypatch.setenv("WERKZEUG_RUN_MAIN", "true")
+
+        with patch.object(
+            scheduler_module, '_register_existing_jobs'
+        ), patch.object(
+            scheduler_module, '_cleanup_stale_executions'
+        ):
+            init_scheduler(app)
+
+        assert get_scheduler_metrics()[
+            "scheduler_running"
+        ] is True
+
+
+# =============================================================================
+# Stale execution cleanup
+# =============================================================================
+
+class TestStaleCleanup:
+    """Tests for _cleanup_stale_executions."""
+
+    def test_cleans_old_running_records(self, db_app):
+        """Stale running records should be marked failed."""
+        from shuffify.models.db import (
+            db,
+            JobExecution,
+            Schedule,
+            User,
+        )
+        from datetime import timedelta
+
+        user = User(
+            spotify_id="test_user",
+            display_name="Test",
+        )
+        db.session.add(user)
+        db.session.flush()
+
+        schedule = Schedule(
+            user_id=user.id,
+            job_type="shuffle",
+            target_playlist_id="pl1",
+            target_playlist_name="Test Playlist",
+            schedule_type="interval",
+            schedule_value="daily",
+        )
+        db.session.add(schedule)
+        db.session.flush()
+
+        # Create a stale execution (started 60 min ago)
+        stale_exec = JobExecution(
+            schedule_id=schedule.id,
+            started_at=(
+                datetime.now(timezone.utc)
+                - timedelta(minutes=60)
+            ),
+            status="running",
+        )
+        db.session.add(stale_exec)
+        db.session.commit()
+
+        _cleanup_stale_executions(max_age_minutes=30)
+
+        db.session.refresh(stale_exec)
+        assert stale_exec.status == "failed"
+        assert "stale" in stale_exec.error_message.lower()
+
+    def test_leaves_recent_running_records(self, db_app):
+        """Recent running records should not be cleaned."""
+        from shuffify.models.db import (
+            db,
+            JobExecution,
+            Schedule,
+            User,
+        )
+        from datetime import timedelta
+
+        user = User(
+            spotify_id="test_user2",
+            display_name="Test2",
+        )
+        db.session.add(user)
+        db.session.flush()
+
+        schedule = Schedule(
+            user_id=user.id,
+            job_type="shuffle",
+            target_playlist_id="pl2",
+            target_playlist_name="Test Playlist 2",
+            schedule_type="interval",
+            schedule_value="daily",
+        )
+        db.session.add(schedule)
+        db.session.flush()
+
+        # Create a recent execution (started 5 min ago)
+        recent_exec = JobExecution(
+            schedule_id=schedule.id,
+            started_at=(
+                datetime.now(timezone.utc)
+                - timedelta(minutes=5)
+            ),
+            status="running",
+        )
+        db.session.add(recent_exec)
+        db.session.commit()
+
+        _cleanup_stale_executions(max_age_minutes=30)
+
+        db.session.refresh(recent_exec)
+        assert recent_exec.status == "running"

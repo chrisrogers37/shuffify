@@ -2,17 +2,19 @@
 APScheduler integration for Shuffify.
 
 Manages the background scheduler lifecycle: initialization,
-job registration, and graceful shutdown. Jobs persist in SQLite
-via SQLAlchemyJobStore.
+job registration, and graceful shutdown. Jobs persist in the
+database via SQLAlchemyJobStore.
 
 IMPORTANT:
 - Must be initialized AFTER Flask app creation (in create_app).
 - In development with Werkzeug reloader, only start in main process.
 - In production with Gunicorn, use --preload for single scheduler.
+- PostgreSQL advisory lock prevents duplicate scheduler instances.
 """
 
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Optional, Tuple, Dict
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -30,14 +32,43 @@ logger = logging.getLogger(__name__)
 # Global scheduler instance
 _scheduler: Optional[BackgroundScheduler] = None
 
+# Advisory lock connection (kept alive for lock duration)
+_lock_connection = None
+
+# Scheduler health metrics
+_metrics = {
+    "jobs_executed": 0,
+    "jobs_failed": 0,
+    "jobs_missed": 0,
+    "last_execution_at": None,
+}
+
+
+def get_scheduler_metrics() -> dict:
+    """Return a copy of current scheduler health metrics."""
+    return {
+        **_metrics,
+        "scheduler_running": (
+            _scheduler is not None and _scheduler.running
+        ),
+    }
+
 
 def _on_job_executed(event):
     """Listener for successful job execution."""
+    _metrics["jobs_executed"] += 1
+    _metrics["last_execution_at"] = datetime.now(
+        timezone.utc
+    ).isoformat()
     logger.info(f"Job {event.job_id} executed successfully")
 
 
 def _on_job_error(event):
     """Listener for failed job execution."""
+    _metrics["jobs_failed"] += 1
+    _metrics["last_execution_at"] = datetime.now(
+        timezone.utc
+    ).isoformat()
     logger.error(
         f"Job {event.job_id} failed with exception: "
         f"{event.exception}",
@@ -47,9 +78,67 @@ def _on_job_error(event):
 
 def _on_job_missed(event):
     """Listener for missed job execution."""
+    _metrics["jobs_missed"] += 1
     logger.warning(
         f"Job {event.job_id} missed its scheduled run time"
     )
+
+
+def _try_acquire_scheduler_lock(db_url: str) -> bool:
+    """
+    Attempt to acquire a PostgreSQL advisory lock to guarantee
+    only one scheduler instance runs across all processes.
+
+    Uses pg_try_advisory_lock with a fixed lock ID. The lock is
+    held for the lifetime of the connection and released
+    automatically when the connection closes.
+
+    Returns True if lock acquired (or non-PostgreSQL DB).
+    Returns True on any error (fail-open for safety).
+    """
+    global _lock_connection
+
+    if not db_url.startswith("postgresql"):
+        # SQLite is single-process by nature — no lock needed
+        return True
+
+    try:
+        from sqlalchemy import create_engine, text
+
+        # Fixed lock ID for scheduler (arbitrary but stable)
+        lock_id = 88442211
+
+        engine = create_engine(db_url, pool_size=1)
+        conn = engine.connect()
+        result = conn.execute(
+            text(f"SELECT pg_try_advisory_lock({lock_id})")
+        )
+        acquired = result.scalar()
+
+        if acquired:
+            # Keep connection alive — lock released on close
+            _lock_connection = conn
+            logger.info(
+                "Acquired scheduler advisory lock"
+            )
+            return True
+        else:
+            conn.close()
+            engine.dispose()
+            logger.info(
+                "Another process holds the scheduler lock, "
+                "skipping scheduler init"
+            )
+            return False
+
+    except Exception as e:
+        # Fail-open: if we can't check the lock, start anyway
+        logger.warning(
+            "Could not acquire advisory lock (%s), "
+            "starting scheduler anyway (fail-open)",
+            e,
+        )
+        return True
 
 
 def init_scheduler(app) -> Optional[BackgroundScheduler]:
@@ -94,11 +183,30 @@ def init_scheduler(app) -> Optional[BackgroundScheduler]:
             "SQLALCHEMY_DATABASE_URI", "sqlite:///shuffify.db"
         )
 
+        # Advisory lock: prevent duplicate schedulers
+        if not _try_acquire_scheduler_lock(db_url):
+            return None
+
+        # Separate jobstore engine with small pool
+        from sqlalchemy import create_engine
+
+        jobstore_engine = create_engine(
+            db_url, pool_size=2, pool_pre_ping=True
+        )
+
+        pool_size = app.config.get(
+            "SCHEDULER_THREAD_POOL_SIZE", 10
+        )
+
         jobstores = {
-            "default": SQLAlchemyJobStore(url=db_url),
+            "default": SQLAlchemyJobStore(
+                engine=jobstore_engine
+            ),
         }
         executors = {
-            "default": ThreadPoolExecutor(max_workers=3),
+            "default": ThreadPoolExecutor(
+                max_workers=pool_size
+            ),
         }
         job_defaults = {
             "coalesce": True,
@@ -120,11 +228,19 @@ def init_scheduler(app) -> Optional[BackgroundScheduler]:
         _scheduler.add_listener(_on_job_missed, EVENT_JOB_MISSED)
 
         _scheduler.start()
-        logger.info("APScheduler started successfully")
+        logger.info(
+            "APScheduler started successfully "
+            "(pool_size=%d)",
+            pool_size,
+        )
 
         # Register existing enabled schedules from database
         with app.app_context():
             _register_existing_jobs(app)
+
+        # Clean up stale execution records from prior crashes
+        with app.app_context():
+            _cleanup_stale_executions()
 
         return _scheduler
 
@@ -318,10 +434,70 @@ def _execute_scheduled_job(app, schedule_id: int):
             )
 
 
+def _cleanup_stale_executions(max_age_minutes: int = 30):
+    """
+    Mark stuck 'running' execution records as failed.
+
+    On startup, any execution still marked 'running' from a
+    prior crash is stale. Mark it failed so the UI doesn't show
+    perpetually-running jobs.
+    """
+    try:
+        from shuffify.models.db import JobExecution
+
+        stale = JobExecution.query.filter_by(
+            status="running"
+        ).all()
+
+        if not stale:
+            return
+
+        now = datetime.now(timezone.utc)
+        cleaned = 0
+        for execution in stale:
+            started = execution.started_at
+            # Ensure timezone-aware comparison
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            age_minutes = (
+                now - started
+            ).total_seconds() / 60
+            if age_minutes > max_age_minutes:
+                execution.status = "failed"
+                execution.completed_at = now
+                execution.error_message = (
+                    "Marked as failed: stale execution "
+                    "from prior process"
+                )
+                cleaned += 1
+
+        if cleaned:
+            from shuffify.models.db import db
+
+            db.session.commit()
+            logger.info(
+                "Cleaned up %d stale execution records",
+                cleaned,
+            )
+
+    except Exception as e:
+        logger.warning(
+            "Failed to clean up stale executions: %s", e
+        )
+
+
 def shutdown_scheduler():
     """Gracefully shut down the scheduler."""
-    global _scheduler
+    global _scheduler, _lock_connection
     if _scheduler is not None and _scheduler.running:
         _scheduler.shutdown(wait=False)
         logger.info("Scheduler shut down")
     _scheduler = None
+
+    # Release advisory lock
+    if _lock_connection is not None:
+        try:
+            _lock_connection.close()
+        except Exception:
+            pass
+        _lock_connection = None

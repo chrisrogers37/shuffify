@@ -73,6 +73,9 @@ class Config:
 
     # Scheduler configuration
     SCHEDULER_ENABLED = True
+    SCHEDULER_THREAD_POOL_SIZE = int(
+        os.getenv('SCHEDULER_THREAD_POOL_SIZE', '10')
+    )
 
     # Application settings
     DEBUG = False

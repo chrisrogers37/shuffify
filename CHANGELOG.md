@@ -32,6 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Create button disabled when prerequisites (raid sources or archive pair) are missing
   - Workshop deep-links (`?setup=raids`, `?setup=archive`) auto-open sidebar to correct tab
   - Backend validation rejects raid schedules with unconfigured sources and rotate schedules without archive pair
+- **Scheduler Scaling Architecture** - Hardened scheduler for multi-user scaling
+  - Configurable thread pool size (default 10, up from 3) via `SCHEDULER_THREAD_POOL_SIZE`
+  - Separate jobstore database engine with dedicated connection pool (pool_size=2)
+  - PostgreSQL advisory lock prevents duplicate scheduler instances across Gunicorn workers (fail-open for safety)
+  - Scheduler health metrics (jobs_executed, jobs_failed, jobs_missed, last_execution_at) exposed via `/health` endpoint
+  - Stale execution cleanup on startup marks stuck "running" records as failed
 
 ### Changed
 - **Schedule Limit Removed** - Users can now create unlimited schedules (previously capped at 5)
