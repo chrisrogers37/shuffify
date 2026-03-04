@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Workshop Source Playlist Analysis** - Documentation evaluating the role of "Source Playlists" vs Raid Sources vs Archive/Rotation in the workshop workflow
+
 ### Changed
 - **Compact Workshop Sidebar** - Reduced vertical scroll for sidebar configuration panels
   - Raid Sources, Backup Playlist, and Snapshots panels are now collapsible (click header to expand)
