@@ -762,60 +762,63 @@
                         </button>
                     </div>
                 </div>
+            </div>
 
-                <!-- Rotation Schedule Section -->
-                <div class="mb-4">
-                    <span class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Rotation Schedule</span>
+            <!-- Rotation Schedule Section (always visible when tab is active) -->
+            <div id="rotation-section" class="hidden mb-4">
+                <span class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Rotation Schedule</span>
 
-                    <!-- No rotation schedule -->
-                    <div id="rotation-no-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
-                        <p class="text-white/40 text-xs mb-3">Set up automatic track rotation between this playlist and the archive.</p>
-                        <div class="space-y-2">
-                            <select id="rotation-mode-select" class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
-                                <option value="archive_oldest">Archive oldest</option>
-                                <option value="refresh">Refresh</option>
-                                <option value="swap">Swap</option>
+                <!-- No rotation schedule -->
+                <div id="rotation-no-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
+                    <p class="text-white/40 text-xs mb-3">Set up automatic track rotation between this playlist and the archive.</p>
+                    <p id="rotation-auto-create-hint" class="hidden text-white/30 text-xs mb-3 italic">An archive playlist will be created automatically when you enable rotation.</p>
+                    <div class="space-y-2">
+                        <select id="rotation-mode-select" class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
+                            <option value="archive_oldest">Archive oldest</option>
+                            <option value="refresh">Refresh</option>
+                            <option value="swap">Swap</option>
+                        </select>
+                        <div class="flex gap-2">
+                            <input id="rotation-count-input" type="number" min="1" max="50" value="5"
+                                   class="w-20 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
+                                   placeholder="#">
+                            <select id="rotation-freq-select" class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
+                                <option value="daily">Daily</option>
+                                <option value="every_3d">Every 3 days</option>
+                                <option value="weekly">Weekly</option>
                             </select>
-                            <div class="flex gap-2">
-                                <input id="rotation-count-input" type="number" min="1" max="50" value="5"
-                                       class="w-20 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
-                                       placeholder="#">
-                                <select id="rotation-freq-select" class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
-                                    <option value="daily">Daily</option>
-                                    <option value="every_3d">Every 3 days</option>
-                                    <option value="weekly">Weekly</option>
-                                </select>
-                            </div>
-                            <button onclick="createRotationSchedule()"
-                                    class="w-full px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
-                                Enable Rotation
-                            </button>
                         </div>
-                    </div>
-
-                    <!-- Existing rotation schedule -->
-                    <div id="rotation-has-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
-                        <div class="flex items-center justify-between mb-2">
-                            <div>
-                                <span id="rotation-schedule-mode" class="text-white text-sm font-medium"></span>
-                                <span id="rotation-schedule-detail" class="text-white/40 text-xs ml-1"></span>
-                            </div>
-                            <span id="rotation-schedule-badge" class="px-2 py-0.5 rounded-full text-xs font-semibold"></span>
-                        </div>
-                        <div class="flex gap-2 mt-3">
-                            <button onclick="toggleRotationSchedule()"
-                                    id="rotation-toggle-btn"
-                                    class="flex-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition duration-150 border border-white/20">
-                            </button>
-                            <button onclick="deleteRotationSchedule()"
-                                    class="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-semibold transition duration-150 border border-red-500/20">
-                                Delete
-                            </button>
-                        </div>
+                        <button id="rotation-enable-btn" onclick="createRotationSchedule()"
+                                class="w-full px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
+                            Enable Rotation
+                        </button>
                     </div>
                 </div>
 
-                <!-- Archive track list -->
+                <!-- Existing rotation schedule -->
+                <div id="rotation-has-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <div>
+                            <span id="rotation-schedule-mode" class="text-white text-sm font-medium"></span>
+                            <span id="rotation-schedule-detail" class="text-white/40 text-xs ml-1"></span>
+                        </div>
+                        <span id="rotation-schedule-badge" class="px-2 py-0.5 rounded-full text-xs font-semibold"></span>
+                    </div>
+                    <div class="flex gap-2 mt-3">
+                        <button onclick="toggleRotationSchedule()"
+                                id="rotation-toggle-btn"
+                                class="flex-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition duration-150 border border-white/20">
+                        </button>
+                        <button onclick="deleteRotationSchedule()"
+                                class="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-semibold transition duration-150 border border-red-500/20">
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Archive track list (only when paired) -->
+            <div id="archive-tracks-section" class="hidden">
                 <div class="flex items-center justify-between mb-2">
                     <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Archived Tracks</span>
                     <button onclick="loadArchiveTracks()"
@@ -3280,8 +3283,9 @@ function loadArchivePairInfo() {
             loadRotationConfig();
         } else {
             workshopState.archivePair = null;
-            noPair.classList.remove('hidden');
+            renderArchivePanel();
             populateArchiveLinkSelect();
+            loadRotationConfig();
         }
         archiveState.isLoaded = true;
     })
@@ -3295,17 +3299,29 @@ function loadArchivePairInfo() {
 function renderArchivePanel() {
     var noPair = document.getElementById('archive-no-pair');
     var paired = document.getElementById('archive-paired');
+    var rotationSection = document.getElementById('rotation-section');
+    var tracksSection = document.getElementById('archive-tracks-section');
+    var autoCreateHint = document.getElementById('rotation-auto-create-hint');
     noPair.classList.add('hidden');
+
+    // Always show the rotation section
+    rotationSection.classList.remove('hidden');
 
     if (!workshopState.archivePair) {
         noPair.classList.remove('hidden');
         paired.classList.add('hidden');
+        tracksSection.classList.add('hidden');
+        // Show hint that archive will be auto-created
+        autoCreateHint.classList.remove('hidden');
         return;
     }
+
+    autoCreateHint.classList.add('hidden');
 
     var nameEl = document.getElementById('archive-pair-name');
     nameEl.textContent = workshopState.archivePair.archive_playlist_name || 'Archive';
     paired.classList.remove('hidden');
+    tracksSection.classList.remove('hidden');
 
     // Set auto-archive toggle state
     var toggleBtn = document.getElementById('auto-archive-toggle');
@@ -3384,6 +3400,8 @@ function deleteArchivePair() {
         archiveState.rotationSchedule = null;
         updateArchiveQueueBadge();
         renderArchivePanel();
+        renderRotationConfig();
+        populateArchiveLinkSelect();
         showNotification('Archive pairing removed', 'success');
     })
     .catch(function(error) {
@@ -3506,7 +3524,12 @@ function toggleAutoArchive() {
 }
 
 function loadRotationConfig() {
-    if (!workshopState.archivePair) return;
+    if (!workshopState.archivePair) {
+        // No pair yet — just show the empty rotation form
+        archiveState.rotationSchedule = null;
+        renderRotationConfig();
+        return;
+    }
 
     fetch('/playlist/' + workshopState.playlistId + '/rotation-status')
     .then(function(response) {
@@ -3577,6 +3600,40 @@ function renderRotationConfig() {
     }
 }
 
+function ensureArchivePair() {
+    // Returns a promise that resolves when an archive pair exists
+    if (workshopState.archivePair) {
+        return Promise.resolve();
+    }
+
+    return fetch('/playlist/' + workshopState.playlistId + '/pair', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({
+            create_new: true,
+            production_playlist_name: workshopState.playlistName,
+        }),
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            return response.json().then(function(d) {
+                throw new Error(d.message || 'Failed to create archive');
+            });
+        }
+        return response.json();
+    })
+    .then(function(data) {
+        workshopState.archivePair = data.pair;
+        inlineBackup.pair = data.pair;
+        renderArchivePanel();
+        inlineBackup.renderLinked();
+        loadArchiveTracks();
+    });
+}
+
 function createRotationSchedule() {
     var modeSelect = document.getElementById('rotation-mode-select');
     var countInput = document.getElementById('rotation-count-input');
@@ -3586,23 +3643,32 @@ function createRotationSchedule() {
     var count = parseInt(countInput.value, 10) || 5;
     var freq = freqSelect.value;
 
-    fetch('/schedules/create', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-        },
-        body: JSON.stringify({
-            job_type: 'rotate',
-            target_playlist_id: workshopState.playlistId,
-            target_playlist_name: workshopState.playlistName,
-            schedule_type: 'interval',
-            schedule_value: freq,
-            algorithm_params: {
-                rotation_mode: mode,
-                rotation_count: count,
+    var btn = document.getElementById('rotation-enable-btn');
+    var originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = workshopState.archivePair ? 'Creating...' : 'Creating archive & schedule...';
+
+    // Auto-create archive pair if needed, then create the schedule
+    ensureArchivePair()
+    .then(function() {
+        return fetch('/schedules/create', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
             },
-        }),
+            body: JSON.stringify({
+                job_type: 'rotate',
+                target_playlist_id: workshopState.playlistId,
+                target_playlist_name: workshopState.playlistName,
+                schedule_type: 'interval',
+                schedule_value: freq,
+                algorithm_params: {
+                    rotation_mode: mode,
+                    rotation_count: count,
+                },
+            }),
+        });
     })
     .then(function(response) {
         if (!response.ok) {
@@ -3613,11 +3679,15 @@ function createRotationSchedule() {
         return response.json();
     })
     .then(function(data) {
+        btn.disabled = false;
+        btn.textContent = originalText;
         archiveState.rotationSchedule = data.schedule;
         renderRotationConfig();
         showNotification('Rotation schedule created!', 'success');
     })
     .catch(function(error) {
+        btn.disabled = false;
+        btn.textContent = originalText;
         showNotification(error.message || 'Failed to create rotation schedule', 'error');
     });
 }
@@ -3822,8 +3892,10 @@ function onArchiveTabActivated() {
                 loadArchiveTracks();
                 loadRotationConfig();
             } else {
-                document.getElementById('archive-no-pair').classList.remove('hidden');
+                // No pair — show archive creation options + rotation config
+                renderArchivePanel();
                 populateArchiveLinkSelect();
+                loadRotationConfig();
             }
             document.getElementById('archive-loading').classList.add('hidden');
         } else {

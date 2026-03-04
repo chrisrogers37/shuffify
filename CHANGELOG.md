@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Inline Archive Creation from Rotation Config** - Rotation schedule setup no longer requires a pre-existing archive pair
+  - Rotation Schedule section is now always visible in the Archive & Rotation sidebar tab
+  - Clicking "Enable Rotation" without an archive auto-creates a private `[Archive]` playlist and links it
+  - Hint text shown when no archive exists: "An archive playlist will be created automatically"
+  - Streamlines the workflow from two separate steps to a single one-click action
+
 ### Changed
 - **Workshop Visibility Overhaul** - Raid Sources, Backup Playlist, and Snapshots are now prominently displayed inline on the workshop page
   - Raid Sources card shows watched sources, quick-add URL, and Raid Now button directly in the right column
