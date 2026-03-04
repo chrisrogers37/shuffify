@@ -114,18 +114,20 @@ def schedules():
             pairs_by_playlist=pairs_by_playlist,
         )
 
-    except (AuthenticationError, PlaylistError) as e:
+    except AuthenticationError as e:
         logger.error(
-            "Auth/playlist error loading schedules: %s", e
+            "Auth error loading schedules: %s", e
         )
         return clear_session_and_show_login(
             "Your session has expired. "
             "Please log in again."
         )
-    except ScheduleError as e:
+    except (PlaylistError, ScheduleError) as e:
         logger.error(
-            "Schedule service error loading schedules page: %s",
+            "Service error loading schedules page: %s "
+            "[type=%s]",
             e,
+            type(e).__name__,
         )
         flash(
             "Could not load schedule data. "
