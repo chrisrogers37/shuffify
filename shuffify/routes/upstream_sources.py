@@ -32,13 +32,29 @@ def list_upstream_sources(
     playlist_id, client=None, user=None
 ):
     """List all upstream sources for a target playlist."""
-    sources = UpstreamSourceService.list_sources(
-        user.spotify_id, playlist_id
-    )
-    return jsonify({
-        "success": True,
-        "sources": [s.to_dict() for s in sources],
-    })
+    try:
+        sources = UpstreamSourceService.list_sources(
+            user.spotify_id, playlist_id
+        )
+        return jsonify({
+            "success": True,
+            "sources": [
+                s.to_dict() for s in sources
+            ],
+        })
+    except UpstreamSourceError as e:
+        return json_error(str(e), 400)
+    except Exception as e:
+        logger.error(
+            "Failed to list upstream sources for "
+            "playlist %s: %s [type=%s]",
+            playlist_id,
+            e,
+            type(e).__name__,
+        )
+        return json_error(
+            "Could not load upstream sources.", 500
+        )
 
 
 @main.route(

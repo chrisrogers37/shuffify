@@ -224,7 +224,17 @@ def _init_database(app):
                 )
                 if os.path.isdir(migrations_dir):
                     from flask_migrate import upgrade
-                    upgrade()
+                    try:
+                        upgrade()
+                    except Exception as mig_err:
+                        logger.error(
+                            "Alembic migration failed: %s "
+                            "[type=%s]. Database schema may "
+                            "be out of date.",
+                            mig_err,
+                            type(mig_err).__name__,
+                            exc_info=True,
+                        )
                 else:
                     logger.warning(
                         "No migrations/ directory found. "
@@ -239,10 +249,13 @@ def _init_database(app):
             app.config.get("SQLALCHEMY_DATABASE_URI", "not set"),
         )
     except Exception as e:
-        logger.warning(
-            "Database initialization failed: %s. "
-            "Persistence features will be unavailable.",
+        logger.error(
+            "Database initialization failed: %s "
+            "[type=%s]. Persistence features will "
+            "be unavailable.",
             e,
+            type(e).__name__,
+            exc_info=True,
         )
 
 
