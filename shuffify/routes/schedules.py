@@ -79,28 +79,50 @@ def schedules():
 
         algorithms = ShuffleService.list_algorithms()
 
-        # Load Workshop data for dynamic form rendering
-        upstream_sources = (
-            UpstreamSourceService.list_all_sources_for_user(
-                db_user.spotify_id
-            )
-        )
+        # Load Workshop data for dynamic form rendering.
+        # Degrade gracefully if queries fail (e.g. pending
+        # migrations) — the page still renders without this
+        # data; users just can't see raid sources or pairs
+        # in the create-schedule modal.
         upstream_sources_map = {}
-        for src in upstream_sources:
-            target_id = src.target_playlist_id
-            if target_id not in upstream_sources_map:
-                upstream_sources_map[target_id] = []
-            upstream_sources_map[target_id].append(
-                src.to_dict()
+        try:
+            upstream_sources = (
+                UpstreamSourceService
+                .list_all_sources_for_user(
+                    db_user.spotify_id
+                )
+            )
+            for src in upstream_sources:
+                target_id = src.target_playlist_id
+                if target_id not in upstream_sources_map:
+                    upstream_sources_map[target_id] = []
+                upstream_sources_map[target_id].append(
+                    src.to_dict()
+                )
+        except Exception as e:
+            logger.warning(
+                "Could not load upstream sources for "
+                "schedules page: %s [type=%s]",
+                e,
+                type(e).__name__,
             )
 
-        pairs = PlaylistPairService.get_pairs_for_user(
-            db_user.id
-        )
-        pairs_by_playlist = {
-            p.production_playlist_id: p.to_dict()
-            for p in pairs
-        }
+        pairs_by_playlist = {}
+        try:
+            pairs = PlaylistPairService.get_pairs_for_user(
+                db_user.id
+            )
+            pairs_by_playlist = {
+                p.production_playlist_id: p.to_dict()
+                for p in pairs
+            }
+        except Exception as e:
+            logger.warning(
+                "Could not load playlist pairs for "
+                "schedules page: %s [type=%s]",
+                e,
+                type(e).__name__,
+            )
 
         return render_template(
             "schedules.html",
