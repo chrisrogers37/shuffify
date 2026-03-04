@@ -196,12 +196,12 @@
             </div>
 
             <!-- Sidebar Controls (1/3 width on large screens) -->
-            <div class="lg:col-span-1 space-y-6">
+            <div class="lg:col-span-1 space-y-3">
 
                 <!-- Shuffle Controls Panel -->
-                <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-5">
-                    <h2 class="text-white font-bold text-lg mb-4">Shuffle Preview</h2>
-                    <p class="text-white/60 text-sm mb-4">Preview a shuffle without affecting Spotify. Only saved when you click "Save to Spotify".</p>
+                <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-4">
+                    <h2 class="text-white font-bold text-sm mb-2">Shuffle Preview</h2>
+                    <p class="text-white/60 text-xs mb-3">Preview a shuffle without affecting Spotify. Only saved when you click "Save to Spotify".</p>
 
                     <!-- Algorithm Selection -->
                     <div class="mb-4">
@@ -241,16 +241,24 @@
                 <!-- ============================================================= -->
                 <!-- Raid Sources Panel (Inline — always visible)                  -->
                 <!-- ============================================================= -->
-                <div id="inline-raid-panel" class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-5">
-                    <div class="flex items-center justify-between mb-3">
-                        <h2 class="text-white font-bold text-lg flex items-center">
+                <div id="inline-raid-panel" class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden">
+                    <button onclick="toggleCollapsiblePanel('raid')"
+                            class="w-full flex items-center justify-between px-4 py-3 text-white font-bold text-sm hover:bg-white/5 transition duration-150"
+                            aria-expanded="false"
+                            aria-controls="raid-panel-body">
+                        <span class="flex items-center">
                             <svg class="w-5 h-5 mr-2 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                             </svg>
                             Raid Sources
-                        </h2>
-                        <span id="inline-raid-source-count" class="text-white/40 text-xs font-medium"></span>
-                    </div>
+                            <span id="inline-raid-source-count" class="ml-2 text-white/40 text-xs font-medium"></span>
+                        </span>
+                        <svg id="raid-panel-chevron" class="w-4 h-4 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </button>
+
+                    <div id="raid-panel-body" class="hidden px-4 pb-4">
                     <p class="text-white/50 text-xs mb-3">Playlists Shuffify will pull new tracks from during raids. These persist until you remove them.</p>
 
                     <!-- Quick-add URL -->
@@ -299,20 +307,29 @@
                             Details
                         </button>
                     </div>
+                    </div>
                 </div>
 
                 <!-- ============================================================= -->
-                <!-- Backup Playlist Panel (Inline — always visible)               -->
+                <!-- Backup Playlist Panel (Collapsible)                           -->
                 <!-- ============================================================= -->
-                <div id="inline-backup-panel" class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-5">
-                    <div class="flex items-center justify-between mb-3">
-                        <h2 class="text-white font-bold text-lg flex items-center">
+                <div id="inline-backup-panel" class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden">
+                    <button onclick="toggleCollapsiblePanel('backup')"
+                            class="w-full flex items-center justify-between px-4 py-3 text-white font-bold text-sm hover:bg-white/5 transition duration-150"
+                            aria-expanded="false"
+                            aria-controls="backup-panel-body">
+                        <span class="flex items-center">
                             <svg class="w-5 h-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
                             </svg>
                             Backup Playlist
-                        </h2>
-                    </div>
+                        </span>
+                        <svg id="backup-panel-chevron" class="w-4 h-4 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </button>
+
+                    <div id="backup-panel-body" class="hidden px-4 pb-4">
                     <p class="text-white/50 text-xs mb-3">Link a backup playlist so removed tracks are automatically preserved. Also used for track rotation.</p>
 
                     <!-- Loading state -->
@@ -370,22 +387,31 @@
                             Manage Backup & Rotation
                         </button>
                     </div>
+                    </div>
                 </div>
 
                 <!-- ============================================================= -->
-                <!-- Snapshots Panel (Inline — always visible)                     -->
+                <!-- Snapshots Panel (Collapsible)                                 -->
                 <!-- ============================================================= -->
-                <div id="inline-snapshots-panel" class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-5">
-                    <div class="flex items-center justify-between mb-3">
-                        <h2 class="text-white font-bold text-lg flex items-center">
+                <div id="inline-snapshots-panel" class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden">
+                    <button onclick="toggleCollapsiblePanel('snapshots')"
+                            class="w-full flex items-center justify-between px-4 py-3 text-white font-bold text-sm hover:bg-white/5 transition duration-150"
+                            aria-expanded="false"
+                            aria-controls="snapshots-panel-body">
+                        <span class="flex items-center">
                             <svg class="w-5 h-5 mr-2 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
                             </svg>
                             Snapshots
-                        </h2>
-                        <span id="inline-snapshot-count" class="text-white/40 text-xs font-medium"></span>
-                    </div>
+                            <span id="inline-snapshot-count" class="ml-2 text-white/40 text-xs font-medium"></span>
+                        </span>
+                        <svg id="snapshots-panel-chevron" class="w-4 h-4 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </button>
+
+                    <div id="snapshots-panel-body" class="hidden px-4 pb-4">
                     <p class="text-white/50 text-xs mb-3">Automatic backups are taken before every shuffle, raid, and commit. View and restore previous states.</p>
 
                     <!-- Loading -->
@@ -420,6 +446,7 @@
                             View All
                         </button>
                     </div>
+                    </div>
                 </div>
 
                 <!-- ============================================================= -->
@@ -428,7 +455,7 @@
                 <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden">
                     <button id="search-panel-toggle"
                             onclick="toggleSearchPanel()"
-                            class="w-full flex items-center justify-between px-5 py-3 text-white font-bold text-sm hover:bg-white/5 transition duration-150"
+                            class="w-full flex items-center justify-between px-4 py-3 text-white font-bold text-sm hover:bg-white/5 transition duration-150"
                             aria-expanded="false"
                             aria-controls="search-panel-body">
                         <span class="flex items-center">
@@ -2217,6 +2244,16 @@ function toggleSearchPanel() {
     chevron.classList.toggle('rotate-180', isHidden);
     toggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
 }
+
+function toggleCollapsiblePanel(name) {
+    var body = document.getElementById(name + '-panel-body');
+    var chevron = document.getElementById(name + '-panel-chevron');
+    var btn = body.previousElementSibling;
+    var isHidden = body.classList.contains('hidden');
+    body.classList.toggle('hidden');
+    chevron.classList.toggle('rotate-180', isHidden);
+    if (btn) btn.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+}
 </script>
 
 <script>
@@ -2755,7 +2792,7 @@ var inlineSnapshots = {
             'auto_pre_raid': { label: 'Pre-Raid', color: 'bg-yellow-500/20 text-yellow-300' },
             'auto_pre_commit': { label: 'Pre-Commit', color: 'bg-purple-500/20 text-purple-300' },
             'manual': { label: 'Manual', color: 'bg-green-500/20 text-green-300' },
-            'scheduled_pre_execution': { label: 'Scheduled', color: 'bg-orange-500/20 text-orange-300' },
+            'scheduled_pre_execution': { label: 'Auto-backup', color: 'bg-orange-500/20 text-orange-300' },
         };
 
         this.snapshots.forEach(function(snap) {
@@ -3001,7 +3038,7 @@ const SNAPSHOT_TYPE_CONFIG = {
     'auto_pre_raid': { label: 'Pre-Raid', color: 'bg-yellow-500/20 text-yellow-300' },
     'auto_pre_commit': { label: 'Pre-Commit', color: 'bg-purple-500/20 text-purple-300' },
     'manual': { label: 'Manual', color: 'bg-green-500/20 text-green-300' },
-    'scheduled_pre_execution': { label: 'Scheduled', color: 'bg-orange-500/20 text-orange-300' },
+    'scheduled_pre_execution': { label: 'Auto-backup', color: 'bg-orange-500/20 text-orange-300' },
 };
 
 function formatRelativeTime(dateStr) {
