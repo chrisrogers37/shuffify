@@ -38,7 +38,21 @@ def execute_shuffle(
 
     try:
         raw_tracks = api.get_playlist_tracks(target_id)
+
+        logger.info(
+            "Schedule %d: fetched %d raw tracks from %s",
+            schedule.id,
+            len(raw_tracks) if raw_tracks else 0,
+            target_id,
+        )
+
         if not raw_tracks:
+            logger.warning(
+                "Schedule %d: no tracks returned for %s "
+                "— skipping shuffle",
+                schedule.id,
+                target_id,
+            )
             return {"tracks_added": 0, "tracks_total": 0}
 
         _auto_snapshot_before_shuffle(
@@ -62,6 +76,12 @@ def execute_shuffle(
                 )
 
         if not tracks:
+            logger.warning(
+                "Schedule %d: %d raw tracks but 0 had "
+                "valid URIs — skipping shuffle",
+                schedule.id,
+                len(raw_tracks),
+            )
             return {"tracks_added": 0, "tracks_total": 0}
 
         algorithm_class = ShuffleRegistry.get_algorithm(
@@ -73,14 +93,25 @@ def execute_shuffle(
             tracks, **params
         )
 
+        logger.info(
+            "Schedule %d: applying %d shuffled tracks "
+            "to %s via Spotify API",
+            schedule.id,
+            len(shuffled_uris),
+            target_id,
+        )
+
         api.update_playlist_tracks(
             target_id, shuffled_uris
         )
 
         logger.info(
-            f"Schedule {schedule.id}: shuffled "
-            f"{schedule.target_playlist_name} "
-            f"with {algorithm_name}"
+            "Schedule %d: shuffled "
+            "%s with %s (%d tracks)",
+            schedule.id,
+            schedule.target_playlist_name,
+            algorithm_name,
+            len(shuffled_uris),
         )
 
         return {

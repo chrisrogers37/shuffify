@@ -300,8 +300,9 @@ class SpotifyAPI:
             f"/playlists/{playlist_id}/items"
         )
         for item in all_items:
-            # Spotify Feb 2026: nested key renamed from "track" to "item"
-            track = item.get("item")
+            # Spotify Feb 2026: nested key renamed from "track"
+            # to "item". Fall back to "track" for compatibility.
+            track = item.get("item") or item.get("track")
             # Only include valid tracks (not None, not local-only)
             if track and track.get("uri"):
                 tracks.append(track)

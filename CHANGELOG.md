@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Schedule Execution History** - Each schedule card now has a collapsible history panel showing past runs
+  - Displays status, timestamp, tracks processed, and error messages per execution
+  - Uses existing `/schedules/<id>/history` API endpoint
+- **Schedule Time-of-Day Picker** - Set preferred run time for daily, every-3-day, and weekly schedules
+  - Time input converts to cron-based scheduling (e.g., "daily at 09:00 UTC")
+  - Schedule cards display human-readable time for cron schedules
+  - Sub-daily intervals (6h, 12h) continue to use interval-based scheduling
+
+### Changed
+- **Improved Schedule Execution Feedback** - "Run Now" returns detailed results including track count
+  - Response message now shows "N tracks processed" or warns if no tracks were processed
+  - Execution results include `tracks_total`, `tracks_added`, and error details
+
+### Fixed
+- **Spotify API Track Parsing Robustness** - Added fallback from "item" to "track" key when parsing playlist tracks
+  - Prevents silent zero-track shuffle when API response format differs from expected
+- **Stale Schedule Object in execute_now()** - Added `db.session.expire()` before refresh to ensure latest status is read
 - **Workshop Raid URL Input** - Raids tab now uses URL-based external playlist input instead of own-playlist dropdown
   - Paste a Spotify playlist URL to add external sources for raiding
   - Self-referencing and own-playlist guards prevent misconfiguration

@@ -465,8 +465,29 @@ def run_schedule_now(
     schedule_id, client=None, user=None
 ):
     """Manually trigger a schedule execution."""
-    result = JobExecutorService.execute_now(
-        schedule_id, user.id
+    try:
+        result = JobExecutorService.execute_now(
+            schedule_id, user.id
+        )
+    except Exception as e:
+        logger.error(
+            "Manual run of schedule %d failed: %s "
+            "[type=%s]",
+            schedule_id,
+            e,
+            type(e).__name__,
+            exc_info=True,
+        )
+        return json_error(
+            f"Execution failed: {e}", 500
+        )
+
+    tracks = result.get("tracks_total", 0)
+    msg = (
+        f"Executed successfully — {tracks} tracks "
+        f"processed."
+        if tracks
+        else "Executed but no tracks were processed."
     )
 
     log_activity(
@@ -481,10 +502,7 @@ def run_schedule_now(
         },
     )
 
-    return json_success(
-        "Schedule executed successfully.",
-        result=result,
-    )
+    return json_success(msg, result=result)
 
 
 @main.route("/schedules/<int:schedule_id>/history")
