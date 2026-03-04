@@ -53,8 +53,24 @@ class TestHealthEndpoint:
         assert "timestamp" in data
         assert "T" in data["timestamp"]
 
-    def test_health_response_has_exactly_two_keys(self, client):
-        """Health response should only contain 'status' and 'timestamp'."""
+    def test_health_response_has_expected_keys(self, client):
+        """Health response should contain status, timestamp, and scheduler."""
         response = client.get("/health")
         data = response.get_json()
-        assert set(data.keys()) == {"status", "timestamp"}
+        assert set(data.keys()) == {
+            "status",
+            "timestamp",
+            "scheduler",
+        }
+
+    def test_health_scheduler_metrics_shape(self, client):
+        """Scheduler metrics should include expected fields."""
+        response = client.get("/health")
+        data = response.get_json()
+        sched = data["scheduler"]
+        assert "scheduler_running" in sched
+        assert "jobs_executed" in sched
+        assert "jobs_failed" in sched
+        assert "jobs_missed" in sched
+        assert "last_execution_at" in sched
+        assert isinstance(sched["scheduler_running"], bool)

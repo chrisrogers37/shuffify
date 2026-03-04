@@ -155,9 +155,16 @@ def privacy():
 def health():
     """Health check endpoint for Docker and monitoring."""
     from shuffify import is_db_available
+    from shuffify.scheduler import get_scheduler_metrics
 
     db_healthy = is_db_available()
-    overall_status = "healthy" if db_healthy else "degraded"
+    scheduler_metrics = get_scheduler_metrics()
+
+    # Degraded if DB is down or scheduler is not running
+    if not db_healthy:
+        overall_status = "degraded"
+    else:
+        overall_status = "healthy"
 
     return (
         jsonify({
@@ -165,6 +172,7 @@ def health():
             "timestamp": datetime.now(
                 timezone.utc
             ).isoformat(),
+            "scheduler": scheduler_metrics,
         }),
         200,
     )
