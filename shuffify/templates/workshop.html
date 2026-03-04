@@ -238,106 +238,280 @@
                     </button>
                 </div>
 
-                <!-- External Playlist Panel -->
-                <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-5">
-                    <h2 class="text-white font-bold text-lg mb-3">Load External Playlist</h2>
-                    <p class="text-white/60 text-sm mb-3">Paste a Spotify playlist URL or search by name.</p>
+                <!-- ============================================================= -->
+                <!-- Raid Sources Panel (Inline — always visible)                  -->
+                <!-- ============================================================= -->
+                <div id="inline-raid-panel" class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-white font-bold text-lg flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                            </svg>
+                            Raid Sources
+                        </h2>
+                        <span id="inline-raid-source-count" class="text-white/40 text-xs font-medium"></span>
+                    </div>
+                    <p class="text-white/50 text-xs mb-3">Playlists Shuffify will pull new tracks from during raids. These persist until you remove them.</p>
 
-                    <!-- URL/Search Input -->
-                    <div class="flex space-x-2 mb-3">
-                        <input id="external-playlist-input"
-                               type="text"
-                               placeholder="Paste URL or search..."
-                               class="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm placeholder-white/40 focus:ring-2 focus:ring-white/30 focus:border-transparent"
-                               onkeydown="if(event.key==='Enter') loadExternalPlaylist()">
-                        <button onclick="loadExternalPlaylist()"
-                                class="px-3 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white text-sm font-semibold transition duration-150 flex-shrink-0">
-                            Load
+                    <!-- Quick-add URL -->
+                    <div class="flex gap-2 mb-3">
+                        <input id="inline-raid-url-input" type="text"
+                               placeholder="Paste Spotify playlist URL..."
+                               class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 placeholder-white/30"
+                               onkeydown="if(event.key==='Enter'){inlineRaid.addUrl();}">
+                        <button id="inline-raid-add-btn" onclick="inlineRaid.addUrl()"
+                                class="px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+                                title="Add raid source">
+                            +
                         </button>
                     </div>
+                    <div id="inline-raid-url-feedback" class="hidden mb-2 text-xs"></div>
 
-                    <!-- Search Results (hidden by default) -->
-                    <div id="external-search-results" class="hidden max-h-48 overflow-y-auto workshop-scrollbar space-y-1">
+                    <!-- Source list -->
+                    <div id="inline-raid-sources" class="space-y-1.5 mb-3 max-h-40 overflow-y-auto workshop-scrollbar">
+                        <!-- Populated by inlineRaid.render() -->
                     </div>
 
-                    <!-- Recently Loaded (from session) -->
-                    {% if session.get('external_playlist_history') %}
-                    <div class="mt-3">
-                        <p class="text-white/50 text-xs uppercase tracking-wide font-semibold mb-2">Recently Loaded</p>
-                        <div id="external-recent-list" class="space-y-1 max-h-32 overflow-y-auto workshop-scrollbar">
-                            {% for entry in session.get('external_playlist_history', [])[:5] %}
-                            <button onclick="loadExternalById('{{ entry.id }}')"
-                                    class="w-full text-left px-2 py-1.5 rounded-lg hover:bg-white/10 transition duration-150 text-sm text-white/80 truncate">
-                                {{ entry.name }} <span class="text-white/40">({{ entry.track_count }} tracks)</span>
-                            </button>
-                            {% endfor %}
-                        </div>
+                    <!-- Empty state -->
+                    <div id="inline-raid-empty" class="hidden rounded-xl bg-white/5 border border-white/10 p-4 text-center">
+                        <p class="text-white/40 text-sm">No raid sources</p>
+                        <p class="text-white/25 text-xs mt-1">Paste a playlist URL above to start watching for new tracks.</p>
                     </div>
-                    {% endif %}
 
-                    <!-- Loading indicator -->
-                    <div id="external-loading" class="hidden py-3 text-center">
-                        <svg class="w-6 h-6 mx-auto animate-spin text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                        <p class="text-white/50 text-xs mt-1">Loading...</p>
+                    <!-- Loading state -->
+                    <div id="inline-raid-loading" class="hidden text-center py-3">
+                        <div class="inline-block w-5 h-5 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
+                    </div>
+
+                    <!-- Actions row -->
+                    <div class="flex gap-2">
+                        <button id="inline-raid-now-btn" onclick="inlineRaid.raidNow()"
+                                disabled
+                                class="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-semibold text-sm transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                            </svg>
+                            Raid Now
+                        </button>
+                        <button onclick="workshopSidebar.open('raids')"
+                                class="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white text-sm transition duration-150 border border-white/10"
+                                title="Open raid details in sidebar">
+                            Details
+                        </button>
                     </div>
                 </div>
 
-                <!-- Search Spotify Panel -->
-                <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-5">
-                    <h2 class="text-white font-bold text-lg mb-3">Search Spotify</h2>
-                    <p class="text-white/60 text-sm mb-3">Find tracks to add to your playlist.</p>
+                <!-- ============================================================= -->
+                <!-- Backup Playlist Panel (Inline — always visible)               -->
+                <!-- ============================================================= -->
+                <div id="inline-backup-panel" class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-white font-bold text-lg flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
+                            </svg>
+                            Backup Playlist
+                        </h2>
+                    </div>
+                    <p class="text-white/50 text-xs mb-3">Link a backup playlist so removed tracks are automatically preserved. Also used for track rotation.</p>
 
-                    <!-- Search Input -->
-                    <div class="flex items-center space-x-2 mb-4">
-                        <input id="search-input"
-                               type="text"
-                               placeholder="Search tracks, artists..."
-                               class="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-white/30 focus:border-transparent text-sm"
-                               onkeydown="if(event.key==='Enter'){event.preventDefault(); searchSpotify();}"
-                               maxlength="200"
-                               autocomplete="off">
-                        <button id="search-btn"
-                                onclick="searchSpotify()"
-                                class="px-3 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white transition duration-150 flex-shrink-0"
-                                title="Search">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <!-- Loading state -->
+                    <div id="inline-backup-loading" class="hidden text-center py-3">
+                        <div class="inline-block w-5 h-5 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
+                    </div>
+
+                    <!-- Not linked state -->
+                    <div id="inline-backup-unlinked" class="hidden">
+                        <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                            <button onclick="inlineBackup.createNew()"
+                                    class="w-full px-4 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 mb-2">
+                                Create New Backup Playlist
+                            </button>
+                            <div class="relative my-2">
+                                <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-white/10"></div></div>
+                                <div class="relative flex justify-center"><span class="bg-[#1a1a2e] px-2 text-white/30 text-xs">or</span></div>
+                            </div>
+                            <select id="inline-backup-link-select"
+                                    class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 mb-2">
+                                <option value="">Link existing playlist...</option>
+                            </select>
+                            <button id="inline-backup-link-btn" onclick="inlineBackup.linkExisting()"
+                                    class="w-full px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    disabled>
+                                Link as Backup
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Linked state -->
+                    <div id="inline-backup-linked" class="hidden">
+                        <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-white/50 text-xs uppercase tracking-wide font-semibold">Linked Backup</span>
+                                <button onclick="inlineBackup.unlink()"
+                                        class="text-red-400/60 hover:text-red-400 text-xs transition duration-150"
+                                        title="Remove backup pairing">
+                                    Unlink
+                                </button>
+                            </div>
+                            <p id="inline-backup-name" class="text-white font-medium text-sm truncate"></p>
+                            <p id="inline-backup-track-count" class="text-white/40 text-xs mt-1"></p>
+                            <!-- Auto-archive toggle -->
+                            <div class="flex items-center justify-between mt-3 pt-3 border-t border-white/10">
+                                <span class="text-white/60 text-xs">Auto-backup on remove</span>
+                                <button id="inline-auto-backup-toggle" onclick="inlineBackup.toggleAutoArchive()"
+                                        class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200">
+                                    <span class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200"></span>
+                                </button>
+                            </div>
+                        </div>
+                        <button onclick="workshopSidebar.open('archive')"
+                                class="w-full mt-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white text-sm transition duration-150 border border-white/10 text-center">
+                            Manage Backup & Rotation
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ============================================================= -->
+                <!-- Snapshots Panel (Inline — always visible)                     -->
+                <!-- ============================================================= -->
+                <div id="inline-snapshots-panel" class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-white font-bold text-lg flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                            Snapshots
+                        </h2>
+                        <span id="inline-snapshot-count" class="text-white/40 text-xs font-medium"></span>
+                    </div>
+                    <p class="text-white/50 text-xs mb-3">Automatic backups are taken before every shuffle, raid, and commit. View and restore previous states.</p>
+
+                    <!-- Loading -->
+                    <div id="inline-snapshot-loading" class="hidden text-center py-3">
+                        <div class="inline-block w-5 h-5 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
+                    </div>
+
+                    <!-- Recent snapshots -->
+                    <div id="inline-snapshot-list" class="space-y-1.5 mb-3 max-h-40 overflow-y-auto workshop-scrollbar">
+                        <!-- Populated by inlineSnapshots.render() -->
+                    </div>
+
+                    <!-- Empty state -->
+                    <div id="inline-snapshot-empty" class="hidden rounded-xl bg-white/5 border border-white/10 p-4 text-center">
+                        <p class="text-white/40 text-sm">No snapshots yet</p>
+                        <p class="text-white/25 text-xs mt-1">Backups are created automatically before shuffles, raids, and commits.</p>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="flex gap-2">
+                        <button onclick="inlineSnapshots.takeSnapshot()"
+                                class="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-semibold text-sm transition duration-150 border border-white/20">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                            Take Snapshot
+                        </button>
+                        <button onclick="workshopSidebar.open('snapshots')"
+                                class="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white text-sm transition duration-150 border border-white/10"
+                                title="View full snapshot timeline">
+                            View All
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ============================================================= -->
+                <!-- Search & External Playlists (Collapsible)                     -->
+                <!-- ============================================================= -->
+                <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden">
+                    <button id="search-panel-toggle"
+                            onclick="toggleSearchPanel()"
+                            class="w-full flex items-center justify-between px-5 py-3 text-white font-bold text-sm hover:bg-white/5 transition duration-150"
+                            aria-expanded="false"
+                            aria-controls="search-panel-body">
+                        <span class="flex items-center">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                             </svg>
-                        </button>
-                    </div>
-
-                    <!-- Search Results Container -->
-                    <div id="search-results" class="space-y-1 max-h-[40vh] overflow-y-auto workshop-scrollbar">
-                        <p id="search-placeholder" class="text-white/40 text-sm text-center py-4">
-                            Type a query and press Enter
-                        </p>
-                    </div>
-
-                    <!-- Load More Button (hidden by default) -->
-                    <button id="search-load-more"
-                            onclick="searchSpotifyMore()"
-                            class="hidden w-full mt-2 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-sm transition duration-150">
-                        Load more results
+                            Search & Add Tracks
+                        </span>
+                        <svg id="search-panel-chevron" class="w-4 h-4 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
                     </button>
-                </div>
 
-                <!-- Playlist Info Panel -->
-                <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-5">
-                    <h2 class="text-white font-bold text-lg mb-3">Playlist Info</h2>
-                    <dl class="space-y-2 text-sm">
-                        <div class="flex justify-between">
-                            <dt class="text-white/60">Tracks</dt>
-                            <dd class="text-white font-medium" id="info-track-count">{{ playlist.tracks | length }}</dd>
+                    <div id="search-panel-body" class="hidden">
+                        <!-- Search Spotify -->
+                        <div class="px-5 py-4 border-t border-white/10">
+                            <h3 class="text-white font-semibold text-sm mb-2">Search Spotify</h3>
+                            <div class="flex items-center space-x-2 mb-3">
+                                <input id="search-input"
+                                       type="text"
+                                       placeholder="Search tracks, artists..."
+                                       class="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-white/30 focus:border-transparent text-sm"
+                                       onkeydown="if(event.key==='Enter'){event.preventDefault(); searchSpotify();}"
+                                       maxlength="200"
+                                       autocomplete="off">
+                                <button id="search-btn"
+                                        onclick="searchSpotify()"
+                                        class="px-3 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white transition duration-150 flex-shrink-0"
+                                        title="Search">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div id="search-results" class="space-y-1 max-h-[40vh] overflow-y-auto workshop-scrollbar">
+                                <p id="search-placeholder" class="text-white/40 text-sm text-center py-4">
+                                    Type a query and press Enter
+                                </p>
+                            </div>
+                            <button id="search-load-more"
+                                    onclick="searchSpotifyMore()"
+                                    class="hidden w-full mt-2 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-sm transition duration-150">
+                                Load more results
+                            </button>
                         </div>
-                        {% if playlist.description %}
-                        <div>
-                            <dt class="text-white/60 mb-1">Description</dt>
-                            <dd class="text-white/80 text-xs">{{ playlist.description }}</dd>
+
+                        <!-- Load External Playlist -->
+                        <div class="px-5 py-4 border-t border-white/10">
+                            <h3 class="text-white font-semibold text-sm mb-2">Load External Playlist</h3>
+                            <div class="flex space-x-2 mb-3">
+                                <input id="external-playlist-input"
+                                       type="text"
+                                       placeholder="Paste URL or search..."
+                                       class="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm placeholder-white/40 focus:ring-2 focus:ring-white/30 focus:border-transparent"
+                                       onkeydown="if(event.key==='Enter') loadExternalPlaylist()">
+                                <button onclick="loadExternalPlaylist()"
+                                        class="px-3 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white text-sm font-semibold transition duration-150 flex-shrink-0">
+                                    Load
+                                </button>
+                            </div>
+                            <div id="external-search-results" class="hidden max-h-48 overflow-y-auto workshop-scrollbar space-y-1">
+                            </div>
+                            {% if session.get('external_playlist_history') %}
+                            <div class="mt-3">
+                                <p class="text-white/50 text-xs uppercase tracking-wide font-semibold mb-2">Recently Loaded</p>
+                                <div id="external-recent-list" class="space-y-1 max-h-32 overflow-y-auto workshop-scrollbar">
+                                    {% for entry in session.get('external_playlist_history', [])[:5] %}
+                                    <button onclick="loadExternalById('{{ entry.id }}')"
+                                            class="w-full text-left px-2 py-1.5 rounded-lg hover:bg-white/10 transition duration-150 text-sm text-white/80 truncate">
+                                        {{ entry.name }} <span class="text-white/40">({{ entry.track_count }} tracks)</span>
+                                    </button>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
+                            <div id="external-loading" class="hidden py-3 text-center">
+                                <svg class="w-6 h-6 mx-auto animate-spin text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                                <p class="text-white/50 text-xs mt-1">Loading...</p>
+                            </div>
                         </div>
-                        {% endif %}
-                    </dl>
+                    </div>
                 </div>
             </div>
         </div>
@@ -588,60 +762,63 @@
                         </button>
                     </div>
                 </div>
+            </div>
 
-                <!-- Rotation Schedule Section -->
-                <div class="mb-4">
-                    <span class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Rotation Schedule</span>
+            <!-- Rotation Schedule Section (always visible when tab is active) -->
+            <div id="rotation-section" class="hidden mb-4">
+                <span class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Rotation Schedule</span>
 
-                    <!-- No rotation schedule -->
-                    <div id="rotation-no-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
-                        <p class="text-white/40 text-xs mb-3">Set up automatic track rotation between this playlist and the archive.</p>
-                        <div class="space-y-2">
-                            <select id="rotation-mode-select" class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
-                                <option value="archive_oldest">Archive oldest</option>
-                                <option value="refresh">Refresh</option>
-                                <option value="swap">Swap</option>
+                <!-- No rotation schedule -->
+                <div id="rotation-no-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
+                    <p class="text-white/40 text-xs mb-3">Set up automatic track rotation between this playlist and the archive.</p>
+                    <p id="rotation-auto-create-hint" class="hidden text-white/30 text-xs mb-3 italic">An archive playlist will be created automatically when you enable rotation.</p>
+                    <div class="space-y-2">
+                        <select id="rotation-mode-select" class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
+                            <option value="archive_oldest">Archive oldest</option>
+                            <option value="refresh">Refresh</option>
+                            <option value="swap">Swap</option>
+                        </select>
+                        <div class="flex gap-2">
+                            <input id="rotation-count-input" type="number" min="1" max="50" value="5"
+                                   class="w-20 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
+                                   placeholder="#">
+                            <select id="rotation-freq-select" class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
+                                <option value="daily">Daily</option>
+                                <option value="every_3d">Every 3 days</option>
+                                <option value="weekly">Weekly</option>
                             </select>
-                            <div class="flex gap-2">
-                                <input id="rotation-count-input" type="number" min="1" max="50" value="5"
-                                       class="w-20 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
-                                       placeholder="#">
-                                <select id="rotation-freq-select" class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
-                                    <option value="daily">Daily</option>
-                                    <option value="every_3d">Every 3 days</option>
-                                    <option value="weekly">Weekly</option>
-                                </select>
-                            </div>
-                            <button onclick="createRotationSchedule()"
-                                    class="w-full px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
-                                Enable Rotation
-                            </button>
                         </div>
-                    </div>
-
-                    <!-- Existing rotation schedule -->
-                    <div id="rotation-has-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
-                        <div class="flex items-center justify-between mb-2">
-                            <div>
-                                <span id="rotation-schedule-mode" class="text-white text-sm font-medium"></span>
-                                <span id="rotation-schedule-detail" class="text-white/40 text-xs ml-1"></span>
-                            </div>
-                            <span id="rotation-schedule-badge" class="px-2 py-0.5 rounded-full text-xs font-semibold"></span>
-                        </div>
-                        <div class="flex gap-2 mt-3">
-                            <button onclick="toggleRotationSchedule()"
-                                    id="rotation-toggle-btn"
-                                    class="flex-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition duration-150 border border-white/20">
-                            </button>
-                            <button onclick="deleteRotationSchedule()"
-                                    class="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-semibold transition duration-150 border border-red-500/20">
-                                Delete
-                            </button>
-                        </div>
+                        <button id="rotation-enable-btn" onclick="createRotationSchedule()"
+                                class="w-full px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
+                            Enable Rotation
+                        </button>
                     </div>
                 </div>
 
-                <!-- Archive track list -->
+                <!-- Existing rotation schedule -->
+                <div id="rotation-has-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <div>
+                            <span id="rotation-schedule-mode" class="text-white text-sm font-medium"></span>
+                            <span id="rotation-schedule-detail" class="text-white/40 text-xs ml-1"></span>
+                        </div>
+                        <span id="rotation-schedule-badge" class="px-2 py-0.5 rounded-full text-xs font-semibold"></span>
+                    </div>
+                    <div class="flex gap-2 mt-3">
+                        <button onclick="toggleRotationSchedule()"
+                                id="rotation-toggle-btn"
+                                class="flex-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition duration-150 border border-white/20">
+                        </button>
+                        <button onclick="deleteRotationSchedule()"
+                                class="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-semibold transition duration-150 border border-red-500/20">
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Archive track list (only when paired) -->
+            <div id="archive-tracks-section" class="hidden">
                 <div class="flex items-center justify-between mb-2">
                     <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Archived Tracks</span>
                     <button onclick="loadArchiveTracks()"
@@ -1242,9 +1419,7 @@ function deleteTrack(uri, buttonElement) {
 function updateTrackCount() {
     const count = workshopState.workingUris.length;
     const countEl = document.getElementById('track-count');
-    const infoCountEl = document.getElementById('info-track-count');
     if (countEl) countEl.textContent = count;
-    if (infoCountEl) infoCountEl.textContent = count;
 }
 
 
@@ -2031,6 +2206,600 @@ function displayExternalTracks(playlistInfo, tracks) {
 
 <script>
 // =============================================================================
+// Search & Add Tracks Panel Toggle
+// =============================================================================
+function toggleSearchPanel() {
+    var body = document.getElementById('search-panel-body');
+    var chevron = document.getElementById('search-panel-chevron');
+    var toggle = document.getElementById('search-panel-toggle');
+    var isHidden = body.classList.contains('hidden');
+    body.classList.toggle('hidden');
+    chevron.classList.toggle('rotate-180', isHidden);
+    toggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+}
+</script>
+
+<script>
+// =============================================================================
+// Inline Raid Sources Panel
+// Eagerly loads raid status and provides quick-add, list, and raid-now.
+// =============================================================================
+
+var inlineRaid = {
+    loaded: false,
+    isLoading: false,
+    status: null,
+
+    init: function() {
+        this.loadStatus();
+    },
+
+    loadStatus: function() {
+        var self = this;
+        var loading = document.getElementById('inline-raid-loading');
+        var sources = document.getElementById('inline-raid-sources');
+        var empty = document.getElementById('inline-raid-empty');
+
+        loading.classList.remove('hidden');
+        sources.innerHTML = '';
+        empty.classList.add('hidden');
+        self.isLoading = true;
+
+        fetch('/playlist/' + workshopState.playlistId + '/raid-status')
+        .then(function(response) {
+            if (!response.ok) throw new Error('Failed to load raid status');
+            return response.json();
+        })
+        .then(function(data) {
+            loading.classList.add('hidden');
+            self.status = data.raid_status;
+            self.loaded = true;
+            self.render();
+            // Keep sidebar raidPanel in sync if already loaded
+            if (typeof raidPanel !== 'undefined') {
+                raidPanel.status = data.raid_status;
+                raidPanel.loaded = true;
+            }
+        })
+        .catch(function(error) {
+            loading.classList.add('hidden');
+            empty.classList.remove('hidden');
+            console.error('Inline raid status error:', error);
+        })
+        .finally(function() {
+            self.isLoading = false;
+        });
+    },
+
+    render: function() {
+        if (!this.status) return;
+        var sourcesEl = document.getElementById('inline-raid-sources');
+        var emptyEl = document.getElementById('inline-raid-empty');
+        var countEl = document.getElementById('inline-raid-source-count');
+        var raidBtn = document.getElementById('inline-raid-now-btn');
+
+        var sources = this.status.sources || [];
+        countEl.textContent = sources.length + ' / 10';
+
+        raidBtn.disabled = sources.length === 0;
+
+        if (sources.length === 0) {
+            sourcesEl.innerHTML = '';
+            emptyEl.classList.remove('hidden');
+            return;
+        }
+
+        emptyEl.classList.add('hidden');
+        var html = '';
+        sources.forEach(function(src) {
+            var name = src.source_name || src.source_playlist_id || 'Unknown';
+            var trackInfo = src.last_track_count ? src.last_track_count + ' tracks' : '';
+            html += '<div class="flex items-center p-2 rounded-lg bg-white/5 hover:bg-white/8 transition duration-150 group">'
+                + '<svg class="w-4 h-4 text-yellow-400/60 flex-shrink-0 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">'
+                + '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>'
+                + '<div class="flex-1 min-w-0">'
+                + '<p class="text-white text-xs font-medium truncate">' + escapeHtml(name) + '</p>'
+                + (trackInfo ? '<p class="text-white/30 text-xs">' + trackInfo + '</p>' : '')
+                + '</div>'
+                + '<button onclick="inlineRaid.removeSource(' + src.id + ')"'
+                + ' class="ml-1 p-1 rounded text-white/15 hover:text-red-400 opacity-0 group-hover:opacity-100 transition duration-150 flex-shrink-0" title="Remove source">'
+                + '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">'
+                + '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>'
+                + '</button>'
+                + '</div>';
+        });
+        sourcesEl.innerHTML = html;
+    },
+
+    addUrl: function() {
+        var input = document.getElementById('inline-raid-url-input');
+        var feedback = document.getElementById('inline-raid-url-feedback');
+        var btn = document.getElementById('inline-raid-add-btn');
+        var url = input.value.trim();
+
+        if (!url) {
+            feedback.textContent = 'Please paste a Spotify playlist URL';
+            feedback.className = 'mb-2 text-xs text-red-300';
+            feedback.classList.remove('hidden');
+            return;
+        }
+
+        var isValid = url.match(/open\.spotify\.com\/playlist\//) ||
+                      url.match(/^spotify:playlist:/) ||
+                      url.match(/^[a-zA-Z0-9]{22}$/);
+        if (!isValid) {
+            feedback.textContent = 'Not a valid Spotify playlist URL';
+            feedback.className = 'mb-2 text-xs text-red-300';
+            feedback.classList.remove('hidden');
+            return;
+        }
+
+        btn.disabled = true;
+        feedback.textContent = 'Adding source...';
+        feedback.className = 'mb-2 text-xs text-white/40';
+        feedback.classList.remove('hidden');
+
+        var self = this;
+        fetch('/playlist/' + workshopState.playlistId + '/raid-add-url', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify({
+                url: url,
+                target_playlist_name: workshopState.playlistName,
+                auto_schedule: true,
+                schedule_value: 'daily',
+            }),
+        })
+        .then(function(response) {
+            return response.json().then(function(d) {
+                if (!response.ok) throw new Error(d.message || 'Failed to add source');
+                return d;
+            });
+        })
+        .then(function(data) {
+            input.value = '';
+            feedback.classList.add('hidden');
+            showNotification('Now watching external source', 'success');
+            self.loadStatus();
+            // Also refresh sidebar raid panel if loaded
+            if (typeof raidPanel !== 'undefined' && raidPanel.loaded) {
+                raidPanel.loaded = false;
+            }
+        })
+        .catch(function(error) {
+            feedback.textContent = error.message || 'Failed to add source';
+            feedback.className = 'mb-2 text-xs text-red-300';
+            feedback.classList.remove('hidden');
+        })
+        .finally(function() {
+            btn.disabled = false;
+        });
+    },
+
+    removeSource: function(sourceId) {
+        var self = this;
+        fetch('/playlist/' + workshopState.playlistId + '/raid-unwatch', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify({ source_id: sourceId }),
+        })
+        .then(function(response) {
+            if (!response.ok) throw new Error('Failed to remove source');
+            return response.json();
+        })
+        .then(function() {
+            showNotification('Source removed', 'success');
+            self.loadStatus();
+            if (typeof raidPanel !== 'undefined' && raidPanel.loaded) {
+                raidPanel.loaded = false;
+            }
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Failed to remove source', 'error');
+        });
+    },
+
+    raidNow: function() {
+        var btn = document.getElementById('inline-raid-now-btn');
+        var originalHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<div class="inline-block w-4 h-4 mr-1.5 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div> Raiding...';
+
+        var self = this;
+        fetch('/playlist/' + workshopState.playlistId + '/raid-now', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify({}),
+        })
+        .then(function(response) {
+            if (!response.ok) {
+                return response.json().then(function(d) {
+                    throw new Error(d.message || 'Raid failed');
+                });
+            }
+            return response.json();
+        })
+        .then(function(data) {
+            var msg = 'Raid complete: ' + (data.tracks_added || 0) + ' new tracks added';
+            showNotification(msg, 'success');
+            self.loadStatus();
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Raid failed', 'error');
+        })
+        .finally(function() {
+            btn.innerHTML = originalHTML;
+            btn.disabled = self.status && self.status.source_count === 0;
+        });
+    },
+};
+
+// =============================================================================
+// Inline Backup Playlist Panel
+// =============================================================================
+
+var inlineBackup = {
+    loaded: false,
+    pair: null,
+
+    init: function() {
+        this.loadStatus();
+        this.loadUserPlaylists();
+    },
+
+    loadStatus: function() {
+        var self = this;
+        var loading = document.getElementById('inline-backup-loading');
+        var unlinked = document.getElementById('inline-backup-unlinked');
+        var linked = document.getElementById('inline-backup-linked');
+
+        loading.classList.remove('hidden');
+        unlinked.classList.add('hidden');
+        linked.classList.add('hidden');
+
+        fetch('/playlist/' + workshopState.playlistId + '/pair')
+        .then(function(response) {
+            if (!response.ok) throw new Error('Failed to load backup status');
+            return response.json();
+        })
+        .then(function(data) {
+            loading.classList.add('hidden');
+            self.loaded = true;
+            if (data.paired && data.pair) {
+                self.pair = data.pair;
+                workshopState.archivePair = data.pair;
+                self.renderLinked();
+            } else {
+                self.pair = null;
+                workshopState.archivePair = null;
+                unlinked.classList.remove('hidden');
+            }
+            // Keep sidebar archive state in sync
+            if (typeof archiveState !== 'undefined') {
+                archiveState.isLoaded = true;
+            }
+        })
+        .catch(function(error) {
+            loading.classList.add('hidden');
+            unlinked.classList.remove('hidden');
+            console.error('Inline backup status error:', error);
+        });
+    },
+
+    loadUserPlaylists: function() {
+        fetch('/api/user-playlists', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        })
+        .then(function(response) {
+            if (!response.ok) return;
+            return response.json();
+        })
+        .then(function(data) {
+            if (!data || !data.playlists) return;
+            var select = document.getElementById('inline-backup-link-select');
+            var linkBtn = document.getElementById('inline-backup-link-btn');
+            // Also populate the sidebar select if it exists
+            var sidebarSelect = document.getElementById('archive-link-select');
+
+            data.playlists.forEach(function(pl) {
+                if (pl.id === workshopState.playlistId) return;
+                var opt = document.createElement('option');
+                opt.value = pl.id;
+                opt.textContent = pl.name + ' (' + (pl.tracks || 0) + ' tracks)';
+                opt.dataset.name = pl.name;
+                select.appendChild(opt);
+                // Mirror to sidebar
+                if (sidebarSelect) {
+                    sidebarSelect.appendChild(opt.cloneNode(true));
+                }
+            });
+
+            select.disabled = false;
+            select.addEventListener('change', function() {
+                linkBtn.disabled = !select.value;
+            });
+            if (sidebarSelect) {
+                var sidebarBtn = document.getElementById('archive-link-btn');
+                sidebarSelect.disabled = false;
+                sidebarSelect.addEventListener('change', function() {
+                    if (sidebarBtn) sidebarBtn.disabled = !sidebarSelect.value;
+                });
+            }
+        })
+        .catch(function() { /* silent */ });
+    },
+
+    renderLinked: function() {
+        var linked = document.getElementById('inline-backup-linked');
+        var unlinked = document.getElementById('inline-backup-unlinked');
+
+        unlinked.classList.add('hidden');
+        linked.classList.remove('hidden');
+
+        document.getElementById('inline-backup-name').textContent = this.pair.archive_playlist_name || this.pair.archive_playlist_id;
+        document.getElementById('inline-backup-track-count').textContent = '';
+
+        var toggle = document.getElementById('inline-auto-backup-toggle');
+        if (this.pair.auto_archive_on_remove) {
+            toggle.className = 'relative inline-flex h-5 w-9 items-center rounded-full bg-spotify-green transition-colors duration-200';
+            toggle.querySelector('span').className = 'inline-block h-3 w-3 transform rounded-full bg-white translate-x-5 transition-transform duration-200';
+        } else {
+            toggle.className = 'relative inline-flex h-5 w-9 items-center rounded-full bg-white/20 transition-colors duration-200';
+            toggle.querySelector('span').className = 'inline-block h-3 w-3 transform rounded-full bg-white translate-x-1 transition-transform duration-200';
+        }
+    },
+
+    createNew: function() {
+        var self = this;
+        fetch('/playlist/' + workshopState.playlistId + '/pair', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify({
+                create_new: true,
+                production_playlist_name: workshopState.playlistName,
+            }),
+        })
+        .then(function(response) {
+            return response.json().then(function(d) {
+                if (!response.ok) throw new Error(d.message || 'Failed to create backup');
+                return d;
+            });
+        })
+        .then(function(data) {
+            self.pair = data.pair;
+            workshopState.archivePair = data.pair;
+            self.renderLinked();
+            showNotification('Backup playlist created!', 'success');
+            if (typeof archiveState !== 'undefined') {
+                archiveState.isLoaded = false;
+            }
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Failed to create backup playlist', 'error');
+        });
+    },
+
+    linkExisting: function() {
+        var select = document.getElementById('inline-backup-link-select');
+        var playlistId = select.value;
+        if (!playlistId) return;
+
+        var playlistName = select.options[select.selectedIndex].dataset.name || playlistId;
+        var self = this;
+
+        fetch('/playlist/' + workshopState.playlistId + '/pair', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify({
+                create_new: false,
+                archive_playlist_id: playlistId,
+                archive_playlist_name: playlistName,
+                production_playlist_name: workshopState.playlistName,
+            }),
+        })
+        .then(function(response) {
+            return response.json().then(function(d) {
+                if (!response.ok) throw new Error(d.message || 'Failed to link backup');
+                return d;
+            });
+        })
+        .then(function(data) {
+            self.pair = data.pair;
+            workshopState.archivePair = data.pair;
+            self.renderLinked();
+            showNotification('Backup playlist linked!', 'success');
+            if (typeof archiveState !== 'undefined') {
+                archiveState.isLoaded = false;
+            }
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Failed to link backup playlist', 'error');
+        });
+    },
+
+    unlink: function() {
+        if (!confirm('Remove backup playlist pairing? Existing backup tracks will remain on Spotify.')) return;
+        var self = this;
+
+        fetch('/playlist/' + workshopState.playlistId + '/pair', {
+            method: 'DELETE',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        })
+        .then(function(response) {
+            if (!response.ok) throw new Error('Failed to unlink');
+            return response.json();
+        })
+        .then(function() {
+            self.pair = null;
+            workshopState.archivePair = null;
+            document.getElementById('inline-backup-linked').classList.add('hidden');
+            document.getElementById('inline-backup-unlinked').classList.remove('hidden');
+            showNotification('Backup playlist unlinked', 'success');
+            if (typeof archiveState !== 'undefined') {
+                archiveState.isLoaded = false;
+            }
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Failed to unlink', 'error');
+        });
+    },
+
+    toggleAutoArchive: function() {
+        if (!this.pair) return;
+        var newVal = !this.pair.auto_archive_on_remove;
+        var self = this;
+
+        fetch('/playlist/' + workshopState.playlistId + '/pair', {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify({ auto_archive_on_remove: newVal }),
+        })
+        .then(function(response) {
+            if (!response.ok) throw new Error('Failed to update');
+            return response.json();
+        })
+        .then(function(data) {
+            self.pair = data.pair;
+            workshopState.archivePair = data.pair;
+            self.renderLinked();
+            showNotification('Auto-backup ' + (newVal ? 'enabled' : 'disabled'), 'success');
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Failed to update setting', 'error');
+        });
+    },
+};
+
+// =============================================================================
+// Inline Snapshots Panel
+// =============================================================================
+
+var inlineSnapshots = {
+    loaded: false,
+    snapshots: [],
+
+    init: function() {
+        this.loadSnapshots();
+    },
+
+    loadSnapshots: function() {
+        var self = this;
+        var loading = document.getElementById('inline-snapshot-loading');
+        var list = document.getElementById('inline-snapshot-list');
+        var empty = document.getElementById('inline-snapshot-empty');
+        var countEl = document.getElementById('inline-snapshot-count');
+
+        loading.classList.remove('hidden');
+        list.innerHTML = '';
+        empty.classList.add('hidden');
+
+        fetch('/playlist/' + workshopState.playlistId + '/snapshots?limit=5', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        })
+        .then(function(response) {
+            if (!response.ok) throw new Error('Failed to load snapshots');
+            return response.json();
+        })
+        .then(function(data) {
+            loading.classList.add('hidden');
+            self.snapshots = data.snapshots || [];
+            self.loaded = true;
+            countEl.textContent = self.snapshots.length > 0 ? self.snapshots.length + ' recent' : '';
+
+            if (self.snapshots.length === 0) {
+                empty.classList.remove('hidden');
+                return;
+            }
+
+            self.render();
+        })
+        .catch(function(error) {
+            loading.classList.add('hidden');
+            empty.classList.remove('hidden');
+            console.error('Inline snapshot error:', error);
+        });
+    },
+
+    render: function() {
+        var list = document.getElementById('inline-snapshot-list');
+        var empty = document.getElementById('inline-snapshot-empty');
+
+        if (this.snapshots.length === 0) {
+            list.innerHTML = '';
+            empty.classList.remove('hidden');
+            return;
+        }
+
+        empty.classList.add('hidden');
+        var html = '';
+        var typeConfig = {
+            'auto_pre_shuffle': { label: 'Pre-Shuffle', color: 'bg-blue-500/20 text-blue-300' },
+            'auto_pre_raid': { label: 'Pre-Raid', color: 'bg-yellow-500/20 text-yellow-300' },
+            'auto_pre_commit': { label: 'Pre-Commit', color: 'bg-purple-500/20 text-purple-300' },
+            'manual': { label: 'Manual', color: 'bg-green-500/20 text-green-300' },
+            'scheduled_pre_execution': { label: 'Scheduled', color: 'bg-orange-500/20 text-orange-300' },
+        };
+
+        this.snapshots.forEach(function(snap) {
+            var cfg = typeConfig[snap.snapshot_type] || { label: snap.snapshot_type, color: 'bg-white/10 text-white/60' };
+            var timeStr = formatRelativeTime(snap.created_at);
+            var trackCount = snap.track_count || 0;
+
+            html += '<div class="flex items-center p-2 rounded-lg bg-white/5 hover:bg-white/8 transition duration-150">'
+                + '<div class="flex-1 min-w-0">'
+                + '<div class="flex items-center gap-2">'
+                + '<span class="px-1.5 py-0.5 rounded text-xs font-medium ' + cfg.color + '">' + cfg.label + '</span>'
+                + '<span class="text-white/30 text-xs">' + timeStr + '</span>'
+                + '</div>'
+                + '<p class="text-white/50 text-xs mt-0.5">' + trackCount + ' tracks'
+                + (snap.description ? ' - ' + escapeHtml(snap.description) : '') + '</p>'
+                + '</div>'
+                + '</div>';
+        });
+        list.innerHTML = html;
+    },
+
+    takeSnapshot: function() {
+        // Open snapshot create form in sidebar
+        workshopSidebar.open('snapshots');
+        setTimeout(function() {
+            if (typeof openManualSnapshotDialog === 'function') {
+                openManualSnapshotDialog();
+            }
+        }, 300);
+    },
+};
+
+// =============================================================================
+// Initialize inline panels on page load
+// =============================================================================
+document.addEventListener('DOMContentLoaded', function() {
+    inlineRaid.init();
+    inlineBackup.init();
+    inlineSnapshots.init();
+});
+</script>
+
+<script>
+// =============================================================================
 // Workshop Powertools Sidebar
 // Self-contained namespace -- does NOT modify any existing workshopState,
 // SortableJS, or search functionality.
@@ -2514,8 +3283,9 @@ function loadArchivePairInfo() {
             loadRotationConfig();
         } else {
             workshopState.archivePair = null;
-            noPair.classList.remove('hidden');
+            renderArchivePanel();
             populateArchiveLinkSelect();
+            loadRotationConfig();
         }
         archiveState.isLoaded = true;
     })
@@ -2529,17 +3299,29 @@ function loadArchivePairInfo() {
 function renderArchivePanel() {
     var noPair = document.getElementById('archive-no-pair');
     var paired = document.getElementById('archive-paired');
+    var rotationSection = document.getElementById('rotation-section');
+    var tracksSection = document.getElementById('archive-tracks-section');
+    var autoCreateHint = document.getElementById('rotation-auto-create-hint');
     noPair.classList.add('hidden');
+
+    // Always show the rotation section
+    rotationSection.classList.remove('hidden');
 
     if (!workshopState.archivePair) {
         noPair.classList.remove('hidden');
         paired.classList.add('hidden');
+        tracksSection.classList.add('hidden');
+        // Show hint that archive will be auto-created
+        autoCreateHint.classList.remove('hidden');
         return;
     }
+
+    autoCreateHint.classList.add('hidden');
 
     var nameEl = document.getElementById('archive-pair-name');
     nameEl.textContent = workshopState.archivePair.archive_playlist_name || 'Archive';
     paired.classList.remove('hidden');
+    tracksSection.classList.remove('hidden');
 
     // Set auto-archive toggle state
     var toggleBtn = document.getElementById('auto-archive-toggle');
@@ -2618,6 +3400,8 @@ function deleteArchivePair() {
         archiveState.rotationSchedule = null;
         updateArchiveQueueBadge();
         renderArchivePanel();
+        renderRotationConfig();
+        populateArchiveLinkSelect();
         showNotification('Archive pairing removed', 'success');
     })
     .catch(function(error) {
@@ -2740,7 +3524,12 @@ function toggleAutoArchive() {
 }
 
 function loadRotationConfig() {
-    if (!workshopState.archivePair) return;
+    if (!workshopState.archivePair) {
+        // No pair yet — just show the empty rotation form
+        archiveState.rotationSchedule = null;
+        renderRotationConfig();
+        return;
+    }
 
     fetch('/playlist/' + workshopState.playlistId + '/rotation-status')
     .then(function(response) {
@@ -2811,6 +3600,40 @@ function renderRotationConfig() {
     }
 }
 
+function ensureArchivePair() {
+    // Returns a promise that resolves when an archive pair exists
+    if (workshopState.archivePair) {
+        return Promise.resolve();
+    }
+
+    return fetch('/playlist/' + workshopState.playlistId + '/pair', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({
+            create_new: true,
+            production_playlist_name: workshopState.playlistName,
+        }),
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            return response.json().then(function(d) {
+                throw new Error(d.message || 'Failed to create archive');
+            });
+        }
+        return response.json();
+    })
+    .then(function(data) {
+        workshopState.archivePair = data.pair;
+        inlineBackup.pair = data.pair;
+        renderArchivePanel();
+        inlineBackup.renderLinked();
+        loadArchiveTracks();
+    });
+}
+
 function createRotationSchedule() {
     var modeSelect = document.getElementById('rotation-mode-select');
     var countInput = document.getElementById('rotation-count-input');
@@ -2820,23 +3643,32 @@ function createRotationSchedule() {
     var count = parseInt(countInput.value, 10) || 5;
     var freq = freqSelect.value;
 
-    fetch('/schedules/create', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-        },
-        body: JSON.stringify({
-            job_type: 'rotate',
-            target_playlist_id: workshopState.playlistId,
-            target_playlist_name: workshopState.playlistName,
-            schedule_type: 'interval',
-            schedule_value: freq,
-            algorithm_params: {
-                rotation_mode: mode,
-                rotation_count: count,
+    var btn = document.getElementById('rotation-enable-btn');
+    var originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = workshopState.archivePair ? 'Creating...' : 'Creating archive & schedule...';
+
+    // Auto-create archive pair if needed, then create the schedule
+    ensureArchivePair()
+    .then(function() {
+        return fetch('/schedules/create', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
             },
-        }),
+            body: JSON.stringify({
+                job_type: 'rotate',
+                target_playlist_id: workshopState.playlistId,
+                target_playlist_name: workshopState.playlistName,
+                schedule_type: 'interval',
+                schedule_value: freq,
+                algorithm_params: {
+                    rotation_mode: mode,
+                    rotation_count: count,
+                },
+            }),
+        });
     })
     .then(function(response) {
         if (!response.ok) {
@@ -2847,11 +3679,15 @@ function createRotationSchedule() {
         return response.json();
     })
     .then(function(data) {
+        btn.disabled = false;
+        btn.textContent = originalText;
         archiveState.rotationSchedule = data.schedule;
         renderRotationConfig();
         showNotification('Rotation schedule created!', 'success');
     })
     .catch(function(error) {
+        btn.disabled = false;
+        btn.textContent = originalText;
         showNotification(error.message || 'Failed to create rotation schedule', 'error');
     });
 }
@@ -3047,7 +3883,24 @@ function updateArchiveQueueBadge() {
 
 function onArchiveTabActivated() {
     if (!archiveState.isLoaded) {
-        loadArchivePairInfo();
+        // Use inline backup data if available
+        if (inlineBackup.loaded) {
+            archiveState.isLoaded = true;
+            if (inlineBackup.pair) {
+                workshopState.archivePair = inlineBackup.pair;
+                renderArchivePanel();
+                loadArchiveTracks();
+                loadRotationConfig();
+            } else {
+                // No pair — show archive creation options + rotation config
+                renderArchivePanel();
+                populateArchiveLinkSelect();
+                loadRotationConfig();
+            }
+            document.getElementById('archive-loading').classList.add('hidden');
+        } else {
+            loadArchivePairInfo();
+        }
     }
 }
 </script>
@@ -3362,7 +4215,16 @@ var raidPanel = {
 
 function onRaidsTabActivated() {
     if (!raidPanel.loaded) {
-        raidPanel.init();
+        // Use inline panel data if available to avoid duplicate fetch
+        if (inlineRaid.loaded && inlineRaid.status) {
+            raidPanel.status = inlineRaid.status;
+            raidPanel.loaded = true;
+            raidPanel.render();
+            document.getElementById('raid-panel-content').classList.remove('hidden');
+            document.getElementById('raid-loading').classList.add('hidden');
+        } else {
+            raidPanel.init();
+        }
     }
 }
 </script>

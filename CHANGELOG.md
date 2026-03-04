@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Inline Archive Creation from Rotation Config** - Rotation schedule setup no longer requires a pre-existing archive pair
+  - Rotation Schedule section is now always visible in the Archive & Rotation sidebar tab
+  - Clicking "Enable Rotation" without an archive auto-creates a private `[Archive]` playlist and links it
+  - Hint text shown when no archive exists: "An archive playlist will be created automatically"
+  - Streamlines the workflow from two separate steps to a single one-click action
+
+### Changed
+- **Workshop Visibility Overhaul** - Raid Sources, Backup Playlist, and Snapshots are now prominently displayed inline on the workshop page
+  - Raid Sources card shows watched sources, quick-add URL, and Raid Now button directly in the right column
+  - Backup Playlist card shows linked archive status with create/link/unlink actions inline
+  - Snapshots card shows recent automatic backups with quick Take Snapshot action
+  - All three panels load eagerly on page load (no sidebar toggle needed)
+  - Search Spotify and Load External Playlist consolidated into a single collapsible section
+  - Removed standalone Playlist Info panel (track count already shown in header)
+  - Sidebar remains available for detailed management via "Details" / "View All" / "Manage" links
+
+### Added
 - **Schedule Execution History** - Each schedule card now has a collapsible history panel showing past runs
   - Displays status, timestamp, tracks processed, and error messages per execution
   - Uses existing `/schedules/<id>/history` API endpoint
