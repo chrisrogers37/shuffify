@@ -237,7 +237,8 @@ class JobExecutorService:
         # Execute synchronously
         JobExecutorService.execute(schedule_id)
 
-        # Reload to get updated status
+        # Reload to get updated status from a clean state
+        db.session.expire(schedule)
         db.session.refresh(schedule)
 
         if schedule.last_status == "failed":
@@ -245,14 +246,35 @@ class JobExecutorService:
                 f"Execution failed: {schedule.last_error}"
             )
 
-        return {
-            "status": schedule.last_status,
+        # Return detailed result from latest execution
+        latest = (
+            JobExecution.query.filter_by(
+                schedule_id=schedule_id
+            )
+            .order_by(JobExecution.started_at.desc())
+            .first()
+        )
+
+        result = {
+            "status": schedule.last_status or "unknown",
             "last_run_at": (
                 schedule.last_run_at.isoformat()
                 if schedule.last_run_at
                 else None
             ),
         }
+
+        if latest:
+            result["tracks_total"] = (
+                latest.tracks_total or 0
+            )
+            result["tracks_added"] = (
+                latest.tracks_added or 0
+            )
+            if latest.error_message:
+                result["error"] = latest.error_message
+
+        return result
 
     @staticmethod
     def _get_spotify_api(user: User) -> SpotifyAPI:

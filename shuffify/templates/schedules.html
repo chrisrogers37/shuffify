@@ -71,7 +71,13 @@
                         </div>
                         <h3 class="text-white font-bold text-lg truncate">{{ schedule.target_playlist_name }}</h3>
                         <p class="text-white/60 text-sm">
+                            {% if schedule.schedule_type == 'cron' %}
+                            {% set parts = schedule.schedule_value.split() %}
+                            Runs {% if parts[2] == '*/3' %}every 3 days{% elif parts[4] == '1' %}weekly{% else %}daily{% endif %}
+                            at {{ '%02d:%02d' | format(parts[1]|int, parts[0]|int) }} UTC
+                            {% else %}
                             Runs {{ schedule.schedule_value | replace('_', ' ') }}
+                            {% endif %}
                             {% if schedule.algorithm_name %}
                             &middot; {{ schedule.algorithm_name }}
                             {% endif %}
@@ -99,6 +105,13 @@
 
                     <!-- Actions -->
                     <div class="flex items-center space-x-2 flex-shrink-0">
+                        <button onclick="toggleHistory({{ schedule.id }})"
+                                class="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition duration-150 border border-white/20"
+                                title="Execution History">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </button>
                         <button onclick="runScheduleNow({{ schedule.id }})"
                                 class="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition duration-150 border border-white/20"
                                 title="Run Now">
@@ -127,6 +140,17 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                             </svg>
                         </button>
+                    </div>
+                </div>
+
+                <!-- Execution History (collapsible) -->
+                <div id="history-{{ schedule.id }}" class="hidden mt-3 pt-3 border-t border-white/10">
+                    <div class="flex items-center justify-between mb-2">
+                        <h4 class="text-white/70 text-xs font-semibold uppercase tracking-wider">Execution History</h4>
+                        <span id="history-loading-{{ schedule.id }}" class="text-white/40 text-xs hidden">Loading...</span>
+                    </div>
+                    <div id="history-list-{{ schedule.id }}" class="space-y-1 text-xs">
+                        <!-- Populated dynamically -->
                     </div>
                 </div>
             </div>
@@ -232,6 +256,7 @@
                 <div>
                     <label class="block text-sm font-medium text-white/90 mb-1">Frequency</label>
                     <select id="modal-frequency" name="schedule_value"
+                            onchange="updateTimePickerVisibility()"
                             class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white">
                         <option value="every_6h">Every 6 hours</option>
                         <option value="every_12h">Every 12 hours</option>
@@ -239,6 +264,15 @@
                         <option value="every_3d">Every 3 days</option>
                         <option value="weekly">Weekly</option>
                     </select>
+                </div>
+
+                <!-- Preferred Time (shown for daily/weekly/every_3d) -->
+                <div id="modal-time-section">
+                    <label class="block text-sm font-medium text-white/90 mb-1">Preferred Time</label>
+                    <input type="time" id="modal-preferred-time"
+                           value="09:00"
+                           class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white">
+                    <p class="text-white/40 text-xs mt-1">What time of day to run (UTC).</p>
                 </div>
 
                 <!-- Buttons -->
@@ -273,6 +307,18 @@ function showCreateModal() {
     document.getElementById('create-modal').classList.remove('hidden');
     updateModalFields();
     onTargetPlaylistChange();
+    updateTimePickerVisibility();
+}
+
+function updateTimePickerVisibility() {
+    const freq = document.getElementById('modal-frequency').value;
+    const timeSection = document.getElementById('modal-time-section');
+    // Show time picker for daily, every_3d, weekly (not for sub-daily intervals)
+    if (freq === 'daily' || freq === 'every_3d' || freq === 'weekly') {
+        timeSection.classList.remove('hidden');
+    } else {
+        timeSection.classList.add('hidden');
+    }
 }
 
 function hideCreateModal() {
@@ -436,13 +482,32 @@ document.getElementById('create-schedule-form').addEventListener('submit', funct
     const targetSelect = document.getElementById('modal-target-playlist');
     const targetId = targetSelect.value;
     const targetName = targetSelect.options[targetSelect.selectedIndex].dataset.name;
-    const scheduleValue = document.getElementById('modal-frequency').value;
+    const frequency = document.getElementById('modal-frequency').value;
+    const timeInput = document.getElementById('modal-preferred-time').value;
+    const timeSection = document.getElementById('modal-time-section');
+    const hasTime = !timeSection.classList.contains('hidden') && timeInput;
+
+    // Build schedule type and value
+    let scheduleType = 'interval';
+    let scheduleValue = frequency;
+
+    if (hasTime) {
+        const [hours, minutes] = timeInput.split(':').map(Number);
+        scheduleType = 'cron';
+        if (frequency === 'daily') {
+            scheduleValue = `${minutes} ${hours} * * *`;
+        } else if (frequency === 'every_3d') {
+            scheduleValue = `${minutes} ${hours} */3 * *`;
+        } else if (frequency === 'weekly') {
+            scheduleValue = `${minutes} ${hours} * * 1`;
+        }
+    }
 
     const body = {
         job_type: jobType,
         target_playlist_id: targetId,
         target_playlist_name: targetName,
-        schedule_type: 'interval',
+        schedule_type: scheduleType,
         schedule_value: scheduleValue,
     };
 
@@ -508,6 +573,9 @@ document.getElementById('create-schedule-form').addEventListener('submit', funct
 function runScheduleNow(scheduleId) {
     if (!confirm('Run this schedule now?')) return;
 
+    const btn = event.target.closest('button');
+    if (btn) btn.disabled = true;
+
     fetch(`/schedules/${scheduleId}/run`, {
         method: 'POST',
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -520,10 +588,16 @@ function runScheduleNow(scheduleId) {
     })
     .then(data => {
         showNotification(data.message || 'Executed successfully.', 'success');
-        setTimeout(() => window.location.reload(), 1000);
+        // Refresh history if visible
+        const historyEl = document.getElementById(`history-${scheduleId}`);
+        if (historyEl && !historyEl.classList.contains('hidden')) {
+            loadHistory(scheduleId);
+        }
+        setTimeout(() => window.location.reload(), 1500);
     })
     .catch(error => {
         showNotification(error.message, 'error');
+        if (btn) btn.disabled = false;
     });
 }
 
@@ -543,6 +617,59 @@ function toggleSchedule(scheduleId) {
     })
     .catch(error => {
         showNotification('Failed to toggle schedule.', 'error');
+    });
+}
+
+// =============================================================================
+// Execution History
+// =============================================================================
+
+function toggleHistory(scheduleId) {
+    const container = document.getElementById(`history-${scheduleId}`);
+    if (container.classList.contains('hidden')) {
+        container.classList.remove('hidden');
+        loadHistory(scheduleId);
+    } else {
+        container.classList.add('hidden');
+    }
+}
+
+function loadHistory(scheduleId) {
+    const loading = document.getElementById(`history-loading-${scheduleId}`);
+    const list = document.getElementById(`history-list-${scheduleId}`);
+    loading.classList.remove('hidden');
+
+    fetch(`/schedules/${scheduleId}/history`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+    .then(r => r.json())
+    .then(data => {
+        loading.classList.add('hidden');
+        if (!data.success || !data.history || data.history.length === 0) {
+            list.innerHTML = '<p class="text-white/40 py-2">No executions yet.</p>';
+            return;
+        }
+        list.innerHTML = data.history.map(h => {
+            const statusColor = h.status === 'success' ? 'text-green-400' : h.status === 'failed' ? 'text-red-400' : 'text-yellow-400';
+            const statusIcon = h.status === 'success' ? '&#10003;' : h.status === 'failed' ? '&#10007;' : '&#8987;';
+            const time = h.started_at ? new Date(h.started_at).toLocaleString() : '—';
+            const tracks = h.tracks_total ? `${h.tracks_total} tracks` : '';
+            const added = h.tracks_added ? ` (+${h.tracks_added} new)` : '';
+            const error = h.error_message ? `<span class="text-red-300 block mt-0.5">${h.error_message}</span>` : '';
+            return `
+                <div class="flex items-start gap-2 px-2 py-1.5 rounded bg-white/5">
+                    <span class="${statusColor} font-bold flex-shrink-0">${statusIcon}</span>
+                    <div class="flex-1 min-w-0">
+                        <span class="text-white/70">${time}</span>
+                        <span class="text-white/50 ml-2">${tracks}${added}</span>
+                        ${error}
+                    </div>
+                </div>`;
+        }).join('');
+    })
+    .catch(() => {
+        loading.classList.add('hidden');
+        list.innerHTML = '<p class="text-red-300 py-2">Failed to load history.</p>';
     });
 }
 
