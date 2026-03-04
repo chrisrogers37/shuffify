@@ -38,6 +38,7 @@ Active evaluation documents for ongoing development planning:
 - **[Extensibility Evaluation](evaluation/03_extensibility_evaluation.md)** - Service extensibility patterns, plugin architecture proposals
 - **[Future Features Readiness](evaluation/04_future_features_readiness.md)** - Readiness for planned features (database, automations, notifications, UI)
 - **[Brainstorm Enhancements](evaluation/05_brainstorm_enhancements.md)** - Enhancement ideas and tracking
+- **[Workshop Source Playlist Analysis](evaluation/workshop-source-playlist-analysis.md)** - Role analysis of "Source Playlists" vs Raids vs Archive/Rotation
 
 ## Guides
 
