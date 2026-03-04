@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Compact Workshop Sidebar** - Reduced vertical scroll for sidebar configuration panels
+  - Raid Sources, Backup Playlist, and Snapshots panels are now collapsible (click header to expand)
+  - Reduced spacing between sidebar sections from 24px to 12px
+  - Tightened padding and font sizes on Shuffle Preview panel
+  - Consistent compact styling across all sidebar panels
+- **Snapshot Label Clarity** - Changed "Scheduled" snapshot type label to "Auto-backup"
+  - Makes it clear that these are backups from past scheduled operations, not upcoming scheduled backups
+
 ### Added
 - **Inline Archive Creation from Rotation Config** - Rotation schedule setup no longer requires a pre-existing archive pair
   - Rotation Schedule section is now always visible in the Archive & Rotation sidebar tab
