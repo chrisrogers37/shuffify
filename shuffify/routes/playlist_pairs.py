@@ -272,17 +272,21 @@ def list_archive_tracks(
         return json_error("No archive pair found", 404)
 
     try:
+        # TODO: Spotify API migrating "track" → "item" key.
+        # Field filter requests both until migration completes.
         results = client.api.get_playlist_items_raw(
             pair.archive_playlist_id,
             fields=(
-                "items(item(id,name,uri,artists(name),"
+                "items(track(id,name,uri,artists(name),"
                 "album(name,images),duration_ms))"
             ),
             limit=100,
         )
         tracks = []
         for item in results.get("items", []):
-            track = item.get("item")
+            track = (
+                item.get("track") or item.get("item")
+            )
             if not track or not track.get("uri"):
                 continue
             artists = [

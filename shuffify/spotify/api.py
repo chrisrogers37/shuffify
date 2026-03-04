@@ -300,9 +300,11 @@ class SpotifyAPI:
             f"/playlists/{playlist_id}/items"
         )
         for item in all_items:
-            # Spotify Feb 2026: nested key renamed from "track"
-            # to "item". Fall back to "track" for compatibility.
-            track = item.get("item") or item.get("track")
+            # TODO: Spotify API migrating from "track" to "item"
+            # key (announced Feb 2026). Use "track" as primary
+            # with "item" fallback until migration is complete,
+            # then swap.
+            track = item.get("track") or item.get("item")
             # Only include valid tracks (not None, not local-only)
             if track and track.get("uri"):
                 tracks.append(track)
@@ -494,8 +496,8 @@ class SpotifyAPI:
         Get playlist items with optional field filtering.
 
         Uses Spotify's field filtering to reduce response size.
-        Note: Field filters use 'item(...)' not 'track(...)' per
-        the Feb 2026 API changes.
+        Note: Spotify is migrating from 'track(...)' to 'item(...)'
+        in field filters. Use 'track(...)' until migration completes.
 
         Args:
             playlist_id: The Spotify playlist ID.
