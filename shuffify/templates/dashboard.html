@@ -2,19 +2,19 @@
 {% from "macros/cards.html" import glass_card, playlist_card %}
 
 {% block content %}
-<div class="min-h-screen bg-gradient-to-br from-spotify-green via-spotify-green/90 to-spotify-dark">
+<div class="relative min-h-screen bg-gradient-to-br from-spotify-green via-spotify-green/90 to-spotify-dark">
     <div class="absolute inset-0" style="background-image: url('/static/images/hero-pattern.svg'); opacity: 0.15; pointer-events: none;"></div>
 
     <!-- User Info / Welcome Section -->
     <div class="relative max-w-6xl mx-auto px-4 pt-8">
         {% call glass_card() %}
             <div class="flex items-center justify-between">
-                <div class="flex items-center">
+                <div class="flex items-center min-w-0">
                     {% if user.images %}
                         <img src="{{ user.images[0].url }}" alt="{{ user.display_name or 'User avatar' }}"
-                             class="w-16 h-16 rounded-full mr-4 border-2 border-white/20">
+                             class="w-16 h-16 rounded-full mr-4 border-2 border-white/20 flex-shrink-0">
                     {% else %}
-                        <div class="w-16 h-16 rounded-full bg-white/10 border-2 border-white/20 flex items-center justify-center mr-4">
+                        <div class="w-16 h-16 rounded-full bg-white/10 border-2 border-white/20 flex items-center justify-center mr-4 flex-shrink-0">
                             {% if user.display_name %}
                                 <span class="text-2xl text-white">{{ user.display_name[0] }}</span>
                             {% else %}
@@ -24,12 +24,12 @@
                             {% endif %}
                         </div>
                     {% endif %}
-                    <div>
+                    <div class="min-w-0">
                         {% if dashboard and dashboard.is_returning_user %}
                             {% if user.display_name %}
-                                <h2 class="text-2xl font-bold text-white">Welcome back, {{ user.display_name }}!</h2>
+                                <h2 class="text-2xl font-bold text-white truncate">Welcome back, {{ user.display_name }}!</h2>
                             {% else %}
-                                <h2 class="text-2xl font-bold text-white">Welcome back!</h2>
+                                <h2 class="text-2xl font-bold text-white truncate">Welcome back!</h2>
                             {% endif %}
                             {% if dashboard.activity_since_last_login_count > 0 %}
                                 <p class="text-white/80">
@@ -40,22 +40,22 @@
                             {% endif %}
                         {% elif dashboard %}
                             {% if user.display_name %}
-                                <h2 class="text-2xl font-bold text-white">Welcome to Shuffify, {{ user.display_name }}!</h2>
+                                <h2 class="text-2xl font-bold text-white truncate">Welcome to Shuffify, {{ user.display_name }}!</h2>
                             {% else %}
-                                <h2 class="text-2xl font-bold text-white">Welcome to Shuffify!</h2>
+                                <h2 class="text-2xl font-bold text-white truncate">Welcome to Shuffify!</h2>
                             {% endif %}
                             <p class="text-white/80">Select a playlist below to get started</p>
                         {% else %}
                             {% if user.display_name %}
-                                <h2 class="text-2xl font-bold text-white">Welcome, {{ user.display_name }}!</h2>
+                                <h2 class="text-2xl font-bold text-white truncate">Welcome, {{ user.display_name }}!</h2>
                             {% else %}
-                                <h2 class="text-2xl font-bold text-white">Welcome!</h2>
+                                <h2 class="text-2xl font-bold text-white truncate">Welcome!</h2>
                             {% endif %}
                             <p class="text-white/80">Select a playlist to shuffle below</p>
                         {% endif %}
                     </div>
                 </div>
-                <div class="flex items-center space-x-2">
+                <div class="flex items-center space-x-2 flex-shrink-0">
                     <!-- Schedules Link -->
                     <a href="{{ url_for('main.schedules') }}"
                        class="inline-flex items-center px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition duration-150 border border-white/20 hover:border-white/30"
