@@ -50,6 +50,26 @@ from shuffify.enums import ActivityType, JobType
 logger = logging.getLogger(__name__)
 
 
+@main.route(
+    "/playlist/<playlist_id>/schedules",
+    methods=["GET"],
+)
+@require_auth_and_db
+def playlist_schedules(
+    playlist_id, client=None, user=None
+):
+    """Get all schedules for a specific playlist."""
+    schedules = (
+        SchedulerService.get_schedules_for_playlist(
+            user.id, playlist_id
+        )
+    )
+    return json_success(
+        "Schedules loaded",
+        schedules=[s.to_dict() for s in schedules],
+    )
+
+
 @main.route("/schedules")
 def schedules():
     """Render the Schedules management page."""

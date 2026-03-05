@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Workshop Track Inbox** - Unified section below the playlist for reviewing raided tracks and searching for new ones
+  - Raided Tracks sub-view: review, promote (add to Spotify), or dismiss staged tracks
+  - Search sub-view: search Spotify tracks and load external playlists by URL
+  - Pending track badge count in workshop header and Track Inbox section
+  - Bulk actions: Promote All, Dismiss All
+- **Pending Raid Staging** - Raids now stage tracks for review instead of adding directly to Spotify
+  - New `PendingRaidTrack` model with deduplication constraint
+  - `PendingRaidService` for CRUD operations on staged tracks
+  - Both scheduled and inline raids stage to the Track Inbox
+  - Track metadata (name, artists, album art) fetched at staging time
+- **Per-Playlist Schedules in Tools Panel** - Schedules tab shows schedules for the current playlist
+  - New `GET /playlist/<id>/schedules` endpoint
+  - Toggle schedules on/off directly from the workshop
+- **Favicon** - Shuffle arrows icon in Spotify green for browser tab identification
+- **SpotifyAPI.get_tracks()** - Batch fetch track metadata by URIs
+
+### Changed
+- **Full-Width Workshop Layout** - Removed right sidebar column for a single full-width track list
+  - Shuffle controls moved to compact horizontal bar above the playlist
+  - Algorithm parameters accessible via gear icon popover (no layout shift)
+  - Source Playlists section removed (superseded by Track Inbox search)
+  - Inline sidebar panels (Raid Sources, Backup Playlist, Snapshots) removed from main layout
+  - All configuration consolidated into the Tools slide-out panel
+- **Raid Executor** - Stages tracks via `PendingRaidService` instead of calling `playlist_add_items` directly
+- **Tools Panel Raids Tab** - Loads raid status directly from server instead of depending on removed inline panel
+
 ### Changed
 - **Compact Workshop Sidebar** - Reduced vertical scroll for sidebar configuration panels
   - Raid Sources, Backup Playlist, and Snapshots panels are now collapsible (click header to expand)

@@ -13,7 +13,12 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List
 
 from flask_sqlalchemy import SQLAlchemy
-from shuffify.enums import ScheduleType, IntervalValue, SnapshotType
+from shuffify.enums import (
+    ScheduleType,
+    IntervalValue,
+    SnapshotType,
+    PendingRaidStatus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1040,4 +1045,125 @@ class PlaylistPreference(db.Model):
             f"order={self.sort_order} "
             f"{'hidden' if self.is_hidden else 'visible'} "
             f"{'pinned' if self.is_pinned else 'unpinned'}>"
+        )
+
+
+class PendingRaidTrack(db.Model):
+    """
+    A track staged by a raid for user review before adding
+    to the target playlist.
+
+    Raids write here instead of directly to Spotify. The user
+    then promotes (adds to playlist) or dismisses tracks from
+    the workshop Track Inbox.
+    """
+
+    __tablename__ = "pending_raid_tracks"
+
+    id = db.Column(
+        db.Integer, primary_key=True, autoincrement=True
+    )
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False,
+    )
+    target_playlist_id = db.Column(
+        db.String(255), nullable=False
+    )
+    track_uri = db.Column(
+        db.String(255), nullable=False
+    )
+    track_name = db.Column(
+        db.String(500), nullable=False
+    )
+    track_artists = db.Column(
+        db.String(1000), nullable=True
+    )
+    track_album = db.Column(
+        db.String(500), nullable=True
+    )
+    track_image_url = db.Column(
+        db.String(1024), nullable=True
+    )
+    track_duration_ms = db.Column(
+        db.Integer, nullable=True
+    )
+    source_playlist_id = db.Column(
+        db.String(255), nullable=True
+    )
+    source_name = db.Column(
+        db.String(255), nullable=True
+    )
+    status = db.Column(
+        db.String(20),
+        nullable=False,
+        default=PendingRaidStatus.PENDING,
+    )
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    resolved_at = db.Column(
+        db.DateTime, nullable=True
+    )
+
+    # Relationships
+    user = db.relationship(
+        "User",
+        backref=db.backref(
+            "pending_raid_tracks",
+            lazy="dynamic",
+            cascade="all, delete-orphan",
+        ),
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "user_id",
+            "target_playlist_id",
+            "track_uri",
+            name="uq_pending_raid_track",
+        ),
+        db.Index(
+            "ix_pending_raid_user_playlist_status",
+            "user_id",
+            "target_playlist_id",
+            "status",
+        ),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize to dictionary."""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "target_playlist_id": self.target_playlist_id,
+            "track_uri": self.track_uri,
+            "track_name": self.track_name,
+            "track_artists": self.track_artists,
+            "track_album": self.track_album,
+            "track_image_url": self.track_image_url,
+            "track_duration_ms": self.track_duration_ms,
+            "source_playlist_id": self.source_playlist_id,
+            "source_name": self.source_name,
+            "status": self.status,
+            "created_at": (
+                self.created_at.isoformat()
+                if self.created_at
+                else None
+            ),
+            "resolved_at": (
+                self.resolved_at.isoformat()
+                if self.resolved_at
+                else None
+            ),
+        }
+
+    def __repr__(self) -> str:
+        return (
+            f"<PendingRaidTrack {self.id}: "
+            f"'{self.track_name}' "
+            f"status={self.status}>"
         )

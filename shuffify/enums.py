@@ -48,6 +48,13 @@ class SnapshotType(StrEnum):
     SCHEDULED_PRE_EXECUTION = "scheduled_pre_execution"
 
 
+class PendingRaidStatus(StrEnum):
+    """Status of a pending raid track."""
+    PENDING = "pending"
+    PROMOTED = "promoted"
+    DISMISSED = "dismissed"
+
+
 class ActivityType(StrEnum):
     """Types of user activities tracked in the activity log."""
     SHUFFLE = "shuffle"
@@ -71,6 +78,8 @@ class ActivityType(StrEnum):
     RAID_WATCH_ADD = "raid_watch_add"
     RAID_WATCH_REMOVE = "raid_watch_remove"
     RAID_SYNC_NOW = "raid_sync_now"
+    RAID_PROMOTE = "raid_promote"
+    RAID_DISMISS = "raid_dismiss"
     SETTINGS_CHANGE = "settings_change"
     LOGIN = "login"
     LOGOUT = "logout"

@@ -311,12 +311,19 @@ class RaidSyncService:
     def _execute_raid_inline(
         user, target_playlist_id, source_playlist_ids
     ):
-        """Execute raid without a schedule (inline)."""
+        """Execute raid without a schedule (inline).
+
+        Stages tracks for review instead of adding directly.
+        """
         from shuffify.services.executors import (
             JobExecutorService,
         )
         from shuffify.services.executors.raid_executor import (
             _fetch_raid_sources,
+            _build_track_dicts,
+        )
+        from shuffify.services.pending_raid_service import (
+            PendingRaidService,
         )
 
         try:
@@ -335,16 +342,22 @@ class RaidSyncService:
                 user_id=user.id,
             )
 
+            staged = 0
             if new_uris:
-                JobExecutorService._batch_add_tracks(
-                    api, target_playlist_id, new_uris
+                track_dicts = _build_track_dicts(
+                    api, new_uris
+                )
+                staged = PendingRaidService.stage_tracks(
+                    user_id=user.id,
+                    target_playlist_id=(
+                        target_playlist_id
+                    ),
+                    tracks=track_dicts,
                 )
 
             return {
-                "tracks_added": len(new_uris),
-                "tracks_total": (
-                    len(target_tracks) + len(new_uris)
-                ),
+                "tracks_added": staged,
+                "tracks_total": len(target_tracks),
                 "status": "success",
             }
         except RaidSyncError:

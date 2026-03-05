@@ -45,6 +45,20 @@ class SchedulerService:
         return schedules
 
     @staticmethod
+    def get_schedules_for_playlist(
+        user_id: int, playlist_id: str
+    ) -> List[Schedule]:
+        """Get all schedules for a specific playlist."""
+        return (
+            Schedule.query.filter_by(
+                user_id=user_id,
+                target_playlist_id=playlist_id,
+            )
+            .order_by(Schedule.created_at.desc())
+            .all()
+        )
+
+    @staticmethod
     def get_schedule(
         schedule_id: int, user_id: int
     ) -> Schedule:

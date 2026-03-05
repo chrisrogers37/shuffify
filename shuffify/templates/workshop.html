@@ -51,12 +51,81 @@
         </div>
     </div>
 
-    <!-- Main Workshop Area -->
-    <div class="relative max-w-5xl mx-auto px-4 py-6">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Shuffle Bar -->
+    <div class="relative max-w-5xl mx-auto px-4 pt-4">
+        <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 px-4 py-3">
+            <div class="flex items-center gap-3 flex-wrap">
+                <!-- Algorithm Dropdown -->
+                <div class="flex items-center gap-2 min-w-0">
+                    <label for="workshop-algorithm" class="text-white/70 text-sm font-medium whitespace-nowrap">Algorithm:</label>
+                    <select id="workshop-algorithm"
+                            name="algorithm"
+                            class="px-3 py-1.5 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:ring-2 focus:ring-white/30 focus:border-transparent">
+                        {% for algo in algorithms %}
+                        <option value="{{ algo.class_name }}"
+                                data-description="{{ algo.description }}"
+                                data-parameters='{{ algo.parameters | tojson }}'>
+                            {{ algo.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
 
-            <!-- Track List (2/3 width on large screens) -->
-            <div class="lg:col-span-2">
+                <!-- Algorithm Description -->
+                <p id="algorithm-description" class="text-white/50 text-xs flex-1 min-w-0 truncate hidden sm:block">
+                    {{ algorithms[0].description if algorithms else '' }}
+                </p>
+
+                <!-- Gear Icon for Params (shown when algorithm has params) -->
+                <div class="relative">
+                    <button id="algo-params-gear"
+                            onclick="toggleAlgoParamsPopover()"
+                            class="hidden p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/60 hover:text-white transition duration-150"
+                            title="Algorithm settings"
+                            aria-expanded="false"
+                            aria-controls="algo-params-popover">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                    </button>
+
+                    <!-- Params Popover -->
+                    <div id="algo-params-popover"
+                         class="hidden absolute right-0 top-full mt-2 w-72 rounded-xl shadow-2xl backdrop-blur-xl bg-gray-900/95 border border-white/20 p-4 z-40">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-white font-semibold text-sm">Algorithm Settings</h3>
+                            <button onclick="toggleAlgoParamsPopover()"
+                                    class="text-white/40 hover:text-white transition duration-150">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <div id="workshop-algorithm-params" class="space-y-3">
+                            <!-- Parameters dynamically inserted here -->
+                        </div>
+                        <button onclick="toggleAlgoParamsPopover(); previewShuffle();"
+                                class="w-full mt-3 px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
+                            Shuffle with Settings
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Preview Shuffle Button -->
+                <button id="preview-shuffle-btn"
+                        onclick="previewShuffle()"
+                        class="px-4 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white font-semibold text-sm transition duration-150 whitespace-nowrap flex-shrink-0"
+                        {% if not playlist.tracks %}disabled{% endif %}>
+                    Preview Shuffle
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Workshop Area (full-width) -->
+    <div class="relative max-w-5xl mx-auto px-4 py-6">
+        <div>
                 <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden">
                     <!-- Track List Header -->
                     <div class="px-4 py-3 border-b border-white/10 flex items-center text-white/60 text-xs uppercase tracking-wide font-semibold">
@@ -127,352 +196,74 @@
                     </div>
                 </div>
 
-                <!-- Source Playlists Panel -->
-                <div class="mt-6">
-                    <button id="source-panel-toggle"
-                            onclick="toggleSourcePanel()"
-                            class="w-full flex items-center justify-between px-5 py-3 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 text-white font-bold text-lg hover:bg-white/15 transition duration-150"
-                            aria-expanded="false"
-                            aria-controls="source-panel-body">
-                        <span class="flex items-center">
-                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
-                            </svg>
-                            Source Playlists
-                        </span>
-                        <svg id="source-panel-chevron" class="w-5 h-5 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                        </svg>
-                    </button>
-
-                    <div id="source-panel-body" class="hidden mt-2 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden">
-                        <!-- Source Playlist Selector -->
-                        <div class="px-5 py-4 border-b border-white/10">
-                            <label for="source-playlist-select" class="block text-sm font-medium text-white/90 mb-2">
-                                Load tracks from another playlist:
-                            </label>
-                            <div class="flex items-center space-x-2">
-                                <select id="source-playlist-select"
-                                        class="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-white/30 focus:border-transparent"
-                                        disabled>
-                                    <option value="">Loading playlists...</option>
-                                </select>
-                                <button id="load-source-btn"
-                                        onclick="loadSourcePlaylist()"
-                                        disabled
-                                        class="px-4 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white font-semibold transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed">
-                                    Load
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Source Track List -->
-                        <div id="source-tracks-container" class="hidden">
-                            <div class="px-4 py-2 border-b border-white/10 flex items-center justify-between">
-                                <div class="flex items-center text-white/60 text-xs uppercase tracking-wide font-semibold">
-                                    <span class="w-10"></span>
-                                    <span class="ml-3">Source Tracks</span>
-                                </div>
-                                <span id="source-track-count" class="text-white/50 text-xs">0 tracks</span>
-                            </div>
-                            <div id="source-track-list" class="max-h-[40vh] overflow-y-auto workshop-scrollbar">
-                            </div>
-                        </div>
-
-                        <!-- Empty state -->
-                        <div id="source-empty-state" class="px-5 py-6 text-center text-white/50 text-sm">
-                            Select a playlist above and click "Load" to browse its tracks.
-                        </div>
-
-                        <!-- Loading state -->
-                        <div id="source-loading-state" class="hidden px-5 py-6 text-center text-white/50 text-sm">
-                            <svg class="w-6 h-6 mx-auto mb-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                            </svg>
-                            Loading tracks...
-                        </div>
-                    </div>
-                </div>
             </div>
 
-            <!-- Sidebar Controls (1/3 width on large screens) -->
-            <div class="lg:col-span-1 space-y-3">
-
-                <!-- Shuffle Controls Panel -->
-                <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 p-4">
-                    <h2 class="text-white font-bold text-sm mb-2">Shuffle Preview</h2>
-                    <p class="text-white/60 text-xs mb-3">Preview a shuffle without affecting Spotify. Only saved when you click "Save to Spotify".</p>
-
-                    <!-- Algorithm Selection -->
-                    <div class="mb-4">
-                        <label for="workshop-algorithm" class="block text-sm font-medium text-white/90 mb-2">
-                            Algorithm:
-                        </label>
-                        <select id="workshop-algorithm"
-                                name="algorithm"
-                                class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:ring-2 focus:ring-white/30 focus:border-transparent">
-                            {% for algo in algorithms %}
-                            <option value="{{ algo.class_name }}"
-                                    data-description="{{ algo.description }}"
-                                    data-parameters='{{ algo.parameters | tojson }}'>
-                                {{ algo.name }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                        <p id="algorithm-description" class="mt-1 text-sm text-white/60">
-                            {{ algorithms[0].description if algorithms else '' }}
-                        </p>
-                    </div>
-
-                    <!-- Dynamic Algorithm Parameters -->
-                    <div id="workshop-algorithm-params" class="space-y-4 mb-4">
-                        <!-- Parameters dynamically inserted here -->
-                    </div>
-
-                    <!-- Preview Shuffle Button -->
-                    <button id="preview-shuffle-btn"
-                            onclick="previewShuffle()"
-                            class="w-full px-4 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white font-semibold transition duration-150"
-                            {% if not playlist.tracks %}disabled{% endif %}>
-                        Preview Shuffle
-                    </button>
-                </div>
-
-                <!-- ============================================================= -->
-                <!-- Raid Sources Panel (Inline — always visible)                  -->
-                <!-- ============================================================= -->
-                <div id="inline-raid-panel" class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden">
-                    <button onclick="toggleCollapsiblePanel('raid')"
-                            class="w-full flex items-center justify-between px-4 py-3 text-white font-bold text-sm hover:bg-white/5 transition duration-150"
-                            aria-expanded="false"
-                            aria-controls="raid-panel-body">
-                        <span class="flex items-center">
-                            <svg class="w-5 h-5 mr-2 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                            </svg>
-                            Raid Sources
-                            <span id="inline-raid-source-count" class="ml-2 text-white/40 text-xs font-medium"></span>
-                        </span>
-                        <svg id="raid-panel-chevron" class="w-4 h-4 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            <!-- Track Inbox Section (Raids + Search) -->
+            <div id="track-inbox" class="mt-6">
+                <button id="inbox-toggle"
+                        onclick="toggleTrackInbox()"
+                        class="w-full flex items-center justify-between px-5 py-3 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 text-white font-bold text-sm hover:bg-white/15 transition duration-150"
+                        aria-expanded="false"
+                        aria-controls="inbox-body">
+                    <span class="flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
                         </svg>
-                    </button>
+                        Track Inbox
+                        <span id="inbox-pending-badge" class="hidden ml-2 px-2 py-0.5 rounded-full bg-yellow-500/80 text-xs font-semibold"></span>
+                    </span>
+                    <svg id="inbox-chevron" class="w-5 h-5 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
 
-                    <div id="raid-panel-body" class="hidden px-4 pb-4">
-                    <p class="text-white/50 text-xs mb-3">Playlists Shuffify will pull new tracks from during raids. These persist until you remove them.</p>
-
-                    <!-- Quick-add URL -->
-                    <div class="flex gap-2 mb-3">
-                        <input id="inline-raid-url-input" type="text"
-                               placeholder="Paste Spotify playlist URL..."
-                               class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 placeholder-white/30"
-                               onkeydown="if(event.key==='Enter'){inlineRaid.addUrl();}">
-                        <button id="inline-raid-add-btn" onclick="inlineRaid.addUrl()"
-                                class="px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
-                                title="Add raid source">
-                            +
+                <div id="inbox-body" class="hidden mt-2 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden">
+                    <!-- Sub-view Tabs -->
+                    <div class="flex border-b border-white/10">
+                        <button id="inbox-tab-raids"
+                                onclick="switchInboxTab('raids')"
+                                class="flex-1 px-4 py-2.5 text-sm font-semibold text-white/70 hover:text-white transition duration-150 border-b-2 border-transparent">
+                            Raided Tracks <span id="inbox-raid-count" class="text-white/40"></span>
+                        </button>
+                        <button id="inbox-tab-search"
+                                onclick="switchInboxTab('search')"
+                                class="flex-1 px-4 py-2.5 text-sm font-semibold text-white/70 hover:text-white transition duration-150 border-b-2 border-transparent">
+                            Search
                         </button>
                     </div>
-                    <div id="inline-raid-url-feedback" class="hidden mb-2 text-xs"></div>
 
-                    <!-- Source list -->
-                    <div id="inline-raid-sources" class="space-y-1.5 mb-3 max-h-40 overflow-y-auto workshop-scrollbar">
-                        <!-- Populated by inlineRaid.render() -->
-                    </div>
-
-                    <!-- Empty state -->
-                    <div id="inline-raid-empty" class="hidden rounded-xl bg-white/5 border border-white/10 p-4 text-center">
-                        <p class="text-white/40 text-sm">No raid sources</p>
-                        <p class="text-white/25 text-xs mt-1">Paste a playlist URL above to start watching for new tracks.</p>
-                    </div>
-
-                    <!-- Loading state -->
-                    <div id="inline-raid-loading" class="hidden text-center py-3">
-                        <div class="inline-block w-5 h-5 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
-                    </div>
-
-                    <!-- Actions row -->
-                    <div class="flex gap-2">
-                        <button id="inline-raid-now-btn" onclick="inlineRaid.raidNow()"
-                                disabled
-                                class="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-semibold text-sm transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed">
-                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    <!-- Raided Tracks Sub-view -->
+                    <div id="inbox-raids-content" class="hidden p-4">
+                        <div id="inbox-raids-loading" class="hidden text-center py-4">
+                            <div class="inline-block w-5 h-5 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
+                            <p class="text-white/40 text-xs mt-2">Loading raided tracks...</p>
+                        </div>
+                        <div id="inbox-raids-empty" class="hidden text-center py-6">
+                            <svg class="w-10 h-10 mx-auto text-white/15 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                             </svg>
-                            Raid Now
-                        </button>
-                        <button onclick="workshopSidebar.open('raids')"
-                                class="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white text-sm transition duration-150 border border-white/10"
-                                title="Open raid details in sidebar">
-                            Details
-                        </button>
-                    </div>
-                    </div>
-                </div>
-
-                <!-- ============================================================= -->
-                <!-- Backup Playlist Panel (Collapsible)                           -->
-                <!-- ============================================================= -->
-                <div id="inline-backup-panel" class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden">
-                    <button onclick="toggleCollapsiblePanel('backup')"
-                            class="w-full flex items-center justify-between px-4 py-3 text-white font-bold text-sm hover:bg-white/5 transition duration-150"
-                            aria-expanded="false"
-                            aria-controls="backup-panel-body">
-                        <span class="flex items-center">
-                            <svg class="w-5 h-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
-                            </svg>
-                            Backup Playlist
-                        </span>
-                        <svg id="backup-panel-chevron" class="w-4 h-4 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                        </svg>
-                    </button>
-
-                    <div id="backup-panel-body" class="hidden px-4 pb-4">
-                    <p class="text-white/50 text-xs mb-3">Link a backup playlist so removed tracks are automatically preserved. Also used for track rotation.</p>
-
-                    <!-- Loading state -->
-                    <div id="inline-backup-loading" class="hidden text-center py-3">
-                        <div class="inline-block w-5 h-5 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
-                    </div>
-
-                    <!-- Not linked state -->
-                    <div id="inline-backup-unlinked" class="hidden">
-                        <div class="rounded-xl bg-white/5 border border-white/10 p-4">
-                            <button onclick="inlineBackup.createNew()"
-                                    class="w-full px-4 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 mb-2">
-                                Create New Backup Playlist
+                            <p class="text-white/40 text-sm">No pending raided tracks</p>
+                            <p class="text-white/25 text-xs mt-1">Configure raid sources in Tools > Raids and click "Raid Now" to discover new tracks.</p>
+                        </div>
+                        <div id="inbox-raids-list" class="space-y-1 max-h-[40vh] overflow-y-auto workshop-scrollbar">
+                            <!-- Populated by loadPendingRaids() -->
+                        </div>
+                        <div id="inbox-raids-actions" class="hidden flex gap-2 mt-3 pt-3 border-t border-white/10">
+                            <button onclick="promoteAllPendingRaids()"
+                                    class="flex-1 px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
+                                Add All to Playlist
                             </button>
-                            <div class="relative my-2">
-                                <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-white/10"></div></div>
-                                <div class="relative flex justify-center"><span class="bg-[#1a1a2e] px-2 text-white/30 text-xs">or</span></div>
-                            </div>
-                            <select id="inline-backup-link-select"
-                                    class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 mb-2">
-                                <option value="">Link existing playlist...</option>
-                            </select>
-                            <button id="inline-backup-link-btn" onclick="inlineBackup.linkExisting()"
-                                    class="w-full px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
-                                    disabled>
-                                Link as Backup
+                            <button onclick="dismissAllPendingRaids()"
+                                    class="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/60 text-sm font-semibold transition duration-150 border border-white/20">
+                                Dismiss All
                             </button>
                         </div>
                     </div>
 
-                    <!-- Linked state -->
-                    <div id="inline-backup-linked" class="hidden">
-                        <div class="rounded-xl bg-white/5 border border-white/10 p-4">
-                            <div class="flex items-center justify-between mb-2">
-                                <span class="text-white/50 text-xs uppercase tracking-wide font-semibold">Linked Backup</span>
-                                <button onclick="inlineBackup.unlink()"
-                                        class="text-red-400/60 hover:text-red-400 text-xs transition duration-150"
-                                        title="Remove backup pairing">
-                                    Unlink
-                                </button>
-                            </div>
-                            <p id="inline-backup-name" class="text-white font-medium text-sm truncate"></p>
-                            <p id="inline-backup-track-count" class="text-white/40 text-xs mt-1"></p>
-                            <!-- Auto-archive toggle -->
-                            <div class="flex items-center justify-between mt-3 pt-3 border-t border-white/10">
-                                <span class="text-white/60 text-xs">Auto-backup on remove</span>
-                                <button id="inline-auto-backup-toggle" onclick="inlineBackup.toggleAutoArchive()"
-                                        class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200">
-                                    <span class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200"></span>
-                                </button>
-                            </div>
-                        </div>
-                        <button onclick="workshopSidebar.open('archive')"
-                                class="w-full mt-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white text-sm transition duration-150 border border-white/10 text-center">
-                            Manage Backup & Rotation
-                        </button>
-                    </div>
-                    </div>
-                </div>
-
-                <!-- ============================================================= -->
-                <!-- Snapshots Panel (Collapsible)                                 -->
-                <!-- ============================================================= -->
-                <div id="inline-snapshots-panel" class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden">
-                    <button onclick="toggleCollapsiblePanel('snapshots')"
-                            class="w-full flex items-center justify-between px-4 py-3 text-white font-bold text-sm hover:bg-white/5 transition duration-150"
-                            aria-expanded="false"
-                            aria-controls="snapshots-panel-body">
-                        <span class="flex items-center">
-                            <svg class="w-5 h-5 mr-2 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            </svg>
-                            Snapshots
-                            <span id="inline-snapshot-count" class="ml-2 text-white/40 text-xs font-medium"></span>
-                        </span>
-                        <svg id="snapshots-panel-chevron" class="w-4 h-4 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                        </svg>
-                    </button>
-
-                    <div id="snapshots-panel-body" class="hidden px-4 pb-4">
-                    <p class="text-white/50 text-xs mb-3">Automatic backups are taken before every shuffle, raid, and commit. View and restore previous states.</p>
-
-                    <!-- Loading -->
-                    <div id="inline-snapshot-loading" class="hidden text-center py-3">
-                        <div class="inline-block w-5 h-5 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
-                    </div>
-
-                    <!-- Recent snapshots -->
-                    <div id="inline-snapshot-list" class="space-y-1.5 mb-3 max-h-40 overflow-y-auto workshop-scrollbar">
-                        <!-- Populated by inlineSnapshots.render() -->
-                    </div>
-
-                    <!-- Empty state -->
-                    <div id="inline-snapshot-empty" class="hidden rounded-xl bg-white/5 border border-white/10 p-4 text-center">
-                        <p class="text-white/40 text-sm">No snapshots yet</p>
-                        <p class="text-white/25 text-xs mt-1">Backups are created automatically before shuffles, raids, and commits.</p>
-                    </div>
-
-                    <!-- Actions -->
-                    <div class="flex gap-2">
-                        <button onclick="inlineSnapshots.takeSnapshot()"
-                                class="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-semibold text-sm transition duration-150 border border-white/20">
-                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            </svg>
-                            Take Snapshot
-                        </button>
-                        <button onclick="workshopSidebar.open('snapshots')"
-                                class="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white text-sm transition duration-150 border border-white/10"
-                                title="View full snapshot timeline">
-                            View All
-                        </button>
-                    </div>
-                    </div>
-                </div>
-
-                <!-- ============================================================= -->
-                <!-- Search & External Playlists (Collapsible)                     -->
-                <!-- ============================================================= -->
-                <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden">
-                    <button id="search-panel-toggle"
-                            onclick="toggleSearchPanel()"
-                            class="w-full flex items-center justify-between px-4 py-3 text-white font-bold text-sm hover:bg-white/5 transition duration-150"
-                            aria-expanded="false"
-                            aria-controls="search-panel-body">
-                        <span class="flex items-center">
-                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                            </svg>
-                            Search & Add Tracks
-                        </span>
-                        <svg id="search-panel-chevron" class="w-4 h-4 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                        </svg>
-                    </button>
-
-                    <div id="search-panel-body" class="hidden">
+                    <!-- Search Sub-view -->
+                    <div id="inbox-search-content" class="hidden p-4">
                         <!-- Search Spotify -->
-                        <div class="px-5 py-4 border-t border-white/10">
-                            <h3 class="text-white font-semibold text-sm mb-2">Search Spotify</h3>
+                        <div class="mb-4">
                             <div class="flex items-center space-x-2 mb-3">
                                 <input id="search-input"
                                        type="text"
@@ -503,7 +294,7 @@
                         </div>
 
                         <!-- Load External Playlist -->
-                        <div class="px-5 py-4 border-t border-white/10">
+                        <div class="pt-4 border-t border-white/10">
                             <h3 class="text-white font-semibold text-sm mb-2">Load External Playlist</h3>
                             <div class="flex space-x-2 mb-3">
                                 <input id="external-playlist-input"
@@ -973,22 +764,48 @@
             </div>
         </div>
 
-        <!-- Tab Content: Schedules (Rotation Panel) — Simplified -->
+        <!-- Tab Content: Schedules (Per-Playlist) -->
         <div id="sidebar-tab-schedules" class="sidebar-tab-content hidden p-5" role="tabpanel">
             <div class="flex items-center justify-between mb-3">
-                <h3 class="text-white font-bold text-lg">Rotation</h3>
+                <h3 class="text-white font-bold text-lg">Schedules</h3>
+                <button onclick="playlistSchedules.loadSchedules()"
+                        class="text-white/40 hover:text-white/60 transition duration-150"
+                        title="Refresh schedules">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                </button>
             </div>
 
-            <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
-                <svg class="w-10 h-10 mx-auto text-white/20 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            <!-- Loading -->
+            <div id="schedules-loading" class="hidden text-center py-6">
+                <svg class="w-8 h-8 mx-auto text-white/30 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                 </svg>
-                <p class="text-white/60 text-sm mb-1">Rotation is configured in the Archive tab</p>
-                <p class="text-white/30 text-xs mb-4">Set up an archive pair, then configure rotation schedules in one place.</p>
-                <button onclick="workshopSidebar.switchTab('archive')"
-                        class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition duration-150 border border-white/20">
-                    Go to Archive & Rotation
+                <p class="text-white/40 text-sm mt-2">Loading schedules...</p>
+            </div>
+
+            <!-- Error -->
+            <div id="schedules-error" class="hidden rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-center">
+                <p class="text-red-300 text-sm">Failed to load schedules</p>
+                <button onclick="playlistSchedules.loadSchedules()"
+                        class="text-red-300/60 hover:text-red-300 text-xs mt-2 underline transition duration-150">
+                    Retry
                 </button>
+            </div>
+
+            <!-- Empty -->
+            <div id="schedules-empty" class="hidden rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                <svg class="w-10 h-10 mx-auto text-white/15 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <p class="text-white/50 text-sm mb-1">No schedules for this playlist</p>
+                <p class="text-white/30 text-xs">Schedules automate shuffling and raiding on a timer.</p>
+            </div>
+
+            <!-- Schedule List -->
+            <div id="schedules-list" class="hidden space-y-2">
+                <!-- Populated by playlistSchedules.render() -->
             </div>
 
             <!-- Manage All Schedules link -->
@@ -1070,12 +887,6 @@ const workshopState = {
     isDirty: false,
     isSaving: false,
     isShuffling: false,
-    // Source panel state
-    sourcePlaylistId: null,
-    sourcePlaylistName: null,
-    sourceTracks: [],
-    playlistsLoaded: false,
-    isLoadingSource: false,
     // Archive pairing state
     archiveQueue: [],
     archivePair: null,
@@ -1112,14 +923,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ghostClass: 'sortable-ghost',
         chosenClass: 'sortable-chosen',
         dragClass: 'sortable-drag',
-        group: {
-            name: 'workshop-tracks',
-            pull: true,
-            put: true,
-        },
-        onAdd: function(evt) {
-            handleSourceTrackAddedViaDrag(evt);
-        },
         onEnd: function(evt) {
             updateWorkingUrisFromDOM();
             markDirty();
@@ -1333,6 +1136,19 @@ function updateWorkshopAlgorithmParams() {
 
     document.getElementById('algorithm-description').textContent = description;
     paramsContainer.innerHTML = '';
+
+    // Show/hide gear icon based on whether algorithm has params
+    const gearBtn = document.getElementById('algo-params-gear');
+    if (gearBtn) {
+        if (Object.keys(parameters).length > 0) {
+            gearBtn.classList.remove('hidden');
+        } else {
+            gearBtn.classList.add('hidden');
+            // Close popover if open
+            var popover = document.getElementById('algo-params-popover');
+            if (popover) popover.classList.add('hidden');
+        }
+    }
 
     for (const [paramName, paramInfo] of Object.entries(parameters)) {
         const paramDiv = document.createElement('div');
@@ -1735,324 +1551,9 @@ function createTrackElement(track, position) {
 
 
 // =============================================================================
-// Source Panel — Toggle, Load, Render
+// Stub: refreshSourceDuplicateIndicators (no-op — source panel removed)
 // =============================================================================
-
-let sourceSortableInstance = null;
-
-function toggleSourcePanel() {
-    const body = document.getElementById('source-panel-body');
-    const chevron = document.getElementById('source-panel-chevron');
-    const toggle = document.getElementById('source-panel-toggle');
-    const isHidden = body.classList.contains('hidden');
-
-    body.classList.toggle('hidden');
-    chevron.classList.toggle('rotate-180');
-    toggle.setAttribute('aria-expanded', String(isHidden));
-
-    // Lazy-load playlists on first open
-    if (isHidden && !workshopState.playlistsLoaded) {
-        fetchUserPlaylists();
-    }
-}
-
-function fetchUserPlaylists() {
-    const select = document.getElementById('source-playlist-select');
-    select.disabled = true;
-    select.innerHTML = '<option value="">Loading playlists...</option>';
-
-    fetch('/api/user-playlists', {
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-    })
-    .then(response => {
-        if (!response.ok) {
-            return response.json().then(data => {
-                throw new Error(data.message || 'Failed to load playlists.');
-            });
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (!data.success || !data.playlists) {
-            throw new Error('Unexpected response format.');
-        }
-
-        select.innerHTML = '<option value="">-- Select a playlist --</option>';
-
-        data.playlists.forEach(p => {
-            if (p.id === workshopState.playlistId) return;
-
-            const option = document.createElement('option');
-            option.value = p.id;
-            option.textContent = p.name + ' (' + p.track_count + ' tracks)';
-            option.dataset.name = p.name;
-            select.appendChild(option);
-        });
-
-        select.disabled = false;
-        document.getElementById('load-source-btn').disabled = false;
-        workshopState.playlistsLoaded = true;
-    })
-    .catch(error => {
-        console.error('Error fetching playlists:', error);
-        select.innerHTML = '<option value="">Failed to load playlists</option>';
-        showNotification(error.message || 'Failed to load playlists.', 'error');
-    });
-}
-
-function loadSourcePlaylist() {
-    const select = document.getElementById('source-playlist-select');
-    const playlistId = select.value;
-
-    if (!playlistId) {
-        showNotification('Please select a playlist first.', 'info');
-        return;
-    }
-
-    if (workshopState.isLoadingSource) return;
-
-    const selectedOption = select.options[select.selectedIndex];
-    const playlistName = selectedOption.dataset.name || selectedOption.textContent;
-
-    workshopState.isLoadingSource = true;
-    workshopState.sourcePlaylistId = playlistId;
-    workshopState.sourcePlaylistName = playlistName;
-
-    document.getElementById('source-empty-state').classList.add('hidden');
-    document.getElementById('source-tracks-container').classList.add('hidden');
-    document.getElementById('source-loading-state').classList.remove('hidden');
-
-    const loadBtn = document.getElementById('load-source-btn');
-    loadBtn.disabled = true;
-    loadBtn.textContent = 'Loading...';
-
-    fetch('/playlist/' + playlistId, {
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-    })
-    .then(response => {
-        if (!response.ok) {
-            return response.json().then(data => {
-                throw new Error(data.message || 'Failed to load playlist.');
-            });
-        }
-        return response.json();
-    })
-    .then(data => {
-        workshopState.sourceTracks = data.tracks || [];
-        renderSourceTracks();
-    })
-    .catch(error => {
-        console.error('Error loading source playlist:', error);
-        showNotification(error.message || 'Failed to load source playlist.', 'error');
-        document.getElementById('source-loading-state').classList.add('hidden');
-        document.getElementById('source-empty-state').classList.remove('hidden');
-    })
-    .finally(() => {
-        workshopState.isLoadingSource = false;
-        loadBtn.disabled = false;
-        loadBtn.textContent = 'Load';
-    });
-}
-
-function renderSourceTracks() {
-    const container = document.getElementById('source-track-list');
-    const tracks = workshopState.sourceTracks;
-
-    container.innerHTML = '';
-
-    if (tracks.length === 0) {
-        document.getElementById('source-loading-state').classList.add('hidden');
-        document.getElementById('source-tracks-container').classList.add('hidden');
-        document.getElementById('source-empty-state').classList.remove('hidden');
-        document.getElementById('source-empty-state').textContent =
-            'This playlist has no tracks.';
-        return;
-    }
-
-    tracks.forEach(function(track) {
-        const isDuplicate = workshopState.workingUris.includes(track.uri);
-
-        const div = document.createElement('div');
-        div.className = 'source-track-item flex items-center px-4 py-2 hover:bg-white/5 transition duration-150 border-b border-white/5 cursor-grab active:cursor-grabbing';
-        div.dataset.uri = track.uri;
-        div.dataset.trackId = track.id;
-
-        const durationMin = Math.floor(track.duration_ms / 60000);
-        const durationSec = Math.floor((track.duration_ms % 60000) / 1000);
-        const durationStr = durationMin + ':' + String(durationSec).padStart(2, '0');
-
-        const artistsStr = Array.isArray(track.artists) ? track.artists.join(', ') : '';
-
-        const albumImg = track.album_image_url
-            ? '<img src="' + escapeHtml(track.album_image_url) + '" alt="" class="w-full h-full object-cover" loading="lazy">'
-            : '<div class="w-full h-full flex items-center justify-center text-white/30"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
-
-        div.innerHTML =
-            '<div class="w-10 h-10 rounded overflow-hidden flex-shrink-0 bg-black/20">' + albumImg + '</div>' +
-            '<div class="ml-3 flex-1 min-w-0">' +
-                '<p class="text-white text-sm font-medium truncate">' + escapeHtml(track.name) + '</p>' +
-                '<p class="text-white/50 text-xs truncate">' + escapeHtml(artistsStr) + '</p>' +
-            '</div>' +
-            '<span class="w-20 text-right text-white/50 text-sm hidden sm:block">' + durationStr + '</span>';
-
-        // Create add button with data attribute for safe event handling
-        const addBtn = document.createElement('button');
-        addBtn.className = 'add-source-track-btn ml-2 w-8 h-8 flex items-center justify-center rounded-full transition duration-150 flex-shrink-0 ' +
-            (isDuplicate ? 'bg-yellow-500/30 text-yellow-300' : 'bg-white/10 hover:bg-white/20 text-white/70 hover:text-white');
-        addBtn.title = isDuplicate ? 'Already in playlist (click to add duplicate)' : 'Add to playlist';
-        addBtn.innerHTML = isDuplicate
-            ? '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
-            : '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>';
-        addBtn._trackUri = track.uri;
-        addBtn.addEventListener('click', function() {
-            addSourceTrackToWorking(this._trackUri);
-        });
-
-        div.appendChild(addBtn);
-        container.appendChild(div);
-    });
-
-    document.getElementById('source-track-count').textContent = tracks.length + ' tracks';
-
-    document.getElementById('source-loading-state').classList.add('hidden');
-    document.getElementById('source-empty-state').classList.add('hidden');
-    document.getElementById('source-tracks-container').classList.remove('hidden');
-
-    initSourceSortable();
-}
-
-function initSourceSortable() {
-    const sourceList = document.getElementById('source-track-list');
-    if (!sourceList) return;
-
-    if (sourceSortableInstance) {
-        sourceSortableInstance.destroy();
-    }
-
-    sourceSortableInstance = Sortable.create(sourceList, {
-        animation: 200,
-        sort: false,
-        group: {
-            name: 'workshop-tracks',
-            pull: 'clone',
-            put: false,
-        },
-        ghostClass: 'sortable-ghost',
-        chosenClass: 'sortable-chosen',
-        dragClass: 'sortable-drag',
-    });
-}
-
-
-// =============================================================================
-// Adding Source Tracks to Working Playlist
-// =============================================================================
-
-function addSourceTrackToWorking(uri) {
-    const isDuplicate = workshopState.workingUris.includes(uri);
-
-    if (isDuplicate) {
-        if (!confirm('This track is already in the playlist. Add it again?')) {
-            return;
-        }
-    }
-
-    const trackData = workshopState.sourceTracks.find(function(t) { return t.uri === uri; });
-    if (!trackData) {
-        showNotification('Track data not found.', 'error');
-        return;
-    }
-
-    // Register in trackDataByUri if not already there
-    if (!trackDataByUri[uri]) {
-        trackDataByUri[uri] = {
-            id: trackData.id,
-            name: trackData.name,
-            artists: trackData.artists,
-            album_name: trackData.album_name || '',
-            album_image_url: trackData.album_image_url || '',
-            duration_ms: trackData.duration_ms,
-            uri: trackData.uri,
-        };
-    }
-
-    workshopState.workingUris.push(uri);
-
-    const trackList = document.getElementById('track-list');
-    const newEl = createTrackElement(trackData, workshopState.workingUris.length);
-    trackList.appendChild(newEl);
-
-    renumberTracks();
-    markDirty();
-    updateTrackCount();
-    refreshSourceDuplicateIndicators();
-
-    showNotification('Added "' + trackData.name + '" to playlist.', 'success');
-
-    trackList.scrollTop = trackList.scrollHeight;
-}
-
-function handleSourceTrackAddedViaDrag(evt) {
-    const addedEl = evt.item;
-    const uri = addedEl.dataset.uri;
-
-    const trackData = workshopState.sourceTracks.find(function(t) { return t.uri === uri; });
-    if (!trackData) {
-        addedEl.remove();
-        return;
-    }
-
-    if (!trackDataByUri[uri]) {
-        trackDataByUri[uri] = {
-            id: trackData.id,
-            name: trackData.name,
-            artists: trackData.artists,
-            album_name: trackData.album_name || '',
-            album_image_url: trackData.album_image_url || '',
-            duration_ms: trackData.duration_ms,
-            uri: trackData.uri,
-        };
-    }
-
-    const isDuplicate = workshopState.workingUris.includes(uri);
-    if (isDuplicate) {
-        showNotification('Note: "' + trackData.name + '" is already in the playlist (duplicate added).', 'info');
-    }
-
-    // Replace the cloned source element with a proper track-item element
-    const newEl = createTrackElement(trackData, workshopState.workingUris.length + 1);
-    addedEl.replaceWith(newEl);
-
-    updateWorkingUrisFromDOM();
-    markDirty();
-    updateTrackCount();
-    refreshSourceDuplicateIndicators();
-}
-
-
-// =============================================================================
-// Refresh Duplicate Indicators on Source Tracks
-// =============================================================================
-
-function refreshSourceDuplicateIndicators() {
-    const sourceItems = document.querySelectorAll('#source-track-list .source-track-item');
-    sourceItems.forEach(function(item) {
-        const uri = item.dataset.uri;
-        const isDuplicate = workshopState.workingUris.includes(uri);
-        const btn = item.querySelector('.add-source-track-btn');
-        if (!btn) return;
-
-        if (isDuplicate) {
-            btn.className = 'add-source-track-btn ml-2 w-8 h-8 flex items-center justify-center rounded-full bg-yellow-500/30 text-yellow-300 transition duration-150 flex-shrink-0';
-            btn.title = 'Already in playlist (click to add duplicate)';
-            btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
-        } else {
-            btn.className = 'add-source-track-btn ml-2 w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition duration-150 flex-shrink-0';
-            btn.title = 'Add to playlist';
-            btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>';
-        }
-    });
-}
+function refreshSourceDuplicateIndicators() { /* no-op */ }
 
 
 // =============================================================================
@@ -2200,11 +1701,6 @@ function suggestSearch(query) {
 }
 
 function displayExternalTracks(playlistInfo, tracks) {
-    // Integrate with Phase 3's source panel by setting state and rendering
-    workshopState.sourcePlaylistId = playlistInfo.id;
-    workshopState.sourcePlaylistName = playlistInfo.name;
-    workshopState.sourceTracks = tracks;
-
     // Register all tracks in trackDataByUri
     tracks.forEach(function(track) {
         if (!trackDataByUri[track.uri]) {
@@ -2220,31 +1716,313 @@ function displayExternalTracks(playlistInfo, tracks) {
         }
     });
 
-    // Ensure source panel is visible
-    const body = document.getElementById('source-panel-body');
-    if (body.classList.contains('hidden')) {
-        toggleSourcePanel();
-    }
+    // Render tracks inline in the search results area
+    const container = document.getElementById('external-search-results');
+    container.innerHTML = '';
 
-    // Render using Phase 3's existing function
-    renderSourceTracks();
+    tracks.forEach(function(track) {
+        const alreadyAdded = workshopState.workingUris.includes(track.uri);
+        container.appendChild(createSearchResultElement(track));
+    });
+
+    container.classList.remove('hidden');
 }
 </script>
 
 <script>
 // =============================================================================
-// Search & Add Tracks Panel Toggle
+// Algo Params Popover Toggle
 // =============================================================================
-function toggleSearchPanel() {
-    var body = document.getElementById('search-panel-body');
-    var chevron = document.getElementById('search-panel-chevron');
-    var toggle = document.getElementById('search-panel-toggle');
+function toggleAlgoParamsPopover() {
+    var popover = document.getElementById('algo-params-popover');
+    var gear = document.getElementById('algo-params-gear');
+    var isHidden = popover.classList.contains('hidden');
+    popover.classList.toggle('hidden');
+    gear.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+}
+
+// Close popover when clicking outside
+document.addEventListener('click', function(e) {
+    var popover = document.getElementById('algo-params-popover');
+    var gear = document.getElementById('algo-params-gear');
+    if (!popover || popover.classList.contains('hidden')) return;
+    if (!popover.contains(e.target) && !gear.contains(e.target)) {
+        popover.classList.add('hidden');
+        gear.setAttribute('aria-expanded', 'false');
+    }
+});
+
+// =============================================================================
+// Track Inbox Toggle + Tab Switching
+// =============================================================================
+function toggleTrackInbox() {
+    var body = document.getElementById('inbox-body');
+    var chevron = document.getElementById('inbox-chevron');
+    var toggle = document.getElementById('inbox-toggle');
     var isHidden = body.classList.contains('hidden');
     body.classList.toggle('hidden');
     chevron.classList.toggle('rotate-180', isHidden);
     toggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+
+    // Default to raids tab on first open
+    if (isHidden) {
+        var activeTab = document.querySelector('#inbox-body [id^="inbox-tab-"].border-spotify-green');
+        if (!activeTab) switchInboxTab('raids');
+    }
 }
 
+function switchInboxTab(tabName) {
+    // Deactivate all tabs
+    ['raids', 'search'].forEach(function(t) {
+        var tabBtn = document.getElementById('inbox-tab-' + t);
+        var content = document.getElementById('inbox-' + t + '-content');
+        if (tabBtn) {
+            tabBtn.classList.remove('border-spotify-green', 'text-white');
+            tabBtn.classList.add('border-transparent', 'text-white/70');
+        }
+        if (content) content.classList.add('hidden');
+    });
+
+    // Activate selected
+    var activeBtn = document.getElementById('inbox-tab-' + tabName);
+    var activeContent = document.getElementById('inbox-' + tabName + '-content');
+    if (activeBtn) {
+        activeBtn.classList.add('border-spotify-green', 'text-white');
+        activeBtn.classList.remove('border-transparent', 'text-white/70');
+    }
+    if (activeContent) activeContent.classList.remove('hidden');
+
+    // Lazy-load raids on first open
+    if (tabName === 'raids') {
+        loadPendingRaids();
+    }
+}
+
+// =============================================================================
+// Pending Raids (Track Inbox — Raids sub-view)
+// =============================================================================
+var pendingRaidsState = {
+    loaded: false,
+    isLoading: false,
+    tracks: [],
+};
+
+function loadPendingRaids() {
+    if (pendingRaidsState.isLoading) return;
+    pendingRaidsState.isLoading = true;
+
+    var loading = document.getElementById('inbox-raids-loading');
+    var empty = document.getElementById('inbox-raids-empty');
+    var list = document.getElementById('inbox-raids-list');
+    var actions = document.getElementById('inbox-raids-actions');
+
+    loading.classList.remove('hidden');
+    empty.classList.add('hidden');
+    list.innerHTML = '';
+    actions.classList.add('hidden');
+
+    fetch('/playlist/' + workshopState.playlistId + '/pending-raids')
+    .then(function(r) {
+        if (!r.ok) throw new Error('Failed to load pending raids');
+        return r.json();
+    })
+    .then(function(data) {
+        pendingRaidsState.tracks = data.tracks || [];
+        pendingRaidsState.loaded = true;
+        renderPendingRaids();
+        updatePendingBadge();
+    })
+    .catch(function(err) {
+        console.error('Pending raids error:', err);
+        empty.classList.remove('hidden');
+    })
+    .finally(function() {
+        loading.classList.add('hidden');
+        pendingRaidsState.isLoading = false;
+    });
+}
+
+function renderPendingRaids() {
+    var list = document.getElementById('inbox-raids-list');
+    var empty = document.getElementById('inbox-raids-empty');
+    var actions = document.getElementById('inbox-raids-actions');
+    var tracks = pendingRaidsState.tracks;
+
+    list.innerHTML = '';
+
+    if (tracks.length === 0) {
+        empty.classList.remove('hidden');
+        actions.classList.add('hidden');
+        return;
+    }
+
+    empty.classList.add('hidden');
+    actions.classList.remove('hidden');
+
+    tracks.forEach(function(track) {
+        var el = document.createElement('div');
+        el.className = 'flex items-center p-2 rounded-lg hover:bg-white/5 transition duration-150';
+        el.dataset.trackId = String(track.id);
+
+        var imgHtml = track.track_image_url
+            ? '<img src="' + escapeHtml(track.track_image_url) + '" alt="" class="w-8 h-8 rounded object-cover flex-shrink-0" loading="lazy">'
+            : '<div class="w-8 h-8 rounded bg-black/20 flex items-center justify-center text-white/30 flex-shrink-0"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
+
+        el.innerHTML = imgHtml +
+            '<div class="ml-2 flex-1 min-w-0">' +
+                '<p class="text-white text-xs font-medium truncate">' + escapeHtml(track.track_name) + '</p>' +
+                '<p class="text-white/40 text-xs truncate">' + escapeHtml(track.track_artists || '') + '</p>' +
+                '<p class="text-white/25 text-xs truncate">from ' + escapeHtml(track.source_name || 'Unknown') + '</p>' +
+            '</div>';
+
+        // Add button
+        var addBtn = document.createElement('button');
+        addBtn.className = 'ml-1 p-1.5 rounded-full bg-white/10 hover:bg-green-500/40 text-white/60 hover:text-white transition duration-150 flex-shrink-0';
+        addBtn.title = 'Add to playlist';
+        addBtn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 6v12M6 12h12"></path></svg>';
+        addBtn._trackId = track.id;
+        addBtn._trackData = track;
+        addBtn.addEventListener('click', function() { promotePendingRaid(this._trackId, this._trackData); });
+
+        // Dismiss button
+        var dismissBtn = document.createElement('button');
+        dismissBtn.className = 'ml-1 p-1.5 rounded-full bg-white/5 hover:bg-red-500/20 text-white/30 hover:text-red-400 transition duration-150 flex-shrink-0';
+        dismissBtn.title = 'Dismiss';
+        dismissBtn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>';
+        dismissBtn._trackId = track.id;
+        dismissBtn.addEventListener('click', function() { dismissPendingRaid(this._trackId); });
+
+        el.appendChild(addBtn);
+        el.appendChild(dismissBtn);
+        list.appendChild(el);
+    });
+}
+
+function promotePendingRaid(trackId, trackData) {
+    fetch('/playlist/' + workshopState.playlistId + '/pending-raids/promote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        body: JSON.stringify({ track_ids: [trackId] }),
+    })
+    .then(function(r) { if (!r.ok) throw new Error('Promote failed'); return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            // Add to working playlist
+            if (trackData.track_uri && !workshopState.workingUris.includes(trackData.track_uri)) {
+                var td = {
+                    id: trackData.track_uri.split(':').pop(),
+                    name: trackData.track_name,
+                    artists: (trackData.track_artists || '').split(', '),
+                    album_name: trackData.track_album || '',
+                    album_image_url: trackData.track_image_url || '',
+                    duration_ms: trackData.track_duration_ms || 0,
+                    uri: trackData.track_uri,
+                };
+                trackDataByUri[td.uri] = td;
+                workshopState.workingUris.push(td.uri);
+                var trackList = document.getElementById('track-list');
+                trackList.appendChild(createTrackElement(td, workshopState.workingUris.length));
+                updateTrackCount();
+                markDirty();
+            }
+            // Remove from pending
+            pendingRaidsState.tracks = pendingRaidsState.tracks.filter(function(t) { return t.id !== trackId; });
+            renderPendingRaids();
+            updatePendingBadge();
+            showNotification('Track added to playlist.', 'success');
+        }
+    })
+    .catch(function(err) { showNotification(err.message, 'error'); });
+}
+
+function dismissPendingRaid(trackId) {
+    fetch('/playlist/' + workshopState.playlistId + '/pending-raids/dismiss', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        body: JSON.stringify({ track_ids: [trackId] }),
+    })
+    .then(function(r) { if (!r.ok) throw new Error('Dismiss failed'); return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            pendingRaidsState.tracks = pendingRaidsState.tracks.filter(function(t) { return t.id !== trackId; });
+            renderPendingRaids();
+            updatePendingBadge();
+            showNotification('Track dismissed.', 'info');
+        }
+    })
+    .catch(function(err) { showNotification(err.message, 'error'); });
+}
+
+function promoteAllPendingRaids() {
+    fetch('/playlist/' + workshopState.playlistId + '/pending-raids/promote-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+    })
+    .then(function(r) { if (!r.ok) throw new Error('Promote all failed'); return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            // Add all tracks to working playlist
+            pendingRaidsState.tracks.forEach(function(track) {
+                if (track.track_uri && !workshopState.workingUris.includes(track.track_uri)) {
+                    var td = {
+                        id: track.track_uri.split(':').pop(),
+                        name: track.track_name,
+                        artists: (track.track_artists || '').split(', '),
+                        album_name: track.track_album || '',
+                        album_image_url: track.track_image_url || '',
+                        duration_ms: track.track_duration_ms || 0,
+                        uri: track.track_uri,
+                    };
+                    trackDataByUri[td.uri] = td;
+                    workshopState.workingUris.push(td.uri);
+                }
+            });
+            fullRerenderTrackList();
+            updateTrackCount();
+            markDirty();
+            pendingRaidsState.tracks = [];
+            renderPendingRaids();
+            updatePendingBadge();
+            showNotification(data.message || 'All tracks added to playlist.', 'success');
+        }
+    })
+    .catch(function(err) { showNotification(err.message, 'error'); });
+}
+
+function dismissAllPendingRaids() {
+    fetch('/playlist/' + workshopState.playlistId + '/pending-raids/dismiss-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+    })
+    .then(function(r) { if (!r.ok) throw new Error('Dismiss all failed'); return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            pendingRaidsState.tracks = [];
+            renderPendingRaids();
+            updatePendingBadge();
+            showNotification('All pending tracks dismissed.', 'info');
+        }
+    })
+    .catch(function(err) { showNotification(err.message, 'error'); });
+}
+
+function updatePendingBadge() {
+    var count = pendingRaidsState.tracks.length;
+    var badge = document.getElementById('inbox-pending-badge');
+    var raidCountEl = document.getElementById('inbox-raid-count');
+    if (count > 0) {
+        badge.textContent = count;
+        badge.classList.remove('hidden');
+        if (raidCountEl) raidCountEl.textContent = '(' + count + ')';
+    } else {
+        badge.classList.add('hidden');
+        if (raidCountEl) raidCountEl.textContent = '';
+    }
+}
+
+// =============================================================================
+// Collapsible Panel Toggle (kept for remaining inline panels)
+// =============================================================================
 function toggleCollapsiblePanel(name) {
     var body = document.getElementById(name + '-panel-body');
     var chevron = document.getElementById(name + '-panel-chevron');
@@ -2258,8 +2036,7 @@ function toggleCollapsiblePanel(name) {
 
 <script>
 // =============================================================================
-// Inline Raid Sources Panel
-// Eagerly loads raid status and provides quick-add, list, and raid-now.
+// Inline panel stubs (panels removed — logic lives in Tools sidebar)
 // =============================================================================
 
 var inlineRaid = {
@@ -2268,7 +2045,7 @@ var inlineRaid = {
     status: null,
 
     init: function() {
-        this.loadStatus();
+        // No-op: raid status is loaded on-demand when Tools > Raids tab opens
     },
 
     loadStatus: function() {
@@ -2826,12 +2603,18 @@ var inlineSnapshots = {
 };
 
 // =============================================================================
-// Initialize inline panels on page load
+// Initialize: load pending raids badge count on page load
 // =============================================================================
 document.addEventListener('DOMContentLoaded', function() {
-    inlineRaid.init();
-    inlineBackup.init();
-    inlineSnapshots.init();
+    // Fetch pending raid count for badge (lightweight)
+    fetch('/playlist/' + workshopState.playlistId + '/pending-raids')
+    .then(function(r) { return r.ok ? r.json() : { tracks: [] }; })
+    .then(function(data) {
+        pendingRaidsState.tracks = data.tracks || [];
+        pendingRaidsState.loaded = true;
+        updatePendingBadge();
+    })
+    .catch(function() { /* silent */ });
 });
 </script>
 
@@ -4251,17 +4034,8 @@ var raidPanel = {
 };
 
 function onRaidsTabActivated() {
-    if (!raidPanel.loaded) {
-        // Use inline panel data if available to avoid duplicate fetch
-        if (inlineRaid.loaded && inlineRaid.status) {
-            raidPanel.status = inlineRaid.status;
-            raidPanel.loaded = true;
-            raidPanel.render();
-            document.getElementById('raid-panel-content').classList.remove('hidden');
-            document.getElementById('raid-loading').classList.add('hidden');
-        } else {
-            raidPanel.init();
-        }
+    if (!raidPanel.loaded && !raidPanel.isLoading) {
+        raidPanel.loadStatus();
     }
 }
 </script>
@@ -4274,10 +4048,119 @@ const rotationState = {
 };
 
 function onSchedulesTabActivated() {
-    if (!rotationState.isLoaded && !rotationState.isLoading) {
-        loadRotationStatus();
+    if (!playlistSchedules.loaded && !playlistSchedules.isLoading) {
+        playlistSchedules.loadSchedules();
     }
 }
+
+// =============================================================================
+// Per-Playlist Schedules Manager
+// =============================================================================
+var playlistSchedules = {
+    loaded: false,
+    isLoading: false,
+    schedules: [],
+
+    loadSchedules: function() {
+        var self = this;
+        self.isLoading = true;
+        var loading = document.getElementById('schedules-loading');
+        var errorEl = document.getElementById('schedules-error');
+        var empty = document.getElementById('schedules-empty');
+        var list = document.getElementById('schedules-list');
+
+        loading.classList.remove('hidden');
+        errorEl.classList.add('hidden');
+        empty.classList.add('hidden');
+        list.classList.add('hidden');
+
+        fetch('/playlist/' + workshopState.playlistId + '/schedules')
+        .then(function(r) {
+            if (!r.ok) throw new Error('Failed to load schedules');
+            return r.json();
+        })
+        .then(function(data) {
+            self.schedules = data.schedules || [];
+            self.loaded = true;
+            self.render();
+        })
+        .catch(function(err) {
+            errorEl.classList.remove('hidden');
+            console.error('Schedules error:', err);
+        })
+        .finally(function() {
+            loading.classList.add('hidden');
+            self.isLoading = false;
+        });
+    },
+
+    render: function() {
+        var list = document.getElementById('schedules-list');
+        var empty = document.getElementById('schedules-empty');
+
+        if (this.schedules.length === 0) {
+            empty.classList.remove('hidden');
+            list.classList.add('hidden');
+            return;
+        }
+
+        empty.classList.add('hidden');
+        list.innerHTML = '';
+        var self = this;
+
+        this.schedules.forEach(function(sched) {
+            var typeLabel = (sched.job_type || 'unknown').replace(/_/g, ' ');
+            typeLabel = typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1);
+
+            var statusClass = sched.is_active
+                ? 'bg-green-500/20 text-green-300'
+                : 'bg-white/10 text-white/40';
+            var statusText = sched.is_active ? 'Active' : 'Paused';
+
+            var freqText = sched.interval_value || sched.cron_expression || '';
+            freqText = freqText.replace(/_/g, ' ');
+
+            var card = document.createElement('div');
+            card.className = 'rounded-xl bg-white/5 border border-white/10 p-3';
+            card.innerHTML =
+                '<div class="flex items-center justify-between mb-1">' +
+                    '<span class="text-white text-sm font-medium">' + escapeHtml(typeLabel) + '</span>' +
+                    '<span class="px-2 py-0.5 rounded-full text-xs font-semibold ' + statusClass + '">' + statusText + '</span>' +
+                '</div>' +
+                '<p class="text-white/40 text-xs">' + escapeHtml(freqText) + '</p>' +
+                '<div class="flex gap-2 mt-2">' +
+                    '<button class="sched-toggle-btn flex-1 px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition duration-150 border border-white/20">' +
+                        (sched.is_active ? 'Pause' : 'Resume') +
+                    '</button>' +
+                '</div>';
+
+            var toggleBtn = card.querySelector('.sched-toggle-btn');
+            toggleBtn._schedId = sched.id;
+            toggleBtn.addEventListener('click', function() { self.toggleSchedule(this._schedId); });
+
+            list.appendChild(card);
+        });
+
+        list.classList.remove('hidden');
+    },
+
+    toggleSchedule: function(schedId) {
+        var self = this;
+        fetch('/schedules/' + schedId + '/toggle', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        })
+        .then(function(r) { if (!r.ok) throw new Error('Toggle failed'); return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                self.loaded = false;
+                self.loadSchedules();
+                showNotification('Schedule ' + (data.is_active ? 'resumed' : 'paused'), 'success');
+            }
+        })
+        .catch(function(err) { showNotification(err.message, 'error'); });
+    },
+};
 
 async function loadRotationStatus() {
     rotationState.isLoading = true;

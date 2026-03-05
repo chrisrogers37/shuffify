@@ -44,6 +44,10 @@ from .raid_requests import (
 from .playlist_preference_requests import (
     SaveOrderRequest,
 )
+from .pending_raid_requests import (
+    PromoteTracksRequest,
+    DismissTracksRequest,
+)
 
 __all__ = [
     # Exceptions
@@ -80,4 +84,7 @@ __all__ = [
     "RaidNowRequest",
     # Playlist Preference schemas
     "SaveOrderRequest",
+    # Pending Raid schemas
+    "PromoteTracksRequest",
+    "DismissTracksRequest",
 ]
