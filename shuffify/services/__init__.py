@@ -152,6 +152,11 @@ from shuffify.services.playlist_preference_service import (
     PlaylistPreferenceNotFoundError,
 )
 
+# Pending Raid Service
+from shuffify.services.pending_raid_service import (
+    PendingRaidService,
+)
+
 __all__ = [
     # Services
     "AuthService",
@@ -231,4 +236,6 @@ __all__ = [
     "PlaylistPreferenceService",
     "PlaylistPreferenceError",
     "PlaylistPreferenceNotFoundError",
+    # Pending Raid Service
+    "PendingRaidService",
 ]

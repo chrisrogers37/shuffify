@@ -382,6 +382,45 @@ class SpotifyAPI:
         return True
 
     @api_error_handler
+    def get_tracks(
+        self, track_uris: List[str]
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch full track metadata for a list of track URIs.
+
+        Args:
+            track_uris: List of Spotify track URIs.
+
+        Returns:
+            List of track dictionaries with metadata.
+        """
+        self._ensure_valid_token()
+
+        # Extract IDs from URIs (spotify:track:<id>)
+        ids = []
+        for uri in track_uris:
+            parts = uri.split(":")
+            if len(parts) == 3 and parts[1] == "track":
+                ids.append(parts[2])
+
+        if not ids:
+            return []
+
+        tracks = []
+        batch_size = 50  # Spotify limit for /tracks
+        for i in range(0, len(ids), batch_size):
+            batch = ids[i: i + batch_size]
+            result = self._http.get(
+                "/tracks",
+                params={"ids": ",".join(batch)},
+            )
+            if result and "tracks" in result:
+                for t in result["tracks"]:
+                    if t and t.get("uri"):
+                        tracks.append(t)
+
+        return tracks
+
     def playlist_add_items(
         self, playlist_id: str, track_uris: List[str]
     ) -> None:

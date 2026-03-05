@@ -1,5 +1,8 @@
 """
 Raid executor: pull new tracks from source playlists into target.
+
+Tracks are staged in PendingRaidTrack for user review instead of
+being added directly to Spotify.
 """
 
 import logging
@@ -16,6 +19,9 @@ from shuffify.enums import SnapshotType
 from shuffify.services.playlist_snapshot_service import (
     PlaylistSnapshotService,
 )
+from shuffify.services.pending_raid_service import (
+    PendingRaidService,
+)
 from shuffify.services.source_resolver import SourceResolver
 
 logger = logging.getLogger(__name__)
@@ -25,10 +31,10 @@ def execute_raid(
     schedule: Schedule, api: SpotifyAPI
 ) -> dict:
     """
-    Pull new tracks from source playlists into the target.
+    Pull new tracks from source playlists and stage them
+    for user review in the Track Inbox.
     """
     from shuffify.services.executors.base_executor import (
-        JobExecutorService,
         JobExecutionError,
     )
 
@@ -73,21 +79,24 @@ def execute_raid(
                 "tracks_total": len(target_tracks),
             }
 
-        JobExecutorService._batch_add_tracks(
-            api, target_id, new_uris
+        # Fetch metadata and stage for review
+        track_dicts = _build_track_dicts(api, new_uris)
+        staged = PendingRaidService.stage_tracks(
+            user_id=schedule.user_id,
+            target_playlist_id=target_id,
+            tracks=track_dicts,
+            source_name=schedule.target_playlist_name,
         )
 
-        total = len(target_tracks) + len(new_uris)
         logger.info(
-            f"Schedule {schedule.id}: added "
-            f"{len(new_uris)} tracks to "
-            f"{schedule.target_playlist_name} "
-            f"(total: {total})"
+            f"Schedule {schedule.id}: staged "
+            f"{staged} tracks for review on "
+            f"{schedule.target_playlist_name}"
         )
 
         return {
-            "tracks_added": len(new_uris),
-            "tracks_total": total,
+            "tracks_added": staged,
+            "tracks_total": len(target_tracks),
         }
 
     except SpotifyNotFoundError:
@@ -229,3 +238,53 @@ def _fetch_raid_sources(
         )
 
     return results.new_uris
+
+
+def _build_track_dicts(
+    api: SpotifyAPI,
+    uris: List[str],
+) -> List[dict]:
+    """
+    Fetch metadata for track URIs and return dicts
+    suitable for PendingRaidService.stage_tracks().
+    """
+    try:
+        raw_tracks = api.get_tracks(uris)
+    except Exception as e:
+        logger.warning(
+            "Could not fetch track metadata, "
+            "staging with URIs only: %s",
+            e,
+        )
+        return [{"uri": uri} for uri in uris]
+
+    # Index by URI for fast lookup
+    meta_by_uri = {}
+    for t in raw_tracks:
+        uri = t.get("uri")
+        if uri:
+            artists = [
+                a.get("name", "")
+                for a in t.get("artists", [])
+            ]
+            album = t.get("album", {})
+            images = album.get("images", [])
+            meta_by_uri[uri] = {
+                "uri": uri,
+                "name": t.get("name", "Unknown"),
+                "artists": artists,
+                "album_name": album.get("name", ""),
+                "album_image_url": (
+                    images[0]["url"] if images else ""
+                ),
+                "duration_ms": t.get("duration_ms"),
+            }
+
+    # Return in original order, fallback for missing
+    result = []
+    for uri in uris:
+        if uri in meta_by_uri:
+            result.append(meta_by_uri[uri])
+        else:
+            result.append({"uri": uri})
+    return result

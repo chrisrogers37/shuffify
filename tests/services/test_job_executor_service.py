@@ -64,6 +64,7 @@ def mock_api():
     ]
     api.update_playlist_tracks.return_value = True
     api.playlist_add_items.return_value = None
+    api.get_tracks.return_value = []
     api.token_info = Mock()
     api.token_info.refresh_token = "original_refresh"
     return api
@@ -72,11 +73,16 @@ def mock_api():
 class TestExecuteRaid:
     """Tests for the raid execution logic."""
 
-    def test_raid_adds_new_tracks(
-        self, mock_schedule, mock_api
+    @patch(
+        "shuffify.services.executors.raid_executor"
+        ".PendingRaidService"
+    )
+    def test_raid_stages_new_tracks(
+        self, mock_pending, mock_schedule, mock_api
     ):
-        """Should add tracks from source not in target."""
+        """Should stage tracks from source not in target."""
         mock_schedule.job_type = "raid"
+        mock_pending.stage_tracks.return_value = 3
 
         # Target has tracks 1-5
         mock_api.get_playlist_tracks.side_effect = [
@@ -102,12 +108,16 @@ class TestExecuteRaid:
             mock_schedule, mock_api
         )
 
-        # Tracks 6, 7, 8 are new (4, 5 are duplicates)
+        # Tracks 6, 7, 8 are new (staged, not added)
         assert result["tracks_added"] == 3
-        assert result["tracks_total"] == 8
+        mock_pending.stage_tracks.assert_called_once()
 
+    @patch(
+        "shuffify.services.executors.raid_executor"
+        ".PendingRaidService"
+    )
     def test_raid_no_new_tracks(
-        self, mock_schedule, mock_api
+        self, mock_pending, mock_schedule, mock_api
     ):
         """Should report 0 additions when all duplicates."""
         mock_schedule.job_type = "raid"
@@ -128,6 +138,7 @@ class TestExecuteRaid:
             mock_schedule, mock_api
         )
         assert result["tracks_added"] == 0
+        mock_pending.stage_tracks.assert_not_called()
 
     def test_raid_no_sources_skips(
         self, mock_schedule, mock_api

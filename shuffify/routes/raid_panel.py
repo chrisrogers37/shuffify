@@ -43,6 +43,13 @@ from shuffify.schemas.raid_requests import (
     UnwatchPlaylistRequest,
     RaidNowRequest,
 )
+from shuffify.schemas.pending_raid_requests import (
+    PromoteTracksRequest,
+    DismissTracksRequest,
+)
+from shuffify.services.pending_raid_service import (
+    PendingRaidService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -426,3 +433,183 @@ def raid_schedule_toggle(
         return json_error(
             "Failed to toggle schedule", 500
         )
+
+
+# =============================================================
+# Pending Raid Tracks (Track Inbox)
+# =============================================================
+
+
+@main.route(
+    "/playlist/<playlist_id>/pending-raids",
+    methods=["GET"],
+)
+@require_auth_and_db
+def pending_raids_list(
+    playlist_id, client=None, user=None
+):
+    """List pending raid tracks for a playlist."""
+    tracks = PendingRaidService.list_pending(
+        user.id, playlist_id
+    )
+    return json_success(
+        "Pending raids loaded",
+        tracks=[t.to_dict() for t in tracks],
+    )
+
+
+@main.route(
+    "/playlist/<playlist_id>/pending-raids/promote",
+    methods=["POST"],
+)
+@require_auth_and_db
+def pending_raids_promote(
+    playlist_id, client=None, user=None
+):
+    """Promote selected pending tracks."""
+    req, err = validate_json(PromoteTracksRequest)
+    if err:
+        return err
+
+    promoted = PendingRaidService.promote_tracks(
+        user.id, playlist_id, req.track_ids
+    )
+
+    if promoted:
+        # Add tracks to Spotify playlist
+        uris = [t.track_uri for t in promoted]
+        try:
+            client.api.playlist_add_items(
+                playlist_id, uris
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to add promoted tracks "
+                "to Spotify: %s",
+                e,
+            )
+            return json_error(
+                "Failed to add tracks to Spotify",
+                500,
+            )
+
+        log_activity(
+            user_id=user.id,
+            activity_type=ActivityType.RAID_PROMOTE,
+            description=(
+                f"Promoted {len(promoted)} "
+                f"raided tracks"
+            ),
+            playlist_id=playlist_id,
+        )
+
+    return json_success(
+        f"{len(promoted)} tracks promoted.",
+        promoted_count=len(promoted),
+    )
+
+
+@main.route(
+    "/playlist/<playlist_id>/pending-raids/dismiss",
+    methods=["POST"],
+)
+@require_auth_and_db
+def pending_raids_dismiss(
+    playlist_id, client=None, user=None
+):
+    """Dismiss selected pending tracks."""
+    req, err = validate_json(DismissTracksRequest)
+    if err:
+        return err
+
+    count = PendingRaidService.dismiss_tracks(
+        user.id, playlist_id, req.track_ids
+    )
+
+    log_activity(
+        user_id=user.id,
+        activity_type=ActivityType.RAID_DISMISS,
+        description=(
+            f"Dismissed {count} raided tracks"
+        ),
+        playlist_id=playlist_id,
+    )
+
+    return json_success(
+        f"{count} tracks dismissed.",
+        dismissed_count=count,
+    )
+
+
+@main.route(
+    "/playlist/<playlist_id>/pending-raids/promote-all",
+    methods=["POST"],
+)
+@require_auth_and_db
+def pending_raids_promote_all(
+    playlist_id, client=None, user=None
+):
+    """Promote all pending tracks."""
+    promoted = PendingRaidService.promote_all(
+        user.id, playlist_id
+    )
+
+    if promoted:
+        uris = [t.track_uri for t in promoted]
+        try:
+            client.api.playlist_add_items(
+                playlist_id, uris
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to add promoted tracks "
+                "to Spotify: %s",
+                e,
+            )
+            return json_error(
+                "Failed to add tracks to Spotify",
+                500,
+            )
+
+        log_activity(
+            user_id=user.id,
+            activity_type=ActivityType.RAID_PROMOTE,
+            description=(
+                f"Promoted all {len(promoted)} "
+                f"raided tracks"
+            ),
+            playlist_id=playlist_id,
+        )
+
+    return json_success(
+        f"{len(promoted)} tracks promoted.",
+        promoted_count=len(promoted),
+    )
+
+
+@main.route(
+    "/playlist/<playlist_id>/pending-raids/dismiss-all",
+    methods=["POST"],
+)
+@require_auth_and_db
+def pending_raids_dismiss_all(
+    playlist_id, client=None, user=None
+):
+    """Dismiss all pending tracks."""
+    count = PendingRaidService.dismiss_all(
+        user.id, playlist_id
+    )
+
+    log_activity(
+        user_id=user.id,
+        activity_type=ActivityType.RAID_DISMISS,
+        description=(
+            f"Dismissed all {count} raided tracks"
+        ),
+        playlist_id=playlist_id,
+    )
+
+    return json_success(
+        f"{count} tracks dismissed.",
+        dismissed_count=count,
+    )
