@@ -2567,7 +2567,7 @@ var inlineSnapshots = {
         var typeConfig = {
             'auto_pre_shuffle': { label: 'Pre-Shuffle', color: 'bg-blue-500/20 text-blue-300' },
             'auto_pre_raid': { label: 'Pre-Raid', color: 'bg-yellow-500/20 text-yellow-300' },
-            'auto_pre_commit': { label: 'Pre-Commit', color: 'bg-purple-500/20 text-purple-300' },
+            'auto_pre_commit': { label: 'Workshop Backup', color: 'bg-purple-500/20 text-purple-300' },
             'manual': { label: 'Manual', color: 'bg-green-500/20 text-green-300' },
             'scheduled_pre_execution': { label: 'Auto-backup', color: 'bg-orange-500/20 text-orange-300' },
         };
@@ -2819,7 +2819,7 @@ const snapshotState = {
 const SNAPSHOT_TYPE_CONFIG = {
     'auto_pre_shuffle': { label: 'Pre-Shuffle', color: 'bg-blue-500/20 text-blue-300' },
     'auto_pre_raid': { label: 'Pre-Raid', color: 'bg-yellow-500/20 text-yellow-300' },
-    'auto_pre_commit': { label: 'Pre-Commit', color: 'bg-purple-500/20 text-purple-300' },
+    'auto_pre_commit': { label: 'Workshop Backup', color: 'bg-purple-500/20 text-purple-300' },
     'manual': { label: 'Manual', color: 'bg-green-500/20 text-green-300' },
     'scheduled_pre_execution': { label: 'Auto-backup', color: 'bg-orange-500/20 text-orange-300' },
 };
@@ -2894,10 +2894,11 @@ function renderSnapshotTimeline() {
     snapshotState.snapshots.forEach(function(snap) {
         var typeConfig = SNAPSHOT_TYPE_CONFIG[snap.snapshot_type] || { label: snap.snapshot_type, color: 'bg-white/10 text-white/50' };
         var diff = snap.track_count - currentCount;
+        var absDiff = Math.abs(diff);
         var diffText = '';
-        if (diff > 0) diffText = '<span class="text-green-400 text-xs">+' + diff + ' vs current</span>';
-        else if (diff < 0) diffText = '<span class="text-red-400 text-xs">' + diff + ' vs current</span>';
-        else diffText = '<span class="text-white/30 text-xs">same as current</span>';
+        if (diff > 0) diffText = '<span class="text-green-400 text-xs">(' + absDiff + ' more track' + (absDiff !== 1 ? 's' : '') + ')</span>';
+        else if (diff < 0) diffText = '<span class="text-red-400 text-xs">(' + absDiff + ' fewer track' + (absDiff !== 1 ? 's' : '') + ')</span>';
+        else diffText = '<span class="text-white/30 text-xs">(same as current)</span>';
 
         var description = snap.trigger_description || '';
         var descHtml = description ? '<p class="text-white/40 text-xs mt-1 truncate" title="' + description.replace(/"/g, '&quot;') + '">' + description + '</p>' : '';
@@ -4268,7 +4269,7 @@ function renderRotationPanel(data) {
 
 /* Snapshot Browser Panel */
 .snapshot-card:hover { background: rgba(255, 255, 255, 0.08) !important; }
-.snapshot-timeline-container { max-height: calc(100vh - 200px); overflow-y: auto; }
+.snapshot-timeline-container { max-height: calc(100vh - 140px); overflow-y: auto; padding-bottom: 8px; }
 .snapshot-timeline-fade {
     position: absolute;
     bottom: 0;

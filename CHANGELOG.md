@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Snapshot Diff Text** - Improved clarity of track count comparison in snapshot cards
+  - Changed from "-1 vs current" to natural language like "1 fewer track" or "2 more tracks"
+- **Snapshot Badge Labels** - Renamed "Pre-Commit" badge to "Workshop Backup" for clarity
+
+### Fixed
+- **Snapshot Panel Scroll** - Fixed scrollbar truncating before page end by reducing max-height offset
+
 ### Added
 - **Workshop Track Inbox** - Unified section below the playlist for reviewing raided tracks and searching for new ones
   - Raided Tracks sub-view: review, promote (add to Spotify), or dismiss staged tracks
