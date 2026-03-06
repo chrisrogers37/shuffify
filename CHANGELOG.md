@@ -10,7 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Snapshot Diff Text** - Improved clarity of track count comparison in snapshot cards
   - Changed from "-1 vs current" to natural language like "1 fewer track" or "2 more tracks"
+  - Removed redundant "(same as current)" text when track counts match
 - **Snapshot Badge Labels** - Renamed "Pre-Commit" badge to "Workshop Backup" for clarity
+- **Snapshot Trigger Descriptions** - Humanized algorithm class names in descriptions
+  - "Before BasicShuffle" now displays as "Before Basic shuffle"
+- **Snapshot Panel UX** - Multiple visual improvements to snapshot browser
+  - Added snapshot count badge to panel header (e.g., "Snapshots (7)")
+  - Added date group separators (Today, Yesterday, Older) between cards
+  - Removed bottom fade gradient that obscured the last snapshot card
 
 ### Fixed
 - **Snapshot Panel Scroll** - Fixed scrollbar truncating before page end by reducing max-height offset
