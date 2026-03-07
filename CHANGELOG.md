@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Rotation Protect Top N** - Optional `protect_count` parameter for rotation schedules
   - Position-based protection: first N tracks in the playlist are never rotated out
   - Works with all three rotation modes (archive oldest, refresh, swap)
+- **Rotation Time-of-Day Picker** - Required time picker when creating rotation schedules
+  - Converts frequency + time to cron expressions (e.g., daily at 09:00 UTC)
+  - Displayed in schedule detail line when viewing an existing rotation
+- **Rotation Run Now Button** - Play button on existing rotation schedules in the workshop
+  - Triggers immediate rotation via the existing `/schedules/<id>/run` endpoint
+  - Refreshes workshop data after execution to reflect track changes
 
 ### Changed
 - **Snapshot Diff Text** - Improved clarity of track count comparison in snapshot cards
