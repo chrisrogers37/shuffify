@@ -605,6 +605,12 @@
                                 <option value="weekly">Weekly</option>
                             </select>
                         </div>
+                        <!-- Time of day -->
+                        <div>
+                            <label class="text-white/50 text-xs mb-1 block">Time of day (UTC)</label>
+                            <input id="rotation-time-input" type="time" value="09:00"
+                                   class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
+                        </div>
                         <!-- Size cap -->
                         <div class="pt-1 border-t border-white/5">
                             <label class="flex items-center justify-between text-white/50 text-xs mb-1">
@@ -639,6 +645,12 @@
                         <span id="rotation-schedule-badge" class="px-2 py-0.5 rounded-full text-xs font-semibold"></span>
                     </div>
                     <div class="flex gap-2 mt-3">
+                        <button onclick="runRotationNow()"
+                                id="rotation-run-btn"
+                                title="Run rotation now"
+                                class="px-3 py-1.5 rounded-lg bg-spotify-green/20 hover:bg-spotify-green/40 text-spotify-green text-xs font-semibold transition duration-150 border border-spotify-green/30">
+                            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                        </button>
                         <button onclick="toggleRotationSchedule()"
                                 id="rotation-toggle-btn"
                                 class="flex-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition duration-150 border border-white/20">
@@ -3458,8 +3470,30 @@ function renderRotationConfig() {
 
     var detailEl = document.getElementById('rotation-schedule-detail');
     var count = params.rotation_count || 5;
-    var freq = freqMap[sched.schedule_value] || sched.schedule_value;
+
+    // Parse frequency and time from schedule value
+    var freq;
+    var timeStr = '';
+    if (sched.schedule_type === 'cron' && sched.schedule_value) {
+        var cronParts = sched.schedule_value.split(' ');
+        if (cronParts.length === 5) {
+            var cronMin = parseInt(cronParts[0], 10);
+            var cronHr = parseInt(cronParts[1], 10);
+            timeStr = ('0' + cronHr).slice(-2) + ':' + ('0' + cronMin).slice(-2) + ' UTC';
+            if (cronParts[2] === '*/3') freq = 'Every 3 days';
+            else if (cronParts[4] === '1') freq = 'Weekly';
+            else freq = 'Daily';
+        } else {
+            freq = sched.schedule_value;
+        }
+    } else {
+        freq = freqMap[sched.schedule_value] || sched.schedule_value;
+    }
+
     var detailParts = [count + ' tracks', freq];
+    if (timeStr) {
+        detailParts.push(timeStr);
+    }
     if (params.target_size) {
         detailParts.push('cap ' + params.target_size);
     }
@@ -3519,12 +3553,17 @@ function createRotationSchedule() {
     var modeSelect = document.getElementById('rotation-mode-select');
     var countInput = document.getElementById('rotation-count-input');
     var freqSelect = document.getElementById('rotation-freq-select');
+    var timeInput = document.getElementById('rotation-time-input');
     var targetSizeInput = document.getElementById('rotation-target-size');
     var protectInput = document.getElementById('rotation-protect-count');
 
     var mode = modeSelect.value;
     var count = parseInt(countInput.value, 10) || 5;
     var freq = freqSelect.value;
+    var timeVal = timeInput.value || '09:00';
+    var timeParts = timeVal.split(':').map(Number);
+    var hours = timeParts[0];
+    var minutes = timeParts[1];
     var targetSize = targetSizeInput.value ? parseInt(targetSizeInput.value, 10) : null;
     var protectCount = parseInt(protectInput.value, 10) || 0;
 
@@ -3537,6 +3576,20 @@ function createRotationSchedule() {
     }
     if (protectCount > 0) {
         params.protect_count = protectCount;
+    }
+
+    // Build cron expression from frequency + time
+    var scheduleType = 'cron';
+    var scheduleValue;
+    if (freq === 'daily') {
+        scheduleValue = minutes + ' ' + hours + ' * * *';
+    } else if (freq === 'every_3d') {
+        scheduleValue = minutes + ' ' + hours + ' */3 * *';
+    } else if (freq === 'weekly') {
+        scheduleValue = minutes + ' ' + hours + ' * * 1';
+    } else {
+        scheduleType = 'interval';
+        scheduleValue = freq;
     }
 
     var btn = document.getElementById('rotation-enable-btn');
@@ -3557,8 +3610,8 @@ function createRotationSchedule() {
                 job_type: 'rotate',
                 target_playlist_id: workshopState.playlistId,
                 target_playlist_name: workshopState.playlistName,
-                schedule_type: 'interval',
-                schedule_value: freq,
+                schedule_type: scheduleType,
+                schedule_value: scheduleValue,
                 algorithm_params: params,
             }),
         });
@@ -3630,6 +3683,42 @@ function deleteRotationSchedule() {
     })
     .catch(function(error) {
         showNotification(error.message || 'Failed to delete rotation schedule', 'error');
+    });
+}
+
+function runRotationNow() {
+    if (!archiveState.rotationSchedule) return;
+    var schedId = archiveState.rotationSchedule.id;
+    var btn = document.getElementById('rotation-run-btn');
+    btn.disabled = true;
+    btn.classList.add('opacity-50');
+
+    fetch('/schedules/' + schedId + '/run', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+    })
+    .then(function(response) {
+        if (!response.ok) {
+            return response.json().then(function(d) {
+                throw new Error(d.message || 'Rotation failed');
+            });
+        }
+        return response.json();
+    })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.classList.remove('opacity-50');
+        showNotification(data.message || 'Rotation executed successfully', 'success');
+        // Refresh workshop data to reflect changes
+        loadWorkshopPlaylist(workshopState.playlistId, workshopState.playlistName);
+    })
+    .catch(function(error) {
+        btn.disabled = false;
+        btn.classList.remove('opacity-50');
+        showNotification(error.message || 'Failed to run rotation', 'error');
     });
 }
 
