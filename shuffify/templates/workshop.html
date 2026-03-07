@@ -605,6 +605,23 @@
                                 <option value="weekly">Weekly</option>
                             </select>
                         </div>
+                        <!-- Size cap -->
+                        <div class="pt-1 border-t border-white/5">
+                            <label class="flex items-center justify-between text-white/50 text-xs mb-1">
+                                <span>Playlist size cap</span>
+                                <span class="text-white/30">&plusmn;5 tolerance</span>
+                            </label>
+                            <input id="rotation-target-size" type="number" min="1" max="10000"
+                                   class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
+                                   placeholder="No limit">
+                        </div>
+                        <!-- Protect top N -->
+                        <div>
+                            <label class="text-white/50 text-xs mb-1 block">Protect top N tracks</label>
+                            <input id="rotation-protect-count" type="number" min="0" max="500" value="0"
+                                   class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
+                                   placeholder="0">
+                        </div>
                         <button id="rotation-enable-btn" onclick="createRotationSchedule()"
                                 class="w-full px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
                             Enable Rotation
@@ -3442,7 +3459,14 @@ function renderRotationConfig() {
     var detailEl = document.getElementById('rotation-schedule-detail');
     var count = params.rotation_count || 5;
     var freq = freqMap[sched.schedule_value] || sched.schedule_value;
-    detailEl.textContent = count + ' tracks \u00b7 ' + freq;
+    var detailParts = [count + ' tracks', freq];
+    if (params.target_size) {
+        detailParts.push('cap ' + params.target_size);
+    }
+    if (params.protect_count) {
+        detailParts.push('protect ' + params.protect_count);
+    }
+    detailEl.textContent = detailParts.join(' \u00b7 ');
 
     var badge = document.getElementById('rotation-schedule-badge');
     var toggleBtn = document.getElementById('rotation-toggle-btn');
@@ -3495,10 +3519,25 @@ function createRotationSchedule() {
     var modeSelect = document.getElementById('rotation-mode-select');
     var countInput = document.getElementById('rotation-count-input');
     var freqSelect = document.getElementById('rotation-freq-select');
+    var targetSizeInput = document.getElementById('rotation-target-size');
+    var protectInput = document.getElementById('rotation-protect-count');
 
     var mode = modeSelect.value;
     var count = parseInt(countInput.value, 10) || 5;
     var freq = freqSelect.value;
+    var targetSize = targetSizeInput.value ? parseInt(targetSizeInput.value, 10) : null;
+    var protectCount = parseInt(protectInput.value, 10) || 0;
+
+    var params = {
+        rotation_mode: mode,
+        rotation_count: count,
+    };
+    if (targetSize && targetSize > 0) {
+        params.target_size = targetSize;
+    }
+    if (protectCount > 0) {
+        params.protect_count = protectCount;
+    }
 
     var btn = document.getElementById('rotation-enable-btn');
     var originalText = btn.textContent;
@@ -3520,10 +3559,7 @@ function createRotationSchedule() {
                 target_playlist_name: workshopState.playlistName,
                 schedule_type: 'interval',
                 schedule_value: freq,
-                algorithm_params: {
-                    rotation_mode: mode,
-                    rotation_count: count,
-                },
+                algorithm_params: params,
             }),
         });
     })
