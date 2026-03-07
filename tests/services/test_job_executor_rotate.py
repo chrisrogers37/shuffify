@@ -713,32 +713,32 @@ class TestComputeRotationCount:
         )
         assert result == 5
 
-    def test_target_size_no_overflow(self):
-        """Playlist within tolerance, use base count."""
+    def test_target_size_under_cap(self):
+        """Playlist under cap, use base count."""
+        result = _compute_rotation_count(
+            rotation_count=3, target_size=20,
+            playlist_len=18, protect_count=0,
+        )
+        # 18 < 20, no overflow
+        assert result == 3
+
+    def test_target_size_at_cap(self):
+        """Exactly at cap, no extra rotation."""
+        result = _compute_rotation_count(
+            rotation_count=3, target_size=20,
+            playlist_len=20, protect_count=0,
+        )
+        # 20 == 20, overflow = 0
+        assert result == 3
+
+    def test_target_size_over_cap(self):
+        """Playlist exceeds hard cap."""
         result = _compute_rotation_count(
             rotation_count=3, target_size=20,
             playlist_len=24, protect_count=0,
         )
-        # 24 <= 20 + 5, no overflow
-        assert result == 3
-
-    def test_target_size_at_tolerance_boundary(self):
-        """Exactly at tolerance boundary, no extra."""
-        result = _compute_rotation_count(
-            rotation_count=3, target_size=20,
-            playlist_len=25, protect_count=0,
-        )
-        # 25 == 20 + 5, overflow = 0
-        assert result == 3
-
-    def test_target_size_over_tolerance(self):
-        """Playlist exceeds cap + tolerance."""
-        result = _compute_rotation_count(
-            rotation_count=3, target_size=20,
-            playlist_len=30, protect_count=0,
-        )
-        # overflow = 30 - 25 = 5, max(3, 5) = 5
-        assert result == 5
+        # overflow = 24 - 20 = 4, max(3, 4) = 4
+        assert result == 4
 
     def test_target_size_large_overflow(self):
         """Large overflow increases count."""
@@ -746,8 +746,8 @@ class TestComputeRotationCount:
             rotation_count=5, target_size=50,
             playlist_len=80, protect_count=0,
         )
-        # overflow = 80 - 55 = 25
-        assert result == 25
+        # overflow = 80 - 50 = 30
+        assert result == 30
 
     def test_protect_count_limits_eligible(self):
         """Protect count reduces eligible tracks."""
@@ -772,10 +772,10 @@ class TestComputeRotationCount:
             rotation_count=3, target_size=10,
             playlist_len=20, protect_count=5,
         )
-        # overflow = 20 - 15 = 5, max(3, 5) = 5
+        # overflow = 20 - 10 = 10, max(3, 10) = 10
         # eligible = 20 - 5 = 15
-        # min(5, 15) = 5
-        assert result == 5
+        # min(10, 15) = 10
+        assert result == 10
 
     def test_protect_caps_overflow(self):
         """Protect limits even when overflow is high."""
@@ -783,9 +783,9 @@ class TestComputeRotationCount:
             rotation_count=3, target_size=10,
             playlist_len=30, protect_count=25,
         )
-        # overflow = 30 - 15 = 15, max(3, 15) = 15
+        # overflow = 30 - 10 = 20, max(3, 20) = 20
         # eligible = 30 - 25 = 5
-        # min(15, 5) = 5
+        # min(20, 5) = 5
         assert result == 5
 
 
@@ -926,7 +926,7 @@ class TestTargetSize:
             False
         )
 
-        # 15 tracks, cap 5 => overflow = 15-10 = 5
+        # 15 tracks, cap 5 => overflow = 15-5 = 10
         uris = ["u{}".format(i) for i in range(15)]
         prod = _make_tracks(uris)
         api = _make_api(prod_tracks=prod)
@@ -937,8 +937,8 @@ class TestTargetSize:
 
         result = execute_rotate(schedule, api)
 
-        # Should archive 5 tracks (overflow), not 2
-        assert result["tracks_total"] == 10
+        # Should archive 10 tracks (overflow), not 2
+        assert result["tracks_total"] == 5
 
     @patch(
         "shuffify.services.executors.rotate_executor"
@@ -948,17 +948,17 @@ class TestTargetSize:
         "shuffify.services.playlist_pair_service"
         ".PlaylistPairService.get_pair_for_playlist"
     )
-    def test_target_size_within_tolerance(
+    def test_target_size_under_cap_uses_base_count(
         self, mock_pair, mock_snap
     ):
-        """Within tolerance, base count is used."""
+        """Under cap, base rotation count is used."""
         mock_pair.return_value = _make_pair()
         mock_snap.is_auto_snapshot_enabled.return_value = (
             False
         )
 
-        # 12 tracks, cap 10 => 12 <= 15, no overflow
-        uris = ["u{}".format(i) for i in range(12)]
+        # 8 tracks, cap 10 => under cap, no overflow
+        uris = ["u{}".format(i) for i in range(8)]
         prod = _make_tracks(uris)
         api = _make_api(prod_tracks=prod)
         schedule = _make_schedule(
@@ -969,7 +969,7 @@ class TestTargetSize:
         result = execute_rotate(schedule, api)
 
         # Normal rotation of 3
-        assert result["tracks_total"] == 9
+        assert result["tracks_total"] == 5
 
     @patch(
         "shuffify.services.executors.rotate_executor"
@@ -989,7 +989,7 @@ class TestTargetSize:
         )
 
         # 20 tracks, cap 10, protect 5
-        # overflow = 20-15 = 5, eligible = 15
+        # overflow = 20-10 = 10, eligible = 15
         uris = ["u{}".format(i) for i in range(20)]
         prod = _make_tracks(uris)
         api = _make_api(prod_tracks=prod)
@@ -1001,12 +1001,13 @@ class TestTargetSize:
 
         result = execute_rotate(schedule, api)
 
-        # Rotates 5, skipping first 5
-        assert result["tracks_total"] == 15
-        # Removed tracks should be u5..u9
+        # Rotates 10, skipping first 5
+        assert result["tracks_total"] == 10
+        # Removed tracks should be u5..u14
         removed = api.playlist_remove_items.call_args[
             0
         ][1]
         assert removed == [
-            "u5", "u6", "u7", "u8", "u9"
+            "u5", "u6", "u7", "u8", "u9",
+            "u10", "u11", "u12", "u13", "u14",
         ]

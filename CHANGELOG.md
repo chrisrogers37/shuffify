@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Rotation Playlist Size Cap** - Optional `target_size` parameter for rotation schedules
-  - When playlist exceeds cap + 5 tolerance, rotation automatically archives extra tracks
+  - Hard cap: rotation automatically archives extra tracks to keep playlist at or under the target size
   - Configurable in the workshop Archive & Rotation panel
 - **Rotation Protect Top N** - Optional `protect_count` parameter for rotation schedules
   - Position-based protection: first N tracks in the playlist are never rotated out

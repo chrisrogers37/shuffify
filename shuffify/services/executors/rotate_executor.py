@@ -179,9 +179,6 @@ def _validate_rotation_config(
     )
 
 
-SIZE_CAP_TOLERANCE = 5
-
-
 def _compute_rotation_count(
     rotation_count: int,
     target_size: int | None,
@@ -191,17 +188,15 @@ def _compute_rotation_count(
     """
     Determine how many tracks to rotate out.
 
-    If target_size is set and the playlist exceeds
-    target_size + tolerance, increase the count so
-    the playlist is brought back within range.
+    If target_size is set and the playlist exceeds it,
+    increase the count so the playlist is brought back
+    to or under the cap.
     The count is also capped to the number of
     eligible (non-protected) tracks.
     """
     count = rotation_count
     if target_size is not None:
-        overflow = playlist_len - (
-            target_size + SIZE_CAP_TOLERANCE
-        )
+        overflow = playlist_len - target_size
         if overflow > 0:
             count = max(count, overflow)
 
