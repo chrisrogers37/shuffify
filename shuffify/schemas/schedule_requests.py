@@ -154,6 +154,30 @@ class ScheduleCreateRequest(BaseModel):
                         "rotation_count must be a "
                         "positive integer"
                     )
+            target_size = params.get("target_size")
+            if target_size is not None:
+                try:
+                    ts = int(target_size)
+                    if ts < 1:
+                        raise ValueError()
+                except (ValueError, TypeError):
+                    raise ValueError(
+                        "target_size must be a "
+                        "positive integer"
+                    )
+            protect_count = params.get(
+                "protect_count"
+            )
+            if protect_count is not None:
+                try:
+                    pc = int(protect_count)
+                    if pc < 0:
+                        raise ValueError()
+                except (ValueError, TypeError):
+                    raise ValueError(
+                        "protect_count must be a "
+                        "non-negative integer"
+                    )
         if self.schedule_type == ScheduleType.INTERVAL:
             if self.schedule_value not in VALID_INTERVAL_VALUES:
                 raise ValueError(

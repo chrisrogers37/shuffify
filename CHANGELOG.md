@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Rotation Playlist Size Cap** - Optional `target_size` parameter for rotation schedules
+  - Hard cap: rotation automatically archives extra tracks to keep playlist at or under the target size
+  - Configurable in the workshop Archive & Rotation panel
+- **Rotation Protect Top N** - Optional `protect_count` parameter for rotation schedules
+  - Position-based protection: first N tracks in the playlist are never rotated out
+  - Works with all three rotation modes (archive oldest, refresh, swap)
+
 ### Changed
 - **Snapshot Diff Text** - Improved clarity of track count comparison in snapshot cards
   - Changed from "-1 vs current" to natural language like "1 fewer track" or "2 more tracks"

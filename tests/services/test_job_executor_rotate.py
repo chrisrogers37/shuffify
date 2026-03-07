@@ -14,6 +14,7 @@ from shuffify.services.executors import (
 )
 from shuffify.services.executors.rotate_executor import (
     execute_rotate,
+    _compute_rotation_count,
 )
 from shuffify.enums import JobType, RotationMode
 
@@ -695,3 +696,318 @@ class TestExecuteRotateValidation:
             schedule, api
         )
         assert result["tracks_total"] == 1
+
+
+# =============================================================================
+# COMPUTE ROTATION COUNT
+# =============================================================================
+
+
+class TestComputeRotationCount:
+    """Tests for _compute_rotation_count helper."""
+
+    def test_no_target_size_returns_base_count(self):
+        result = _compute_rotation_count(
+            rotation_count=5, target_size=None,
+            playlist_len=20, protect_count=0,
+        )
+        assert result == 5
+
+    def test_target_size_under_cap(self):
+        """Playlist under cap, use base count."""
+        result = _compute_rotation_count(
+            rotation_count=3, target_size=20,
+            playlist_len=18, protect_count=0,
+        )
+        # 18 < 20, no overflow
+        assert result == 3
+
+    def test_target_size_at_cap(self):
+        """Exactly at cap, no extra rotation."""
+        result = _compute_rotation_count(
+            rotation_count=3, target_size=20,
+            playlist_len=20, protect_count=0,
+        )
+        # 20 == 20, overflow = 0
+        assert result == 3
+
+    def test_target_size_over_cap(self):
+        """Playlist exceeds hard cap."""
+        result = _compute_rotation_count(
+            rotation_count=3, target_size=20,
+            playlist_len=24, protect_count=0,
+        )
+        # overflow = 24 - 20 = 4, max(3, 4) = 4
+        assert result == 4
+
+    def test_target_size_large_overflow(self):
+        """Large overflow increases count."""
+        result = _compute_rotation_count(
+            rotation_count=5, target_size=50,
+            playlist_len=80, protect_count=0,
+        )
+        # overflow = 80 - 50 = 30
+        assert result == 30
+
+    def test_protect_count_limits_eligible(self):
+        """Protect count reduces eligible tracks."""
+        result = _compute_rotation_count(
+            rotation_count=10, target_size=None,
+            playlist_len=15, protect_count=10,
+        )
+        # eligible = 15 - 10 = 5
+        assert result == 5
+
+    def test_protect_count_exceeds_playlist(self):
+        """Protect count >= playlist len = 0."""
+        result = _compute_rotation_count(
+            rotation_count=5, target_size=None,
+            playlist_len=3, protect_count=5,
+        )
+        assert result == 0
+
+    def test_target_size_and_protect_combined(self):
+        """Both target_size overflow and protect."""
+        result = _compute_rotation_count(
+            rotation_count=3, target_size=10,
+            playlist_len=20, protect_count=5,
+        )
+        # overflow = 20 - 10 = 10, max(3, 10) = 10
+        # eligible = 20 - 5 = 15
+        # min(10, 15) = 10
+        assert result == 10
+
+    def test_protect_caps_overflow(self):
+        """Protect limits even when overflow is high."""
+        result = _compute_rotation_count(
+            rotation_count=3, target_size=10,
+            playlist_len=30, protect_count=25,
+        )
+        # overflow = 30 - 10 = 20, max(3, 20) = 20
+        # eligible = 30 - 25 = 5
+        # min(20, 5) = 5
+        assert result == 5
+
+
+# =============================================================================
+# PROTECT COUNT INTEGRATION
+# =============================================================================
+
+
+class TestProtectCount:
+    """Tests for protect_count in rotation modes."""
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_archive_oldest_skips_protected(
+        self, mock_pair, mock_snap
+    ):
+        """Protected tracks are not archived."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        prod = _make_tracks(
+            ["p1", "p2", "p3", "p4", "p5"]
+        )
+        api = _make_api(prod_tracks=prod)
+        schedule = _make_schedule(
+            rotation_count=2
+        )
+        schedule.algorithm_params["protect_count"] = 2
+
+        result = execute_rotate(schedule, api)
+
+        # Should archive p3, p4 (skip p1, p2)
+        api.playlist_remove_items.assert_called_once_with(
+            "target1", ["p3", "p4"]
+        )
+        assert result["tracks_total"] == 3
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_protect_all_returns_zero(
+        self, mock_pair, mock_snap
+    ):
+        """If all tracks protected, nothing rotates."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        prod = _make_tracks(["p1", "p2", "p3"])
+        api = _make_api(prod_tracks=prod)
+        schedule = _make_schedule(
+            rotation_count=5
+        )
+        schedule.algorithm_params["protect_count"] = 10
+
+        result = execute_rotate(schedule, api)
+
+        assert result["tracks_added"] == 0
+        assert result["tracks_total"] == 3
+        api.playlist_remove_items.assert_not_called()
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_refresh_skips_protected(
+        self, mock_pair, mock_snap
+    ):
+        """Refresh removes from after protected zone."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        prod = _make_tracks(
+            ["p1", "p2", "p3", "p4"]
+        )
+        archive = _make_tracks(["a1", "a2"])
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=archive,
+        )
+        schedule = _make_schedule(
+            rotation_mode="refresh",
+            rotation_count=2,
+        )
+        schedule.algorithm_params["protect_count"] = 2
+
+        result = execute_rotate(schedule, api)
+
+        # Should remove p3, p4 (not p1, p2)
+        api.playlist_remove_items.assert_called_once_with(
+            "target1", ["p3", "p4"]
+        )
+        assert result["tracks_added"] == 2
+
+
+# =============================================================================
+# TARGET SIZE INTEGRATION
+# =============================================================================
+
+
+class TestTargetSize:
+    """Tests for target_size playlist cap."""
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_target_size_increases_archival(
+        self, mock_pair, mock_snap
+    ):
+        """When over cap, more tracks are archived."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        # 15 tracks, cap 5 => overflow = 15-5 = 10
+        uris = ["u{}".format(i) for i in range(15)]
+        prod = _make_tracks(uris)
+        api = _make_api(prod_tracks=prod)
+        schedule = _make_schedule(
+            rotation_count=2
+        )
+        schedule.algorithm_params["target_size"] = 5
+
+        result = execute_rotate(schedule, api)
+
+        # Should archive 10 tracks (overflow), not 2
+        assert result["tracks_total"] == 5
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_target_size_under_cap_uses_base_count(
+        self, mock_pair, mock_snap
+    ):
+        """Under cap, base rotation count is used."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        # 8 tracks, cap 10 => under cap, no overflow
+        uris = ["u{}".format(i) for i in range(8)]
+        prod = _make_tracks(uris)
+        api = _make_api(prod_tracks=prod)
+        schedule = _make_schedule(
+            rotation_count=3
+        )
+        schedule.algorithm_params["target_size"] = 10
+
+        result = execute_rotate(schedule, api)
+
+        # Normal rotation of 3
+        assert result["tracks_total"] == 5
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_target_size_with_protect(
+        self, mock_pair, mock_snap
+    ):
+        """Cap + protect combined."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        # 20 tracks, cap 10, protect 5
+        # overflow = 20-10 = 10, eligible = 15
+        uris = ["u{}".format(i) for i in range(20)]
+        prod = _make_tracks(uris)
+        api = _make_api(prod_tracks=prod)
+        schedule = _make_schedule(
+            rotation_count=2
+        )
+        schedule.algorithm_params["target_size"] = 10
+        schedule.algorithm_params["protect_count"] = 5
+
+        result = execute_rotate(schedule, api)
+
+        # Rotates 10, skipping first 5
+        assert result["tracks_total"] == 10
+        # Removed tracks should be u5..u14
+        removed = api.playlist_remove_items.call_args[
+            0
+        ][1]
+        assert removed == [
+            "u5", "u6", "u7", "u8", "u9",
+            "u10", "u11", "u12", "u13", "u14",
+        ]
