@@ -252,6 +252,121 @@ class TestExecuteRotateArchiveOldest:
 
 
 # =============================================================================
+# ARCHIVE OLDEST — DEDUP
+# =============================================================================
+
+
+class TestArchiveOldestDedup:
+    """Archive oldest must not push duplicates to archive."""
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_skips_tracks_already_in_archive(
+        self, mock_pair, mock_snap
+    ):
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        prod = _make_tracks(
+            ["u1", "u2", "u3", "u4"]
+        )
+        archive = _make_tracks(["u1", "u2"])
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=archive,
+        )
+        schedule = _make_schedule(
+            rotation_count=3
+        )
+
+        result = execute_rotate(schedule, api)
+
+        # u1, u2 already in archive — only u3 added
+        api.playlist_add_items.assert_called_once_with(
+            "archive1", ["u3"]
+        )
+        # All 3 still removed from production
+        api.playlist_remove_items.assert_called_once_with(
+            "target1", ["u1", "u2", "u3"]
+        )
+        assert result["tracks_total"] == 1
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_all_already_in_archive_no_add(
+        self, mock_pair, mock_snap
+    ):
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        prod = _make_tracks(["u1", "u2", "u3"])
+        archive = _make_tracks(["u1", "u2", "u3"])
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=archive,
+        )
+        schedule = _make_schedule(
+            rotation_count=2
+        )
+
+        execute_rotate(schedule, api)
+
+        # Nothing to add — all already in archive
+        api.playlist_add_items.assert_not_called()
+        # Still removed from production
+        api.playlist_remove_items.assert_called_once_with(
+            "target1", ["u1", "u2"]
+        )
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_empty_archive_adds_all(
+        self, mock_pair, mock_snap
+    ):
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        prod = _make_tracks(["u1", "u2", "u3"])
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=[],
+        )
+        schedule = _make_schedule(
+            rotation_count=2
+        )
+
+        execute_rotate(schedule, api)
+
+        api.playlist_add_items.assert_called_once_with(
+            "archive1", ["u1", "u2"]
+        )
+
+
+# =============================================================================
 # REFRESH
 # =============================================================================
 
@@ -512,6 +627,104 @@ class TestExecuteRotateSwap:
         )
 
         assert result["tracks_added"] == 0
+
+
+# =============================================================================
+# SWAP — DEDUP
+# =============================================================================
+
+
+class TestSwapDedup:
+    """Swap must not push duplicates to archive."""
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_swap_skips_outgoing_already_in_archive(
+        self, mock_pair, mock_snap
+    ):
+        """If a prod track being swapped out is already in
+        the archive, don't add it again."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        prod = _make_tracks(
+            ["p1", "p2", "p3", "p4"]
+        )
+        # a1, a2 are unique archive tracks; p1 is a
+        # dupe that's in both prod and archive
+        archive = _make_tracks(["p1", "a1", "a2"])
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=archive,
+        )
+        schedule = _make_schedule(
+            rotation_mode="swap",
+            rotation_count=2,
+        )
+
+        result = execute_rotate(schedule, api)
+
+        # a1, a2 available to swap in (p1 is in prod)
+        assert result["tracks_added"] == 2
+        # p1, p2 are swap_out candidates; p1 is already
+        # in archive so only p2 should be added
+        add_calls = api.playlist_add_items.call_args_list
+        archive_add = [
+            c for c in add_calls
+            if c[0][0] == "archive1"
+        ]
+        assert len(archive_add) == 1
+        assert archive_add[0][0][1] == ["p2"]
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_swap_all_outgoing_already_in_archive(
+        self, mock_pair, mock_snap
+    ):
+        """If all outgoing tracks are already in the
+        archive, skip the archive add entirely."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        prod = _make_tracks(["p1", "p2", "p3"])
+        # p1 is already in archive along with a1
+        archive = _make_tracks(["p1", "a1"])
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=archive,
+        )
+        schedule = _make_schedule(
+            rotation_mode="swap",
+            rotation_count=1,
+        )
+
+        result = execute_rotate(schedule, api)
+
+        # a1 swaps in; p1 swaps out but is already
+        # in archive so no archive add
+        assert result["tracks_added"] == 1
+        add_calls = api.playlist_add_items.call_args_list
+        archive_add = [
+            c for c in add_calls
+            if c[0][0] == "archive1"
+        ]
+        assert len(archive_add) == 0
 
 
 # =============================================================================

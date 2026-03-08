@@ -637,12 +637,12 @@
 
                 <!-- Existing rotation schedule -->
                 <div id="rotation-has-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
-                    <div class="flex items-center justify-between mb-2">
-                        <div>
+                    <div class="mb-2">
+                        <div class="flex items-center justify-between">
                             <span id="rotation-schedule-mode" class="text-white text-sm font-medium"></span>
-                            <span id="rotation-schedule-detail" class="text-white/40 text-xs ml-1"></span>
+                            <span id="rotation-schedule-badge" class="px-2 py-0.5 rounded-full text-xs font-semibold"></span>
                         </div>
-                        <span id="rotation-schedule-badge" class="px-2 py-0.5 rounded-full text-xs font-semibold"></span>
+                        <span id="rotation-schedule-detail" class="text-white/40 text-xs block mt-0.5"></span>
                     </div>
                     <div class="flex gap-2 mt-3">
                         <button onclick="runRotationNow()"
@@ -3702,9 +3702,11 @@ function runRotationNow() {
     })
     .then(function(response) {
         if (!response.ok) {
-            return response.json().then(function(d) {
-                throw new Error(d.message || 'Rotation failed');
-            });
+            return response.json()
+                .catch(function() { return {}; })
+                .then(function(d) {
+                    throw new Error(d.message || 'Rotation failed (status ' + response.status + ')');
+                });
         }
         return response.json();
     })
@@ -3712,7 +3714,6 @@ function runRotationNow() {
         btn.disabled = false;
         btn.classList.remove('opacity-50');
         showNotification(data.message || 'Rotation executed successfully', 'success');
-        // Refresh workshop data to reflect changes
         loadWorkshopPlaylist(workshopState.playlistId, workshopState.playlistName);
     })
     .catch(function(error) {

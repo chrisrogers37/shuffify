@@ -21,6 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Triggers immediate rotation via the existing `/schedules/<id>/run` endpoint
   - Refreshes workshop data after execution to reflect track changes
 
+### Fixed
+- **Rotation Duplicate Prevention** - Added dedup checks for all rotation modes
+  - `archive_oldest`: fetches archive tracks before adding, skips tracks already present
+  - `swap`: filters outgoing tracks against archive before adding, prevents double-archiving
+  - `refresh` already had dedup (archive → production direction) — no change needed
+- **Rotation Schedule Detail Layout** - Fixed awkward mid-text line wrapping in workshop sidebar
+  - Mode name and status badge now on their own line, details on a dedicated second line
+- **Rotation Run Error Messages** - Fixed double-wrapped "Execution failed: Execution failed:" text
+  - Error notifications now show the actual Spotify/server error clearly
+
 ### Changed
 - **Snapshot Diff Text** - Improved clarity of track count comparison in snapshot cards
   - Changed from "-1 vs current" to natural language like "1 fewer track" or "2 more tracks"

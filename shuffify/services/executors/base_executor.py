@@ -243,7 +243,7 @@ class JobExecutorService:
 
         if schedule.last_status == "failed":
             raise JobExecutionError(
-                f"Execution failed: {schedule.last_error}"
+                schedule.last_error or "Unknown error"
             )
 
         # Return detailed result from latest execution
