@@ -255,17 +255,33 @@ def _rotate_archive(
         JobExecutorService,
     )
 
-    JobExecutorService._batch_add_tracks(
-        api, archive_id, oldest_uris
+    # Dedupe: only add tracks not already in archive
+    archive_tracks = api.get_playlist_tracks(
+        archive_id
     )
+    archive_set = {
+        t["uri"]
+        for t in archive_tracks
+        if t.get("uri")
+    }
+    new_to_archive = [
+        u for u in oldest_uris
+        if u not in archive_set
+    ]
+
+    if new_to_archive:
+        JobExecutorService._batch_add_tracks(
+            api, archive_id, new_to_archive
+        )
     api.playlist_remove_items(
         target_id, oldest_uris
     )
 
     logger.info(
         "Schedule %s: archived %d oldest tracks "
-        "from '%s'",
+        "(%d new) from '%s'",
         schedule.id, actual_count,
+        len(new_to_archive),
         schedule.target_playlist_name,
     )
 
@@ -354,6 +370,7 @@ def _rotate_swap(
     ]
 
     prod_set = set(prod_uris)
+    archive_set = set(archive_uris)
     available = [
         u for u in archive_uris
         if u not in prod_set
@@ -364,9 +381,15 @@ def _rotate_swap(
     ]
 
     if swap_in_uris and swap_out_uris:
-        JobExecutorService._batch_add_tracks(
-            api, archive_id, swap_out_uris
-        )
+        # Dedupe: only add tracks not already in archive
+        new_to_archive = [
+            u for u in swap_out_uris
+            if u not in archive_set
+        ]
+        if new_to_archive:
+            JobExecutorService._batch_add_tracks(
+                api, archive_id, new_to_archive
+            )
         api.playlist_remove_items(
             target_id, swap_out_uris
         )
