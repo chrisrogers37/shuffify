@@ -22,6 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Refreshes workshop data after execution to reflect track changes
 
 ### Fixed
+- **Scheduler Job Registration** - Fixed APScheduler failing to register jobs on production
+  - Flask app objects are not picklable; SQLAlchemyJobStore serialization caused silent failures
+  - Stored app reference at module level instead of passing as job argument
+- **Schedules Panel Display** - Fixed all schedules showing as "Paused" with empty frequency
+  - Used correct API field names (`is_enabled` instead of `is_active`, `schedule_value` for frequency)
+  - Added cron-aware frequency display (e.g., "Daily at 14:00 UTC")
+- **Migration Idempotency** - Fixed stuck migration blocking redeployment
+  - Added IF NOT EXISTS checks to `upstream_sources` column additions and `pending_raid_tracks` table creation
+  - Manually applied missing `search_query` and resolver columns to production DB
 - **Rotation Duplicate Prevention** - Added dedup checks for all rotation modes
   - `archive_oldest`: fetches archive tracks before adding, skips tracks already present
   - `swap`: filters outgoing tracks against archive before adding, prevents double-archiving
