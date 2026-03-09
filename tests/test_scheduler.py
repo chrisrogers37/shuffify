@@ -232,7 +232,7 @@ class TestAddRemoveJob:
         mock_schedule.schedule_value = "daily"
 
         with pytest.raises(RuntimeError, match="not initialized"):
-            add_job_for_schedule(mock_schedule, Mock())
+            add_job_for_schedule(mock_schedule)
 
     def test_add_and_remove_job(self):
         mock_sched = MagicMock()
@@ -243,7 +243,7 @@ class TestAddRemoveJob:
         mock_schedule.schedule_type = "interval"
         mock_schedule.schedule_value = "daily"
 
-        add_job_for_schedule(mock_schedule, Mock())
+        add_job_for_schedule(mock_schedule)
 
         mock_sched.add_job.assert_called_once()
         call_kwargs = mock_sched.add_job.call_args
@@ -263,8 +263,8 @@ class TestAddRemoveJob:
         mock_schedule.schedule_value = "daily"
 
         # Add twice — should not raise
-        add_job_for_schedule(mock_schedule, Mock())
-        add_job_for_schedule(mock_schedule, Mock())
+        add_job_for_schedule(mock_schedule)
+        add_job_for_schedule(mock_schedule)
 
         assert mock_sched.add_job.call_count == 2
 
@@ -296,19 +296,21 @@ class TestExecuteScheduledJob:
     """Tests for _execute_scheduled_job."""
 
     def test_successful_execution(self, app):
+        scheduler_module._app = app
         with patch(
             "shuffify.services.executors.JobExecutorService"
         ) as mock_executor:
-            _execute_scheduled_job(app, 42)
+            _execute_scheduled_job(42)
             mock_executor.execute.assert_called_once_with(42)
 
     @patch("shuffify.scheduler.logger")
     def test_execution_failure_logged(self, mock_logger, app):
+        scheduler_module._app = app
         with patch(
             "shuffify.services.executors.JobExecutorService"
         ) as mock_executor:
             mock_executor.execute.side_effect = Exception("boom")
-            _execute_scheduled_job(app, 42)
+            _execute_scheduled_job(42)
         mock_logger.error.assert_called_once()
         assert "failed" in mock_logger.error.call_args[0][0].lower()
 

@@ -396,11 +396,7 @@ def raid_schedule_toggle(
                 from shuffify.scheduler import (
                     add_job_for_schedule,
                 )
-                from flask import current_app
-                add_job_for_schedule(
-                    schedule,
-                    current_app._get_current_object(),
-                )
+                add_job_for_schedule(schedule)
             else:
                 from shuffify.scheduler import (
                     remove_job_for_schedule,

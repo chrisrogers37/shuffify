@@ -4275,13 +4275,26 @@ var playlistSchedules = {
             var typeLabel = (sched.job_type || 'unknown').replace(/_/g, ' ');
             typeLabel = typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1);
 
-            var statusClass = sched.is_active
+            var statusClass = sched.is_enabled
                 ? 'bg-green-500/20 text-green-300'
                 : 'bg-white/10 text-white/40';
-            var statusText = sched.is_active ? 'Active' : 'Paused';
+            var statusText = sched.is_enabled ? 'Active' : 'Paused';
 
-            var freqText = sched.interval_value || sched.cron_expression || '';
-            freqText = freqText.replace(/_/g, ' ');
+            var freqText = '';
+            if (sched.schedule_type === 'cron' && sched.schedule_value) {
+                var cronParts = sched.schedule_value.split(' ');
+                if (cronParts.length === 5) {
+                    var cronHr = parseInt(cronParts[1], 10);
+                    var cronMin = parseInt(cronParts[0], 10);
+                    var timeStr = ('0' + cronHr).slice(-2) + ':' + ('0' + cronMin).slice(-2) + ' UTC';
+                    if (cronParts[2] === '*/3') freqText = 'Every 3 days at ' + timeStr;
+                    else if (cronParts[4] === '1') freqText = 'Weekly at ' + timeStr;
+                    else freqText = 'Daily at ' + timeStr;
+                }
+            } else {
+                var freqMap = {daily: 'Daily', every_3d: 'Every 3 days', weekly: 'Weekly', every_6h: 'Every 6h', every_12h: 'Every 12h'};
+                freqText = freqMap[sched.schedule_value] || (sched.schedule_value || '').replace(/_/g, ' ');
+            }
 
             var card = document.createElement('div');
             card.className = 'rounded-xl bg-white/5 border border-white/10 p-3';
@@ -4293,7 +4306,7 @@ var playlistSchedules = {
                 '<p class="text-white/40 text-xs">' + escapeHtml(freqText) + '</p>' +
                 '<div class="flex gap-2 mt-2">' +
                     '<button class="sched-toggle-btn flex-1 px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition duration-150 border border-white/20">' +
-                        (sched.is_active ? 'Pause' : 'Resume') +
+                        (sched.is_enabled ? 'Pause' : 'Resume') +
                     '</button>' +
                 '</div>';
 

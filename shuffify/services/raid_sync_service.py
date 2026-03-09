@@ -98,10 +98,7 @@ class RaidSyncService:
                     from shuffify.scheduler import (
                         add_job_for_schedule,
                     )
-                    from flask import current_app
-                    add_job_for_schedule(
-                        schedule, current_app._get_current_object()
-                    )
+                    add_job_for_schedule(schedule)
                 except Exception as e:
                     logger.warning(
                         "Could not register schedule with "

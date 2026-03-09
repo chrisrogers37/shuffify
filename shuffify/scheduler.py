@@ -32,6 +32,9 @@ logger = logging.getLogger(__name__)
 # Global scheduler instance
 _scheduler: Optional[BackgroundScheduler] = None
 
+# Flask app reference (stored at module level to avoid pickling)
+_app = None
+
 # Advisory lock connection (kept alive for lock duration)
 _lock_connection = None
 
@@ -154,7 +157,7 @@ def init_scheduler(app) -> Optional[BackgroundScheduler]:
     Returns:
         The BackgroundScheduler instance, or None if disabled.
     """
-    global _scheduler
+    global _scheduler, _app
 
     if not app.config.get("SCHEDULER_ENABLED", True):
         logger.info("Scheduler disabled by configuration")
@@ -228,6 +231,7 @@ def init_scheduler(app) -> Optional[BackgroundScheduler]:
         _scheduler.add_listener(_on_job_missed, EVENT_JOB_MISSED)
 
         _scheduler.start()
+        _app = app
         logger.info(
             "APScheduler started successfully "
             "(pool_size=%d)",
@@ -236,7 +240,7 @@ def init_scheduler(app) -> Optional[BackgroundScheduler]:
 
         # Register existing enabled schedules from database
         with app.app_context():
-            _register_existing_jobs(app)
+            _register_existing_jobs()
 
         # Clean up stale execution records from prior crashes
         with app.app_context():
@@ -253,13 +257,10 @@ def init_scheduler(app) -> Optional[BackgroundScheduler]:
         return None
 
 
-def _register_existing_jobs(app):
+def _register_existing_jobs():
     """
     Load enabled schedules from the database and register them
     with APScheduler.
-
-    Args:
-        app: The Flask application instance.
     """
     try:
         from shuffify.models.db import Schedule
@@ -271,7 +272,7 @@ def _register_existing_jobs(app):
 
         for schedule in enabled_schedules:
             try:
-                add_job_for_schedule(schedule, app)
+                add_job_for_schedule(schedule)
                 registered += 1
             except Exception as e:
                 logger.error(
@@ -296,13 +297,12 @@ def get_scheduler() -> Optional[BackgroundScheduler]:
     return _scheduler
 
 
-def add_job_for_schedule(schedule, app):
+def add_job_for_schedule(schedule):
     """
     Register an APScheduler job for a Schedule model instance.
 
     Args:
         schedule: A Schedule model instance.
-        app: The Flask application instance.
 
     Raises:
         RuntimeError: If scheduler is not initialized.
@@ -327,7 +327,7 @@ def add_job_for_schedule(schedule, app):
         func=_execute_scheduled_job,
         trigger=trigger,
         id=job_id,
-        args=[app, schedule.id],
+        args=[schedule.id],
         replace_existing=True,
         **trigger_kwargs,
     )
@@ -409,17 +409,20 @@ def _parse_schedule(
         return "interval", {"days": 1}
 
 
-def _execute_scheduled_job(app, schedule_id: int):
+def _execute_scheduled_job(schedule_id: int):
     """
     Wrapper that executes a scheduled job within Flask app context.
 
-    This is the function registered with APScheduler.
+    This is the function registered with APScheduler.  The Flask
+    app is accessed via the module-level ``_app`` reference rather
+    than being passed as an argument, because APScheduler's
+    SQLAlchemyJobStore needs to pickle job args and Flask app
+    objects are not picklable.
 
     Args:
-        app: The Flask application instance.
         schedule_id: The Schedule model ID to execute.
     """
-    with app.app_context():
+    with _app.app_context():
         try:
             from shuffify.services.executors import (
                 JobExecutorService,
@@ -488,11 +491,12 @@ def _cleanup_stale_executions(max_age_minutes: int = 30):
 
 def shutdown_scheduler():
     """Gracefully shut down the scheduler."""
-    global _scheduler, _lock_connection
+    global _scheduler, _app, _lock_connection
     if _scheduler is not None and _scheduler.running:
         _scheduler.shutdown(wait=False)
         logger.info("Scheduler shut down")
     _scheduler = None
+    _app = None
 
     # Release advisory lock
     if _lock_connection is not None:

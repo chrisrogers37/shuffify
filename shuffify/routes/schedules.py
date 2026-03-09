@@ -11,7 +11,6 @@ from flask import (
     flash,
     jsonify,
     render_template,
-    current_app,
 )
 
 from shuffify.routes import (
@@ -275,10 +274,7 @@ def create_schedule(client=None, user=None):
             add_job_for_schedule,
         )
 
-        add_job_for_schedule(
-            schedule,
-            current_app._get_current_object(),
-        )
+        add_job_for_schedule(schedule)
     except Exception as e:
         logger.warning(
             "Could not register schedule %d with "
@@ -349,10 +345,7 @@ def update_schedule(
         )
 
         if schedule.is_enabled:
-            add_job_for_schedule(
-                schedule,
-                current_app._get_current_object(),
-            )
+            add_job_for_schedule(schedule)
         else:
             remove_job_for_schedule(schedule_id)
     except Exception as e:
@@ -438,10 +431,7 @@ def toggle_schedule(
         )
 
         if schedule.is_enabled:
-            add_job_for_schedule(
-                schedule,
-                current_app._get_current_object(),
-            )
+            add_job_for_schedule(schedule)
         else:
             remove_job_for_schedule(schedule_id)
     except Exception as e:
