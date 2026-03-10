@@ -8,9 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Rotation Playlist Size Cap** - Optional `target_size` parameter for rotation schedules
+- **Rotation Playlist Size Cap** - Required `target_size` parameter for swap rotation mode
   - Hard cap: rotation automatically archives extra tracks to keep playlist at or under the target size
   - Configurable in the workshop Archive & Rotation panel
+  - Two-phase cold-start: overflow archival (phase 1) seeds the archive, then steady-state swap (phase 2)
 - **Rotation Protect Top N** - Optional `protect_count` parameter for rotation schedules
   - Position-based protection: first N tracks in the playlist are never rotated out
   - Works with all three rotation modes (archive oldest, refresh, swap)
@@ -41,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Error notifications now show the actual Spotify/server error clearly
 
 ### Changed
+- **Swap Rotation Requires Cap** - Swap rotation mode now requires a playlist size cap at all layers
+  - Schema validation, runtime executor, and frontend all enforce `target_size` for swap mode
+  - Enables meaningful cold-start behavior: overflow archival when over cap, bidirectional swap when at cap
+- **Snapshot Pre-Rotate Label** - Renamed `auto_pre_rotate` snapshot badge to "Before Rotation"
 - **Snapshot Diff Text** - Improved clarity of track count comparison in snapshot cards
   - Changed from "-1 vs current" to natural language like "1 fewer track" or "2 more tracks"
   - Removed redundant "(same as current)" text when track counts match

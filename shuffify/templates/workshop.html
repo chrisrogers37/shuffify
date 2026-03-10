@@ -595,6 +595,24 @@
                             <option value="refresh">Refresh</option>
                             <option value="swap">Swap</option>
                         </select>
+                        <script>
+                        document.getElementById('rotation-mode-select').addEventListener('change', function() {
+                            var capLabel = document.getElementById('rotation-cap-label');
+                            var capHint = document.getElementById('rotation-cap-hint');
+                            var capInput = document.getElementById('rotation-target-size');
+                            if (this.value === 'swap') {
+                                capLabel.textContent = 'Playlist size cap';
+                                capHint.textContent = 'required';
+                                capHint.className = 'text-spotify-green text-xs font-medium';
+                                capInput.placeholder = 'e.g. 50';
+                            } else {
+                                capLabel.textContent = 'Playlist size cap';
+                                capHint.textContent = 'optional';
+                                capHint.className = 'text-white/30 text-xs';
+                                capInput.placeholder = 'No limit';
+                            }
+                        });
+                        </script>
                         <div class="flex gap-2">
                             <input id="rotation-count-input" type="number" min="1" max="50" value="5"
                                    class="w-20 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
@@ -614,8 +632,8 @@
                         <!-- Size cap -->
                         <div class="pt-1 border-t border-white/5">
                             <label class="flex items-center justify-between text-white/50 text-xs mb-1">
-                                <span>Playlist size cap</span>
-                                <span class="text-white/30">hard cap</span>
+                                <span id="rotation-cap-label">Playlist size cap</span>
+                                <span id="rotation-cap-hint" class="text-white/30 text-xs">optional</span>
                             </label>
                             <input id="rotation-target-size" type="number" min="1" max="10000"
                                    class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
@@ -2596,6 +2614,7 @@ var inlineSnapshots = {
             'auto_pre_shuffle': { label: 'Pre-Shuffle', color: 'bg-blue-500/20 text-blue-300' },
             'auto_pre_raid': { label: 'Pre-Raid', color: 'bg-yellow-500/20 text-yellow-300' },
             'auto_pre_commit': { label: 'Workshop Backup', color: 'bg-purple-500/20 text-purple-300' },
+            'auto_pre_rotate': { label: 'Before Rotation', color: 'bg-teal-500/20 text-teal-300' },
             'manual': { label: 'Manual', color: 'bg-green-500/20 text-green-300' },
             'scheduled_pre_execution': { label: 'Auto-backup', color: 'bg-orange-500/20 text-orange-300' },
         };
@@ -2848,6 +2867,7 @@ const SNAPSHOT_TYPE_CONFIG = {
     'auto_pre_shuffle': { label: 'Pre-Shuffle', color: 'bg-blue-500/20 text-blue-300' },
     'auto_pre_raid': { label: 'Pre-Raid', color: 'bg-yellow-500/20 text-yellow-300' },
     'auto_pre_commit': { label: 'Workshop Backup', color: 'bg-purple-500/20 text-purple-300' },
+    'auto_pre_rotate': { label: 'Before Rotation', color: 'bg-teal-500/20 text-teal-300' },
     'manual': { label: 'Manual', color: 'bg-green-500/20 text-green-300' },
     'scheduled_pre_execution': { label: 'Auto-backup', color: 'bg-orange-500/20 text-orange-300' },
 };
@@ -3566,6 +3586,11 @@ function createRotationSchedule() {
     var minutes = timeParts[1];
     var targetSize = targetSizeInput.value ? parseInt(targetSizeInput.value, 10) : null;
     var protectCount = parseInt(protectInput.value, 10) || 0;
+
+    if (mode === 'swap' && (!targetSize || targetSize < 1)) {
+        showToast('Swap mode requires a playlist size cap', 'error');
+        return;
+    }
 
     var params = {
         rotation_mode: mode,

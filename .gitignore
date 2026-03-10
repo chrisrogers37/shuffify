@@ -65,6 +65,10 @@ htmlcov/
 *.ipynb
 test_notebook.ipynb
 
+# Claude Code
+.claude/agent-memory/
+.claude/worktrees/
+
 # New additions
 .web-extension-id
 
