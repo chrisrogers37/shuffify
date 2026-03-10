@@ -24,6 +24,7 @@ def _make_schedule(
     rotation_count=5,
     target_id="target1",
     user_id=1,
+    target_size=None,
 ):
     """Create a mock schedule for rotation tests."""
     schedule = MagicMock()
@@ -36,6 +37,10 @@ def _make_schedule(
         "rotation_mode": rotation_mode,
         "rotation_count": rotation_count,
     }
+    if target_size is not None:
+        schedule.algorithm_params["target_size"] = (
+            target_size
+        )
     return schedule
 
 
@@ -551,6 +556,7 @@ class TestExecuteRotateSwap:
         schedule = _make_schedule(
             rotation_mode="swap",
             rotation_count=2,
+            target_size=3,
         )
 
         result = execute_rotate(
@@ -587,6 +593,7 @@ class TestExecuteRotateSwap:
         schedule = _make_schedule(
             rotation_mode="swap",
             rotation_count=3,
+            target_size=3,
         )
 
         result = execute_rotate(
@@ -620,6 +627,7 @@ class TestExecuteRotateSwap:
         schedule = _make_schedule(
             rotation_mode="swap",
             rotation_count=2,
+            target_size=2,
         )
 
         result = execute_rotate(
@@ -668,6 +676,7 @@ class TestSwapDedup:
         schedule = _make_schedule(
             rotation_mode="swap",
             rotation_count=2,
+            target_size=4,
         )
 
         result = execute_rotate(schedule, api)
@@ -712,6 +721,7 @@ class TestSwapDedup:
         schedule = _make_schedule(
             rotation_mode="swap",
             rotation_count=1,
+            target_size=3,
         )
 
         result = execute_rotate(schedule, api)
@@ -847,6 +857,29 @@ class TestExecuteRotateValidation:
 
         # Clamped to 1, so 1 track archived
         assert result["tracks_total"] == 2
+
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_swap_without_target_size_raises(
+        self, mock_pair
+    ):
+        mock_pair.return_value = _make_pair()
+
+        api = _make_api(
+            prod_tracks=_make_tracks(["u1", "u2"])
+        )
+        schedule = _make_schedule(
+            rotation_mode="swap",
+            rotation_count=1,
+        )
+
+        with pytest.raises(
+            JobExecutionError,
+            match="playlist size cap",
+        ):
+            execute_rotate(schedule, api)
 
     def test_dispatch_routes_to_rotate(self):
         """_execute_job_type dispatches ROTATE."""

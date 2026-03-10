@@ -178,6 +178,12 @@ class ScheduleCreateRequest(BaseModel):
                         "protect_count must be a "
                         "non-negative integer"
                     )
+            if rotation_mode == RotationMode.SWAP:
+                if target_size is None:
+                    raise ValueError(
+                        "target_size (playlist cap) is "
+                        "required for swap rotation mode"
+                    )
         if self.schedule_type == ScheduleType.INTERVAL:
             if self.schedule_value not in VALID_INTERVAL_VALUES:
                 raise ValueError(

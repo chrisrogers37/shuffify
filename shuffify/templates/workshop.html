@@ -2596,6 +2596,7 @@ var inlineSnapshots = {
             'auto_pre_shuffle': { label: 'Pre-Shuffle', color: 'bg-blue-500/20 text-blue-300' },
             'auto_pre_raid': { label: 'Pre-Raid', color: 'bg-yellow-500/20 text-yellow-300' },
             'auto_pre_commit': { label: 'Workshop Backup', color: 'bg-purple-500/20 text-purple-300' },
+            'auto_pre_rotate': { label: 'Before Rotation', color: 'bg-teal-500/20 text-teal-300' },
             'manual': { label: 'Manual', color: 'bg-green-500/20 text-green-300' },
             'scheduled_pre_execution': { label: 'Auto-backup', color: 'bg-orange-500/20 text-orange-300' },
         };
@@ -2848,6 +2849,7 @@ const SNAPSHOT_TYPE_CONFIG = {
     'auto_pre_shuffle': { label: 'Pre-Shuffle', color: 'bg-blue-500/20 text-blue-300' },
     'auto_pre_raid': { label: 'Pre-Raid', color: 'bg-yellow-500/20 text-yellow-300' },
     'auto_pre_commit': { label: 'Workshop Backup', color: 'bg-purple-500/20 text-purple-300' },
+    'auto_pre_rotate': { label: 'Before Rotation', color: 'bg-teal-500/20 text-teal-300' },
     'manual': { label: 'Manual', color: 'bg-green-500/20 text-green-300' },
     'scheduled_pre_execution': { label: 'Auto-backup', color: 'bg-orange-500/20 text-orange-300' },
 };
@@ -3566,6 +3568,11 @@ function createRotationSchedule() {
     var minutes = timeParts[1];
     var targetSize = targetSizeInput.value ? parseInt(targetSizeInput.value, 10) : null;
     var protectCount = parseInt(protectInput.value, 10) || 0;
+
+    if (mode === 'swap' && (!targetSize || targetSize < 1)) {
+        showToast('Swap mode requires a playlist size cap', 'error');
+        return;
+    }
 
     var params = {
         rotation_mode: mode,

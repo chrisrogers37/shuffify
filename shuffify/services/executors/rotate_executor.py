@@ -87,10 +87,15 @@ def execute_rotate(
                 actual_count, protect_count,
             )
         elif rotation_mode == RotationMode.SWAP:
+            if target_size is None:
+                raise JobExecutionError(
+                    "Swap rotation requires a playlist "
+                    "size cap (target_size)"
+                )
             return _rotate_swap(
                 api, schedule, target_id,
-                archive_id, oldest_uris,
-                prod_uris, actual_count,
+                archive_id, prod_uris,
+                rotation_count, target_size,
                 protect_count,
             )
         else:
@@ -351,11 +356,21 @@ def _rotate_refresh(
 
 def _rotate_swap(
     api, schedule, target_id, archive_id,
-    oldest_uris, prod_uris, actual_count,
+    prod_uris, rotation_count, target_size,
     protect_count=0,
 ):
-    """Exchange tracks between production and
-    archive."""
+    """Exchange tracks between production and archive.
+
+    Two-phase approach for cold-start support:
+
+    Phase 1 (overflow): If playlist exceeds target_size,
+    archive excess tracks to reach the cap. No swap-in
+    occurs during overflow — this seeds the archive.
+
+    Phase 2 (swap): When playlist is at or under cap,
+    swap rotation_count tracks between production and
+    archive.
+    """
     from shuffify.services.executors.base_executor import (
         JobExecutorService,
     )
@@ -369,19 +384,57 @@ def _rotate_swap(
         if t.get("uri")
     ]
 
-    prod_set = set(prod_uris)
     archive_set = set(archive_uris)
+    eligible_uris = prod_uris[protect_count:]
+
+    # Phase 1: Archive overflow to reach target_size
+    if (
+        target_size is not None
+        and len(prod_uris) > target_size
+    ):
+        overflow = len(prod_uris) - target_size
+        overflow_uris = eligible_uris[:overflow]
+
+        new_to_archive = [
+            u for u in overflow_uris
+            if u not in archive_set
+        ]
+        if new_to_archive:
+            JobExecutorService._batch_add_tracks(
+                api, archive_id, new_to_archive
+            )
+        api.playlist_remove_items(
+            target_id, overflow_uris
+        )
+
+        logger.info(
+            "Schedule %s: archived %d overflow "
+            "tracks from '%s' (cap %d)",
+            schedule.id, len(overflow_uris),
+            schedule.target_playlist_name,
+            target_size,
+        )
+
+        return {
+            "tracks_added": 0,
+            "tracks_total": (
+                len(prod_uris) - len(overflow_uris)
+            ),
+        }
+
+    # Phase 2: Normal swap (playlist at or under cap)
+    prod_set = set(prod_uris)
     available = [
         u for u in archive_uris
         if u not in prod_set
     ]
-    swap_in_uris = available[-actual_count:]
-    swap_out_uris = oldest_uris[
+    swap_in_uris = available[-rotation_count:]
+    swap_out_uris = eligible_uris[
         :len(swap_in_uris)
     ]
 
     if swap_in_uris and swap_out_uris:
-        # Dedupe: only add tracks not already in archive
+        # Move outgoing tracks to archive (deduped)
         new_to_archive = [
             u for u in swap_out_uris
             if u not in archive_set
@@ -394,6 +447,7 @@ def _rotate_swap(
             target_id, swap_out_uris
         )
 
+        # Bring in tracks from archive
         JobExecutorService._batch_add_tracks(
             api, target_id, swap_in_uris
         )
