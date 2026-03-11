@@ -42,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Error notifications now show the actual Spotify/server error clearly
 
 ### Changed
+- **Swap-Only Rotation** - Simplified rotation to swap mode only; removed archive_oldest and refresh modes
+  - Removed rotation mode dropdown from Workshop and Schedules UI
+  - `target_size` (playlist cap) is now always required for rotation schedules
+  - Prior archive_oldest and refresh implementations preserved in git history for future re-addition
 - **Swap Rotation Requires Cap** - Swap rotation mode now requires a playlist size cap at all layers
   - Schema validation, runtime executor, and frontend all enforce `target_size` for swap mode
   - Enables meaningful cold-start behavior: overflow archival when over cap, bidirectional swap when at cap

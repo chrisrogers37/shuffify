@@ -125,12 +125,9 @@ class ScheduleCreateRequest(BaseModel):
                     )
         if self.job_type == JobType.ROTATE:
             params = self.algorithm_params or {}
-            rotation_mode = params.get("rotation_mode")
-            if not rotation_mode:
-                raise ValueError(
-                    "algorithm_params.rotation_mode "
-                    "required for job_type 'rotate'"
-                )
+            rotation_mode = params.get(
+                "rotation_mode", RotationMode.SWAP
+            )
             if rotation_mode not in VALID_ROTATION_MODES:
                 raise ValueError(
                     "Invalid rotation_mode '{}'. "
@@ -155,16 +152,20 @@ class ScheduleCreateRequest(BaseModel):
                         "positive integer"
                     )
             target_size = params.get("target_size")
-            if target_size is not None:
-                try:
-                    ts = int(target_size)
-                    if ts < 1:
-                        raise ValueError()
-                except (ValueError, TypeError):
-                    raise ValueError(
-                        "target_size must be a "
-                        "positive integer"
-                    )
+            if target_size is None:
+                raise ValueError(
+                    "target_size (playlist cap) is "
+                    "required for rotate job type"
+                )
+            try:
+                ts = int(target_size)
+                if ts < 1:
+                    raise ValueError()
+            except (ValueError, TypeError):
+                raise ValueError(
+                    "target_size must be a "
+                    "positive integer"
+                )
             protect_count = params.get(
                 "protect_count"
             )
@@ -177,12 +178,6 @@ class ScheduleCreateRequest(BaseModel):
                     raise ValueError(
                         "protect_count must be a "
                         "non-negative integer"
-                    )
-            if rotation_mode == RotationMode.SWAP:
-                if target_size is None:
-                    raise ValueError(
-                        "target_size (playlist cap) is "
-                        "required for swap rotation mode"
                     )
         if self.schedule_type == ScheduleType.INTERVAL:
             if self.schedule_value not in VALID_INTERVAL_VALUES:

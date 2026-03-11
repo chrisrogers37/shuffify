@@ -18,9 +18,9 @@ class JobType(StrEnum):
 
 class RotationMode(StrEnum):
     """Modes for the scheduled rotation job type."""
-    ARCHIVE_OLDEST = "archive_oldest"
-    REFRESH = "refresh"
     SWAP = "swap"
+    # TODO: Re-implement archive_oldest mode (see git history)
+    # TODO: Re-implement refresh mode (see git history)
 
 
 class ScheduleType(StrEnum):

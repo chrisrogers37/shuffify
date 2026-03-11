@@ -1090,8 +1090,9 @@ class TestBackendValidation:
                 "target_playlist_id": "p1",
                 "target_playlist_name": "My Playlist",
                 "algorithm_params": {
-                    "rotation_mode": "archive_oldest",
+                    "rotation_mode": "swap",
                     "rotation_count": 5,
+                    "target_size": 50,
                 },
             },
         )
