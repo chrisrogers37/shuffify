@@ -16,7 +16,7 @@ APScheduler>=3.10
 # --- Security: explicit floors for transitive deps with known CVEs ---
 # These packages are pulled in by Flask, requests, cryptography, etc.
 # pip will NOT upgrade them on its own unless we set a minimum version.
-werkzeug>=3.1.5
+werkzeug>=3.1.6
 urllib3>=2.6.3
 certifi>=2026.1.4
 MarkupSafe>=3.0.3

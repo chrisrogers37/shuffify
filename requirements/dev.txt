@@ -21,3 +21,8 @@ ipython==9.10.0
 
 # Security: pin wheel to patched version (CVE-2026-24049)
 wheel>=0.46.2
+
+# Security: pin transitive deps with known CVEs
+authlib>=1.6.7       # CVE-2026-28802: JWT alg:none bypass
+nltk>=3.9.3          # CVE-2025-14009: zip extraction RCE
+tornado>=6.5         # CVE-2025-47287: multipart DoS
