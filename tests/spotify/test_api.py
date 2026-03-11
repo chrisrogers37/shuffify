@@ -439,6 +439,136 @@ class TestSpotifyAPIPlaylistOperations:
 
 
 # =============================================================================
+# SpotifyAPI playlist_add_items / playlist_remove_items Tests
+# =============================================================================
+
+class TestPlaylistAddItems:
+    """Tests for playlist_add_items."""
+
+    def test_add_items_empty_list_returns_early(
+        self, valid_token_info, auth_manager
+    ):
+        """Should return immediately for empty list."""
+        with patch(
+            'shuffify.spotify.api.SpotifyHTTPClient'
+        ) as MockHTTP:
+            mock_http = MockHTTP.return_value
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            api.playlist_add_items('playlist123', [])
+
+            mock_http.post.assert_not_called()
+
+    def test_add_items_posts_uris(
+        self, valid_token_info, auth_manager
+    ):
+        """Should POST uris in correct format."""
+        uris = ['spotify:track:1', 'spotify:track:2']
+
+        with patch(
+            'shuffify.spotify.api.SpotifyHTTPClient'
+        ) as MockHTTP:
+            mock_http = MockHTTP.return_value
+            mock_http.post.return_value = None
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            api.playlist_add_items('playlist123', uris)
+
+            mock_http.post.assert_called_once_with(
+                '/playlists/playlist123/items',
+                json={'uris': uris},
+            )
+
+    def test_add_items_wraps_api_errors(
+        self, valid_token_info, auth_manager
+    ):
+        """Should wrap errors via api_error_handler."""
+        with patch(
+            'shuffify.spotify.api.SpotifyHTTPClient'
+        ) as MockHTTP:
+            mock_http = MockHTTP.return_value
+            mock_http.post.side_effect = SpotifyAPIError(
+                "API error 500: Server error"
+            )
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            with pytest.raises(SpotifyAPIError):
+                api.playlist_add_items(
+                    'playlist123', ['spotify:track:1']
+                )
+
+
+class TestPlaylistRemoveItems:
+    """Tests for playlist_remove_items."""
+
+    def test_remove_items_sends_uris_format(
+        self, valid_token_info, auth_manager
+    ):
+        """Should DELETE with {uris: [...]} body."""
+        uris = ['spotify:track:1', 'spotify:track:2']
+
+        with patch(
+            'shuffify.spotify.api.SpotifyHTTPClient'
+        ) as MockHTTP:
+            mock_http = MockHTTP.return_value
+            mock_http.delete.return_value = None
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            result = api.playlist_remove_items(
+                'playlist123', uris
+            )
+
+            assert result is True
+            mock_http.delete.assert_called_once_with(
+                '/playlists/playlist123/items',
+                json={'uris': uris},
+            )
+
+    def test_remove_items_empty_list_returns_true(
+        self, valid_token_info, auth_manager
+    ):
+        """Should return True immediately for empty list."""
+        with patch(
+            'shuffify.spotify.api.SpotifyHTTPClient'
+        ) as MockHTTP:
+            mock_http = MockHTTP.return_value
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            result = api.playlist_remove_items(
+                'playlist123', []
+            )
+
+            assert result is True
+            mock_http.delete.assert_not_called()
+
+    def test_remove_items_batches_large_lists(
+        self, valid_token_info, auth_manager
+    ):
+        """Should batch removals for >100 tracks."""
+        uris = [
+            f'spotify:track:{i}' for i in range(150)
+        ]
+
+        with patch(
+            'shuffify.spotify.api.SpotifyHTTPClient'
+        ) as MockHTTP:
+            mock_http = MockHTTP.return_value
+            mock_http.delete.return_value = None
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            result = api.playlist_remove_items(
+                'playlist123', uris
+            )
+
+            assert result is True
+            assert mock_http.delete.call_count == 2
+            # Verify body format is {uris: [...]}
+            first_call = mock_http.delete.call_args_list[0]
+            assert 'uris' in first_call[1]['json']
+            assert len(first_call[1]['json']['uris']) == 100
+
+
+# =============================================================================
 # SpotifyAPI Audio Features Tests
 # =============================================================================
 
