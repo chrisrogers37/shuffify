@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Rotation Archive Overlap Bug** - Fixed rotation short-circuiting when archive contains tracks that also exist in production
+  - Added pre-rotation archive cleanup: overlapping tracks are purged from archive before rotation begins
+  - Prevents stale duplicates from reducing the available swap-in pool
+- **Rotation Track Selection** - Overflow and swap-out now use random selection instead of always picking the first N tracks
+  - Previously, the first tracks in the playlist were always rotated out; now tracks are randomly sampled from eligible pool
+- **Rotation Verification** - `tracks_total` now reflects actual playlist size after Spotify API operations
+  - Previously calculated mathematically (assumed success); now re-fetches playlist to verify
+  - Logs warnings when actual size differs from expected, detecting silent API failures
+
 ### Changed
 - **Rate Limiting Expansion** - Extended rate limits to resource-intensive endpoints
   - `/shuffle` (5/min), `/workshop/commit` (10/min), `/schedules/*/run` (5/min)
