@@ -153,31 +153,6 @@ def _validate_rotation_config(
     )
 
 
-def _compute_rotation_count(
-    rotation_count: int,
-    target_size: int | None,
-    playlist_len: int,
-    protect_count: int,
-) -> int:
-    """
-    Determine how many tracks to rotate out.
-
-    If target_size is set and the playlist exceeds it,
-    increase the count so the playlist is brought back
-    to or under the cap.
-    The count is also capped to the number of
-    eligible (non-protected) tracks.
-    """
-    count = rotation_count
-    if target_size is not None:
-        overflow = playlist_len - target_size
-        if overflow > 0:
-            count = max(count, overflow)
-
-    eligible = max(0, playlist_len - protect_count)
-    return min(count, eligible)
-
-
 def _auto_snapshot_before_rotate(
     schedule: Schedule,
     prod_uris: list,
@@ -226,6 +201,41 @@ def _auto_snapshot_before_rotate(
 # (see git history for prior _rotate_refresh)
 
 
+def _sample_at_most(pool, count):
+    """Randomly sample up to count items from pool.
+
+    Returns all items if pool is smaller than count.
+    """
+    if len(pool) <= count:
+        return list(pool)
+    return random.sample(pool, count)
+
+
+def _verify_playlist_size(
+    api, target_id, expected, schedule_id, phase,
+):
+    """Re-fetch playlist to get actual track count.
+
+    Logs a warning if the actual size differs from
+    expected, indicating a silent API failure.
+
+    Returns:
+        Actual track count.
+    """
+    verified = api.get_playlist_tracks(target_id)
+    actual = sum(
+        1 for t in verified if t.get("uri")
+    ) if verified else 0
+
+    if actual != expected:
+        logger.warning(
+            "Schedule %s: %s size mismatch — "
+            "expected %d tracks, got %d",
+            schedule_id, phase, expected, actual,
+        )
+    return actual
+
+
 def _purge_archive_overlaps(
     api, archive_id, archive_uris, prod_set,
 ):
@@ -239,9 +249,11 @@ def _purge_archive_overlaps(
     Returns:
         Tuple of (cleaned_archive_uris, purged_count).
     """
-    overlaps = [
-        u for u in archive_uris if u in prod_set
-    ]
+    overlaps, cleaned = [], []
+    for u in archive_uris:
+        (overlaps if u in prod_set
+         else cleaned).append(u)
+
     if overlaps:
         api.playlist_remove_items(
             archive_id, overlaps
@@ -251,10 +263,6 @@ def _purge_archive_overlaps(
             "archive %s",
             len(overlaps), archive_id,
         )
-    cleaned = [
-        u for u in archive_uris
-        if u not in prod_set
-    ]
     return cleaned, len(overlaps)
 
 
@@ -274,6 +282,8 @@ def _rotate_swap(
     Phase 1 (overflow): If playlist exceeds target_size,
     archive excess tracks to reach the cap. No swap-in
     occurs during overflow — this seeds the archive.
+    NOTE: Phase 1 returns early, so Phase 2 state
+    (prod_set, archive_uris) is never stale.
 
     Phase 2 (swap): When playlist is at or under cap,
     swap rotation_count tracks between production and
@@ -309,13 +319,9 @@ def _rotate_swap(
         and len(prod_uris) > target_size
     ):
         overflow = len(prod_uris) - target_size
-        # Randomly select overflow tracks from eligible
-        if len(eligible_uris) <= overflow:
-            overflow_uris = list(eligible_uris)
-        else:
-            overflow_uris = random.sample(
-                eligible_uris, overflow
-            )
+        overflow_uris = _sample_at_most(
+            eligible_uris, overflow
+        )
 
         # Remove from production FIRST
         api.playlist_remove_items(
@@ -332,26 +338,11 @@ def _rotate_swap(
                 api, archive_id, new_to_archive
             )
 
-        # Verify actual playlist size after removal
-        verified_tracks = api.get_playlist_tracks(
-            target_id
+        expected = len(prod_uris) - len(overflow_uris)
+        actual_total = _verify_playlist_size(
+            api, target_id, expected,
+            schedule.id, "overflow removal",
         )
-        actual_total = len([
-            t for t in verified_tracks
-            if t.get("uri")
-        ]) if verified_tracks else 0
-
-        expected_total = (
-            len(prod_uris) - len(overflow_uris)
-        )
-        if actual_total != expected_total:
-            logger.warning(
-                "Schedule %s: overflow removal "
-                "mismatch — expected %d tracks, "
-                "got %d",
-                schedule.id, expected_total,
-                actual_total,
-            )
 
         logger.info(
             "Schedule %s: archived %d overflow "
@@ -368,24 +359,14 @@ def _rotate_swap(
         }
 
     # Phase 2: Normal swap (playlist at or under cap)
-    # available = archive-only tracks (overlaps already
-    # purged in Step 0, but filter defensively)
-    available = [
-        u for u in archive_uris
-        if u not in prod_set
-    ]
-    swap_in_uris = available[-rotation_count:]
+    # Swap-in uses last N from archive (FIFO: oldest
+    # archived tracks rotate back in first).
+    swap_in_uris = archive_uris[-rotation_count:]
 
     # Randomly select swap-out tracks from eligible
-    swap_out_count = min(
-        len(swap_in_uris), len(eligible_uris)
+    swap_out_uris = _sample_at_most(
+        eligible_uris, len(swap_in_uris)
     )
-    if swap_out_count >= len(eligible_uris):
-        swap_out_uris = list(eligible_uris)
-    else:
-        swap_out_uris = random.sample(
-            eligible_uris, swap_out_count
-        )
 
     if swap_in_uris and swap_out_uris:
         # Remove outgoing from production first
@@ -418,22 +399,10 @@ def _rotate_swap(
         len(swap_out_uris),
     )
 
-    # Verify actual playlist size after swap
-    verified_tracks = api.get_playlist_tracks(
-        target_id
+    actual_total = _verify_playlist_size(
+        api, target_id, len(prod_uris),
+        schedule.id, "swap",
     )
-    actual_total = len([
-        t for t in verified_tracks
-        if t.get("uri")
-    ]) if verified_tracks else 0
-
-    if actual_total != len(prod_uris):
-        logger.warning(
-            "Schedule %s: swap size mismatch — "
-            "expected %d tracks, got %d",
-            schedule.id, len(prod_uris),
-            actual_total,
-        )
 
     logger.info(
         "Schedule %s: swapped %d tracks between "

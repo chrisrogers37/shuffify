@@ -6,7 +6,7 @@ parameter validation, edge cases, and dispatch.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 
 from shuffify.services.executors import (
     JobExecutorService,
@@ -14,7 +14,6 @@ from shuffify.services.executors import (
 )
 from shuffify.services.executors.rotate_executor import (
     execute_rotate,
-    _compute_rotation_count,
     _purge_archive_overlaps,
 )
 from shuffify.enums import JobType
@@ -1022,96 +1021,6 @@ class TestExecuteRotateValidation:
         )
         assert result["tracks_total"] == 2
 
-
-# =============================================================================
-# COMPUTE ROTATION COUNT
-# =============================================================================
-
-
-class TestComputeRotationCount:
-    """Tests for _compute_rotation_count helper."""
-
-    def test_no_target_size_returns_base_count(self):
-        result = _compute_rotation_count(
-            rotation_count=5, target_size=None,
-            playlist_len=20, protect_count=0,
-        )
-        assert result == 5
-
-    def test_target_size_under_cap(self):
-        """Playlist under cap, use base count."""
-        result = _compute_rotation_count(
-            rotation_count=3, target_size=20,
-            playlist_len=18, protect_count=0,
-        )
-        # 18 < 20, no overflow
-        assert result == 3
-
-    def test_target_size_at_cap(self):
-        """Exactly at cap, no extra rotation."""
-        result = _compute_rotation_count(
-            rotation_count=3, target_size=20,
-            playlist_len=20, protect_count=0,
-        )
-        # 20 == 20, overflow = 0
-        assert result == 3
-
-    def test_target_size_over_cap(self):
-        """Playlist exceeds hard cap."""
-        result = _compute_rotation_count(
-            rotation_count=3, target_size=20,
-            playlist_len=24, protect_count=0,
-        )
-        # overflow = 24 - 20 = 4, max(3, 4) = 4
-        assert result == 4
-
-    def test_target_size_large_overflow(self):
-        """Large overflow increases count."""
-        result = _compute_rotation_count(
-            rotation_count=5, target_size=50,
-            playlist_len=80, protect_count=0,
-        )
-        # overflow = 80 - 50 = 30
-        assert result == 30
-
-    def test_protect_count_limits_eligible(self):
-        """Protect count reduces eligible tracks."""
-        result = _compute_rotation_count(
-            rotation_count=10, target_size=None,
-            playlist_len=15, protect_count=10,
-        )
-        # eligible = 15 - 10 = 5
-        assert result == 5
-
-    def test_protect_count_exceeds_playlist(self):
-        """Protect count >= playlist len = 0."""
-        result = _compute_rotation_count(
-            rotation_count=5, target_size=None,
-            playlist_len=3, protect_count=5,
-        )
-        assert result == 0
-
-    def test_target_size_and_protect_combined(self):
-        """Both target_size overflow and protect."""
-        result = _compute_rotation_count(
-            rotation_count=3, target_size=10,
-            playlist_len=20, protect_count=5,
-        )
-        # overflow = 20 - 10 = 10, max(3, 10) = 10
-        # eligible = 20 - 5 = 15
-        # min(10, 15) = 10
-        assert result == 10
-
-    def test_protect_caps_overflow(self):
-        """Protect limits even when overflow is high."""
-        result = _compute_rotation_count(
-            rotation_count=3, target_size=10,
-            playlist_len=30, protect_count=25,
-        )
-        # overflow = 30 - 10 = 20, max(3, 20) = 20
-        # eligible = 30 - 25 = 5
-        # min(20, 5) = 5
-        assert result == 5
 
 
 # =============================================================================
