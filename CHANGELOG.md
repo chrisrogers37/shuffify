@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Rate Limiting Expansion** - Extended rate limits to resource-intensive endpoints
+  - `/shuffle` (5/min), `/workshop/commit` (10/min), `/schedules/*/run` (5/min)
+  - Previously only auth endpoints (`/login`, `/callback`) were rate-limited
+
+### Security
+- **Dependency Security Updates** - Bumped transitive deps with known CVEs
+  - `werkzeug>=3.1.6` (CVE-2026-27199: Windows path traversal)
+  - `authlib>=1.6.7` (CVE-2026-28802: JWT alg:none bypass, dev-only)
+  - `nltk>=3.9.3` (CVE-2025-14009: zip extraction RCE, dev-only)
+  - `tornado>=6.5` (CVE-2025-47287: multipart DoS, dev-only)
+
 ### Added
 - **Rotation Playlist Size Cap** - Required `target_size` parameter for swap rotation mode
   - Hard cap: rotation automatically archives extra tracks to keep playlist at or under the target size

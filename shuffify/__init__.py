@@ -348,12 +348,29 @@ def create_app(config_name=None):
             app.view_functions["main.callback"] = _limiter.limit(
                 "20/minute"
             )(app.view_functions["main.callback"])
+            # Resource-intensive endpoints
+            app.view_functions["main.shuffle"] = _limiter.limit(
+                "5/minute"
+            )(app.view_functions["main.shuffle"])
+            app.view_functions[
+                "main.workshop_commit"
+            ] = _limiter.limit("10/minute")(
+                app.view_functions["main.workshop_commit"]
+            )
+            app.view_functions[
+                "main.run_schedule_now"
+            ] = _limiter.limit("5/minute")(
+                app.view_functions["main.run_schedule_now"]
+            )
             logger.info(
-                "Rate limits applied: /login=10/min, /callback=20/min"
+                "Rate limits applied: /login=10/min, "
+                "/callback=20/min, /shuffle=5/min, "
+                "/workshop/commit=10/min, "
+                "/schedules/*/run=5/min"
             )
         except Exception as e:
             logger.warning(
-                "Failed to apply auth rate limits: %s", e
+                "Failed to apply rate limits: %s", e
             )
 
     # Register global error handlers
