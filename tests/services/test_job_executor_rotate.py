@@ -1,12 +1,12 @@
 """
 Tests for execute_rotate().
 
-Tests cover all three rotation modes (archive_oldest, refresh,
-swap), parameter validation, edge cases, and dispatch.
+Tests cover swap rotation mode (the only supported mode),
+parameter validation, edge cases, and dispatch.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock, PropertyMock
+from unittest.mock import patch, MagicMock
 
 from shuffify.services.executors import (
     JobExecutorService,
@@ -16,15 +16,15 @@ from shuffify.services.executors.rotate_executor import (
     execute_rotate,
     _compute_rotation_count,
 )
-from shuffify.enums import JobType, RotationMode
+from shuffify.enums import JobType
 
 
 def _make_schedule(
-    rotation_mode="archive_oldest",
+    rotation_mode="swap",
     rotation_count=5,
     target_id="target1",
     user_id=1,
-    target_size=None,
+    target_size=50,
 ):
     """Create a mock schedule for rotation tests."""
     schedule = MagicMock()
@@ -36,11 +36,8 @@ def _make_schedule(
     schedule.algorithm_params = {
         "rotation_mode": rotation_mode,
         "rotation_count": rotation_count,
+        "target_size": target_size,
     }
-    if target_size is not None:
-        schedule.algorithm_params["target_size"] = (
-            target_size
-        )
     return schedule
 
 
@@ -80,12 +77,12 @@ def _make_pair():
 
 
 # =============================================================================
-# ARCHIVE OLDEST
+# SWAP
 # =============================================================================
 
 
-class TestExecuteRotateArchiveOldest:
-    """Tests for archive_oldest rotation mode."""
+class TestExecuteRotateSwap:
+    """Tests for swap rotation mode."""
 
     @patch(
         "shuffify.services.executors.rotate_executor"
@@ -95,7 +92,41 @@ class TestExecuteRotateArchiveOldest:
         "shuffify.services.playlist_pair_service"
         ".PlaylistPairService.get_pair_for_playlist"
     )
-    def test_archives_oldest_tracks(
+    def test_swap_exchanges_tracks(
+        self, mock_pair, mock_snap
+    ):
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        prod = _make_tracks(["p1", "p2", "p3"])
+        archive = _make_tracks(["a1", "a2", "a3"])
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=archive,
+        )
+        schedule = _make_schedule(
+            rotation_count=2,
+            target_size=3,
+        )
+
+        result = execute_rotate(
+            schedule, api
+        )
+
+        assert result["tracks_added"] == 2
+        assert result["tracks_total"] == 3
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_swap_deduplicates(
         self, mock_pair, mock_snap
     ):
         mock_pair.return_value = _make_pair()
@@ -104,25 +135,24 @@ class TestExecuteRotateArchiveOldest:
         )
 
         prod = _make_tracks(
-            ["u1", "u2", "u3", "u4", "u5", "u6"]
+            ["p1", "p2", "shared"]
         )
-        api = _make_api(prod_tracks=prod)
+        archive = _make_tracks(["shared", "a1"])
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=archive,
+        )
         schedule = _make_schedule(
-            rotation_count=3
+            rotation_count=3,
+            target_size=3,
         )
 
         result = execute_rotate(
             schedule, api
         )
 
-        assert result["tracks_added"] == 0
-        assert result["tracks_total"] == 3
-        api.playlist_add_items.assert_called_once_with(
-            "archive1", ["u1", "u2", "u3"]
-        )
-        api.playlist_remove_items.assert_called_once_with(
-            "target1", ["u1", "u2", "u3"]
-        )
+        # Only a1 is available; swap limited to 1
+        assert result["tracks_added"] == 1
 
     @patch(
         "shuffify.services.executors.rotate_executor"
@@ -132,7 +162,7 @@ class TestExecuteRotateArchiveOldest:
         "shuffify.services.playlist_pair_service"
         ".PlaylistPairService.get_pair_for_playlist"
     )
-    def test_clamps_count_to_playlist_size(
+    def test_swap_empty_archive(
         self, mock_pair, mock_snap
     ):
         mock_pair.return_value = _make_pair()
@@ -140,20 +170,21 @@ class TestExecuteRotateArchiveOldest:
             False
         )
 
-        prod = _make_tracks(["u1", "u2"])
-        api = _make_api(prod_tracks=prod)
+        prod = _make_tracks(["p1", "p2"])
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=[],
+        )
         schedule = _make_schedule(
-            rotation_count=10
+            rotation_count=2,
+            target_size=2,
         )
 
         result = execute_rotate(
             schedule, api
         )
 
-        assert result["tracks_total"] == 0
-        api.playlist_remove_items.assert_called_once_with(
-            "target1", ["u1", "u2"]
-        )
+        assert result["tracks_added"] == 0
 
     @patch(
         "shuffify.services.executors.rotate_executor"
@@ -200,7 +231,8 @@ class TestExecuteRotateArchiveOldest:
         prod = _make_tracks(["u1", "u2", "u3"])
         api = _make_api(prod_tracks=prod)
         schedule = _make_schedule(
-            rotation_count=1
+            rotation_count=1,
+            target_size=3,
         )
 
         execute_rotate(
@@ -228,7 +260,8 @@ class TestExecuteRotateArchiveOldest:
         prod = _make_tracks(["u1", "u2", "u3"])
         api = _make_api(prod_tracks=prod)
         schedule = _make_schedule(
-            rotation_count=1
+            rotation_count=1,
+            target_size=3,
         )
 
         execute_rotate(
@@ -254,387 +287,6 @@ class TestExecuteRotateArchiveOldest:
             execute_rotate(
                 schedule, api
             )
-
-
-# =============================================================================
-# ARCHIVE OLDEST — DEDUP
-# =============================================================================
-
-
-class TestArchiveOldestDedup:
-    """Archive oldest must not push duplicates to archive."""
-
-    @patch(
-        "shuffify.services.executors.rotate_executor"
-        ".PlaylistSnapshotService"
-    )
-    @patch(
-        "shuffify.services.playlist_pair_service"
-        ".PlaylistPairService.get_pair_for_playlist"
-    )
-    def test_skips_tracks_already_in_archive(
-        self, mock_pair, mock_snap
-    ):
-        mock_pair.return_value = _make_pair()
-        mock_snap.is_auto_snapshot_enabled.return_value = (
-            False
-        )
-
-        prod = _make_tracks(
-            ["u1", "u2", "u3", "u4"]
-        )
-        archive = _make_tracks(["u1", "u2"])
-        api = _make_api(
-            prod_tracks=prod,
-            archive_tracks=archive,
-        )
-        schedule = _make_schedule(
-            rotation_count=3
-        )
-
-        result = execute_rotate(schedule, api)
-
-        # u1, u2 already in archive — only u3 added
-        api.playlist_add_items.assert_called_once_with(
-            "archive1", ["u3"]
-        )
-        # All 3 still removed from production
-        api.playlist_remove_items.assert_called_once_with(
-            "target1", ["u1", "u2", "u3"]
-        )
-        assert result["tracks_total"] == 1
-
-    @patch(
-        "shuffify.services.executors.rotate_executor"
-        ".PlaylistSnapshotService"
-    )
-    @patch(
-        "shuffify.services.playlist_pair_service"
-        ".PlaylistPairService.get_pair_for_playlist"
-    )
-    def test_all_already_in_archive_no_add(
-        self, mock_pair, mock_snap
-    ):
-        mock_pair.return_value = _make_pair()
-        mock_snap.is_auto_snapshot_enabled.return_value = (
-            False
-        )
-
-        prod = _make_tracks(["u1", "u2", "u3"])
-        archive = _make_tracks(["u1", "u2", "u3"])
-        api = _make_api(
-            prod_tracks=prod,
-            archive_tracks=archive,
-        )
-        schedule = _make_schedule(
-            rotation_count=2
-        )
-
-        execute_rotate(schedule, api)
-
-        # Nothing to add — all already in archive
-        api.playlist_add_items.assert_not_called()
-        # Still removed from production
-        api.playlist_remove_items.assert_called_once_with(
-            "target1", ["u1", "u2"]
-        )
-
-    @patch(
-        "shuffify.services.executors.rotate_executor"
-        ".PlaylistSnapshotService"
-    )
-    @patch(
-        "shuffify.services.playlist_pair_service"
-        ".PlaylistPairService.get_pair_for_playlist"
-    )
-    def test_empty_archive_adds_all(
-        self, mock_pair, mock_snap
-    ):
-        mock_pair.return_value = _make_pair()
-        mock_snap.is_auto_snapshot_enabled.return_value = (
-            False
-        )
-
-        prod = _make_tracks(["u1", "u2", "u3"])
-        api = _make_api(
-            prod_tracks=prod,
-            archive_tracks=[],
-        )
-        schedule = _make_schedule(
-            rotation_count=2
-        )
-
-        execute_rotate(schedule, api)
-
-        api.playlist_add_items.assert_called_once_with(
-            "archive1", ["u1", "u2"]
-        )
-
-
-# =============================================================================
-# REFRESH
-# =============================================================================
-
-
-class TestExecuteRotateRefresh:
-    """Tests for refresh rotation mode."""
-
-    @patch(
-        "shuffify.services.executors.rotate_executor"
-        ".PlaylistSnapshotService"
-    )
-    @patch(
-        "shuffify.services.playlist_pair_service"
-        ".PlaylistPairService.get_pair_for_playlist"
-    )
-    def test_refresh_replaces_oldest(
-        self, mock_pair, mock_snap
-    ):
-        mock_pair.return_value = _make_pair()
-        mock_snap.is_auto_snapshot_enabled.return_value = (
-            False
-        )
-
-        prod = _make_tracks(
-            ["p1", "p2", "p3", "p4"]
-        )
-        archive = _make_tracks(
-            ["a1", "a2", "a3"]
-        )
-        api = _make_api(
-            prod_tracks=prod,
-            archive_tracks=archive,
-        )
-        schedule = _make_schedule(
-            rotation_mode="refresh",
-            rotation_count=2,
-        )
-
-        result = execute_rotate(
-            schedule, api
-        )
-
-        assert result["tracks_added"] == 2
-        assert result["tracks_total"] == 4
-        api.playlist_remove_items.assert_called_once_with(
-            "target1", ["p1", "p2"]
-        )
-
-    @patch(
-        "shuffify.services.executors.rotate_executor"
-        ".PlaylistSnapshotService"
-    )
-    @patch(
-        "shuffify.services.playlist_pair_service"
-        ".PlaylistPairService.get_pair_for_playlist"
-    )
-    def test_refresh_deduplicates(
-        self, mock_pair, mock_snap
-    ):
-        mock_pair.return_value = _make_pair()
-        mock_snap.is_auto_snapshot_enabled.return_value = (
-            False
-        )
-
-        prod = _make_tracks(["p1", "p2", "shared"])
-        archive = _make_tracks(["shared", "a1"])
-        api = _make_api(
-            prod_tracks=prod,
-            archive_tracks=archive,
-        )
-        schedule = _make_schedule(
-            rotation_mode="refresh",
-            rotation_count=2,
-        )
-
-        result = execute_rotate(
-            schedule, api
-        )
-
-        # Only a1 is available (shared is in prod)
-        assert result["tracks_added"] == 1
-
-    @patch(
-        "shuffify.services.executors.rotate_executor"
-        ".PlaylistSnapshotService"
-    )
-    @patch(
-        "shuffify.services.playlist_pair_service"
-        ".PlaylistPairService.get_pair_for_playlist"
-    )
-    def test_refresh_empty_archive(
-        self, mock_pair, mock_snap
-    ):
-        mock_pair.return_value = _make_pair()
-        mock_snap.is_auto_snapshot_enabled.return_value = (
-            False
-        )
-
-        prod = _make_tracks(["p1", "p2"])
-        api = _make_api(
-            prod_tracks=prod,
-            archive_tracks=[],
-        )
-        schedule = _make_schedule(
-            rotation_mode="refresh",
-            rotation_count=2,
-        )
-
-        result = execute_rotate(
-            schedule, api
-        )
-
-        assert result["tracks_added"] == 0
-        api.playlist_remove_items.assert_not_called()
-
-    @patch(
-        "shuffify.services.executors.rotate_executor"
-        ".PlaylistSnapshotService"
-    )
-    @patch(
-        "shuffify.services.playlist_pair_service"
-        ".PlaylistPairService.get_pair_for_playlist"
-    )
-    def test_refresh_partial(
-        self, mock_pair, mock_snap
-    ):
-        """Archive has fewer unique tracks than requested."""
-        mock_pair.return_value = _make_pair()
-        mock_snap.is_auto_snapshot_enabled.return_value = (
-            False
-        )
-
-        prod = _make_tracks(["p1", "p2", "p3"])
-        archive = _make_tracks(["a1"])
-        api = _make_api(
-            prod_tracks=prod,
-            archive_tracks=archive,
-        )
-        schedule = _make_schedule(
-            rotation_mode="refresh",
-            rotation_count=5,
-        )
-
-        result = execute_rotate(
-            schedule, api
-        )
-
-        assert result["tracks_added"] == 1
-        assert result["tracks_total"] == 3
-
-
-# =============================================================================
-# SWAP
-# =============================================================================
-
-
-class TestExecuteRotateSwap:
-    """Tests for swap rotation mode."""
-
-    @patch(
-        "shuffify.services.executors.rotate_executor"
-        ".PlaylistSnapshotService"
-    )
-    @patch(
-        "shuffify.services.playlist_pair_service"
-        ".PlaylistPairService.get_pair_for_playlist"
-    )
-    def test_swap_exchanges_tracks(
-        self, mock_pair, mock_snap
-    ):
-        mock_pair.return_value = _make_pair()
-        mock_snap.is_auto_snapshot_enabled.return_value = (
-            False
-        )
-
-        prod = _make_tracks(["p1", "p2", "p3"])
-        archive = _make_tracks(["a1", "a2", "a3"])
-        api = _make_api(
-            prod_tracks=prod,
-            archive_tracks=archive,
-        )
-        schedule = _make_schedule(
-            rotation_mode="swap",
-            rotation_count=2,
-            target_size=3,
-        )
-
-        result = execute_rotate(
-            schedule, api
-        )
-
-        assert result["tracks_added"] == 2
-        assert result["tracks_total"] == 3
-
-    @patch(
-        "shuffify.services.executors.rotate_executor"
-        ".PlaylistSnapshotService"
-    )
-    @patch(
-        "shuffify.services.playlist_pair_service"
-        ".PlaylistPairService.get_pair_for_playlist"
-    )
-    def test_swap_deduplicates(
-        self, mock_pair, mock_snap
-    ):
-        mock_pair.return_value = _make_pair()
-        mock_snap.is_auto_snapshot_enabled.return_value = (
-            False
-        )
-
-        prod = _make_tracks(
-            ["p1", "p2", "shared"]
-        )
-        archive = _make_tracks(["shared", "a1"])
-        api = _make_api(
-            prod_tracks=prod,
-            archive_tracks=archive,
-        )
-        schedule = _make_schedule(
-            rotation_mode="swap",
-            rotation_count=3,
-            target_size=3,
-        )
-
-        result = execute_rotate(
-            schedule, api
-        )
-
-        # Only a1 is available; swap limited to 1
-        assert result["tracks_added"] == 1
-
-    @patch(
-        "shuffify.services.executors.rotate_executor"
-        ".PlaylistSnapshotService"
-    )
-    @patch(
-        "shuffify.services.playlist_pair_service"
-        ".PlaylistPairService.get_pair_for_playlist"
-    )
-    def test_swap_empty_archive(
-        self, mock_pair, mock_snap
-    ):
-        mock_pair.return_value = _make_pair()
-        mock_snap.is_auto_snapshot_enabled.return_value = (
-            False
-        )
-
-        prod = _make_tracks(["p1", "p2"])
-        api = _make_api(
-            prod_tracks=prod,
-            archive_tracks=[],
-        )
-        schedule = _make_schedule(
-            rotation_mode="swap",
-            rotation_count=2,
-            target_size=2,
-        )
-
-        result = execute_rotate(
-            schedule, api
-        )
-
-        assert result["tracks_added"] == 0
 
 
 # =============================================================================
@@ -674,7 +326,6 @@ class TestSwapDedup:
             archive_tracks=archive,
         )
         schedule = _make_schedule(
-            rotation_mode="swap",
             rotation_count=2,
             target_size=4,
         )
@@ -719,7 +370,6 @@ class TestSwapDedup:
             archive_tracks=archive,
         )
         schedule = _make_schedule(
-            rotation_mode="swap",
             rotation_count=1,
             target_size=3,
         )
@@ -735,6 +385,46 @@ class TestSwapDedup:
             if c[0][0] == "archive1"
         ]
         assert len(archive_add) == 0
+
+
+# =============================================================================
+# SWAP — OVERFLOW (COLD-START)
+# =============================================================================
+
+
+class TestSwapOverflow:
+    """Tests for Phase 1 overflow archival."""
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_overflow_archives_excess(
+        self, mock_pair, mock_snap
+    ):
+        """When playlist exceeds cap, archive excess."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        uris = ["u{}".format(i) for i in range(8)]
+        prod = _make_tracks(uris)
+        api = _make_api(prod_tracks=prod)
+        schedule = _make_schedule(
+            rotation_count=2,
+            target_size=5,
+        )
+
+        result = execute_rotate(schedule, api)
+
+        # overflow = 8 - 5 = 3 tracks archived
+        assert result["tracks_added"] == 0
+        assert result["tracks_total"] == 5
 
 
 # =============================================================================
@@ -758,6 +448,7 @@ class TestExecuteRotateValidation:
         schedule = _make_schedule()
         schedule.algorithm_params = {
             "rotation_mode": "invalid_mode",
+            "target_size": 50,
         }
 
         with pytest.raises(
@@ -776,7 +467,7 @@ class TestExecuteRotateValidation:
         "shuffify.services.playlist_pair_service"
         ".PlaylistPairService.get_pair_for_playlist"
     )
-    def test_missing_mode_defaults(
+    def test_missing_mode_defaults_to_swap(
         self, mock_pair, mock_snap
     ):
         mock_pair.return_value = _make_pair()
@@ -785,17 +476,23 @@ class TestExecuteRotateValidation:
         )
 
         prod = _make_tracks(["u1", "u2"])
-        api = _make_api(prod_tracks=prod)
+        archive = _make_tracks(["a1", "a2"])
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=archive,
+        )
         schedule = _make_schedule()
-        schedule.algorithm_params = {}
+        schedule.algorithm_params = {
+            "target_size": 2,
+        }
 
         result = execute_rotate(
             schedule, api
         )
 
-        # Defaults to archive_oldest with count=5
-        # but only 2 tracks, so all archived
-        assert result["tracks_total"] == 0
+        # Defaults to swap with count=5, but only
+        # 2 archive tracks available
+        assert result["tracks_added"] == 2
 
     @patch(
         "shuffify.services.executors.rotate_executor"
@@ -817,46 +514,25 @@ class TestExecuteRotateValidation:
             "u{}".format(i) for i in range(10)
         ]
         prod = _make_tracks(uris)
-        api = _make_api(prod_tracks=prod)
+        archive = _make_tracks(
+            ["a{}".format(i) for i in range(10)]
+        )
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=archive,
+        )
         schedule = _make_schedule()
         schedule.algorithm_params = {
-            "rotation_mode": "archive_oldest",
+            "rotation_mode": "swap",
+            "target_size": 10,
         }
 
         result = execute_rotate(
             schedule, api
         )
 
-        assert result["tracks_total"] == 5
-
-    @patch(
-        "shuffify.services.executors.rotate_executor"
-        ".PlaylistSnapshotService"
-    )
-    @patch(
-        "shuffify.services.playlist_pair_service"
-        ".PlaylistPairService.get_pair_for_playlist"
-    )
-    def test_count_zero_clamped_to_1(
-        self, mock_pair, mock_snap
-    ):
-        mock_pair.return_value = _make_pair()
-        mock_snap.is_auto_snapshot_enabled.return_value = (
-            False
-        )
-
-        prod = _make_tracks(["u1", "u2", "u3"])
-        api = _make_api(prod_tracks=prod)
-        schedule = _make_schedule(
-            rotation_count=0
-        )
-
-        result = execute_rotate(
-            schedule, api
-        )
-
-        # Clamped to 1, so 1 track archived
-        assert result["tracks_total"] == 2
+        # Default count=5, swaps 5 tracks
+        assert result["tracks_added"] == 5
 
     @patch(
         "shuffify.services.playlist_pair_service"
@@ -870,10 +546,11 @@ class TestExecuteRotateValidation:
         api = _make_api(
             prod_tracks=_make_tracks(["u1", "u2"])
         )
-        schedule = _make_schedule(
-            rotation_mode="swap",
-            rotation_count=1,
-        )
+        schedule = _make_schedule()
+        schedule.algorithm_params = {
+            "rotation_mode": "swap",
+            "rotation_count": 1,
+        }
 
         with pytest.raises(
             JobExecutionError,
@@ -934,14 +611,15 @@ class TestExecuteRotateValidation:
         prod = _make_tracks(["u1", "u2"])
         api = _make_api(prod_tracks=prod)
         schedule = _make_schedule(
-            rotation_count=1
+            rotation_count=1,
+            target_size=2,
         )
 
         # Should not raise despite snapshot failure
         result = execute_rotate(
             schedule, api
         )
-        assert result["tracks_total"] == 1
+        assert result["tracks_total"] == 2
 
 
 # =============================================================================
@@ -1041,7 +719,7 @@ class TestComputeRotationCount:
 
 
 class TestProtectCount:
-    """Tests for protect_count in rotation modes."""
+    """Tests for protect_count in swap rotation."""
 
     @patch(
         "shuffify.services.executors.rotate_executor"
@@ -1051,10 +729,10 @@ class TestProtectCount:
         "shuffify.services.playlist_pair_service"
         ".PlaylistPairService.get_pair_for_playlist"
     )
-    def test_archive_oldest_skips_protected(
+    def test_swap_skips_protected(
         self, mock_pair, mock_snap
     ):
-        """Protected tracks are not archived."""
+        """Protected tracks are not swapped out."""
         mock_pair.return_value = _make_pair()
         mock_snap.is_auto_snapshot_enabled.return_value = (
             False
@@ -1063,19 +741,24 @@ class TestProtectCount:
         prod = _make_tracks(
             ["p1", "p2", "p3", "p4", "p5"]
         )
-        api = _make_api(prod_tracks=prod)
+        archive = _make_tracks(
+            ["a1", "a2", "a3"]
+        )
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=archive,
+        )
         schedule = _make_schedule(
-            rotation_count=2
+            rotation_count=2,
+            target_size=5,
         )
         schedule.algorithm_params["protect_count"] = 2
 
         result = execute_rotate(schedule, api)
 
-        # Should archive p3, p4 (skip p1, p2)
-        api.playlist_remove_items.assert_called_once_with(
-            "target1", ["p3", "p4"]
-        )
-        assert result["tracks_total"] == 3
+        # Should swap p3, p4 out (skip p1, p2)
+        # and bring in a2, a3
+        assert result["tracks_added"] == 2
 
     @patch(
         "shuffify.services.executors.rotate_executor"
@@ -1095,9 +778,14 @@ class TestProtectCount:
         )
 
         prod = _make_tracks(["p1", "p2", "p3"])
-        api = _make_api(prod_tracks=prod)
+        archive = _make_tracks(["a1"])
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=archive,
+        )
         schedule = _make_schedule(
-            rotation_count=5
+            rotation_count=5,
+            target_size=3,
         )
         schedule.algorithm_params["protect_count"] = 10
 
@@ -1105,46 +793,6 @@ class TestProtectCount:
 
         assert result["tracks_added"] == 0
         assert result["tracks_total"] == 3
-        api.playlist_remove_items.assert_not_called()
-
-    @patch(
-        "shuffify.services.executors.rotate_executor"
-        ".PlaylistSnapshotService"
-    )
-    @patch(
-        "shuffify.services.playlist_pair_service"
-        ".PlaylistPairService.get_pair_for_playlist"
-    )
-    def test_refresh_skips_protected(
-        self, mock_pair, mock_snap
-    ):
-        """Refresh removes from after protected zone."""
-        mock_pair.return_value = _make_pair()
-        mock_snap.is_auto_snapshot_enabled.return_value = (
-            False
-        )
-
-        prod = _make_tracks(
-            ["p1", "p2", "p3", "p4"]
-        )
-        archive = _make_tracks(["a1", "a2"])
-        api = _make_api(
-            prod_tracks=prod,
-            archive_tracks=archive,
-        )
-        schedule = _make_schedule(
-            rotation_mode="refresh",
-            rotation_count=2,
-        )
-        schedule.algorithm_params["protect_count"] = 2
-
-        result = execute_rotate(schedule, api)
-
-        # Should remove p3, p4 (not p1, p2)
-        api.playlist_remove_items.assert_called_once_with(
-            "target1", ["p3", "p4"]
-        )
-        assert result["tracks_added"] == 2
 
 
 # =============================================================================
@@ -1163,27 +811,28 @@ class TestTargetSize:
         "shuffify.services.playlist_pair_service"
         ".PlaylistPairService.get_pair_for_playlist"
     )
-    def test_target_size_increases_archival(
+    def test_target_size_archives_overflow(
         self, mock_pair, mock_snap
     ):
-        """When over cap, more tracks are archived."""
+        """When over cap, excess tracks are archived."""
         mock_pair.return_value = _make_pair()
         mock_snap.is_auto_snapshot_enabled.return_value = (
             False
         )
 
-        # 15 tracks, cap 5 => overflow = 15-5 = 10
+        # 15 tracks, cap 5 => overflow = 10
         uris = ["u{}".format(i) for i in range(15)]
         prod = _make_tracks(uris)
         api = _make_api(prod_tracks=prod)
         schedule = _make_schedule(
-            rotation_count=2
+            rotation_count=2,
+            target_size=5,
         )
-        schedule.algorithm_params["target_size"] = 5
 
         result = execute_rotate(schedule, api)
 
-        # Should archive 10 tracks (overflow), not 2
+        # Phase 1: archive 10, no swap
+        assert result["tracks_added"] == 0
         assert result["tracks_total"] == 5
 
     @patch(
@@ -1194,28 +843,33 @@ class TestTargetSize:
         "shuffify.services.playlist_pair_service"
         ".PlaylistPairService.get_pair_for_playlist"
     )
-    def test_target_size_under_cap_uses_base_count(
+    def test_target_size_under_cap_swaps(
         self, mock_pair, mock_snap
     ):
-        """Under cap, base rotation count is used."""
+        """Under cap, normal swap occurs."""
         mock_pair.return_value = _make_pair()
         mock_snap.is_auto_snapshot_enabled.return_value = (
             False
         )
 
-        # 8 tracks, cap 10 => under cap, no overflow
+        # 8 tracks, cap 10 => under cap
         uris = ["u{}".format(i) for i in range(8)]
         prod = _make_tracks(uris)
-        api = _make_api(prod_tracks=prod)
-        schedule = _make_schedule(
-            rotation_count=3
+        archive = _make_tracks(
+            ["a{}".format(i) for i in range(5)]
         )
-        schedule.algorithm_params["target_size"] = 10
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=archive,
+        )
+        schedule = _make_schedule(
+            rotation_count=3,
+            target_size=10,
+        )
 
         result = execute_rotate(schedule, api)
 
-        # Normal rotation of 3
-        assert result["tracks_total"] == 5
+        assert result["tracks_added"] == 3
 
     @patch(
         "shuffify.services.executors.rotate_executor"
@@ -1228,7 +882,7 @@ class TestTargetSize:
     def test_target_size_with_protect(
         self, mock_pair, mock_snap
     ):
-        """Cap + protect combined."""
+        """Cap + protect combined overflow."""
         mock_pair.return_value = _make_pair()
         mock_snap.is_auto_snapshot_enabled.return_value = (
             False
@@ -1240,14 +894,15 @@ class TestTargetSize:
         prod = _make_tracks(uris)
         api = _make_api(prod_tracks=prod)
         schedule = _make_schedule(
-            rotation_count=2
+            rotation_count=2,
+            target_size=10,
         )
-        schedule.algorithm_params["target_size"] = 10
         schedule.algorithm_params["protect_count"] = 5
 
         result = execute_rotate(schedule, api)
 
-        # Rotates 10, skipping first 5
+        # Phase 1: archive 10 overflow, no swap
+        assert result["tracks_added"] == 0
         assert result["tracks_total"] == 10
         # Removed tracks should be u5..u14
         removed = api.playlist_remove_items.call_args[

@@ -1,6 +1,9 @@
 """
-Rotate executor: rotation modes and pairing logic for
+Rotate executor: swap rotation and pairing logic for
 production/archive playlist management.
+
+Currently only supports swap mode. See git history for
+prior archive_oldest and refresh implementations.
 """
 
 import logging
@@ -57,52 +60,17 @@ def execute_rotate(
             schedule, prod_uris, rotation_mode
         )
 
-        actual_count = _compute_rotation_count(
-            rotation_count, target_size,
-            len(prod_uris), protect_count,
-        )
-        if actual_count == 0:
-            return {
-                "tracks_added": 0,
-                "tracks_total": len(prod_uris),
-            }
-
-        # Skip protected top-N tracks when selecting
-        # candidates for archival
-        eligible_uris = prod_uris[protect_count:]
-        oldest_uris = eligible_uris[:actual_count]
-        # Clamp to what's actually available
-        actual_count = len(oldest_uris)
-
-        if rotation_mode == RotationMode.ARCHIVE_OLDEST:
-            return _rotate_archive(
-                api, schedule, target_id,
-                archive_id, oldest_uris,
-                prod_uris, actual_count,
-            )
-        elif rotation_mode == RotationMode.REFRESH:
-            return _rotate_refresh(
-                api, schedule, target_id,
-                archive_id, prod_uris,
-                actual_count, protect_count,
-            )
-        elif rotation_mode == RotationMode.SWAP:
-            if target_size is None:
-                raise JobExecutionError(
-                    "Swap rotation requires a playlist "
-                    "size cap (target_size)"
-                )
-            return _rotate_swap(
-                api, schedule, target_id,
-                archive_id, prod_uris,
-                rotation_count, target_size,
-                protect_count,
-            )
-        else:
+        if target_size is None:
             raise JobExecutionError(
-                "Unknown rotation mode: "
-                "{}".format(rotation_mode)
+                "Swap rotation requires a playlist "
+                "size cap (target_size)"
             )
+        return _rotate_swap(
+            api, schedule, target_id,
+            archive_id, prod_uris,
+            rotation_count, target_size,
+            protect_count,
+        )
 
     except JobExecutionError:
         raise
@@ -144,7 +112,7 @@ def _validate_rotation_config(
 
     params = schedule.algorithm_params or {}
     rotation_mode = params.get(
-        "rotation_mode", RotationMode.ARCHIVE_OLDEST
+        "rotation_mode", RotationMode.SWAP
     )
     rotation_count = max(
         1, int(params.get("rotation_count", 5))
@@ -251,107 +219,10 @@ def _auto_snapshot_before_rotate(
         )
 
 
-def _rotate_archive(
-    api, schedule, target_id, archive_id,
-    oldest_uris, prod_uris, actual_count,
-):
-    """Archive oldest tracks from production."""
-    from shuffify.services.executors.base_executor import (
-        JobExecutorService,
-    )
-
-    # Dedupe: only add tracks not already in archive
-    archive_tracks = api.get_playlist_tracks(
-        archive_id
-    )
-    archive_set = {
-        t["uri"]
-        for t in archive_tracks
-        if t.get("uri")
-    }
-    new_to_archive = [
-        u for u in oldest_uris
-        if u not in archive_set
-    ]
-
-    if new_to_archive:
-        JobExecutorService._batch_add_tracks(
-            api, archive_id, new_to_archive
-        )
-    api.playlist_remove_items(
-        target_id, oldest_uris
-    )
-
-    logger.info(
-        "Schedule %s: archived %d oldest tracks "
-        "(%d new) from '%s'",
-        schedule.id, actual_count,
-        len(new_to_archive),
-        schedule.target_playlist_name,
-    )
-
-    return {
-        "tracks_added": 0,
-        "tracks_total": (
-            len(prod_uris) - actual_count
-        ),
-    }
-
-
-def _rotate_refresh(
-    api, schedule, target_id, archive_id,
-    prod_uris, actual_count, protect_count=0,
-):
-    """Replace oldest production tracks with newest
-    archive tracks."""
-    from shuffify.services.executors.base_executor import (
-        JobExecutorService,
-    )
-
-    archive_tracks = api.get_playlist_tracks(
-        archive_id
-    )
-    archive_uris = [
-        t["uri"]
-        for t in archive_tracks
-        if t.get("uri")
-    ]
-
-    prod_set = set(prod_uris)
-    available = [
-        u for u in archive_uris
-        if u not in prod_set
-    ]
-    refresh_uris = available[-actual_count:]
-    remove_count = min(
-        actual_count, len(refresh_uris)
-    )
-    eligible = prod_uris[protect_count:]
-    to_remove = eligible[:remove_count]
-
-    if refresh_uris:
-        api.playlist_remove_items(
-            target_id, to_remove
-        )
-        JobExecutorService._batch_add_tracks(
-            api, target_id, refresh_uris
-        )
-
-    new_total = (
-        len(prod_uris) - remove_count
-        + len(refresh_uris)
-    )
-
-    logger.info(
-        "Schedule %s: refreshed %d tracks in '%s'",
-        schedule.id, len(refresh_uris),
-        schedule.target_playlist_name,
-    )
-
-    return {
-        "tracks_added": len(refresh_uris),
-        "tracks_total": new_total,
-    }
+# TODO: Re-implement archive_oldest mode
+# (see git history for prior _rotate_archive)
+# TODO: Re-implement refresh mode
+# (see git history for prior _rotate_refresh)
 
 
 def _rotate_swap(

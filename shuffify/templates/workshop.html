@@ -587,32 +587,9 @@
 
                 <!-- No rotation schedule -->
                 <div id="rotation-no-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
-                    <p class="text-white/40 text-xs mb-3">Set up automatic track rotation between this playlist and the archive.</p>
+                    <p class="text-white/40 text-xs mb-3">Exchange tracks between this playlist and its archive on a schedule.</p>
                     <p id="rotation-auto-create-hint" class="hidden text-white/30 text-xs mb-3 italic">An archive playlist will be created automatically when you enable rotation.</p>
                     <div class="space-y-2">
-                        <select id="rotation-mode-select" class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
-                            <option value="archive_oldest">Archive oldest</option>
-                            <option value="refresh">Refresh</option>
-                            <option value="swap">Swap</option>
-                        </select>
-                        <script>
-                        document.getElementById('rotation-mode-select').addEventListener('change', function() {
-                            var capLabel = document.getElementById('rotation-cap-label');
-                            var capHint = document.getElementById('rotation-cap-hint');
-                            var capInput = document.getElementById('rotation-target-size');
-                            if (this.value === 'swap') {
-                                capLabel.textContent = 'Playlist size cap';
-                                capHint.textContent = 'required';
-                                capHint.className = 'text-spotify-green text-xs font-medium';
-                                capInput.placeholder = 'e.g. 50';
-                            } else {
-                                capLabel.textContent = 'Playlist size cap';
-                                capHint.textContent = 'optional';
-                                capHint.className = 'text-white/30 text-xs';
-                                capInput.placeholder = 'No limit';
-                            }
-                        });
-                        </script>
                         <div class="flex gap-2">
                             <input id="rotation-count-input" type="number" min="1" max="50" value="5"
                                    class="w-20 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
@@ -631,13 +608,10 @@
                         </div>
                         <!-- Size cap -->
                         <div class="pt-1 border-t border-white/5">
-                            <label class="flex items-center justify-between text-white/50 text-xs mb-1">
-                                <span id="rotation-cap-label">Playlist size cap</span>
-                                <span id="rotation-cap-hint" class="text-white/30 text-xs">optional</span>
-                            </label>
+                            <label class="text-white/50 text-xs mb-1 block">Playlist size cap</label>
                             <input id="rotation-target-size" type="number" min="1" max="10000"
                                    class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
-                                   placeholder="No limit">
+                                   placeholder="e.g. 50">
                         </div>
                         <!-- Protect top N -->
                         <div>
@@ -3473,8 +3447,6 @@ function renderRotationConfig() {
     var sched = archiveState.rotationSchedule;
     var params = sched.algorithm_params || {};
     var modeMap = {
-        'archive_oldest': 'Archive oldest',
-        'refresh': 'Refresh',
         'swap': 'Swap',
     };
     var freqMap = {
@@ -3570,14 +3542,13 @@ function ensureArchivePair() {
 }
 
 function createRotationSchedule() {
-    var modeSelect = document.getElementById('rotation-mode-select');
     var countInput = document.getElementById('rotation-count-input');
     var freqSelect = document.getElementById('rotation-freq-select');
     var timeInput = document.getElementById('rotation-time-input');
     var targetSizeInput = document.getElementById('rotation-target-size');
     var protectInput = document.getElementById('rotation-protect-count');
 
-    var mode = modeSelect.value;
+    var mode = 'swap';
     var count = parseInt(countInput.value, 10) || 5;
     var freq = freqSelect.value;
     var timeVal = timeInput.value || '09:00';
@@ -3587,8 +3558,8 @@ function createRotationSchedule() {
     var targetSize = targetSizeInput.value ? parseInt(targetSizeInput.value, 10) : null;
     var protectCount = parseInt(protectInput.value, 10) || 0;
 
-    if (mode === 'swap' && (!targetSize || targetSize < 1)) {
-        showToast('Swap mode requires a playlist size cap', 'error');
+    if (!targetSize || targetSize < 1) {
+        showToast('Please enter a playlist size cap', 'error');
         return;
     }
 
@@ -4412,7 +4383,7 @@ function renderRotationPanel(data) {
     if (data.has_rotation_schedule && data.rotation_schedule) {
         const sched = data.rotation_schedule;
         const params = sched.algorithm_params || {};
-        const mode = (params.rotation_mode || 'archive_oldest').replace(/_/g, ' ');
+        const mode = (params.rotation_mode || 'swap').replace(/_/g, ' ');
         const count = params.rotation_count || 5;
         const freq = (sched.schedule_value || 'daily').replace(/_/g, ' ');
 

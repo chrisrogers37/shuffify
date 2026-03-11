@@ -88,7 +88,7 @@
                             &middot; Keep top {{ schedule.algorithm_params.get('keep_first') }}
                             {% endif %}
                             {% if schedule.job_type == 'rotate' and schedule.algorithm_params %}
-                            &middot; {{ schedule.algorithm_params.get('rotation_mode', 'archive_oldest') | replace('_', ' ') | title }} x{{ schedule.algorithm_params.get('rotation_count', 5) }}
+                            &middot; Swap x{{ schedule.algorithm_params.get('rotation_count', 5) }}{% if schedule.algorithm_params.get('target_size') %} &middot; cap {{ schedule.algorithm_params.get('target_size') }}{% endif %}
                             {% endif %}
                         </p>
                         {% if schedule.last_run_at %}
@@ -229,25 +229,23 @@
                         <!-- Populated dynamically by renderPairStatus() -->
                     </div>
                     <div id="rotation-controls" class="hidden space-y-3">
-                        <div>
-                            <label class="block text-sm font-medium text-white/90 mb-1">Rotation Mode</label>
-                            <select id="modal-rotation-mode"
-                                    class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
-                                    onchange="updateRotationDesc()">
-                                <option value="archive_oldest">Archive Oldest</option>
-                                <option value="refresh">Refresh from Archive</option>
-                                <option value="swap">Swap with Archive</option>
-                            </select>
-                            <p id="rotation-mode-desc" class="text-white/40 text-xs mt-1">
-                                Move the oldest tracks from your playlist to its archive.
-                            </p>
-                        </div>
+                        <p class="text-white/40 text-xs">
+                            Exchange tracks between your playlist and its archive on a schedule.
+                        </p>
                         <div>
                             <label class="block text-sm font-medium text-white/90 mb-1">Tracks per Rotation</label>
                             <input type="number" id="modal-rotation-count"
                                    value="5" min="1" max="50"
                                    class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white">
                             <p class="text-white/40 text-xs mt-1">How many tracks to rotate each time (1-50).</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-white/90 mb-1">Playlist Size Cap</label>
+                            <input type="number" id="modal-rotation-target-size"
+                                   min="1" max="10000"
+                                   class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                                   placeholder="e.g. 50">
+                            <p class="text-white/40 text-xs mt-1">Maximum number of tracks to keep in the playlist.</p>
                         </div>
                     </div>
                 </div>
@@ -461,14 +459,9 @@ function updateCreateButtonState() {
 }
 
 function updateRotationDesc() {
-    const mode = document.getElementById('modal-rotation-mode').value;
-    const desc = document.getElementById('rotation-mode-desc');
-    const descriptions = {
-        'archive_oldest': 'Move the oldest tracks from your playlist to its archive.',
-        'refresh': 'Replace the oldest tracks with the newest from your archive.',
-        'swap': 'Exchange tracks between your playlist and its archive.',
-    };
-    desc.textContent = descriptions[mode] || '';
+    // Currently only swap mode is supported
+    // TODO: Re-add mode descriptions when more modes
+    // are implemented (see git history)
 }
 
 // =============================================================================
@@ -533,9 +526,16 @@ document.getElementById('create-schedule-form').addEventListener('submit', funct
 
     // Add rotation params if applicable
     if (jobType === 'rotate') {
+        var rotTargetSize = document.getElementById('modal-rotation-target-size').value;
+        if (!rotTargetSize || parseInt(rotTargetSize, 10) < 1) {
+            showToast('Please enter a playlist size cap', 'error');
+            setSubmitState(false);
+            return;
+        }
         body.algorithm_params = {
-            rotation_mode: document.getElementById('modal-rotation-mode').value,
+            rotation_mode: 'swap',
             rotation_count: parseInt(document.getElementById('modal-rotation-count').value, 10) || 5,
+            target_size: parseInt(rotTargetSize, 10),
         };
     }
 

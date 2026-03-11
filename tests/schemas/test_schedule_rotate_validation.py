@@ -2,7 +2,7 @@
 Tests for rotate-specific schedule schema validation.
 
 Tests ScheduleCreateRequest and ScheduleUpdateRequest
-with rotate job type parameters.
+with rotate job type parameters (swap mode only).
 """
 
 import pytest
@@ -22,28 +22,6 @@ from shuffify.schemas.schedule_requests import (
 class TestRotateScheduleCreateValid:
     """Tests for valid rotate schedule creation."""
 
-    def test_archive_oldest_mode(self):
-        req = ScheduleCreateRequest(
-            job_type="rotate",
-            target_playlist_id="p1",
-            target_playlist_name="My Playlist",
-            algorithm_params={
-                "rotation_mode": "archive_oldest",
-            },
-        )
-        assert req.job_type == "rotate"
-
-    def test_refresh_mode(self):
-        req = ScheduleCreateRequest(
-            job_type="rotate",
-            target_playlist_id="p1",
-            target_playlist_name="My Playlist",
-            algorithm_params={
-                "rotation_mode": "refresh",
-            },
-        )
-        assert req.job_type == "rotate"
-
     def test_swap_mode(self):
         req = ScheduleCreateRequest(
             job_type="rotate",
@@ -62,7 +40,8 @@ class TestRotateScheduleCreateValid:
             target_playlist_id="p1",
             target_playlist_name="My Playlist",
             algorithm_params={
-                "rotation_mode": "archive_oldest",
+                "rotation_mode": "swap",
+                "target_size": 50,
             },
         )
         assert (
@@ -76,7 +55,8 @@ class TestRotateScheduleCreateValid:
             target_playlist_id="p1",
             target_playlist_name="My Playlist",
             algorithm_params={
-                "rotation_mode": "archive_oldest",
+                "rotation_mode": "swap",
+                "target_size": 50,
                 "rotation_count": 10,
             },
         )
@@ -102,7 +82,8 @@ class TestRotateScheduleCreateValid:
             target_playlist_id="p1",
             target_playlist_name="My Playlist",
             algorithm_params={
-                "rotation_mode": "refresh",
+                "rotation_mode": "swap",
+                "target_size": 50,
             },
         )
         assert req.source_playlist_ids is None
@@ -113,7 +94,8 @@ class TestRotateScheduleCreateValid:
             target_playlist_id="p1",
             target_playlist_name="My Playlist",
             algorithm_params={
-                "rotation_mode": "archive_oldest",
+                "rotation_mode": "swap",
+                "target_size": 50,
                 "rotation_count": "7",
             },
         )
@@ -125,13 +107,26 @@ class TestRotateScheduleCreateValid:
             target_playlist_id="p1",
             target_playlist_name="My Playlist",
             algorithm_params={
-                "rotation_mode": "archive_oldest",
+                "rotation_mode": "swap",
+                "target_size": 50,
                 "custom_key": "value",
             },
         )
         assert (
             req.algorithm_params["custom_key"] == "value"
         )
+
+    def test_mode_defaults_to_swap(self):
+        """rotation_mode defaults to swap if omitted."""
+        req = ScheduleCreateRequest(
+            job_type="rotate",
+            target_playlist_id="p1",
+            target_playlist_name="My Playlist",
+            algorithm_params={
+                "target_size": 50,
+            },
+        )
+        assert req.job_type == "rotate"
 
 
 # =============================================================================
@@ -142,22 +137,25 @@ class TestRotateScheduleCreateValid:
 class TestRotateScheduleCreateInvalid:
     """Tests for invalid rotate schedule creation."""
 
-    def test_missing_rotation_mode(self):
+    def test_missing_target_size(self):
+        """target_size is always required for rotate."""
         with pytest.raises(
             ValidationError,
-            match="rotation_mode",
+            match="target_size",
         ):
             ScheduleCreateRequest(
                 job_type="rotate",
                 target_playlist_id="p1",
                 target_playlist_name="My Playlist",
-                algorithm_params={},
+                algorithm_params={
+                    "rotation_mode": "swap",
+                },
             )
 
     def test_null_algorithm_params(self):
         with pytest.raises(
             ValidationError,
-            match="rotation_mode",
+            match="target_size",
         ):
             ScheduleCreateRequest(
                 job_type="rotate",
@@ -169,7 +167,7 @@ class TestRotateScheduleCreateInvalid:
     def test_no_algorithm_params(self):
         with pytest.raises(
             ValidationError,
-            match="rotation_mode",
+            match="target_size",
         ):
             ScheduleCreateRequest(
                 job_type="rotate",
@@ -187,7 +185,23 @@ class TestRotateScheduleCreateInvalid:
                 target_playlist_id="p1",
                 target_playlist_name="My Playlist",
                 algorithm_params={
-                    "rotation_mode": "invalid",
+                    "rotation_mode": "archive_oldest",
+                    "target_size": 50,
+                },
+            )
+
+    def test_refresh_mode_rejected(self):
+        with pytest.raises(
+            ValidationError,
+            match="Invalid rotation_mode",
+        ):
+            ScheduleCreateRequest(
+                job_type="rotate",
+                target_playlist_id="p1",
+                target_playlist_name="My Playlist",
+                algorithm_params={
+                    "rotation_mode": "refresh",
+                    "target_size": 50,
                 },
             )
 
@@ -201,7 +215,8 @@ class TestRotateScheduleCreateInvalid:
                 target_playlist_id="p1",
                 target_playlist_name="My Playlist",
                 algorithm_params={
-                    "rotation_mode": "archive_oldest",
+                    "rotation_mode": "swap",
+                    "target_size": 50,
                     "rotation_count": 0,
                 },
             )
@@ -216,7 +231,8 @@ class TestRotateScheduleCreateInvalid:
                 target_playlist_id="p1",
                 target_playlist_name="My Playlist",
                 algorithm_params={
-                    "rotation_mode": "archive_oldest",
+                    "rotation_mode": "swap",
+                    "target_size": 50,
                     "rotation_count": -1,
                 },
             )
@@ -231,8 +247,39 @@ class TestRotateScheduleCreateInvalid:
                 target_playlist_id="p1",
                 target_playlist_name="My Playlist",
                 algorithm_params={
-                    "rotation_mode": "archive_oldest",
+                    "rotation_mode": "swap",
+                    "target_size": 50,
                     "rotation_count": "abc",
+                },
+            )
+
+    def test_target_size_zero(self):
+        with pytest.raises(
+            ValidationError,
+            match="positive integer",
+        ):
+            ScheduleCreateRequest(
+                job_type="rotate",
+                target_playlist_id="p1",
+                target_playlist_name="My Playlist",
+                algorithm_params={
+                    "rotation_mode": "swap",
+                    "target_size": 0,
+                },
+            )
+
+    def test_target_size_non_numeric(self):
+        with pytest.raises(
+            ValidationError,
+            match="positive integer",
+        ):
+            ScheduleCreateRequest(
+                job_type="rotate",
+                target_playlist_id="p1",
+                target_playlist_name="My Playlist",
+                algorithm_params={
+                    "rotation_mode": "swap",
+                    "target_size": "abc",
                 },
             )
 
@@ -248,21 +295,6 @@ class TestRotateScheduleCreateInvalid:
             },
         )
         assert req.job_type == "rotate"
-
-    def test_swap_without_target_size(self):
-        """Swap mode requires target_size."""
-        with pytest.raises(
-            ValidationError,
-            match="target_size",
-        ):
-            ScheduleCreateRequest(
-                job_type="rotate",
-                target_playlist_id="p1",
-                target_playlist_name="My Playlist",
-                algorithm_params={
-                    "rotation_mode": "swap",
-                },
-            )
 
 
 # =============================================================================
@@ -282,13 +314,14 @@ class TestRotateScheduleUpdate:
     def test_update_algorithm_params(self):
         req = ScheduleUpdateRequest(
             algorithm_params={
-                "rotation_mode": "refresh",
+                "rotation_mode": "swap",
                 "rotation_count": 10,
+                "target_size": 50,
             }
         )
         assert (
             req.algorithm_params["rotation_mode"]
-            == "refresh"
+            == "swap"
         )
 
     def test_rotate_passes_job_type_validator(self):
