@@ -912,3 +912,130 @@ class TestTargetSize:
             "u5", "u6", "u7", "u8", "u9",
             "u10", "u11", "u12", "u13", "u14",
         ]
+
+
+# =============================================================================
+# OPERATION ORDERING
+# =============================================================================
+
+
+class TestOperationOrdering:
+    """Verify remove-before-add ordering for resilience."""
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_overflow_removes_before_archiving(
+        self, mock_pair, mock_snap
+    ):
+        """Phase 1: remove from prod before adding to
+        archive, so a failed remove leaves archive clean."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        uris = ["u{}".format(i) for i in range(8)]
+        prod = _make_tracks(uris)
+        api = _make_api(prod_tracks=prod)
+
+        # Track call order
+        call_order = []
+        api.playlist_remove_items.side_effect = (
+            lambda *a, **k: call_order.append("remove")
+        )
+        orig_batch = (
+            JobExecutorService._batch_add_tracks
+        )
+
+        def track_add(*a, **k):
+            call_order.append("add")
+            return orig_batch(*a, **k)
+
+        schedule = _make_schedule(
+            rotation_count=2,
+            target_size=5,
+        )
+
+        with patch.object(
+            JobExecutorService, "_batch_add_tracks",
+            side_effect=track_add,
+        ):
+            execute_rotate(schedule, api)
+
+        assert call_order[0] == "remove"
+        assert "add" in call_order
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_swap_removes_from_prod_before_archive_add(
+        self, mock_pair, mock_snap
+    ):
+        """Phase 2: remove from prod before adding to
+        archive for outgoing tracks."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        prod = _make_tracks(
+            ["p1", "p2", "p3", "p4"]
+        )
+        archive = _make_tracks(["a1", "a2"])
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=archive,
+        )
+
+        call_order = []
+
+        def track_remove(pid, uris):
+            call_order.append(
+                ("remove", pid)
+            )
+
+        def track_add(api_obj, pid, uris):
+            call_order.append(
+                ("add", pid)
+            )
+
+        api.playlist_remove_items.side_effect = (
+            track_remove
+        )
+
+        schedule = _make_schedule(
+            rotation_count=2,
+            target_size=4,
+        )
+
+        with patch.object(
+            JobExecutorService, "_batch_add_tracks",
+            side_effect=track_add,
+        ):
+            execute_rotate(schedule, api)
+
+        # First op: remove from production
+        assert call_order[0] == (
+            "remove", "target1"
+        )
+        # Archive add comes after prod remove
+        archive_add_idx = next(
+            i for i, c in enumerate(call_order)
+            if c == ("add", "archive1")
+        )
+        prod_remove_idx = next(
+            i for i, c in enumerate(call_order)
+            if c == ("remove", "target1")
+        )
+        assert prod_remove_idx < archive_add_idx

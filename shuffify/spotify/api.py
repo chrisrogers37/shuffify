@@ -421,6 +421,7 @@ class SpotifyAPI:
 
         return tracks
 
+    @api_error_handler
     def playlist_add_items(
         self, playlist_id: str, track_uris: List[str]
     ) -> None:
@@ -432,6 +433,9 @@ class SpotifyAPI:
             track_uris: List of track URIs to add.
         """
         self._ensure_valid_token()
+
+        if not track_uris:
+            return
 
         for i in range(0, len(track_uris), self.BATCH_SIZE):
             batch = track_uris[i: i + self.BATCH_SIZE]
@@ -468,10 +472,9 @@ class SpotifyAPI:
 
         for i in range(0, len(track_uris), self.BATCH_SIZE):
             batch = track_uris[i: i + self.BATCH_SIZE]
-            items = [{"uri": uri} for uri in batch]
             self._http.delete(
                 f"/playlists/{playlist_id}/items",
-                json={"tracks": items},
+                json={"uris": batch},
             )
 
         logger.info(

@@ -266,6 +266,12 @@ def _rotate_swap(
         overflow = len(prod_uris) - target_size
         overflow_uris = eligible_uris[:overflow]
 
+        # Remove from production FIRST
+        api.playlist_remove_items(
+            target_id, overflow_uris
+        )
+
+        # Then archive (deduped)
         new_to_archive = [
             u for u in overflow_uris
             if u not in archive_set
@@ -274,9 +280,6 @@ def _rotate_swap(
             JobExecutorService._batch_add_tracks(
                 api, archive_id, new_to_archive
             )
-        api.playlist_remove_items(
-            target_id, overflow_uris
-        )
 
         logger.info(
             "Schedule %s: archived %d overflow "
@@ -305,7 +308,12 @@ def _rotate_swap(
     ]
 
     if swap_in_uris and swap_out_uris:
-        # Move outgoing tracks to archive (deduped)
+        # Remove outgoing from production first
+        api.playlist_remove_items(
+            target_id, swap_out_uris
+        )
+
+        # Then archive outgoing (deduped)
         new_to_archive = [
             u for u in swap_out_uris
             if u not in archive_set
@@ -314,16 +322,15 @@ def _rotate_swap(
             JobExecutorService._batch_add_tracks(
                 api, archive_id, new_to_archive
             )
-        api.playlist_remove_items(
-            target_id, swap_out_uris
-        )
 
-        # Bring in tracks from archive
-        JobExecutorService._batch_add_tracks(
-            api, target_id, swap_in_uris
-        )
+        # Remove incoming from archive first
         api.playlist_remove_items(
             archive_id, swap_in_uris
+        )
+
+        # Then add incoming to production
+        JobExecutorService._batch_add_tracks(
+            api, target_id, swap_in_uris
         )
 
     swapped = min(
