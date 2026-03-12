@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Scheduled Rotation Failures** - Fixed `playlist_remove_items` sending wrong request body format to Spotify API
+  - Was sending `{"uris": [...]}` but Spotify's DELETE endpoint requires `{"tracks": [{"uri": "..."}, ...]}`
+  - Also corrected endpoint path from `/playlists/{id}/items` to `/playlists/{id}/tracks` for delete operations
+  - This caused all scheduled ROTATE jobs to fail with a Spotify API error
 - **Rotation Archive Overlap Bug** - Fixed rotation short-circuiting when archive contains tracks that also exist in production
   - Added pre-rotation archive cleanup: overlapping tracks are purged from archive before rotation begins
   - Prevents stale duplicates from reducing the available swap-in pool

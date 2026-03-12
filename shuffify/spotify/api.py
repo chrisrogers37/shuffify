@@ -473,8 +473,12 @@ class SpotifyAPI:
         for i in range(0, len(track_uris), self.BATCH_SIZE):
             batch = track_uris[i: i + self.BATCH_SIZE]
             self._http.delete(
-                f"/playlists/{playlist_id}/items",
-                json={"uris": batch},
+                f"/playlists/{playlist_id}/tracks",
+                json={
+                    "tracks": [
+                        {"uri": u} for u in batch
+                    ]
+                },
             )
 
         logger.info(

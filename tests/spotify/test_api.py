@@ -501,10 +501,10 @@ class TestPlaylistAddItems:
 class TestPlaylistRemoveItems:
     """Tests for playlist_remove_items."""
 
-    def test_remove_items_sends_uris_format(
+    def test_remove_items_sends_tracks_format(
         self, valid_token_info, auth_manager
     ):
-        """Should DELETE with {uris: [...]} body."""
+        """Should DELETE with {tracks: [{uri: ...}]} body."""
         uris = ['spotify:track:1', 'spotify:track:2']
 
         with patch(
@@ -520,8 +520,13 @@ class TestPlaylistRemoveItems:
 
             assert result is True
             mock_http.delete.assert_called_once_with(
-                '/playlists/playlist123/items',
-                json={'uris': uris},
+                '/playlists/playlist123/tracks',
+                json={
+                    'tracks': [
+                        {'uri': 'spotify:track:1'},
+                        {'uri': 'spotify:track:2'},
+                    ]
+                },
             )
 
     def test_remove_items_empty_list_returns_true(
@@ -562,10 +567,12 @@ class TestPlaylistRemoveItems:
 
             assert result is True
             assert mock_http.delete.call_count == 2
-            # Verify body format is {uris: [...]}
+            # Verify body format is {tracks: [{uri: ...}]}
             first_call = mock_http.delete.call_args_list[0]
-            assert 'uris' in first_call[1]['json']
-            assert len(first_call[1]['json']['uris']) == 100
+            assert 'tracks' in first_call[1]['json']
+            assert len(
+                first_call[1]['json']['tracks']
+            ) == 100
 
 
 # =============================================================================
