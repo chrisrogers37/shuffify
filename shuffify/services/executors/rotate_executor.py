@@ -61,10 +61,10 @@ def execute_rotate(
             schedule, prod_uris, rotation_mode
         )
 
-        if target_size is None:
+        if target_size is None or target_size < 1:
             raise JobExecutionError(
                 "Swap rotation requires a playlist "
-                "size cap (target_size)"
+                "size cap (target_size) of at least 1"
             )
         return _rotate_swap(
             api, schedule, target_id,
@@ -217,17 +217,34 @@ def _verify_playlist_size(
     """Re-fetch playlist to get actual track count.
 
     Logs a warning if the actual size differs from
-    expected, indicating a silent API failure.
+    expected, indicating a silent API failure. Raises
+    JobExecutionError if drift exceeds 50% of expected
+    size, indicating a serious Spotify failure.
 
     Returns:
         Actual track count.
     """
+    from shuffify.services.executors.base_executor import (
+        JobExecutionError,
+    )
+
     verified = api.get_playlist_tracks(target_id)
     actual = sum(
         1 for t in verified if t.get("uri")
     ) if verified else 0
 
     if actual != expected:
+        drift = abs(actual - expected)
+        threshold = max(1, expected // 2)
+        if drift > threshold:
+            raise JobExecutionError(
+                "Schedule {}: {} size drift too "
+                "large — expected {} tracks, got "
+                "{}".format(
+                    schedule_id, phase,
+                    expected, actual,
+                )
+            )
         logger.warning(
             "Schedule %s: %s size mismatch — "
             "expected %d tracks, got %d",
@@ -248,22 +265,74 @@ def _purge_archive_overlaps(
 
     Returns:
         Tuple of (cleaned_archive_uris, purged_count).
+
+    Raises:
+        JobExecutionError: If the archive purge fails,
+            since proceeding with stale overlaps would
+            contaminate the swap-in pool.
     """
+    from shuffify.services.executors.base_executor import (
+        JobExecutionError,
+    )
+
     overlaps, cleaned = [], []
     for u in archive_uris:
         (overlaps if u in prod_set
          else cleaned).append(u)
 
     if overlaps:
-        api.playlist_remove_items(
-            archive_id, overlaps
-        )
+        try:
+            result = api.playlist_remove_items(
+                archive_id, overlaps
+            )
+            if not result:
+                raise JobExecutionError(
+                    "Archive overlap purge returned "
+                    "failure for archive {}".format(
+                        archive_id
+                    )
+                )
+        except (SpotifyAPIError, SpotifyNotFoundError):
+            raise JobExecutionError(
+                "Failed to purge {} overlapping "
+                "tracks from archive {}. Aborting "
+                "rotation to prevent "
+                "duplicates.".format(
+                    len(overlaps), archive_id,
+                )
+            )
         logger.info(
             "Purged %d overlapping tracks from "
             "archive %s",
             len(overlaps), archive_id,
         )
     return cleaned, len(overlaps)
+
+
+def _checked_remove(
+    api, playlist_id, uris, schedule_id, phase,
+):
+    """Remove tracks and verify the operation succeeded.
+
+    Raises JobExecutionError if the Spotify API returns
+    a falsy result, indicating a silent failure.
+    """
+    from shuffify.services.executors.base_executor import (
+        JobExecutionError,
+    )
+
+    result = api.playlist_remove_items(
+        playlist_id, uris
+    )
+    if not result:
+        raise JobExecutionError(
+            "Schedule {}: {} failed — "
+            "playlist_remove_items returned falsy "
+            "for playlist {}".format(
+                schedule_id, phase, playlist_id,
+            )
+        )
+    return result
 
 
 def _rotate_swap(
@@ -313,6 +382,25 @@ def _rotate_swap(
     archive_set = set(archive_uris)
     eligible_uris = prod_uris[protect_count:]
 
+    # Fix #3: Warn when all tracks are protected
+    if not eligible_uris and prod_uris:
+        logger.warning(
+            "Schedule %s: protect_count (%d) >= "
+            "playlist size (%d) — no tracks "
+            "eligible for rotation",
+            schedule.id, protect_count,
+            len(prod_uris),
+        )
+        actual_total = _verify_playlist_size(
+            api, target_id, len(prod_uris),
+            schedule.id, "swap",
+        )
+        return {
+            "tracks_added": 0,
+            "tracks_total": actual_total,
+            "skipped_reason": "all_tracks_protected",
+        }
+
     # Phase 1: Archive overflow to reach target_size
     if (
         target_size is not None
@@ -324,8 +412,9 @@ def _rotate_swap(
         )
 
         # Remove from production FIRST
-        api.playlist_remove_items(
-            target_id, overflow_uris
+        _checked_remove(
+            api, target_id, overflow_uris,
+            schedule.id, "overflow prod-remove",
         )
 
         # Then archive (deduped)
@@ -370,8 +459,9 @@ def _rotate_swap(
 
     if swap_in_uris and swap_out_uris:
         # Remove outgoing from production first
-        api.playlist_remove_items(
-            target_id, swap_out_uris
+        _checked_remove(
+            api, target_id, swap_out_uris,
+            schedule.id, "swap prod-remove",
         )
 
         # Then archive outgoing (deduped)
@@ -385,8 +475,9 @@ def _rotate_swap(
             )
 
         # Remove incoming from archive first
-        api.playlist_remove_items(
-            archive_id, swap_in_uris
+        _checked_remove(
+            api, archive_id, swap_in_uris,
+            schedule.id, "swap archive-remove",
         )
 
         # Then add incoming to production
