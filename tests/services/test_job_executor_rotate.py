@@ -1451,15 +1451,15 @@ class TestOperationOrdering:
 class TestCheckedRemove:
     """Tests for _checked_remove error handling."""
 
-    def test_success_returns_result(self):
-        """Truthy return passes through."""
+    def test_success_does_not_raise(self):
+        """Truthy return completes without error."""
         api = MagicMock()
         api.playlist_remove_items.return_value = True
 
-        result = _checked_remove(
+        # Should not raise
+        _checked_remove(
             api, "playlist1", ["u1"], 42, "test",
         )
-        assert result is True
 
     def test_falsy_return_raises(self):
         """Falsy return from API raises error."""
@@ -1853,7 +1853,7 @@ class TestPurgeArchiveErrorHandling:
 
         with pytest.raises(
             JobExecutionError,
-            match="Archive overlap purge returned",
+            match="Failed to purge",
         ):
             _purge_archive_overlaps(
                 api, "archive1",

@@ -282,17 +282,15 @@ def _purge_archive_overlaps(
 
     if overlaps:
         try:
-            result = api.playlist_remove_items(
-                archive_id, overlaps
+            _checked_remove(
+                api, archive_id, overlaps,
+                None, "archive overlap purge",
             )
-            if not result:
-                raise JobExecutionError(
-                    "Archive overlap purge returned "
-                    "failure for archive {}".format(
-                        archive_id
-                    )
-                )
-        except (SpotifyAPIError, SpotifyNotFoundError):
+        except (
+            SpotifyAPIError,
+            SpotifyNotFoundError,
+            JobExecutionError,
+        ):
             raise JobExecutionError(
                 "Failed to purge {} overlapping "
                 "tracks from archive {}. Aborting "
@@ -332,7 +330,6 @@ def _checked_remove(
                 schedule_id, phase, playlist_id,
             )
         )
-    return result
 
 
 def _rotate_swap(
@@ -382,7 +379,8 @@ def _rotate_swap(
     archive_set = set(archive_uris)
     eligible_uris = prod_uris[protect_count:]
 
-    # Fix #3: Warn when all tracks are protected
+    # Warn when all tracks are protected — no
+    # verification needed since nothing was modified.
     if not eligible_uris and prod_uris:
         logger.warning(
             "Schedule %s: protect_count (%d) >= "
@@ -391,13 +389,9 @@ def _rotate_swap(
             schedule.id, protect_count,
             len(prod_uris),
         )
-        actual_total = _verify_playlist_size(
-            api, target_id, len(prod_uris),
-            schedule.id, "swap",
-        )
         return {
             "tracks_added": 0,
-            "tracks_total": actual_total,
+            "tracks_total": len(prod_uris),
             "skipped_reason": "all_tracks_protected",
         }
 
