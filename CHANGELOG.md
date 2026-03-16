@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Hardened Rotation Executor** - Rotation now fails fast on silent Spotify API failures instead of proceeding with stale state
+  - Remove operations (`playlist_remove_items`) are now verified via `_checked_remove()` — falsy returns abort the rotation with `JobExecutionError`
+  - `_purge_archive_overlaps()` catches `SpotifyAPIError`/`SpotifyNotFoundError` and aborts rotation to prevent duplicate contamination
+  - `_verify_playlist_size()` raises `JobExecutionError` when actual vs expected track count drift exceeds 50%, detecting serious silent Spotify failures
+  - `target_size` validation rejects values < 1 (previously only checked for `None`)
+  - When `protect_count` >= playlist size, rotation returns early with `skipped_reason: "all_tracks_protected"` and a warning log
+
 ### Fixed
 - **Scheduled Rotation Failures** - Fixed `playlist_remove_items` sending wrong request body format to Spotify API
   - Was sending `{"uris": [...]}` but Spotify's DELETE endpoint requires `{"tracks": [{"uri": "..."}, ...]}`

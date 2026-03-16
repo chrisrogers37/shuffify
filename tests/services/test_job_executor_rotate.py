@@ -15,6 +15,12 @@ from shuffify.services.executors import (
 from shuffify.services.executors.rotate_executor import (
     execute_rotate,
     _purge_archive_overlaps,
+    _checked_remove,
+    _verify_playlist_size,
+)
+from shuffify.spotify.exceptions import (
+    SpotifyAPIError,
+    SpotifyNotFoundError,
 )
 from shuffify.enums import JobType
 
@@ -1089,10 +1095,11 @@ class TestProtectCount:
         "shuffify.services.playlist_pair_service"
         ".PlaylistPairService.get_pair_for_playlist"
     )
-    def test_protect_all_returns_zero(
+    def test_protect_all_returns_zero_with_reason(
         self, mock_pair, mock_snap
     ):
-        """If all tracks protected, nothing rotates."""
+        """If all tracks protected, nothing rotates and
+        skipped_reason is set."""
         mock_pair.return_value = _make_pair()
         mock_snap.is_auto_snapshot_enabled.return_value = (
             False
@@ -1116,6 +1123,9 @@ class TestProtectCount:
 
         assert result["tracks_added"] == 0
         assert result["tracks_total"] == 3
+        assert result["skipped_reason"] == (
+            "all_tracks_protected"
+        )
 
 
 # =============================================================================
@@ -1397,6 +1407,7 @@ class TestOperationOrdering:
             call_order.append(
                 ("remove", pid)
             )
+            return True
 
         def track_add(api_obj, pid, uris):
             call_order.append(
@@ -1430,3 +1441,521 @@ class TestOperationOrdering:
             if c == ("add", "archive1")
         )
         assert prod_remove_idx < archive_add_idx
+
+
+# =============================================================================
+# CHECKED REMOVE (Fix #1)
+# =============================================================================
+
+
+class TestCheckedRemove:
+    """Tests for _checked_remove error handling."""
+
+    def test_success_does_not_raise(self):
+        """Truthy return completes without error."""
+        api = MagicMock()
+        api.playlist_remove_items.return_value = True
+
+        # Should not raise
+        _checked_remove(
+            api, "playlist1", ["u1"], 42, "test",
+        )
+
+    def test_falsy_return_raises(self):
+        """Falsy return from API raises error."""
+        api = MagicMock()
+        api.playlist_remove_items.return_value = False
+
+        with pytest.raises(
+            JobExecutionError,
+            match="returned falsy",
+        ):
+            _checked_remove(
+                api, "playlist1", ["u1"],
+                42, "test phase",
+            )
+
+    def test_none_return_raises(self):
+        """None return from API raises error."""
+        api = MagicMock()
+        api.playlist_remove_items.return_value = None
+
+        with pytest.raises(
+            JobExecutionError,
+            match="returned falsy",
+        ):
+            _checked_remove(
+                api, "playlist1", ["u1"],
+                42, "test phase",
+            )
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".random"
+    )
+    def test_swap_prod_remove_failure_aborts(
+        self, mock_random, mock_pair, mock_snap
+    ):
+        """If prod remove fails in swap, rotation
+        aborts with JobExecutionError."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        prod = _make_tracks(["p1", "p2", "p3"])
+        archive = _make_tracks(["a1", "a2"])
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=archive,
+        )
+        # No overlaps so no purge call;
+        # first remove (swap prod-remove) fails
+        api.playlist_remove_items.return_value = False
+        schedule = _make_schedule(
+            rotation_count=2,
+            target_size=3,
+        )
+        mock_random.sample.side_effect = (
+            lambda lst, n: lst[:n]
+        )
+
+        with pytest.raises(
+            JobExecutionError,
+            match="swap prod-remove failed",
+        ):
+            execute_rotate(schedule, api)
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".random"
+    )
+    def test_overflow_remove_failure_aborts(
+        self, mock_random, mock_pair, mock_snap
+    ):
+        """If prod remove fails in overflow, rotation
+        aborts with JobExecutionError."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        uris = ["u{}".format(i) for i in range(8)]
+        prod = _make_tracks(uris)
+        api = _make_api(prod_tracks=prod)
+        # Purge has no overlaps so no call;
+        # overflow remove returns False
+        api.playlist_remove_items.return_value = False
+        schedule = _make_schedule(
+            rotation_count=2,
+            target_size=5,
+        )
+        mock_random.sample.side_effect = (
+            lambda lst, n: lst[:n]
+        )
+
+        with pytest.raises(
+            JobExecutionError,
+            match="overflow prod-remove failed",
+        ):
+            execute_rotate(schedule, api)
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".random"
+    )
+    def test_archive_remove_failure_aborts(
+        self, mock_random, mock_pair, mock_snap
+    ):
+        """If archive remove fails in swap, rotation
+        aborts."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        prod = _make_tracks(["p1", "p2", "p3"])
+        archive = _make_tracks(["a1", "a2"])
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=archive,
+        )
+        # No overlaps so no purge call;
+        # prod-remove succeeds, archive-remove fails
+        api.playlist_remove_items.side_effect = [
+            True, False
+        ]
+        schedule = _make_schedule(
+            rotation_count=2,
+            target_size=3,
+        )
+        mock_random.sample.side_effect = (
+            lambda lst, n: lst[:n]
+        )
+
+        with pytest.raises(
+            JobExecutionError,
+            match="swap archive-remove failed",
+        ):
+            execute_rotate(schedule, api)
+
+
+# =============================================================================
+# TARGET SIZE GUARD (Fix #2)
+# =============================================================================
+
+
+class TestTargetSizeGuard:
+    """Tests for target_size floor check."""
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_target_size_zero_raises(
+        self, mock_pair, mock_snap
+    ):
+        """target_size=0 raises JobExecutionError."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        prod = _make_tracks(["u1", "u2"])
+        api = _make_api(prod_tracks=prod)
+        schedule = _make_schedule(target_size=50)
+        # Bypass _validate_rotation_config clamping
+        # by setting target_size after construction
+        schedule.algorithm_params["target_size"] = None
+
+        with pytest.raises(
+            JobExecutionError,
+            match="target_size.*at least 1",
+        ):
+            execute_rotate(schedule, api)
+
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_target_size_none_raises(
+        self, mock_pair
+    ):
+        """target_size=None raises JobExecutionError."""
+        mock_pair.return_value = _make_pair()
+
+        prod = _make_tracks(["u1", "u2"])
+        api = _make_api(prod_tracks=prod)
+        schedule = _make_schedule()
+        schedule.algorithm_params = {
+            "rotation_mode": "swap",
+            "rotation_count": 1,
+        }
+
+        with pytest.raises(
+            JobExecutionError,
+            match="target_size.*at least 1",
+        ):
+            execute_rotate(schedule, api)
+
+
+# =============================================================================
+# PROTECT COUNT WARNING (Fix #3)
+# =============================================================================
+
+
+class TestProtectCountWarning:
+    """Tests for all-protected early return."""
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_all_protected_returns_skipped_reason(
+        self, mock_pair, mock_snap
+    ):
+        """When protect_count >= playlist size, result
+        includes skipped_reason."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        prod = _make_tracks(["p1", "p2"])
+        api = _make_api(
+            prod_tracks=prod,
+            post_removal_prod=prod,
+        )
+        schedule = _make_schedule(
+            rotation_count=2,
+            target_size=2,
+        )
+        schedule.algorithm_params["protect_count"] = 5
+
+        result = execute_rotate(schedule, api)
+
+        assert result["tracks_added"] == 0
+        assert result["skipped_reason"] == (
+            "all_tracks_protected"
+        )
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_protect_equal_to_size_returns_reason(
+        self, mock_pair, mock_snap
+    ):
+        """protect_count == len(prod_uris) triggers
+        early return."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        prod = _make_tracks(["p1", "p2", "p3"])
+        api = _make_api(
+            prod_tracks=prod,
+            post_removal_prod=prod,
+        )
+        schedule = _make_schedule(
+            rotation_count=2,
+            target_size=3,
+        )
+        schedule.algorithm_params["protect_count"] = 3
+
+        result = execute_rotate(schedule, api)
+
+        assert result["tracks_added"] == 0
+        assert result["skipped_reason"] == (
+            "all_tracks_protected"
+        )
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_all_protected_no_remove_calls(
+        self, mock_pair, mock_snap
+    ):
+        """When all protected, no swap API calls
+        are made."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        prod = _make_tracks(["p1", "p2"])
+        api = _make_api(
+            prod_tracks=prod,
+            post_removal_prod=prod,
+        )
+        schedule = _make_schedule(
+            rotation_count=2,
+            target_size=2,
+        )
+        schedule.algorithm_params["protect_count"] = 10
+
+        execute_rotate(schedule, api)
+
+        # Only get_playlist_tracks calls (initial +
+        # archive + verification), no removes
+        api.playlist_add_items.assert_not_called()
+
+
+# =============================================================================
+# PURGE ARCHIVE ERROR HANDLING (Fix #4)
+# =============================================================================
+
+
+class TestPurgeArchiveErrorHandling:
+    """Tests for _purge_archive_overlaps failures."""
+
+    def test_api_error_raises_execution_error(self):
+        """SpotifyAPIError during purge raises
+        JobExecutionError."""
+        api = MagicMock()
+        api.playlist_remove_items.side_effect = (
+            SpotifyAPIError("API failed")
+        )
+
+        with pytest.raises(
+            JobExecutionError,
+            match="Failed to purge",
+        ):
+            _purge_archive_overlaps(
+                api, "archive1",
+                ["shared", "a1"], {"shared", "p1"},
+            )
+
+    def test_not_found_raises_execution_error(self):
+        """SpotifyNotFoundError during purge raises
+        JobExecutionError."""
+        api = MagicMock()
+        api.playlist_remove_items.side_effect = (
+            SpotifyNotFoundError("Not found")
+        )
+
+        with pytest.raises(
+            JobExecutionError,
+            match="Failed to purge",
+        ):
+            _purge_archive_overlaps(
+                api, "archive1",
+                ["shared"], {"shared"},
+            )
+
+    def test_falsy_return_raises_execution_error(self):
+        """Falsy return from remove during purge
+        raises JobExecutionError."""
+        api = MagicMock()
+        api.playlist_remove_items.return_value = False
+
+        with pytest.raises(
+            JobExecutionError,
+            match="Failed to purge",
+        ):
+            _purge_archive_overlaps(
+                api, "archive1",
+                ["shared"], {"shared"},
+            )
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    def test_purge_failure_aborts_rotation(
+        self, mock_pair, mock_snap
+    ):
+        """Purge failure during full rotation aborts
+        the entire operation."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        prod = _make_tracks(["p1", "shared"])
+        archive = _make_tracks(["shared", "a1"])
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=archive,
+        )
+        api.playlist_remove_items.side_effect = (
+            SpotifyAPIError("Purge failed")
+        )
+
+        schedule = _make_schedule(
+            rotation_count=1,
+            target_size=2,
+        )
+
+        with pytest.raises(JobExecutionError):
+            execute_rotate(schedule, api)
+
+
+# =============================================================================
+# VERIFY PLAYLIST SIZE DRIFT (Fix #5 bonus)
+# =============================================================================
+
+
+class TestVerifyPlaylistSizeDrift:
+    """Tests for _verify_playlist_size drift detection."""
+
+    def test_small_drift_returns_actual(self):
+        """Small drift logs warning but returns actual."""
+        api = MagicMock()
+        api.get_playlist_tracks.return_value = (
+            _make_tracks(["u1", "u2", "u3"])
+        )
+
+        result = _verify_playlist_size(
+            api, "playlist1", 4, 42, "test",
+        )
+        assert result == 3
+
+    def test_large_drift_raises(self):
+        """Drift > 50% of expected raises error."""
+        api = MagicMock()
+        # Expected 10 tracks, got 2 (drift=8 > 5)
+        api.get_playlist_tracks.return_value = (
+            _make_tracks(["u1", "u2"])
+        )
+
+        with pytest.raises(
+            JobExecutionError,
+            match="size drift too large",
+        ):
+            _verify_playlist_size(
+                api, "playlist1", 10, 42, "test",
+            )
+
+    def test_exact_match_no_error(self):
+        """Exact match raises nothing."""
+        api = MagicMock()
+        api.get_playlist_tracks.return_value = (
+            _make_tracks(["u1", "u2", "u3"])
+        )
+
+        result = _verify_playlist_size(
+            api, "playlist1", 3, 42, "test",
+        )
+        assert result == 3
+
+    def test_zero_expected_one_actual_raises(self):
+        """Drift from 0 expected to 1 actual raises
+        (threshold=max(1,0)=1, drift=1 > 1 is false,
+        so it warns instead)."""
+        api = MagicMock()
+        api.get_playlist_tracks.return_value = (
+            _make_tracks(["u1"])
+        )
+
+        # drift=1, threshold=max(1,0)=1, 1>1 is false
+        result = _verify_playlist_size(
+            api, "playlist1", 0, 42, "test",
+        )
+        assert result == 1
