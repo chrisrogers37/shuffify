@@ -274,14 +274,29 @@ def list_archive_tracks(
     try:
         # TODO: Spotify API migrating "track" → "item" key.
         # Field filter requests both until migration completes.
+        track_fields = (
+            "items(track(id,name,uri,artists(name),"
+            "album(name,images),duration_ms))"
+        )
+
+        # Get total count first (cheap call, no items)
+        count_result = client.api.get_playlist_items_raw(
+            pair.archive_playlist_id,
+            fields="total",
+            limit=0,
+        )
+        total = count_result.get("total", 0)
+
+        # Fetch only the last 25 (most recently archived)
+        display_limit = 25
+        offset = max(0, total - display_limit)
         results = client.api.get_playlist_items_raw(
             pair.archive_playlist_id,
-            fields=(
-                "items(track(id,name,uri,artists(name),"
-                "album(name,images),duration_ms))"
-            ),
-            limit=100,
+            fields=track_fields,
+            limit=display_limit,
+            offset=offset,
         )
+
         tracks = []
         for item in results.get("items", []):
             track = (
@@ -309,12 +324,9 @@ def list_archive_tracks(
                 ),
             })
 
-        total = len(tracks)
-        display_tracks = tracks[:25]
-
         return jsonify({
             "success": True,
-            "tracks": display_tracks,
+            "tracks": tracks,
             "total": total,
         })
     except Exception as e:
