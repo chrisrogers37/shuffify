@@ -175,6 +175,62 @@ class TestExecuteRotateSwap:
         "shuffify.services.executors.rotate_executor"
         ".random"
     )
+    def test_swap_uses_fifo_order(
+        self, mock_random, mock_pair, mock_snap
+    ):
+        """Swap-in selects oldest archived tracks first
+        (FIFO), not most recently added (LIFO)."""
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+
+        prod = _make_tracks(["p1", "p2", "p3"])
+        # Archive order: old1 is oldest, old3 is newest
+        archive = _make_tracks(
+            ["old1", "old2", "old3"]
+        )
+        post_prod = _make_tracks(
+            ["p3", "old1", "old2"]
+        )
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=archive,
+            post_removal_prod=post_prod,
+        )
+        schedule = _make_schedule(
+            rotation_count=2,
+            target_size=3,
+        )
+        mock_random.sample.side_effect = (
+            lambda lst, n: lst[:n]
+        )
+
+        execute_rotate(schedule, api)
+
+        # Verify swap-in used first 2 (oldest), not
+        # last 2 (newest)
+        add_calls = api.playlist_add_items.call_args_list
+        swap_in_call = [
+            c for c in add_calls
+            if c[0][0] == "target1"
+        ]
+        assert len(swap_in_call) == 1
+        added_uris = swap_in_call[0][0][1]
+        assert added_uris == ["old1", "old2"]
+
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".random"
+    )
     def test_swap_deduplicates(
         self, mock_random, mock_pair, mock_snap
     ):

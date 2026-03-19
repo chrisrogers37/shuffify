@@ -309,10 +309,13 @@ def list_archive_tracks(
                 ),
             })
 
+        total = len(tracks)
+        display_tracks = tracks[:25]
+
         return jsonify({
             "success": True,
-            "tracks": tracks,
-            "total": len(tracks),
+            "tracks": display_tracks,
+            "total": total,
         })
     except Exception as e:
         logger.error(

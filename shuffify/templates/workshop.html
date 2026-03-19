@@ -658,7 +658,7 @@
             <!-- Archive track list (only when paired) -->
             <div id="archive-tracks-section" class="hidden">
                 <div class="flex items-center justify-between mb-2">
-                    <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Archived Tracks</span>
+                    <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Recently Archived</span>
                     <button onclick="loadArchiveTracks()"
                             class="text-white/40 hover:text-white/60 transition duration-150"
                             title="Refresh archive tracks">
@@ -3733,8 +3733,11 @@ function loadArchiveTracks() {
         return response.json();
     })
     .then(function(data) {
-        workshopState.archiveTracks = data.tracks || [];
-        countEl.textContent = workshopState.archiveTracks.length + ' track' + (workshopState.archiveTracks.length !== 1 ? 's' : '') + ' archived';
+        workshopState.archiveTracks = (data.tracks || []).slice().reverse();
+        var total = data.total || workshopState.archiveTracks.length;
+        countEl.textContent = total > 25
+            ? 'Showing 25 of ' + total + ' archived'
+            : total + ' track' + (total !== 1 ? 's' : '') + ' archived';
         renderArchiveTrackList();
     })
     .catch(function(error) {
