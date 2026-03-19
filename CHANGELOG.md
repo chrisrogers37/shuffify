@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Rotation LIFO→FIFO Bug** - Fixed swap-in selecting most recently archived tracks instead of oldest
+  - `archive_uris[-rotation_count:]` (LIFO) changed to `archive_uris[:rotation_count]` (FIFO)
+  - Previously the same few tracks bounced back and forth daily while older archive tracks were permanently stuck
+- **Archive Sidebar Display** - Renamed "Archived Tracks" to "Recently Archived", capped at 25 tracks, reversed to show newest first
+  - API response capped at 25 items with full `total` count returned for display
+  - Frontend reverses the list so the most recently archived tracks appear at the top
+
 ### Changed
 - **Hardened Rotation Executor** - Rotation now fails fast on silent Spotify API failures instead of proceeding with stale state
   - Remove operations (`playlist_remove_items`) are now verified via `_checked_remove()` — falsy returns abort the rotation with `JobExecutionError`

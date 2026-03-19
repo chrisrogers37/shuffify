@@ -442,9 +442,9 @@ def _rotate_swap(
         }
 
     # Phase 2: Normal swap (playlist at or under cap)
-    # Swap-in uses last N from archive (FIFO: oldest
+    # Swap-in uses first N from archive (FIFO: oldest
     # archived tracks rotate back in first).
-    swap_in_uris = archive_uris[-rotation_count:]
+    swap_in_uris = archive_uris[:rotation_count]
 
     # Randomly select swap-out tracks from eligible
     swap_out_uris = _sample_at_most(
