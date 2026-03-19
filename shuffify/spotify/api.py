@@ -537,6 +537,7 @@ class SpotifyAPI:
         playlist_id: str,
         fields: Optional[str] = None,
         limit: int = 100,
+        offset: int = 0,
     ) -> Dict[str, Any]:
         """
         Get playlist items with optional field filtering.
@@ -549,13 +550,14 @@ class SpotifyAPI:
             playlist_id: The Spotify playlist ID.
             fields: Spotify field filter string.
             limit: Max items per page.
+            offset: Index of the first item to return.
 
         Returns:
             Raw API response dictionary.
         """
         self._ensure_valid_token()
 
-        params = {"limit": limit}
+        params = {"limit": limit, "offset": offset}
         if fields:
             params["fields"] = fields
 
