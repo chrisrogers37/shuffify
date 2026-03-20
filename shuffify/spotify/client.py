@@ -264,6 +264,30 @@ class SpotifyClient:
         self._ensure_authenticated()
         return self._api.get_playlist_tracks(playlist_id)
 
+    def get_playlist_tracks_via_metadata(
+        self, playlist_id: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Get tracks from a public playlist via the metadata endpoint.
+
+        Works for playlists the user does not own or collaborate on.
+        Uses GET /playlists/{id} which has no ownership restriction.
+
+        Args:
+            playlist_id: The Spotify playlist ID.
+
+        Returns:
+            List of track dictionaries.
+
+        Raises:
+            RuntimeError: If not authenticated.
+            SpotifyAPIError: If the request fails.
+        """
+        self._ensure_authenticated()
+        return self._api.get_playlist_tracks_via_metadata(
+            playlist_id
+        )
+
     def update_playlist_tracks(self, playlist_id: str, track_uris: List[str]) -> bool:
         """
         Update a playlist with new track order.

@@ -321,6 +321,56 @@ class SpotifyAPI:
         return tracks
 
     @api_error_handler
+    def get_playlist_tracks_via_metadata(
+        self, playlist_id: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Get tracks from a public playlist using the metadata endpoint.
+
+        Uses GET /playlists/{id} which embeds the first page of tracks
+        in the response, then follows ``next`` URLs for remaining pages.
+        Unlike get_playlist_tracks(), this does NOT call the restricted
+        GET /playlists/{id}/items endpoint and works for playlists the
+        user does not own or collaborate on.
+
+        Args:
+            playlist_id: The Spotify playlist ID.
+
+        Returns:
+            List of track dictionaries.
+        """
+        self._ensure_valid_token()
+
+        # First page of tracks is embedded in the playlist response
+        playlist = self._http.get(f"/playlists/{playlist_id}")
+        tracks_page = playlist.get("tracks", {})
+
+        tracks = []
+        items = tracks_page.get("items", [])
+        for item in items:
+            track = item.get("track") or item.get("item")
+            if track and track.get("uri"):
+                tracks.append(track)
+
+        # Follow pagination via next URLs
+        next_url = tracks_page.get("next")
+        while next_url:
+            data = self._http._request_url("GET", next_url)
+            if not data:
+                break
+            for item in data.get("items", []):
+                track = item.get("track") or item.get("item")
+                if track and track.get("uri"):
+                    tracks.append(track)
+            next_url = data.get("next")
+
+        logger.debug(
+            f"Retrieved {len(tracks)} tracks from playlist "
+            f"{playlist_id} via metadata endpoint"
+        )
+        return tracks
+
+    @api_error_handler
     def update_playlist_tracks(
         self, playlist_id: str, track_uris: List[str]
     ) -> bool:
