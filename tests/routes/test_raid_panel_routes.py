@@ -267,13 +267,13 @@ class TestRaidAddUrlValidation:
         mock_auth.return_value = MagicMock()
         mock_parse.return_value = "ext1"
 
-        mock_playlist = MagicMock()
-        mock_playlist.owner_id = "user123"
-        mock_playlist.name = "My List"
-        mock_playlist.total_tracks = 10
-        mock_svc_cls.return_value.get_playlist.return_value = (
-            mock_playlist
-        )
+        mock_svc_cls.return_value.get_playlist_metadata.return_value = {
+            "id": "ext1",
+            "name": "My List",
+            "owner_id": "user123",
+            "description": None,
+            "total_tracks": 10,
+        }
 
         resp = auth_client.post(
             "/playlist/p1/raid-add-url",
@@ -307,7 +307,7 @@ class TestRaidAddUrlValidation:
 
         mock_auth.return_value = MagicMock()
         mock_parse.return_value = "ext1"
-        mock_svc_cls.return_value.get_playlist.side_effect = (
+        mock_svc_cls.return_value.get_playlist_metadata.side_effect = (
             PlaylistNotFoundError("Not found")
         )
 

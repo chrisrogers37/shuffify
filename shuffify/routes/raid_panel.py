@@ -196,10 +196,13 @@ def raid_add_url(playlist_id, client=None, user=None):
             "Cannot raid from the same playlist", 400
         )
 
-    # 3. Get playlist metadata for ownership check
+    # 3. Get playlist metadata for ownership check.
+    # Uses metadata-only fetch (GET /playlists/{id}) which works
+    # for any public playlist, unlike /items which is restricted
+    # to owners/collaborators since Feb 2026.
     try:
         playlist_svc = PlaylistService(client)
-        playlist_info = playlist_svc.get_playlist(
+        playlist_meta = playlist_svc.get_playlist_metadata(
             source_playlist_id
         )
     except PlaylistNotFoundError:
@@ -214,7 +217,7 @@ def raid_add_url(playlist_id, client=None, user=None):
         )
 
     # 4. Guard: owner is not current user (external-only)
-    if playlist_info.owner_id == user.spotify_id:
+    if playlist_meta["owner_id"] == user.spotify_id:
         return json_error(
             "Cannot raid your own playlist. "
             "Use rotation instead.",
@@ -222,7 +225,7 @@ def raid_add_url(playlist_id, client=None, user=None):
         )
 
     # 5. Best-effort track count via playlist metadata
-    track_count = playlist_info.total_tracks
+    track_count = playlist_meta.get("total_tracks")
 
     # 6. Register source
     data = request.get_json(silent=True)
@@ -234,7 +237,7 @@ def raid_add_url(playlist_id, client=None, user=None):
                 "target_playlist_name", playlist_id
             ),
             source_playlist_id=source_playlist_id,
-            source_playlist_name=playlist_info.name,
+            source_playlist_name=playlist_meta["name"],
             source_url=req.url,
             auto_schedule=req.auto_schedule,
             schedule_value=req.schedule_value,
@@ -260,8 +263,8 @@ def raid_add_url(playlist_id, client=None, user=None):
             user_id=user.id,
             activity_type=ActivityType.RAID_WATCH_ADD,
             description=(
-                f"Watching external: "
-                f"'{playlist_info.name}'"
+                "Watching external: "
+                f"'{playlist_meta['name']}'"
             ),
             playlist_id=playlist_id,
         )

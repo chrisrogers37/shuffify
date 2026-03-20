@@ -8,6 +8,7 @@ import logging
 from typing import Dict, List, Any
 
 from shuffify.spotify.client import SpotifyClient
+from shuffify.spotify.exceptions import SpotifyNotFoundError
 from shuffify.models.playlist import Playlist
 
 logger = logging.getLogger(__name__)
@@ -94,12 +95,68 @@ class PlaylistService:
                 f"Retrieved playlist '{playlist.name}' with {len(playlist)} tracks"
             )
             return playlist
-        except ValueError:
+        except (ValueError, SpotifyNotFoundError):
             logger.error(f"Invalid playlist ID: {playlist_id}")
             raise PlaylistNotFoundError(f"Playlist not found: {playlist_id}")
         except Exception as e:
             logger.error(f"Failed to get playlist {playlist_id}: {e}", exc_info=True)
             raise PlaylistError(f"Failed to fetch playlist: {e}")
+
+    def get_playlist_metadata(
+        self, playlist_id: str
+    ) -> Dict[str, Any]:
+        """
+        Fetch playlist metadata only (no tracks).
+
+        Uses GET /playlists/{playlist_id} which works for any public
+        playlist regardless of ownership. Unlike get_playlist(), this
+        does NOT call GET /playlists/{playlist_id}/items which is
+        restricted to owners/collaborators since Feb 2026.
+
+        Args:
+            playlist_id: The Spotify playlist ID.
+
+        Returns:
+            Dict with keys: id, name, owner_id, description,
+            total_tracks.
+
+        Raises:
+            PlaylistNotFoundError: If the playlist doesn't exist.
+            PlaylistError: If fetching fails for other reasons.
+        """
+        if not playlist_id:
+            raise PlaylistNotFoundError("Playlist ID is required")
+
+        try:
+            data = self._client.get_playlist(playlist_id)
+            total_tracks_meta = data.get(
+                "tracks", data.get("items", {})
+            )
+            total_tracks = (
+                total_tracks_meta.get("total")
+                if isinstance(total_tracks_meta, dict)
+                else None
+            )
+            return {
+                "id": data["id"],
+                "name": data["name"],
+                "owner_id": data["owner"]["id"],
+                "description": data.get("description"),
+                "total_tracks": total_tracks,
+            }
+        except (ValueError, SpotifyNotFoundError):
+            raise PlaylistNotFoundError(
+                f"Playlist not found: {playlist_id}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to get playlist metadata "
+                f"{playlist_id}: {e}",
+                exc_info=True,
+            )
+            raise PlaylistError(
+                f"Failed to fetch playlist metadata: {e}"
+            )
 
     def get_playlist_stats(self, playlist_id: str) -> Dict[str, Any]:
         """

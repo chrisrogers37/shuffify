@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Raid "Could not access playlist" Error** - Fixed external playlist raiding broken by Spotify's Feb 2026 API restriction
+  - `GET /playlists/{id}/items` now returns 403 for playlists you don't own/collaborate on
+  - `raid_add_url` was calling `Playlist.from_spotify()` which fetches both metadata AND tracks — the tracks call triggered the 403
+  - Now uses new `PlaylistService.get_playlist_metadata()` which only calls `GET /playlists/{id}` (no restriction) for validation
+  - Track fetching is deferred to raid execution, which uses the `SourceResolver` fallback chain (direct API → search → public page scraping)
+- **SpotifyNotFoundError Mapping** - Fixed `PlaylistService.get_playlist()` swallowing `SpotifyNotFoundError` as generic `PlaylistError`
+  - 404 responses from Spotify now correctly map to `PlaylistNotFoundError` instead of the catch-all "Could not access playlist"
 - **Rotation LIFO→FIFO Bug** - Fixed swap-in selecting most recently archived tracks instead of oldest
   - `archive_uris[-rotation_count:]` (LIFO) changed to `archive_uris[:rotation_count]` (FIFO)
   - Previously the same few tracks bounced back and forth daily while older archive tracks were permanently stuck
