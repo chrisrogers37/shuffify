@@ -8,12 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Raid "Could not access playlist" Error** - Fixed external playlist raiding broken by Spotify's Feb 2026 API restriction
+  - `GET /playlists/{id}/items` now returns 403 for playlists you don't own/collaborate on
+  - `raid_add_url` was calling `Playlist.from_spotify()` which fetches both metadata AND tracks — the tracks call triggered the 403
+  - Now uses new `PlaylistService.get_playlist_metadata()` which only calls `GET /playlists/{id}` (no restriction) for validation
+  - Track fetching is deferred to raid execution, which uses the `SourceResolver` fallback chain (direct API → search → public page scraping)
+- **SpotifyNotFoundError Mapping** - Fixed `PlaylistService.get_playlist()` swallowing `SpotifyNotFoundError` as generic `PlaylistError`
+  - 404 responses from Spotify now correctly map to `PlaylistNotFoundError` instead of the catch-all "Could not access playlist"
+
+### Added
 - **Rotation LIFO→FIFO Bug** - Fixed swap-in selecting most recently archived tracks instead of oldest
   - `archive_uris[-rotation_count:]` (LIFO) changed to `archive_uris[:rotation_count]` (FIFO)
   - Previously the same few tracks bounced back and forth daily while older archive tracks were permanently stuck
 - **Archive Sidebar Display** - Renamed "Archived Tracks" to "Recently Archived", capped at 25 tracks, reversed to show newest first
   - API response capped at 25 items with full `total` count returned for display
   - Frontend reverses the list so the most recently archived tracks appear at the top
+
+### Removed
+- **Metadata Tracks Pathway** - Removed non-functional source resolver pathway
+  - `GET /playlists/{id}` does NOT return embedded tracks for non-owned playlists (Feb 2026 API change strips the `items` field entirely)
+  - Removed `MetadataTracksPathway`, `SpotifyAPI.get_playlist_tracks_via_metadata()`, and `SpotifyClient` wrapper
+  - Resolution chain simplified: DirectAPI → Search → PublicScraper
 
 ### Changed
 - **Hardened Rotation Executor** - Rotation now fails fast on silent Spotify API failures instead of proceeding with stale state

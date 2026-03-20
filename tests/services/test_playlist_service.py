@@ -114,6 +114,55 @@ class TestPlaylistServiceGetPlaylist:
         assert "Failed to fetch playlist" in str(exc_info.value)
 
 
+class TestPlaylistServiceGetPlaylistMetadata:
+    """Tests for get_playlist_metadata method."""
+
+    def test_get_metadata_success(self, mock_spotify_client):
+        """Should return metadata dict without fetching tracks."""
+        mock_spotify_client.get_playlist.return_value = {
+            "id": "pl1",
+            "name": "Cool Playlist",
+            "owner": {"id": "owner1"},
+            "description": "A playlist",
+            "tracks": {"total": 42},
+        }
+        service = PlaylistService(mock_spotify_client)
+        result = service.get_playlist_metadata("pl1")
+
+        assert result["id"] == "pl1"
+        assert result["name"] == "Cool Playlist"
+        assert result["owner_id"] == "owner1"
+        assert result["total_tracks"] == 42
+        # Should NOT call get_playlist_tracks
+        mock_spotify_client.get_playlist_tracks.assert_not_called()
+
+    def test_get_metadata_empty_id(self, mock_spotify_client):
+        """Should raise PlaylistNotFoundError for empty ID."""
+        service = PlaylistService(mock_spotify_client)
+        with pytest.raises(PlaylistNotFoundError):
+            service.get_playlist_metadata("")
+
+    def test_get_metadata_not_found(self, mock_spotify_client):
+        """Should raise PlaylistNotFoundError on 404."""
+        from shuffify.spotify.exceptions import SpotifyNotFoundError
+
+        mock_spotify_client.get_playlist.side_effect = (
+            SpotifyNotFoundError("Not found")
+        )
+        service = PlaylistService(mock_spotify_client)
+        with pytest.raises(PlaylistNotFoundError):
+            service.get_playlist_metadata("pl1")
+
+    def test_get_metadata_api_failure(self, mock_spotify_client):
+        """Should raise PlaylistError on generic failure."""
+        mock_spotify_client.get_playlist.side_effect = (
+            Exception("API error")
+        )
+        service = PlaylistService(mock_spotify_client)
+        with pytest.raises(PlaylistError):
+            service.get_playlist_metadata("pl1")
+
+
 class TestPlaylistServiceGetPlaylistStats:
     """Tests for get_playlist_stats method."""
 
