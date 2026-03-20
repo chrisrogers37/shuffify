@@ -5,7 +5,6 @@ from typing import Any, List, Optional, Set
 
 from .base import ResolveAllResult, ResolvePathway, ResolveResult
 from .direct_api_pathway import DirectAPIPathway
-from .metadata_tracks_pathway import MetadataTracksPathway
 from .public_scraper_pathway import PublicScraperPathway
 from .search_pathway import SearchPathway
 
@@ -38,7 +37,6 @@ class SourceResolver:
         """Default pathway chain in priority order."""
         return [
             DirectAPIPathway(),
-            MetadataTracksPathway(),
             SearchPathway(),
             PublicScraperPathway(redis_client=redis_client),
         ]

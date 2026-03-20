@@ -17,17 +17,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 404 responses from Spotify now correctly map to `PlaylistNotFoundError` instead of the catch-all "Could not access playlist"
 
 ### Added
-- **Metadata Tracks Pathway** - New source resolver pathway for fetching tracks from external playlists
-  - Uses `GET /playlists/{id}` (no ownership restriction) to extract embedded tracks and follows pagination
-  - Added as second pathway in the resolution chain: DirectAPI → **MetadataTracks** → Search → PublicScraper
-  - Falls back gracefully if the metadata endpoint doesn't return tracks
-  - Added `SpotifyAPI.get_playlist_tracks_via_metadata()` and corresponding `SpotifyClient` method
 - **Rotation LIFO→FIFO Bug** - Fixed swap-in selecting most recently archived tracks instead of oldest
   - `archive_uris[-rotation_count:]` (LIFO) changed to `archive_uris[:rotation_count]` (FIFO)
   - Previously the same few tracks bounced back and forth daily while older archive tracks were permanently stuck
 - **Archive Sidebar Display** - Renamed "Archived Tracks" to "Recently Archived", capped at 25 tracks, reversed to show newest first
   - API response capped at 25 items with full `total` count returned for display
   - Frontend reverses the list so the most recently archived tracks appear at the top
+
+### Removed
+- **Metadata Tracks Pathway** - Removed non-functional source resolver pathway
+  - `GET /playlists/{id}` does NOT return embedded tracks for non-owned playlists (Feb 2026 API change strips the `items` field entirely)
+  - Removed `MetadataTracksPathway`, `SpotifyAPI.get_playlist_tracks_via_metadata()`, and `SpotifyClient` wrapper
+  - Resolution chain simplified: DirectAPI → Search → PublicScraper
 
 ### Changed
 - **Hardened Rotation Executor** - Rotation now fails fast on silent Spotify API failures instead of proceeding with stale state
