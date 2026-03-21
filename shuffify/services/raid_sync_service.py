@@ -273,10 +273,23 @@ class RaidSyncService:
         )
 
         if schedule:
+            logger.info(
+                "Raid via scheduler path for "
+                "playlist %s (schedule %s, %d sources)",
+                target_playlist_id,
+                schedule.id,
+                len(source_playlist_ids),
+            )
             return RaidSyncService._execute_raid_via_scheduler(
                 schedule, user
             )
         else:
+            logger.info(
+                "Raid via inline path for "
+                "playlist %s (%d sources)",
+                target_playlist_id,
+                len(source_playlist_ids),
+            )
             return RaidSyncService._execute_raid_inline(
                 user, target_playlist_id,
                 source_playlist_ids,
@@ -295,10 +308,17 @@ class RaidSyncService:
             result = JobExecutorService.execute_now(
                 schedule.id, user.id
             )
+            logger.info(
+                "Scheduler raid result: %s", result
+            )
             db.session.refresh(schedule)
             return {
-                "tracks_added": 0,
-                "tracks_total": 0,
+                "tracks_added": result.get(
+                    "tracks_added", 0
+                ),
+                "tracks_total": result.get(
+                    "tracks_total", 0
+                ),
                 "status": result.get("status", "success"),
             }
         except JobExecutionError as e:
@@ -334,9 +354,19 @@ class RaidSyncService:
                 if t.get("uri")
             }
 
+            logger.info(
+                "Inline raid: target has %d tracks",
+                len(target_tracks),
+            )
+
             new_uris = _fetch_raid_sources(
                 api, source_playlist_ids, target_uris,
                 user_id=user.id,
+            )
+
+            logger.info(
+                "Inline raid: %d new URIs found",
+                len(new_uris),
             )
 
             staged = 0
@@ -351,6 +381,13 @@ class RaidSyncService:
                     ),
                     tracks=track_dicts,
                 )
+
+            logger.info(
+                "Inline raid complete: "
+                "staged=%d, total=%d",
+                staged,
+                len(target_tracks),
+            )
 
             return {
                 "tracks_added": staged,

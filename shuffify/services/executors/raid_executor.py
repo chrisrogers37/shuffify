@@ -198,7 +198,7 @@ def _fetch_raid_sources(
                         )
                     )
         except Exception as e:
-            logger.debug(
+            logger.warning(
                 "DB lookup for sources failed, "
                 "using source_ids directly: %s",
                 e,

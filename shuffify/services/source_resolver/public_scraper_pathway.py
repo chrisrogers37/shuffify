@@ -169,7 +169,13 @@ class PublicScraperPathway:
                 headers=REQUEST_HEADERS,
             )
             if resp.status_code != 200:
-                logger.debug(
+                log_level = (
+                    logging.WARNING
+                    if resp.status_code in (403, 429)
+                    else logging.DEBUG
+                )
+                logger.log(
+                    log_level,
                     "Embed returned %d for %s",
                     resp.status_code,
                     playlist_id,
@@ -194,7 +200,13 @@ class PublicScraperPathway:
                 headers=REQUEST_HEADERS,
             )
             if resp.status_code != 200:
-                logger.debug(
+                log_level = (
+                    logging.WARNING
+                    if resp.status_code in (403, 429)
+                    else logging.DEBUG
+                )
+                logger.log(
+                    log_level,
                     "Public page returned %d for %s",
                     resp.status_code,
                     playlist_id,

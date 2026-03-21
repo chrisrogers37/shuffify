@@ -64,6 +64,11 @@ class SourceResolver:
             )
 
         # All pathways exhausted
+        logger.warning(
+            "All resolution pathways exhausted "
+            "for source %s",
+            getattr(source, "source_playlist_id", "?"),
+        )
         return ResolveResult(
             track_uris=[],
             pathway_name="none",
