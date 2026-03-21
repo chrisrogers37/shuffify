@@ -8,6 +8,7 @@ arrays that Spotify embeds in server-rendered HTML.
 import json
 import logging
 import re
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -44,7 +45,6 @@ REQUEST_HEADERS = {
 # ---------------------------------------------------------------------------
 # Cache configuration
 # ---------------------------------------------------------------------------
-CACHE_PREFIX = "shuffify:cache:scrape:"
 CACHE_TTL = 3600  # 1 hour
 
 # ---------------------------------------------------------------------------
@@ -83,11 +83,8 @@ class PublicScraperPathway:
     3. Public page → parse __NEXT_DATA__ JSON
     4. Any page → fallback regex extraction of track URIs/URLs
 
-    Results are cached in Redis to avoid repeated scraping.
+    Results are cached in the database to avoid repeated scraping.
     """
-
-    def __init__(self, redis_client=None):
-        self._redis = redis_client
 
     @property
     def name(self) -> str:
@@ -129,7 +126,7 @@ class PublicScraperPathway:
         # Strategy 1: Embed endpoint (lighter, more structured)
         uris = self._scrape_embed(playlist_id)
         if uris:
-            self._set_cached(playlist_id, uris)
+            self._set_cached(playlist_id, uris, "embed")
             return ResolveResult(
                 track_uris=uris,
                 pathway_name=self.name,
@@ -139,7 +136,9 @@ class PublicScraperPathway:
         # Strategy 2: Public page (heavier, but may have more data)
         uris = self._scrape_public_page(playlist_id)
         if uris:
-            self._set_cached(playlist_id, uris)
+            self._set_cached(
+                playlist_id, uris, "public_page"
+            )
             return ResolveResult(
                 track_uris=uris,
                 pathway_name=self.name,
@@ -147,7 +146,7 @@ class PublicScraperPathway:
             )
 
         # Both strategies failed — cache the empty result too
-        self._set_cached(playlist_id, [])
+        self._set_cached(playlist_id, [], "none")
         return ResolveResult(
             track_uris=[],
             pathway_name=self.name,
@@ -222,38 +221,91 @@ class PublicScraperPathway:
             return []
 
     # ------------------------------------------------------------------
-    # Cache helpers
+    # Cache helpers (database-backed)
     # ------------------------------------------------------------------
 
+    @staticmethod
     def _get_cached(
-        self, playlist_id: str
+        playlist_id: str,
     ) -> Optional[List[str]]:
-        """Get cached scrape results from Redis."""
-        if self._redis is None:
-            return None
+        """Get cached scrape results from database."""
         try:
-            key = f"{CACHE_PREFIX}{playlist_id}"
-            data = self._redis.get(key)
-            if data is None:
+            from shuffify.models.db import (
+                ScrapedPlaylistCache,
+            )
+
+            now = datetime.now(timezone.utc)
+            row = (
+                ScrapedPlaylistCache.query.filter(
+                    ScrapedPlaylistCache.playlist_id
+                    == playlist_id,
+                    ScrapedPlaylistCache.expires_at > now,
+                )
+                .order_by(
+                    ScrapedPlaylistCache.scraped_at.desc()
+                )
+                .first()
+            )
+            if row is None:
                 return None
-            return json.loads(data)
+            return row.track_uris
         except Exception as e:
-            logger.warning("Scraper cache read error: %s", e)
+            logger.warning(
+                "Scraper cache read error: %s", e
+            )
             return None
 
+    @staticmethod
     def _set_cached(
-        self, playlist_id: str, uris: List[str]
+        playlist_id: str,
+        uris: List[str],
+        pathway: str = "unknown",
     ) -> None:
-        """Cache scrape results in Redis."""
-        if self._redis is None:
-            return
+        """Cache scrape results in database."""
         try:
-            key = f"{CACHE_PREFIX}{playlist_id}"
-            self._redis.setex(
-                key, CACHE_TTL, json.dumps(uris)
+            from shuffify.models.db import (
+                ScrapedPlaylistCache,
+                db,
             )
+
+            now = datetime.now(timezone.utc)
+            expires = now + timedelta(seconds=CACHE_TTL)
+
+            # Delete expired rows for this playlist
+            ScrapedPlaylistCache.query.filter(
+                ScrapedPlaylistCache.playlist_id
+                == playlist_id,
+                ScrapedPlaylistCache.expires_at <= now,
+            ).delete()
+
+            # Upsert: update existing or create new
+            existing = ScrapedPlaylistCache.query.filter(
+                ScrapedPlaylistCache.playlist_id
+                == playlist_id,
+            ).first()
+
+            if existing:
+                existing.track_uris = uris
+                existing.track_count = len(uris)
+                existing.scraped_at = now
+                existing.scrape_pathway = pathway
+                existing.expires_at = expires
+            else:
+                row = ScrapedPlaylistCache(
+                    playlist_id=playlist_id,
+                    track_count=len(uris),
+                    scraped_at=now,
+                    scrape_pathway=pathway,
+                    expires_at=expires,
+                )
+                row.track_uris = uris
+                db.session.add(row)
+
+            db.session.commit()
         except Exception as e:
-            logger.warning("Scraper cache write error: %s", e)
+            logger.warning(
+                "Scraper cache write error: %s", e
+            )
 
 
 # ======================================================================

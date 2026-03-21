@@ -21,24 +21,19 @@ class SourceResolver:
     def __init__(
         self,
         pathways: Optional[List[ResolvePathway]] = None,
-        redis_client: Any = None,
     ):
         if pathways is not None:
             self._pathways = pathways
         else:
-            self._pathways = self._default_pathways(
-                redis_client=redis_client
-            )
+            self._pathways = self._default_pathways()
 
     @staticmethod
-    def _default_pathways(
-        redis_client: Any = None,
-    ) -> List[ResolvePathway]:
+    def _default_pathways() -> List[ResolvePathway]:
         """Default pathway chain in priority order."""
         return [
             DirectAPIPathway(),
             SearchPathway(),
-            PublicScraperPathway(redis_client=redis_client),
+            PublicScraperPathway(),
         ]
 
     def resolve(self, source: Any, api: Any = None) -> ResolveResult:

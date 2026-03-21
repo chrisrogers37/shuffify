@@ -1167,3 +1167,78 @@ class PendingRaidTrack(db.Model):
             f"'{self.track_name}' "
             f"status={self.status}>"
         )
+
+
+# =============================================================================
+# Scraped Playlist Cache
+# =============================================================================
+
+
+class ScrapedPlaylistCache(db.Model):
+    """
+    Database-backed cache for tracks scraped from public
+    Spotify playlist pages.
+
+    Shared across users (no user_id FK) since scrape results
+    are playlist-level. Replaces the previous Redis-based cache
+    with persistence across app restarts.
+    """
+
+    __tablename__ = "scraped_playlist_cache"
+
+    id = db.Column(
+        db.Integer, primary_key=True, autoincrement=True
+    )
+    playlist_id = db.Column(
+        db.String(255), nullable=False, index=True
+    )
+    track_uris_json = db.Column(db.Text, nullable=False)
+    track_count = db.Column(
+        db.Integer, nullable=False, default=0
+    )
+    scraped_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    scrape_pathway = db.Column(
+        db.String(50), nullable=True
+    )
+    expires_at = db.Column(
+        db.DateTime, nullable=False
+    )
+
+    __table_args__ = (
+        db.Index(
+            "ix_scrape_cache_playlist_expires",
+            "playlist_id",
+            "expires_at",
+        ),
+    )
+
+    @property
+    def track_uris(self) -> List[str]:
+        """Deserialize the stored JSON into a list of URIs."""
+        if not self.track_uris_json:
+            return []
+        try:
+            return json.loads(self.track_uris_json)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning(
+                "Failed to decode track_uris_json for "
+                "ScrapedPlaylistCache %s",
+                self.id,
+            )
+            return []
+
+    @track_uris.setter
+    def track_uris(self, uris: List[str]) -> None:
+        """Serialize a list of URI strings to JSON."""
+        self.track_uris_json = json.dumps(uris)
+
+    def __repr__(self) -> str:
+        return (
+            f"<ScrapedPlaylistCache "
+            f"playlist={self.playlist_id} "
+            f"tracks={self.track_count}>"
+        )

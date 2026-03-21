@@ -12,7 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `_execute_raid_via_scheduler` was hardcoding `tracks_added: 0` instead of passing through the actual executor result
   - Manual "Raid Now" with an existing schedule now correctly reports how many tracks were staged
 
+### Added
+- **Database-Backed Scrape Cache** - External playlist scrape results now cached in database instead of Redis
+  - New `ScrapedPlaylistCache` model stores track URIs with TTL-based expiry
+  - Scrape results persist across app restarts and work without Redis
+  - Lazy cleanup of expired cache rows on write
+
 ### Changed
+- **PublicScraperPathway** - No longer requires Redis; uses database for scrape caching
 - **Raid Execution Logging** - Enhanced logging throughout the raid execution chain for operational visibility
   - Added INFO-level logs for execution path selection (scheduler vs inline), executor results, and staged track counts
   - Upgraded DB lookup failures and "all pathways exhausted" from DEBUG to WARNING
