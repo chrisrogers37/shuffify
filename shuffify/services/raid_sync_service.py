@@ -31,6 +31,7 @@ class RaidSyncService:
         source_url=None,
         auto_schedule=True,
         schedule_value="daily",
+        schedule_time=None,
         source_type="own",
     ):
         """
@@ -82,6 +83,11 @@ class RaidSyncService:
                     )
                     db.session.refresh(schedule)
             else:
+                sched_type, sched_val = (
+                    RaidSyncService._resolve_schedule_params(
+                        schedule_value, schedule_time
+                    )
+                )
                 schedule = SchedulerService.create_schedule(
                     user_id=user.id,
                     job_type=JobType.RAID,
@@ -89,8 +95,8 @@ class RaidSyncService:
                     target_playlist_name=(
                         target_playlist_name or target_playlist_id
                     ),
-                    schedule_type=ScheduleType.INTERVAL,
-                    schedule_value=schedule_value,
+                    schedule_type=sched_type,
+                    schedule_value=sched_val,
                     source_playlist_ids=[source_playlist_id],
                 )
                 # Register with APScheduler
@@ -410,6 +416,7 @@ class RaidSyncService:
         source_name=None,
         auto_schedule=True,
         schedule_value="daily",
+        schedule_time=None,
     ):
         """
         Register a search query as a raid source.
@@ -442,11 +449,16 @@ class RaidSyncService:
                 user.id, target_playlist_id
             )
             if not schedule:
+                sched_type, sched_val = (
+                    RaidSyncService._resolve_schedule_params(
+                        schedule_value, schedule_time
+                    )
+                )
                 schedule = SchedulerService.create_schedule(
                     user_id=user.id,
                     job_type=JobType.RAID,
-                    schedule_type=ScheduleType.INTERVAL,
-                    schedule_value=schedule_value,
+                    schedule_type=sched_type,
+                    schedule_value=sched_val,
                     target_playlist_id=target_playlist_id,
                     target_playlist_name=(
                         target_playlist_name
@@ -476,3 +488,109 @@ class RaidSyncService:
                 JobType.RAID_AND_SHUFFLE,
             ]),
         ).first()
+
+    @staticmethod
+    def _resolve_schedule_params(
+        schedule_value, schedule_time=None
+    ):
+        """Convert frequency + optional time into
+        schedule_type and schedule_value.
+
+        Returns (schedule_type, schedule_value) tuple.
+        """
+        from shuffify.schemas.raid_requests import (
+            _build_cron,
+            _TIME_CAPABLE_FREQUENCIES,
+        )
+
+        if (
+            schedule_time
+            and schedule_value in _TIME_CAPABLE_FREQUENCIES
+        ):
+            cron_expr = _build_cron(
+                schedule_value, schedule_time
+            )
+            return ScheduleType.CRON, cron_expr
+        return ScheduleType.INTERVAL, schedule_value
+
+    @staticmethod
+    def update_raid_schedule(
+        spotify_id,
+        target_playlist_id,
+        **kwargs,
+    ):
+        """Update an existing raid schedule.
+
+        Accepts schedule_value, schedule_time, is_enabled.
+        """
+        from shuffify.services.scheduler_service import (
+            SchedulerService,
+        )
+
+        user = User.query.filter_by(
+            spotify_id=spotify_id
+        ).first()
+        if not user:
+            raise RaidSyncError("User not found")
+
+        schedule = RaidSyncService._find_raid_schedule(
+            user.id, target_playlist_id
+        )
+        if not schedule:
+            raise RaidSyncError(
+                "No raid schedule found"
+            )
+
+        # Build update fields
+        update_fields = {}
+
+        sched_value = kwargs.get("schedule_value")
+        sched_time = kwargs.get("schedule_time")
+        is_enabled = kwargs.get("is_enabled")
+
+        if sched_value is not None:
+            sched_type, sched_val = (
+                RaidSyncService._resolve_schedule_params(
+                    sched_value, sched_time
+                )
+            )
+            update_fields["schedule_type"] = sched_type
+            update_fields["schedule_value"] = sched_val
+        elif sched_time is not None:
+            # Time changed but frequency didn't — use
+            # current schedule_value as base
+            current_val = schedule.schedule_value
+            sched_type, sched_val = (
+                RaidSyncService._resolve_schedule_params(
+                    current_val, sched_time
+                )
+            )
+            update_fields["schedule_type"] = sched_type
+            update_fields["schedule_value"] = sched_val
+
+        if is_enabled is not None:
+            update_fields["is_enabled"] = is_enabled
+
+        if not update_fields:
+            return schedule
+
+        updated = SchedulerService.update_schedule(
+            schedule.id, user.id, **update_fields
+        )
+
+        # Re-register with APScheduler
+        try:
+            from shuffify.scheduler import (
+                add_job_for_schedule,
+                remove_job_for_schedule,
+            )
+            if updated.is_enabled:
+                add_job_for_schedule(updated)
+            else:
+                remove_job_for_schedule(updated.id)
+        except Exception as e:
+            logger.warning(
+                "Could not update APScheduler: %s", e
+            )
+
+        return updated

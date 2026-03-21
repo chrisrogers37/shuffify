@@ -42,6 +42,7 @@ from shuffify.schemas.raid_requests import (
     AddRaidUrlRequest,
     UnwatchPlaylistRequest,
     RaidNowRequest,
+    UpdateRaidScheduleRequest,
 )
 from shuffify.schemas.pending_raid_requests import (
     PromoteTracksRequest,
@@ -93,6 +94,7 @@ def raid_watch(playlist_id, client=None, user=None):
             source_url=req.source_url,
             auto_schedule=req.auto_schedule,
             schedule_value=req.schedule_value,
+            schedule_time=req.schedule_time,
         )
 
         log_activity(
@@ -144,6 +146,7 @@ def raid_watch_search(
             source_name=req.source_name,
             auto_schedule=req.auto_schedule,
             schedule_value=req.schedule_value,
+            schedule_time=req.schedule_time,
         )
 
         log_activity(
@@ -241,6 +244,7 @@ def raid_add_url(playlist_id, client=None, user=None):
             source_url=req.url,
             auto_schedule=req.auto_schedule,
             schedule_value=req.schedule_value,
+            schedule_time=req.schedule_time,
             source_type="external",
         )
 
@@ -431,6 +435,87 @@ def raid_schedule_toggle(
         )
         return json_error(
             "Failed to toggle schedule", 500
+        )
+
+
+# =============================================================
+# Raid Schedule Management
+# =============================================================
+
+
+@main.route(
+    "/playlist/<playlist_id>/raid-schedule",
+    methods=["PUT"],
+)
+@require_auth_and_db
+def raid_schedule_update(
+    playlist_id, client=None, user=None
+):
+    """Update a raid schedule (frequency, time, enabled)."""
+    req, err = validate_json(UpdateRaidScheduleRequest)
+    if err:
+        return err
+
+    try:
+        schedule = RaidSyncService.update_raid_schedule(
+            spotify_id=user.spotify_id,
+            target_playlist_id=playlist_id,
+            schedule_value=req.schedule_value,
+            schedule_time=req.schedule_time,
+            is_enabled=req.is_enabled,
+        )
+
+        log_activity(
+            user_id=user.id,
+            activity_type=ActivityType.SCHEDULE_TOGGLE,
+            description="Updated raid schedule",
+            playlist_id=playlist_id,
+        )
+
+        return json_success(
+            "Schedule updated.",
+            schedule=schedule.to_dict(),
+        )
+    except RaidSyncError as e:
+        return json_error(str(e), 400)
+    except Exception as e:
+        logger.error(
+            "Failed to update raid schedule: %s", e
+        )
+        return json_error(
+            "Failed to update schedule", 500
+        )
+
+
+@main.route(
+    "/playlist/<playlist_id>/raid-schedule/history",
+    methods=["GET"],
+)
+@require_auth_and_db
+def raid_schedule_history(
+    playlist_id, client=None, user=None
+):
+    """Get execution history for a raid schedule."""
+    schedule = RaidSyncService._find_raid_schedule(
+        user.id, playlist_id
+    )
+    if not schedule:
+        return json_error("No raid schedule found", 404)
+
+    try:
+        history = SchedulerService.get_execution_history(
+            schedule.id, user.id, limit=10
+        )
+        return json_success(
+            "History loaded.",
+            history=history,
+        )
+    except Exception as e:
+        logger.error(
+            "Failed to load raid history: %s", e
+        )
+        return json_error(
+            "Failed to load history", 500
         )
 
 
