@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Raid "0 Tracks Added" Bug** - Fixed raid results always showing 0 tracks when executed via schedule path
+  - `_execute_raid_via_scheduler` was hardcoding `tracks_added: 0` instead of passing through the actual executor result
+  - Manual "Raid Now" with an existing schedule now correctly reports how many tracks were staged
+
+### Changed
+- **Raid Execution Logging** - Enhanced logging throughout the raid execution chain for operational visibility
+  - Added INFO-level logs for execution path selection (scheduler vs inline), executor results, and staged track counts
+  - Upgraded DB lookup failures and "all pathways exhausted" from DEBUG to WARNING
+  - Scraper 403/429 responses now logged at WARNING level (bot detection visibility)
+  - DirectAPI empty results logged at INFO (expected for external playlists post-Feb 2026)
+
+### Fixed
 - **Raid "Could not access playlist" Error** - Fixed external playlist raiding broken by Spotify's Feb 2026 API restriction
   - `GET /playlists/{id}/items` now returns 403 for playlists you don't own/collaborate on
   - `raid_add_url` was calling `Playlist.from_spotify()` which fetches both metadata AND tracks — the tracks call triggered the 403

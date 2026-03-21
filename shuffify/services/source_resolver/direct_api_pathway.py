@@ -63,6 +63,11 @@ class DirectAPIPathway:
 
         if not uris:
             # Empty result — likely the Feb 2026 restriction
+            logger.info(
+                "DirectAPI returned empty tracks for %s "
+                "(likely API restriction)",
+                playlist_id,
+            )
             return ResolveResult(
                 track_uris=[],
                 pathway_name=self.name,

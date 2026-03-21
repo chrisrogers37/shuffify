@@ -305,6 +305,76 @@ class TestRaidNow:
                 "user123", "target1"
             )
 
+    def test_raid_now_via_scheduler_passes_through_result(
+        self, user
+    ):
+        """Verify _execute_raid_via_scheduler passes through
+        tracks_added and tracks_total from the executor."""
+        # Create a schedule so the scheduler path is taken
+        SchedulerService.create_schedule(
+            user_id=user.id,
+            job_type=JobType.RAID,
+            target_playlist_id="target1",
+            target_playlist_name="Target",
+            schedule_type="interval",
+            schedule_value="daily",
+            source_playlist_ids=["s1"],
+        )
+
+        mock_result = {
+            "tracks_added": 5,
+            "tracks_total": 20,
+            "status": "success",
+        }
+
+        with patch(
+            "shuffify.services.executors"
+            ".JobExecutorService.execute_now",
+            return_value=mock_result,
+        ):
+            result = RaidSyncService.raid_now(
+                "user123", "target1",
+                source_playlist_ids=["s1"],
+            )
+
+        assert result["tracks_added"] == 5
+        assert result["tracks_total"] == 20
+        assert result["status"] == "success"
+
+    def test_raid_now_via_scheduler_handles_zero_result(
+        self, user
+    ):
+        """Verify scheduler path correctly returns 0 when
+        executor reports 0 tracks."""
+        SchedulerService.create_schedule(
+            user_id=user.id,
+            job_type=JobType.RAID,
+            target_playlist_id="target2",
+            target_playlist_name="Target 2",
+            schedule_type="interval",
+            schedule_value="daily",
+            source_playlist_ids=["s1"],
+        )
+
+        mock_result = {
+            "tracks_added": 0,
+            "tracks_total": 50,
+            "status": "success",
+        }
+
+        with patch(
+            "shuffify.services.executors"
+            ".JobExecutorService.execute_now",
+            return_value=mock_result,
+        ):
+            result = RaidSyncService.raid_now(
+                "user123", "target2",
+                source_playlist_ids=["s1"],
+            )
+
+        assert result["tracks_added"] == 0
+        assert result["tracks_total"] == 50
+
 
 # =============================================================================
 # _find_raid_schedule
