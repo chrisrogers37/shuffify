@@ -7,10 +7,8 @@ Tests cover all extraction strategies:
 Plus caching, error handling, and integration with resolve().
 """
 
-import json
-
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 from shuffify.services.source_resolver.public_scraper_pathway import (
     PublicScraperPathway,
@@ -22,8 +20,6 @@ from shuffify.services.source_resolver.public_scraper_pathway import (
     _walk_json_for_tracks,
     _find_key,
     _try_parse_json,
-    CACHE_PREFIX,
-    CACHE_TTL,
 )
 
 
@@ -34,14 +30,12 @@ from shuffify.services.source_resolver.public_scraper_pathway import (
 
 @pytest.fixture
 def pathway():
-    return PublicScraperPathway(redis_client=None)
+    return PublicScraperPathway()
 
 
 @pytest.fixture
 def pathway_with_cache():
-    mock_redis = MagicMock()
-    mock_redis.get.return_value = None
-    return PublicScraperPathway(redis_client=mock_redis)
+    return PublicScraperPathway()
 
 
 @pytest.fixture
@@ -797,110 +791,175 @@ class TestResolve:
 
 
 class TestCaching:
-    """Tests for Redis cache integration."""
+    """Tests for database cache integration."""
 
-    def test_cache_hit_returns_cached(self, mock_source):
-        mock_redis = MagicMock()
-        cached_uris = [
-            "spotify:track:aaaaaaaaaaaaaaaaaaaaaa",
-            "spotify:track:bbbbbbbbbbbbbbbbbbbbbb",
-        ]
-        mock_redis.get.return_value = json.dumps(
-            cached_uris
-        ).encode()
-        pathway = PublicScraperPathway(redis_client=mock_redis)
+    def test_cache_hit_returns_cached(
+        self, mock_source, db_app
+    ):
+        """Pre-populated cache row is returned directly."""
+        from datetime import datetime, timedelta, timezone
+        from shuffify.models.db import (
+            ScrapedPlaylistCache, db,
+        )
 
-        result = pathway.resolve(mock_source)
-        assert result.success is True
-        assert result.track_uris == cached_uris
+        with db_app.app_context():
+            now = datetime.now(timezone.utc)
+            row = ScrapedPlaylistCache(
+                playlist_id="pl_test123",
+                track_count=2,
+                scraped_at=now,
+                scrape_pathway="embed",
+                expires_at=now + timedelta(hours=1),
+            )
+            row.track_uris = [
+                "spotify:track:aaaaaaaaaaaaaaaaaaaaaa",
+                "spotify:track:bbbbbbbbbbbbbbbbbbbbbb",
+            ]
+            db.session.add(row)
+            db.session.commit()
 
-    def test_cache_hit_empty_returns_failure(self, mock_source):
-        mock_redis = MagicMock()
-        mock_redis.get.return_value = json.dumps([]).encode()
-        pathway = PublicScraperPathway(redis_client=mock_redis)
+            pathway = PublicScraperPathway()
+            result = pathway.resolve(mock_source)
+            assert result.success is True
+            assert len(result.track_uris) == 2
 
-        result = pathway.resolve(mock_source)
-        assert result.success is False
+    def test_cache_hit_empty_returns_failure(
+        self, mock_source, db_app
+    ):
+        """Cached empty result returns failure."""
+        from datetime import datetime, timedelta, timezone
+        from shuffify.models.db import (
+            ScrapedPlaylistCache, db,
+        )
+
+        with db_app.app_context():
+            now = datetime.now(timezone.utc)
+            row = ScrapedPlaylistCache(
+                playlist_id="pl_test123",
+                track_count=0,
+                scraped_at=now,
+                scrape_pathway="none",
+                expires_at=now + timedelta(hours=1),
+            )
+            row.track_uris = []
+            db.session.add(row)
+            db.session.commit()
+
+            pathway = PublicScraperPathway()
+            result = pathway.resolve(mock_source)
+            assert result.success is False
 
     @patch(
         "shuffify.services.source_resolver"
         ".public_scraper_pathway.requests.get"
     )
     def test_cache_miss_fetches_and_stores(
-        self, mock_get, mock_source
+        self, mock_get, mock_source, db_app
     ):
-        mock_redis = MagicMock()
-        mock_redis.get.return_value = None
-        pathway = PublicScraperPathway(redis_client=mock_redis)
-
-        mock_get.return_value = Mock(
-            status_code=200,
-            text=NEXT_DATA_TRACKS_ITEMS_HTML,
+        """Cache miss triggers scraping and stores result."""
+        from shuffify.models.db import (
+            ScrapedPlaylistCache,
         )
 
-        result = pathway.resolve(mock_source)
-        assert result.success is True
-
-        # Verify cache was set
-        mock_redis.setex.assert_called_once()
-        call_args = mock_redis.setex.call_args
-        assert call_args[0][0] == f"{CACHE_PREFIX}pl_test123"
-        assert call_args[0][1] == CACHE_TTL
-
-    def test_cache_error_falls_through(self, mock_source):
-        """Redis errors should not prevent scraping."""
-        mock_redis = MagicMock()
-        mock_redis.get.side_effect = Exception("Redis down")
-        pathway = PublicScraperPathway(redis_client=mock_redis)
-
-        with patch(
-            "shuffify.services.source_resolver"
-            ".public_scraper_pathway.requests.get"
-        ) as mock_get:
+        with db_app.app_context():
             mock_get.return_value = Mock(
                 status_code=200,
                 text=NEXT_DATA_TRACKS_ITEMS_HTML,
             )
+
+            pathway = PublicScraperPathway()
             result = pathway.resolve(mock_source)
             assert result.success is True
 
-    def test_no_redis_skips_cache(self, mock_source):
-        """Without Redis, scraping always happens."""
-        pathway = PublicScraperPathway(redis_client=None)
+            # Verify cache row was created
+            row = ScrapedPlaylistCache.query.filter_by(
+                playlist_id="pl_test123"
+            ).first()
+            assert row is not None
+            assert row.track_count > 0
+            assert row.scrape_pathway == "embed"
 
-        with patch(
-            "shuffify.services.source_resolver"
-            ".public_scraper_pathway.requests.get"
-        ) as mock_get:
+    def test_cache_read_error_returns_none(self, db_app):
+        """DB errors in _get_cached return None gracefully."""
+        with db_app.app_context():
+            with patch(
+                "shuffify.models.db"
+                ".ScrapedPlaylistCache.query"
+            ) as mock_q:
+                mock_q.filter.side_effect = Exception(
+                    "DB down"
+                )
+                result = PublicScraperPathway._get_cached(
+                    "pl_test123"
+                )
+                assert result is None
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.requests.get"
+    )
+    def test_expired_cache_triggers_rescrape(
+        self, mock_get, mock_source, db_app
+    ):
+        """Expired cache row is ignored; fresh scrape runs."""
+        from datetime import datetime, timedelta, timezone
+        from shuffify.models.db import (
+            ScrapedPlaylistCache, db,
+        )
+
+        with db_app.app_context():
+            now = datetime.now(timezone.utc)
+            row = ScrapedPlaylistCache(
+                playlist_id="pl_test123",
+                track_count=1,
+                scraped_at=now - timedelta(hours=2),
+                scrape_pathway="embed",
+                expires_at=now - timedelta(hours=1),
+            )
+            row.track_uris = [
+                "spotify:track:oldoldoldoldoldoldoldold",
+            ]
+            db.session.add(row)
+            db.session.commit()
+
             mock_get.return_value = Mock(
                 status_code=200,
                 text=NEXT_DATA_TRACKS_ITEMS_HTML,
             )
+
+            pathway = PublicScraperPathway()
             result = pathway.resolve(mock_source)
             assert result.success is True
+            # Should have new tracks, not the old cached one
+            assert (
+                "spotify:track:oldoldoldoldoldoldoldold"
+                not in result.track_uris
+            )
 
     @patch(
         "shuffify.services.source_resolver"
         ".public_scraper_pathway.requests.get"
     )
     def test_failed_scrape_caches_empty(
-        self, mock_get, mock_source
+        self, mock_get, mock_source, db_app
     ):
-        """Both strategies failing still caches empty result."""
-        mock_redis = MagicMock()
-        mock_redis.get.return_value = None
-        pathway = PublicScraperPathway(redis_client=mock_redis)
-
-        mock_get.return_value = Mock(
-            status_code=200, text="<html></html>"
+        """Both strategies failing still caches empty."""
+        from shuffify.models.db import (
+            ScrapedPlaylistCache,
         )
 
-        result = pathway.resolve(mock_source)
-        assert result.success is False
+        with db_app.app_context():
+            mock_get.return_value = Mock(
+                status_code=200, text="<html></html>"
+            )
 
-        # Verify empty list was cached
-        mock_redis.setex.assert_called_once()
-        cached_data = json.loads(
-            mock_redis.setex.call_args[0][2]
-        )
-        assert cached_data == []
+            pathway = PublicScraperPathway()
+            result = pathway.resolve(mock_source)
+            assert result.success is False
+
+            # Verify empty was cached
+            row = ScrapedPlaylistCache.query.filter_by(
+                playlist_id="pl_test123"
+            ).first()
+            assert row is not None
+            assert row.track_count == 0
