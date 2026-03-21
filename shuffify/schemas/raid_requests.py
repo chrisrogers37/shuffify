@@ -2,11 +2,33 @@
 Pydantic schemas for raid panel API endpoints.
 """
 
+import re
 from typing import List, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from shuffify.enums import IntervalValue
+
+
+# Frequencies that support a time-of-day picker
+_TIME_CAPABLE_FREQUENCIES = {"daily", "every_3d", "weekly"}
+
+# HH:MM pattern
+_TIME_RE = re.compile(r"^\d{2}:\d{2}$")
+
+
+def _build_cron(schedule_value: str, schedule_time: str) -> str:
+    """Convert frequency + HH:MM into a 5-field cron expression."""
+    hours, minutes = schedule_time.split(":")
+    if schedule_value == "daily":
+        return f"{minutes} {hours} * * *"
+    if schedule_value == "every_3d":
+        return f"{minutes} {hours} */3 * *"
+    if schedule_value == "weekly":
+        return f"{minutes} {hours} * * 0"
+    raise ValueError(
+        f"Cannot build cron for frequency: {schedule_value}"
+    )
 
 
 class WatchPlaylistRequest(BaseModel):
@@ -19,6 +41,7 @@ class WatchPlaylistRequest(BaseModel):
     source_url: Optional[str] = None
     auto_schedule: bool = True
     schedule_value: str = "daily"
+    schedule_time: Optional[str] = None
 
     @field_validator("source_playlist_id")
     @classmethod
@@ -56,6 +79,17 @@ class WatchPlaylistRequest(BaseModel):
             )
         return v
 
+    @field_validator("schedule_time")
+    @classmethod
+    def validate_schedule_time(cls, v):
+        if v is not None:
+            v = v.strip()
+            if not _TIME_RE.match(v):
+                raise ValueError(
+                    "schedule_time must be HH:MM format"
+                )
+        return v
+
 
 class WatchSearchQueryRequest(BaseModel):
     """Request to watch a search query as a raid source."""
@@ -66,6 +100,7 @@ class WatchSearchQueryRequest(BaseModel):
     source_name: Optional[str] = None
     auto_schedule: bool = True
     schedule_value: str = "daily"
+    schedule_time: Optional[str] = None
 
     @field_validator("search_query")
     @classmethod
@@ -93,6 +128,17 @@ class WatchSearchQueryRequest(BaseModel):
             )
         return v
 
+    @field_validator("schedule_time")
+    @classmethod
+    def validate_schedule_time(cls, v):
+        if v is not None:
+            v = v.strip()
+            if not _TIME_RE.match(v):
+                raise ValueError(
+                    "schedule_time must be HH:MM format"
+                )
+        return v
+
 
 class UnwatchPlaylistRequest(BaseModel):
     """Request to remove a source from the watch list."""
@@ -117,6 +163,7 @@ class AddRaidUrlRequest(BaseModel):
     url: str
     auto_schedule: bool = True
     schedule_value: str = "daily"
+    schedule_time: Optional[str] = None
 
     @field_validator("url")
     @classmethod
@@ -141,6 +188,65 @@ class AddRaidUrlRequest(BaseModel):
                 f"{', '.join(valid)}"
             )
         return v
+
+    @field_validator("schedule_time")
+    @classmethod
+    def validate_schedule_time(cls, v):
+        if v is not None:
+            v = v.strip()
+            if not _TIME_RE.match(v):
+                raise ValueError(
+                    "schedule_time must be HH:MM format"
+                )
+        return v
+
+
+class UpdateRaidScheduleRequest(BaseModel):
+    """Request to update a raid schedule."""
+
+    model_config = {"extra": "ignore"}
+
+    schedule_value: Optional[str] = None
+    schedule_time: Optional[str] = None
+    is_enabled: Optional[bool] = None
+
+    @field_validator("schedule_value")
+    @classmethod
+    def validate_schedule_value(cls, v):
+        if v is not None:
+            v = v.strip().lower()
+            valid = [e.value for e in IntervalValue]
+            if v not in valid:
+                raise ValueError(
+                    f"schedule_value must be one of: "
+                    f"{', '.join(valid)}"
+                )
+        return v
+
+    @field_validator("schedule_time")
+    @classmethod
+    def validate_schedule_time(cls, v):
+        if v is not None:
+            v = v.strip()
+            if v and not _TIME_RE.match(v):
+                raise ValueError(
+                    "schedule_time must be HH:MM format"
+                )
+            if not v:
+                return None
+        return v
+
+    @model_validator(mode="after")
+    def at_least_one_field(self):
+        if (
+            self.schedule_value is None
+            and self.schedule_time is None
+            and self.is_enabled is None
+        ):
+            raise ValueError(
+                "At least one field must be provided"
+            )
+        return self
 
 
 class RaidNowRequest(BaseModel):

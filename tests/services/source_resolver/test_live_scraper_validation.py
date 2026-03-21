@@ -487,7 +487,7 @@ class TestPublicScraperPathwayLive:
         if skip_reason is not None:
             pytest.skip(f"Network unavailable — {skip_reason}")
 
-        pathway = PublicScraperPathway(redis_client=None)
+        pathway = PublicScraperPathway()
         source = self._make_source(playlist_id)
 
         return pathway.resolve(source)

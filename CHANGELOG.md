@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Manual "Raid Now" with an existing schedule now correctly reports how many tracks were staged
 
 ### Added
+- **Raid Schedule Parity** - Raid scheduling now matches rotation scheduling capabilities
+  - Frequency selector dropdown (every 6h, 12h, daily, every 3 days, weekly) in raid panel
+  - Time-of-day picker for daily/every 3 days/weekly schedules (converts to cron expressions)
+  - Schedule update endpoint (`PUT /playlist/<id>/raid-schedule`) for changing frequency/time after creation
+  - Execution history endpoint (`GET /playlist/<id>/raid-schedule/history`) with last 10 runs
+  - Collapsible history view in raid panel showing timestamps, status badges, and track counts
+  - Save button appears when schedule settings differ from saved values
 - **Database-Backed Scrape Cache** - External playlist scrape results now cached in database instead of Redis
   - New `ScrapedPlaylistCache` model stores track URIs with TTL-based expiry
   - Scrape results persist across app restarts and work without Redis

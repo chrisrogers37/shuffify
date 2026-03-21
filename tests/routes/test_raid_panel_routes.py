@@ -9,7 +9,6 @@ import time
 from unittest.mock import patch, MagicMock
 
 
-
 # =============================================================================
 # Authentication Tests
 # =============================================================================
@@ -317,5 +316,74 @@ class TestRaidAddUrlValidation:
                 "url": "https://open.spotify.com"
                 "/playlist/ext1",
             },
+        )
+        assert resp.status_code == 404
+
+
+# =============================================================================
+# PUT /playlist/<id>/raid-schedule
+# =============================================================================
+
+
+class TestRaidScheduleUpdate:
+    """Tests for raid schedule update endpoint."""
+
+    @patch("shuffify.routes.require_auth")
+    def test_update_no_body_returns_400(
+        self, mock_auth, auth_client
+    ):
+        mock_auth.return_value = MagicMock()
+        resp = auth_client.put(
+            "/playlist/p1/raid-schedule",
+            json={},
+        )
+        assert resp.status_code == 400
+
+    @patch("shuffify.routes.require_auth")
+    def test_update_invalid_value_returns_400(
+        self, mock_auth, auth_client
+    ):
+        mock_auth.return_value = MagicMock()
+        resp = auth_client.put(
+            "/playlist/p1/raid-schedule",
+            json={"schedule_value": "every_minute"},
+        )
+        assert resp.status_code == 400
+
+    @patch("shuffify.routes.require_auth")
+    def test_update_unauth(self, mock_auth, db_app):
+        mock_auth.return_value = None
+        with db_app.test_client() as client:
+            resp = client.put(
+                "/playlist/p1/raid-schedule",
+                json={"schedule_value": "daily"},
+            )
+            assert resp.status_code == 401
+
+
+# =============================================================================
+# GET /playlist/<id>/raid-schedule/history
+# =============================================================================
+
+
+class TestRaidScheduleHistory:
+    """Tests for raid schedule history endpoint."""
+
+    @patch("shuffify.routes.require_auth")
+    def test_history_unauth(self, mock_auth, db_app):
+        mock_auth.return_value = None
+        with db_app.test_client() as client:
+            resp = client.get(
+                "/playlist/p1/raid-schedule/history",
+            )
+            assert resp.status_code == 401
+
+    @patch("shuffify.routes.require_auth")
+    def test_history_no_schedule_returns_404(
+        self, mock_auth, auth_client
+    ):
+        mock_auth.return_value = MagicMock()
+        resp = auth_client.get(
+            "/playlist/p1/raid-schedule/history",
         )
         assert resp.status_code == 404
