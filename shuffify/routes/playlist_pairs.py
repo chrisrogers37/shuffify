@@ -279,11 +279,12 @@ def list_archive_tracks(
             "album(name,images),duration_ms))"
         )
 
-        # Get total count first (cheap call, no items)
+        # Get total count first (cheap call, minimal items)
+        # Spotify API rejects limit=0; use limit=1 instead
         count_result = client.api.get_playlist_items_raw(
             pair.archive_playlist_id,
             fields="total",
-            limit=0,
+            limit=1,
         )
         total = count_result.get("total", 0)
 

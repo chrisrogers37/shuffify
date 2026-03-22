@@ -2,33 +2,14 @@
 Pydantic schemas for raid panel API endpoints.
 """
 
-import re
 from typing import List, Optional
 
 from pydantic import BaseModel, field_validator, model_validator
 
 from shuffify.enums import IntervalValue
-
-
-# Frequencies that support a time-of-day picker
-_TIME_CAPABLE_FREQUENCIES = {"daily", "every_3d", "weekly"}
-
-# HH:MM pattern
-_TIME_RE = re.compile(r"^\d{2}:\d{2}$")
-
-
-def _build_cron(schedule_value: str, schedule_time: str) -> str:
-    """Convert frequency + HH:MM into a 5-field cron expression."""
-    hours, minutes = schedule_time.split(":")
-    if schedule_value == "daily":
-        return f"{minutes} {hours} * * *"
-    if schedule_value == "every_3d":
-        return f"{minutes} {hours} */3 * *"
-    if schedule_value == "weekly":
-        return f"{minutes} {hours} * * 0"
-    raise ValueError(
-        f"Cannot build cron for frequency: {schedule_value}"
-    )
+from shuffify.services.schedule_utils import (
+    TIME_RE as _TIME_RE,
+)
 
 
 class WatchPlaylistRequest(BaseModel):

@@ -14,8 +14,8 @@ from shuffify.schemas.raid_requests import (
     AddRaidUrlRequest,
     RaidNowRequest,
     UpdateRaidScheduleRequest,
-    _build_cron,
 )
+from shuffify.services.schedule_utils import build_cron
 
 
 # =============================================================================
@@ -270,20 +270,20 @@ class TestScheduleTime:
 
 
 class TestBuildCron:
-    """Tests for _build_cron helper."""
+    """Tests for build_cron helper."""
 
     def test_daily_cron(self):
-        assert _build_cron("daily", "14:30") == "30 14 * * *"
+        assert build_cron("daily", "14:30") == "30 14 * * *"
 
     def test_every_3d_cron(self):
-        assert _build_cron("every_3d", "09:00") == "00 09 */3 * *"
+        assert build_cron("every_3d", "09:00") == "00 09 */3 * *"
 
     def test_weekly_cron(self):
-        assert _build_cron("weekly", "22:15") == "15 22 * * 0"
+        assert build_cron("weekly", "22:15") == "15 22 * * 0"
 
     def test_unsupported_frequency_raises(self):
         with pytest.raises(ValueError):
-            _build_cron("every_6h", "12:00")
+            build_cron("every_6h", "12:00")
 
 
 # =============================================================================

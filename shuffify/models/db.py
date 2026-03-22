@@ -1214,6 +1214,10 @@ class ScrapedPlaylistCache(db.Model):
             "playlist_id",
             "expires_at",
         ),
+        db.UniqueConstraint(
+            "playlist_id",
+            name="uq_scrape_cache_playlist_id",
+        ),
     )
 
     @property

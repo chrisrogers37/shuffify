@@ -4045,11 +4045,12 @@ var raidPanel = {
         // If cron, parse back to frequency + time
         if (schedule.schedule_type === 'cron' && schedule.schedule_value) {
             var parts = schedule.schedule_value.split(' ');
-            if (parts.length >= 2) {
-                time = parts[1].padStart(2, '0') + ':' + parts[0].padStart(2, '0');
-                // Determine frequency from cron pattern
-                var dayPart = parts.length >= 3 ? parts[2] : '*';
-                var dowPart = parts.length >= 5 ? parts[4] : '*';
+            var mins = parseInt(parts[0], 10);
+            var hrs = parseInt(parts[1], 10);
+            if (parts.length >= 5 && !isNaN(mins) && !isNaN(hrs)) {
+                time = String(hrs).padStart(2, '0') + ':' + String(mins).padStart(2, '0');
+                var dayPart = parts[2];
+                var dowPart = parts[4];
                 if (dowPart !== '*') freq = 'weekly';
                 else if (dayPart === '*/3') freq = 'every_3d';
                 else freq = 'daily';
@@ -4308,6 +4309,7 @@ var raidPanel = {
         .then(function(data) {
             var msg = 'Raid complete: ' + (data.tracks_added || 0) + ' new tracks added';
             showNotification(msg, 'success');
+            self._historyLoaded = false;
             self.loadStatus();
         })
         .catch(function(error) {

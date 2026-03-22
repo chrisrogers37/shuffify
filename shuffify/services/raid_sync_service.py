@@ -498,16 +498,16 @@ class RaidSyncService:
 
         Returns (schedule_type, schedule_value) tuple.
         """
-        from shuffify.schemas.raid_requests import (
-            _build_cron,
-            _TIME_CAPABLE_FREQUENCIES,
+        from shuffify.services.schedule_utils import (
+            build_cron,
+            TIME_CAPABLE_FREQUENCIES,
         )
 
         if (
             schedule_time
-            and schedule_value in _TIME_CAPABLE_FREQUENCIES
+            and schedule_value in TIME_CAPABLE_FREQUENCIES
         ):
-            cron_expr = _build_cron(
+            cron_expr = build_cron(
                 schedule_value, schedule_time
             )
             return ScheduleType.CRON, cron_expr
