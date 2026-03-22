@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Archive Sidebar "Invalid limit" Error** - Fixed `limit=0` in archive track count query rejected by Spotify API
+- **Cron Parsing Edge Case** - Raid schedule UI now validates cron fields are numeric before rendering time picker
+- **Stale Raid History** - Execution history now refreshes after running a new raid
 - **Raid "0 Tracks Added" Bug** - Fixed raid results always showing 0 tracks when executed via schedule path
   - `_execute_raid_via_scheduler` was hardcoding `tracks_added: 0` instead of passing through the actual executor result
   - Manual "Raid Now" with an existing schedule now correctly reports how many tracks were staged
@@ -20,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Execution history endpoint (`GET /playlist/<id>/raid-schedule/history`) with last 10 runs
   - Collapsible history view in raid panel showing timestamps, status badges, and track counts
   - Save button appears when schedule settings differ from saved values
+- **Shared Schedule Utilities** - Extracted `build_cron` and `TIME_CAPABLE_FREQUENCIES` to `services/schedule_utils.py` for reuse by rotation scheduling
+- **Scrape Cache Uniqueness** - Added unique constraint on `playlist_id` to prevent duplicate cache rows in concurrent scenarios
 - **Database-Backed Scrape Cache** - External playlist scrape results now cached in database instead of Redis
   - New `ScrapedPlaylistCache` model stores track URIs with TTL-based expiry
   - Scrape results persist across app restarts and work without Redis
