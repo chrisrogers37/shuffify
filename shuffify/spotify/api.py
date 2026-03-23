@@ -532,6 +532,32 @@ class SpotifyAPI:
         return result
 
     @api_error_handler
+    def update_playlist_details(
+        self,
+        playlist_id: str,
+        **kwargs,
+    ) -> None:
+        """
+        Update a playlist's details (name, public, description).
+
+        Only provided kwargs are sent to the API.
+        """
+        self._ensure_valid_token()
+
+        allowed = {"name", "public", "description"}
+        body = {
+            k: v for k, v in kwargs.items()
+            if k in allowed
+        }
+        if not body:
+            return
+
+        self._http.put(
+            f"/playlists/{playlist_id}",
+            json=body,
+        )
+
+    @api_error_handler
     def get_playlist_items_raw(
         self,
         playlist_id: str,

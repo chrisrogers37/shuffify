@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Archive Playlists Created as Public** - Archive playlists now explicitly set to private after creation
+  - Spotify API may ignore `public: false` on create if user's account defaults to public playlists
+  - Added follow-up `PUT /playlists/{id}` call to force private visibility
+  - New `SpotifyAPI.update_playlist_details()` method for modifying playlist metadata
 - **Archive Sidebar "Invalid limit" Error** - Fixed `limit=0` in archive track count query rejected by Spotify API
 - **Cron Parsing Edge Case** - Raid schedule UI now validates cron fields are numeric before rendering time picker
 - **Stale Raid History** - Execution history now refreshes after running a new raid

@@ -188,9 +188,25 @@ class PlaylistPairService:
             public=False,
             description="Archive playlist for removed tracks",
         )
+        playlist_id = result["id"]
+
+        # Spotify may ignore public=false on create if the
+        # user's account defaults to public playlists.
+        # Explicitly set private via a follow-up PUT call.
+        try:
+            api.update_playlist_details(
+                playlist_id, public=False
+            )
+        except Exception as e:
+            logger.warning(
+                "Could not set archive playlist to "
+                "private: %s",
+                e,
+            )
+
         logger.info(
             "Created archive playlist '%s' (%s)",
             archive_name,
-            result["id"],
+            playlist_id,
         )
-        return result["id"], archive_name
+        return playlist_id, archive_name
