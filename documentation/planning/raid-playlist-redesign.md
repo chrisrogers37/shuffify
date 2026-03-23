@@ -284,7 +284,7 @@ These are independent because:
 
 Mirrors `playlist_pair_service.py`:
 - `create_link(user_id, target_id, raid_playlist_id, ...)` — Link raid playlist
-- `create_raid_playlist(user_id, target_id, name)` — Create new Spotify playlist + link
+- `create_raid_playlist(user_id, target_id, name)` — Create `{name} [Raids]` on Spotify + link
 - `get_link_for_playlist(user_id, target_id)` — Retrieve link
 - `get_links_for_user(user_id)` — List all links
 - `update_link(link_id, ...)` — Update drip_count, drip_enabled
@@ -362,10 +362,26 @@ POST /playlist/<id>/drip-schedule-toggle — Enable/disable drip schedule
 
 ---
 
-## Open Questions
+## Design Decisions (Resolved)
 
-1. **Raid playlist naming convention**: Auto-name as `[Target Name] — Raids`? Or user-chosen?
-2. **Drip selection strategy**: FIFO (oldest staged first) or random from raid playlist?
-3. **Raid playlist size cap**: Should there be a maximum? What happens if raids outpace drips?
-4. **Dismissed track expiry**: How long do dismissed tracks block re-staging? Forever? 30 days?
-5. **Existing PendingRaidTrack data**: Migrate existing pending tracks into a raid playlist on upgrade?
+1. **Raid playlist naming**: Auto-name as `{Target Name} [Raids]` — mirrors `{Name} [Archive]` convention
+2. **Drip selection**: Random selection from raid playlist (not FIFO)
+3. **Raid playlist size cap**: No cap — let it grow freely
+4. **Dismissed tracks**: Removed from raid playlist + marked DISMISSED in DB. Blocked from re-staging **permanently** by default (dedupe checks dismissed URIs). A future "clear dismissed" action can reset if needed.
+5. **Existing PendingRaidTrack data**: No automatic migration. Existing pending tracks stay in DB-only inbox. New flow activates when user creates a RaidPlaylistLink. No surprise playlist creation on upgrade.
+
+## Promote/Dismiss with Raid Playlist
+
+The raid panel continues to show track-level controls, but now backed by the real Spotify playlist:
+
+| Action | Raid Playlist (Spotify) | PendingRaidTrack (DB) | Target Playlist |
+|--------|------------------------|-----------------------|-----------------|
+| **Track raided** | Added | Inserted (PENDING) | — |
+| **Promote** | Removed | Status → PROMOTED | Added to top |
+| **Dismiss** | Removed | Status → DISMISSED | — |
+| **Drip (auto)** | Removed (random N) | Status → PROMOTED | Added to top |
+
+The DB layer gives us:
+- **Provenance**: Which source brought this track, when
+- **Dedupe**: Dismissed URIs never re-raid
+- **History**: Full audit trail of what was promoted/dismissed/dripped
