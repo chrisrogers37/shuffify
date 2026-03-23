@@ -425,7 +425,19 @@ def raid_add_url(playlist_id, client=None, user=None):
             source_playlist_id
         )
     except PlaylistNotFoundError:
-        return json_error("Playlist not found", 404)
+        logger.warning(
+            "Playlist not found via Spotify API: %s "
+            "(URL: %s)",
+            source_playlist_id,
+            req.url,
+        )
+        return json_error(
+            "Playlist not found. The Spotify API returned "
+            "404 for playlist ID '{}'. The playlist may be "
+            "private, region-locked, or the link may have "
+            "changed.".format(source_playlist_id),
+            404,
+        )
     except Exception as e:
         logger.warning(
             "Could not fetch playlist metadata "
@@ -433,7 +445,8 @@ def raid_add_url(playlist_id, client=None, user=None):
             source_playlist_id, e,
         )
         return json_error(
-            "Could not access playlist", 400
+            "Could not access playlist: {}".format(str(e)),
+            400,
         )
 
     # 4. Guard: owner is not current user

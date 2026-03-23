@@ -144,7 +144,21 @@ class PlaylistService:
                 "description": data.get("description"),
                 "total_tracks": total_tracks,
             }
-        except (ValueError, SpotifyNotFoundError):
+        except SpotifyNotFoundError as e:
+            logger.warning(
+                "Spotify returned 404 for playlist %s: %s",
+                playlist_id,
+                e,
+            )
+            raise PlaylistNotFoundError(
+                f"Playlist not found: {playlist_id}"
+            )
+        except ValueError as e:
+            logger.warning(
+                "Invalid response parsing playlist %s: %s",
+                playlist_id,
+                e,
+            )
             raise PlaylistNotFoundError(
                 f"Playlist not found: {playlist_id}"
             )
