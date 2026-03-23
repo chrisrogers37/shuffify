@@ -2,7 +2,7 @@
 Raid panel routes.
 
 Smart raid management: watch/unwatch sources, trigger raids,
-and manage raid schedules from the workshop sidebar.
+manage raid schedules, raid playlist links, and drip operations.
 """
 
 import logging
@@ -21,7 +21,14 @@ from shuffify.services.raid_sync_service import (
     RaidSyncService,
     RaidSyncError,
 )
+from shuffify.services.raid_link_service import (
+    RaidLinkService,
+    RaidLinkError,
+    RaidLinkExistsError,
+    RaidLinkNotFoundError,
+)
 from shuffify.services.upstream_source_service import (
+    UpstreamSourceService,
     UpstreamSourceNotFoundError,
     UpstreamSourceLimitError,
 )
@@ -48,11 +55,21 @@ from shuffify.schemas.pending_raid_requests import (
     PromoteTracksRequest,
     DismissTracksRequest,
 )
+from shuffify.schemas.raid_link_requests import (
+    CreateRaidLinkRequest,
+    UpdateRaidLinkRequest,
+    UpdateSourceRaidCountRequest,
+)
 from shuffify.services.pending_raid_service import (
     PendingRaidService,
 )
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================
+# Raid Status
+# =============================================================
 
 
 @main.route(
@@ -68,6 +85,202 @@ def raid_status(playlist_id, client=None, user=None):
     return json_success(
         "Raid status loaded", raid_status=status
     )
+
+
+# =============================================================
+# Raid Playlist Link CRUD
+# =============================================================
+
+
+@main.route(
+    "/playlist/<playlist_id>/raid-link",
+    methods=["POST"],
+)
+@require_auth_and_db
+def raid_link_create(
+    playlist_id, client=None, user=None
+):
+    """Create a raid playlist link."""
+    req, err = validate_json(CreateRaidLinkRequest)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+
+    try:
+        if req.create_new:
+            target_name = data.get(
+                "target_playlist_name", playlist_id
+            )
+            raid_id, raid_name = (
+                RaidLinkService.create_raid_playlist(
+                    client.api,
+                    user.spotify_id,
+                    target_name,
+                )
+            )
+        else:
+            raid_id = req.raid_playlist_id
+            raid_name = data.get(
+                "raid_playlist_name", raid_id
+            )
+
+        link = RaidLinkService.create_link(
+            user_id=user.id,
+            target_playlist_id=playlist_id,
+            raid_playlist_id=raid_id,
+            target_playlist_name=data.get(
+                "target_playlist_name"
+            ),
+            raid_playlist_name=raid_name,
+            drip_count=req.drip_count,
+            drip_enabled=req.drip_enabled,
+        )
+
+        log_activity(
+            user_id=user.id,
+            activity_type=ActivityType.RAID_LINK_CREATE,
+            description=(
+                "Created raid link: "
+                "'{}'".format(raid_name)
+            ),
+            playlist_id=playlist_id,
+        )
+
+        return json_success(
+            "Raid playlist linked.",
+            raid_link=link.to_dict(),
+        )
+    except RaidLinkExistsError as e:
+        return json_error(str(e), 409)
+    except RaidLinkError as e:
+        return json_error(str(e), 400)
+    except Exception as e:
+        logger.error(
+            "Failed to create raid link: %s", e
+        )
+        return json_error(
+            "Failed to create raid link", 500
+        )
+
+
+@main.route(
+    "/playlist/<playlist_id>/raid-link",
+    methods=["PUT"],
+)
+@require_auth_and_db
+def raid_link_update(
+    playlist_id, client=None, user=None
+):
+    """Update a raid playlist link."""
+    req, err = validate_json(UpdateRaidLinkRequest)
+    if err:
+        return err
+
+    try:
+        update_fields = {}
+        if req.drip_count is not None:
+            update_fields["drip_count"] = req.drip_count
+        if req.drip_enabled is not None:
+            update_fields["drip_enabled"] = (
+                req.drip_enabled
+            )
+
+        link = RaidLinkService.update_link(
+            user.id, playlist_id, **update_fields
+        )
+
+        return json_success(
+            "Raid link updated.",
+            raid_link=link.to_dict(),
+        )
+    except RaidLinkNotFoundError:
+        return json_error(
+            "No raid link found", 404
+        )
+    except RaidLinkError as e:
+        return json_error(str(e), 400)
+    except Exception as e:
+        logger.error(
+            "Failed to update raid link: %s", e
+        )
+        return json_error(
+            "Failed to update raid link", 500
+        )
+
+
+@main.route(
+    "/playlist/<playlist_id>/raid-link",
+    methods=["DELETE"],
+)
+@require_auth_and_db
+def raid_link_delete(
+    playlist_id, client=None, user=None
+):
+    """Delete a raid playlist link."""
+    try:
+        RaidLinkService.delete_link(
+            user.id, playlist_id
+        )
+
+        log_activity(
+            user_id=user.id,
+            activity_type=ActivityType.RAID_LINK_DELETE,
+            description="Removed raid playlist link",
+            playlist_id=playlist_id,
+        )
+
+        return json_success("Raid link removed.")
+    except RaidLinkNotFoundError:
+        return json_error(
+            "No raid link found", 404
+        )
+    except RaidLinkError as e:
+        return json_error(str(e), 400)
+    except Exception as e:
+        logger.error(
+            "Failed to delete raid link: %s", e
+        )
+        return json_error(
+            "Failed to delete raid link", 500
+        )
+
+
+# =============================================================
+# Source raid_count update
+# =============================================================
+
+
+@main.route(
+    "/playlist/<playlist_id>/raid-source-count",
+    methods=["PUT"],
+)
+@require_auth_and_db
+def raid_source_count_update(
+    playlist_id, client=None, user=None
+):
+    """Update a source's raid_count."""
+    req, err = validate_json(
+        UpdateSourceRaidCountRequest
+    )
+    if err:
+        return err
+
+    try:
+        source = UpstreamSourceService.update_raid_count(
+            user.id, req.source_id, req.raid_count
+        )
+        return json_success(
+            "Source raid count updated.",
+            source=source.to_dict(),
+        )
+    except UpstreamSourceNotFoundError:
+        return json_error("Source not found", 404)
+
+
+# =============================================================
+# Watch / Unwatch Sources
+# =============================================================
 
 
 @main.route(
@@ -101,8 +314,12 @@ def raid_watch(playlist_id, client=None, user=None):
             user_id=user.id,
             activity_type=ActivityType.RAID_WATCH_ADD,
             description=(
-                f"Watching '"
-                f"{req.source_playlist_name or req.source_playlist_id}'"
+                "Watching '"
+                "{}'"
+                .format(
+                    req.source_playlist_name
+                    or req.source_playlist_id
+                )
             ),
             playlist_id=playlist_id,
         )
@@ -153,8 +370,8 @@ def raid_watch_search(
             user_id=user.id,
             activity_type=ActivityType.RAID_WATCH_ADD,
             description=(
-                f"Watching search: "
-                f"'{req.search_query}'"
+                "Watching search: "
+                "'{}'".format(req.search_query)
             ),
             playlist_id=playlist_id,
         )
@@ -187,7 +404,9 @@ def raid_add_url(playlist_id, client=None, user=None):
         return err
 
     # 1. Parse URL to playlist ID
-    source_playlist_id = parse_spotify_playlist_url(req.url)
+    source_playlist_id = parse_spotify_playlist_url(
+        req.url
+    )
     if not source_playlist_id:
         return json_error(
             "Invalid Spotify playlist URL", 400
@@ -200,9 +419,6 @@ def raid_add_url(playlist_id, client=None, user=None):
         )
 
     # 3. Get playlist metadata for ownership check.
-    # Uses metadata-only fetch (GET /playlists/{id}) which works
-    # for any public playlist, unlike /items which is restricted
-    # to owners/collaborators since Feb 2026.
     try:
         playlist_svc = PlaylistService(client)
         playlist_meta = playlist_svc.get_playlist_metadata(
@@ -212,14 +428,15 @@ def raid_add_url(playlist_id, client=None, user=None):
         return json_error("Playlist not found", 404)
     except Exception as e:
         logger.warning(
-            "Could not fetch playlist metadata for %s: %s",
+            "Could not fetch playlist metadata "
+            "for %s: %s",
             source_playlist_id, e,
         )
         return json_error(
             "Could not access playlist", 400
         )
 
-    # 4. Guard: owner is not current user (external-only)
+    # 4. Guard: owner is not current user
     if playlist_meta["owner_id"] == user.spotify_id:
         return json_error(
             "Cannot raid your own playlist. "
@@ -227,7 +444,7 @@ def raid_add_url(playlist_id, client=None, user=None):
             400,
         )
 
-    # 5. Best-effort track count via playlist metadata
+    # 5. Best-effort track count
     track_count = playlist_meta.get("total_tracks")
 
     # 6. Register source
@@ -268,7 +485,7 @@ def raid_add_url(playlist_id, client=None, user=None):
             activity_type=ActivityType.RAID_WATCH_ADD,
             description=(
                 "Watching external: "
-                f"'{playlist_meta['name']}'"
+                "'{}'".format(playlist_meta["name"])
             ),
             playlist_id=playlist_id,
         )
@@ -329,6 +546,11 @@ def raid_unwatch(playlist_id, client=None, user=None):
         )
 
 
+# =============================================================
+# Raid / Drip Execution
+# =============================================================
+
+
 @main.route(
     "/playlist/<playlist_id>/raid-now",
     methods=["POST"],
@@ -350,8 +572,9 @@ def raid_now(playlist_id, client=None, user=None):
             user_id=user.id,
             activity_type=ActivityType.RAID_SYNC_NOW,
             description=(
-                f"Raid: {result.get('tracks_added', 0)}"
-                f" tracks added"
+                "Raid: {} tracks added".format(
+                    result.get("tracks_added", 0)
+                )
             ),
             playlist_id=playlist_id,
             metadata={
@@ -362,9 +585,9 @@ def raid_now(playlist_id, client=None, user=None):
         )
 
         return json_success(
-            f"Raid complete: "
-            f"{result.get('tracks_added', 0)} "
-            f"new tracks added.",
+            "Raid complete: {} new tracks added.".format(
+                result.get("tracks_added", 0)
+            ),
             tracks_added=result.get("tracks_added", 0),
             tracks_total=result.get("tracks_total", 0),
         )
@@ -374,6 +597,110 @@ def raid_now(playlist_id, client=None, user=None):
         logger.error("Failed to execute raid: %s", e)
         return json_error(
             "Failed to execute raid", 500
+        )
+
+
+@main.route(
+    "/playlist/<playlist_id>/drip-now",
+    methods=["POST"],
+)
+@require_auth_and_db
+def drip_now(playlist_id, client=None, user=None):
+    """Trigger an immediate drip from raid playlist."""
+    try:
+        result = RaidSyncService.drip_now(
+            spotify_id=user.spotify_id,
+            target_playlist_id=playlist_id,
+        )
+
+        log_activity(
+            user_id=user.id,
+            activity_type=ActivityType.RAID_DRIP,
+            description=(
+                "Drip: {} tracks moved".format(
+                    result.get("tracks_added", 0)
+                )
+            ),
+            playlist_id=playlist_id,
+            metadata={
+                "tracks_added": result.get(
+                    "tracks_added", 0
+                ),
+            },
+        )
+
+        return json_success(
+            "Drip complete: {} tracks moved.".format(
+                result.get("tracks_added", 0)
+            ),
+            tracks_added=result.get("tracks_added", 0),
+            tracks_total=result.get("tracks_total", 0),
+        )
+    except RaidSyncError as e:
+        return json_error(str(e), 400)
+    except Exception as e:
+        logger.error("Failed to execute drip: %s", e)
+        return json_error(
+            "Failed to execute drip", 500
+        )
+
+
+# =============================================================
+# Raid Schedule Management
+# =============================================================
+
+
+def _toggle_schedule(schedule, user_id, playlist_id, label):
+    """Shared toggle logic for raid and drip schedules."""
+    try:
+        schedule = SchedulerService.toggle_schedule(
+            schedule.id, user_id
+        )
+
+        try:
+            if schedule.is_enabled:
+                from shuffify.scheduler import (
+                    add_job_for_schedule,
+                )
+                add_job_for_schedule(schedule)
+            else:
+                from shuffify.scheduler import (
+                    remove_job_for_schedule,
+                )
+                remove_job_for_schedule(schedule.id)
+        except Exception as e:
+            logger.warning(
+                "APScheduler toggle failed: %s", e
+            )
+
+        state = (
+            "enabled"
+            if schedule.is_enabled
+            else "disabled"
+        )
+        log_activity(
+            user_id=user_id,
+            activity_type=ActivityType.SCHEDULE_TOGGLE,
+            description="{} schedule {}".format(
+                label, state
+            ),
+            playlist_id=playlist_id,
+        )
+
+        return json_success(
+            "{} schedule {}.".format(label, state),
+            schedule=schedule.to_dict(),
+        )
+    except Exception as e:
+        logger.error(
+            "Failed to toggle %s schedule: %s",
+            label.lower(), e,
+        )
+        return json_error(
+            "Failed to toggle {} schedule".format(
+                label.lower()
+            ),
+            500,
         )
 
 
@@ -391,56 +718,28 @@ def raid_schedule_toggle(
     )
     if not schedule:
         return json_error("No raid schedule found", 404)
-
-    try:
-        schedule = SchedulerService.toggle_schedule(
-            schedule.id, user.id
-        )
-
-        # Update APScheduler
-        try:
-            if schedule.is_enabled:
-                from shuffify.scheduler import (
-                    add_job_for_schedule,
-                )
-                add_job_for_schedule(schedule)
-            else:
-                from shuffify.scheduler import (
-                    remove_job_for_schedule,
-                )
-                remove_job_for_schedule(schedule.id)
-        except Exception as e:
-            logger.warning(
-                "APScheduler toggle failed: %s", e
-            )
-
-        log_activity(
-            user_id=user.id,
-            activity_type=ActivityType.SCHEDULE_TOGGLE,
-            description=(
-                f"Raid schedule "
-                f"{'enabled' if schedule.is_enabled else 'disabled'}"
-            ),
-            playlist_id=playlist_id,
-        )
-
-        return json_success(
-            f"Schedule "
-            f"{'enabled' if schedule.is_enabled else 'disabled'}.",
-            schedule=schedule.to_dict(),
-        )
-    except Exception as e:
-        logger.error(
-            "Failed to toggle schedule: %s", e
-        )
-        return json_error(
-            "Failed to toggle schedule", 500
-        )
+    return _toggle_schedule(
+        schedule, user.id, playlist_id, "Raid"
+    )
 
 
-# =============================================================
-# Raid Schedule Management
-# =============================================================
+@main.route(
+    "/playlist/<playlist_id>/drip-schedule-toggle",
+    methods=["POST"],
+)
+@require_auth_and_db
+def drip_schedule_toggle(
+    playlist_id, client=None, user=None
+):
+    """Toggle the drip schedule on/off."""
+    schedule = RaidSyncService._find_drip_schedule(
+        user.id, playlist_id
+    )
+    if not schedule:
+        return json_error("No drip schedule found", 404)
+    return _toggle_schedule(
+        schedule, user.id, playlist_id, "Drip"
+    )
 
 
 @main.route(
@@ -524,6 +823,28 @@ def raid_schedule_history(
 # =============================================================
 
 
+def _remove_from_raid_playlist(
+    api, user_id, playlist_id, uris,
+):
+    """Remove tracks from the raid Spotify playlist
+    if a RaidPlaylistLink exists."""
+    link = RaidLinkService.get_link_for_playlist(
+        user_id, playlist_id
+    )
+    if not link:
+        return
+
+    try:
+        api.playlist_remove_items(
+            link.raid_playlist_id, uris
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to remove tracks from raid "
+            "playlist: %s", e
+        )
+
+
 @main.route(
     "/playlist/<playlist_id>/pending-raids",
     methods=["GET"],
@@ -560,11 +881,16 @@ def pending_raids_promote(
     )
 
     if promoted:
-        # Add tracks to Spotify playlist
         uris = [t.track_uri for t in promoted]
         try:
+            # Add to target playlist
             client.api.playlist_add_items(
                 playlist_id, uris
+            )
+            # Remove from raid playlist
+            _remove_from_raid_playlist(
+                client.api, user.id,
+                playlist_id, uris,
             )
         except Exception as e:
             logger.error(
@@ -581,14 +907,15 @@ def pending_raids_promote(
             user_id=user.id,
             activity_type=ActivityType.RAID_PROMOTE,
             description=(
-                f"Promoted {len(promoted)} "
-                f"raided tracks"
+                "Promoted {} raided tracks".format(
+                    len(promoted)
+                )
             ),
             playlist_id=playlist_id,
         )
 
     return json_success(
-        f"{len(promoted)} tracks promoted.",
+        "{} tracks promoted.".format(len(promoted)),
         promoted_count=len(promoted),
     )
 
@@ -606,21 +933,42 @@ def pending_raids_dismiss(
     if err:
         return err
 
+    # Get tracks before dismissing for raid playlist sync
+    from shuffify.models.db import PendingRaidTrack
+    from shuffify.enums import PendingRaidStatus
+
+    tracks = PendingRaidTrack.query.filter(
+        PendingRaidTrack.id.in_(req.track_ids),
+        PendingRaidTrack.user_id == user.id,
+        PendingRaidTrack.target_playlist_id
+        == playlist_id,
+        PendingRaidTrack.status
+        == PendingRaidStatus.PENDING,
+    ).all()
+    uris_to_remove = [t.track_uri for t in tracks]
+
     count = PendingRaidService.dismiss_tracks(
         user.id, playlist_id, req.track_ids
     )
+
+    # Remove from raid playlist
+    if uris_to_remove:
+        _remove_from_raid_playlist(
+            client.api, user.id,
+            playlist_id, uris_to_remove,
+        )
 
     log_activity(
         user_id=user.id,
         activity_type=ActivityType.RAID_DISMISS,
         description=(
-            f"Dismissed {count} raided tracks"
+            "Dismissed {} raided tracks".format(count)
         ),
         playlist_id=playlist_id,
     )
 
     return json_success(
-        f"{count} tracks dismissed.",
+        "{} tracks dismissed.".format(count),
         dismissed_count=count,
     )
 
@@ -644,6 +992,10 @@ def pending_raids_promote_all(
             client.api.playlist_add_items(
                 playlist_id, uris
             )
+            _remove_from_raid_playlist(
+                client.api, user.id,
+                playlist_id, uris,
+            )
         except Exception as e:
             logger.error(
                 "Failed to add promoted tracks "
@@ -659,14 +1011,14 @@ def pending_raids_promote_all(
             user_id=user.id,
             activity_type=ActivityType.RAID_PROMOTE,
             description=(
-                f"Promoted all {len(promoted)} "
-                f"raided tracks"
+                "Promoted all {} "
+                "raided tracks".format(len(promoted))
             ),
             playlist_id=playlist_id,
         )
 
     return json_success(
-        f"{len(promoted)} tracks promoted.",
+        "{} tracks promoted.".format(len(promoted)),
         promoted_count=len(promoted),
     )
 
@@ -680,20 +1032,33 @@ def pending_raids_dismiss_all(
     playlist_id, client=None, user=None
 ):
     """Dismiss all pending tracks."""
+    # Get URIs before dismissing for raid playlist sync
+    pending = PendingRaidService.list_pending(
+        user.id, playlist_id
+    )
+    uris_to_remove = [t.track_uri for t in pending]
+
     count = PendingRaidService.dismiss_all(
         user.id, playlist_id
     )
+
+    # Remove from raid playlist
+    if uris_to_remove:
+        _remove_from_raid_playlist(
+            client.api, user.id,
+            playlist_id, uris_to_remove,
+        )
 
     log_activity(
         user_id=user.id,
         activity_type=ActivityType.RAID_DISMISS,
         description=(
-            f"Dismissed all {count} raided tracks"
+            "Dismissed all {} raided tracks".format(count)
         ),
         playlist_id=playlist_id,
     )
 
     return json_success(
-        f"{count} tracks dismissed.",
+        "{} tracks dismissed.".format(count),
         dismissed_count=count,
     )

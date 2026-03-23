@@ -14,6 +14,7 @@ class JobType(StrEnum):
     SHUFFLE = "shuffle"
     RAID_AND_SHUFFLE = "raid_and_shuffle"
     ROTATE = "rotate"
+    DRIP = "drip"
 
 
 class RotationMode(StrEnum):
@@ -44,6 +45,7 @@ class SnapshotType(StrEnum):
     AUTO_PRE_RAID = "auto_pre_raid"
     AUTO_PRE_COMMIT = "auto_pre_commit"
     AUTO_PRE_ROTATE = "auto_pre_rotate"
+    AUTO_PRE_DRIP = "auto_pre_drip"
     MANUAL = "manual"
     SCHEDULED_PRE_EXECUTION = "scheduled_pre_execution"
 
@@ -80,6 +82,9 @@ class ActivityType(StrEnum):
     RAID_SYNC_NOW = "raid_sync_now"
     RAID_PROMOTE = "raid_promote"
     RAID_DISMISS = "raid_dismiss"
+    RAID_DRIP = "raid_drip"
+    RAID_LINK_CREATE = "raid_link_create"
+    RAID_LINK_DELETE = "raid_link_delete"
     SETTINGS_CHANGE = "settings_change"
     LOGIN = "login"
     LOGOUT = "logout"

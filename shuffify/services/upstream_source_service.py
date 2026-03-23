@@ -293,6 +293,31 @@ class UpstreamSourceService:
         return True
 
     @staticmethod
+    def update_raid_count(
+        user_id: int,
+        source_id: int,
+        raid_count: int,
+    ) -> UpstreamSource:
+        """Update a source's raid_count.
+
+        Raises UpstreamSourceNotFoundError if not found.
+        """
+        source = UpstreamSource.query.filter_by(
+            id=source_id,
+            user_id=user_id,
+        ).first()
+        if not source:
+            raise UpstreamSourceNotFoundError(
+                f"Source {source_id} not found"
+            )
+        source.raid_count = raid_count
+        safe_commit(
+            f"update raid_count for source {source_id}",
+            UpstreamSourceError,
+        )
+        return source
+
+    @staticmethod
     def list_all_sources_for_user(
         spotify_id: str,
     ) -> List[UpstreamSource]:

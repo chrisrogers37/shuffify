@@ -1,11 +1,14 @@
 """
-Raid executor: pull new tracks from source playlists into target.
+Raid executor: pull new tracks from source playlists into the
+raid playlist and stage them in PendingRaidTrack for provenance.
 
-Tracks are staged in PendingRaidTrack for user review instead of
-being added directly to Spotify.
+Tracks are added to the raid Spotify playlist (if linked) AND
+recorded in the database. Per-source raid_count controls how
+many tracks each source contributes.
 """
 
 import logging
+import random
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -23,6 +26,9 @@ from shuffify.services.pending_raid_service import (
     PendingRaidService,
 )
 from shuffify.services.source_resolver import SourceResolver
+from shuffify.services.raid_dedupe import (
+    build_full_exclusion_set,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +37,8 @@ def execute_raid(
     schedule: Schedule, api: SpotifyAPI
 ) -> dict:
     """
-    Pull new tracks from source playlists and stage them
-    for user review in the Track Inbox.
+    Pull new tracks from source playlists, add to the raid
+    playlist (if linked), and stage in PendingRaidTrack.
     """
     from shuffify.services.executors.base_executor import (
         JobExecutionError,
@@ -43,8 +49,9 @@ def execute_raid(
 
     if not source_ids:
         logger.info(
-            f"Schedule {schedule.id}: no source playlists "
-            f"configured, skipping raid"
+            "Schedule %s: no source playlists "
+            "configured, skipping raid",
+            schedule.id,
         )
         target_tracks = api.get_playlist_tracks(target_id)
         return {
@@ -53,34 +60,37 @@ def execute_raid(
         }
 
     try:
-        target_tracks = api.get_playlist_tracks(target_id)
-        target_uris = {
-            t.get("uri")
-            for t in target_tracks
-            if t.get("uri")
-        }
-
-        _auto_snapshot_before_raid(
-            schedule, target_tracks
+        exclusion_set, target_count = (
+            build_full_exclusion_set(
+                api, target_id, schedule.user_id
+            )
         )
 
-        new_uris = _fetch_raid_sources(
-            api, source_ids, target_uris,
+        _auto_snapshot_before_raid(
+            schedule, api, target_id
+        )
+
+        new_uris = _fetch_raid_sources_with_limits(
+            api, source_ids, exclusion_set,
             user_id=schedule.user_id,
         )
 
         if not new_uris:
             logger.info(
-                f"Schedule {schedule.id}: "
-                f"no new tracks to add"
+                "Schedule %s: no new tracks to add",
+                schedule.id,
             )
             return {
                 "tracks_added": 0,
-                "tracks_total": len(target_tracks),
+                "tracks_total": target_count,
             }
 
-        # Fetch metadata and stage for review
         track_dicts = _build_track_dicts(api, new_uris)
+
+        _add_to_raid_playlist(
+            api, schedule.user_id, target_id, new_uris
+        )
+
         staged = PendingRaidService.stage_tracks(
             user_id=schedule.user_id,
             target_playlist_id=target_id,
@@ -89,54 +99,56 @@ def execute_raid(
         )
 
         logger.info(
-            f"Schedule {schedule.id}: staged "
-            f"{staged} tracks for review on "
-            f"{schedule.target_playlist_name}"
+            "Schedule %s: staged %d tracks for "
+            "review on %s",
+            schedule.id,
+            staged,
+            schedule.target_playlist_name,
         )
 
         return {
             "tracks_added": staged,
-            "tracks_total": len(target_tracks),
+            "tracks_total": target_count,
         }
 
     except SpotifyNotFoundError:
         raise JobExecutionError(
-            f"Target playlist {target_id} not found. "
-            f"It may have been deleted."
+            "Target playlist {} not found. "
+            "It may have been deleted.".format(
+                target_id
+            )
         )
     except SpotifyAPIError as e:
         raise JobExecutionError(
-            f"Spotify API error during raid: {e}"
+            "Spotify API error during raid: {}".format(e)
         )
 
 
 def _auto_snapshot_before_raid(
     schedule: Schedule,
-    target_tracks: list,
+    api: SpotifyAPI,
+    target_id: str,
 ) -> None:
-    """Create an auto-snapshot before a scheduled raid
-    if enabled."""
+    """Create auto-snapshots before a scheduled raid."""
     try:
+        if not PlaylistSnapshotService.is_auto_snapshot_enabled(
+            schedule.user_id
+        ):
+            return
+
+        target_tracks = api.get_playlist_tracks(target_id)
         pre_raid_uris = [
             t.get("uri")
             for t in target_tracks
             if t.get("uri")
         ]
-        if (
-            pre_raid_uris
-            and PlaylistSnapshotService
-            .is_auto_snapshot_enabled(
-                schedule.user_id
-            )
-        ):
+        if pre_raid_uris:
             PlaylistSnapshotService.create_snapshot(
                 user_id=schedule.user_id,
-                playlist_id=(
-                    schedule.target_playlist_id
-                ),
+                playlist_id=target_id,
                 playlist_name=(
                     schedule.target_playlist_name
-                    or schedule.target_playlist_id
+                    or target_id
                 ),
                 track_uris=pre_raid_uris,
                 snapshot_type=(
@@ -149,26 +161,94 @@ def _auto_snapshot_before_raid(
     except Exception as snap_err:
         logger.warning(
             "Auto-snapshot before scheduled "
-            f"raid failed: {snap_err}"
+            "raid failed: %s", snap_err
         )
 
 
-def _fetch_raid_sources(
+def _add_to_raid_playlist(
+    api, user_id, target_id, uris,
+):
+    """Add raided tracks to the raid Spotify playlist
+    if a RaidPlaylistLink exists."""
+    from shuffify.services.raid_link_service import (
+        RaidLinkService,
+    )
+
+    link = RaidLinkService.get_link_for_playlist(
+        user_id, target_id
+    )
+    if not link:
+        return
+
+    try:
+        api.playlist_add_items(
+            link.raid_playlist_id, uris
+        )
+        logger.info(
+            "Added %d tracks to raid playlist %s",
+            len(uris), link.raid_playlist_id,
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to add tracks to raid "
+            "playlist: %s", e
+        )
+
+
+def _fetch_raid_sources_with_limits(
     api: SpotifyAPI,
     source_ids: list,
-    target_uris: set,
+    exclusion_set: set,
     user_id: Optional[int] = None,
 ) -> List[str]:
     """
-    Fetch new tracks from source playlists not already
-    in target using multi-pathway resolution.
-
-    Returns:
-        List of new track URIs (deduplicated).
+    Fetch new tracks from sources with per-source
+    raid_count limits and chain-wide deduplication.
     """
     resolver = SourceResolver()
 
-    # Load full UpstreamSource records if user_id available
+    # Load UpstreamSource records for raid_count
+    sources = _load_sources(
+        source_ids, user_id
+    )
+
+    results = resolver.resolve_all(
+        sources, api, exclude_uris=exclusion_set
+    )
+
+    # Apply per-source raid_count limits
+    all_new_uris = []
+
+    for source, result in results.source_results:
+        raid_count = source.raid_count or 5
+        source_uris = (
+            result.track_uris if result else []
+        )
+
+        if len(source_uris) > raid_count:
+            source_uris = random.sample(
+                source_uris, raid_count
+            )
+
+        all_new_uris.extend(source_uris)
+
+    # Update tracking fields on resolved sources
+    _update_source_tracking(results)
+
+    # Deduplicate across sources
+    seen = set()
+    deduped = []
+    for uri in all_new_uris:
+        if uri not in seen and uri not in exclusion_set:
+            seen.add(uri)
+            deduped.append(uri)
+
+    return deduped
+
+
+def _load_sources(source_ids, user_id):
+    """Load UpstreamSource records from DB or create
+    ephemeral ones."""
     sources = None
     if user_id:
         try:
@@ -195,6 +275,7 @@ def _fetch_raid_sources(
                         UpstreamSource(
                             source_playlist_id=sid,
                             source_type="external",
+                            raid_count=5,
                         )
                     )
         except Exception as e:
@@ -210,20 +291,23 @@ def _fetch_raid_sources(
             UpstreamSource(
                 source_playlist_id=sid,
                 source_type="external",
+                raid_count=5,
             )
             for sid in source_ids
         ]
 
-    results = resolver.resolve_all(
-        sources, api, exclude_uris=target_uris
-    )
+    return sources
 
-    # Update tracking fields on resolved sources
+
+def _update_source_tracking(results):
+    """Update tracking fields on resolved sources."""
     now = datetime.now(timezone.utc)
     for source, result in results.source_results:
-        if source.id:  # Only update persisted sources
+        if source.id:
             source.last_resolved_at = now
-            source.last_resolve_pathway = result.pathway_name
+            source.last_resolve_pathway = (
+                result.pathway_name
+            )
             if result.success:
                 source.last_resolve_status = "success"
             elif result.partial:
@@ -236,8 +320,6 @@ def _fetch_raid_sources(
         logger.warning(
             "Failed to update source tracking: %s", e
         )
-
-    return results.new_uris
 
 
 def _build_track_dicts(
