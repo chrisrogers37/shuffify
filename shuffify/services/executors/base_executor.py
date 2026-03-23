@@ -366,6 +366,9 @@ class JobExecutorService:
         from shuffify.services.executors.rotate_executor import (  # noqa: E501
             execute_rotate,
         )
+        from shuffify.services.executors.drip_executor import (  # noqa: E501
+            execute_drip,
+        )
 
         if schedule.job_type == JobType.RAID:
             return execute_raid(schedule, api)
@@ -380,6 +383,8 @@ class JobExecutorService:
             return result
         elif schedule.job_type == JobType.ROTATE:
             return execute_rotate(schedule, api)
+        elif schedule.job_type == JobType.DRIP:
+            return execute_drip(schedule, api)
         else:
             raise JobExecutionError(
                 f"Unknown job type: {schedule.job_type}"

@@ -20,6 +20,7 @@ from shuffify.models.db import (
     LoginHistory,
     PlaylistSnapshot,
     ActivityLog,
+    RaidPlaylistLink,
 )
 from shuffify.models.playlist import Playlist
 
@@ -34,5 +35,6 @@ __all__ = [
     "LoginHistory",
     "PlaylistSnapshot",
     "ActivityLog",
+    "RaidPlaylistLink",
     "Playlist",
 ]

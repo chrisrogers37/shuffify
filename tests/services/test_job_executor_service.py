@@ -75,34 +75,43 @@ class TestExecuteRaid:
 
     @patch(
         "shuffify.services.executors.raid_executor"
+        "._add_to_raid_playlist"
+    )
+    @patch(
+        "shuffify.services.executors.raid_executor"
         ".PendingRaidService"
     )
     def test_raid_stages_new_tracks(
-        self, mock_pending, mock_schedule, mock_api
+        self, mock_pending, mock_add_raid,
+        mock_schedule, mock_api,
     ):
         """Should stage tracks from source not in target."""
         mock_schedule.job_type = "raid"
         mock_pending.stage_tracks.return_value = 3
 
-        # Target has tracks 1-5
-        mock_api.get_playlist_tracks.side_effect = [
-            # First call: target tracks
-            [
-                {
-                    "id": f"track{i}",
-                    "uri": f"spotify:track:track{i}",
-                }
-                for i in range(1, 6)
-            ],
-            # Second call: source tracks (some new)
-            [
-                {
-                    "id": f"track{i}",
-                    "uri": f"spotify:track:track{i}",
-                }
-                for i in range(4, 9)
-            ],
+        target_tracks = [
+            {
+                "id": f"track{i}",
+                "uri": f"spotify:track:track{i}",
+            }
+            for i in range(1, 6)
         ]
+        source_tracks = [
+            {
+                "id": f"track{i}",
+                "uri": f"spotify:track:track{i}",
+            }
+            for i in range(4, 9)
+        ]
+
+        def get_tracks(pid):
+            if pid == "target_pl":
+                return target_tracks
+            return source_tracks
+
+        mock_api.get_playlist_tracks.side_effect = (
+            get_tracks
+        )
 
         result = execute_raid(
             mock_schedule, mock_api
@@ -129,10 +138,9 @@ class TestExecuteRaid:
             }
             for i in range(1, 4)
         ]
-        mock_api.get_playlist_tracks.side_effect = [
-            same_tracks,
-            same_tracks,
-        ]
+        mock_api.get_playlist_tracks.return_value = (
+            same_tracks
+        )
 
         result = execute_raid(
             mock_schedule, mock_api

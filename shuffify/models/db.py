@@ -107,6 +107,11 @@ class User(db.Model):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    raid_playlist_links = db.relationship(
+        "RaidPlaylistLink",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the User to a dictionary."""
@@ -375,6 +380,9 @@ class UpstreamSource(db.Model):
         db.String(20), nullable=True
     )  # "success", "partial", "failed"
     last_track_count = db.Column(db.Integer, nullable=True)
+    raid_count = db.Column(
+        db.Integer, nullable=False, default=5
+    )
     created_at = db.Column(
         db.DateTime,
         nullable=False,
@@ -412,6 +420,7 @@ class UpstreamSource(db.Model):
             "last_resolve_pathway": self.last_resolve_pathway,
             "last_resolve_status": self.last_resolve_status,
             "last_track_count": self.last_track_count,
+            "raid_count": self.raid_count,
             "created_at": (
                 self.created_at.isoformat()
                 if self.created_at
@@ -953,6 +962,107 @@ class PlaylistPair(db.Model):
             f"<PlaylistPair {self.id}: "
             f"'{self.production_playlist_name}' -> "
             f"'{self.archive_playlist_name}'>"
+        )
+
+
+class RaidPlaylistLink(db.Model):
+    """
+    Links a target playlist to a raid staging playlist.
+
+    Raid sources feed into the raid playlist, and tracks drip from
+    the raid playlist into the target. Mirrors the PlaylistPair
+    pattern (production/archive) for the upstream direction.
+    """
+
+    __tablename__ = "raid_playlist_links"
+
+    id = db.Column(
+        db.Integer, primary_key=True, autoincrement=True
+    )
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    target_playlist_id = db.Column(
+        db.String(255), nullable=False
+    )
+    target_playlist_name = db.Column(
+        db.String(255), nullable=True
+    )
+    raid_playlist_id = db.Column(
+        db.String(255), nullable=False
+    )
+    raid_playlist_name = db.Column(
+        db.String(255), nullable=True
+    )
+    drip_count = db.Column(
+        db.Integer, nullable=False, default=3
+    )
+    drip_enabled = db.Column(
+        db.Boolean, nullable=False, default=False
+    )
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # Relationships
+    user = db.relationship(
+        "User", back_populates="raid_playlist_links"
+    )
+
+    # Unique constraint: one raid link per user per target
+    __table_args__ = (
+        db.UniqueConstraint(
+            "user_id",
+            "target_playlist_id",
+            name="uq_raid_link_user_target",
+        ),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize the RaidPlaylistLink to a dictionary."""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "target_playlist_id": (
+                self.target_playlist_id
+            ),
+            "target_playlist_name": (
+                self.target_playlist_name
+            ),
+            "raid_playlist_id": self.raid_playlist_id,
+            "raid_playlist_name": (
+                self.raid_playlist_name
+            ),
+            "drip_count": self.drip_count,
+            "drip_enabled": self.drip_enabled,
+            "created_at": (
+                self.created_at.isoformat()
+                if self.created_at
+                else None
+            ),
+            "updated_at": (
+                self.updated_at.isoformat()
+                if self.updated_at
+                else None
+            ),
+        }
+
+    def __repr__(self) -> str:
+        return (
+            f"<RaidPlaylistLink {self.id}: "
+            f"'{self.target_playlist_name}' <- "
+            f"'{self.raid_playlist_name}'>"
         )
 
 

@@ -191,6 +191,9 @@ class RaidSyncService:
         from shuffify.services.upstream_source_service import (
             UpstreamSourceService,
         )
+        from shuffify.services.raid_link_service import (
+            RaidLinkService,
+        )
 
         max_sources = (
             UpstreamSourceService.MAX_SOURCES_PER_TARGET
@@ -203,6 +206,8 @@ class RaidSyncService:
             return {
                 "sources": [],
                 "schedule": None,
+                "raid_link": None,
+                "drip_schedule": None,
                 "source_count": 0,
                 "max_sources": max_sources,
                 "has_schedule": False,
@@ -217,11 +222,25 @@ class RaidSyncService:
         schedule = RaidSyncService._find_raid_schedule(
             user.id, target_playlist_id
         )
+        raid_link = RaidLinkService.get_link_for_playlist(
+            user.id, target_playlist_id
+        )
+        drip_schedule = RaidSyncService._find_drip_schedule(
+            user.id, target_playlist_id
+        )
 
         return {
             "sources": [s.to_dict() for s in sources],
             "schedule": (
                 schedule.to_dict() if schedule else None
+            ),
+            "raid_link": (
+                raid_link.to_dict()
+                if raid_link else None
+            ),
+            "drip_schedule": (
+                drip_schedule.to_dict()
+                if drip_schedule else None
             ),
             "source_count": len(sources),
             "max_sources": max_sources,
@@ -336,37 +355,41 @@ class RaidSyncService:
     ):
         """Execute raid without a schedule (inline).
 
-        Stages tracks for review instead of adding directly.
+        Stages tracks for review and adds to raid playlist.
+        Uses chain-wide deduplication.
         """
         from shuffify.services.executors import (
             JobExecutorService,
         )
         from shuffify.services.executors.raid_executor import (
-            _fetch_raid_sources,
+            _fetch_raid_sources_with_limits,
             _build_track_dicts,
+            _add_to_raid_playlist,
         )
         from shuffify.services.pending_raid_service import (
             PendingRaidService,
         )
+        from shuffify.services.raid_dedupe import (
+            build_full_exclusion_set,
+        )
 
         try:
             api = JobExecutorService._get_spotify_api(user)
-            target_tracks = api.get_playlist_tracks(
-                target_playlist_id
+
+            # Chain-wide dedupe
+            exclusion_set = build_full_exclusion_set(
+                api, target_playlist_id, user.id
             )
-            target_uris = {
-                t.get("uri")
-                for t in target_tracks
-                if t.get("uri")
-            }
 
             logger.info(
-                "Inline raid: target has %d tracks",
-                len(target_tracks),
+                "Inline raid: exclusion set has "
+                "%d URIs",
+                len(exclusion_set),
             )
 
-            new_uris = _fetch_raid_sources(
-                api, source_playlist_ids, target_uris,
+            new_uris = _fetch_raid_sources_with_limits(
+                api, source_playlist_ids,
+                exclusion_set,
                 user_id=user.id,
             )
 
@@ -380,6 +403,13 @@ class RaidSyncService:
                 track_dicts = _build_track_dicts(
                     api, new_uris
                 )
+
+                # Add to raid playlist
+                _add_to_raid_playlist(
+                    api, user.id,
+                    target_playlist_id, new_uris,
+                )
+
                 staged = PendingRaidService.stage_tracks(
                     user_id=user.id,
                     target_playlist_id=(
@@ -387,6 +417,10 @@ class RaidSyncService:
                     ),
                     tracks=track_dicts,
                 )
+
+            target_tracks = api.get_playlist_tracks(
+                target_playlist_id
+            )
 
             logger.info(
                 "Inline raid complete: "
@@ -404,7 +438,7 @@ class RaidSyncService:
             raise
         except Exception as e:
             raise RaidSyncError(
-                f"Raid execution failed: {e}"
+                "Raid execution failed: {}".format(e)
             )
 
     @staticmethod
@@ -478,6 +512,94 @@ class RaidSyncService:
         }
 
     @staticmethod
+    def drip_now(spotify_id, target_playlist_id):
+        """Trigger an immediate drip from raid playlist
+        to target."""
+        from shuffify.services.executors import (
+            JobExecutorService,
+            JobExecutionError,
+        )
+        from shuffify.services.executors.drip_executor import (
+            execute_drip,
+        )
+        from shuffify.services.raid_link_service import (
+            RaidLinkService,
+        )
+
+        user = User.query.filter_by(
+            spotify_id=spotify_id
+        ).first()
+        if not user:
+            raise RaidSyncError("User not found")
+
+        link = RaidLinkService.get_link_for_playlist(
+            user.id, target_playlist_id
+        )
+        if not link:
+            raise RaidSyncError(
+                "No raid playlist link found. "
+                "Create a raid link first."
+            )
+
+        # Use drip schedule if exists
+        schedule = RaidSyncService._find_drip_schedule(
+            user.id, target_playlist_id
+        )
+
+        if schedule:
+            try:
+                result = JobExecutorService.execute_now(
+                    schedule.id, user.id
+                )
+                return {
+                    "tracks_added": result.get(
+                        "tracks_added", 0
+                    ),
+                    "tracks_total": result.get(
+                        "tracks_total", 0
+                    ),
+                    "status": "success",
+                }
+            except JobExecutionError as e:
+                raise RaidSyncError(str(e))
+
+        # Inline drip (no schedule)
+        try:
+            api = JobExecutorService._get_spotify_api(user)
+            # Create a mock schedule for drip executor
+            mock_schedule = Schedule(
+                id=0,
+                user_id=user.id,
+                job_type=JobType.DRIP,
+                target_playlist_id=target_playlist_id,
+                target_playlist_name=(
+                    link.target_playlist_name
+                ),
+                algorithm_params={
+                    "drip_count": link.drip_count,
+                },
+                is_enabled=True,
+            )
+            # Temporarily enable drip for inline exec
+            link.drip_enabled = True
+            result = execute_drip(mock_schedule, api)
+            return {
+                "tracks_added": result.get(
+                    "tracks_added", 0
+                ),
+                "tracks_total": result.get(
+                    "tracks_total", 0
+                ),
+                "status": "success",
+            }
+        except RaidSyncError:
+            raise
+        except Exception as e:
+            raise RaidSyncError(
+                "Drip execution failed: {}".format(e)
+            )
+
+    @staticmethod
     def _find_raid_schedule(user_id, target_playlist_id):
         """Find a raid schedule for user + target playlist."""
         return Schedule.query.filter(
@@ -487,6 +609,16 @@ class RaidSyncService:
                 JobType.RAID,
                 JobType.RAID_AND_SHUFFLE,
             ]),
+        ).first()
+
+    @staticmethod
+    def _find_drip_schedule(user_id, target_playlist_id):
+        """Find a drip schedule for user + target playlist."""
+        return Schedule.query.filter(
+            Schedule.user_id == user_id,
+            Schedule.target_playlist_id
+            == target_playlist_id,
+            Schedule.job_type == JobType.DRIP,
         ).first()
 
     @staticmethod

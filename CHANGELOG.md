@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Raid Playlist System** - Mirror the Rotation/Archive pairing model for upstream raid
+  - `RaidPlaylistLink` model links a target playlist to a real Spotify raid staging playlist
+  - Auto-creates `{Target Name} [Raids]` playlist on Spotify (private, mirrors archive naming)
+  - Per-source `raid_count` on `UpstreamSource` controls how many tracks each source contributes
+  - Configurable `drip_count` controls how many tracks move from raid playlist to target per execution
+  - `drip_enabled` toggle for automatic drip scheduling
+- **Drip Executor** - New job type (`DRIP`) moves tracks from raid playlist into target
+  - Random selection from raid playlist (not FIFO)
+  - Adds to top of target playlist (position 0)
+  - Removes dripped tracks from raid playlist
+  - Updates `PendingRaidTrack` status to PROMOTED for provenance tracking
+  - Pre-drip snapshots for both target and raid playlist (`AUTO_PRE_DRIP`)
+- **Chain-Wide Deduplication** - Raid exclusion set now checks the entire linked system
+  - Target playlist + Raid playlist + Archive playlist + Dismissed tracks
+  - Prevents duplicate tracks across all linked playlists
+- **Raid Link CRUD Endpoints** - Full management of raid playlist links
+  - `POST /playlist/<id>/raid-link` - Create link (new or existing raid playlist)
+  - `PUT /playlist/<id>/raid-link` - Update drip settings
+  - `DELETE /playlist/<id>/raid-link` - Remove link
+  - `PUT /playlist/<id>/raid-source-count` - Update per-source raid count
+  - `POST /playlist/<id>/drip-now` - Manual drip trigger
+  - `POST /playlist/<id>/drip-schedule-toggle` - Toggle drip schedule
+- **Promote/Dismiss Sync** - Promoting or dismissing tracks now also removes from raid Spotify playlist
+- **New Enums** - `JobType.DRIP`, `SnapshotType.AUTO_PRE_DRIP`, `ActivityType.RAID_DRIP/RAID_LINK_CREATE/RAID_LINK_DELETE`
+
 ### Fixed
 - **Archive Playlists Created as Public** - Archive playlists now explicitly set to private after creation
   - Spotify API may ignore `public: false` on create if user's account defaults to public playlists
