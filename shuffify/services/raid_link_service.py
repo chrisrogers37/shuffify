@@ -7,7 +7,10 @@ Mirrors PlaylistPairService for the upstream raid direction.
 import logging
 
 from shuffify.models.db import db, RaidPlaylistLink
-from shuffify.services.base import safe_commit
+from shuffify.services.base import (
+    safe_commit,
+    create_private_playlist,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -141,32 +144,12 @@ class RaidLinkService:
 
         Returns (playlist_id, playlist_name).
         """
-        raid_name = f"{name} [Raids]"
-        result = api.create_user_playlist(
+        return create_private_playlist(
+            api,
             user_id,
-            raid_name,
-            public=False,
+            name,
+            suffix="Raids",
             description=(
                 "Raid staging playlist for incoming tracks"
             ),
         )
-        playlist_id = result["id"]
-
-        # Ensure private
-        try:
-            api.update_playlist_details(
-                playlist_id, public=False
-            )
-        except Exception as e:
-            logger.warning(
-                "Could not set raid playlist to "
-                "private: %s",
-                e,
-            )
-
-        logger.info(
-            "Created raid playlist '%s' (%s)",
-            raid_name,
-            playlist_id,
-        )
-        return playlist_id, raid_name

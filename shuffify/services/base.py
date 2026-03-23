@@ -6,7 +6,7 @@ and entity ownership verification. Used across all service modules.
 """
 
 import logging
-from typing import Type, Optional
+from typing import Type, Optional, Tuple
 
 from shuffify.models.db import db, User
 
@@ -113,3 +113,50 @@ def get_owned_entity(
             f"{entity_class.__name__} {entity_id} not found"
         )
     return entity
+
+
+def create_private_playlist(
+    api,
+    spotify_user_id: str,
+    base_name: str,
+    suffix: str,
+    description: str,
+) -> Tuple[str, str]:
+    """
+    Create a private Spotify playlist with a standard naming
+    convention: ``{base_name} [{suffix}]``.
+
+    Works around a Spotify API quirk where ``public=False`` on
+    create may be ignored if the user's account defaults to
+    public. A follow-up PUT forces private visibility.
+
+    Returns:
+        (playlist_id, playlist_name) tuple.
+    """
+    playlist_name = f"{base_name} [{suffix}]"
+    result = api.create_user_playlist(
+        spotify_user_id,
+        playlist_name,
+        public=False,
+        description=description,
+    )
+    playlist_id = result["id"]
+
+    try:
+        api.update_playlist_details(
+            playlist_id, public=False
+        )
+    except Exception as e:
+        logger.warning(
+            "Could not set playlist '%s' to "
+            "private: %s",
+            playlist_name,
+            e,
+        )
+
+    logger.info(
+        "Created playlist '%s' (%s)",
+        playlist_name,
+        playlist_id,
+    )
+    return playlist_id, playlist_name

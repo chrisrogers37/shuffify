@@ -60,16 +60,16 @@ def execute_raid(
         }
 
     try:
-        # Build chain-wide exclusion set
-        exclusion_set = build_full_exclusion_set(
-            api, target_id, schedule.user_id
+        exclusion_set, target_count = (
+            build_full_exclusion_set(
+                api, target_id, schedule.user_id
+            )
         )
 
         _auto_snapshot_before_raid(
             schedule, api, target_id
         )
 
-        # Fetch from each source with per-source limits
         new_uris = _fetch_raid_sources_with_limits(
             api, source_ids, exclusion_set,
             user_id=schedule.user_id,
@@ -80,23 +80,17 @@ def execute_raid(
                 "Schedule %s: no new tracks to add",
                 schedule.id,
             )
-            target_tracks = api.get_playlist_tracks(
-                target_id
-            )
             return {
                 "tracks_added": 0,
-                "tracks_total": len(target_tracks),
+                "tracks_total": target_count,
             }
 
-        # Fetch metadata
         track_dicts = _build_track_dicts(api, new_uris)
 
-        # Add to raid playlist if linked
         _add_to_raid_playlist(
             api, schedule.user_id, target_id, new_uris
         )
 
-        # Stage in DB for provenance tracking
         staged = PendingRaidService.stage_tracks(
             user_id=schedule.user_id,
             target_playlist_id=target_id,
@@ -112,10 +106,9 @@ def execute_raid(
             schedule.target_playlist_name,
         )
 
-        target_tracks = api.get_playlist_tracks(target_id)
         return {
             "tracks_added": staged,
-            "tracks_total": len(target_tracks),
+            "tracks_total": target_count,
         }
 
     except SpotifyNotFoundError:

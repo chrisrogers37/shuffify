@@ -28,6 +28,7 @@ from shuffify.services.raid_link_service import (
     RaidLinkNotFoundError,
 )
 from shuffify.services.upstream_source_service import (
+    UpstreamSourceService,
     UpstreamSourceNotFoundError,
     UpstreamSourceLimitError,
 )
@@ -265,22 +266,16 @@ def raid_source_count_update(
     if err:
         return err
 
-    from shuffify.models.db import db, UpstreamSource
-
-    source = UpstreamSource.query.filter_by(
-        id=req.source_id,
-        user_id=user.id,
-    ).first()
-    if not source:
+    try:
+        source = UpstreamSourceService.update_raid_count(
+            user.id, req.source_id, req.raid_count
+        )
+        return json_success(
+            "Source raid count updated.",
+            source=source.to_dict(),
+        )
+    except UpstreamSourceNotFoundError:
         return json_error("Source not found", 404)
-
-    source.raid_count = req.raid_count
-    db.session.commit()
-
-    return json_success(
-        "Source raid count updated.",
-        source=source.to_dict(),
-    )
 
 
 # =============================================================
@@ -655,27 +650,13 @@ def drip_now(playlist_id, client=None, user=None):
 # =============================================================
 
 
-@main.route(
-    "/playlist/<playlist_id>/raid-schedule-toggle",
-    methods=["POST"],
-)
-@require_auth_and_db
-def raid_schedule_toggle(
-    playlist_id, client=None, user=None
-):
-    """Toggle the raid schedule on/off."""
-    schedule = RaidSyncService._find_raid_schedule(
-        user.id, playlist_id
-    )
-    if not schedule:
-        return json_error("No raid schedule found", 404)
-
+def _toggle_schedule(schedule, user_id, playlist_id, label):
+    """Shared toggle logic for raid and drip schedules."""
     try:
         schedule = SchedulerService.toggle_schedule(
-            schedule.id, user.id
+            schedule.id, user_id
         )
 
-        # Update APScheduler
         try:
             if schedule.is_enabled:
                 from shuffify.scheduler import (
@@ -692,34 +673,54 @@ def raid_schedule_toggle(
                 "APScheduler toggle failed: %s", e
             )
 
+        state = (
+            "enabled"
+            if schedule.is_enabled
+            else "disabled"
+        )
         log_activity(
-            user_id=user.id,
+            user_id=user_id,
             activity_type=ActivityType.SCHEDULE_TOGGLE,
-            description=(
-                "Raid schedule {}".format(
-                    "enabled"
-                    if schedule.is_enabled
-                    else "disabled"
-                )
+            description="{} schedule {}".format(
+                label, state
             ),
             playlist_id=playlist_id,
         )
 
         return json_success(
-            "Schedule {}.".format(
-                "enabled"
-                if schedule.is_enabled
-                else "disabled"
-            ),
+            "{} schedule {}.".format(label, state),
             schedule=schedule.to_dict(),
         )
     except Exception as e:
         logger.error(
-            "Failed to toggle schedule: %s", e
+            "Failed to toggle %s schedule: %s",
+            label.lower(), e,
         )
         return json_error(
-            "Failed to toggle schedule", 500
+            "Failed to toggle {} schedule".format(
+                label.lower()
+            ),
+            500,
         )
+
+
+@main.route(
+    "/playlist/<playlist_id>/raid-schedule-toggle",
+    methods=["POST"],
+)
+@require_auth_and_db
+def raid_schedule_toggle(
+    playlist_id, client=None, user=None
+):
+    """Toggle the raid schedule on/off."""
+    schedule = RaidSyncService._find_raid_schedule(
+        user.id, playlist_id
+    )
+    if not schedule:
+        return json_error("No raid schedule found", 404)
+    return _toggle_schedule(
+        schedule, user.id, playlist_id, "Raid"
+    )
 
 
 @main.route(
@@ -736,56 +737,9 @@ def drip_schedule_toggle(
     )
     if not schedule:
         return json_error("No drip schedule found", 404)
-
-    try:
-        schedule = SchedulerService.toggle_schedule(
-            schedule.id, user.id
-        )
-
-        try:
-            if schedule.is_enabled:
-                from shuffify.scheduler import (
-                    add_job_for_schedule,
-                )
-                add_job_for_schedule(schedule)
-            else:
-                from shuffify.scheduler import (
-                    remove_job_for_schedule,
-                )
-                remove_job_for_schedule(schedule.id)
-        except Exception as e:
-            logger.warning(
-                "APScheduler toggle failed: %s", e
-            )
-
-        log_activity(
-            user_id=user.id,
-            activity_type=ActivityType.SCHEDULE_TOGGLE,
-            description=(
-                "Drip schedule {}".format(
-                    "enabled"
-                    if schedule.is_enabled
-                    else "disabled"
-                )
-            ),
-            playlist_id=playlist_id,
-        )
-
-        return json_success(
-            "Drip schedule {}.".format(
-                "enabled"
-                if schedule.is_enabled
-                else "disabled"
-            ),
-            schedule=schedule.to_dict(),
-        )
-    except Exception as e:
-        logger.error(
-            "Failed to toggle drip schedule: %s", e
-        )
-        return json_error(
-            "Failed to toggle drip schedule", 500
-        )
+    return _toggle_schedule(
+        schedule, user.id, playlist_id, "Drip"
+    )
 
 
 @main.route(

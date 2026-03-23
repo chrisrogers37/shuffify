@@ -73,7 +73,6 @@ def execute_drip(
     try:
         raid_id = link.raid_playlist_id
 
-        # Fetch raid playlist tracks
         raid_tracks = api.get_playlist_tracks(raid_id)
         raid_uris = [
             t["uri"]
@@ -95,17 +94,14 @@ def execute_drip(
                 "tracks_total": len(target_tracks),
             }
 
-        # Snapshot before drip
         _auto_snapshot_before_drip(
             schedule, api, target_id, raid_id
         )
 
-        # Select random tracks to drip
         drip_uris = _select_drip_tracks(
             raid_uris, drip_count
         )
 
-        # Dedupe against target (safety check)
         target_tracks = api.get_playlist_tracks(target_id)
         target_uri_set = {
             t.get("uri")
@@ -128,15 +124,10 @@ def execute_drip(
                 "tracks_total": len(target_tracks),
             }
 
-        # Add to top of target playlist (position 0)
         api.playlist_add_items(
             target_id, drip_uris, position=0
         )
-
-        # Remove from raid playlist
         api.playlist_remove_items(raid_id, drip_uris)
-
-        # Update PendingRaidTrack status
         _mark_dripped_as_promoted(
             user_id, target_id, drip_uris
         )
@@ -247,7 +238,8 @@ def _mark_dripped_as_promoted(
     user_id, target_playlist_id, drip_uris,
 ):
     """Mark dripped tracks as PROMOTED in the DB."""
-    from shuffify.models.db import db, PendingRaidTrack
+    from shuffify.models.db import PendingRaidTrack
+    from shuffify.services.base import safe_commit
 
     now = datetime.now(timezone.utc)
     try:
@@ -265,7 +257,9 @@ def _mark_dripped_as_promoted(
             },
             synchronize_session="fetch",
         )
-        db.session.commit()
+        safe_commit(
+            "mark dripped tracks as promoted",
+        )
     except Exception as e:
         logger.warning(
             "Failed to mark dripped tracks as "

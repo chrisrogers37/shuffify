@@ -46,11 +46,12 @@ class TestBuildFullExclusionSet:
             {"uri": "spotify:track:t2"},
         ]
 
-        result = build_full_exclusion_set(
+        result, count = build_full_exclusion_set(
             mock_api, "target1", user.id
         )
         assert "spotify:track:t1" in result
         assert "spotify:track:t2" in result
+        assert count == 2
 
     def test_includes_raid_playlist_tracks(
         self, user, mock_api
@@ -74,7 +75,7 @@ class TestBuildFullExclusionSet:
             get_tracks
         )
 
-        result = build_full_exclusion_set(
+        result, _ = build_full_exclusion_set(
             mock_api, "target2", user.id
         )
         assert "spotify:track:t1" in result
@@ -102,7 +103,7 @@ class TestBuildFullExclusionSet:
             get_tracks
         )
 
-        result = build_full_exclusion_set(
+        result, _ = build_full_exclusion_set(
             mock_api, "target3", user.id
         )
         assert "spotify:track:a1" in result
@@ -122,7 +123,7 @@ class TestBuildFullExclusionSet:
 
         mock_api.get_playlist_tracks.return_value = []
 
-        result = build_full_exclusion_set(
+        result, _ = build_full_exclusion_set(
             mock_api, "target4", user.id
         )
         assert "spotify:track:dismissed1" in result
@@ -169,7 +170,7 @@ class TestBuildFullExclusionSet:
             get_tracks
         )
 
-        result = build_full_exclusion_set(
+        result, _ = build_full_exclusion_set(
             mock_api, "target5", user.id
         )
         assert "spotify:track:t1" in result
@@ -187,7 +188,7 @@ class TestBuildFullExclusionSet:
             Exception("API error")
         )
 
-        result = build_full_exclusion_set(
+        result, _ = build_full_exclusion_set(
             mock_api, "target_err", user.id
         )
         # Should return empty set, not raise

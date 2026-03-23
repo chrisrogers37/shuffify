@@ -5,7 +5,10 @@ Service for managing playlist pairs (production + archive).
 import logging
 
 from shuffify.models.db import db, PlaylistPair
-from shuffify.services.base import safe_commit
+from shuffify.services.base import (
+    safe_commit,
+    create_private_playlist,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -181,32 +184,12 @@ class PlaylistPairService:
 
         Returns (playlist_id, playlist_name).
         """
-        archive_name = f"{name} [Archive]"
-        result = api.create_user_playlist(
+        return create_private_playlist(
+            api,
             user_id,
-            archive_name,
-            public=False,
-            description="Archive playlist for removed tracks",
+            name,
+            suffix="Archive",
+            description=(
+                "Archive playlist for removed tracks"
+            ),
         )
-        playlist_id = result["id"]
-
-        # Spotify may ignore public=false on create if the
-        # user's account defaults to public playlists.
-        # Explicitly set private via a follow-up PUT call.
-        try:
-            api.update_playlist_details(
-                playlist_id, public=False
-            )
-        except Exception as e:
-            logger.warning(
-                "Could not set archive playlist to "
-                "private: %s",
-                e,
-            )
-
-        logger.info(
-            "Created archive playlist '%s' (%s)",
-            archive_name,
-            playlist_id,
-        )
-        return playlist_id, archive_name

@@ -28,13 +28,16 @@ def build_full_exclusion_set(api, target_id, user_id):
         user_id: Internal database user ID.
 
     Returns:
-        Set of track URIs to exclude.
+        Tuple of (exclusion_set, target_track_count).
+        target_track_count allows callers to avoid a
+        redundant API call for the response total.
     """
     exclusion = set()
+    target_track_count = 0
 
-    # 1. Target playlist tracks
     try:
         target_tracks = api.get_playlist_tracks(target_id)
+        target_track_count = len(target_tracks)
         exclusion |= {
             t.get("uri")
             for t in target_tracks
@@ -46,7 +49,6 @@ def build_full_exclusion_set(api, target_id, user_id):
             "dedupe: %s", e
         )
 
-    # 2. Raid playlist tracks (if link exists)
     try:
         link = RaidPlaylistLink.query.filter_by(
             user_id=user_id,
@@ -67,7 +69,6 @@ def build_full_exclusion_set(api, target_id, user_id):
             "for dedupe: %s", e
         )
 
-    # 3. Archive playlist tracks (if rotation pair exists)
     try:
         pair = PlaylistPair.query.filter_by(
             user_id=user_id,
@@ -88,7 +89,6 @@ def build_full_exclusion_set(api, target_id, user_id):
             "dedupe: %s", e
         )
 
-    # 4. Dismissed tracks (prevent re-staging)
     try:
         dismissed = PendingRaidTrack.query.filter_by(
             user_id=user_id,
@@ -102,4 +102,4 @@ def build_full_exclusion_set(api, target_id, user_id):
             "dedupe: %s", e
         )
 
-    return exclusion
+    return exclusion, target_track_count

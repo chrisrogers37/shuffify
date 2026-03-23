@@ -376,9 +376,10 @@ class RaidSyncService:
         try:
             api = JobExecutorService._get_spotify_api(user)
 
-            # Chain-wide dedupe
-            exclusion_set = build_full_exclusion_set(
-                api, target_playlist_id, user.id
+            exclusion_set, target_count = (
+                build_full_exclusion_set(
+                    api, target_playlist_id, user.id
+                )
             )
 
             logger.info(
@@ -404,7 +405,6 @@ class RaidSyncService:
                     api, new_uris
                 )
 
-                # Add to raid playlist
                 _add_to_raid_playlist(
                     api, user.id,
                     target_playlist_id, new_uris,
@@ -418,20 +418,16 @@ class RaidSyncService:
                     tracks=track_dicts,
                 )
 
-            target_tracks = api.get_playlist_tracks(
-                target_playlist_id
-            )
-
             logger.info(
                 "Inline raid complete: "
                 "staged=%d, total=%d",
                 staged,
-                len(target_tracks),
+                target_count,
             )
 
             return {
                 "tracks_added": staged,
-                "tracks_total": len(target_tracks),
+                "tracks_total": target_count,
                 "status": "success",
             }
         except RaidSyncError:
