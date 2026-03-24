@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Raid Panel UI Parity** - Frontend now exposes all raid playlist features from PR #158
+  - Create/link/unlink raid staging playlist (mirrors Archive panel UX)
+  - Drip toggle, drip count slider, drip schedule badge
+  - "Drip Now" button alongside "Raid Now"
+  - Per-source raid_count editable input on each source card
+- **Playlist Visibility Toggle** - Control public/private from within Shuffify
+  - Globe/lock icon on dashboard playlist tiles (hover actions)
+  - Globe/lock icon in workshop header next to playlist name
+  - New `POST /playlist/<id>/toggle-visibility` endpoint
 - **Raid Playlist System** - Mirror the Rotation/Archive pairing model for upstream raid
   - `RaidPlaylistLink` model links a target playlist to a real Spotify raid staging playlist
   - Auto-creates `{Target Name} [Raids]` playlist on Spotify (private, mirrors archive naming)
@@ -34,6 +43,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **New Enums** - `JobType.DRIP`, `SnapshotType.AUTO_PRE_DRIP`, `ActivityType.RAID_DRIP/RAID_LINK_CREATE/RAID_LINK_DELETE`
 
 ### Fixed
+- **Raid "Playlist not found" on Add URL** - External playlists returning Spotify API 404 now fall back to scraper
+  - Scraper metadata fallback moved into `get_playlist_metadata()` service for all callers
+  - URL parser now handles `/intl-XX/` internationalized URLs, `/embed/` URLs, and trailing slashes
+  - Improved error message explains possible causes (private, deleted, region-restricted)
+- **Redundant API Call in Workshop** - Removed duplicate `get_playlist()` call for public/private field
+  - Added `public` field to `Playlist` model and `to_dict()` — populated from existing API response
+- **Duplicated `_find_key` Utility** - Extracted to shared `find_nested_key()` in source resolver base module
 - **Archive Playlists Created as Public** - Archive playlists now explicitly set to private after creation
   - Spotify API may ignore `public: false` on create if user's account defaults to public playlists
   - Added follow-up `PUT /playlists/{id}` call to force private visibility

@@ -38,7 +38,6 @@ from shuffify.services.scheduler_service import (
 from shuffify.services.playlist_service import (
     PlaylistService,
     PlaylistNotFoundError,
-    scrape_playlist_metadata,
 )
 from shuffify.spotify.url_parser import (
     parse_spotify_playlist_url,
@@ -420,34 +419,18 @@ def raid_add_url(playlist_id, client=None, user=None):
         )
 
     # 3. Get playlist metadata for ownership check.
-    # Try authenticated API first, fall back to public page
-    # scraping if Spotify returns 404 (API restrictions on
-    # non-owned playlists have been expanding since Feb 2026).
-    playlist_meta = None
+    # Service handles API-first with scraper fallback
+    # for non-owned playlists restricted since Feb 2026.
     try:
         playlist_svc = PlaylistService(client)
         playlist_meta = playlist_svc.get_playlist_metadata(
             source_playlist_id
         )
     except PlaylistNotFoundError:
-        logger.info(
-            "API returned 404 for %s, trying scraper fallback",
-            source_playlist_id,
-        )
-        playlist_meta = scrape_playlist_metadata(
-            source_playlist_id
-        )
-        if playlist_meta is None:
-            return json_error(
-                "Playlist not found. It may be private, "
-                "deleted, or region-restricted.",
-                404,
-            )
-        logger.info(
-            "Scraped metadata for %s: '%s' (owner: %s)",
-            source_playlist_id,
-            playlist_meta.get("name"),
-            playlist_meta.get("owner_id"),
+        return json_error(
+            "Playlist not found. It may be private, "
+            "deleted, or region-restricted.",
+            404,
         )
     except Exception as e:
         logger.warning(

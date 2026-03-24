@@ -18,8 +18,10 @@ from shuffify.services.source_resolver.public_scraper_pathway import (
     _extract_with_regex,
     _get_track_uri_from_item,
     _walk_json_for_tracks,
-    _find_key,
     _try_parse_json,
+)
+from shuffify.services.source_resolver.base import (
+    find_nested_key as _find_key,
 )
 
 

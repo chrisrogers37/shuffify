@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from .base import ResolveResult
+from .base import ResolveResult, find_nested_key
 
 logger = logging.getLogger(__name__)
 
@@ -384,7 +384,7 @@ def _extract_from_track_list(html: str) -> List[str]:
         if parsed is None:
             continue
 
-        track_list = _find_key(parsed, "trackList")
+        track_list = find_nested_key(parsed, "trackList")
         if not isinstance(track_list, list):
             continue
 
@@ -524,23 +524,6 @@ def _get_track_uri_from_item(item: Any) -> Optional[str]:
     if isinstance(track_id, str) and len(track_id) == 22:
         return f"spotify:track:{track_id}"
 
-    return None
-
-
-def _find_key(data: Any, key: str) -> Any:
-    """Find the first occurrence of a key in a nested structure."""
-    if isinstance(data, dict):
-        if key in data:
-            return data[key]
-        for value in data.values():
-            result = _find_key(value, key)
-            if result is not None:
-                return result
-    elif isinstance(data, list):
-        for item in data:
-            result = _find_key(item, key)
-            if result is not None:
-                return result
     return None
 
 

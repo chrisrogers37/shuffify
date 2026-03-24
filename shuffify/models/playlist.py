@@ -15,6 +15,7 @@ class Playlist:
     owner_id: str
     description: Optional[str] = None
     total_tracks: Optional[int] = None
+    public: Optional[bool] = None
     tracks: List[Dict[str, Any]] = field(default_factory=list)
     audio_features: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
@@ -81,6 +82,7 @@ class Playlist:
             owner_id=playlist_data["owner"]["id"],
             description=playlist_data.get("description"),
             total_tracks=total_tracks,
+            public=playlist_data.get("public"),
             tracks=tracks,
             audio_features=audio_features,
         )
@@ -131,6 +133,7 @@ class Playlist:
             "owner_id": self.owner_id,
             "description": self.description,
             "total_tracks": self.total_tracks,
+            "public": self.public,
             "tracks": self.tracks,
             "audio_features": self.audio_features,
         }
