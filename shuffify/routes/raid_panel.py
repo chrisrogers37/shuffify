@@ -38,6 +38,7 @@ from shuffify.services.scheduler_service import (
 from shuffify.services.playlist_service import (
     PlaylistService,
     PlaylistNotFoundError,
+    scrape_playlist_metadata,
 )
 from shuffify.spotify.url_parser import (
     parse_spotify_playlist_url,
@@ -419,13 +420,35 @@ def raid_add_url(playlist_id, client=None, user=None):
         )
 
     # 3. Get playlist metadata for ownership check.
+    # Try authenticated API first, fall back to public page
+    # scraping if Spotify returns 404 (API restrictions on
+    # non-owned playlists have been expanding since Feb 2026).
+    playlist_meta = None
     try:
         playlist_svc = PlaylistService(client)
         playlist_meta = playlist_svc.get_playlist_metadata(
             source_playlist_id
         )
     except PlaylistNotFoundError:
-        return json_error("Playlist not found", 404)
+        logger.info(
+            "API returned 404 for %s, trying scraper fallback",
+            source_playlist_id,
+        )
+        playlist_meta = scrape_playlist_metadata(
+            source_playlist_id
+        )
+        if playlist_meta is None:
+            return json_error(
+                "Playlist not found. It may be private, "
+                "deleted, or region-restricted.",
+                404,
+            )
+        logger.info(
+            "Scraped metadata for %s: '%s' (owner: %s)",
+            source_playlist_id,
+            playlist_meta.get("name"),
+            playlist_meta.get("owner_id"),
+        )
     except Exception as e:
         logger.warning(
             "Could not fetch playlist metadata "
@@ -436,8 +459,13 @@ def raid_add_url(playlist_id, client=None, user=None):
             "Could not access playlist", 400
         )
 
-    # 4. Guard: owner is not current user
-    if playlist_meta["owner_id"] == user.spotify_id:
+    # 4. Guard: owner is not current user (external-only).
+    # Skip check if owner_id is unknown (scraped metadata).
+    owner_id = playlist_meta.get("owner_id", "unknown")
+    if (
+        owner_id != "unknown"
+        and owner_id == user.spotify_id
+    ):
         return json_error(
             "Cannot raid your own playlist. "
             "Use rotation instead.",
