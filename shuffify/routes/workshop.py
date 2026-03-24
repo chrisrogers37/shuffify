@@ -62,6 +62,10 @@ def workshop(playlist_id):
             playlist_id, include_features=False
         )
 
+        # Fetch raw playlist data for fields not in
+        # Playlist model (e.g. public/private state).
+        raw_data = client.get_playlist(playlist_id)
+
         algorithms = ShuffleService.list_algorithms()
 
         logger.info(
@@ -73,6 +77,7 @@ def workshop(playlist_id):
         return render_template(
             "workshop.html",
             playlist=playlist.to_dict(),
+            playlist_raw=raw_data,
             user=user,
             algorithms=algorithms,
         )

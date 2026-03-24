@@ -19,7 +19,21 @@
                         </svg>
                     </a>
                     <div class="min-w-0">
-                        <h1 class="text-2xl font-bold text-white truncate">{{ playlist.name }}</h1>
+                        <div class="flex items-center gap-2">
+                            <h1 class="text-2xl font-bold text-white truncate">{{ playlist.name }}</h1>
+                            <button id="workshop-visibility-btn"
+                                    onclick="toggleWorkshopVisibility()"
+                                    data-public="{{ 'true' if playlist_raw.get('public', False) else 'false' }}"
+                                    class="flex-shrink-0 w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition duration-150"
+                                    title="{{ 'Public - click to make private' if playlist_raw.get('public', False) else 'Private - click to make public' }}">
+                                <svg id="workshop-vis-globe" class="w-3.5 h-3.5 text-blue-300 {{ '' if playlist_raw.get('public', False) else 'hidden' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <svg id="workshop-vis-lock" class="w-3.5 h-3.5 text-white/50 {{ 'hidden' if playlist_raw.get('public', False) else '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                </svg>
+                            </button>
+                        </div>
                         <p class="text-white/70 text-sm">
                             <span id="track-count">{{ playlist.tracks|length }}</span> tracks
                             <span id="modified-badge" class="ml-2 px-2 py-0.5 rounded-full bg-yellow-500/80 text-xs font-semibold hidden">Modified</span>
@@ -712,6 +726,83 @@
             <!-- Raid panel content -->
             <div id="raid-panel-content" class="hidden space-y-4">
 
+                <!-- Raid Playlist Link Section -->
+                <div id="raid-link-no-pair" class="hidden">
+                    <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                        <svg class="w-12 h-12 mx-auto text-white/20 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                        </svg>
+                        <p class="text-white/60 text-sm mb-1">No raid playlist linked</p>
+                        <p class="text-white/30 text-xs mb-4">Link a staging playlist so raided tracks are collected before dripping into your playlist.</p>
+                        <button onclick="raidPanel.createRaidLink()"
+                                class="w-full px-4 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 mb-2">
+                            Create New Raid Playlist
+                        </button>
+                        <div class="relative my-3">
+                            <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-white/10"></div></div>
+                            <div class="relative flex justify-center"><span class="bg-[#1a1a2e] px-2 text-white/30 text-xs">or</span></div>
+                        </div>
+                        <select id="raid-link-select" onchange="document.getElementById('raid-link-btn').disabled = !this.value"
+                                class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 mb-2">
+                            <option value="">Link existing playlist...</option>
+                        </select>
+                        <button id="raid-link-btn" onclick="raidPanel.linkExistingRaid()"
+                                class="w-full px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                                disabled>
+                            Link as Raid Playlist
+                        </button>
+                    </div>
+                </div>
+
+                <div id="raid-link-paired" class="hidden">
+                    <div class="rounded-xl bg-white/5 border border-white/10 p-4 mb-0">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Raid Playlist</span>
+                            <button onclick="raidPanel.unlinkRaidPlaylist()"
+                                    class="text-red-400/60 hover:text-red-400 text-xs transition duration-150"
+                                    title="Remove raid link">
+                                Unlink
+                            </button>
+                        </div>
+                        <p id="raid-link-name" class="text-white font-medium text-sm truncate"></p>
+                        <p id="raid-link-track-count" class="text-white/40 text-xs mt-1"></p>
+                        <!-- Drip enabled toggle -->
+                        <div class="flex items-center justify-between mt-3 pt-3 border-t border-white/10">
+                            <span class="text-white/60 text-xs">Drip into playlist</span>
+                            <button id="raid-drip-toggle" onclick="raidPanel.toggleDripEnabled()"
+                                    class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200">
+                                <span class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200"></span>
+                            </button>
+                        </div>
+                        <!-- Drip config (visible when drip enabled) -->
+                        <div id="raid-drip-config" class="hidden mt-3 pt-3 border-t border-white/10">
+                            <div class="flex items-center justify-between">
+                                <label class="text-white/60 text-xs">Drip count</label>
+                                <div class="flex items-center gap-1">
+                                    <input id="raid-drip-count" type="number" min="1" max="50" value="3"
+                                           oninput="raidPanel.onDripCountChange()"
+                                           class="w-14 bg-white/10 border border-white/20 rounded px-2 py-0.5 text-white text-xs text-center focus:outline-none focus:border-spotify-green/50">
+                                    <span class="text-white/30 text-xs">tracks</span>
+                                    <button id="raid-drip-count-save" onclick="raidPanel.saveDripCount()"
+                                            class="hidden ml-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-300 border border-green-400/30 hover:bg-green-500/30 transition">
+                                        Save
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Drip schedule info -->
+                            <div id="raid-drip-schedule-info" class="hidden mt-2 flex items-center justify-between">
+                                <span class="text-white/40 text-xs">Drip schedule</span>
+                                <div class="flex items-center gap-1">
+                                    <span id="raid-drip-schedule-badge" class="px-1.5 py-0.5 rounded-full text-xs font-semibold"></span>
+                                    <button id="raid-drip-schedule-toggle-btn" onclick="raidPanel.toggleDripSchedule()"
+                                            class="text-white/40 hover:text-white/60 text-xs underline transition">
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Add External Source Section -->
                 <div class="rounded-xl bg-white/5 border border-white/10 p-4">
                     <label class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Add External Source</label>
@@ -788,14 +879,23 @@
                     </div>
                 </div>
 
-                <!-- Raid Now -->
-                <button id="raid-now-btn" onclick="raidPanel.raidNow()"
-                        class="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-semibold text-sm transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                    </svg>
-                    Raid Now
-                </button>
+                <!-- Raid Now / Drip Now -->
+                <div class="flex gap-2">
+                    <button id="raid-now-btn" onclick="raidPanel.raidNow()"
+                            class="flex-1 inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-semibold text-sm transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                        Raid Now
+                    </button>
+                    <button id="drip-now-btn" onclick="raidPanel.dripNow()"
+                            class="hidden flex-1 inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-spotify-green/20 hover:bg-spotify-green/30 text-green-300 font-semibold text-sm transition duration-150 border border-green-400/20 disabled:opacity-40 disabled:cursor-not-allowed">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                        </svg>
+                        Drip Now
+                    </button>
+                </div>
             </div>
 
             <!-- Error state -->
@@ -1155,6 +1255,43 @@ function undoPreview() {
     markDirty();
     refreshSourceDuplicateIndicators();
     showNotification('Reverted to last saved order.', 'success');
+}
+
+function toggleWorkshopVisibility() {
+    var btn = document.getElementById('workshop-visibility-btn');
+    var isPublic = btn.dataset.public === 'true';
+    var newState = !isPublic;
+
+    fetch('/playlist/' + workshopState.playlistId + '/toggle-visibility', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({ public: newState }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            btn.dataset.public = newState ? 'true' : 'false';
+            btn.title = newState ? 'Public - click to make private' : 'Private - click to make public';
+            var globe = document.getElementById('workshop-vis-globe');
+            var lock = document.getElementById('workshop-vis-lock');
+            if (newState) {
+                globe.classList.remove('hidden');
+                lock.classList.add('hidden');
+            } else {
+                globe.classList.add('hidden');
+                lock.classList.remove('hidden');
+            }
+            showNotification('Playlist set to ' + (newState ? 'public' : 'private'), 'success');
+        } else {
+            showNotification(data.message || 'Failed to update visibility', 'error');
+        }
+    })
+    .catch(function() {
+        showNotification('Failed to update visibility', 'error');
+    });
 }
 
 
@@ -3917,6 +4054,8 @@ var raidPanel = {
     loaded: false,
     isLoading: false,
     status: null,
+    _playlistsPopulated: false,
+    _savedDripCount: null,
 
     init: function() {
         this.loadStatus();
@@ -3957,8 +4096,10 @@ var raidPanel = {
 
     render: function() {
         if (!this.status) return;
+        this.renderRaidLink(this.status.raid_link);
         this.renderSources(this.status.sources);
         this.renderSchedule(this.status.schedule);
+        this.renderDripSchedule(this.status.drip_schedule);
 
         // Source count badge
         var countEl = document.getElementById('raid-source-count');
@@ -3971,6 +4112,15 @@ var raidPanel = {
 
         var raidNowBtn = document.getElementById('raid-now-btn');
         raidNowBtn.disabled = this.status.source_count === 0;
+
+        // Drip Now button visibility
+        var dripNowBtn = document.getElementById('drip-now-btn');
+        if (this.status.raid_link) {
+            dripNowBtn.classList.remove('hidden');
+            dripNowBtn.disabled = !this.status.raid_link.drip_enabled;
+        } else {
+            dripNowBtn.classList.add('hidden');
+        }
     },
 
     renderSources: function(sources) {
@@ -4001,10 +4151,21 @@ var raidPanel = {
                 trackInfo = '<span class="text-white/30 text-xs ml-1">' + src.last_track_count + ' tracks</span>';
             }
 
+            var raidCount = src.raid_count || 5;
+            var raidCountHtml = '<div class="flex items-center gap-1 mt-1">'
+                + '<span class="text-white/30 text-xs">pull</span>'
+                + '<input type="number" min="1" max="100" value="' + raidCount + '" '
+                + 'data-source-id="' + src.id + '" data-original="' + raidCount + '" '
+                + 'onchange="raidPanel.updateSourceRaidCount(this, ' + src.id + ')" '
+                + 'class="w-14 bg-white/10 border border-white/20 rounded px-1.5 py-0.5 text-white text-xs text-center focus:outline-none focus:border-spotify-green/50">'
+                + '<span class="text-white/30 text-xs">tracks</span>'
+                + '</div>';
+
             html += '<div class="flex items-center p-2 rounded-lg hover:bg-white/5 transition duration-150 group">'
                 + '<div class="flex-1 min-w-0">'
                 + '<p class="text-white text-sm truncate">' + escapeHtml(name) + '</p>'
                 + '<div class="flex items-center gap-1 mt-0.5">' + typeBadge + trackInfo + '</div>'
+                + raidCountHtml
                 + '</div>'
                 + '<button onclick="raidPanel.unwatchSource(' + src.id + ')" '
                 + 'class="ml-2 p-1.5 rounded-lg text-white/20 hover:text-red-400 hover:bg-white/10 opacity-0 group-hover:opacity-100 transition duration-150 flex-shrink-0" '
@@ -4342,6 +4503,338 @@ var raidPanel = {
         })
         .catch(function(error) {
             showNotification(error.message || 'Failed to toggle schedule', 'error');
+        });
+    },
+
+    // =================================================================
+    // Raid Playlist Link
+    // =================================================================
+
+    renderRaidLink: function(raidLink) {
+        var noPair = document.getElementById('raid-link-no-pair');
+        var paired = document.getElementById('raid-link-paired');
+        var dripConfig = document.getElementById('raid-drip-config');
+        var toggle = document.getElementById('raid-drip-toggle');
+
+        if (!raidLink) {
+            noPair.classList.remove('hidden');
+            paired.classList.add('hidden');
+            if (!this._playlistsPopulated) this.populateRaidLinkSelect();
+            return;
+        }
+
+        noPair.classList.add('hidden');
+        paired.classList.remove('hidden');
+
+        document.getElementById('raid-link-name').textContent = raidLink.raid_playlist_name || raidLink.raid_playlist_id;
+        document.getElementById('raid-link-track-count').textContent = '';
+
+        // Drip toggle state
+        if (raidLink.drip_enabled) {
+            toggle.className = 'relative inline-flex h-5 w-9 items-center rounded-full bg-spotify-green transition-colors duration-200';
+            toggle.firstElementChild.style.transform = 'translateX(16px)';
+            dripConfig.classList.remove('hidden');
+        } else {
+            toggle.className = 'relative inline-flex h-5 w-9 items-center rounded-full bg-white/20 transition-colors duration-200';
+            toggle.firstElementChild.style.transform = 'translateX(4px)';
+            dripConfig.classList.add('hidden');
+        }
+
+        this._savedDripCount = raidLink.drip_count;
+        document.getElementById('raid-drip-count').value = raidLink.drip_count;
+        document.getElementById('raid-drip-count-save').classList.add('hidden');
+    },
+
+    populateRaidLinkSelect: function() {
+        var select = document.getElementById('raid-link-select');
+        if (this._playlistsPopulated) return;
+
+        fetch('/api/user-playlists')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var playlists = data.playlists || data;
+            if (!Array.isArray(playlists)) return;
+            select.innerHTML = '<option value="">Link existing playlist...</option>';
+            playlists.forEach(function(p) {
+                if (p.id === workshopState.playlistId) return;
+                var opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.name;
+                opt.dataset.name = p.name;
+                select.appendChild(opt);
+            });
+            raidPanel._playlistsPopulated = true;
+        })
+        .catch(function() {});
+    },
+
+    createRaidLink: function() {
+        var self = this;
+
+        fetch('/playlist/' + workshopState.playlistId + '/raid-link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({
+                create_new: true,
+                target_playlist_name: workshopState.playlistName,
+                drip_count: 3,
+                drip_enabled: false,
+            }),
+        })
+        .then(function(r) {
+            return r.json().then(function(d) {
+                if (!r.ok) throw new Error(d.message || 'Failed to create raid playlist');
+                return d;
+            });
+        })
+        .then(function(data) {
+            showNotification('Raid playlist created!', 'success');
+            self.loadStatus();
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Failed to create raid playlist', 'error');
+        });
+    },
+
+    linkExistingRaid: function() {
+        var select = document.getElementById('raid-link-select');
+        var playlistId = select.value;
+        if (!playlistId) return;
+
+        var selectedOption = select.options[select.selectedIndex];
+        var playlistName = selectedOption.dataset.name || selectedOption.textContent;
+        var self = this;
+
+        fetch('/playlist/' + workshopState.playlistId + '/raid-link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({
+                create_new: false,
+                raid_playlist_id: playlistId,
+                raid_playlist_name: playlistName,
+                target_playlist_name: workshopState.playlistName,
+            }),
+        })
+        .then(function(r) {
+            return r.json().then(function(d) {
+                if (!r.ok) throw new Error(d.message || 'Failed to link raid playlist');
+                return d;
+            });
+        })
+        .then(function(data) {
+            showNotification('Linked existing playlist as raid playlist!', 'success');
+            self.loadStatus();
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Failed to link raid playlist', 'error');
+        });
+    },
+
+    unlinkRaidPlaylist: function() {
+        if (!confirm('Remove the raid link? The raid playlist itself will NOT be deleted.')) return;
+
+        var self = this;
+        fetch('/playlist/' + workshopState.playlistId + '/raid-link', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        })
+        .then(function(r) {
+            if (!r.ok) throw new Error('Failed to unlink');
+            return r.json();
+        })
+        .then(function() {
+            showNotification('Raid playlist unlinked', 'success');
+            self._playlistsPopulated = false;
+            self.loadStatus();
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Failed to unlink', 'error');
+        });
+    },
+
+    toggleDripEnabled: function() {
+        var raidLink = this.status && this.status.raid_link;
+        if (!raidLink) return;
+
+        var newState = !raidLink.drip_enabled;
+        var self = this;
+
+        fetch('/playlist/' + workshopState.playlistId + '/raid-link', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ drip_enabled: newState }),
+        })
+        .then(function(r) {
+            return r.json().then(function(d) {
+                if (!r.ok) throw new Error(d.message || 'Failed to toggle drip');
+                return d;
+            });
+        })
+        .then(function(data) {
+            showNotification(newState ? 'Drip enabled' : 'Drip disabled', 'success');
+            if (data.raid_link) self.status.raid_link = data.raid_link;
+            self.renderRaidLink(self.status.raid_link);
+            // Update drip now button
+            var dripBtn = document.getElementById('drip-now-btn');
+            dripBtn.disabled = !newState;
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Failed to toggle drip', 'error');
+        });
+    },
+
+    onDripCountChange: function() {
+        var input = document.getElementById('raid-drip-count');
+        var saveBtn = document.getElementById('raid-drip-count-save');
+        if (parseInt(input.value) !== this._savedDripCount) {
+            saveBtn.classList.remove('hidden');
+        } else {
+            saveBtn.classList.add('hidden');
+        }
+    },
+
+    saveDripCount: function() {
+        var input = document.getElementById('raid-drip-count');
+        var val = parseInt(input.value);
+        if (isNaN(val) || val < 1 || val > 50) {
+            showNotification('Drip count must be 1-50', 'error');
+            return;
+        }
+
+        var self = this;
+        fetch('/playlist/' + workshopState.playlistId + '/raid-link', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ drip_count: val }),
+        })
+        .then(function(r) {
+            return r.json().then(function(d) {
+                if (!r.ok) throw new Error(d.message || 'Failed to save drip count');
+                return d;
+            });
+        })
+        .then(function(data) {
+            self._savedDripCount = val;
+            if (data.raid_link) self.status.raid_link = data.raid_link;
+            document.getElementById('raid-drip-count-save').classList.add('hidden');
+            showNotification('Drip count updated', 'success');
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Failed to save drip count', 'error');
+        });
+    },
+
+    // =================================================================
+    // Drip Execution & Schedule
+    // =================================================================
+
+    dripNow: function() {
+        var btn = document.getElementById('drip-now-btn');
+        var originalHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<svg class="w-4 h-4 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Dripping...';
+
+        var self = this;
+        fetch('/playlist/' + workshopState.playlistId + '/drip-now', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({}),
+        })
+        .then(function(r) {
+            return r.json().then(function(d) {
+                if (!r.ok) throw new Error(d.message || 'Drip failed');
+                return d;
+            });
+        })
+        .then(function(data) {
+            var msg = 'Drip complete: ' + (data.tracks_added || 0) + ' tracks moved';
+            showNotification(msg, 'success');
+            self.loadStatus();
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Drip failed', 'error');
+        })
+        .finally(function() {
+            btn.innerHTML = originalHTML;
+            btn.disabled = !(self.status && self.status.raid_link && self.status.raid_link.drip_enabled);
+        });
+    },
+
+    renderDripSchedule: function(dripSchedule) {
+        var infoEl = document.getElementById('raid-drip-schedule-info');
+        if (!infoEl) return;
+
+        if (!dripSchedule || !this.status.raid_link) {
+            infoEl.classList.add('hidden');
+            return;
+        }
+
+        infoEl.classList.remove('hidden');
+        var badge = document.getElementById('raid-drip-schedule-badge');
+        var toggleBtn = document.getElementById('raid-drip-schedule-toggle-btn');
+
+        if (dripSchedule.is_enabled) {
+            badge.textContent = 'Enabled';
+            badge.className = 'px-1.5 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-300';
+            toggleBtn.textContent = 'Disable';
+        } else {
+            badge.textContent = 'Disabled';
+            badge.className = 'px-1.5 py-0.5 rounded-full text-xs font-semibold bg-red-500/20 text-red-300';
+            toggleBtn.textContent = 'Enable';
+        }
+    },
+
+    toggleDripSchedule: function() {
+        var self = this;
+
+        fetch('/playlist/' + workshopState.playlistId + '/drip-schedule-toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        })
+        .then(function(r) {
+            if (!r.ok) throw new Error('Toggle failed');
+            return r.json();
+        })
+        .then(function(data) {
+            var state = data.schedule && data.schedule.is_enabled ? 'enabled' : 'disabled';
+            showNotification('Drip schedule ' + state, 'success');
+            self.loadStatus();
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Failed to toggle drip schedule', 'error');
+        });
+    },
+
+    // =================================================================
+    // Per-Source Raid Count
+    // =================================================================
+
+    updateSourceRaidCount: function(inputEl, sourceId) {
+        var val = parseInt(inputEl.value);
+        if (isNaN(val) || val < 1 || val > 100) {
+            inputEl.value = inputEl.dataset.original;
+            return;
+        }
+
+        fetch('/playlist/' + workshopState.playlistId + '/raid-source-count', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ source_id: sourceId, raid_count: val }),
+        })
+        .then(function(r) {
+            return r.json().then(function(d) {
+                if (!r.ok) throw new Error(d.message || 'Failed to update');
+                return d;
+            });
+        })
+        .then(function() {
+            inputEl.dataset.original = val;
+            inputEl.style.borderColor = 'rgb(34 197 94 / 0.5)';
+            setTimeout(function() { inputEl.style.borderColor = ''; }, 1000);
+        })
+        .catch(function() {
+            inputEl.value = inputEl.dataset.original;
+            showNotification('Failed to update raid count', 'error');
         });
     },
 };
