@@ -4,14 +4,165 @@ Playlist service for managing Spotify playlist operations.
 Handles playlist retrieval, track management, and playlist updates.
 """
 
+import json
 import logging
-from typing import Dict, List, Any
+import re
+from typing import Dict, List, Any, Optional
+
+import requests
 
 from shuffify.spotify.client import SpotifyClient
 from shuffify.spotify.exceptions import SpotifyNotFoundError
 from shuffify.models.playlist import Playlist
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------
+# Scraper-based metadata fallback
+# ---------------------------------------------------------------
+_EMBED_URL = "https://open.spotify.com/embed/playlist/{playlist_id}"
+_SCRAPE_TIMEOUT = 10
+_SCRAPE_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": (
+        "text/html,application/xhtml+xml,"
+        "application/xml;q=0.9,*/*;q=0.8"
+    ),
+    "Accept-Language": "en-US,en;q=0.9",
+}
+_NEXT_DATA_RE = re.compile(
+    r'<script\s+id="__NEXT_DATA__"\s+type="application/json"'
+    r"[^>]*>(.*?)</script>",
+    re.DOTALL,
+)
+_OG_TITLE_RE = re.compile(
+    r'<meta\s+property="og:title"\s+content="([^"]+)"',
+)
+
+
+def scrape_playlist_metadata(
+    playlist_id: str,
+) -> Optional[Dict[str, Any]]:
+    """Scrape basic playlist metadata from Spotify's public embed page.
+
+    Fallback for when the authenticated API returns 404 (e.g. Spotify
+    restricts GET /playlists/{id} for non-owned playlists).
+
+    Returns a dict with keys ``id``, ``name``, ``owner_id`` (may be
+    ``"unknown"``), ``description``, ``total_tracks``, and
+    ``scraped: True``.  Returns ``None`` if scraping fails entirely.
+    """
+    url = _EMBED_URL.format(playlist_id=playlist_id)
+    try:
+        resp = requests.get(
+            url,
+            timeout=_SCRAPE_TIMEOUT,
+            headers=_SCRAPE_HEADERS,
+        )
+        if resp.status_code != 200:
+            logger.info(
+                "Embed page returned %d for %s",
+                resp.status_code,
+                playlist_id,
+            )
+            return None
+    except Exception as e:
+        logger.info(
+            "Embed page request failed for %s: %s",
+            playlist_id,
+            e,
+        )
+        return None
+
+    html = resp.text
+
+    # Strategy 1: parse __NEXT_DATA__ JSON
+    meta = _parse_next_data_metadata(html, playlist_id)
+    if meta:
+        return meta
+
+    # Strategy 2: og:title fallback (name only, no owner)
+    og_match = _OG_TITLE_RE.search(html)
+    if og_match:
+        return {
+            "id": playlist_id,
+            "name": og_match.group(1),
+            "owner_id": "unknown",
+            "description": None,
+            "total_tracks": None,
+            "scraped": True,
+        }
+
+    return None
+
+
+def _parse_next_data_metadata(
+    html: str, playlist_id: str
+) -> Optional[Dict[str, Any]]:
+    """Extract playlist metadata from __NEXT_DATA__ JSON."""
+    match = _NEXT_DATA_RE.search(html)
+    if not match:
+        return None
+
+    try:
+        data = json.loads(match.group(1))
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+    entity = _find_key(data, "entity") or {}
+    name = (
+        entity.get("name")
+        or _find_key(data, "name")
+    )
+    if not name:
+        return None
+
+    # Owner may be nested under entity.owner or similar
+    owner = entity.get("owner") or _find_key(
+        data, "owner"
+    )
+    owner_id = (
+        owner.get("id", "unknown")
+        if isinstance(owner, dict)
+        else "unknown"
+    )
+
+    track_list = entity.get("trackList")
+    total_tracks = (
+        len(track_list)
+        if isinstance(track_list, list)
+        else None
+    )
+
+    return {
+        "id": playlist_id,
+        "name": name,
+        "owner_id": owner_id,
+        "description": entity.get("description"),
+        "total_tracks": total_tracks,
+        "scraped": True,
+    }
+
+
+def _find_key(data: Any, key: str) -> Any:
+    """Find the first occurrence of a key in nested structure."""
+    if isinstance(data, dict):
+        if key in data:
+            return data[key]
+        for value in data.values():
+            result = _find_key(value, key)
+            if result is not None:
+                return result
+    elif isinstance(data, list):
+        for item in data:
+            result = _find_key(item, key)
+            if result is not None:
+                return result
+    return None
 
 
 class PlaylistError(Exception):
