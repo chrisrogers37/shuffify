@@ -107,6 +107,17 @@ def raid_link_create(
 
     data = request.get_json(silent=True) or {}
 
+    # Check for existing link BEFORE creating a Spotify
+    # playlist to prevent orphaned playlists on 409.
+    existing = RaidLinkService.get_link_for_playlist(
+        user.id, playlist_id
+    )
+    if existing:
+        return json_success(
+            "Raid playlist already linked.",
+            raid_link=existing.to_dict(),
+        )
+
     try:
         if req.create_new:
             target_name = data.get(

@@ -742,7 +742,9 @@
                             <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-white/10"></div></div>
                             <div class="relative flex justify-center"><span class="bg-[#1a1a2e] px-2 text-white/30 text-xs">or</span></div>
                         </div>
-                        <select id="raid-link-select" onchange="document.getElementById('raid-link-btn').disabled = !this.value"
+                        <select id="raid-link-select"
+                                onfocus="raidPanel.populateRaidLinkSelect()"
+                                onchange="document.getElementById('raid-link-btn').disabled = !this.value"
                                 class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 mb-2">
                             <option value="">Link existing playlist...</option>
                         </select>
@@ -4527,7 +4529,6 @@ var raidPanel = {
             noPair.classList.remove('hidden');
             paired.classList.add('hidden');
             dripSection.classList.add('hidden');
-            if (!this._playlistsPopulated) this.populateRaidLinkSelect();
             return;
         }
 
@@ -4604,7 +4605,17 @@ var raidPanel = {
         })
         .then(function(data) {
             showNotification('Raid playlist created!', 'success');
-            self.loadStatus();
+            // Update state directly from response to avoid loadStatus delay
+            if (data.raid_link) {
+                if (self.status) {
+                    self.status.raid_link = data.raid_link;
+                } else {
+                    self.status = { raid_link: data.raid_link, sources: [], schedule: null, drip_schedule: null, source_count: 0, max_sources: 10 };
+                }
+                self.render();
+            } else {
+                self.loadStatus();
+            }
         })
         .catch(function(error) {
             showNotification(error.message || 'Failed to create raid playlist', 'error');
@@ -4639,7 +4650,16 @@ var raidPanel = {
         })
         .then(function(data) {
             showNotification('Linked existing playlist as raid playlist!', 'success');
-            self.loadStatus();
+            if (data.raid_link) {
+                if (self.status) {
+                    self.status.raid_link = data.raid_link;
+                } else {
+                    self.status = { raid_link: data.raid_link, sources: [], schedule: null, drip_schedule: null, source_count: 0, max_sources: 10 };
+                }
+                self.render();
+            } else {
+                self.loadStatus();
+            }
         })
         .catch(function(error) {
             showNotification(error.message || 'Failed to link raid playlist', 'error');

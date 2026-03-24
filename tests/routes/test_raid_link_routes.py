@@ -167,6 +167,8 @@ class TestRaidLinkSuccess:
         self, mock_svc, mock_auth, auth_client,
     ):
         mock_auth.return_value = MagicMock()
+        # No existing link — allows creation to proceed
+        mock_svc.get_link_for_playlist.return_value = None
         mock_link = MagicMock()
         mock_link.to_dict.return_value = {
             "id": 1,
