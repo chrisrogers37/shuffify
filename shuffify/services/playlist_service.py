@@ -14,6 +14,9 @@ import requests
 from shuffify.spotify.client import SpotifyClient
 from shuffify.spotify.exceptions import SpotifyNotFoundError
 from shuffify.models.playlist import Playlist
+from shuffify.services.source_resolver.base import (
+    find_nested_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -113,16 +116,16 @@ def _parse_next_data_metadata(
     except (json.JSONDecodeError, ValueError):
         return None
 
-    entity = _find_key(data, "entity") or {}
+    entity = find_nested_key(data, "entity") or {}
     name = (
         entity.get("name")
-        or _find_key(data, "name")
+        or find_nested_key(data, "name")
     )
     if not name:
         return None
 
     # Owner may be nested under entity.owner or similar
-    owner = entity.get("owner") or _find_key(
+    owner = entity.get("owner") or find_nested_key(
         data, "owner"
     )
     owner_id = (
@@ -146,23 +149,6 @@ def _parse_next_data_metadata(
         "total_tracks": total_tracks,
         "scraped": True,
     }
-
-
-def _find_key(data: Any, key: str) -> Any:
-    """Find the first occurrence of a key in nested structure."""
-    if isinstance(data, dict):
-        if key in data:
-            return data[key]
-        for value in data.values():
-            result = _find_key(value, key)
-            if result is not None:
-                return result
-    elif isinstance(data, list):
-        for item in data:
-            result = _find_key(item, key)
-            if result is not None:
-                return result
-    return None
 
 
 class PlaylistError(Exception):
@@ -259,20 +245,23 @@ class PlaylistService:
         """
         Fetch playlist metadata only (no tracks).
 
-        Uses GET /playlists/{playlist_id} which works for any public
-        playlist regardless of ownership. Unlike get_playlist(), this
-        does NOT call GET /playlists/{playlist_id}/items which is
-        restricted to owners/collaborators since Feb 2026.
+        Tries the authenticated Spotify API first
+        (GET /playlists/{playlist_id}), then falls back to
+        scraping the public embed page if the API returns 404.
+        Spotify has been progressively restricting API access to
+        non-owned playlists since Feb 2026.
 
         Args:
             playlist_id: The Spotify playlist ID.
 
         Returns:
             Dict with keys: id, name, owner_id, description,
-            total_tracks.
+            total_tracks. May include ``scraped: True`` if the
+            data came from the scraper fallback.
 
         Raises:
-            PlaylistNotFoundError: If the playlist doesn't exist.
+            PlaylistNotFoundError: If the playlist doesn't exist
+                and scraping also fails.
             PlaylistError: If fetching fails for other reasons.
         """
         if not playlist_id:
@@ -296,6 +285,20 @@ class PlaylistService:
                 "total_tracks": total_tracks,
             }
         except (ValueError, SpotifyNotFoundError):
+            # API returned 404 — try scraper fallback
+            logger.info(
+                "API returned 404 for %s, trying "
+                "scraper fallback",
+                playlist_id,
+            )
+            scraped = scrape_playlist_metadata(playlist_id)
+            if scraped:
+                logger.info(
+                    "Scraped metadata for %s: '%s'",
+                    playlist_id,
+                    scraped.get("name"),
+                )
+                return scraped
             raise PlaylistNotFoundError(
                 f"Playlist not found: {playlist_id}"
             )

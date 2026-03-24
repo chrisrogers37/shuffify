@@ -33,6 +33,28 @@ class ResolveAllResult:
     )
 
 
+def find_nested_key(data: Any, key: str) -> Any:
+    """Find the first occurrence of a key in a nested structure.
+
+    Recursively searches dicts and lists for a matching key.
+    Shared by scraper-based code in both the source resolver
+    and playlist service.
+    """
+    if isinstance(data, dict):
+        if key in data:
+            return data[key]
+        for value in data.values():
+            result = find_nested_key(value, key)
+            if result is not None:
+                return result
+    elif isinstance(data, list):
+        for item in data:
+            result = find_nested_key(item, key)
+            if result is not None:
+                return result
+    return None
+
+
 class ResolvePathway(Protocol):
     """Protocol for source resolution pathways."""
 
