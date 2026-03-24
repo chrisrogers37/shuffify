@@ -114,3 +114,46 @@ def api_user_playlists(client=None, user=None):
         return json_error(
             "Failed to fetch playlists.", 500
         )
+
+
+@main.route(
+    "/playlist/<playlist_id>/toggle-visibility",
+    methods=["POST"],
+)
+@require_auth_and_db
+def toggle_visibility(
+    playlist_id, client=None, user=None
+):
+    """Toggle a playlist's public/private visibility."""
+    data = request.get_json(silent=True) or {}
+    public = data.get("public")
+    if public is None:
+        return json_error(
+            "Missing 'public' field", 400
+        )
+
+    try:
+        client.api.update_playlist_details(
+            playlist_id, public=bool(public)
+        )
+        state = "public" if public else "private"
+        logger.info(
+            "Playlist %s set to %s by user %s",
+            playlist_id,
+            state,
+            user.spotify_id,
+        )
+        return json_success(
+            "Playlist set to {}".format(state),
+            public=bool(public),
+        )
+    except Exception as e:
+        logger.error(
+            "Failed to update visibility for %s: %s",
+            playlist_id,
+            e,
+        )
+        return json_error(
+            "Failed to update playlist visibility",
+            500,
+        )

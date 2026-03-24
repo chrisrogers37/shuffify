@@ -827,6 +827,44 @@ function toggleHide(playlistId) {
     }
 }
 
+function togglePlaylistVisibility(playlistId, btnEl) {
+    var isPublic = btnEl.dataset.public === 'true';
+    var newState = !isPublic;
+
+    fetch('/playlist/' + playlistId + '/toggle-visibility', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({ public: newState }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            btnEl.dataset.public = newState ? 'true' : 'false';
+            btnEl.title = newState ? 'Make private' : 'Make public';
+            var globe = btnEl.querySelector('.vis-globe');
+            var lock = btnEl.querySelector('.vis-lock');
+            if (globe && lock) {
+                if (newState) {
+                    globe.classList.remove('hidden');
+                    lock.classList.add('hidden');
+                } else {
+                    globe.classList.add('hidden');
+                    lock.classList.remove('hidden');
+                }
+            }
+            showNotification('Playlist set to ' + (newState ? 'public' : 'private'), 'success');
+        } else {
+            showNotification(data.message || 'Failed to update visibility', 'error');
+        }
+    })
+    .catch(function() {
+        showNotification('Failed to update visibility', 'error');
+    });
+}
+
 function resetPreferences() {
     if (!confirm('Reset all playlist preferences? This will restore the default Spotify ordering.')) {
         return;
