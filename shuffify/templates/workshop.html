@@ -755,7 +755,7 @@
                 </div>
 
                 <div id="raid-link-paired" class="hidden">
-                    <div class="rounded-xl bg-white/5 border border-white/10 p-4 mb-0">
+                    <div class="rounded-xl bg-white/5 border border-white/10 p-4">
                         <div class="flex items-center justify-between mb-2">
                             <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Raid Playlist</span>
                             <button onclick="raidPanel.unlinkRaidPlaylist()"
@@ -766,40 +766,6 @@
                         </div>
                         <p id="raid-link-name" class="text-white font-medium text-sm truncate"></p>
                         <p id="raid-link-track-count" class="text-white/40 text-xs mt-1"></p>
-                        <!-- Drip enabled toggle -->
-                        <div class="flex items-center justify-between mt-3 pt-3 border-t border-white/10">
-                            <span class="text-white/60 text-xs">Drip into playlist</span>
-                            <button id="raid-drip-toggle" onclick="raidPanel.toggleDripEnabled()"
-                                    class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200">
-                                <span class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200"></span>
-                            </button>
-                        </div>
-                        <!-- Drip config (visible when drip enabled) -->
-                        <div id="raid-drip-config" class="hidden mt-3 pt-3 border-t border-white/10">
-                            <div class="flex items-center justify-between">
-                                <label class="text-white/60 text-xs">Drip count</label>
-                                <div class="flex items-center gap-1">
-                                    <input id="raid-drip-count" type="number" min="1" max="50" value="3"
-                                           oninput="raidPanel.onDripCountChange()"
-                                           class="w-14 bg-white/10 border border-white/20 rounded px-2 py-0.5 text-white text-xs text-center focus:outline-none focus:border-spotify-green/50">
-                                    <span class="text-white/30 text-xs">tracks</span>
-                                    <button id="raid-drip-count-save" onclick="raidPanel.saveDripCount()"
-                                            class="hidden ml-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-300 border border-green-400/30 hover:bg-green-500/30 transition">
-                                        Save
-                                    </button>
-                                </div>
-                            </div>
-                            <!-- Drip schedule info -->
-                            <div id="raid-drip-schedule-info" class="hidden mt-2 flex items-center justify-between">
-                                <span class="text-white/40 text-xs">Drip schedule</span>
-                                <div class="flex items-center gap-1">
-                                    <span id="raid-drip-schedule-badge" class="px-1.5 py-0.5 rounded-full text-xs font-semibold"></span>
-                                    <button id="raid-drip-schedule-toggle-btn" onclick="raidPanel.toggleDripSchedule()"
-                                            class="text-white/40 hover:text-white/60 text-xs underline transition">
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </div>
 
@@ -832,6 +798,44 @@
                     <div id="raid-sources-empty" class="hidden rounded-xl bg-white/5 border border-white/10 p-4 text-center">
                         <p class="text-white/40 text-sm">No sources watched</p>
                         <p class="text-white/20 text-xs mt-1">Paste a Spotify playlist URL above to start watching.</p>
+                    </div>
+                </div>
+
+                <!-- Drip Configuration (how many songs from raid playlist → target) -->
+                <div id="raid-drip-section" class="hidden">
+                    <span class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Drip to Playlist</span>
+                    <div class="rounded-xl bg-white/5 border border-white/10 p-4 space-y-3">
+                        <p class="text-white/40 text-xs">How many songs from the raid playlist should be added to your target playlist each run.</p>
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="text-white/60 text-xs">Enabled</span>
+                                <button id="raid-drip-toggle" onclick="raidPanel.toggleDripEnabled()"
+                                        class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200">
+                                    <span class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200"></span>
+                                </button>
+                            </div>
+                            <div id="raid-drip-count-row" class="hidden flex items-center gap-1">
+                                <span class="text-white/40 text-xs">Add</span>
+                                <input id="raid-drip-count" type="number" min="1" max="50" value="3"
+                                       oninput="raidPanel.onDripCountChange()"
+                                       class="w-14 bg-white/10 border border-white/20 rounded px-2 py-0.5 text-white text-xs text-center focus:outline-none focus:border-spotify-green/50">
+                                <span class="text-white/40 text-xs">tracks per run</span>
+                                <button id="raid-drip-count-save" onclick="raidPanel.saveDripCount()"
+                                        class="hidden ml-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-300 border border-green-400/30 hover:bg-green-500/30 transition">
+                                    Save
+                                </button>
+                            </div>
+                        </div>
+                        <!-- Drip schedule info -->
+                        <div id="raid-drip-schedule-info" class="hidden flex items-center justify-between">
+                            <span class="text-white/40 text-xs">Drip schedule</span>
+                            <div class="flex items-center gap-1">
+                                <span id="raid-drip-schedule-badge" class="px-1.5 py-0.5 rounded-full text-xs font-semibold"></span>
+                                <button id="raid-drip-schedule-toggle-btn" onclick="raidPanel.toggleDripSchedule()"
+                                        class="text-white/40 hover:text-white/60 text-xs underline transition">
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -2243,6 +2247,8 @@ var inlineRaid = {
         fetch('/playlist/' + workshopState.playlistId + '/raid-status')
         .then(function(response) {
             if (!response.ok) throw new Error('Failed to load raid status');
+            var ct = response.headers.get('content-type') || '';
+            if (ct.indexOf('application/json') === -1) throw new Error('Session expired');
             return response.json();
         })
         .then(function(data) {
@@ -4075,6 +4081,8 @@ var raidPanel = {
         fetch('/playlist/' + workshopState.playlistId + '/raid-status')
         .then(function(response) {
             if (!response.ok) throw new Error('Failed to load raid status');
+            var ct = response.headers.get('content-type') || '';
+            if (ct.indexOf('application/json') === -1) throw new Error('Session expired');
             return response.json();
         })
         .then(function(data) {
@@ -4153,12 +4161,12 @@ var raidPanel = {
 
             var raidCount = src.raid_count || 5;
             var raidCountHtml = '<div class="flex items-center gap-1 mt-1">'
-                + '<span class="text-white/30 text-xs">pull</span>'
+                + '<span class="text-white/30 text-xs">Raid</span>'
                 + '<input type="number" min="1" max="100" value="' + raidCount + '" '
                 + 'data-source-id="' + src.id + '" data-original="' + raidCount + '" '
                 + 'onchange="raidPanel.updateSourceRaidCount(this, ' + src.id + ')" '
                 + 'class="w-14 bg-white/10 border border-white/20 rounded px-1.5 py-0.5 text-white text-xs text-center focus:outline-none focus:border-spotify-green/50">'
-                + '<span class="text-white/30 text-xs">tracks</span>'
+                + '<span class="text-white/30 text-xs">tracks per run</span>'
                 + '</div>';
 
             html += '<div class="flex items-center p-2 rounded-lg hover:bg-white/5 transition duration-150 group">'
@@ -4513,31 +4521,34 @@ var raidPanel = {
     renderRaidLink: function(raidLink) {
         var noPair = document.getElementById('raid-link-no-pair');
         var paired = document.getElementById('raid-link-paired');
-        var dripConfig = document.getElementById('raid-drip-config');
-        var toggle = document.getElementById('raid-drip-toggle');
+        var dripSection = document.getElementById('raid-drip-section');
 
         if (!raidLink) {
             noPair.classList.remove('hidden');
             paired.classList.add('hidden');
+            dripSection.classList.add('hidden');
             if (!this._playlistsPopulated) this.populateRaidLinkSelect();
             return;
         }
 
         noPair.classList.add('hidden');
         paired.classList.remove('hidden');
+        dripSection.classList.remove('hidden');
 
         document.getElementById('raid-link-name').textContent = raidLink.raid_playlist_name || raidLink.raid_playlist_id;
         document.getElementById('raid-link-track-count').textContent = '';
 
-        // Drip toggle state
+        // Drip toggle + count
+        var toggle = document.getElementById('raid-drip-toggle');
+        var countRow = document.getElementById('raid-drip-count-row');
         if (raidLink.drip_enabled) {
             toggle.className = 'relative inline-flex h-5 w-9 items-center rounded-full bg-spotify-green transition-colors duration-200';
             toggle.firstElementChild.style.transform = 'translateX(16px)';
-            dripConfig.classList.remove('hidden');
+            countRow.classList.remove('hidden');
         } else {
             toggle.className = 'relative inline-flex h-5 w-9 items-center rounded-full bg-white/20 transition-colors duration-200';
             toggle.firstElementChild.style.transform = 'translateX(4px)';
-            dripConfig.classList.add('hidden');
+            countRow.classList.add('hidden');
         }
 
         this._savedDripCount = raidLink.drip_count;
@@ -4570,6 +4581,10 @@ var raidPanel = {
 
     createRaidLink: function() {
         var self = this;
+        // Disable all buttons in the no-pair section to prevent spam
+        var noPair = document.getElementById('raid-link-no-pair');
+        var buttons = noPair ? noPair.querySelectorAll('button') : [];
+        buttons.forEach(function(b) { b.disabled = true; });
 
         fetch('/playlist/' + workshopState.playlistId + '/raid-link', {
             method: 'POST',
@@ -4593,6 +4608,7 @@ var raidPanel = {
         })
         .catch(function(error) {
             showNotification(error.message || 'Failed to create raid playlist', 'error');
+            buttons.forEach(function(b) { b.disabled = false; });
         });
     },
 
