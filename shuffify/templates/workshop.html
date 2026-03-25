@@ -726,86 +726,99 @@
             <!-- Raid panel content -->
             <div id="raid-panel-content" class="hidden space-y-4">
 
-                <!-- Raid Playlist Link Section -->
-                <div id="raid-link-no-pair" class="hidden">
-                    <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
-                        <svg class="w-12 h-12 mx-auto text-white/20 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
-                        </svg>
-                        <p class="text-white/60 text-sm mb-1">No raid playlist linked</p>
-                        <p class="text-white/30 text-xs mb-4">Link a staging playlist so raided tracks are collected before dripping into your playlist.</p>
-                        <button onclick="raidPanel.createRaidLink()"
-                                class="w-full px-4 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 mb-2">
-                            Create New Raid Playlist
-                        </button>
-                        <div class="relative my-3">
-                            <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-white/10"></div></div>
-                            <div class="relative flex justify-center"><span class="bg-[#1a1a2e] px-2 text-white/30 text-xs">or</span></div>
-                        </div>
-                        <select id="raid-link-select"
-                                onfocus="raidPanel.populateRaidLinkSelect()"
-                                onchange="document.getElementById('raid-link-btn').disabled = !this.value"
-                                class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 mb-2">
-                            <option value="">Link existing playlist...</option>
-                        </select>
-                        <button id="raid-link-btn" onclick="raidPanel.linkExistingRaid()"
-                                class="w-full px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
-                                disabled>
-                            Link as Raid Playlist
-                        </button>
-                    </div>
-                </div>
-
-                <div id="raid-link-paired" class="hidden">
-                    <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                <!-- Section 1: Raid Playlist -->
+                <div>
+                    <div id="raid-link-no-pair" class="hidden">
                         <div class="flex items-center justify-between mb-2">
                             <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Raid Playlist</span>
-                            <button onclick="raidPanel.unlinkRaidPlaylist()"
-                                    class="text-red-400/60 hover:text-red-400 text-xs transition duration-150"
-                                    title="Remove raid link">
-                                Unlink
+                        </div>
+                        <div class="rounded-xl bg-white/5 border border-white/10 p-4 text-center">
+                            <svg class="w-10 h-10 mx-auto text-white/20 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                            </svg>
+                            <p class="text-white/60 text-sm mb-1">No raid playlist linked</p>
+                            <p class="text-white/30 text-xs mb-3">Link a staging playlist so raided tracks are collected before dripping into your playlist.</p>
+                            <button onclick="raidPanel.createRaidLink()"
+                                    class="w-full px-4 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 mb-2">
+                                Create New Raid Playlist
+                            </button>
+                            <div class="relative my-3">
+                                <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-white/10"></div></div>
+                                <div class="relative flex justify-center"><span class="bg-[#1a1a2e] px-2 text-white/30 text-xs">or</span></div>
+                            </div>
+                            <select id="raid-link-select"
+                                    onfocus="raidPanel.populateRaidLinkSelect()"
+                                    onchange="document.getElementById('raid-link-btn').disabled = !this.value"
+                                    class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 mb-2">
+                                <option value="">Link existing playlist...</option>
+                            </select>
+                            <button id="raid-link-btn" onclick="raidPanel.linkExistingRaid()"
+                                    class="w-full px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    disabled>
+                                Link as Raid Playlist
                             </button>
                         </div>
-                        <p id="raid-link-name" class="text-white font-medium text-sm truncate"></p>
-                        <p id="raid-link-track-count" class="text-white/40 text-xs mt-1"></p>
+                    </div>
+
+                    <div id="raid-link-paired" class="hidden">
+                        <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Raid Playlist</span>
+                                <button onclick="raidPanel.unlinkRaidPlaylist()"
+                                        class="text-red-400/60 hover:text-red-400 text-xs transition duration-150"
+                                        title="Remove raid link">
+                                    Unlink
+                                </button>
+                            </div>
+                            <p id="raid-link-name" class="text-white font-medium text-sm truncate"></p>
+                            <p id="raid-link-track-count" class="text-white/40 text-xs mt-1"></p>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Add External Source Section -->
-                <div class="rounded-xl bg-white/5 border border-white/10 p-4">
-                    <label class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Add External Source</label>
-                    <div class="flex gap-2">
-                        <input id="raid-url-input" type="text"
-                               placeholder="Paste Spotify playlist URL..."
-                               class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 placeholder-white/30"
-                               onkeydown="if(event.key==='Enter'){raidPanel.addExternalUrl();}">
-                        <button id="raid-add-url-btn" onclick="raidPanel.addExternalUrl()"
-                                class="px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
-                            +
-                        </button>
+                <!-- Section 2: Add External Source -->
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Add External Source</span>
                     </div>
-                    <div id="raid-url-feedback" class="hidden mt-2 text-xs"></div>
-                    <p class="text-white/30 text-xs mt-2">Paste a playlist URL from a curator or tastemaker to watch for new tracks.</p>
+                    <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                        <div class="flex gap-2">
+                            <input id="raid-url-input" type="text"
+                                   placeholder="Paste Spotify playlist URL..."
+                                   class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 placeholder-white/30"
+                                   onkeydown="if(event.key==='Enter'){raidPanel.addExternalUrl();}">
+                            <button id="raid-add-url-btn" onclick="raidPanel.addExternalUrl()"
+                                    class="px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
+                                +
+                            </button>
+                        </div>
+                        <div id="raid-url-feedback" class="hidden mt-2 text-xs"></div>
+                        <p class="text-white/30 text-xs mt-2">Paste a playlist URL from a curator or tastemaker to watch for new tracks.</p>
+                    </div>
                 </div>
 
-                <!-- Watched Sources List -->
+                <!-- Section 3: Watched Sources -->
                 <div>
                     <div class="flex items-center justify-between mb-2">
                         <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Watched Sources</span>
                         <span id="raid-source-count" class="text-white/30 text-xs"></span>
                     </div>
-                    <div id="raid-sources-list" class="space-y-1 max-h-[30vh] overflow-y-auto sidebar-scrollbar">
-                        <!-- Populated by raidPanel.renderSources() -->
-                    </div>
-                    <div id="raid-sources-empty" class="hidden rounded-xl bg-white/5 border border-white/10 p-4 text-center">
-                        <p class="text-white/40 text-sm">No sources watched</p>
-                        <p class="text-white/20 text-xs mt-1">Paste a Spotify playlist URL above to start watching.</p>
+                    <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                        <div id="raid-sources-list" class="space-y-1 max-h-[30vh] overflow-y-auto sidebar-scrollbar">
+                            <!-- Populated by raidPanel.renderSources() -->
+                        </div>
+                        <div id="raid-sources-empty" class="hidden text-center py-2">
+                            <p class="text-white/40 text-sm">No sources watched</p>
+                            <p class="text-white/20 text-xs mt-1">Paste a Spotify playlist URL above to start watching.</p>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Drip Configuration (how many songs from raid playlist → target) -->
+                <!-- Section 4: Drip to Playlist -->
                 <div id="raid-drip-section" class="hidden">
-                    <span class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Drip to Playlist</span>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Drip to Playlist</span>
+                    </div>
                     <div class="rounded-xl bg-white/5 border border-white/10 p-4 space-y-3">
                         <p class="text-white/40 text-xs">How many songs from the raid playlist should be added to your target playlist each run.</p>
                         <div class="flex items-center justify-between">
@@ -828,41 +841,72 @@
                                 </button>
                             </div>
                         </div>
-                        <!-- Drip schedule info -->
-                        <div id="raid-drip-schedule-info" class="hidden flex items-center justify-between">
-                            <span class="text-white/40 text-xs">Drip schedule</span>
-                            <div class="flex items-center gap-1">
-                                <span id="raid-drip-schedule-badge" class="px-1.5 py-0.5 rounded-full text-xs font-semibold"></span>
-                                <button id="raid-drip-schedule-toggle-btn" onclick="raidPanel.toggleDripSchedule()"
-                                        class="text-white/40 hover:text-white/60 text-xs underline transition">
-                                </button>
-                            </div>
-                        </div>
                     </div>
                 </div>
 
-                <!-- Schedule Status -->
+                <!-- Section 5: Schedule -->
                 <div id="raid-schedule-section">
-                    <span class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Schedule</span>
-                    <div id="raid-schedule-info" class="hidden rounded-xl bg-white/5 border border-white/10 p-3 space-y-2">
-                        <div class="flex items-center justify-between">
-                            <select id="raid-schedule-frequency" onchange="raidPanel.onScheduleChange()"
-                                    class="bg-white/10 text-white text-sm rounded-lg border border-white/20 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-400">
-                                <option value="every_6h">Every 6 hours</option>
-                                <option value="every_12h">Every 12 hours</option>
-                                <option value="daily" selected>Every day</option>
-                                <option value="every_3d">Every 3 days</option>
-                                <option value="weekly">Every week</option>
-                            </select>
-                            <button onclick="raidPanel.toggleSchedule()" id="raid-schedule-toggle"
-                                    class="px-2 py-0.5 rounded-full text-xs font-semibold transition duration-150">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Schedule</span>
+                    </div>
+
+                    <!-- No schedule: creation form -->
+                    <div id="raid-no-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
+                        <p class="text-white/40 text-xs mb-3">Automatically raid sources and drip tracks on a schedule.</p>
+                        <div class="space-y-2">
+                            <div>
+                                <label class="text-white/50 text-xs mb-1 block">Operation</label>
+                                <select id="raid-schedule-create-type"
+                                        class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
+                                    <option value="raid">Raid Only</option>
+                                    <option value="drip">Drip Only</option>
+                                    <option value="raid_and_drip" selected>Raid &amp; Drip</option>
+                                </select>
+                            </div>
+                            <div class="flex gap-2">
+                                <select id="raid-schedule-create-freq"
+                                        onchange="raidPanel.onCreateFreqChange()"
+                                        class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
+                                    <option value="every_6h">Every 6 hours</option>
+                                    <option value="every_12h">Every 12 hours</option>
+                                    <option value="daily" selected>Daily</option>
+                                    <option value="every_3d">Every 3 days</option>
+                                    <option value="weekly">Weekly</option>
+                                </select>
+                            </div>
+                            <div id="raid-schedule-create-time-row">
+                                <label class="text-white/50 text-xs mb-1 block">Time of day (UTC)</label>
+                                <input id="raid-schedule-create-time" type="time" value="09:00"
+                                       class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
+                            </div>
+                            <button id="raid-schedule-create-btn" onclick="raidPanel.createSchedule()"
+                                    class="w-full px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed">
+                                Enable Schedule
                             </button>
+                        </div>
+                    </div>
+
+                    <!-- Existing schedule -->
+                    <div id="raid-schedule-info" class="hidden rounded-xl bg-white/5 border border-white/10 p-4 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span id="raid-schedule-type-badge" class="px-1.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-300"></span>
+                                <select id="raid-schedule-frequency" onchange="raidPanel.onScheduleChange()"
+                                        class="bg-white/10 text-white text-xs rounded-lg border border-white/20 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-400">
+                                    <option value="every_6h">Every 6h</option>
+                                    <option value="every_12h">Every 12h</option>
+                                    <option value="daily" selected>Daily</option>
+                                    <option value="every_3d">Every 3d</option>
+                                    <option value="weekly">Weekly</option>
+                                </select>
+                            </div>
+                            <span id="raid-schedule-enabled-badge" class="px-2 py-0.5 rounded-full text-xs font-semibold"></span>
                         </div>
                         <div id="raid-schedule-time-row" class="hidden flex items-center gap-2">
                             <label class="text-white/50 text-xs">at</label>
                             <input type="time" id="raid-schedule-time" value="09:00"
                                    onchange="raidPanel.onScheduleChange()"
-                                   class="bg-white/10 text-white text-sm rounded-lg border border-white/20 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-400">
+                                   class="bg-white/10 text-white text-xs rounded-lg border border-white/20 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-400">
                             <button onclick="raidPanel.saveSchedule()" id="raid-schedule-save"
                                     class="hidden px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-300 border border-green-400/30 hover:bg-green-500/30 transition">
                                 Save
@@ -872,6 +916,21 @@
                             <span id="raid-schedule-last-run" class="text-white/40"></span>
                             <span id="raid-schedule-status-badge" class="px-1.5 py-0.5 rounded-full text-xs font-semibold"></span>
                         </div>
+                        <div class="flex gap-2 mt-2">
+                            <button onclick="raidPanel.runScheduleNow()"
+                                    id="raid-schedule-run-btn"
+                                    title="Run now"
+                                    class="px-3 py-1.5 rounded-lg bg-spotify-green/20 hover:bg-spotify-green/40 text-spotify-green text-xs font-semibold transition duration-150 border border-spotify-green/30">
+                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                            </button>
+                            <button onclick="raidPanel.toggleSchedule()" id="raid-schedule-toggle"
+                                    class="flex-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition duration-150 border border-white/20">
+                            </button>
+                            <button onclick="raidPanel.deleteSchedule()"
+                                    class="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-semibold transition duration-150 border border-red-500/20">
+                                Delete
+                            </button>
+                        </div>
                         <!-- Execution History -->
                         <div id="raid-history-section">
                             <button onclick="raidPanel.toggleHistory()" class="text-white/40 text-xs hover:text-white/60 transition underline">
@@ -880,35 +939,37 @@
                             <div id="raid-history-list" class="hidden mt-2 space-y-1 max-h-40 overflow-y-auto"></div>
                         </div>
                     </div>
-                    <div id="raid-no-schedule" class="hidden text-white/30 text-xs">
-                        No schedule configured. Watch a playlist to auto-create one.
-                    </div>
                 </div>
 
-                <!-- Action Buttons -->
-                <div class="space-y-2">
-                    <button id="raid-and-drip-btn" onclick="raidPanel.raidAndDrip()"
-                            class="hidden w-full inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white font-semibold text-sm transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                        </svg>
-                        Raid &amp; Drip
-                    </button>
-                    <div class="flex gap-2">
-                        <button id="raid-now-btn" onclick="raidPanel.raidNow()"
-                                class="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed">
-                            <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <!-- Section 6: Actions -->
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Actions</span>
+                    </div>
+                    <div class="space-y-2">
+                        <button id="raid-and-drip-btn" onclick="raidPanel.raidAndDrip()"
+                                class="hidden w-full inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white font-semibold text-sm transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                             </svg>
-                            Raid Only
+                            Raid &amp; Drip
                         </button>
-                        <button id="drip-now-btn" onclick="raidPanel.dripNow()"
-                                class="hidden flex-1 inline-flex items-center justify-center px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed">
-                            <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
-                            </svg>
-                            Drip Only
-                        </button>
+                        <div class="flex gap-2">
+                            <button id="raid-now-btn" onclick="raidPanel.raidNow()"
+                                    class="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed">
+                                <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                </svg>
+                                Raid Only
+                            </button>
+                            <button id="drip-now-btn" onclick="raidPanel.dripNow()"
+                                    class="hidden flex-1 inline-flex items-center justify-center px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed">
+                                <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                                </svg>
+                                Drip Only
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -4141,8 +4202,9 @@ var raidPanel = {
         if (!this.status) return;
         this.renderRaidLink(this.status.raid_link);
         this.renderSources(this.status.sources);
-        this.renderSchedule(this.status.schedule);
-        this.renderDripSchedule(this.status.drip_schedule);
+        // Show raid schedule if present; fall back to drip schedule
+        var activeSchedule = this.status.schedule || this.status.drip_schedule;
+        this.renderSchedule(activeSchedule);
 
         // Source count badge
         var countEl = document.getElementById('raid-source-count');
@@ -4229,6 +4291,8 @@ var raidPanel = {
     _savedScheduleTime: null,
     _historyLoaded: false,
 
+    _scheduleId: null,
+
     renderSchedule: function(schedule) {
         var infoEl = document.getElementById('raid-schedule-info');
         var noSched = document.getElementById('raid-no-schedule');
@@ -4236,11 +4300,19 @@ var raidPanel = {
         if (!schedule) {
             infoEl.classList.add('hidden');
             noSched.classList.remove('hidden');
+            this._scheduleId = null;
             return;
         }
 
         noSched.classList.add('hidden');
         infoEl.classList.remove('hidden');
+        this._scheduleId = schedule.id;
+
+        // Show job type badge
+        var typeBadge = document.getElementById('raid-schedule-type-badge');
+        var jobType = schedule.job_type || 'raid';
+        var typeLabels = { raid: 'Raid', drip: 'Drip', raid_and_drip: 'Raid & Drip', raid_and_shuffle: 'Raid & Shuffle', 'raid_and_drip': 'Raid & Drip' };
+        typeBadge.textContent = typeLabels[jobType] || jobType;
 
         // Determine current frequency and time from schedule
         var freqEl = document.getElementById('raid-schedule-frequency');
@@ -4281,14 +4353,19 @@ var raidPanel = {
         // Hide save button initially
         document.getElementById('raid-schedule-save').classList.add('hidden');
 
-        var toggleEl = document.getElementById('raid-schedule-toggle');
+        // Enabled badge
+        var enabledBadge = document.getElementById('raid-schedule-enabled-badge');
         if (schedule.is_enabled) {
-            toggleEl.textContent = 'Enabled';
-            toggleEl.className = 'px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-300 transition duration-150';
+            enabledBadge.textContent = 'Enabled';
+            enabledBadge.className = 'px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-300';
         } else {
-            toggleEl.textContent = 'Disabled';
-            toggleEl.className = 'px-2 py-0.5 rounded-full text-xs font-semibold bg-red-500/20 text-red-300 transition duration-150';
+            enabledBadge.textContent = 'Paused';
+            enabledBadge.className = 'px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-500/20 text-yellow-300';
         }
+
+        // Toggle button text
+        var toggleEl = document.getElementById('raid-schedule-toggle');
+        toggleEl.textContent = schedule.is_enabled ? 'Pause' : 'Resume';
 
         var lastRunEl = document.getElementById('raid-schedule-last-run');
         var badgeEl = document.getElementById('raid-schedule-status-badge');
@@ -4402,6 +4479,142 @@ var raidPanel = {
             }
         })
         .catch(function() {});
+    },
+
+    // =================================================================
+    // Schedule Creation / Management
+    // =================================================================
+
+    onCreateFreqChange: function() {
+        var freq = document.getElementById('raid-schedule-create-freq').value;
+        var timeRow = document.getElementById('raid-schedule-create-time-row');
+        var timeCapable = ['daily', 'every_3d', 'weekly'];
+        if (timeCapable.indexOf(freq) >= 0) {
+            timeRow.classList.remove('hidden');
+        } else {
+            timeRow.classList.add('hidden');
+        }
+    },
+
+    createSchedule: function() {
+        var jobType = document.getElementById('raid-schedule-create-type').value;
+        var freq = document.getElementById('raid-schedule-create-freq').value;
+        var time = document.getElementById('raid-schedule-create-time').value;
+        var timeCapable = ['daily', 'every_3d', 'weekly'];
+
+        // Build schedule_type and schedule_value
+        var scheduleType = 'interval';
+        var scheduleValue = freq;
+        if (timeCapable.indexOf(freq) >= 0 && time) {
+            scheduleType = 'cron';
+            var parts = time.split(':');
+            var cronMap = {
+                daily: parts[1] + ' ' + parts[0] + ' * * *',
+                every_3d: parts[1] + ' ' + parts[0] + ' */3 * *',
+                weekly: parts[1] + ' ' + parts[0] + ' * * 0',
+            };
+            scheduleValue = cronMap[freq];
+        }
+
+        // Get source playlist IDs for raid types
+        var sourceIds = [];
+        if (jobType === 'raid' || jobType === 'raid_and_drip') {
+            if (this.status && this.status.sources) {
+                this.status.sources.forEach(function(s) {
+                    if (s.source_playlist_id) sourceIds.push(s.source_playlist_id);
+                });
+            }
+        }
+
+        var btn = document.getElementById('raid-schedule-create-btn');
+        btn.disabled = true;
+        btn.textContent = 'Creating...';
+
+        var self = this;
+        fetch('/playlist/' + workshopState.playlistId + '/raid-schedule-create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({
+                job_type: jobType,
+                schedule_type: scheduleType,
+                schedule_value: scheduleValue,
+                source_playlist_ids: sourceIds,
+                target_playlist_name: workshopState.playlistName,
+            }),
+        })
+        .then(function(r) {
+            return r.json().then(function(d) {
+                if (!r.ok) throw new Error(d.message || d.error || 'Failed to create schedule');
+                return d;
+            });
+        })
+        .then(function(data) {
+            showNotification('Schedule created!', 'success');
+            self._historyLoaded = false;
+            self.loadStatus();
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Failed to create schedule', 'error');
+        })
+        .finally(function() {
+            btn.disabled = false;
+            btn.textContent = 'Enable Schedule';
+        });
+    },
+
+    deleteSchedule: function() {
+        if (!this._scheduleId) return;
+        if (!confirm('Delete this schedule? You can re-create it anytime.')) return;
+
+        var self = this;
+        fetch('/schedules/' + this._scheduleId, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        })
+        .then(function(r) {
+            if (!r.ok) throw new Error('Failed to delete schedule');
+            return r.json();
+        })
+        .then(function() {
+            showNotification('Schedule deleted', 'success');
+            self._scheduleId = null;
+            self._historyLoaded = false;
+            self.loadStatus();
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Failed to delete schedule', 'error');
+        });
+    },
+
+    runScheduleNow: function() {
+        if (!this._scheduleId) return;
+
+        var btn = document.getElementById('raid-schedule-run-btn');
+        btn.disabled = true;
+
+        var self = this;
+        fetch('/schedules/' + this._scheduleId + '/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        })
+        .then(function(r) {
+            return r.json().then(function(d) {
+                if (!r.ok) throw new Error(d.message || d.error || 'Failed to run schedule');
+                return d;
+            });
+        })
+        .then(function(data) {
+            showNotification(data.message || 'Schedule executed', 'success');
+            self._historyLoaded = false;
+            self.loadStatus();
+            loadPendingRaids();
+        })
+        .catch(function(error) {
+            showNotification(error.message || 'Failed to run schedule', 'error');
+        })
+        .finally(function() {
+            btn.disabled = false;
+        });
     },
 
     addExternalUrl: function() {
@@ -4531,9 +4744,10 @@ var raidPanel = {
     },
 
     toggleSchedule: function() {
+        if (!this._scheduleId) return;
         var self = this;
 
-        fetch('/playlist/' + workshopState.playlistId + '/raid-schedule-toggle', {
+        fetch('/schedules/' + this._scheduleId + '/toggle', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -4545,7 +4759,7 @@ var raidPanel = {
             return response.json();
         })
         .then(function(data) {
-            var state = data.schedule.is_enabled ? 'enabled' : 'disabled';
+            var state = data.schedule.is_enabled ? 'enabled' : 'paused';
             showNotification('Schedule ' + state, 'success');
             self.loadStatus();
         })

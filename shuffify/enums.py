@@ -13,6 +13,7 @@ class JobType(StrEnum):
     RAID = "raid"
     SHUFFLE = "shuffle"
     RAID_AND_SHUFFLE = "raid_and_shuffle"
+    RAID_AND_DRIP = "raid_and_drip"
     ROTATE = "rotate"
     DRIP = "drip"
 

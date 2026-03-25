@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Raid Panel Scheduling** - Full schedule creation, management, and deletion directly from the Raids side panel
+  - Create schedules for Raid Only, Drip Only, or Raid & Drip operations
+  - Configure frequency (every 6h, 12h, daily, every 3d, weekly) and time of day
+  - Run, pause/resume, and delete schedules with inline controls (matches Rotation panel UX)
+  - New `POST /playlist/<id>/raid-schedule-create` endpoint for schedule creation
+- **Raid & Drip Job Type** - New `raid_and_drip` scheduled job type that raids all sources then automatically drips tracks to the target playlist in a single execution
+  - Added `JobType.RAID_AND_DRIP` enum value
+  - Executor chains `execute_raid()` then `execute_drip()` in sequence
+  - Available in both the Raids panel and the global Schedules page
+
+### Changed
+- **Raids Panel Uniform Layout** - Restructured all Raids panel subsections to use consistent card formatting
+  - Every section now uses the same header label + rounded card pattern (matches Archive & Rotation panels)
+  - Sections: Raid Playlist, Add External Source, Watched Sources, Drip to Playlist, Schedule, Actions
+  - Watched Sources now wrapped in a card container for visual consistency
 - **Newest First Algorithm** - Reorder algorithm that sorts tracks by date added (newest first) with configurable jitter
   - Window-based jitter prevents exact sorting while preserving recency ordering
   - Preserves `added_at` timestamp through the Spotify API data pipeline

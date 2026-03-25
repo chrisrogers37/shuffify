@@ -230,6 +230,38 @@ class UpdateRaidScheduleRequest(BaseModel):
         return self
 
 
+class CreateRaidScheduleRequest(BaseModel):
+    """Request to create a raid/drip schedule from the panel."""
+
+    model_config = {"extra": "ignore"}
+
+    job_type: str
+    schedule_type: str = "interval"
+    schedule_value: str = "daily"
+    source_playlist_ids: Optional[List[str]] = None
+
+    @field_validator("job_type")
+    @classmethod
+    def validate_job_type(cls, v):
+        valid = {"raid", "drip", "raid_and_drip"}
+        if v not in valid:
+            raise ValueError(
+                "job_type must be one of: "
+                "{}".format(", ".join(sorted(valid)))
+            )
+        return v
+
+    @field_validator("schedule_type")
+    @classmethod
+    def validate_schedule_type(cls, v):
+        valid = {"interval", "cron"}
+        if v not in valid:
+            raise ValueError(
+                "schedule_type must be 'interval' or 'cron'"
+            )
+        return v
+
+
 class RaidNowRequest(BaseModel):
     """Request to trigger an immediate raid."""
 

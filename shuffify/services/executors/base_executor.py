@@ -381,6 +381,13 @@ class JobExecutorService:
                 "tracks_total"
             ]
             return result
+        elif schedule.job_type == JobType.RAID_AND_DRIP:
+            result = execute_raid(schedule, api)
+            drip_result = execute_drip(schedule, api)
+            result["tracks_dripped"] = drip_result.get(
+                "tracks_added", 0
+            )
+            return result
         elif schedule.job_type == JobType.ROTATE:
             return execute_rotate(schedule, api)
         elif schedule.job_type == JobType.DRIP:
