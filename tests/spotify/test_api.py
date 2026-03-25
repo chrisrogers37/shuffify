@@ -372,6 +372,54 @@ class TestSpotifyAPIPlaylistOperations:
 
             assert len(result) == 2
 
+    def test_get_playlist_tracks_preserves_added_at(
+        self, valid_token_info, auth_manager, sample_tracks
+    ):
+        """Should inject added_at from item wrapper into track dict."""
+        items = [
+            {
+                'item': sample_tracks[0],
+                'added_at': '2025-06-15T12:00:00Z',
+            },
+            {
+                'item': sample_tracks[1],
+                'added_at': '2025-07-20T18:30:00Z',
+            },
+        ]
+
+        with patch(
+            'shuffify.spotify.api.SpotifyHTTPClient'
+        ) as MockHTTP:
+            mock_http = MockHTTP.return_value
+            mock_http.get_all_pages.return_value = items
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            result = api.get_playlist_tracks('playlist123')
+
+            assert len(result) == 2
+            assert result[0]['added_at'] == '2025-06-15T12:00:00Z'
+            assert result[1]['added_at'] == '2025-07-20T18:30:00Z'
+
+    def test_get_playlist_tracks_missing_added_at(
+        self, valid_token_info, auth_manager, sample_tracks
+    ):
+        """Should handle items without added_at field."""
+        items = [
+            {'item': sample_tracks[0]},
+        ]
+
+        with patch(
+            'shuffify.spotify.api.SpotifyHTTPClient'
+        ) as MockHTTP:
+            mock_http = MockHTTP.return_value
+            mock_http.get_all_pages.return_value = items
+
+            api = SpotifyAPI(valid_token_info, auth_manager)
+            result = api.get_playlist_tracks('playlist123')
+
+            assert len(result) == 1
+            assert 'added_at' not in result[0]
+
     def test_update_playlist_tracks_success(
         self, valid_token_info, auth_manager
     ):

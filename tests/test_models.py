@@ -58,6 +58,19 @@ class TestPlaylistTrackOperations:
         ]
         return Playlist(id="p1", name="Test", owner_id="u1", tracks=tracks)
 
+    def test_tracks_preserve_added_at(self):
+        """Tracks with added_at field should preserve it."""
+        tracks = [
+            {
+                "id": "t1",
+                "uri": "spotify:track:t1",
+                "name": "Track 1",
+                "added_at": "2025-06-15T12:00:00Z",
+            },
+        ]
+        playlist = Playlist(id="p1", name="Test", owner_id="u1", tracks=tracks)
+        assert playlist.tracks[0]["added_at"] == "2025-06-15T12:00:00Z"
+
     def test_get_track_uris(self, playlist_with_tracks):
         uris = playlist_with_tracks.get_track_uris()
         assert uris == [

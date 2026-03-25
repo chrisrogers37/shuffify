@@ -46,6 +46,7 @@ class Playlist:
                     "uri": track["uri"],
                     "duration_ms": track.get("duration_ms"),
                     "is_local": track.get("is_local", False),
+                    "added_at": track.get("added_at"),
                     "artists": [
                         artist.get("name") for artist in track.get("artists", [])
                     ],

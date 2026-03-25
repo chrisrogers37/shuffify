@@ -150,6 +150,38 @@ class TestShuffleRequest:
         request = ShuffleRequest(algorithm='  BasicShuffle  ')
         assert request.algorithm == 'BasicShuffle'
 
+    def test_valid_newest_first_shuffle(self):
+        """Test valid NewestFirstShuffle request."""
+        request = ShuffleRequest(
+            algorithm='NewestFirstShuffle',
+            jitter=10
+        )
+
+        assert request.algorithm == 'NewestFirstShuffle'
+        params = request.get_algorithm_params()
+        assert params == {'jitter': 10}
+
+    def test_newest_first_default_jitter(self):
+        """Test NewestFirstShuffle with default jitter."""
+        request = ShuffleRequest(algorithm='NewestFirstShuffle')
+        assert request.jitter == 5
+        params = request.get_algorithm_params()
+        assert params == {'jitter': 5}
+
+    def test_jitter_below_minimum(self):
+        """Test that jitter below 1 raises ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            ShuffleRequest(jitter=0)
+
+        assert 'greater than or equal to 1' in str(exc_info.value).lower()
+
+    def test_jitter_above_maximum(self):
+        """Test that jitter above 50 raises ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            ShuffleRequest(jitter=51)
+
+        assert 'less than or equal to 50' in str(exc_info.value).lower()
+
     def test_extra_fields_ignored(self):
         """Test that extra fields are ignored."""
         request = ShuffleRequest(
@@ -193,6 +225,17 @@ class TestParseShuffleRequest:
         request = parse_shuffle_request(form_data)
         assert request.algorithm == 'BasicShuffle'
         assert request.keep_first == 0
+
+    def test_parse_jitter_from_string(self):
+        """Test parsing jitter integer parameter from string."""
+        form_data = {
+            'algorithm': 'NewestFirstShuffle',
+            'jitter': '10'
+        }
+
+        request = parse_shuffle_request(form_data)
+        assert request.jitter == 10
+        assert isinstance(request.jitter, int)
 
     def test_parse_invalid_integer(self):
         """Test parsing invalid integer raises ValidationError."""

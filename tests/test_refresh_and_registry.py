@@ -37,14 +37,14 @@ class TestRegistryHiddenAlgorithms:
         assert "AlbumSequenceShuffle" in class_names
 
     def test_visible_algorithm_count(self):
-        """Should have 6 visible algorithms (7 total minus 1 hidden)."""
+        """Should have 7 visible algorithms (8 total minus 1 hidden)."""
         algorithms = ShuffleRegistry.list_algorithms()
-        assert len(algorithms) == 6
+        assert len(algorithms) == 7
 
     def test_all_algorithms_count(self):
-        """Should have 7 total registered algorithms."""
+        """Should have 8 total registered algorithms."""
         all_algos = ShuffleRegistry.get_available_algorithms()
-        assert len(all_algos) == 7
+        assert len(all_algos) == 8
 
     def test_algorithm_display_order(self):
         """Algorithms should appear in the defined order."""
@@ -57,6 +57,7 @@ class TestRegistryHiddenAlgorithms:
             "Stratified",
             "Artist Spacing",
             "Album Sequence",
+            "Newest First",
         ]
         assert names == expected
 

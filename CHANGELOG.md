@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Newest First Algorithm** - Reorder algorithm that sorts tracks by date added (newest first) with configurable jitter
+  - Window-based jitter prevents exact sorting while preserving recency ordering
+  - Preserves `added_at` timestamp through the Spotify API data pipeline
+
+### Fixed
+- **Workshop Raid Undo** - Promoting raided tracks no longer writes to Spotify immediately
+  - "Add All" / "Add" now stages tracks locally in the workshop cache
+  - "Undo" properly reverts staged raid tracks back to the inbox
+  - Only "Save to Spotify" ratifies changes to the actual playlist
+  - New `/finalize` endpoints handle DB cleanup after commit
 - **Raid Panel UI Parity** - Frontend now exposes all raid playlist features from PR #158
   - Create/link/unlink raid staging playlist (mirrors Archive panel UX)
   - Drip toggle, drip count slider, drip schedule badge

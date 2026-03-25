@@ -1152,3 +1152,91 @@ def pending_raids_dismiss_all(
         "{} tracks dismissed.".format(count),
         dismissed_count=count,
     )
+
+
+@main.route(
+    "/playlist/<playlist_id>/pending-raids/finalize",
+    methods=["POST"],
+)
+@require_auth_and_db
+def pending_raids_finalize(
+    playlist_id, client=None, user=None
+):
+    """Finalize selected tracks after workshop commit.
+
+    Marks tracks as PROMOTED and removes from raid playlist.
+    Does NOT add to target playlist (already done by commit).
+    """
+    req, err = validate_json(PromoteTracksRequest)
+    if err:
+        return err
+
+    promoted = PendingRaidService.promote_tracks(
+        user.id, playlist_id, req.track_ids
+    )
+
+    if promoted:
+        uris = [t.track_uri for t in promoted]
+        _remove_from_raid_playlist(
+            client.api, user.id,
+            playlist_id, uris,
+        )
+
+        log_activity(
+            user_id=user.id,
+            activity_type=ActivityType.RAID_PROMOTE,
+            description=(
+                "Finalized {} raided tracks "
+                "via workshop commit".format(
+                    len(promoted)
+                )
+            ),
+            playlist_id=playlist_id,
+        )
+
+    return json_success(
+        "{} tracks finalized.".format(len(promoted)),
+        promoted_count=len(promoted),
+    )
+
+
+@main.route(
+    "/playlist/<playlist_id>/pending-raids/finalize-all",
+    methods=["POST"],
+)
+@require_auth_and_db
+def pending_raids_finalize_all(
+    playlist_id, client=None, user=None
+):
+    """Finalize all pending tracks after workshop commit.
+
+    Marks all pending tracks as PROMOTED and removes from
+    raid playlist. Does NOT add to target playlist.
+    """
+    promoted = PendingRaidService.promote_all(
+        user.id, playlist_id
+    )
+
+    if promoted:
+        uris = [t.track_uri for t in promoted]
+        _remove_from_raid_playlist(
+            client.api, user.id,
+            playlist_id, uris,
+        )
+
+        log_activity(
+            user_id=user.id,
+            activity_type=ActivityType.RAID_PROMOTE,
+            description=(
+                "Finalized all {} raided tracks "
+                "via workshop commit".format(
+                    len(promoted)
+                )
+            ),
+            playlist_id=playlist_id,
+        )
+
+    return json_success(
+        "{} tracks finalized.".format(len(promoted)),
+        promoted_count=len(promoted),
+    )

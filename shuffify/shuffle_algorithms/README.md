@@ -2,7 +2,7 @@
 
 This directory contains various algorithms for shuffling Spotify playlists, each with its own unique approach and parameters.
 
-**Total:** 7 algorithms registered (6 visible, 1 hidden)
+**Total:** 8 algorithms registered (7 visible, 1 hidden)
 
 ## Available Algorithms
 
@@ -178,6 +178,41 @@ This directory contains various algorithms for shuffling Spotify playlists, each
   - Maintaining the intentional track ordering of albums while varying which album comes first
 
 
+### Newest First
+- **Class**: `NewestFirstShuffle`
+- **File**: `newest_first.py`
+- **Visible**: Yes
+- **Requires Audio Features**: No
+- **Description**: Reorders tracks so the most recently added appear at the top, with adjustable jitter to keep things feeling natural.
+- **Parameters**:
+  - `jitter` (integer): Window size for local shuffling (1 = exact date sort, higher = more variation)
+    - Default: 5, Min: 1, Max: 50
+- **How it works in detail**:
+  1. Reads the `added_at` timestamp from each track (preserved from the Spotify API item wrapper)
+  2. Sorts all tracks by `added_at` in descending order (newest first)
+  3. Divides the sorted list into windows of `jitter` size
+  4. Shuffles tracks within each window to add natural variation
+  5. Tracks with missing or malformed `added_at` are treated as oldest (placed at the end)
+
+  Example with 20 tracks and `jitter=5`:
+  ```
+  Sorted by date: [Newest1, Newest2, ..., Oldest20]
+
+  1. Window 1: [Newest1-5] → shuffled internally
+  2. Window 2: [Newest6-10] → shuffled internally
+  3. Window 3: [Newest11-15] → shuffled internally
+  4. Window 4: [Newest16-20] → shuffled internally
+
+  Result: Newest tracks trend toward the top, but with natural variation
+  ```
+
+- **Use Cases**:
+  - Playlists where you want to hear recently added songs first
+  - Discovery playlists where new additions should get priority
+  - Large playlists that grow over time and tend to bury fresh additions
+  - Any playlist where date-based ordering with slight randomness is preferred
+
+
 ### Tempo Gradient (Hidden)
 - **Class**: `TempoGradientShuffle`
 - **File**: `tempo_gradient.py`
@@ -211,6 +246,7 @@ This directory contains various algorithms for shuffling Spotify playlists, each
 | **Stratified** | Low | High | No | Yes | Controlled randomness within defined sections |
 | **Artist Spacing** | Medium | N/A (constraint-based) | No | Yes | Preventing same-artist back-to-back |
 | **Album Sequence** | Medium (album level) | High (within albums) | No | Yes | Keeping album tracks together, shuffling album order |
+| **Newest First** | Low-Medium (jitter-controlled) | High (date-based) | No | Yes | Surfacing recently added tracks to the top |
 | **Tempo Gradient** | None (deterministic sort) | None | **Yes** | **No** | DJ-style BPM ordering (currently hidden) |
 
 ## Architecture
@@ -250,6 +286,7 @@ The `list_algorithms()` method returns visible algorithms in this order:
 4. Stratified
 5. Artist Spacing
 6. Album Sequence
+7. Newest First
 
 (Tempo Gradient is hidden and not displayed)
 
@@ -262,7 +299,7 @@ Common functions used across multiple algorithms:
 
 | Function | Description | Used By |
 |----------|-------------|---------|
-| `extract_uris(tracks)` | Extract track URIs from track dicts, skipping None | Basic, Percentage, Balanced, Stratified |
+| `extract_uris(tracks)` | Extract track URIs from track dicts, skipping None | Basic, Percentage, Balanced, Stratified, Newest First |
 | `split_keep_first(uris, keep_first)` | Split URI list into kept (pinned) and shuffleable portions | Basic, Balanced, Stratified |
 | `split_into_sections(items, section_count)` | Divide a list into N roughly equal sections | Balanced, Stratified |
 

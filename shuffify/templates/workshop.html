@@ -1233,6 +1233,21 @@ function commitToSpotify() {
             markDirty();
             refreshSourceDuplicateIndicators();
             showNotification(data.message || 'Saved to Spotify!', 'success');
+            // Finalize staged raid promotions (DB + raid playlist cleanup)
+            if (pendingRaidsState.stagedPromotions.length > 0) {
+                var stagedIds = pendingRaidsState.stagedPromotions.map(function(t) { return t.id; });
+                fetch('/playlist/' + workshopState.playlistId + '/pending-raids/finalize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    body: JSON.stringify({ track_ids: stagedIds }),
+                })
+                .then(function() {
+                    pendingRaidsState.stagedPromotions = [];
+                })
+                .catch(function(err) {
+                    console.error('Finalize failed (non-critical):', err);
+                });
+            }
             // Refresh snapshot list to show new auto-snapshot
             if (typeof snapshotState !== 'undefined' && snapshotState.isLoaded) {
                 setTimeout(function() { loadSnapshots(); }, 500);
@@ -1265,6 +1280,15 @@ function undoPreview() {
     workshopState.workingUris = [...workshopState.savedUris];
     workshopState.archiveQueue = [];
     updateArchiveQueueBadge();
+    // Restore staged raid promotions back to inbox
+    if (pendingRaidsState.stagedPromotions.length > 0) {
+        pendingRaidsState.tracks = pendingRaidsState.tracks.concat(
+            pendingRaidsState.stagedPromotions
+        );
+        pendingRaidsState.stagedPromotions = [];
+        renderPendingRaids();
+        updatePendingBadge();
+    }
     fullRerenderTrackList();
     updateTrackCount();
     markDirty();
@@ -2001,6 +2025,7 @@ var pendingRaidsState = {
     loaded: false,
     isLoading: false,
     tracks: [],
+    stagedPromotions: [],
 };
 
 function loadPendingRaids() {
@@ -2095,40 +2120,34 @@ function renderPendingRaids() {
 }
 
 function promotePendingRaid(trackId, trackData) {
-    fetch('/playlist/' + workshopState.playlistId + '/pending-raids/promote', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-        body: JSON.stringify({ track_ids: [trackId] }),
-    })
-    .then(function(r) { if (!r.ok) throw new Error('Promote failed'); return r.json(); })
-    .then(function(data) {
-        if (data.success) {
-            // Add to working playlist
-            if (trackData.track_uri && !workshopState.workingUris.includes(trackData.track_uri)) {
-                var td = {
-                    id: trackData.track_uri.split(':').pop(),
-                    name: trackData.track_name,
-                    artists: (trackData.track_artists || '').split(', '),
-                    album_name: trackData.track_album || '',
-                    album_image_url: trackData.track_image_url || '',
-                    duration_ms: trackData.track_duration_ms || 0,
-                    uri: trackData.track_uri,
-                };
-                trackDataByUri[td.uri] = td;
-                workshopState.workingUris.push(td.uri);
-                var trackList = document.getElementById('track-list');
-                trackList.appendChild(createTrackElement(td, workshopState.workingUris.length));
-                updateTrackCount();
-                markDirty();
-            }
-            // Remove from pending
-            pendingRaidsState.tracks = pendingRaidsState.tracks.filter(function(t) { return t.id !== trackId; });
-            renderPendingRaids();
-            updatePendingBadge();
-            showNotification('Track added to playlist.', 'success');
-        }
-    })
-    .catch(function(err) { showNotification(err.message, 'error'); });
+    // Local-only: stage track in workshop without writing to Spotify.
+    // Actual Spotify write happens on "Save to Spotify" (commit).
+    if (trackData.track_uri && !workshopState.workingUris.includes(trackData.track_uri)) {
+        var td = {
+            id: trackData.track_uri.split(':').pop(),
+            name: trackData.track_name,
+            artists: (trackData.track_artists || '').split(', '),
+            album_name: trackData.track_album || '',
+            album_image_url: trackData.track_image_url || '',
+            duration_ms: trackData.track_duration_ms || 0,
+            uri: trackData.track_uri,
+        };
+        trackDataByUri[td.uri] = td;
+        workshopState.workingUris.push(td.uri);
+        var trackList = document.getElementById('track-list');
+        trackList.appendChild(createTrackElement(td, workshopState.workingUris.length));
+        updateTrackCount();
+        markDirty();
+    }
+    // Move from inbox to staged promotions
+    var track = pendingRaidsState.tracks.find(function(t) { return t.id === trackId; });
+    if (track) {
+        pendingRaidsState.stagedPromotions.push(track);
+    }
+    pendingRaidsState.tracks = pendingRaidsState.tracks.filter(function(t) { return t.id !== trackId; });
+    renderPendingRaids();
+    updatePendingBadge();
+    showNotification('Track staged for save.', 'success');
 }
 
 function dismissPendingRaid(trackId) {
@@ -2150,39 +2169,34 @@ function dismissPendingRaid(trackId) {
 }
 
 function promoteAllPendingRaids() {
-    fetch('/playlist/' + workshopState.playlistId + '/pending-raids/promote-all', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-    })
-    .then(function(r) { if (!r.ok) throw new Error('Promote all failed'); return r.json(); })
-    .then(function(data) {
-        if (data.success) {
-            // Add all tracks to working playlist
-            pendingRaidsState.tracks.forEach(function(track) {
-                if (track.track_uri && !workshopState.workingUris.includes(track.track_uri)) {
-                    var td = {
-                        id: track.track_uri.split(':').pop(),
-                        name: track.track_name,
-                        artists: (track.track_artists || '').split(', '),
-                        album_name: track.track_album || '',
-                        album_image_url: track.track_image_url || '',
-                        duration_ms: track.track_duration_ms || 0,
-                        uri: track.track_uri,
-                    };
-                    trackDataByUri[td.uri] = td;
-                    workshopState.workingUris.push(td.uri);
-                }
-            });
-            fullRerenderTrackList();
-            updateTrackCount();
-            markDirty();
-            pendingRaidsState.tracks = [];
-            renderPendingRaids();
-            updatePendingBadge();
-            showNotification(data.message || 'All tracks added to playlist.', 'success');
+    // Local-only: stage all inbox tracks in workshop without writing to Spotify.
+    // Actual Spotify write happens on "Save to Spotify" (commit).
+    pendingRaidsState.tracks.forEach(function(track) {
+        if (track.track_uri && !workshopState.workingUris.includes(track.track_uri)) {
+            var td = {
+                id: track.track_uri.split(':').pop(),
+                name: track.track_name,
+                artists: (track.track_artists || '').split(', '),
+                album_name: track.track_album || '',
+                album_image_url: track.track_image_url || '',
+                duration_ms: track.track_duration_ms || 0,
+                uri: track.track_uri,
+            };
+            trackDataByUri[td.uri] = td;
+            workshopState.workingUris.push(td.uri);
         }
-    })
-    .catch(function(err) { showNotification(err.message, 'error'); });
+    });
+    fullRerenderTrackList();
+    updateTrackCount();
+    markDirty();
+    // Move all tracks to staged promotions for undo support
+    pendingRaidsState.stagedPromotions = pendingRaidsState.stagedPromotions.concat(
+        pendingRaidsState.tracks
+    );
+    pendingRaidsState.tracks = [];
+    renderPendingRaids();
+    updatePendingBadge();
+    showNotification('All tracks staged for save.', 'success');
 }
 
 function dismissAllPendingRaids() {
