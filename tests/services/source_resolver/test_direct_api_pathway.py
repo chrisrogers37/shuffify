@@ -72,14 +72,17 @@ class TestResolve:
         assert result.track_uris == []
         assert result.error_message is None
 
-    def test_not_found_raises_through(
+    def test_not_found_returns_failure(
         self, pathway, mock_source, mock_api
     ):
+        """NotFoundError should return failure, not raise,
+        to allow scraper fallback."""
         mock_api.get_playlist_tracks.side_effect = (
             SpotifyNotFoundError("Not found")
         )
-        with pytest.raises(SpotifyNotFoundError):
-            pathway.resolve(mock_source, api=mock_api)
+        result = pathway.resolve(mock_source, api=mock_api)
+        assert result.success is False
+        assert "not found" in result.error_message.lower()
 
     def test_api_error_returns_failure(
         self, pathway, mock_source, mock_api

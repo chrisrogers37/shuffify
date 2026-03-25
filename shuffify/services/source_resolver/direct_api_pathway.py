@@ -45,7 +45,17 @@ class DirectAPIPathway:
         try:
             tracks = api.get_playlist_tracks(playlist_id)
         except SpotifyNotFoundError:
-            raise
+            logger.info(
+                "DirectAPI: playlist %s not found, "
+                "deferring to next pathway",
+                playlist_id,
+            )
+            return ResolveResult(
+                track_uris=[],
+                pathway_name=self.name,
+                success=False,
+                error_message="Playlist not found via API",
+            )
         except Exception as e:
             logger.warning(
                 "DirectAPI failed for %s: %s", playlist_id, e

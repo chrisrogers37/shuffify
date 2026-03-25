@@ -59,6 +59,7 @@ def execute_raid(
             "tracks_total": len(target_tracks),
         }
 
+    # --- Target-specific operations (can raise NotFound) ---
     try:
         exclusion_set, target_count = (
             build_full_exclusion_set(
@@ -69,22 +70,37 @@ def execute_raid(
         _auto_snapshot_before_raid(
             schedule, api, target_id
         )
-
-        new_uris = _fetch_raid_sources_with_limits(
-            api, source_ids, exclusion_set,
-            user_id=schedule.user_id,
+    except SpotifyNotFoundError:
+        raise JobExecutionError(
+            "Target playlist {} not found. "
+            "It may have been deleted.".format(
+                target_id
+            )
+        )
+    except SpotifyAPIError as e:
+        raise JobExecutionError(
+            "Spotify API error accessing target: "
+            "{}".format(e)
         )
 
-        if not new_uris:
-            logger.info(
-                "Schedule %s: no new tracks to add",
-                schedule.id,
-            )
-            return {
-                "tracks_added": 0,
-                "tracks_total": target_count,
-            }
+    # --- Source resolution (graceful — returns 0 on failure) ---
+    new_uris = _fetch_raid_sources_with_limits(
+        api, source_ids, exclusion_set,
+        user_id=schedule.user_id,
+    )
 
+    if not new_uris:
+        logger.info(
+            "Schedule %s: no new tracks to add",
+            schedule.id,
+        )
+        return {
+            "tracks_added": 0,
+            "tracks_total": target_count,
+        }
+
+    # --- Stage and write results ---
+    try:
         track_dicts = _build_track_dicts(api, new_uris)
 
         _add_to_raid_playlist(
@@ -113,14 +129,13 @@ def execute_raid(
 
     except SpotifyNotFoundError:
         raise JobExecutionError(
-            "Target playlist {} not found. "
-            "It may have been deleted.".format(
-                target_id
-            )
+            "Raid playlist not found when writing "
+            "tracks. It may have been deleted."
         )
     except SpotifyAPIError as e:
         raise JobExecutionError(
-            "Spotify API error during raid: {}".format(e)
+            "Spotify API error during raid: "
+            "{}".format(e)
         )
 
 

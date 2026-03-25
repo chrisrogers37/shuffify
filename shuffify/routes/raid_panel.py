@@ -667,6 +667,74 @@ def drip_now(playlist_id, client=None, user=None):
         )
 
 
+@main.route(
+    "/playlist/<playlist_id>/raid-and-drip",
+    methods=["POST"],
+)
+@require_auth_and_db
+def raid_and_drip(
+    playlist_id, client=None, user=None
+):
+    """Raid sources then drip into target in one step."""
+    data = request.get_json(silent=True) or {}
+    req = RaidNowRequest(**data)
+
+    try:
+        raid_result = RaidSyncService.raid_now(
+            spotify_id=user.spotify_id,
+            target_playlist_id=playlist_id,
+            source_playlist_ids=req.source_playlist_ids,
+        )
+    except RaidSyncError as e:
+        return json_error(
+            "Raid step failed: {}".format(e), 400
+        )
+    except Exception as e:
+        logger.error("Raid step failed: %s", e)
+        return json_error(
+            "Raid step failed", 500
+        )
+
+    try:
+        drip_result = RaidSyncService.drip_now(
+            spotify_id=user.spotify_id,
+            target_playlist_id=playlist_id,
+        )
+    except RaidSyncError as e:
+        return json_error(
+            "Drip step failed: {}".format(e), 400
+        )
+    except Exception as e:
+        logger.error("Drip step failed: %s", e)
+        return json_error(
+            "Drip step failed", 500
+        )
+
+    raided = raid_result.get("tracks_added", 0)
+    dripped = drip_result.get("tracks_added", 0)
+
+    log_activity(
+        user_id=user.id,
+        activity_type=ActivityType.RAID_SYNC_NOW,
+        description=(
+            "Raid & Drip: {} raided, "
+            "{} dripped".format(raided, dripped)
+        ),
+        playlist_id=playlist_id,
+        metadata={
+            "tracks_raided": raided,
+            "tracks_dripped": dripped,
+        },
+    )
+
+    return json_success(
+        "Raid & Drip: {} raided, {} added "
+        "to playlist.".format(raided, dripped),
+        tracks_raided=raided,
+        tracks_dripped=dripped,
+    )
+
+
 # =============================================================
 # Raid Schedule Management
 # =============================================================
