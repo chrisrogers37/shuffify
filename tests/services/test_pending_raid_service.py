@@ -193,6 +193,67 @@ class TestPromote:
 
 
 # =============================================================
+# Unpromote Tracks
+# =============================================================
+
+
+class TestUnpromote:
+    """Tests for PendingRaidService.unpromote_tracks."""
+
+    def test_unpromote_reverts_to_pending(
+        self, user, sample_tracks
+    ):
+        PendingRaidService.stage_tracks(
+            user_id=user.id,
+            target_playlist_id="pl1",
+            tracks=sample_tracks,
+        )
+        PendingRaidService.promote_all(user.id, "pl1")
+        uris = [t["uri"] for t in sample_tracks]
+
+        count = PendingRaidService.unpromote_tracks(
+            user.id, "pl1", uris
+        )
+        assert count == 3
+
+        pending = PendingRaidService.list_pending(
+            user.id, "pl1"
+        )
+        assert len(pending) == 3
+        for t in pending:
+            assert (
+                t.status == PendingRaidStatus.PENDING
+            )
+            assert t.resolved_at is None
+
+    def test_unpromote_ignores_non_promoted(
+        self, user, sample_tracks
+    ):
+        PendingRaidService.stage_tracks(
+            user_id=user.id,
+            target_playlist_id="pl1",
+            tracks=sample_tracks,
+        )
+        # Don't promote — they're still PENDING
+        uris = [t["uri"] for t in sample_tracks]
+
+        count = PendingRaidService.unpromote_tracks(
+            user.id, "pl1", uris
+        )
+        assert count == 0
+
+    def test_unpromote_no_match_returns_zero(
+        self, user
+    ):
+        count = PendingRaidService.unpromote_tracks(
+            user.id,
+            "pl1",
+            ["spotify:track:nonexistent"],
+        )
+        assert count == 0
+
+
+# =============================================================
 # Dismiss Tracks
 # =============================================================
 

@@ -545,6 +545,36 @@ class TestPlaylistAddItems:
                     'playlist123', ['spotify:track:1']
                 )
 
+    def test_add_items_with_position(
+        self, valid_token_info, auth_manager
+    ):
+        """Should include position in JSON body."""
+        uris = [
+            'spotify:track:1',
+            'spotify:track:2',
+        ]
+
+        with patch(
+            'shuffify.spotify.api.SpotifyHTTPClient'
+        ) as MockHTTP:
+            mock_http = MockHTTP.return_value
+            mock_http.post.return_value = None
+
+            api = SpotifyAPI(
+                valid_token_info, auth_manager
+            )
+            api.playlist_add_items(
+                'playlist123', uris, position=0
+            )
+
+            mock_http.post.assert_called_once_with(
+                '/playlists/playlist123/items',
+                json={
+                    'uris': uris,
+                    'position': 0,
+                },
+            )
+
 
 class TestPlaylistRemoveItems:
     """Tests for playlist_remove_items."""

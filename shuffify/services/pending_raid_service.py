@@ -148,6 +148,33 @@ class PendingRaidService:
         return tracks
 
     @staticmethod
+    def unpromote_tracks(
+        user_id: int,
+        target_playlist_id: str,
+        track_uris: List[str],
+    ) -> int:
+        """Revert promoted tracks back to pending status.
+
+        Returns the number of tracks reverted.
+        """
+        count = PendingRaidTrack.query.filter(
+            PendingRaidTrack.user_id == user_id,
+            PendingRaidTrack.target_playlist_id
+            == target_playlist_id,
+            PendingRaidTrack.track_uri.in_(track_uris),
+            PendingRaidTrack.status
+            == PendingRaidStatus.PROMOTED,
+        ).update(
+            {
+                "status": PendingRaidStatus.PENDING,
+                "resolved_at": None,
+            },
+            synchronize_session="fetch",
+        )
+        db.session.commit()
+        return count
+
+    @staticmethod
     def dismiss_tracks(
         user_id: int,
         target_playlist_id: str,

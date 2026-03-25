@@ -54,6 +54,7 @@ from shuffify.schemas.raid_requests import (
 from shuffify.schemas.pending_raid_requests import (
     PromoteTracksRequest,
     DismissTracksRequest,
+    UnpromoteTracksRequest,
 )
 from shuffify.schemas.raid_link_requests import (
     CreateRaidLinkRequest,
@@ -918,21 +919,9 @@ def _remove_from_raid_playlist(
 ):
     """Remove tracks from the raid Spotify playlist
     if a RaidPlaylistLink exists."""
-    link = RaidLinkService.get_link_for_playlist(
-        user_id, playlist_id
+    RaidLinkService.remove_tracks_from_raid_playlist(
+        api, user_id, playlist_id, uris
     )
-    if not link:
-        return
-
-    try:
-        api.playlist_remove_items(
-            link.raid_playlist_id, uris
-        )
-    except Exception as e:
-        logger.warning(
-            "Failed to remove tracks from raid "
-            "playlist: %s", e
-        )
 
 
 @main.route(
@@ -961,7 +950,11 @@ def pending_raids_list(
 def pending_raids_promote(
     playlist_id, client=None, user=None
 ):
-    """Promote selected pending tracks."""
+    """Promote selected pending tracks.
+
+    Spotify writes are deferred to workshop commit so
+    that undo can revert promoted tracks back to pending.
+    """
     req, err = validate_json(PromoteTracksRequest)
     if err:
         return err
@@ -971,28 +964,6 @@ def pending_raids_promote(
     )
 
     if promoted:
-        uris = [t.track_uri for t in promoted]
-        try:
-            # Add to target playlist
-            client.api.playlist_add_items(
-                playlist_id, uris
-            )
-            # Remove from raid playlist
-            _remove_from_raid_playlist(
-                client.api, user.id,
-                playlist_id, uris,
-            )
-        except Exception as e:
-            logger.error(
-                "Failed to add promoted tracks "
-                "to Spotify: %s",
-                e,
-            )
-            return json_error(
-                "Failed to add tracks to Spotify",
-                500,
-            )
-
         log_activity(
             user_id=user.id,
             activity_type=ActivityType.RAID_PROMOTE,
@@ -1007,6 +978,30 @@ def pending_raids_promote(
     return json_success(
         "{} tracks promoted.".format(len(promoted)),
         promoted_count=len(promoted),
+        uris=[t.track_uri for t in promoted],
+    )
+
+
+@main.route(
+    "/playlist/<playlist_id>/pending-raids/unpromote",
+    methods=["POST"],
+)
+@require_auth_and_db
+def pending_raids_unpromote(
+    playlist_id, client=None, user=None
+):
+    """Revert promoted tracks back to pending."""
+    req, err = validate_json(UnpromoteTracksRequest)
+    if err:
+        return err
+
+    count = PendingRaidService.unpromote_tracks(
+        user.id, playlist_id, req.track_uris
+    )
+
+    return json_success(
+        "{} tracks restored to inbox.".format(count),
+        reverted_count=count,
     )
 
 
@@ -1071,32 +1066,16 @@ def pending_raids_dismiss(
 def pending_raids_promote_all(
     playlist_id, client=None, user=None
 ):
-    """Promote all pending tracks."""
+    """Promote all pending tracks.
+
+    Spotify writes are deferred to workshop commit so
+    that undo can revert promoted tracks back to pending.
+    """
     promoted = PendingRaidService.promote_all(
         user.id, playlist_id
     )
 
     if promoted:
-        uris = [t.track_uri for t in promoted]
-        try:
-            client.api.playlist_add_items(
-                playlist_id, uris
-            )
-            _remove_from_raid_playlist(
-                client.api, user.id,
-                playlist_id, uris,
-            )
-        except Exception as e:
-            logger.error(
-                "Failed to add promoted tracks "
-                "to Spotify: %s",
-                e,
-            )
-            return json_error(
-                "Failed to add tracks to Spotify",
-                500,
-            )
-
         log_activity(
             user_id=user.id,
             activity_type=ActivityType.RAID_PROMOTE,
@@ -1110,6 +1089,7 @@ def pending_raids_promote_all(
     return json_success(
         "{} tracks promoted.".format(len(promoted)),
         promoted_count=len(promoted),
+        uris=[t.track_uri for t in promoted],
     )
 
 

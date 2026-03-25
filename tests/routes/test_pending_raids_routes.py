@@ -67,6 +67,20 @@ class TestPendingRaidsAuth:
             )
             assert resp.status_code == 401
 
+    @patch("shuffify.routes.require_auth")
+    def test_unpromote_unauth(self, mock_auth, db_app):
+        mock_auth.return_value = None
+        with db_app.test_client() as client:
+            resp = client.post(
+                "/playlist/p1/pending-raids/unpromote",
+                json={
+                    "track_uris": [
+                        "spotify:track:1",
+                    ]
+                },
+            )
+            assert resp.status_code == 401
+
 
 # =============================================================
 # Validation Tests
@@ -139,6 +153,28 @@ class TestPendingRaidsValidation:
         resp = auth_client.post(
             "/playlist/p1/pending-raids/finalize",
             json={"track_ids": []},
+        )
+        assert resp.status_code == 400
+
+    @patch("shuffify.routes.require_auth")
+    def test_unpromote_missing_uris(
+        self, mock_auth, auth_client
+    ):
+        mock_auth.return_value = MagicMock()
+        resp = auth_client.post(
+            "/playlist/p1/pending-raids/unpromote",
+            json={},
+        )
+        assert resp.status_code == 400
+
+    @patch("shuffify.routes.require_auth")
+    def test_unpromote_empty_uris(
+        self, mock_auth, auth_client
+    ):
+        mock_auth.return_value = MagicMock()
+        resp = auth_client.post(
+            "/playlist/p1/pending-raids/unpromote",
+            json={"track_uris": []},
         )
         assert resp.status_code == 400
 
