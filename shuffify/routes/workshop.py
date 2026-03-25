@@ -40,9 +40,6 @@ from shuffify.schemas import (
 from shuffify.spotify.url_parser import (
     parse_spotify_playlist_url,
 )
-from shuffify.services.raid_link_service import (
-    RaidLinkService,
-)
 from flask import render_template
 
 logger = logging.getLogger(__name__)
@@ -221,25 +218,6 @@ def workshop_commit(
     playlist_service.update_playlist_tracks(
         playlist_id, commit_request.track_uris
     )
-
-    # Clean up promoted raid tracks from raid playlist
-    newly_added = (
-        set(commit_request.track_uris)
-        - set(current_uris)
-    )
-    if newly_added:
-        try:
-            RaidLinkService.remove_tracks_from_raid_playlist(
-                client.api,
-                user.id,
-                playlist_id,
-                list(newly_added),
-            )
-        except Exception as e:
-            logger.warning(
-                "Failed to clean up raid playlist "
-                "after commit: %s", e
-            )
 
     updated_state = StateService.record_new_state(
         session, playlist_id, commit_request.track_uris
