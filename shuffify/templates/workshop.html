@@ -4519,6 +4519,7 @@ var raidPanel = {
             showNotification(msg, 'success');
             self._historyLoaded = false;
             self.loadStatus();
+            loadPendingRaids();
         })
         .catch(function(error) {
             showNotification(error.message || 'Raid failed', 'error');
@@ -4825,6 +4826,7 @@ var raidPanel = {
             var msg = 'Drip complete: ' + (data.tracks_added || 0) + ' tracks moved';
             showNotification(msg, 'success');
             self.loadStatus();
+            loadPendingRaids();
         })
         .catch(function(error) {
             showNotification(error.message || 'Drip failed', 'error');
@@ -4859,6 +4861,7 @@ var raidPanel = {
             var msg = 'Raid & Drip: ' + (data.tracks_raided || 0) + ' raided, ' + (data.tracks_dripped || 0) + ' added to playlist';
             showNotification(msg, 'success');
             self.loadStatus();
+            loadPendingRaids();
         })
         .catch(function(error) {
             showNotification(error.message || 'Raid & Drip failed', 'error');
