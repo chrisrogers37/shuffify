@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Newest First Algorithm** - Reorder algorithm that sorts tracks by date added (newest first) with configurable jitter
+  - Window-based jitter prevents exact sorting while preserving recency ordering
+  - Preserves `added_at` timestamp through the Spotify API data pipeline
 - **Raid Panel UI Parity** - Frontend now exposes all raid playlist features from PR #158
   - Create/link/unlink raid staging playlist (mirrors Archive panel UX)
   - Drip toggle, drip count slider, drip schedule badge

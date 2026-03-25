@@ -90,6 +90,9 @@ class ShuffleRequest(BaseModel):
     # AlbumSequenceShuffle specific
     shuffle_within_albums: Literal["no", "yes"] = "no"
 
+    # NewestFirstShuffle specific
+    jitter: Annotated[int, Field(ge=1, le=50)] = 5
+
     # TempoGradientShuffle specific
     direction: Literal["ascending", "descending"] = "ascending"
 
@@ -120,6 +123,7 @@ class ShuffleRequest(BaseModel):
         "PercentageShuffle": ["shuffle_percentage", "shuffle_location"],
         "ArtistSpacingShuffle": ["min_spacing"],
         "AlbumSequenceShuffle": ["shuffle_within_albums"],
+        "NewestFirstShuffle": ["jitter"],
         "TempoGradientShuffle": ["direction"],
     }
 
@@ -175,7 +179,7 @@ def parse_shuffle_request(form_data: Dict[str, Any]) -> ShuffleRequest:
         parsed["algorithm"] = str(form_data["algorithm"])
 
     # Integer parameters
-    for key in ["keep_first", "section_count", "min_spacing"]:
+    for key in ["keep_first", "section_count", "min_spacing", "jitter"]:
         if key in form_data:
             try:
                 parsed[key] = int(form_data[key])

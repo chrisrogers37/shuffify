@@ -67,6 +67,7 @@ def execute_shuffle(
                         "id": t.get("id", ""),
                         "name": t.get("name", ""),
                         "uri": t["uri"],
+                        "added_at": t.get("added_at"),
                         "artists": [
                             a.get("name", "")
                             for a in t.get("artists", [])

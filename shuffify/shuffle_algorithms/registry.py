@@ -7,6 +7,7 @@ from .stratified import StratifiedShuffle
 from .artist_spacing import ArtistSpacingShuffle
 from .album_sequence import AlbumSequenceShuffle
 from .tempo_gradient import TempoGradientShuffle
+from .newest_first import NewestFirstShuffle
 
 
 class ShuffleRegistry:
@@ -20,6 +21,7 @@ class ShuffleRegistry:
         "ArtistSpacingShuffle": ArtistSpacingShuffle,
         "AlbumSequenceShuffle": AlbumSequenceShuffle,
         "TempoGradientShuffle": TempoGradientShuffle,
+        "NewestFirstShuffle": NewestFirstShuffle,
     }
     # TempoGradientShuffle hidden: Spotify deprecated Audio Features API
     # (Nov 2024). Unhide when extended API access is granted.
@@ -61,6 +63,7 @@ class ShuffleRegistry:
             StratifiedShuffle,
             ArtistSpacingShuffle,
             AlbumSequenceShuffle,
+            NewestFirstShuffle,
             TempoGradientShuffle,
         ]
 

@@ -257,6 +257,7 @@ All algorithms implement the `ShuffleAlgorithm` protocol and are registered in `
 | **StratifiedShuffle** | Shuffle within sections independently | Maintain overall structure |
 | **ArtistSpacingShuffle** | Ensure same artist doesn't appear back-to-back | Variety in artist sequence |
 | **AlbumSequenceShuffle** | Keep album tracks together, shuffle albums | Preserve album flow |
+| **NewestFirstShuffle** | Sort by date added (newest first) with jitter | Surface recently added tracks |
 | **TempoGradientShuffle** | Sort by BPM for DJ-style transitions | DJ-style mixing *(hidden — needs Audio Features API)* |
 
 **Location**: `shuffify/shuffle_algorithms/`
@@ -466,7 +467,7 @@ except Exception as e:
 **Test Structure** (mirrors `shuffify/`):
 ```
 tests/
-├── algorithms/             # Tests for all 7 shuffle algorithms
+├── algorithms/             # Tests for all 8 shuffle algorithms
 ├── spotify/                # Spotify client, API, cache tests
 ├── schemas/                # Pydantic schema validation tests
 ├── services/               # Service layer tests (17 services)
@@ -821,7 +822,7 @@ if session.get('undo_stack'):
 - ~~Caching layer for Spotify API responses~~
 - ~~Service layer extraction~~ (18 services)
 - ~~Pydantic validation layer~~ (7 schema modules)
-- ~~7 shuffle algorithms~~ (6 visible + 1 hidden, 1081 tests)
+- ~~8 shuffle algorithms~~ (7 visible + 1 hidden)
 - ~~Playlist Workshop~~ (track management, merging, raiding)
 - ~~SQLAlchemy database~~ (11 models — see Models section)
 - ~~APScheduler background jobs~~ (scheduled shuffle/raid operations)
@@ -864,7 +865,7 @@ if session.get('undo_stack'):
 | `shuffify/spotify/client.py` | Spotify API wrapper (facade) |
 | `shuffify/spotify/api.py` | Spotify Web API data operations with caching support |
 | `shuffify/spotify/cache.py` | Redis caching layer for Spotify API responses |
-| `shuffify/shuffle_algorithms/registry.py` | Algorithm registration system (7 algorithms) |
+| `shuffify/shuffle_algorithms/registry.py` | Algorithm registration system (8 algorithms) |
 | `shuffify/models/playlist.py` | Playlist data model |
 | `shuffify/models/db.py` | SQLAlchemy models (11 models — User, UserSettings, WorkshopSession, UpstreamSource, Schedule, JobExecution, LoginHistory, PlaylistSnapshot, ActivityLog, PlaylistPair, PlaylistPreference) |
 | `shuffify/enums.py` | Shared enums (ScheduleFrequency, JobType, SnapshotType, ActivityType, RotationMode) |

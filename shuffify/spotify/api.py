@@ -307,6 +307,9 @@ class SpotifyAPI:
             track = item.get("track") or item.get("item")
             # Only include valid tracks (not None, not local-only)
             if track and track.get("uri"):
+                # Preserve added_at from the playlist item wrapper
+                if "added_at" in item:
+                    track["added_at"] = item["added_at"]
                 tracks.append(track)
 
         logger.debug(
