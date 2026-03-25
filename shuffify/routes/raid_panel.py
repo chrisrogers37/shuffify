@@ -914,16 +914,6 @@ def raid_schedule_history(
 # =============================================================
 
 
-def _remove_from_raid_playlist(
-    api, user_id, playlist_id, uris,
-):
-    """Remove tracks from the raid Spotify playlist
-    if a RaidPlaylistLink exists."""
-    RaidLinkService.remove_tracks_from_raid_playlist(
-        api, user_id, playlist_id, uris
-    )
-
-
 @main.route(
     "/playlist/<playlist_id>/pending-raids",
     methods=["GET"],
@@ -1038,7 +1028,7 @@ def pending_raids_dismiss(
 
     # Remove from raid playlist
     if uris_to_remove:
-        _remove_from_raid_playlist(
+        RaidLinkService.remove_tracks_from_raid_playlist(
             client.api, user.id,
             playlist_id, uris_to_remove,
         )
@@ -1114,7 +1104,7 @@ def pending_raids_dismiss_all(
 
     # Remove from raid playlist
     if uris_to_remove:
-        _remove_from_raid_playlist(
+        RaidLinkService.remove_tracks_from_raid_playlist(
             client.api, user.id,
             playlist_id, uris_to_remove,
         )
@@ -1157,7 +1147,7 @@ def pending_raids_finalize(
 
     if promoted:
         uris = [t.track_uri for t in promoted]
-        _remove_from_raid_playlist(
+        RaidLinkService.remove_tracks_from_raid_playlist(
             client.api, user.id,
             playlist_id, uris,
         )
@@ -1199,7 +1189,7 @@ def pending_raids_finalize_all(
 
     if promoted:
         uris = [t.track_uri for t in promoted]
-        _remove_from_raid_playlist(
+        RaidLinkService.remove_tracks_from_raid_playlist(
             client.api, user.id,
             playlist_id, uris,
         )

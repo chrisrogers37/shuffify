@@ -215,7 +215,8 @@ class TestPendingRaidsFinalize:
 
     @patch(
         "shuffify.routes.raid_panel"
-        "._remove_from_raid_playlist"
+        ".RaidLinkService"
+        ".remove_tracks_from_raid_playlist"
     )
     @patch(
         "shuffify.routes.raid_panel"
@@ -247,7 +248,8 @@ class TestPendingRaidsFinalize:
 
     @patch(
         "shuffify.routes.raid_panel"
-        "._remove_from_raid_playlist"
+        ".RaidLinkService"
+        ".remove_tracks_from_raid_playlist"
     )
     @patch(
         "shuffify.routes.raid_panel"
@@ -275,7 +277,8 @@ class TestPendingRaidsFinalize:
 
     @patch(
         "shuffify.routes.raid_panel"
-        "._remove_from_raid_playlist"
+        ".RaidLinkService"
+        ".remove_tracks_from_raid_playlist"
     )
     @patch(
         "shuffify.routes.raid_panel"

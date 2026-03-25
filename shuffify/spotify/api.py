@@ -438,8 +438,8 @@ class SpotifyAPI:
             playlist_id: The Spotify playlist ID.
             track_uris: List of track URIs to add.
             position: Optional insertion position (0-based).
-                Only applied to the first batch; subsequent
-                batches append after the initial insertion.
+                Each batch offsets from this position to
+                maintain correct ordering.
         """
         self._ensure_valid_token()
 
@@ -449,8 +449,8 @@ class SpotifyAPI:
         for i in range(0, len(track_uris), self.BATCH_SIZE):
             batch = track_uris[i: i + self.BATCH_SIZE]
             payload: Dict[str, Any] = {"uris": batch}
-            if position is not None and i == 0:
-                payload["position"] = position
+            if position is not None:
+                payload["position"] = position + i
             self._http.post(
                 f"/playlists/{playlist_id}/items",
                 json=payload,
