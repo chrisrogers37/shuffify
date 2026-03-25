@@ -21,3 +21,11 @@ class DismissTracksRequest(BaseModel):
     track_ids: List[int] = Field(
         ..., min_length=1, max_length=200
     )
+
+
+class UnpromoteTracksRequest(BaseModel):
+    """Request to unpromote tracks back to pending."""
+
+    track_uris: List[str] = Field(
+        ..., min_length=1, max_length=200
+    )

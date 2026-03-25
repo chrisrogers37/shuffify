@@ -426,7 +426,10 @@ class SpotifyAPI:
 
     @api_error_handler
     def playlist_add_items(
-        self, playlist_id: str, track_uris: List[str]
+        self,
+        playlist_id: str,
+        track_uris: List[str],
+        position: Optional[int] = None,
     ) -> None:
         """
         Add tracks to a playlist in batches.
@@ -434,6 +437,9 @@ class SpotifyAPI:
         Args:
             playlist_id: The Spotify playlist ID.
             track_uris: List of track URIs to add.
+            position: Optional insertion position (0-based).
+                Only applied to the first batch; subsequent
+                batches append after the initial insertion.
         """
         self._ensure_valid_token()
 
@@ -442,9 +448,12 @@ class SpotifyAPI:
 
         for i in range(0, len(track_uris), self.BATCH_SIZE):
             batch = track_uris[i: i + self.BATCH_SIZE]
+            payload: Dict[str, Any] = {"uris": batch}
+            if position is not None and i == 0:
+                payload["position"] = position
             self._http.post(
                 f"/playlists/{playlist_id}/items",
-                json={"uris": batch},
+                json=payload,
             )
 
         if self._cache:

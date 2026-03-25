@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Drip Position Bug** - Added `position` parameter to `SpotifyAPI.playlist_add_items()` so drip executor correctly inserts tracks at top of target playlist
+- **Raid Promote Undo** - Deferred Spotify writes from promote endpoints to workshop commit, enabling undo to restore promoted tracks back to the Track Inbox
+  - New `unpromote` endpoint reverts promoted tracks to pending status
+  - Workshop commit now cleans up raid playlist for newly added tracks
+  - Extracted `RaidLinkService.remove_tracks_from_raid_playlist()` for reuse
+
 ### Added
 - **Newest First Algorithm** - Reorder algorithm that sorts tracks by date added (newest first) with configurable jitter
   - Window-based jitter prevents exact sorting while preserving recency ordering

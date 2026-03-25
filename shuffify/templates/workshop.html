@@ -1050,6 +1050,8 @@ const workshopState = {
     archiveQueue: [],
     archivePair: null,
     archiveTracks: [],
+    // Promoted raid URIs for undo support
+    promotedRaidUris: [],
 };
 
 const trackDataByUri = {};
@@ -1230,6 +1232,7 @@ function commitToSpotify() {
     .then(data => {
         if (data.success) {
             workshopState.savedUris = [...workshopState.workingUris];
+            workshopState.promotedRaidUris = [];
             markDirty();
             refreshSourceDuplicateIndicators();
             showNotification(data.message || 'Saved to Spotify!', 'success');
@@ -1277,6 +1280,22 @@ function commitToSpotify() {
 // =============================================================================
 
 function undoPreview() {
+    // Revert promoted raid tracks back to pending
+    if (workshopState.promotedRaidUris.length > 0) {
+        fetch('/playlist/' + workshopState.playlistId + '/pending-raids/unpromote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ track_uris: workshopState.promotedRaidUris }),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function() {
+            workshopState.promotedRaidUris = [];
+            loadPendingRaids();
+        })
+        .catch(function(err) {
+            console.error('Unpromote failed:', err);
+        });
+    }
     workshopState.workingUris = [...workshopState.savedUris];
     workshopState.archiveQueue = [];
     updateArchiveQueueBadge();
@@ -2134,6 +2153,7 @@ function promotePendingRaid(trackId, trackData) {
         };
         trackDataByUri[td.uri] = td;
         workshopState.workingUris.push(td.uri);
+        workshopState.promotedRaidUris.push(td.uri);
         var trackList = document.getElementById('track-list');
         trackList.appendChild(createTrackElement(td, workshopState.workingUris.length));
         updateTrackCount();
@@ -2184,6 +2204,12 @@ function promoteAllPendingRaids() {
             };
             trackDataByUri[td.uri] = td;
             workshopState.workingUris.push(td.uri);
+        }
+    });
+    // Track promoted URIs for undo
+    pendingRaidsState.tracks.forEach(function(t) {
+        if (t.track_uri && workshopState.workingUris.includes(t.track_uri)) {
+            workshopState.promotedRaidUris.push(t.track_uri);
         }
     });
     fullRerenderTrackList();
