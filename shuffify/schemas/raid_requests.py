@@ -236,8 +236,8 @@ class CreateRaidScheduleRequest(BaseModel):
     model_config = {"extra": "ignore"}
 
     job_type: str
-    schedule_type: str = "interval"
     schedule_value: str = "daily"
+    schedule_time: Optional[str] = None
     source_playlist_ids: Optional[List[str]] = None
 
     @field_validator("job_type")
@@ -251,14 +251,27 @@ class CreateRaidScheduleRequest(BaseModel):
             )
         return v
 
-    @field_validator("schedule_type")
+    @field_validator("schedule_value")
     @classmethod
-    def validate_schedule_type(cls, v):
-        valid = {"interval", "cron"}
+    def validate_schedule_value(cls, v):
+        v = v.strip().lower()
+        valid = [e.value for e in IntervalValue]
         if v not in valid:
             raise ValueError(
-                "schedule_type must be 'interval' or 'cron'"
+                f"schedule_value must be one of: "
+                f"{', '.join(valid)}"
             )
+        return v
+
+    @field_validator("schedule_time")
+    @classmethod
+    def validate_schedule_time(cls, v):
+        if v is not None:
+            v = v.strip()
+            if not _TIME_RE.match(v):
+                raise ValueError(
+                    "schedule_time must be HH:MM format"
+                )
         return v
 
 

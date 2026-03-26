@@ -42,7 +42,7 @@ from shuffify.services.playlist_service import (
 from shuffify.spotify.url_parser import (
     parse_spotify_playlist_url,
 )
-from shuffify.enums import ActivityType
+from shuffify.enums import ActivityType, JobType
 from shuffify.schemas.raid_requests import (
     WatchPlaylistRequest,
     WatchSearchQueryRequest,
@@ -869,28 +869,22 @@ def raid_schedule_create(
             409,
         )
 
-    from shuffify.enums import JobType
-
-    job_type_map = {
-        "raid": JobType.RAID,
-        "drip": JobType.DRIP,
-        "raid_and_drip": JobType.RAID_AND_DRIP,
-    }
-    job_type = job_type_map.get(
-        req.job_type, JobType.RAID
-    )
-
     try:
         data = request.get_json(silent=True) or {}
+        sched_type, sched_val = (
+            RaidSyncService._resolve_schedule_params(
+                req.schedule_value, req.schedule_time
+            )
+        )
         schedule = SchedulerService.create_schedule(
             user_id=user.id,
-            job_type=job_type,
+            job_type=JobType(req.job_type),
             target_playlist_id=playlist_id,
             target_playlist_name=data.get(
                 "target_playlist_name", playlist_id
             ),
-            schedule_type=req.schedule_type,
-            schedule_value=req.schedule_value,
+            schedule_type=sched_type,
+            schedule_value=sched_val,
             source_playlist_ids=(
                 req.source_playlist_ids or []
             ),
@@ -910,7 +904,7 @@ def raid_schedule_create(
 
         log_activity(
             user_id=user.id,
-            activity_type=ActivityType.SCHEDULE_TOGGLE,
+            activity_type=ActivityType.SCHEDULE_CREATE,
             description="Created {} schedule".format(
                 req.job_type
             ),

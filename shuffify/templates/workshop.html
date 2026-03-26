@@ -4152,6 +4152,8 @@ function onArchiveTabActivated() {
 
 <!-- Smart Raid Panel (Phase 4) -->
 <script>
+var RAID_TIME_CAPABLE = ['daily', 'every_3d', 'weekly'];
+
 var raidPanel = {
     loaded: false,
     isLoading: false,
@@ -4311,7 +4313,7 @@ var raidPanel = {
         // Show job type badge
         var typeBadge = document.getElementById('raid-schedule-type-badge');
         var jobType = schedule.job_type || 'raid';
-        var typeLabels = { raid: 'Raid', drip: 'Drip', raid_and_drip: 'Raid & Drip', raid_and_shuffle: 'Raid & Shuffle', 'raid_and_drip': 'Raid & Drip' };
+        var typeLabels = { raid: 'Raid', drip: 'Drip', raid_and_drip: 'Raid & Drip', raid_and_shuffle: 'Raid & Shuffle' };
         typeBadge.textContent = typeLabels[jobType] || jobType;
 
         // Determine current frequency and time from schedule
@@ -4342,7 +4344,7 @@ var raidPanel = {
         this._savedScheduleTime = time;
 
         // Show time picker for frequencies that support it
-        var timeCapable = ['daily', 'every_3d', 'weekly'];
+        var timeCapable = RAID_TIME_CAPABLE;
         if (timeCapable.indexOf(freq) >= 0) {
             timeRow.classList.remove('hidden');
             if (time) timeEl.value = time;
@@ -4391,7 +4393,7 @@ var raidPanel = {
     onScheduleChange: function() {
         var freq = document.getElementById('raid-schedule-frequency').value;
         var timeRow = document.getElementById('raid-schedule-time-row');
-        var timeCapable = ['daily', 'every_3d', 'weekly'];
+        var timeCapable = RAID_TIME_CAPABLE;
 
         if (timeCapable.indexOf(freq) >= 0) {
             timeRow.classList.remove('hidden');
@@ -4414,7 +4416,7 @@ var raidPanel = {
     saveSchedule: function() {
         var freq = document.getElementById('raid-schedule-frequency').value;
         var time = document.getElementById('raid-schedule-time').value;
-        var timeCapable = ['daily', 'every_3d', 'weekly'];
+        var timeCapable = RAID_TIME_CAPABLE;
         var body = { schedule_value: freq };
         if (timeCapable.indexOf(freq) >= 0 && time) {
             body.schedule_time = time;
@@ -4488,7 +4490,7 @@ var raidPanel = {
     onCreateFreqChange: function() {
         var freq = document.getElementById('raid-schedule-create-freq').value;
         var timeRow = document.getElementById('raid-schedule-create-time-row');
-        var timeCapable = ['daily', 'every_3d', 'weekly'];
+        var timeCapable = RAID_TIME_CAPABLE;
         if (timeCapable.indexOf(freq) >= 0) {
             timeRow.classList.remove('hidden');
         } else {
@@ -4500,21 +4502,6 @@ var raidPanel = {
         var jobType = document.getElementById('raid-schedule-create-type').value;
         var freq = document.getElementById('raid-schedule-create-freq').value;
         var time = document.getElementById('raid-schedule-create-time').value;
-        var timeCapable = ['daily', 'every_3d', 'weekly'];
-
-        // Build schedule_type and schedule_value
-        var scheduleType = 'interval';
-        var scheduleValue = freq;
-        if (timeCapable.indexOf(freq) >= 0 && time) {
-            scheduleType = 'cron';
-            var parts = time.split(':');
-            var cronMap = {
-                daily: parts[1] + ' ' + parts[0] + ' * * *',
-                every_3d: parts[1] + ' ' + parts[0] + ' */3 * *',
-                weekly: parts[1] + ' ' + parts[0] + ' * * 0',
-            };
-            scheduleValue = cronMap[freq];
-        }
 
         // Get source playlist IDs for raid types
         var sourceIds = [];
@@ -4526,6 +4513,16 @@ var raidPanel = {
             }
         }
 
+        var body = {
+            job_type: jobType,
+            schedule_value: freq,
+            source_playlist_ids: sourceIds,
+            target_playlist_name: workshopState.playlistName,
+        };
+        if (RAID_TIME_CAPABLE.indexOf(freq) >= 0 && time) {
+            body.schedule_time = time;
+        }
+
         var btn = document.getElementById('raid-schedule-create-btn');
         btn.disabled = true;
         btn.textContent = 'Creating...';
@@ -4534,13 +4531,7 @@ var raidPanel = {
         fetch('/playlist/' + workshopState.playlistId + '/raid-schedule-create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: JSON.stringify({
-                job_type: jobType,
-                schedule_type: scheduleType,
-                schedule_value: scheduleValue,
-                source_playlist_ids: sourceIds,
-                target_playlist_name: workshopState.playlistName,
-            }),
+            body: JSON.stringify(body),
         })
         .then(function(r) {
             return r.json().then(function(d) {
