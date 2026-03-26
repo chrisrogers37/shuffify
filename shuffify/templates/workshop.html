@@ -239,6 +239,11 @@
                                 class="flex-1 px-4 py-2.5 text-sm font-semibold text-white/70 hover:text-white transition duration-150 border-b-2 border-transparent">
                             Raided Tracks <span id="inbox-raid-count" class="text-white/40"></span>
                         </button>
+                        <button id="inbox-tab-archived"
+                                onclick="switchInboxTab('archived')"
+                                class="flex-1 px-4 py-2.5 text-sm font-semibold text-white/70 hover:text-white transition duration-150 border-b-2 border-transparent">
+                            Archived <span id="inbox-archive-count" class="text-white/40"></span>
+                        </button>
                         <button id="inbox-tab-search"
                                 onclick="switchInboxTab('search')"
                                 class="flex-1 px-4 py-2.5 text-sm font-semibold text-white/70 hover:text-white transition duration-150 border-b-2 border-transparent">
@@ -270,6 +275,30 @@
                             <button onclick="dismissAllPendingRaids()"
                                     class="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/60 text-sm font-semibold transition duration-150 border border-white/20">
                                 Dismiss All
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Archived Tracks Sub-view -->
+                    <div id="inbox-archive-content" class="hidden p-4">
+                        <div id="inbox-archive-loading" class="hidden text-center py-4">
+                            <div class="inline-block w-5 h-5 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
+                            <p class="text-white/40 text-xs mt-2">Loading archived tracks...</p>
+                        </div>
+                        <div id="inbox-archive-empty" class="hidden text-center py-6">
+                            <svg class="w-10 h-10 mx-auto text-white/15 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
+                            </svg>
+                            <p class="text-white/40 text-sm">No archived tracks</p>
+                            <p class="text-white/25 text-xs mt-1">Link an archive in Tools &gt; Archive &amp; Rotation to see removed tracks here.</p>
+                        </div>
+                        <div id="inbox-archive-list" class="space-y-1 max-h-[40vh] overflow-y-auto workshop-scrollbar">
+                            <!-- Populated by renderInboxArchiveTracks() -->
+                        </div>
+                        <div id="inbox-archive-actions" class="hidden flex gap-2 mt-3 pt-3 border-t border-white/10">
+                            <button onclick="restoreAllArchiveTracks()"
+                                    class="flex-1 px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
+                                Restore All to Playlist
                             </button>
                         </div>
                     </div>
@@ -669,26 +698,13 @@
                 </div>
             </div>
 
-            <!-- Archive track list (only when paired) -->
+            <!-- Archive summary (track list moved to Track Inbox) -->
             <div id="archive-tracks-section" class="hidden">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Recently Archived</span>
-                    <button onclick="loadArchiveTracks()"
-                            class="text-white/40 hover:text-white/60 transition duration-150"
-                            title="Refresh archive tracks">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                    </button>
-                </div>
-
-                <div id="archive-track-list" class="space-y-1 max-h-[40vh] overflow-y-auto sidebar-scrollbar">
-                    <!-- Populated by renderArchiveTrackList() -->
-                </div>
-
-                <div id="archive-tracks-empty" class="hidden rounded-xl bg-white/5 border border-white/10 p-4 text-center">
-                    <p class="text-white/40 text-sm">No archived tracks yet</p>
-                    <p class="text-white/20 text-xs mt-1">Tracks removed from this playlist will appear here after saving.</p>
+                <div class="rounded-xl bg-white/5 border border-white/10 p-3">
+                    <p class="text-white/40 text-xs">
+                        <span id="archive-summary-count"></span>
+                        — restore tracks via the <button onclick="toggleTrackInbox(); switchInboxTab('archived');" class="text-spotify-green hover:text-spotify-green/80 underline transition duration-150">Track Inbox</button>
+                    </p>
                 </div>
             </div>
 
@@ -1050,6 +1066,7 @@ const workshopState = {
     archiveQueue: [],
     archivePair: null,
     archiveTracks: [],
+    stagedRestorations: [],
 };
 
 const trackDataByUri = {};
@@ -1248,13 +1265,31 @@ function commitToSpotify() {
                     console.error('Finalize failed (non-critical):', err);
                 });
             }
+            // Finalize archive restorations, then flush archive queue (sequential to avoid concurrent mutations)
+            var finalizePromise = Promise.resolve();
+            if (workshopState.stagedRestorations.length > 0) {
+                var restorationUris = workshopState.stagedRestorations.map(function(t) { return t.uri; });
+                finalizePromise = fetch('/playlist/' + workshopState.playlistId + '/pair/finalize-restore', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    body: JSON.stringify({ track_uris: restorationUris }),
+                })
+                .then(function() {
+                    workshopState.stagedRestorations = [];
+                    renderInboxArchiveTracks();
+                })
+                .catch(function(err) {
+                    console.error('Finalize restore failed (non-critical):', err);
+                });
+            }
+            finalizePromise.then(function() {
+                if (workshopState.archiveQueue.length > 0) {
+                    flushArchiveQueue();
+                }
+            });
             // Refresh snapshot list to show new auto-snapshot
             if (typeof snapshotState !== 'undefined' && snapshotState.isLoaded) {
                 setTimeout(function() { loadSnapshots(); }, 500);
-            }
-            // Flush archive queue (best-effort, after commit succeeds)
-            if (workshopState.archiveQueue.length > 0) {
-                flushArchiveQueue();
             }
         } else {
             showNotification(data.message || 'Save returned unexpected response.', 'error');
@@ -1295,6 +1330,14 @@ function undoPreview() {
         pendingRaidsState.stagedPromotions = [];
         renderPendingRaids();
         updatePendingBadge();
+    }
+    // Revert staged archive restorations back to inbox
+    if (workshopState.stagedRestorations.length > 0) {
+        workshopState.archiveTracks = workshopState.stagedRestorations.concat(
+            workshopState.archiveTracks
+        );
+        workshopState.stagedRestorations = [];
+        renderInboxArchiveTracks();
     }
     workshopState.workingUris = [...workshopState.savedUris];
     workshopState.archiveQueue = [];
@@ -1458,8 +1501,15 @@ function deleteTrack(uri, buttonElement) {
     // Remove from workingUris at the same index
     workshopState.workingUris.splice(domIndex, 1);
 
-    // Queue for archiving if pair exists with auto-archive enabled
-    if (workshopState.archivePair && workshopState.archivePair.auto_archive_on_remove) {
+    // Check if this track is a staged archive restoration
+    var restorationIndex = workshopState.stagedRestorations.findIndex(function(t) { return t.uri === uri; });
+    if (restorationIndex !== -1) {
+        // Move back to archive inbox; do NOT queue for archiving (already there)
+        var restoredTrack = workshopState.stagedRestorations.splice(restorationIndex, 1)[0];
+        workshopState.archiveTracks.unshift(restoredTrack);
+        renderInboxArchiveTracks();
+    } else if (workshopState.archivePair && workshopState.archivePair.auto_archive_on_remove) {
+        // Queue for archiving (existing behavior)
         workshopState.archiveQueue.push(uri);
         updateArchiveQueueBadge();
     }
@@ -2003,7 +2053,7 @@ function toggleTrackInbox() {
 
 function switchInboxTab(tabName) {
     // Deactivate all tabs
-    ['raids', 'search'].forEach(function(t) {
+    ['raids', 'archived', 'search'].forEach(function(t) {
         var tabBtn = document.getElementById('inbox-tab-' + t);
         var content = document.getElementById('inbox-' + t + '-content');
         if (tabBtn) {
@@ -2022,9 +2072,11 @@ function switchInboxTab(tabName) {
     }
     if (activeContent) activeContent.classList.remove('hidden');
 
-    // Lazy-load raids on first open
+    // Lazy-load on first open
     if (tabName === 'raids') {
         loadPendingRaids();
+    } else if (tabName === 'archived') {
+        loadArchiveTracksForInbox();
     }
 }
 
@@ -3479,10 +3531,13 @@ function deleteArchivePair() {
         workshopState.archivePair = null;
         workshopState.archiveTracks = [];
         workshopState.archiveQueue = [];
+        workshopState.stagedRestorations = [];
         archiveState.rotationSchedule = null;
+        archiveInboxLoaded = false;
         updateArchiveQueueBadge();
         renderArchivePanel();
         renderRotationConfig();
+        renderInboxArchiveTracks();
         populateArchiveLinkSelect();
         showNotification('Archive pairing removed', 'success');
     })
@@ -3921,15 +3976,19 @@ function runRotationNow() {
     });
 }
 
-function loadArchiveTracks() {
-    if (!workshopState.archivePair) return;
-    archiveState.isLoadingTracks = true;
+var archiveInboxLoaded = false;
 
-    var listEl = document.getElementById('archive-track-list');
-    var emptyEl = document.getElementById('archive-tracks-empty');
-    var countEl = document.getElementById('archive-pair-track-count');
+function fetchArchiveTracks(force) {
+    if (!workshopState.archivePair) {
+        renderInboxArchiveTracks();
+        return Promise.resolve();
+    }
+    if (!force && archiveInboxLoaded) {
+        renderInboxArchiveTracks();
+        return Promise.resolve();
+    }
 
-    fetch('/playlist/' + workshopState.playlistId + '/pair/archive-tracks')
+    return fetch('/playlist/' + workshopState.playlistId + '/pair/archive-tracks')
     .then(function(response) {
         if (!response.ok) throw new Error('Failed to load archive tracks');
         return response.json();
@@ -3937,55 +3996,152 @@ function loadArchiveTracks() {
     .then(function(data) {
         workshopState.archiveTracks = (data.tracks || []).slice().reverse();
         var total = data.total || workshopState.archiveTracks.length;
-        countEl.textContent = total > 25
-            ? 'Showing 25 of ' + total + ' archived'
-            : total + ' track' + (total !== 1 ? 's' : '') + ' archived';
-        renderArchiveTrackList();
+        updateArchiveSummary(total);
+        var countEl = document.getElementById('archive-pair-track-count');
+        if (countEl) {
+            countEl.textContent = total + ' track' + (total !== 1 ? 's' : '') + ' archived';
+        }
+        archiveInboxLoaded = true;
+        renderInboxArchiveTracks();
     })
     .catch(function(error) {
         console.error('Archive tracks load error:', error);
-        listEl.innerHTML = '';
-        emptyEl.classList.add('hidden');
-        countEl.textContent = 'Error loading tracks';
-    })
-    .finally(function() {
+    });
+}
+
+function loadArchiveTracks() {
+    archiveState.isLoadingTracks = true;
+    fetchArchiveTracks(true).finally(function() {
         archiveState.isLoadingTracks = false;
     });
 }
 
-function renderArchiveTrackList() {
-    var listEl = document.getElementById('archive-track-list');
-    var emptyEl = document.getElementById('archive-tracks-empty');
+function updateArchiveSummary(total) {
+    var summaryEl = document.getElementById('archive-summary-count');
+    if (summaryEl) {
+        summaryEl.textContent = total + ' track' + (total !== 1 ? 's' : '') + ' archived';
+    }
+}
 
-    if (!workshopState.archiveTracks || workshopState.archiveTracks.length === 0) {
-        listEl.innerHTML = '';
-        emptyEl.classList.remove('hidden');
+function loadArchiveTracksForInbox() {
+    var loading = document.getElementById('inbox-archive-loading');
+    if (loading && !archiveInboxLoaded) loading.classList.remove('hidden');
+
+    fetchArchiveTracks(false).finally(function() {
+        if (loading) loading.classList.add('hidden');
+    });
+}
+
+function renderInboxArchiveTracks() {
+    var list = document.getElementById('inbox-archive-list');
+    var empty = document.getElementById('inbox-archive-empty');
+    var actions = document.getElementById('inbox-archive-actions');
+    var countEl = document.getElementById('inbox-archive-count');
+    var tracks = workshopState.archiveTracks;
+
+    if (!list) return;
+    list.innerHTML = '';
+
+    if (!tracks || tracks.length === 0) {
+        if (empty) empty.classList.remove('hidden');
+        if (actions) actions.classList.add('hidden');
+        if (countEl) countEl.textContent = '';
         return;
     }
 
-    emptyEl.classList.add('hidden');
-    var html = '';
-    workshopState.archiveTracks.forEach(function(track) {
-        var artists = (track.artists || []).join(', ');
-        var imgHtml = track.album_image_url
-            ? '<img src="' + escapeHtml(track.album_image_url) + '" alt="" class="w-full h-full object-cover" loading="lazy">'
-            : '<div class="w-full h-full flex items-center justify-center text-white/30"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
+    if (empty) empty.classList.add('hidden');
+    if (actions) actions.classList.remove('hidden');
+    if (countEl) countEl.textContent = '(' + tracks.length + ')';
 
-        html += '<div class="archive-track-item flex items-center p-2 rounded-lg hover:bg-white/5 transition duration-150 group">'
-            + '<div class="w-8 h-8 rounded overflow-hidden flex-shrink-0 bg-black/20">' + imgHtml + '</div>'
-            + '<div class="ml-2 flex-1 min-w-0">'
-            + '<p class="text-white text-sm truncate">' + escapeHtml(track.name) + '</p>'
-            + '<p class="text-white/40 text-xs truncate">' + escapeHtml(artists) + '</p>'
-            + '</div>'
-            + '<button onclick="unarchiveTrack(\'' + escapeHtml(track.uri) + '\')" '
-            + 'class="ml-2 p-1.5 rounded-lg text-white/20 hover:text-green-400 hover:bg-white/10 opacity-0 group-hover:opacity-100 transition duration-150 flex-shrink-0" '
-            + 'title="Restore to playlist">'
-            + '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">'
-            + '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 015 5v2M3 10l4-4M3 10l4 4"></path>'
-            + '</svg></button>'
-            + '</div>';
+    tracks.forEach(function(track) {
+        var el = document.createElement('div');
+        el.className = 'flex items-center p-2 rounded-lg hover:bg-white/5 transition duration-150';
+        el.dataset.uri = track.uri;
+
+        var imgHtml = track.album_image_url
+            ? '<img src="' + escapeHtml(track.album_image_url) + '" alt="" class="w-8 h-8 rounded object-cover flex-shrink-0" loading="lazy">'
+            : '<div class="w-8 h-8 rounded bg-black/20 flex items-center justify-center text-white/30 flex-shrink-0"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
+
+        var artists = (track.artists || []).join(', ');
+        el.innerHTML = imgHtml +
+            '<div class="ml-2 flex-1 min-w-0">' +
+                '<p class="text-white text-xs font-medium truncate">' + escapeHtml(track.name) + '</p>' +
+                '<p class="text-white/40 text-xs truncate">' + escapeHtml(artists) + '</p>' +
+            '</div>';
+
+        // Add button
+        var addBtn = document.createElement('button');
+        addBtn.className = 'ml-1 p-1.5 rounded-full bg-white/10 hover:bg-green-500/40 text-white/60 hover:text-white transition duration-150 flex-shrink-0';
+        addBtn.title = 'Restore to playlist';
+        addBtn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 6v12M6 12h12"></path></svg>';
+        addBtn._uri = track.uri;
+        addBtn.addEventListener('click', function() { stageArchiveRestore(this._uri); });
+
+        el.appendChild(addBtn);
+        list.appendChild(el);
     });
-    listEl.innerHTML = html;
+}
+
+// Archive track data is already workshop-compatible; normalize with fallbacks
+function normalizeArchiveTrack(track) {
+    return {
+        id: track.id || track.uri.split(':').pop(),
+        name: track.name,
+        artists: track.artists || [],
+        album_name: track.album_name || '',
+        album_image_url: track.album_image_url || '',
+        duration_ms: track.duration_ms || 0,
+        uri: track.uri,
+    };
+}
+
+function stageArchiveRestore(uri) {
+    if (!workshopState.archivePair) return;
+
+    var track = workshopState.archiveTracks.find(function(t) { return t.uri === uri; });
+    if (!track) return;
+
+    if (workshopState.workingUris.includes(uri)) {
+        showNotification('Track already in playlist.', 'info');
+        return;
+    }
+
+    var td = normalizeArchiveTrack(track);
+    trackDataByUri[td.uri] = td;
+
+    workshopState.workingUris.push(td.uri);
+    var trackList = document.getElementById('track-list');
+    trackList.appendChild(createTrackElement(td, workshopState.workingUris.length));
+    updateTrackCount();
+    markDirty();
+
+    workshopState.stagedRestorations.push(track);
+    workshopState.archiveTracks = workshopState.archiveTracks.filter(function(t) { return t.uri !== uri; });
+    renderInboxArchiveTracks();
+    showNotification('Track staged for restore.', 'success');
+}
+
+function restoreAllArchiveTracks() {
+    if (!workshopState.archivePair || !workshopState.archiveTracks.length) return;
+
+    workshopState.archiveTracks.forEach(function(track) {
+        if (track.uri && !workshopState.workingUris.includes(track.uri)) {
+            var td = normalizeArchiveTrack(track);
+            trackDataByUri[td.uri] = td;
+            workshopState.workingUris.push(td.uri);
+        }
+    });
+
+    fullRerenderTrackList();
+    updateTrackCount();
+    markDirty();
+
+    workshopState.stagedRestorations = workshopState.stagedRestorations.concat(
+        workshopState.archiveTracks
+    );
+    workshopState.archiveTracks = [];
+    renderInboxArchiveTracks();
+    showNotification('All archive tracks staged for restore.', 'success');
 }
 
 function flushArchiveQueue() {
@@ -4014,9 +4170,8 @@ function flushArchiveQueue() {
     })
     .then(function(data) {
         showNotification('Archived ' + data.archived_count + ' track' + (data.archived_count !== 1 ? 's' : ''), 'info');
-        if (archiveState.isLoaded) {
-            loadArchiveTracks();
-        }
+        archiveInboxLoaded = false;
+        fetchArchiveTracks(true);
     })
     .catch(function(error) {
         console.error('Archive flush error:', error);
@@ -4024,30 +4179,6 @@ function flushArchiveQueue() {
         workshopState.archiveQueue = uris.concat(workshopState.archiveQueue);
         updateArchiveQueueBadge();
         showNotification('Failed to archive removed tracks. They remain queued.', 'error');
-    });
-}
-
-function unarchiveTrack(uri) {
-    if (!workshopState.archivePair) return;
-
-    fetch('/playlist/' + workshopState.playlistId + '/pair/unarchive', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-        },
-        body: JSON.stringify({ track_uris: [uri] }),
-    })
-    .then(function(response) {
-        if (!response.ok) throw new Error('Unarchive failed');
-        return response.json();
-    })
-    .then(function(data) {
-        showNotification('Track restored to playlist', 'success');
-        loadArchiveTracks();
-    })
-    .catch(function(error) {
-        showNotification(error.message || 'Failed to restore track', 'error');
     });
 }
 

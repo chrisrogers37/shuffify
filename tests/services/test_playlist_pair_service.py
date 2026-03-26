@@ -312,6 +312,53 @@ class TestUnarchiveTracks:
 
 
 # =============================================================================
+# Remove From Archive (finalize restore)
+# =============================================================================
+
+
+class TestRemoveFromArchive:
+    """Tests for PlaylistPairService.remove_from_archive."""
+
+    def test_remove_success(self, mock_api):
+        uris = ["spotify:track:a1b2c3d4e5f6g7h8i9j0k1"]
+        count = PlaylistPairService.remove_from_archive(
+            mock_api, "arch1", uris
+        )
+        assert count == 1
+        mock_api.playlist_remove_items \
+            .assert_called_once_with("arch1", uris)
+
+    def test_remove_does_not_add_to_production(
+        self, mock_api
+    ):
+        uris = ["spotify:track:a1b2c3d4e5f6g7h8i9j0k1"]
+        PlaylistPairService.remove_from_archive(
+            mock_api, "arch1", uris
+        )
+        mock_api.playlist_add_items.assert_not_called()
+
+    def test_remove_empty_list(self, mock_api):
+        count = PlaylistPairService.remove_from_archive(
+            mock_api, "arch1", []
+        )
+        assert count == 0
+        mock_api.playlist_remove_items.assert_not_called()
+
+    def test_remove_multiple_tracks(self, mock_api):
+        uris = [
+            "spotify:track:a1b2c3d4e5f6g7h8i9j0k1",
+            "spotify:track:b2c3d4e5f6g7h8i9j0k1l2",
+            "spotify:track:c3d4e5f6g7h8i9j0k1l2m3",
+        ]
+        count = PlaylistPairService.remove_from_archive(
+            mock_api, "arch1", uris
+        )
+        assert count == 3
+        mock_api.playlist_remove_items \
+            .assert_called_once_with("arch1", uris)
+
+
+# =============================================================================
 # Create Archive Playlist
 # =============================================================================
 
