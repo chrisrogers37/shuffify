@@ -184,3 +184,121 @@ class TestUpdatePairValidation:
             json={"auto_archive_on_remove": True},
         )
         assert resp.status_code == 404
+
+
+# =============================================================================
+# POST /playlist/<id>/pair/finalize-restore
+# =============================================================================
+
+
+class TestFinalizeRestoreAuth:
+    """Authentication tests for finalize-restore endpoint."""
+
+    @patch("shuffify.routes.require_auth")
+    def test_finalize_restore_unauth(
+        self, mock_auth, db_app
+    ):
+        mock_auth.return_value = None
+        with db_app.test_client() as client:
+            resp = client.post(
+                "/playlist/p1/pair/finalize-restore",
+                json={
+                    "track_uris": [
+                        "spotify:track:"
+                        "a1b2c3d4e5f6g7h8i9j0k1"
+                    ]
+                },
+            )
+            assert resp.status_code == 401
+
+
+class TestFinalizeRestoreValidation:
+    """Validation tests for finalize-restore endpoint."""
+
+    @patch("shuffify.routes.require_auth")
+    @patch(
+        "shuffify.routes.playlist_pairs"
+        ".PlaylistPairService"
+    )
+    def test_no_pair_returns_404(
+        self, mock_svc, mock_auth, auth_client
+    ):
+        mock_auth.return_value = MagicMock()
+        mock_svc.get_pair_for_playlist.return_value = None
+        resp = auth_client.post(
+            "/playlist/p1/pair/finalize-restore",
+            json={
+                "track_uris": [
+                    "spotify:track:"
+                    "a1b2c3d4e5f6g7h8i9j0k1"
+                ]
+            },
+        )
+        assert resp.status_code == 404
+
+    @patch("shuffify.routes.require_auth")
+    @patch(
+        "shuffify.routes.playlist_pairs"
+        ".PlaylistPairService"
+    )
+    def test_empty_uris_returns_400(
+        self, mock_svc, mock_auth, auth_client
+    ):
+        mock_auth.return_value = MagicMock()
+        mock_pair = MagicMock()
+        mock_svc.get_pair_for_playlist.return_value = (
+            mock_pair
+        )
+        resp = auth_client.post(
+            "/playlist/p1/pair/finalize-restore",
+            json={"track_uris": []},
+        )
+        assert resp.status_code == 400
+
+    @patch("shuffify.routes.require_auth")
+    @patch(
+        "shuffify.routes.playlist_pairs"
+        ".PlaylistPairService"
+    )
+    def test_invalid_uri_returns_400(
+        self, mock_svc, mock_auth, auth_client
+    ):
+        mock_auth.return_value = MagicMock()
+        mock_pair = MagicMock()
+        mock_svc.get_pair_for_playlist.return_value = (
+            mock_pair
+        )
+        resp = auth_client.post(
+            "/playlist/p1/pair/finalize-restore",
+            json={"track_uris": ["invalid-uri"]},
+        )
+        assert resp.status_code == 400
+
+    @patch("shuffify.routes.require_auth")
+    @patch(
+        "shuffify.routes.playlist_pairs"
+        ".PlaylistPairService"
+    )
+    def test_finalize_success(
+        self, mock_svc, mock_auth, auth_client
+    ):
+        mock_auth.return_value = MagicMock()
+        mock_pair = MagicMock()
+        mock_svc.get_pair_for_playlist.return_value = (
+            mock_pair
+        )
+        mock_svc.remove_from_archive.return_value = 1
+        resp = auth_client.post(
+            "/playlist/p1/pair/finalize-restore",
+            json={
+                "track_uris": [
+                    "spotify:track:"
+                    "a1b2c3d4e5f6g7h8i9j0k1"
+                ]
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["restored_count"] == 1
+        mock_svc.remove_from_archive.assert_called_once()

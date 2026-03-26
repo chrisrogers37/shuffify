@@ -86,37 +86,31 @@ class UpdatePairRequest(BaseModel):
         return self
 
 
-class ArchiveTracksRequest(BaseModel):
+class _TrackUriListRequest(BaseModel):
+    """Base for requests carrying a list of track URIs."""
+
+    track_uris: List[str]
+
+    @field_validator("track_uris")
+    @classmethod
+    def validate_track_uris(cls, v):
+        if not v:
+            raise ValueError("track_uris must not be empty")
+        for uri in v:
+            if not TRACK_URI_PATTERN.match(uri):
+                raise ValueError(
+                    f"Invalid track URI format: {uri}"
+                )
+        return v
+
+
+class ArchiveTracksRequest(_TrackUriListRequest):
     """Request to archive tracks to the paired archive playlist."""
 
-    track_uris: List[str]
 
-    @field_validator("track_uris")
-    @classmethod
-    def validate_track_uris(cls, v):
-        if not v:
-            raise ValueError("track_uris must not be empty")
-        for uri in v:
-            if not TRACK_URI_PATTERN.match(uri):
-                raise ValueError(
-                    f"Invalid track URI format: {uri}"
-                )
-        return v
-
-
-class UnarchiveTracksRequest(BaseModel):
+class UnarchiveTracksRequest(_TrackUriListRequest):
     """Request to unarchive tracks back to production playlist."""
 
-    track_uris: List[str]
 
-    @field_validator("track_uris")
-    @classmethod
-    def validate_track_uris(cls, v):
-        if not v:
-            raise ValueError("track_uris must not be empty")
-        for uri in v:
-            if not TRACK_URI_PATTERN.match(uri):
-                raise ValueError(
-                    f"Invalid track URI format: {uri}"
-                )
-        return v
+class FinalizeRestoreRequest(_TrackUriListRequest):
+    """Finalize archive restorations after workshop commit."""

@@ -179,6 +179,28 @@ class PlaylistPairService:
         return len(track_uris)
 
     @staticmethod
+    def remove_from_archive(api, archive_playlist_id, track_uris):
+        """Remove tracks from archive playlist only.
+
+        Unlike unarchive_tracks(), does NOT add to production.
+        Used after workshop commit has already added the tracks.
+        Returns the number of tracks removed.
+        """
+        if not track_uris:
+            return 0
+
+        api.playlist_remove_items(
+            archive_playlist_id, track_uris
+        )
+
+        logger.info(
+            "Removed %d tracks from archive %s",
+            len(track_uris),
+            archive_playlist_id,
+        )
+        return len(track_uris)
+
+    @staticmethod
     def create_archive_playlist(api, user_id, name):
         """Create a new private Spotify playlist for archiving.
 

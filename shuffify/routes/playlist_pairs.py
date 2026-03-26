@@ -27,6 +27,7 @@ from shuffify.schemas.playlist_pair_requests import (
     UpdatePairRequest,
     ArchiveTracksRequest,
     UnarchiveTracksRequest,
+    FinalizeRestoreRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -253,6 +254,58 @@ def unarchive_tracks(
         )
         return json_error(
             "Failed to unarchive tracks", 500
+        )
+
+
+@main.route(
+    "/playlist/<playlist_id>/pair/finalize-restore",
+    methods=["POST"],
+)
+@require_auth_and_db
+def finalize_restore(
+    playlist_id, client=None, user=None
+):
+    """Finalize archive restorations after workshop commit.
+
+    Removes tracks from archive playlist only. Production add
+    was already handled by workshop commit.
+    """
+    pair = PlaylistPairService.get_pair_for_playlist(
+        user.id, playlist_id
+    )
+    if not pair:
+        return json_error("No archive pair found", 404)
+
+    req, err = validate_json(FinalizeRestoreRequest)
+    if err:
+        return err
+
+    try:
+        count = PlaylistPairService.remove_from_archive(
+            client.api,
+            pair.archive_playlist_id,
+            req.track_uris,
+        )
+        log_activity(
+            user_id=user.id,
+            activity_type=ActivityType.UNARCHIVE_TRACKS,
+            description=(
+                f"Finalized {count} archive restorations"
+            ),
+            playlist_id=playlist_id,
+            metadata={"track_count": count},
+        )
+        return json_success(
+            f"Finalized {count} archive restorations",
+            restored_count=count,
+        )
+    except Exception as e:
+        logger.error(
+            "Failed to finalize restore: %s", e
+        )
+        return json_error(
+            "Failed to finalize archive restorations",
+            500,
         )
 
 
