@@ -5077,51 +5077,6 @@ var raidPanel = {
         });
     },
 
-    renderDripSchedule: function(dripSchedule) {
-        var infoEl = document.getElementById('raid-drip-schedule-info');
-        if (!infoEl) return;
-
-        if (!dripSchedule || !this.status.raid_link) {
-            infoEl.classList.add('hidden');
-            return;
-        }
-
-        infoEl.classList.remove('hidden');
-        var badge = document.getElementById('raid-drip-schedule-badge');
-        var toggleBtn = document.getElementById('raid-drip-schedule-toggle-btn');
-
-        if (dripSchedule.is_enabled) {
-            badge.textContent = 'Enabled';
-            badge.className = 'px-1.5 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-300';
-            toggleBtn.textContent = 'Disable';
-        } else {
-            badge.textContent = 'Disabled';
-            badge.className = 'px-1.5 py-0.5 rounded-full text-xs font-semibold bg-red-500/20 text-red-300';
-            toggleBtn.textContent = 'Enable';
-        }
-    },
-
-    toggleDripSchedule: function() {
-        var self = this;
-
-        fetch('/playlist/' + workshopState.playlistId + '/drip-schedule-toggle', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-        })
-        .then(function(r) {
-            if (!r.ok) throw new Error('Toggle failed');
-            return r.json();
-        })
-        .then(function(data) {
-            var state = data.schedule && data.schedule.is_enabled ? 'enabled' : 'disabled';
-            showNotification('Drip schedule ' + state, 'success');
-            self.loadStatus();
-        })
-        .catch(function(error) {
-            showNotification(error.message || 'Failed to toggle drip schedule', 'error');
-        });
-    },
-
     // =================================================================
     // Per-Source Raid Count
     // =================================================================
