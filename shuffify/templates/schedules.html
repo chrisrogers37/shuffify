@@ -60,6 +60,8 @@
                                 {% if schedule.job_type == 'raid' %}bg-blue-500/80
                                 {% elif schedule.job_type == 'shuffle' %}bg-purple-500/80
                                 {% elif schedule.job_type == 'rotate' %}bg-teal-500/80
+                                {% elif schedule.job_type == 'raid_and_drip' %}bg-emerald-500/80
+                                {% elif schedule.job_type == 'drip' %}bg-cyan-500/80
                                 {% else %}bg-orange-500/80{% endif %} text-white">
                                 {{ schedule.job_type | replace('_', ' ') }}
                             </span>
@@ -177,6 +179,8 @@
                         <option value="raid">Raid (pull new tracks from sources)</option>
                         <option value="shuffle">Shuffle (reorder playlist)</option>
                         <option value="raid_and_shuffle">Raid + Shuffle (pull then shuffle)</option>
+                        <option value="raid_and_drip">Raid + Drip (pull then drip to playlist)</option>
+                        <option value="drip">Drip (move from raid playlist to target)</option>
                         <option value="rotate">Rotate (cycle tracks with archive)</option>
                     </select>
                 </div>
@@ -338,7 +342,7 @@ function updateModalFields() {
     const rotationSection = document.getElementById('modal-rotation-section');
 
     // Show/hide sections based on job type
-    if (jobType === 'raid' || jobType === 'raid_and_shuffle') {
+    if (jobType === 'raid' || jobType === 'raid_and_shuffle' || jobType === 'raid_and_drip') {
         sourcesSection.classList.remove('hidden');
     } else {
         sourcesSection.classList.add('hidden');
@@ -442,7 +446,7 @@ function updateCreateButtonState() {
     const targetId = document.getElementById('modal-target-playlist').value;
     let disabled = false;
 
-    if (jobType === 'raid' || jobType === 'raid_and_shuffle') {
+    if (jobType === 'raid' || jobType === 'raid_and_shuffle' || jobType === 'raid_and_drip') {
         const sources = UPSTREAM_SOURCES[targetId] || [];
         if (sources.length === 0) {
             disabled = true;
@@ -505,7 +509,7 @@ document.getElementById('create-schedule-form').addEventListener('submit', funct
     };
 
     // Add source playlists if applicable
-    if (jobType === 'raid' || jobType === 'raid_and_shuffle') {
+    if (jobType === 'raid' || jobType === 'raid_and_shuffle' || jobType === 'raid_and_drip') {
         const checked = document.querySelectorAll('input[name="source_playlist"]:checked');
         body.source_playlist_ids = Array.from(checked).map(cb => cb.value);
         if (body.source_playlist_ids.length === 0) {

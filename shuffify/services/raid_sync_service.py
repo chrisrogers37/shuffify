@@ -604,6 +604,7 @@ class RaidSyncService:
             Schedule.job_type.in_([
                 JobType.RAID,
                 JobType.RAID_AND_SHUFFLE,
+                JobType.RAID_AND_DRIP,
             ]),
         ).first()
 

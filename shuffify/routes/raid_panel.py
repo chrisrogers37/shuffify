@@ -42,7 +42,7 @@ from shuffify.services.playlist_service import (
 from shuffify.spotify.url_parser import (
     parse_spotify_playlist_url,
 )
-from shuffify.enums import ActivityType
+from shuffify.enums import ActivityType, JobType
 from shuffify.schemas.raid_requests import (
     WatchPlaylistRequest,
     WatchSearchQueryRequest,
@@ -50,6 +50,7 @@ from shuffify.schemas.raid_requests import (
     UnwatchPlaylistRequest,
     RaidNowRequest,
     UpdateRaidScheduleRequest,
+    CreateRaidScheduleRequest,
 )
 from shuffify.schemas.pending_raid_requests import (
     PromoteTracksRequest,
@@ -831,6 +832,96 @@ def drip_schedule_toggle(
     return _toggle_schedule(
         schedule, user.id, playlist_id, "Drip"
     )
+
+
+@main.route(
+    "/playlist/<playlist_id>/raid-schedule-create",
+    methods=["POST"],
+)
+@require_auth_and_db
+def raid_schedule_create(
+    playlist_id, client=None, user=None
+):
+    """Create a raid/drip schedule from the raids panel."""
+    if not user.encrypted_refresh_token:
+        return json_error(
+            "Your account needs a fresh login to enable "
+            "scheduled operations. Please log out and "
+            "log back in.",
+            400,
+        )
+
+    req, err = validate_json(CreateRaidScheduleRequest)
+    if err:
+        return err
+
+    # Check for existing raid-family schedule
+    existing = RaidSyncService._find_raid_schedule(
+        user.id, playlist_id
+    )
+    drip_existing = RaidSyncService._find_drip_schedule(
+        user.id, playlist_id
+    )
+    if existing or drip_existing:
+        return json_error(
+            "A schedule already exists for this playlist. "
+            "Delete it first to create a new one.",
+            409,
+        )
+
+    try:
+        data = request.get_json(silent=True) or {}
+        sched_type, sched_val = (
+            RaidSyncService._resolve_schedule_params(
+                req.schedule_value, req.schedule_time
+            )
+        )
+        schedule = SchedulerService.create_schedule(
+            user_id=user.id,
+            job_type=JobType(req.job_type),
+            target_playlist_id=playlist_id,
+            target_playlist_name=data.get(
+                "target_playlist_name", playlist_id
+            ),
+            schedule_type=sched_type,
+            schedule_value=sched_val,
+            source_playlist_ids=(
+                req.source_playlist_ids or []
+            ),
+        )
+
+        # Register with APScheduler
+        try:
+            from shuffify.scheduler import (
+                add_job_for_schedule,
+            )
+            add_job_for_schedule(schedule)
+        except Exception as e:
+            logger.warning(
+                "Could not register schedule with "
+                "APScheduler: %s", e
+            )
+
+        log_activity(
+            user_id=user.id,
+            activity_type=ActivityType.SCHEDULE_CREATE,
+            description="Created {} schedule".format(
+                req.job_type
+            ),
+            playlist_id=playlist_id,
+        )
+
+        return json_success(
+            "Schedule created.",
+            schedule=schedule.to_dict(),
+        )
+    except Exception as e:
+        logger.error(
+            "Failed to create raid schedule: %s", e
+        )
+        return json_error(
+            "Failed to create schedule", 500
+        )
 
 
 @main.route(
