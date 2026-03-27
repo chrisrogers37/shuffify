@@ -689,10 +689,7 @@ class TestWorkshopLinkage:
     """Tests for Workshop data loading in GET /schedules."""
 
     @patch(
-        "shuffify.routes.schedules.PlaylistPairService"
-    )
-    @patch(
-        "shuffify.routes.schedules.UpstreamSourceService"
+        "shuffify.routes.schedules.load_schedule_context"
     )
     @patch("shuffify.routes.schedules.ShuffleService")
     @patch("shuffify.routes.schedules.PlaylistService")
@@ -706,8 +703,7 @@ class TestWorkshopLinkage:
         mock_get_db_user,
         mock_ps_class,
         mock_shuffle_svc,
-        mock_upstream_svc,
-        mock_pair_svc,
+        mock_load_ctx,
         auth_client,
     ):
         """Route loads upstream sources grouped by target."""
@@ -726,6 +722,14 @@ class TestWorkshopLinkage:
         mock_db_user.spotify_id = "user123"
         mock_get_db_user.return_value = mock_db_user
 
+        sources_map = {
+            "p1": [
+                {"id": 1, "source_playlist_id": "ext1"},
+                {"id": 2, "source_playlist_id": "ext2"},
+            ]
+        }
+        mock_load_ctx.return_value = (sources_map, {})
+
         from shuffify.services.scheduler_service import (
             SchedulerService,
         )
@@ -742,38 +746,14 @@ class TestWorkshopLinkage:
                 []
             )
 
-            # Two sources for same target
-            src1 = MagicMock()
-            src1.target_playlist_id = "p1"
-            src1.to_dict.return_value = {
-                "id": 1,
-                "source_playlist_id": "ext1",
-            }
-            src2 = MagicMock()
-            src2.target_playlist_id = "p1"
-            src2.to_dict.return_value = {
-                "id": 2,
-                "source_playlist_id": "ext2",
-            }
-            mock_upstream_svc.list_all_sources_for_user.return_value = [
-                src1,
-                src2,
-            ]
-            mock_pair_svc.get_pairs_for_user.return_value = (
-                []
-            )
-
             resp = auth_client.get("/schedules")
             assert resp.status_code == 200
-            mock_upstream_svc.list_all_sources_for_user.assert_called_once_with(
-                "user123"
+            mock_load_ctx.assert_called_once_with(
+                mock_db_user
             )
 
     @patch(
-        "shuffify.routes.schedules.PlaylistPairService"
-    )
-    @patch(
-        "shuffify.routes.schedules.UpstreamSourceService"
+        "shuffify.routes.schedules.load_schedule_context"
     )
     @patch("shuffify.routes.schedules.ShuffleService")
     @patch("shuffify.routes.schedules.PlaylistService")
@@ -787,8 +767,7 @@ class TestWorkshopLinkage:
         mock_get_db_user,
         mock_ps_class,
         mock_shuffle_svc,
-        mock_upstream_svc,
-        mock_pair_svc,
+        mock_load_ctx,
         auth_client,
     ):
         """Route loads playlist pairs keyed by production ID."""
@@ -807,6 +786,11 @@ class TestWorkshopLinkage:
         mock_db_user.spotify_id = "user123"
         mock_get_db_user.return_value = mock_db_user
 
+        pairs_map = {
+            "p1": {"archive_playlist_name": "Archive"}
+        }
+        mock_load_ctx.return_value = ({}, pairs_map)
+
         from shuffify.services.scheduler_service import (
             SchedulerService,
         )
@@ -822,23 +806,11 @@ class TestWorkshopLinkage:
             mock_shuffle_svc.list_algorithms.return_value = (
                 []
             )
-            mock_upstream_svc.list_all_sources_for_user.return_value = (
-                []
-            )
-
-            pair = MagicMock()
-            pair.production_playlist_id = "p1"
-            pair.to_dict.return_value = {
-                "archive_playlist_name": "Archive",
-            }
-            mock_pair_svc.get_pairs_for_user.return_value = [
-                pair
-            ]
 
             resp = auth_client.get("/schedules")
             assert resp.status_code == 200
-            mock_pair_svc.get_pairs_for_user.assert_called_once_with(
-                1
+            mock_load_ctx.assert_called_once_with(
+                mock_db_user
             )
 
     @patch(

@@ -11,13 +11,6 @@
 
 var ScheduleEdit = {
 
-    // =========================================================================
-    // Cron helpers
-    // =========================================================================
-
-    /**
-     * Parse a schedule's type+value into {frequency, time} for form fields.
-     */
     parseCron: function(schedType, schedValue) {
         var result = { frequency: 'daily', time: '09:00' };
         if (schedType === 'cron' && schedValue) {
@@ -39,9 +32,6 @@ var ScheduleEdit = {
         return result;
     },
 
-    /**
-     * Build a human-readable frequency string from schedule data.
-     */
     getFreqText: function(sched) {
         if (sched.schedule_type === 'cron' && sched.schedule_value) {
             var parts = sched.schedule_value.split(' ');
@@ -64,9 +54,6 @@ var ScheduleEdit = {
         return map[sched.schedule_value] || (sched.schedule_value || '').replace(/_/g, ' ');
     },
 
-    /**
-     * Convert frequency + time form values into {schedule_type, schedule_value}.
-     */
     buildScheduleValue: function(frequency, timeValue, hasTime) {
         var scheduleType = 'interval';
         var scheduleValue = frequency;
@@ -84,16 +71,9 @@ var ScheduleEdit = {
         return { schedule_type: scheduleType, schedule_value: scheduleValue };
     },
 
-    // =========================================================================
-    // Edit form builder
-    // =========================================================================
-
     /**
-     * Return an HTML string for the inline edit form for a schedule.
-     *
-     * @param {Object} sched          - schedule data from the API
-     * @param {string} playlistId     - target playlist ID (used to look up
-     *                                  sources); pass null for global page
+     * @param {Object} sched      - schedule data from the API
+     * @param {string} playlistId - target playlist ID for source lookup; null for global page
      */
     buildEditForm: function(sched, playlistId) {
         var parsed = this.parseCron(sched.schedule_type, sched.schedule_value);
@@ -106,7 +86,6 @@ var ScheduleEdit = {
 
         var html = '<div class="space-y-3">';
 
-        // Frequency
         html += '<div>' +
             '<label class="block text-xs font-medium text-white/70 mb-1">Frequency</label>' +
             '<select class="sched-edit-freq w-full px-2 py-1.5 bg-white/10 border border-white/20 rounded-lg text-white text-xs">' +
@@ -118,13 +97,11 @@ var ScheduleEdit = {
             '</select>' +
         '</div>';
 
-        // Preferred time
         html += '<div class="sched-edit-time-section' + (showTime ? '' : ' hidden') + '">' +
             '<label class="block text-xs font-medium text-white/70 mb-1">Preferred Time (UTC)</label>' +
             '<input type="time" class="sched-edit-time w-full px-2 py-1.5 bg-white/10 border border-white/20 rounded-lg text-white text-xs" value="' + (parsed.time || '09:00') + '">' +
         '</div>';
 
-        // Raid sources
         if (isRaidType) {
             var lookupId = playlistId || sched.target_playlist_id;
             var sources = (window.SCHED_UPSTREAM_SOURCES || {})[lookupId] || [];
@@ -148,7 +125,6 @@ var ScheduleEdit = {
             html += '</div>';
         }
 
-        // Algorithm
         if (isShuffleType) {
             var algos = window.SCHED_ALGORITHMS || [];
             html += '<div>' +
@@ -160,7 +136,6 @@ var ScheduleEdit = {
             });
             html += '</select></div>';
 
-            // Keep top songs
             html += '<div>' +
                 '<label class="block text-xs font-medium text-white/70 mb-1">Keep Top Songs</label>' +
                 '<input type="number" class="sched-edit-keep-first w-full px-2 py-1.5 bg-white/10 border border-white/20 rounded-lg text-white text-xs" value="' + (params.keep_first || 0) + '" min="0" max="500">' +
@@ -168,7 +143,6 @@ var ScheduleEdit = {
             '</div>';
         }
 
-        // Rotation config
         if (isRotateType) {
             html += '<div>' +
                 '<label class="block text-xs font-medium text-white/70 mb-1">Tracks per Rotation</label>' +
@@ -180,7 +154,6 @@ var ScheduleEdit = {
             '</div>';
         }
 
-        // Save / Cancel buttons
         html += '<div class="flex gap-2 pt-1">' +
             '<button class="sched-cancel-btn flex-1 px-2 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition duration-150 border border-white/20">Cancel</button>' +
             '<button class="sched-save-btn flex-1 px-2 py-1.5 rounded-lg bg-spotify-green hover:bg-green-400 text-spotify-dark text-xs font-bold transition duration-150">Save</button>' +
@@ -190,23 +163,11 @@ var ScheduleEdit = {
         return html;
     },
 
-    // =========================================================================
-    // Wire up edit-panel interactivity on a container element
-    // =========================================================================
-
-    /**
-     * Attach event listeners for the frequency select (show/hide time picker)
-     * within a given container element.
-     */
     wireFrequencyToggle: function(container) {
         var freqSelect = container.querySelector('.sched-edit-freq');
         if (freqSelect) {
             freqSelect.addEventListener('change', function() {
-                var timeDiv = this.closest('.sched-edit-panel, .sched-edit-inline').querySelector('.sched-edit-time-section');
-                if (!timeDiv) {
-                    // fallback: search within same parent div structure
-                    timeDiv = container.querySelector('.sched-edit-time-section');
-                }
+                var timeDiv = container.querySelector('.sched-edit-time-section');
                 if (timeDiv) {
                     var freq = this.value;
                     if (freq === 'daily' || freq === 'every_3d' || freq === 'weekly') {
@@ -218,10 +179,6 @@ var ScheduleEdit = {
             });
         }
     },
-
-    // =========================================================================
-    // Collect form data and build the PUT payload
-    // =========================================================================
 
     /**
      * Read form inputs within `panel` and return the body object for PUT,
@@ -240,7 +197,6 @@ var ScheduleEdit = {
             schedule_value: sv.schedule_value,
         };
 
-        // Raid sources
         var isRaidType = (jobType === 'raid' || jobType === 'raid_and_shuffle' || jobType === 'raid_and_drip');
         if (isRaidType) {
             var checked = panel.querySelectorAll('.sched-edit-source:checked');
@@ -251,7 +207,6 @@ var ScheduleEdit = {
             }
         }
 
-        // Algorithm
         var isShuffleType = (jobType === 'shuffle' || jobType === 'raid_and_shuffle');
         if (isShuffleType) {
             var algoSelect = panel.querySelector('.sched-edit-algo');
@@ -262,7 +217,6 @@ var ScheduleEdit = {
             if (keepFirst > 0) body.algorithm_params.keep_first = keepFirst;
         }
 
-        // Rotation
         if (jobType === 'rotate') {
             var rotCount = panel.querySelector('.sched-edit-rot-count');
             var rotSize = panel.querySelector('.sched-edit-target-size');
@@ -281,13 +235,6 @@ var ScheduleEdit = {
         return body;
     },
 
-    // =========================================================================
-    // Save (PUT) a schedule
-    // =========================================================================
-
-    /**
-     * Send PUT to update the schedule, then call onSuccess().
-     */
     saveSchedule: function(schedId, panel, jobType, onSuccess) {
         var body = this.collectPayload(panel, jobType);
         if (!body) return;
@@ -319,10 +266,6 @@ var ScheduleEdit = {
         });
     },
 
-    // =========================================================================
-    // Delete a schedule
-    // =========================================================================
-
     deleteSchedule: function(schedId, onSuccess) {
         if (!confirm('Delete this schedule? This cannot be undone.')) return;
 
@@ -342,10 +285,6 @@ var ScheduleEdit = {
         })
         .catch(function(err) { showNotification(err.message, 'error'); });
     },
-
-    // =========================================================================
-    // Toggle a schedule
-    // =========================================================================
 
     toggleSchedule: function(schedId, onSuccess) {
         fetch('/schedules/' + schedId + '/toggle', {

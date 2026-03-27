@@ -17,6 +17,7 @@ from shuffify.routes import (
     get_db_user,
     log_activity,
     validate_json,
+    load_schedule_context,
 )
 from shuffify.services import (
     AuthService,
@@ -30,8 +31,6 @@ from shuffify.services import (
     AuthenticationError,
     PlaylistError,
     PlaylistSnapshotService,
-    UpstreamSourceService,
-    PlaylistPairService,
 )
 from shuffify.enums import SnapshotType, ActivityType
 from shuffify.schemas import (
@@ -67,49 +66,13 @@ def workshop(playlist_id):
 
         algorithms = ShuffleService.list_algorithms()
 
-        # Load schedule-edit data (upstream sources + pairs)
-        # with graceful fallback if DB queries fail.
         upstream_sources_json = {}
         playlist_pairs_json = {}
         db_user = get_db_user()
         if db_user:
-            try:
-                sources = (
-                    UpstreamSourceService
-                    .list_all_sources_for_user(
-                        db_user.spotify_id
-                    )
-                )
-                for src in sources:
-                    tid = src.target_playlist_id
-                    if tid not in upstream_sources_json:
-                        upstream_sources_json[tid] = []
-                    upstream_sources_json[tid].append(
-                        src.to_dict()
-                    )
-            except Exception as e:
-                logger.warning(
-                    "Could not load upstream sources "
-                    "for workshop: %s",
-                    e,
-                )
-
-            try:
-                pairs = (
-                    PlaylistPairService.get_pairs_for_user(
-                        db_user.id
-                    )
-                )
-                playlist_pairs_json = {
-                    p.production_playlist_id: p.to_dict()
-                    for p in pairs
-                }
-            except Exception as e:
-                logger.warning(
-                    "Could not load playlist pairs "
-                    "for workshop: %s",
-                    e,
-                )
+            upstream_sources_json, playlist_pairs_json = (
+                load_schedule_context(db_user)
+            )
 
         logger.info(
             f"User {user.get('display_name', 'Unknown')} "
