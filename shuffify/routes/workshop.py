@@ -67,10 +67,9 @@ def workshop(playlist_id):
         algorithms = ShuffleService.list_algorithms()
 
         upstream_sources_json = {}
-        playlist_pairs_json = {}
         db_user = get_db_user()
         if db_user:
-            upstream_sources_json, playlist_pairs_json = (
+            upstream_sources_json, _ = (
                 load_schedule_context(db_user)
             )
 
@@ -86,7 +85,6 @@ def workshop(playlist_id):
             user=user,
             algorithms=algorithms,
             upstream_sources_json=upstream_sources_json,
-            playlist_pairs_json=playlist_pairs_json,
         )
 
     except (AuthenticationError, PlaylistError) as e:

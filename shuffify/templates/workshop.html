@@ -1131,10 +1131,9 @@ const workshopState = {
     stagedRestorations: [],
 };
 
-// Schedule edit data (upstream sources, pairs, algorithms)
-const SCHED_UPSTREAM_SOURCES = {{ upstream_sources_json | tojson }};
-const SCHED_PLAYLIST_PAIRS = {{ playlist_pairs_json | tojson }};
-const SCHED_ALGORITHMS = [
+// Schedule edit data (upstream sources, algorithms)
+window.SCHED_UPSTREAM_SOURCES = {{ upstream_sources_json | tojson }};
+window.SCHED_ALGORITHMS = [
     {% for algo in algorithms %}
     { class_name: {{ algo.class_name | tojson }}, name: {{ algo.name | tojson }} }{% if not loop.last %},{% endif %}
     {% endfor %}
@@ -5279,7 +5278,7 @@ var playlistSchedules = {
     loaded: false,
     isLoading: false,
     schedules: [],
-    editingId: null,
+
 
     loadSchedules: function() {
         var self = this;
@@ -5302,7 +5301,7 @@ var playlistSchedules = {
         .then(function(data) {
             self.schedules = data.schedules || [];
             self.loaded = true;
-            self.editingId = null;
+
             self.render();
         })
         .catch(function(err) {
@@ -5455,10 +5454,10 @@ var playlistSchedules = {
             var allPanels = document.querySelectorAll('.sched-edit-panel');
             allPanels.forEach(function(p) { p.classList.add('hidden'); });
             panel.classList.remove('hidden');
-            this.editingId = schedId;
+
         } else {
             panel.classList.add('hidden');
-            this.editingId = null;
+
         }
     },
 };
