@@ -114,7 +114,7 @@ var ScheduleEdit = {
                 html += '<div class="max-h-28 overflow-y-auto space-y-1 bg-white/5 rounded-lg p-1.5">';
                 sources.forEach(function(src) {
                     var checked = selectedIds.indexOf(src.source_playlist_id) !== -1 ? ' checked' : '';
-                    var srcName = src.source_playlist_name || src.source_playlist_id;
+                    var srcName = src.source_name || src.source_playlist_id;
                     html += '<label class="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-white/5 cursor-pointer">' +
                         '<input type="checkbox" class="sched-edit-source rounded border-white/30 bg-white/10 text-spotify-green focus:ring-spotify-green" value="' + escapeHtml(src.source_playlist_id) + '"' + checked + '>' +
                         '<span class="text-white/70 text-xs truncate">' + escapeHtml(srcName) + '</span>' +
