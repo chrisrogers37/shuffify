@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Inline Schedule Editing** - Edit schedules in-place from both the Workshop sidebar and the global Schedules page
+  - Expandable edit panel on each schedule card with frequency, time, algorithm, raid sources, keep-top, and rotation config fields
+  - Shared `schedule-edit.js` module powers both the sidebar and global page, eliminating code duplication
+  - Detail chips on schedule cards show algorithm, source count, keep-top, and rotation params at a glance
+  - Delete button on sidebar schedule cards for quick removal without navigating away
+  - Workshop route now loads upstream sources and playlist pairs for schedule edit forms
 - **Raid Panel Scheduling** - Full schedule creation, management, and deletion directly from the Raids side panel
   - Create schedules for Raid Only, Drip Only, or Raid & Drip operations
   - Configure frequency (every 6h, 12h, daily, every 3d, weekly) and time of day

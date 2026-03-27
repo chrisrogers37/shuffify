@@ -14,8 +14,10 @@ from shuffify.routes import (
     clear_session_and_show_login,
     json_error,
     json_success,
+    get_db_user,
     log_activity,
     validate_json,
+    load_schedule_context,
 )
 from shuffify.services import (
     AuthService,
@@ -64,6 +66,13 @@ def workshop(playlist_id):
 
         algorithms = ShuffleService.list_algorithms()
 
+        upstream_sources_json = {}
+        db_user = get_db_user()
+        if db_user:
+            upstream_sources_json, _ = (
+                load_schedule_context(db_user)
+            )
+
         logger.info(
             f"User {user.get('display_name', 'Unknown')} "
             f"opened workshop for playlist "
@@ -75,6 +84,7 @@ def workshop(playlist_id):
             playlist=playlist.to_dict(),
             user=user,
             algorithms=algorithms,
+            upstream_sources_json=upstream_sources_json,
         )
 
     except (AuthenticationError, PlaylistError) as e:

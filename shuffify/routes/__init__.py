@@ -224,6 +224,57 @@ def log_activity(
         logger.warning("Activity logging failed: %s", e)
 
 
+def load_schedule_context(db_user):
+    """
+    Load upstream sources and playlist pairs for schedule forms.
+
+    Returns (upstream_sources_map, pairs_by_playlist) with graceful
+    fallback to empty dicts if DB queries fail.
+    """
+    from shuffify.services import (
+        UpstreamSourceService,
+        PlaylistPairService,
+    )
+
+    upstream_sources_map = {}
+    try:
+        sources = (
+            UpstreamSourceService
+            .list_all_sources_for_user(
+                db_user.spotify_id
+            )
+        )
+        for src in sources:
+            tid = src.target_playlist_id
+            if tid not in upstream_sources_map:
+                upstream_sources_map[tid] = []
+            upstream_sources_map[tid].append(
+                src.to_dict()
+            )
+    except Exception as e:
+        logger.warning(
+            "Could not load upstream sources: %s",
+            e,
+        )
+
+    pairs_by_playlist = {}
+    try:
+        pairs = PlaylistPairService.get_pairs_for_user(
+            db_user.id
+        )
+        pairs_by_playlist = {
+            p.production_playlist_id: p.to_dict()
+            for p in pairs
+        }
+    except Exception as e:
+        logger.warning(
+            "Could not load playlist pairs: %s",
+            e,
+        )
+
+    return upstream_sources_map, pairs_by_playlist
+
+
 # =============================================================================
 # Import route modules to register their routes on the Blueprint.
 # These must be at the bottom to avoid circular imports.
