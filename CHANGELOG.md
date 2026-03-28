@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Playlist Dropdown Selector** - Click the playlist name in the Workshop header to open a searchable dropdown for quick playlist switching
+  - Fetches playlists via existing `/api/user-playlists` endpoint on demand
+  - Filter/search playlists by name with real-time filtering
+  - Shows playlist artwork, name, and track count in each row
+  - Current playlist highlighted with checkmark; closes on outside click or Escape
 - **Inline Schedule Editing** - Edit schedules in-place from both the Workshop sidebar and the global Schedules page
   - Expandable edit panel on each schedule card with frequency, time, algorithm, raid sources, keep-top, and rotation config fields
   - Shared `schedule-edit.js` module powers both the sidebar and global page, eliminating code duplication
