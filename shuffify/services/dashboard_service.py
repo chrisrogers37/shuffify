@@ -10,6 +10,8 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 from shuffify.models.db import db, Schedule, JobExecution
 
 logger = logging.getLogger(__name__)
@@ -171,18 +173,22 @@ class DashboardService:
                 PlaylistSnapshot,
             )
 
-            total_shuffles = (
-                ActivityLog.query.filter(
-                    ActivityLog.user_id == user_id,
-                    ActivityLog.activity_type == "shuffle",
-                ).count()
+            # Two queries instead of four: one for
+            # activity/snapshot counts, one for schedule/exec
+            shuffle_and_snap = (
+                db.session.query(
+                    func.count(ActivityLog.id).filter(
+                        ActivityLog.activity_type
+                        == "shuffle"
+                    ).label("shuffles"),
+                )
+                .filter(ActivityLog.user_id == user_id)
+                .first()
             )
-
-            total_scheduled_runs = (
-                db.session.query(JobExecution)
-                .join(Schedule)
-                .filter(Schedule.user_id == user_id)
-                .count()
+            total_shuffles = (
+                shuffle_and_snap.shuffles
+                if shuffle_and_snap
+                else 0
             )
 
             total_snapshots = (
@@ -191,20 +197,38 @@ class DashboardService:
                 ).count()
             )
 
-            active_schedule_count = (
-                Schedule.query.filter_by(
-                    user_id=user_id, is_enabled=True
-                ).count()
+            schedule_stats = (
+                db.session.query(
+                    func.count(Schedule.id).label(
+                        "total"
+                    ),
+                    func.count(Schedule.id).filter(
+                        Schedule.is_enabled.is_(True)
+                    ).label("active"),
+                )
+                .filter(Schedule.user_id == user_id)
+                .first()
+            )
+
+            total_scheduled_runs = (
+                db.session.query(
+                    func.count(JobExecution.id)
+                )
+                .join(Schedule)
+                .filter(Schedule.user_id == user_id)
+                .scalar()
             )
 
             return {
                 "total_shuffles": total_shuffles,
                 "total_scheduled_runs": (
-                    total_scheduled_runs
+                    total_scheduled_runs or 0
                 ),
                 "total_snapshots": total_snapshots,
                 "active_schedule_count": (
-                    active_schedule_count
+                    schedule_stats.active
+                    if schedule_stats
+                    else 0
                 ),
             }
         except Exception as e:
@@ -248,6 +272,9 @@ class DashboardService:
             executions = (
                 db.session.query(JobExecution)
                 .join(Schedule)
+                .options(
+                    joinedload(JobExecution.schedule)
+                )
                 .filter(Schedule.user_id == user_id)
                 .order_by(JobExecution.started_at.desc())
                 .limit(limit)

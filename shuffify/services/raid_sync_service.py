@@ -33,6 +33,7 @@ class RaidSyncService:
         schedule_value="daily",
         schedule_time=None,
         source_type="own",
+        user=None,
     ):
         """
         One-click watch: register source + optionally
@@ -47,11 +48,12 @@ class RaidSyncService:
             SchedulerService,
         )
 
-        user = User.query.filter_by(
-            spotify_id=spotify_id
-        ).first()
-        if not user:
-            raise RaidSyncError("User not found")
+        if user is None:
+            user = User.query.filter_by(
+                spotify_id=spotify_id
+            ).first()
+            if not user:
+                raise RaidSyncError("User not found")
 
         # 1. Register source (idempotent)
         source = UpstreamSourceService.add_source(
@@ -120,7 +122,8 @@ class RaidSyncService:
 
     @staticmethod
     def unwatch_playlist(
-        spotify_id, source_id, target_playlist_id
+        spotify_id, source_id, target_playlist_id,
+        user=None,
     ):
         """
         Remove a source and update/delete the raid schedule.
@@ -143,11 +146,12 @@ class RaidSyncService:
             source_id, spotify_id
         )
 
-        user = User.query.filter_by(
-            spotify_id=spotify_id
-        ).first()
-        if not user:
-            return True
+        if user is None:
+            user = User.query.filter_by(
+                spotify_id=spotify_id
+            ).first()
+            if not user:
+                return True
 
         # Update or delete the raid schedule
         schedule = RaidSyncService._find_raid_schedule(
@@ -184,7 +188,9 @@ class RaidSyncService:
         return True
 
     @staticmethod
-    def get_raid_status(spotify_id, target_playlist_id):
+    def get_raid_status(
+        spotify_id, target_playlist_id, user=None,
+    ):
         """
         Get raid panel summary for a target playlist.
         """
@@ -199,9 +205,10 @@ class RaidSyncService:
             UpstreamSourceService.MAX_SOURCES_PER_TARGET
         )
 
-        user = User.query.filter_by(
-            spotify_id=spotify_id
-        ).first()
+        if user is None:
+            user = User.query.filter_by(
+                spotify_id=spotify_id
+            ).first()
         if not user:
             return {
                 "sources": [],
@@ -262,6 +269,7 @@ class RaidSyncService:
     def raid_now(
         spotify_id, target_playlist_id,
         source_playlist_ids=None,
+        user=None,
     ):
         """
         Trigger an immediate one-off raid.
@@ -273,11 +281,12 @@ class RaidSyncService:
             UpstreamSourceService,
         )
 
-        user = User.query.filter_by(
-            spotify_id=spotify_id
-        ).first()
-        if not user:
-            raise RaidSyncError("User not found")
+        if user is None:
+            user = User.query.filter_by(
+                spotify_id=spotify_id
+            ).first()
+            if not user:
+                raise RaidSyncError("User not found")
 
         if source_playlist_ids is None:
             sources = UpstreamSourceService.list_sources(
@@ -447,6 +456,7 @@ class RaidSyncService:
         auto_schedule=True,
         schedule_value="daily",
         schedule_time=None,
+        user=None,
     ):
         """
         Register a search query as a raid source.
@@ -460,11 +470,12 @@ class RaidSyncService:
             SchedulerService,
         )
 
-        user = User.query.filter_by(
-            spotify_id=spotify_id
-        ).first()
-        if not user:
-            raise RaidSyncError("User not found")
+        if user is None:
+            user = User.query.filter_by(
+                spotify_id=spotify_id
+            ).first()
+            if not user:
+                raise RaidSyncError("User not found")
 
         source = UpstreamSourceService.add_search_source(
             spotify_id=spotify_id,
@@ -508,7 +519,9 @@ class RaidSyncService:
         }
 
     @staticmethod
-    def drip_now(spotify_id, target_playlist_id):
+    def drip_now(
+        spotify_id, target_playlist_id, user=None,
+    ):
         """Trigger an immediate drip from raid playlist
         to target."""
         from shuffify.services.executors import (
@@ -522,11 +535,12 @@ class RaidSyncService:
             RaidLinkService,
         )
 
-        user = User.query.filter_by(
-            spotify_id=spotify_id
-        ).first()
-        if not user:
-            raise RaidSyncError("User not found")
+        if user is None:
+            user = User.query.filter_by(
+                spotify_id=spotify_id
+            ).first()
+            if not user:
+                raise RaidSyncError("User not found")
 
         link = RaidLinkService.get_link_for_playlist(
             user.id, target_playlist_id
@@ -645,6 +659,7 @@ class RaidSyncService:
     def update_raid_schedule(
         spotify_id,
         target_playlist_id,
+        user=None,
         **kwargs,
     ):
         """Update an existing raid schedule.
@@ -655,11 +670,12 @@ class RaidSyncService:
             SchedulerService,
         )
 
-        user = User.query.filter_by(
-            spotify_id=spotify_id
-        ).first()
-        if not user:
-            raise RaidSyncError("User not found")
+        if user is None:
+            user = User.query.filter_by(
+                spotify_id=spotify_id
+            ).first()
+            if not user:
+                raise RaidSyncError("User not found")
 
         schedule = RaidSyncService._find_raid_schedule(
             user.id, target_playlist_id

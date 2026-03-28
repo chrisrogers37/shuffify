@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Pending Raid Dedup** - Replaced N per-track SELECT queries with single IN() query in `PendingRaidService.stage_tracks()` (50 queries → 1 per raid batch)
+- **Dashboard Eager Loading** - Added `joinedload` to `_get_recent_executions()` eliminating N+1 lazy-load queries on the Schedule relationship
+- **Dashboard Stats** - Reduced separate COUNT queries in `_get_quick_stats()` using conditional aggregation
+- **RaidSyncService** - All public methods now accept optional `user` parameter to eliminate redundant User table lookups from route callers
+- **Snapshot Cleanup** - Replaced individual DELETE loop with bulk DELETE subquery in `cleanup_old_snapshots()`
+- **Rotation Status** - Direct `Schedule.query.filter_by()` replaces full-table Python iteration for rotation schedule lookup
+
 ### Added
 - **Newest First Algorithm** - Reorder algorithm that sorts tracks by date added (newest first) with configurable jitter
   - Window-based jitter prevents exact sorting while preserving recency ordering

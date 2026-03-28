@@ -227,33 +227,39 @@ class PlaylistSnapshotService:
         Returns:
             Number of snapshots deleted.
         """
-        all_snapshots = (
-            PlaylistSnapshot.query.filter_by(
+        # IDs of snapshots to keep (most recent N)
+        keep_ids_query = (
+            db.session.query(PlaylistSnapshot.id)
+            .filter_by(
                 user_id=user_id, playlist_id=playlist_id
             )
             .order_by(PlaylistSnapshot.created_at.desc())
-            .all()
+            .limit(max_count)
+            .subquery()
         )
 
-        if len(all_snapshots) <= max_count:
-            return 0
+        # Bulk delete all snapshots NOT in the keep set
+        deleted_count = (
+            PlaylistSnapshot.query.filter(
+                PlaylistSnapshot.user_id == user_id,
+                PlaylistSnapshot.playlist_id
+                == playlist_id,
+                ~PlaylistSnapshot.id.in_(
+                    db.session.query(keep_ids_query)
+                ),
+            ).delete(synchronize_session="fetch")
+        )
 
-        to_delete = all_snapshots[max_count:]
-        deleted_count = 0
-
-        for snapshot in to_delete:
-            db.session.delete(snapshot)
-            deleted_count += 1
-
-        try:
-            safe_commit(
-                f"cleanup {deleted_count} old snapshots "
-                f"for user {user_id}, "
-                f"playlist {playlist_id}",
-                PlaylistSnapshotError,
-            )
-        except PlaylistSnapshotError:
-            return 0
+        if deleted_count > 0:
+            try:
+                safe_commit(
+                    f"cleanup {deleted_count} old snapshots "
+                    f"for user {user_id}, "
+                    f"playlist {playlist_id}",
+                    PlaylistSnapshotError,
+                )
+            except PlaylistSnapshotError:
+                return 0
 
         return deleted_count
 
