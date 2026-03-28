@@ -32,6 +32,9 @@ from shuffify.services import (
     PlaylistError,
     PlaylistSnapshotService,
 )
+from shuffify.services.playlist_preference_service import (
+    PlaylistPreferenceService,
+)
 from shuffify.enums import SnapshotType, ActivityType
 from shuffify.schemas import (
     parse_shuffle_request,
@@ -73,6 +76,51 @@ def workshop(playlist_id):
                 load_schedule_context(db_user)
             )
 
+        # Build ordered playlist list for prev/next navigation
+        prev_playlist_id = None
+        next_playlist_id = None
+        try:
+            all_playlists = (
+                playlist_service.get_user_playlists()
+            )
+            ordered_ids = [
+                p["id"] for p in all_playlists
+            ]
+            if db_user:
+                try:
+                    preferences = (
+                        PlaylistPreferenceService
+                        .get_user_preferences(db_user.id)
+                    )
+                    if preferences:
+                        favs, visible, _hidden = (
+                            PlaylistPreferenceService
+                            .apply_preferences(
+                                all_playlists, preferences
+                            )
+                        )
+                        ordered_ids = [
+                            p["id"]
+                            for p in favs + visible
+                        ]
+                except Exception:
+                    pass
+
+            if playlist_id in ordered_ids:
+                idx = ordered_ids.index(playlist_id)
+                if idx > 0:
+                    prev_playlist_id = ordered_ids[
+                        idx - 1
+                    ]
+                if idx < len(ordered_ids) - 1:
+                    next_playlist_id = ordered_ids[
+                        idx + 1
+                    ]
+        except Exception:
+            logger.debug(
+                "Could not build playlist navigation"
+            )
+
         logger.info(
             f"User {user.get('display_name', 'Unknown')} "
             f"opened workshop for playlist "
@@ -85,6 +133,8 @@ def workshop(playlist_id):
             user=user,
             algorithms=algorithms,
             upstream_sources_json=upstream_sources_json,
+            prev_playlist_id=prev_playlist_id,
+            next_playlist_id=next_playlist_id,
         )
 
     except (AuthenticationError, PlaylistError) as e:
