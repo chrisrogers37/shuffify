@@ -11,6 +11,7 @@ from typing import List, Dict, Any, Optional
 
 from shuffify.models.db import db, PendingRaidTrack
 from shuffify.enums import PendingRaidStatus
+from shuffify.services.base import safe_commit
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +88,10 @@ class PendingRaidService:
             staged += 1
 
         if staged > 0:
-            db.session.commit()
+            safe_commit(
+                f"stage {staged} tracks for user "
+                f"{user_id}",
+            )
             logger.info(
                 "Staged %d tracks for user %d, "
                 "playlist %s",
@@ -140,7 +144,7 @@ class PendingRaidService:
             t.resolved_at = now
 
         if tracks:
-            db.session.commit()
+            safe_commit("promote pending tracks")
         return tracks
 
     @staticmethod
@@ -161,7 +165,7 @@ class PendingRaidService:
             t.resolved_at = now
 
         if tracks:
-            db.session.commit()
+            safe_commit("promote pending tracks")
         return tracks
 
     @staticmethod
@@ -188,7 +192,7 @@ class PendingRaidService:
             },
             synchronize_session="fetch",
         )
-        db.session.commit()
+        safe_commit("unpromote pending tracks")
         return count
 
     @staticmethod
@@ -213,7 +217,7 @@ class PendingRaidService:
             },
             synchronize_session="fetch",
         )
-        db.session.commit()
+        safe_commit("dismiss pending tracks")
         return count
 
     @staticmethod
@@ -234,7 +238,7 @@ class PendingRaidService:
             },
             synchronize_session="fetch",
         )
-        db.session.commit()
+        safe_commit("dismiss all pending tracks")
         return count
 
     @staticmethod
@@ -264,5 +268,5 @@ class PendingRaidService:
                 PendingRaidStatus.DISMISSED,
             ]),
         ).delete(synchronize_session="fetch")
-        db.session.commit()
+        safe_commit("cleanup resolved pending tracks")
         return count

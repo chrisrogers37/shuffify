@@ -181,14 +181,32 @@ def get_db_user():
     """
     Get the database User record for the current session user.
 
+    Uses a cached database PK (``_db_user_id``) when available to
+    avoid a ``spotify_id`` string lookup on every request.
+
     Returns:
         User model instance or None if not found.
     """
+    from shuffify.models.db import User
+
     user_data = session.get("user_data")
     if not user_data or "id" not in user_data:
         return None
 
-    return UserService.get_by_spotify_id(user_data["id"])
+    # Fast path: use cached integer PK from session
+    db_user_id = session.get("_db_user_id")
+    if db_user_id:
+        user = User.query.get(db_user_id)
+        if user:
+            return user
+        # Cached ID stale — fall through to spotify_id lookup
+
+    # Slow path: lookup by spotify_id string
+    user = UserService.get_by_spotify_id(user_data["id"])
+    if user:
+        session["_db_user_id"] = user.id
+        session.modified = True
+    return user
 
 
 def log_activity(
