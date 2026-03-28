@@ -45,6 +45,7 @@ from shuffify.services.scheduler_service import (
 from shuffify.services.executors import (
     JobExecutorService,
 )
+from shuffify.models.db import Schedule
 from shuffify.enums import ActivityType, JobType
 
 logger = logging.getLogger(__name__)
@@ -508,17 +509,18 @@ def rotation_status(
     if pair:
         pair_info = pair.to_dict()
 
-    rotate_schedule = None
-    user_schedules = (
-        SchedulerService.get_user_schedules(user.id)
+    rotate_schedule_obj = (
+        Schedule.query.filter_by(
+            user_id=user.id,
+            target_playlist_id=playlist_id,
+            job_type=JobType.ROTATE,
+        ).first()
     )
-    for s in user_schedules:
-        if (
-            s.target_playlist_id == playlist_id
-            and s.job_type == JobType.ROTATE
-        ):
-            rotate_schedule = s.to_dict()
-            break
+    rotate_schedule = (
+        rotate_schedule_obj.to_dict()
+        if rotate_schedule_obj
+        else None
+    )
 
     return jsonify({
         "success": True,

@@ -82,7 +82,7 @@ logger = logging.getLogger(__name__)
 def raid_status(playlist_id, client=None, user=None):
     """Get raid panel status for a playlist."""
     status = RaidSyncService.get_raid_status(
-        user.spotify_id, playlist_id
+        user.spotify_id, playlist_id, user=user
     )
     return json_success(
         "Raid status loaded", raid_status=status
@@ -321,6 +321,7 @@ def raid_watch(playlist_id, client=None, user=None):
             auto_schedule=req.auto_schedule,
             schedule_value=req.schedule_value,
             schedule_time=req.schedule_time,
+            user=user,
         )
 
         log_activity(
@@ -377,6 +378,7 @@ def raid_watch_search(
             auto_schedule=req.auto_schedule,
             schedule_value=req.schedule_value,
             schedule_time=req.schedule_time,
+            user=user,
         )
 
         log_activity(
@@ -487,6 +489,7 @@ def raid_add_url(playlist_id, client=None, user=None):
             schedule_value=req.schedule_value,
             schedule_time=req.schedule_time,
             source_type="external",
+            user=user,
         )
 
         # Update track count on source record
@@ -549,6 +552,7 @@ def raid_unwatch(playlist_id, client=None, user=None):
             spotify_id=user.spotify_id,
             source_id=req.source_id,
             target_playlist_id=playlist_id,
+            user=user,
         )
 
         log_activity(
@@ -590,6 +594,7 @@ def raid_now(playlist_id, client=None, user=None):
             spotify_id=user.spotify_id,
             target_playlist_id=playlist_id,
             source_playlist_ids=req.source_playlist_ids,
+            user=user,
         )
 
         log_activity(
@@ -635,6 +640,7 @@ def drip_now(playlist_id, client=None, user=None):
         result = RaidSyncService.drip_now(
             spotify_id=user.spotify_id,
             target_playlist_id=playlist_id,
+            user=user,
         )
 
         log_activity(
@@ -686,6 +692,7 @@ def raid_and_drip(
             spotify_id=user.spotify_id,
             target_playlist_id=playlist_id,
             source_playlist_ids=req.source_playlist_ids,
+            user=user,
         )
     except RaidSyncError as e:
         return json_error(
@@ -701,6 +708,7 @@ def raid_and_drip(
         drip_result = RaidSyncService.drip_now(
             spotify_id=user.spotify_id,
             target_playlist_id=playlist_id,
+            user=user,
         )
     except RaidSyncError as e:
         return json_error(
@@ -941,6 +949,7 @@ def raid_schedule_update(
         schedule = RaidSyncService.update_raid_schedule(
             spotify_id=user.spotify_id,
             target_playlist_id=playlist_id,
+            user=user,
             schedule_value=req.schedule_value,
             schedule_time=req.schedule_time,
             is_enabled=req.is_enabled,

@@ -31,18 +31,34 @@ class PendingRaidService:
 
         Returns the number of newly staged tracks.
         """
+        # Collect all candidate URIs from the batch
+        candidate_uris = [
+            t.get("uri") for t in tracks if t.get("uri")
+        ]
+        if not candidate_uris:
+            return 0
+
+        # Single query to find existing URIs (replaces N per-track queries)
+        existing_uris = set(
+            row[0]
+            for row in db.session.query(
+                PendingRaidTrack.track_uri
+            )
+            .filter(
+                PendingRaidTrack.user_id == user_id,
+                PendingRaidTrack.target_playlist_id
+                == target_playlist_id,
+                PendingRaidTrack.track_uri.in_(
+                    candidate_uris
+                ),
+            )
+            .all()
+        )
+
         staged = 0
         for track in tracks:
             uri = track.get("uri")
-            if not uri:
-                continue
-
-            existing = PendingRaidTrack.query.filter_by(
-                user_id=user_id,
-                target_playlist_id=target_playlist_id,
-                track_uri=uri,
-            ).first()
-            if existing:
+            if not uri or uri in existing_uris:
                 continue
 
             artists = track.get("artists", [])
@@ -67,6 +83,7 @@ class PendingRaidService:
                 status=PendingRaidStatus.PENDING,
             )
             db.session.add(pending)
+            existing_uris.add(uri)
             staged += 1
 
         if staged > 0:

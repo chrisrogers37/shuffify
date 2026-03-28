@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Pending Raid Dedup** - Replaced N per-track SELECT queries with single IN() query in `PendingRaidService.stage_tracks()` (50 queries → 1 per raid batch)
+- **Dashboard Eager Loading** - Added `joinedload` to `_get_recent_executions()` eliminating N+1 lazy-load queries on the Schedule relationship
+- **Dashboard Stats** - Reduced separate COUNT queries in `_get_quick_stats()` using conditional aggregation
+- **RaidSyncService** - All public methods now accept optional `user` parameter to eliminate redundant User table lookups from route callers
+- **Snapshot Cleanup** - Replaced individual DELETE loop with bulk DELETE subquery in `cleanup_old_snapshots()`
+- **Rotation Status** - Direct `Schedule.query.filter_by()` replaces full-table Python iteration for rotation schedule lookup
+
 ### Added
 - **Playlist Dropdown Selector** - Click the playlist name in the Workshop header to open a searchable dropdown for quick playlist switching
   - Fetches playlists via existing `/api/user-playlists` endpoint on demand
