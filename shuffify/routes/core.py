@@ -261,11 +261,13 @@ def callback():
 
         # Upsert user record in database (non-blocking)
         is_new_user = False
+        db_user = None
         try:
             result = UserService.upsert_from_spotify(
                 user_data
             )
             is_new_user = result.is_new
+            db_user = result.user
         except Exception as e:
             # Database failure should NOT block login
             logger.warning(
@@ -276,30 +278,16 @@ def callback():
         session["is_new_user"] = is_new_user
 
         # Store encrypted refresh token for scheduled ops
-        if token_data.get("refresh_token"):
+        if db_user and token_data.get("refresh_token"):
             try:
-                from shuffify.services.token_service import (
-                    TokenService,
+                UserService.store_refresh_token(
+                    db_user,
+                    token_data["refresh_token"],
                 )
-                from shuffify.models.db import db as _db
-
-                db_user = UserService.get_by_spotify_id(
-                    user_data["id"]
+                logger.debug(
+                    f"Stored encrypted refresh token "
+                    f"for user {user_data['id']}"
                 )
-                if (
-                    db_user
-                    and TokenService.is_initialized()
-                ):
-                    db_user.encrypted_refresh_token = (
-                        TokenService.encrypt_token(
-                            token_data["refresh_token"]
-                        )
-                    )
-                    _db.session.commit()
-                    logger.debug(
-                        f"Stored encrypted refresh token "
-                        f"for user {user_data['id']}"
-                    )
             except Exception as e:
                 logger.warning(
                     f"Failed to store refresh token: {e}. "
@@ -307,11 +295,8 @@ def callback():
                 )
 
         # Record login event (non-blocking)
-        try:
-            db_user = UserService.get_by_spotify_id(
-                user_data["id"]
-            )
-            if db_user:
+        if db_user:
+            try:
                 flask_session_id = getattr(
                     session, "sid", None
                 )
@@ -321,30 +306,24 @@ def callback():
                     session_id=flask_session_id,
                     login_type="oauth_initial",
                 )
-        except Exception as e:
-            # Login history failure should NOT block login
-            logger.warning(
-                f"Failed to record login history: {e}. "
-                f"Login continues without history tracking."
-            )
+            except Exception as e:
+                # Login history failure should NOT block login
+                logger.warning(
+                    f"Failed to record login history: {e}. "
+                    f"Login continues without history tracking."
+                )
 
         session.modified = True
 
         # Log login activity (non-blocking)
-        try:
-            db_user = UserService.get_by_spotify_id(
-                user_data["id"]
+        if db_user:
+            log_activity(
+                user_id=db_user.id,
+                activity_type=ActivityType.LOGIN,
+                description=(
+                    "Logged in via Spotify OAuth"
+                ),
             )
-            if db_user:
-                log_activity(
-                    user_id=db_user.id,
-                    activity_type=ActivityType.LOGIN,
-                    description=(
-                        "Logged in via Spotify OAuth"
-                    ),
-                )
-        except Exception:
-            pass
 
         logger.info(
             f"User "

@@ -328,6 +328,27 @@ class UpstreamSourceService:
         return source
 
     @staticmethod
+    def update_track_count(
+        user_id: int,
+        target_playlist_id: str,
+        source_playlist_id: str,
+        track_count: int,
+    ) -> None:
+        """Update a source's last_track_count."""
+        source = UpstreamSource.query.filter_by(
+            user_id=user_id,
+            target_playlist_id=target_playlist_id,
+            source_playlist_id=source_playlist_id,
+        ).first()
+        if source:
+            source.last_track_count = track_count
+            safe_commit(
+                f"update track_count for source "
+                f"{source_playlist_id}",
+                UpstreamSourceError,
+            )
+
+    @staticmethod
     def list_all_sources_for_user(
         spotify_id: str,
     ) -> List[UpstreamSource]:

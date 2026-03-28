@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Snapshot Cleanup** - Replaced individual DELETE loop with bulk DELETE subquery in `cleanup_old_snapshots()`
 - **Rotation Status** - Direct `Schedule.query.filter_by()` replaces full-table Python iteration for rotation schedule lookup
 - **Schema Integrity** - Added CHECK constraints for 10 enum/range columns, composite index on schedules, row locking for source limits, and fixed ORM-vs-migration drift on pending_raid_tracks
+- **User Session Caching** - Cache database PK in Flask session to avoid per-request `spotify_id` string lookup
+- **Service Layer Enforcement** - Moved direct DB operations from routes into service methods (token storage, track count updates)
+- **PendingRaidService** - Replaced raw `db.session.commit()` with `safe_commit()` for rollback safety
+- **OAuth Callback** - Eliminated 3 redundant user lookups by reusing upsert result
 
 ### Added
 - **Playlist Dropdown Selector** - Click the playlist name in the Workshop header to open a searchable dropdown for quick playlist switching

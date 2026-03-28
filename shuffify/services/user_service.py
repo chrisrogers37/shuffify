@@ -199,3 +199,30 @@ class UserService:
             User instance if found, None otherwise.
         """
         return db.session.get(User, user_id)
+
+    @staticmethod
+    def store_refresh_token(
+        user: "User", refresh_token: str
+    ) -> None:
+        """
+        Encrypt and store a refresh token for a user.
+
+        Args:
+            user: The User model instance.
+            refresh_token: The plaintext refresh token.
+        """
+        from shuffify.services.token_service import (
+            TokenService,
+        )
+
+        if not TokenService.is_initialized():
+            return
+
+        user.encrypted_refresh_token = (
+            TokenService.encrypt_token(refresh_token)
+        )
+        safe_commit(
+            f"store refresh token for user "
+            f"{user.spotify_id}",
+            UserServiceError,
+        )

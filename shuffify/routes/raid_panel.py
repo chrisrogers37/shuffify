@@ -494,18 +494,12 @@ def raid_add_url(playlist_id, client=None, user=None):
 
         # Update track count on source record
         if track_count is not None:
-            from shuffify.models.db import (
-                db,
-                UpstreamSource,
-            )
-            src = UpstreamSource.query.filter_by(
+            UpstreamSourceService.update_track_count(
                 user_id=user.id,
                 target_playlist_id=playlist_id,
                 source_playlist_id=source_playlist_id,
-            ).first()
-            if src:
-                src.last_track_count = track_count
-                db.session.commit()
+                track_count=track_count,
+            )
 
         log_activity(
             user_id=user.id,
