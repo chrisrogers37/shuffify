@@ -11,13 +11,24 @@
         <div class="p-6 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20">
             <div class="flex items-center justify-between flex-wrap gap-4">
                 <div class="flex items-center min-w-0">
-                    <a href="{{ url_for('main.index') }}"
-                       class="mr-4 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition duration-150 border border-white/20 flex-shrink-0"
-                       title="Back to Dashboard">
+                    <!-- Playlist Navigation Arrows -->
+                    {% if prev_playlist_id %}
+                    <a href="{{ url_for('main.workshop', playlist_id=prev_playlist_id) }}"
+                       class="mr-2 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition duration-150 border border-white/20 flex-shrink-0"
+                       title="Previous playlist"
+                       onclick="return confirmNavigation(this)">
                         <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                         </svg>
                     </a>
+                    {% else %}
+                    <span class="mr-2 p-2 rounded-lg bg-white/5 border border-white/10 flex-shrink-0 opacity-30 cursor-not-allowed"
+                          title="No previous playlist">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                    </span>
+                    {% endif %}
                     <div class="min-w-0">
                         <div class="flex items-center gap-2">
                             <h1 class="text-2xl font-bold text-white truncate">{{ playlist.name }}</h1>
@@ -39,6 +50,23 @@
                             <span id="modified-badge" class="ml-2 px-2 py-0.5 rounded-full bg-yellow-500/80 text-xs font-semibold hidden">Modified</span>
                         </p>
                     </div>
+                    {% if next_playlist_id %}
+                    <a href="{{ url_for('main.workshop', playlist_id=next_playlist_id) }}"
+                       class="ml-2 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition duration-150 border border-white/20 flex-shrink-0"
+                       title="Next playlist"
+                       onclick="return confirmNavigation(this)">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    </a>
+                    {% else %}
+                    <span class="ml-2 p-2 rounded-lg bg-white/5 border border-white/10 flex-shrink-0 opacity-30 cursor-not-allowed"
+                          title="No next playlist">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    </span>
+                    {% endif %}
                 </div>
                 <div class="flex items-center space-x-2 flex-shrink-0">
                     <button id="undo-preview-btn"
@@ -1130,6 +1158,43 @@ const workshopState = {
     archiveTracks: [],
     stagedRestorations: [],
 };
+
+// =============================================================================
+// Playlist Navigation (arrow keys + nav buttons)
+// =============================================================================
+
+const prevPlaylistId = {{ prev_playlist_id | tojson }};
+const nextPlaylistId = {{ next_playlist_id | tojson }};
+
+function confirmUnsavedChanges() {
+    if (!workshopState.isDirty) return true;
+    return confirm('You have unsaved changes. Leave without saving?');
+}
+
+function confirmNavigation() {
+    return confirmUnsavedChanges();
+}
+
+function navigatePlaylist(direction) {
+    const targetId = direction === 'prev' ? prevPlaylistId : nextPlaylistId;
+    if (!targetId) return;
+    if (!confirmUnsavedChanges()) return;
+    window.location.href = `/workshop/${targetId}`;
+}
+
+document.addEventListener('keydown', function(e) {
+    const tag = e.target.tagName.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        navigatePlaylist('prev');
+    } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        navigatePlaylist('next');
+    }
+});
 
 // Schedule edit data (upstream sources, algorithms)
 window.SCHED_UPSTREAM_SOURCES = {{ upstream_sources_json | tojson }};
