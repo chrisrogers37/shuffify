@@ -1223,26 +1223,30 @@ document.addEventListener('keydown', function(e) {
 // =============================================================================
 
 const currentPlaylistId = {{ playlist.id | tojson }};
-let playlistDropdownOpen = false;
 let allPlaylistsCache = null;
+let playlistSearchTimer = null;
+
+const playlistDropdownEl = document.getElementById('playlist-dropdown');
+const playlistDropdownSearchEl = document.getElementById('playlist-dropdown-search');
+const playlistDropdownListEl = document.getElementById('playlist-dropdown-list');
+const playlistDropdownToggleEl = document.getElementById('playlist-dropdown-toggle');
+
+function isPlaylistDropdownOpen() {
+    return !playlistDropdownEl.classList.contains('hidden');
+}
 
 function togglePlaylistDropdown() {
-    const dropdown = document.getElementById('playlist-dropdown');
-    playlistDropdownOpen = !playlistDropdownOpen;
-    dropdown.classList.toggle('hidden', !playlistDropdownOpen);
-    if (playlistDropdownOpen) {
+    const opening = !isPlaylistDropdownOpen();
+    playlistDropdownEl.classList.toggle('hidden', !opening);
+    if (opening) {
         loadPlaylistDropdown();
-        setTimeout(() => {
-            document.getElementById('playlist-dropdown-search').focus();
-        }, 50);
+        requestAnimationFrame(() => playlistDropdownSearchEl.focus());
     }
 }
 
 function closePlaylistDropdown() {
-    const dropdown = document.getElementById('playlist-dropdown');
-    playlistDropdownOpen = false;
-    dropdown.classList.add('hidden');
-    document.getElementById('playlist-dropdown-search').value = '';
+    playlistDropdownEl.classList.add('hidden');
+    playlistDropdownSearchEl.value = '';
 }
 
 async function loadPlaylistDropdown() {
@@ -1252,43 +1256,46 @@ async function loadPlaylistDropdown() {
     }
     try {
         const resp = await fetch('/api/user-playlists');
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
         if (data.success) {
             allPlaylistsCache = data.playlists;
             renderPlaylistDropdown(data.playlists);
         }
     } catch (e) {
-        document.getElementById('playlist-dropdown-list').innerHTML =
+        playlistDropdownListEl.innerHTML =
             '<div class="px-4 py-3 text-red-300 text-sm text-center">Failed to load playlists</div>';
     }
 }
 
 function renderPlaylistDropdown(playlists, filter = '') {
-    const listEl = document.getElementById('playlist-dropdown-list');
+    const filterLower = filter.toLowerCase();
     const filtered = filter
-        ? playlists.filter(p => p.name.toLowerCase().includes(filter.toLowerCase()))
+        ? playlists.filter(p => p.name.toLowerCase().includes(filterLower))
         : playlists;
 
     if (filtered.length === 0) {
-        listEl.innerHTML = '<div class="px-4 py-3 text-white/50 text-sm text-center">No playlists found</div>';
+        playlistDropdownListEl.innerHTML = '<div class="px-4 py-3 text-white/50 text-sm text-center">No playlists found</div>';
         return;
     }
 
-    listEl.innerHTML = filtered.map(p => {
+    playlistDropdownListEl.innerHTML = filtered.map(p => {
         const isCurrent = p.id === currentPlaylistId;
+        const safeName = escapeHtml(p.name);
+        const safeId = escapeHtml(p.id);
         const imgHtml = p.image_url
-            ? `<img src="${p.image_url}" alt="" class="w-8 h-8 rounded object-cover flex-shrink-0">`
+            ? `<img src="${escapeHtml(p.image_url)}" alt="" class="w-8 h-8 rounded object-cover flex-shrink-0">`
             : `<div class="w-8 h-8 rounded bg-white/10 flex items-center justify-center flex-shrink-0">
                  <svg class="w-4 h-4 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
                  </svg>
                </div>`;
-        return `<button onclick="selectPlaylist('${p.id}')"
+        return `<button onclick="selectPlaylist('${safeId}')"
                     class="w-full flex items-center gap-3 px-3 py-2 hover:bg-white/10 transition duration-100 text-left ${isCurrent ? 'bg-white/10' : ''}"
                     ${isCurrent ? 'disabled' : ''}>
                     ${imgHtml}
                     <div class="min-w-0 flex-1">
-                        <div class="text-white text-sm font-medium truncate ${isCurrent ? 'text-spotify-green' : ''}">${p.name}</div>
+                        <div class="text-white text-sm font-medium truncate ${isCurrent ? 'text-spotify-green' : ''}">${safeName}</div>
                         <div class="text-white/40 text-xs">${p.track_count} tracks</div>
                     </div>
                     ${isCurrent ? '<svg class="w-4 h-4 text-spotify-green flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>' : ''}
@@ -1302,27 +1309,23 @@ function selectPlaylist(playlistId) {
     window.location.href = `/workshop/${playlistId}`;
 }
 
-// Search filtering
-document.getElementById('playlist-dropdown-search').addEventListener('input', function(e) {
-    if (allPlaylistsCache) {
-        renderPlaylistDropdown(allPlaylistsCache, e.target.value);
-    }
-});
-
-// Close dropdown on outside click
-document.addEventListener('click', function(e) {
-    if (playlistDropdownOpen) {
-        const dropdown = document.getElementById('playlist-dropdown');
-        const toggle = document.getElementById('playlist-dropdown-toggle');
-        if (!dropdown.contains(e.target) && !toggle.contains(e.target)) {
-            closePlaylistDropdown();
+playlistDropdownSearchEl.addEventListener('input', function(e) {
+    clearTimeout(playlistSearchTimer);
+    playlistSearchTimer = setTimeout(() => {
+        if (allPlaylistsCache) {
+            renderPlaylistDropdown(allPlaylistsCache, e.target.value);
         }
+    }, 150);
+});
+
+document.addEventListener('click', function(e) {
+    if (isPlaylistDropdownOpen() && !playlistDropdownEl.contains(e.target) && !playlistDropdownToggleEl.contains(e.target)) {
+        closePlaylistDropdown();
     }
 });
 
-// Close dropdown on Escape
 document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && playlistDropdownOpen) {
+    if (e.key === 'Escape' && isPlaylistDropdownOpen()) {
         closePlaylistDropdown();
     }
 });
