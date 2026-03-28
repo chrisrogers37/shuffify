@@ -76,7 +76,6 @@ def workshop(playlist_id):
                 load_schedule_context(db_user)
             )
 
-        # Build ordered playlist list for prev/next navigation
         prev_playlist_id = None
         next_playlist_id = None
         try:
@@ -103,8 +102,12 @@ def workshop(playlist_id):
                             p["id"]
                             for p in favs + visible
                         ]
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(
+                        "Could not apply playlist "
+                        "preferences for navigation: %s",
+                        e,
+                    )
 
             if playlist_id in ordered_ids:
                 idx = ordered_ids.index(playlist_id)
@@ -116,9 +119,11 @@ def workshop(playlist_id):
                     next_playlist_id = ordered_ids[
                         idx + 1
                     ]
-        except Exception:
+        except Exception as e:
             logger.debug(
-                "Could not build playlist navigation"
+                "Could not build playlist "
+                "navigation: %s",
+                e,
             )
 
         logger.info(

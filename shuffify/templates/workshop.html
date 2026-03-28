@@ -14,7 +14,7 @@
                     <!-- Playlist Navigation Arrows -->
                     {% if prev_playlist_id %}
                     <a href="{{ url_for('main.workshop', playlist_id=prev_playlist_id) }}"
-                       class="mr-2 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition duration-150 border border-white/20 flex-shrink-0 workshop-nav-arrow"
+                       class="mr-2 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition duration-150 border border-white/20 flex-shrink-0"
                        title="Previous playlist"
                        onclick="return confirmNavigation(this)">
                         <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -52,7 +52,7 @@
                     </div>
                     {% if next_playlist_id %}
                     <a href="{{ url_for('main.workshop', playlist_id=next_playlist_id) }}"
-                       class="ml-2 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition duration-150 border border-white/20 flex-shrink-0 workshop-nav-arrow"
+                       class="ml-2 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition duration-150 border border-white/20 flex-shrink-0"
                        title="Next playlist"
                        onclick="return confirmNavigation(this)">
                         <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1166,31 +1166,25 @@ const workshopState = {
 const prevPlaylistId = {{ prev_playlist_id | tojson }};
 const nextPlaylistId = {{ next_playlist_id | tojson }};
 
-function confirmNavigation(linkEl) {
-    if (workshopState.isDirty) {
-        if (!confirm('You have unsaved changes. Leave without saving?')) {
-            return false;
-        }
-    }
-    return true;
+function confirmUnsavedChanges() {
+    if (!workshopState.isDirty) return true;
+    return confirm('You have unsaved changes. Leave without saving?');
+}
+
+function confirmNavigation() {
+    return confirmUnsavedChanges();
 }
 
 function navigatePlaylist(direction) {
     const targetId = direction === 'prev' ? prevPlaylistId : nextPlaylistId;
     if (!targetId) return;
-    if (workshopState.isDirty) {
-        if (!confirm('You have unsaved changes. Leave without saving?')) {
-            return;
-        }
-    }
+    if (!confirmUnsavedChanges()) return;
     window.location.href = `/workshop/${targetId}`;
 }
 
 document.addEventListener('keydown', function(e) {
-    // Don't trigger when typing in inputs/textareas/selects
     const tag = e.target.tagName.toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
-    // Don't trigger with modifier keys (allow browser shortcuts)
     if (e.ctrlKey || e.metaKey || e.altKey) return;
 
     if (e.key === 'ArrowLeft') {
