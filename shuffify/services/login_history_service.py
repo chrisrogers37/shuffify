@@ -7,7 +7,7 @@ timestamps, and querying login history for auditing and analytics.
 
 import logging
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from typing import Optional
 
 from flask import Request
 
@@ -138,94 +138,3 @@ class LoginHistoryService:
             LoginHistoryError,
         )
         return True
-
-    @staticmethod
-    def get_recent_logins(
-        user_id: int, limit: int = 10
-    ) -> List[LoginHistory]:
-        """
-        Get the most recent login events for a user.
-
-        Args:
-            user_id: The internal database user ID.
-            limit: Maximum number of records to return (default 10).
-
-        Returns:
-            List of LoginHistory instances, most recent first.
-        """
-        return (
-            LoginHistory.query.filter_by(user_id=user_id)
-            .order_by(LoginHistory.logged_in_at.desc())
-            .limit(limit)
-            .all()
-        )
-
-    @staticmethod
-    def get_login_stats(user_id: int) -> Dict[str, Any]:
-        """
-        Get summary statistics for a user's login history.
-
-        Returns total logins, average session duration (for completed
-        sessions), the most recent login timestamp, and a count of
-        logins by type.
-
-        Args:
-            user_id: The internal database user ID.
-
-        Returns:
-            Dictionary with keys:
-                - total_logins (int)
-                - avg_session_duration_seconds (float or None)
-                - last_login_at (str ISO format or None)
-                - logins_by_type (dict of type -> count)
-        """
-        all_entries = LoginHistory.query.filter_by(
-            user_id=user_id
-        ).all()
-
-        if not all_entries:
-            return {
-                "total_logins": 0,
-                "avg_session_duration_seconds": None,
-                "last_login_at": None,
-                "logins_by_type": {},
-            }
-
-        total_logins = len(all_entries)
-
-        # Calculate average session duration for completed sessions
-        completed = [
-            e for e in all_entries if e.logged_out_at is not None
-        ]
-        avg_duration = None
-        if completed:
-            durations = [
-                (
-                    e.logged_out_at - e.logged_in_at
-                ).total_seconds()
-                for e in completed
-            ]
-            avg_duration = sum(durations) / len(durations)
-
-        # Most recent login
-        most_recent = max(
-            all_entries, key=lambda e: e.logged_in_at
-        )
-
-        # Count by login type
-        logins_by_type: Dict[str, int] = {}
-        for e in all_entries:
-            logins_by_type[e.login_type] = (
-                logins_by_type.get(e.login_type, 0) + 1
-            )
-
-        return {
-            "total_logins": total_logins,
-            "avg_session_duration_seconds": avg_duration,
-            "last_login_at": (
-                most_recent.logged_in_at.isoformat()
-                if most_recent.logged_in_at
-                else None
-            ),
-            "logins_by_type": logins_by_type,
-        }

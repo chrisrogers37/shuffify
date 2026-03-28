@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Service Layer Enforcement** - Moved direct DB operations from routes into service methods (token storage, track count updates)
 - **PendingRaidService** - Replaced raw `db.session.commit()` with `safe_commit()` for rollback safety
 - **OAuth Callback** - Eliminated 3 redundant user lookups by reusing upsert result
+- **Dead Code Removal** - Removed unused `get_default_algorithm()`, `get_login_stats()`, `get_recent_logins()` service methods and their tests
+- **Model Exports** - Added `PlaylistPair`, `PlaylistPreference`, `PendingRaidTrack`, `ScrapedPlaylistCache` to `models/__init__.py`
 
 ### Added
 - **Playlist Dropdown Selector** - Click the playlist name in the Workshop header to open a searchable dropdown for quick playlist switching

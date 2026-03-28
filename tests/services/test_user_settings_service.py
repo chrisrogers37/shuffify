@@ -10,8 +10,6 @@ from shuffify.models.db import db, User, UserSettings
 from shuffify.services.user_settings_service import (
     UserSettingsService,
     UserSettingsError,
-    MAX_SNAPSHOTS_LIMIT,
-    MIN_SNAPSHOTS_LIMIT,
 )
 
 
@@ -253,51 +251,6 @@ class TestUpdate:
             test_user.id, extra=extra_data
         )
         assert settings.extra == extra_data
-
-
-class TestGetDefaultAlgorithm:
-    """Tests for get_default_algorithm."""
-
-    def test_returns_none_when_no_settings(
-        self, app_ctx, test_user
-    ):
-        """Should return None when no settings exist."""
-        result = UserSettingsService.get_default_algorithm(
-            test_user.id
-        )
-        assert result is None
-
-    def test_returns_none_when_not_set(
-        self, app_ctx, test_user
-    ):
-        """Should return None when algorithm is not configured."""
-        UserSettingsService.get_or_create(test_user.id)
-        result = UserSettingsService.get_default_algorithm(
-            test_user.id
-        )
-        assert result is None
-
-    def test_returns_algorithm_when_set(
-        self, app_ctx, test_user
-    ):
-        """Should return algorithm name when configured."""
-        UserSettingsService.update(
-            test_user.id,
-            default_algorithm="ArtistSpacingShuffle",
-        )
-        result = UserSettingsService.get_default_algorithm(
-            test_user.id
-        )
-        assert result == "ArtistSpacingShuffle"
-
-    def test_returns_none_for_nonexistent_user(
-        self, app_ctx
-    ):
-        """Should return None for a user ID with no settings."""
-        result = UserSettingsService.get_default_algorithm(
-            99999
-        )
-        assert result is None
 
 
 class TestUserSettingsModel:
