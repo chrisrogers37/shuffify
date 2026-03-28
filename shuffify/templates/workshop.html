@@ -1247,6 +1247,7 @@ function togglePlaylistDropdown() {
 function closePlaylistDropdown() {
     playlistDropdownEl.classList.add('hidden');
     playlistDropdownSearchEl.value = '';
+    clearTimeout(playlistSearchTimer);
 }
 
 async function loadPlaylistDropdown() {
@@ -1261,6 +1262,9 @@ async function loadPlaylistDropdown() {
         if (data.success) {
             allPlaylistsCache = data.playlists;
             renderPlaylistDropdown(data.playlists);
+        } else {
+            playlistDropdownListEl.innerHTML =
+                '<div class="px-4 py-3 text-red-300 text-sm text-center">Failed to load playlists</div>';
         }
     } catch (e) {
         playlistDropdownListEl.innerHTML =
@@ -1282,7 +1286,6 @@ function renderPlaylistDropdown(playlists, filter = '') {
     playlistDropdownListEl.innerHTML = filtered.map(p => {
         const isCurrent = p.id === currentPlaylistId;
         const safeName = escapeHtml(p.name);
-        const safeId = escapeHtml(p.id);
         const imgHtml = p.image_url
             ? `<img src="${escapeHtml(p.image_url)}" alt="" class="w-8 h-8 rounded object-cover flex-shrink-0">`
             : `<div class="w-8 h-8 rounded bg-white/10 flex items-center justify-center flex-shrink-0">
@@ -1290,7 +1293,7 @@ function renderPlaylistDropdown(playlists, filter = '') {
                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
                  </svg>
                </div>`;
-        return `<button onclick="selectPlaylist('${safeId}')"
+        return `<button data-playlist-id="${escapeHtml(p.id)}"
                     class="w-full flex items-center gap-3 px-3 py-2 hover:bg-white/10 transition duration-100 text-left ${isCurrent ? 'bg-white/10' : ''}"
                     ${isCurrent ? 'disabled' : ''}>
                     ${imgHtml}
@@ -1303,11 +1306,14 @@ function renderPlaylistDropdown(playlists, filter = '') {
     }).join('');
 }
 
-function selectPlaylist(playlistId) {
+playlistDropdownListEl.addEventListener('click', function(e) {
+    const btn = e.target.closest('[data-playlist-id]');
+    if (!btn || btn.disabled) return;
+    const playlistId = btn.dataset.playlistId;
     if (playlistId === currentPlaylistId) return;
     if (!confirmUnsavedChanges()) return;
     window.location.href = `/workshop/${playlistId}`;
-}
+});
 
 playlistDropdownSearchEl.addEventListener('input', function(e) {
     clearTimeout(playlistSearchTimer);
