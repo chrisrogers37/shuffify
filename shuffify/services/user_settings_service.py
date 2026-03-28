@@ -7,7 +7,7 @@ for reading specific preference values.
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from shuffify.models.db import db, UserSettings
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
@@ -150,25 +150,3 @@ class UserSettingsService:
         except UserSettingsError:
             db.session.rollback()
             raise
-
-    @staticmethod
-    def get_default_algorithm(
-        user_id: int,
-    ) -> Optional[str]:
-        """
-        Get the user's default shuffle algorithm name.
-
-        Args:
-            user_id: The internal database user ID.
-
-        Returns:
-            Algorithm class name string, or None if not set.
-        """
-        settings = UserSettings.query.filter_by(
-            user_id=user_id
-        ).first()
-
-        if not settings:
-            return None
-
-        return settings.default_algorithm
