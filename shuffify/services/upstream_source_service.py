@@ -108,11 +108,17 @@ class UpstreamSourceService:
             )
             return existing
 
-        # Enforce per-target source limit
-        count = UpstreamSource.query.filter_by(
-            user_id=user.id,
-            target_playlist_id=target_playlist_id,
-        ).count()
+        # Enforce per-target source limit with row locking
+        # to prevent race conditions on concurrent writes.
+        # with_for_update() is a no-op on SQLite (dev).
+        count = (
+            UpstreamSource.query.filter_by(
+                user_id=user.id,
+                target_playlist_id=target_playlist_id,
+            )
+            .with_for_update()
+            .count()
+        )
         if count >= UpstreamSourceService.MAX_SOURCES_PER_TARGET:
             raise UpstreamSourceLimitError(
                 f"Maximum of "
@@ -181,11 +187,15 @@ class UpstreamSourceService:
             )
             return existing
 
-        # Enforce per-target source limit
-        count = UpstreamSource.query.filter_by(
-            user_id=user.id,
-            target_playlist_id=target_playlist_id,
-        ).count()
+        # Enforce per-target source limit with row locking
+        count = (
+            UpstreamSource.query.filter_by(
+                user_id=user.id,
+                target_playlist_id=target_playlist_id,
+            )
+            .with_for_update()
+            .count()
+        )
         if count >= UpstreamSourceService.MAX_SOURCES_PER_TARGET:
             raise UpstreamSourceLimitError(
                 f"Maximum of "

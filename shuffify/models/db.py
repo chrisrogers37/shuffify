@@ -219,6 +219,18 @@ class UserSettings(db.Model):
     # Valid theme choices (used by service layer for validation)
     VALID_THEMES = {"light", "dark", "system"}
 
+    __table_args__ = (
+        db.CheckConstraint(
+            "theme IN ('light', 'dark', 'system')",
+            name="ck_user_settings_theme",
+        ),
+        db.CheckConstraint(
+            "max_snapshots_per_playlist >= 1 "
+            "AND max_snapshots_per_playlist <= 50",
+            name="ck_user_settings_max_snapshots",
+        ),
+    )
+
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the UserSettings to a dictionary."""
         return {
@@ -392,12 +404,20 @@ class UpstreamSource(db.Model):
     # Relationships
     user = db.relationship("User", back_populates="upstream_sources")
 
-    # Composite index
     __table_args__ = (
         db.Index(
             "ix_upstream_user_target",
             "user_id",
             "target_playlist_id",
+        ),
+        db.CheckConstraint(
+            "source_type IN ('own', 'external', "
+            "'search_query')",
+            name="ck_upstream_source_type",
+        ),
+        db.CheckConstraint(
+            "raid_count >= 1 AND raid_count <= 100",
+            name="ck_upstream_raid_count_range",
         ),
     )
 
@@ -538,6 +558,25 @@ class Schedule(db.Model):
             ),
         }
 
+    __table_args__ = (
+        db.Index(
+            "ix_schedules_user_target_type",
+            "user_id",
+            "target_playlist_id",
+            "job_type",
+        ),
+        db.CheckConstraint(
+            "job_type IN ('raid', 'shuffle', "
+            "'raid_and_shuffle', 'raid_and_drip', "
+            "'rotate', 'drip')",
+            name="ck_schedules_job_type",
+        ),
+        db.CheckConstraint(
+            "schedule_type IN ('interval', 'cron')",
+            name="ck_schedules_schedule_type",
+        ),
+    )
+
     def __repr__(self) -> str:
         return (
             f"<Schedule {self.id}: {self.job_type} on "
@@ -644,6 +683,14 @@ class LoginHistory(db.Model):
         "User", back_populates="login_history"
     )
 
+    __table_args__ = (
+        db.CheckConstraint(
+            "login_type IN ('oauth_initial', "
+            "'oauth_refresh', 'session_resume')",
+            name="ck_login_history_type",
+        ),
+    )
+
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the LoginHistory to a dictionary."""
         return {
@@ -725,14 +772,20 @@ class PlaylistSnapshot(db.Model):
         ),
     )
 
-    # Composite index for efficient lookup: "all snapshots for
-    # this user's playlist, ordered by recency"
     __table_args__ = (
         db.Index(
             "ix_snapshot_user_playlist_created",
             "user_id",
             "playlist_id",
             "created_at",
+        ),
+        db.CheckConstraint(
+            "snapshot_type IN ("
+            "'auto_pre_shuffle', 'auto_pre_raid', "
+            "'auto_pre_commit', 'auto_pre_rotate', "
+            "'auto_pre_drip', 'manual', "
+            "'scheduled_pre_execution')",
+            name="ck_snapshot_type",
         ),
     )
 
@@ -1020,12 +1073,15 @@ class RaidPlaylistLink(db.Model):
         "User", back_populates="raid_playlist_links"
     )
 
-    # Unique constraint: one raid link per user per target
     __table_args__ = (
         db.UniqueConstraint(
             "user_id",
             "target_playlist_id",
             name="uq_raid_link_user_target",
+        ),
+        db.CheckConstraint(
+            "drip_count >= 1 AND drip_count <= 50",
+            name="ck_raid_link_drip_count",
         ),
     )
 
@@ -1241,6 +1297,11 @@ class PendingRaidTrack(db.Model):
             "user_id",
             "target_playlist_id",
             "status",
+        ),
+        db.CheckConstraint(
+            "status IN ('pending', 'promoted', "
+            "'dismissed')",
+            name="ck_pending_raid_status",
         ),
     )
 
