@@ -13,6 +13,9 @@ from shuffify.routes import (
     json_success,
 )
 from shuffify.services import PlaylistService, PlaylistError
+from shuffify.services.playlist_preference_service import (
+    PlaylistPreferenceService,
+)
 from shuffify.schemas import PlaylistQueryParams
 
 logger = logging.getLogger(__name__)
@@ -89,6 +92,23 @@ def api_user_playlists(client=None, user=None):
     try:
         playlist_service = PlaylistService(client)
         playlists = playlist_service.get_user_playlists()
+
+        # Apply user preferences (favorites first, hidden excluded)
+        try:
+            preferences = (
+                PlaylistPreferenceService
+                .get_user_preferences(user.id)
+            )
+            if preferences:
+                favs, visible, _hidden = (
+                    PlaylistPreferenceService
+                    .apply_preferences(
+                        playlists, preferences
+                    )
+                )
+                playlists = favs + visible
+        except Exception:
+            pass  # Fall back to default order
 
         result = []
         for p in playlists:

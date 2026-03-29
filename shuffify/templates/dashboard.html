@@ -683,8 +683,8 @@ function toggleManageMode() {
         el.classList.toggle('hidden', manageMode);
     });
 
-    // Toggle draggable on tiles
-    document.querySelectorAll('#playlist-grid .card-tile').forEach(tile => {
+    // Toggle draggable on tiles (both favorites and regular grids)
+    document.querySelectorAll('#favorites-grid .card-tile, #playlist-grid .card-tile').forEach(tile => {
         tile.draggable = manageMode;
         tile.classList.toggle('manage-mode-active', manageMode);
     });
@@ -889,8 +889,12 @@ function resetPreferences() {
 }
 
 function saveCurrentOrder() {
-    const tiles = document.querySelectorAll('#playlist-grid .card-tile');
-    const playlistIds = Array.from(tiles).map(t => t.dataset.playlistId);
+    const favTiles = document.querySelectorAll('#favorites-grid .card-tile');
+    const regTiles = document.querySelectorAll('#playlist-grid .card-tile');
+    const playlistIds = [
+        ...Array.from(favTiles).map(t => t.dataset.playlistId),
+        ...Array.from(regTiles).map(t => t.dataset.playlistId)
+    ];
 
     fetch('/api/playlist-preferences/order', {
         method: 'POST',
@@ -916,61 +920,68 @@ function saveCurrentOrder() {
 
 /* --- HTML5 Drag and Drop --- */
 function initDragAndDrop() {
-    const grid = document.getElementById('playlist-grid');
+    const grids = [
+        document.getElementById('favorites-grid'),
+        document.getElementById('playlist-grid')
+    ].filter(Boolean);
+
     let draggedTile = null;
 
-    grid.addEventListener('dragstart', (e) => {
-        const tile = e.target.closest('.card-tile');
-        if (!tile || !manageMode) return;
-        draggedTile = tile;
-        tile.style.opacity = '0.4';
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', tile.dataset.playlistId);
-    });
+    grids.forEach(grid => {
+        grid.addEventListener('dragstart', (e) => {
+            const tile = e.target.closest('.card-tile');
+            if (!tile || !manageMode) return;
+            draggedTile = tile;
+            tile.style.opacity = '0.4';
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', tile.dataset.playlistId);
+        });
 
-    grid.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        const tile = e.target.closest('.card-tile');
-        if (tile && tile !== draggedTile) {
-            tile.classList.add('drag-over');
-        }
-    });
+        grid.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const tile = e.target.closest('.card-tile');
+            if (tile && tile !== draggedTile) {
+                tile.classList.add('drag-over');
+            }
+        });
 
-    grid.addEventListener('dragleave', (e) => {
-        const tile = e.target.closest('.card-tile');
-        if (tile) {
-            tile.classList.remove('drag-over');
-        }
-    });
+        grid.addEventListener('dragleave', (e) => {
+            const tile = e.target.closest('.card-tile');
+            if (tile) {
+                tile.classList.remove('drag-over');
+            }
+        });
 
-    grid.addEventListener('drop', (e) => {
-        e.preventDefault();
-        const targetTile = e.target.closest('.card-tile');
-        if (!targetTile || !draggedTile || targetTile === draggedTile) return;
+        grid.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const targetTile = e.target.closest('.card-tile');
+            if (!targetTile || !draggedTile || targetTile === draggedTile) return;
+            // Only allow reorder within the same grid
+            if (!grid.contains(draggedTile)) return;
 
-        targetTile.classList.remove('drag-over');
+            targetTile.classList.remove('drag-over');
 
-        // Determine insert position
-        const tiles = Array.from(grid.querySelectorAll('.card-tile'));
-        const dragIdx = tiles.indexOf(draggedTile);
-        const dropIdx = tiles.indexOf(targetTile);
+            const tiles = Array.from(grid.querySelectorAll('.card-tile'));
+            const dragIdx = tiles.indexOf(draggedTile);
+            const dropIdx = tiles.indexOf(targetTile);
 
-        if (dragIdx < dropIdx) {
-            targetTile.parentNode.insertBefore(draggedTile, targetTile.nextSibling);
-        } else {
-            targetTile.parentNode.insertBefore(draggedTile, targetTile);
-        }
+            if (dragIdx < dropIdx) {
+                targetTile.parentNode.insertBefore(draggedTile, targetTile.nextSibling);
+            } else {
+                targetTile.parentNode.insertBefore(draggedTile, targetTile);
+            }
 
-        saveCurrentOrder();
-    });
+            saveCurrentOrder();
+        });
 
-    grid.addEventListener('dragend', (e) => {
-        if (draggedTile) {
-            draggedTile.style.opacity = '1';
-            draggedTile = null;
-        }
-        grid.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        grid.addEventListener('dragend', (e) => {
+            if (draggedTile) {
+                draggedTile.style.opacity = '1';
+                draggedTile = null;
+            }
+            grid.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        });
     });
 }
 

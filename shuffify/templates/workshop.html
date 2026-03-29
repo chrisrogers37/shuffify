@@ -11,6 +11,14 @@
         <div class="p-6 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20">
             <div class="flex items-center justify-between flex-wrap gap-4">
                 <div class="flex items-center min-w-0">
+                    <!-- Home Button -->
+                    <a href="{{ url_for('main.index') }}"
+                       class="mr-2 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition duration-150 border border-white/20 flex-shrink-0"
+                       title="Back to dashboard">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                        </svg>
+                    </a>
                     <!-- Playlist Navigation Arrows -->
                     {% if prev_playlist_id %}
                     <a href="{{ url_for('main.workshop', playlist_id=prev_playlist_id) }}"
