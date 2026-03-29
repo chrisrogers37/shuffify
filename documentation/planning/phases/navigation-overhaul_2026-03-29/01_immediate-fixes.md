@@ -1,6 +1,8 @@
 # Phase 01: Immediate Fixes
 
-**Status**: PENDING
+**Status**: ✅ COMPLETE
+**Started**: 2026-03-29
+**Completed**: 2026-03-29
 
 ## Objective
 
@@ -89,7 +91,7 @@ function initDragAndDrop() {
 }
 ```
 
-Note: Cross-grid dragging (favorites to regular) is not needed for now — each grid reorders independently. The combined order is captured by `saveCurrentOrder()`.
+Each grid reorders independently within itself (favorites within favorites, regular within regular). No cross-grid dragging. `saveCurrentOrder()` reads favorites first, then regular, sending a combined flat list. `PlaylistPreferenceService.save_order()` only updates `sort_order` (preserves `is_pinned`/`is_hidden`), so this works safely.
 
 ### 1c. Workshop back button
 
@@ -132,7 +134,7 @@ This gives a 4+3 layout (4 in first row, 3 in second row) which is visually bala
 
 Uses a clock icon (matches "newest first" concept — time-based sorting).
 
-**Button sizing**: With 4 columns, buttons are narrower. Reduce icon size if needed: `w-4 h-4` instead of `w-5 h-5`, or reduce padding from `py-1.5` to `py-1`. Test visually.
+**Button sizing**: With 4 columns, buttons are narrower (~70px vs ~95px). Keep current sizing (`w-5 h-5` icons, `py-1.5`) and test visually. Only reduce if it breaks.
 
 ## Verification
 
