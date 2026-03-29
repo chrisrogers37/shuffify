@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Workshop Playlist Dropdown** - Redesigned dropdown to match green glass-morphism design system
+  - Frosted dark glass container (`bg-black/70 backdrop-blur-xl`) replacing opaque dark background
+  - Smooth open/close animation (scale + opacity, 150ms)
+  - Larger playlist thumbnails with rounded corners
+  - Search input with magnifying glass icon and standardized focus ring
+  - Active playlist highlighted with green left border accent
+  - Polished loading spinner, empty state, and error state
 - **Pending Raid Dedup** - Replaced N per-track SELECT queries with single IN() query in `PendingRaidService.stage_tracks()` (50 queries → 1 per raid batch)
 - **Dashboard Eager Loading** - Added `joinedload` to `_get_recent_executions()` eliminating N+1 lazy-load queries on the Schedule relationship
 - **Dashboard Stats** - Reduced separate COUNT queries in `_get_quick_stats()` using conditional aggregation
