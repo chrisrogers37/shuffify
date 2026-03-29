@@ -173,6 +173,11 @@
         {% endwith %}
     </div>
 
+    <!-- Navigation Bar (authenticated users only) -->
+    {% if session.get('access_token') %}
+        {% include 'partials/navbar.html' %}
+    {% endif %}
+
     <!-- Main Content -->
     <main id="main-content" class="flex-grow">
         {% block content %}{% endblock %}

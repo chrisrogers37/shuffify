@@ -7,13 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Navigation Bar** - Persistent top-level navigation across all authenticated pages
+  - 6 items: Tiles, Workshop, Schedules, Activity, Settings, Logout
+  - Glass-morphism styling with active state auto-detection via request endpoint
+  - Responsive: icon-only on mobile, icon+text on desktop
+
 ### Fixed
 - **Workshop Playlist Dropdown** - Playlists now sorted by user preferences (favorites first, hidden excluded)
 - **Algorithm Grid Spacing** - Changed to 4-column layout for even distribution, added missing Newest First icon
 
-### Added
-- **Workshop Home Button** - Added dashboard navigation button in workshop header
-- **Favorites Drag-to-Reorder** - Extended drag-and-drop reordering to favorites section on dashboard
+### Removed
+- **Old Navigation Buttons** - Replaced per-page nav buttons with unified nav bar
+  - Dashboard: removed Schedules, Settings, Logout buttons from header
+  - Workshop: removed home button (navbar replaces it)
+  - Schedules: removed back-to-dashboard button
+  - Settings: removed back-to-dashboard button
 
 ### Changed
 - **Workshop Playlist Dropdown** - Redesigned dropdown to match green glass-morphism design system

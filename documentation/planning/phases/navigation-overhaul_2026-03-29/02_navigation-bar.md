@@ -1,11 +1,12 @@
 # Phase 02: Navigation Bar
 
-**Status**: PENDING
+**Status**: IN PROGRESS
+**Started**: 2026-03-29
 **Depends on**: Phase 01
 
 ## Objective
 
-Introduce a persistent top-level navigation bar across all authenticated pages. 5 sections: Tiles, Workshop, Schedules, Activity, Settings. Remove old per-page nav buttons.
+Introduce a persistent top-level navigation bar across all authenticated pages. 6 items: Tiles, Workshop, Schedules, Activity, Settings, Logout. Remove old per-page nav buttons.
 
 ## Files
 
@@ -25,10 +26,20 @@ Introduce a persistent top-level navigation bar across all authenticated pages. 
 
 **New file**: `shuffify/templates/partials/navbar.html`
 
-Glass-morphism nav bar matching the design system. Fixed/sticky at top of page.
+Glass-morphism nav bar matching the design system. Sticky at top of page. Auto-detects active state from `request.endpoint` — no route changes needed.
 
 ```html
 {# Navigation Bar — included on all authenticated pages #}
+{% set endpoint_map = {
+    'main.index': 'tiles',
+    'main.workshop': 'workshop',
+    'main.workshop_hub': 'workshop',
+    'main.schedules': 'schedules',
+    'main.activity': 'activity',
+    'main.settings': 'settings',
+} %}
+{% set active_nav = endpoint_map.get(request.endpoint, '') %}
+
 <nav class="sticky top-0 z-40 backdrop-blur-md bg-white/10 border-b border-white/20">
     <div class="max-w-6xl mx-auto px-4">
         <div class="flex items-center justify-between h-14">
@@ -39,88 +50,113 @@ Glass-morphism nav bar matching the design system. Fixed/sticky at top of page.
 
             {# Nav Items #}
             <div class="flex items-center gap-1">
-                {% set nav_items = [
-                    ('tiles', 'main.index', 'Tiles', 'grid-icon-svg'),
-                    ('workshop', 'main.workshop_hub', 'Workshop', 'wrench-icon-svg'),
-                    ('schedules', 'main.schedules', 'Schedules', 'clock-icon-svg'),
-                    ('activity', 'main.activity', 'Activity', 'lightning-icon-svg'),
-                    ('settings', 'main.settings', 'Settings', 'gear-icon-svg'),
-                ] %}
-
-                {% for key, endpoint, label, icon in nav_items %}
-                <a href="{{ url_for(endpoint) }}"
+                {# Tiles #}
+                <a href="{{ url_for('main.index') }}"
                    class="flex items-center gap-2 px-3 py-2 rounded-lg transition duration-150
-                          {{ 'bg-white/20 text-white' if active_nav == key else 'text-white/60 hover:text-white hover:bg-white/10' }}">
-                    {# icon SVG here #}
-                    <span class="hidden sm:inline text-sm font-medium">{{ label }}</span>
+                          {{ 'bg-white/20 text-white' if active_nav == 'tiles' else 'text-white/60 hover:text-white hover:bg-white/10' }}">
+                    {# grid icon SVG #}
+                    <span class="hidden sm:inline text-sm font-medium">Tiles</span>
                 </a>
-                {% endfor %}
+
+                {# Workshop — placeholder href until Phase 3 #}
+                <a href="#" data-pending="workshop_hub"
+                   class="flex items-center gap-2 px-3 py-2 rounded-lg transition duration-150
+                          {{ 'bg-white/20 text-white' if active_nav == 'workshop' else 'text-white/60 hover:text-white hover:bg-white/10' }}">
+                    {# wrench icon SVG #}
+                    <span class="hidden sm:inline text-sm font-medium">Workshop</span>
+                </a>
+
+                {# Schedules #}
+                <a href="{{ url_for('main.schedules') }}"
+                   class="flex items-center gap-2 px-3 py-2 rounded-lg transition duration-150
+                          {{ 'bg-white/20 text-white' if active_nav == 'schedules' else 'text-white/60 hover:text-white hover:bg-white/10' }}">
+                    {# clock icon SVG #}
+                    <span class="hidden sm:inline text-sm font-medium">Schedules</span>
+                </a>
+
+                {# Activity — placeholder href until Phase 4 #}
+                <a href="#" data-pending="activity"
+                   class="flex items-center gap-2 px-3 py-2 rounded-lg transition duration-150
+                          {{ 'bg-white/20 text-white' if active_nav == 'activity' else 'text-white/60 hover:text-white hover:bg-white/10' }}">
+                    {# lightning icon SVG #}
+                    <span class="hidden sm:inline text-sm font-medium">Activity</span>
+                </a>
+
+                {# Settings #}
+                <a href="{{ url_for('main.settings') }}"
+                   class="flex items-center gap-2 px-3 py-2 rounded-lg transition duration-150
+                          {{ 'bg-white/20 text-white' if active_nav == 'settings' else 'text-white/60 hover:text-white hover:bg-white/10' }}">
+                    {# gear icon SVG #}
+                    <span class="hidden sm:inline text-sm font-medium">Settings</span>
+                </a>
+
+                {# Logout — rightmost, subtle styling. Phase 5 moves this into settings sidebar. #}
+                <a href="{{ url_for('main.logout') }}"
+                   class="flex items-center gap-2 px-3 py-2 rounded-lg transition duration-150 text-white/40 hover:text-red-300 hover:bg-white/10 ml-2"
+                   onclick="return confirm('Are you sure you want to log out?')">
+                    {# exit icon SVG #}
+                    <span class="hidden sm:inline text-sm font-medium">Logout</span>
+                </a>
             </div>
         </div>
     </div>
 </nav>
 ```
 
-Active state detection: Each page template sets `active_nav` variable. Or auto-detect via `request.endpoint`:
-- `main.index` → tiles
-- `main.workshop`, `main.workshop_hub` → workshop
-- `main.schedules` → schedules
-- `main.activity` → activity
-- `main.settings` → settings
+Active state auto-detection: The `endpoint_map` dict maps `request.endpoint` to nav keys. No `active_nav` variable needed from routes. Non-existent endpoints (`workshop_hub`, `activity`) are in the map for when Phases 3-4 ship — they won't cause errors since `request.endpoint` simply won't match them until the routes exist.
 
-Note: `workshop_hub` and `activity` routes don't exist yet. Use `#` as placeholder href until Phases 3-4 ship. Or define stub routes that redirect.
-
-### 2b. Add navbar block to base.html
+### 2b. Include navbar in base.html
 
 **File**: `shuffify/templates/base.html`
 
-Add a block above `{% block content %}`:
+Include the navbar directly in base.html with a session check, above `{% block content %}`. No per-template block needed — DRY, one include for all authenticated pages:
 
 ```html
-{% block navbar %}{% endblock %}
+{% if session.get('access_token') %}
+    {% include 'partials/navbar.html' %}
+{% endif %}
 {% block content %}{% endblock %}
 ```
 
-### 2c. Include navbar in authenticated pages
+This is better than a `{% block navbar %}` pattern because:
+- DRY: one line vs. repeating the block override in every template
+- Future-proof: new templates automatically get the navbar
+- base.html already owns layout concerns
 
-Each authenticated template adds:
+### 2c. Remove old navigation elements
 
-```html
-{% block navbar %}
-    {% include 'partials/navbar.html' %}
-{% endblock %}
-```
+**dashboard.html** (lines 60-106): Remove Schedules button (L60-67), Settings button (L69-77), and Logout button (L99-106). Keep Manage (L79-87) and Refresh (L89-97) as local action buttons.
 
-And sets `active_nav` in route context, or relies on auto-detection.
+**workshop.html** (lines 15-21): Remove the home button added in Phase 1. Navbar provides persistent navigation. Keep prev/next playlist arrows.
 
-### 2d. Remove old navigation elements
+**schedules.html** (lines 16-22): Remove the back-to-dashboard chevron button.
 
-**dashboard.html**: Remove the nav buttons from the welcome card header (Schedules, Settings, Logout buttons). Keep Manage + Refresh as local action buttons within the tiles view area (not in the nav).
-
-**workshop.html**: Remove the home button added in Phase 1 (navbar now provides persistent navigation back to Tiles). Keep prev/next playlist arrows.
-
-**schedules.html**: Remove the back-to-dashboard button from the header.
-
-**settings.html**: Remove the back-to-dashboard button from the header.
+**settings.html** (lines 15-21): Remove the back-to-dashboard chevron button.
 
 ## Verification
 
 1. Nav bar visible on dashboard, workshop, schedules, settings
-2. Active item highlighted correctly per page
+2. Active item highlighted correctly per page (auto-detected from endpoint)
 3. Responsive: icons only on narrow screens, icon+text on wider
 4. Old nav buttons gone — no duplicate navigation
 5. Manage and Refresh still accessible on dashboard
-6. `flake8 shuffify/` and `pytest tests/ -v`
+6. Logout accessible from navbar on all pages (with confirmation)
+7. Workshop and Activity links render as `#` (no crash from missing routes)
+8. `flake8 shuffify/` and `pytest tests/ -v`
 
 ## CHANGELOG Entry
 
 ```markdown
 ### Added
 - **Navigation Bar** - Persistent top-level navigation across all authenticated pages
-  - 5 sections: Tiles, Workshop, Schedules, Activity, Settings
-  - Glass-morphism styling with active state highlighting
+  - 6 items: Tiles, Workshop, Schedules, Activity, Settings, Logout
+  - Glass-morphism styling with active state auto-detection
   - Responsive: icon-only on mobile, icon+text on desktop
 
 ### Removed
 - **Old Navigation Buttons** - Replaced per-page nav buttons with unified nav bar
+  - Dashboard: removed Schedules, Settings, Logout buttons from header
+  - Workshop: removed home button (navbar replaces it)
+  - Schedules: removed back-to-dashboard button
+  - Settings: removed back-to-dashboard button
 ```

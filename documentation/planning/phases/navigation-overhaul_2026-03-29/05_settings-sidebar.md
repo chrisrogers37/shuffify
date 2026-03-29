@@ -33,7 +33,7 @@ Port the workshop sidebar pattern (`workshopSidebar` JS object in workshop.html)
   - Auto-snapshot toggle
   - Max snapshots per playlist
   - Show recent activity toggle
-- **Logout button** at the bottom with confirmation dialog
+- **Logout button** at the bottom with confirmation dialog (moved from navbar — Phase 02 added it there as interim location)
 - Close button (X) at top-right
 - Backdrop overlay to close on click-outside
 
@@ -69,7 +69,13 @@ Port the workshop sidebar pattern (`workshopSidebar` JS object in workshop.html)
 </div>
 ```
 
-### 5b. AJAX settings save
+### 5b. Remove Logout from navbar
+
+**File**: `shuffify/templates/partials/navbar.html`
+
+Remove the Logout nav item added in Phase 02 (it now lives in the settings sidebar footer). The navbar should have 5 items after this: Tiles, Workshop, Schedules, Activity, Settings.
+
+### 5c. AJAX settings save
 
 **File**: `shuffify/routes/settings.py`
 
@@ -89,7 +95,7 @@ def update_settings(client=None, user=None):
     return redirect(url_for("main.settings"))
 ```
 
-### 5c. Include in base.html
+### 5d. Include in base.html
 
 **File**: `shuffify/templates/base.html`
 
@@ -101,7 +107,7 @@ Include the sidebar partial for authenticated users:
 
 Or include it directly in the navbar block since it's always present for authenticated users.
 
-### 5d. Wire nav bar Settings button
+### 5e. Wire nav bar Settings button
 
 **File**: `shuffify/templates/partials/navbar.html`
 
@@ -115,7 +121,7 @@ Change Settings nav item from a link to a button that toggles the sidebar:
 </button>
 ```
 
-### 5e. JS toggle functions
+### 5f. JS toggle functions
 
 Add to sidebar partial or base.html:
 
@@ -141,7 +147,7 @@ function closeSettingsSidebar() {
 }
 ```
 
-### 5f. Keep /settings as fallback
+### 5g. Keep /settings as fallback
 
 Keep the existing `/settings` GET route and `settings.html` template as a no-JS fallback. The sidebar is the primary interaction path but the full page still works.
 

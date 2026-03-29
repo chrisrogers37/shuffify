@@ -1,0 +1,85 @@
+{# Navigation Bar — auto-included for authenticated users via base.html #}
+{% set endpoint_map = {
+    'main.index': 'tiles',
+    'main.workshop': 'workshop',
+    'main.workshop_hub': 'workshop',
+    'main.schedules': 'schedules',
+    'main.activity': 'activity',
+    'main.settings': 'settings',
+    'main.update_settings': 'settings',
+} %}
+{% set active_nav = endpoint_map.get(request.endpoint, '') %}
+
+<nav class="sticky top-0 z-40 backdrop-blur-md bg-white/10 border-b border-white/20">
+    <div class="max-w-6xl mx-auto px-4">
+        <div class="flex items-center justify-between h-14">
+            {# Logo/Brand #}
+            <a href="{{ url_for('main.index') }}" class="text-white font-bold text-lg tracking-tight">
+                Shuffify
+            </a>
+
+            {# Nav Items #}
+            <div class="flex items-center gap-1">
+                {# Tiles #}
+                <a href="{{ url_for('main.index') }}"
+                   class="flex items-center gap-2 px-3 py-2 rounded-lg transition duration-150
+                          {{ 'bg-white/20 text-white' if active_nav == 'tiles' else 'text-white/60 hover:text-white hover:bg-white/10' }}">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+                    </svg>
+                    <span class="hidden sm:inline text-sm font-medium">Tiles</span>
+                </a>
+
+                {# Workshop — placeholder href until Phase 3 #}
+                <a href="#" data-pending="workshop_hub"
+                   class="flex items-center gap-2 px-3 py-2 rounded-lg transition duration-150
+                          {{ 'bg-white/20 text-white' if active_nav == 'workshop' else 'text-white/60 hover:text-white hover:bg-white/10' }}">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"></path>
+                    </svg>
+                    <span class="hidden sm:inline text-sm font-medium">Workshop</span>
+                </a>
+
+                {# Schedules #}
+                <a href="{{ url_for('main.schedules') }}"
+                   class="flex items-center gap-2 px-3 py-2 rounded-lg transition duration-150
+                          {{ 'bg-white/20 text-white' if active_nav == 'schedules' else 'text-white/60 hover:text-white hover:bg-white/10' }}">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span class="hidden sm:inline text-sm font-medium">Schedules</span>
+                </a>
+
+                {# Activity — placeholder href until Phase 4 #}
+                <a href="#" data-pending="activity"
+                   class="flex items-center gap-2 px-3 py-2 rounded-lg transition duration-150
+                          {{ 'bg-white/20 text-white' if active_nav == 'activity' else 'text-white/60 hover:text-white hover:bg-white/10' }}">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg>
+                    <span class="hidden sm:inline text-sm font-medium">Activity</span>
+                </a>
+
+                {# Settings #}
+                <a href="{{ url_for('main.settings') }}"
+                   class="flex items-center gap-2 px-3 py-2 rounded-lg transition duration-150
+                          {{ 'bg-white/20 text-white' if active_nav == 'settings' else 'text-white/60 hover:text-white hover:bg-white/10' }}">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+                    </svg>
+                    <span class="hidden sm:inline text-sm font-medium">Settings</span>
+                </a>
+
+                {# Logout — rightmost, subtle styling. Phase 5 moves this into settings sidebar. #}
+                <a href="{{ url_for('main.logout') }}"
+                   class="flex items-center gap-2 px-3 py-2 rounded-lg transition duration-150 text-white/40 hover:text-red-300 hover:bg-white/10 ml-2"
+                   onclick="return confirm('Are you sure you want to log out?')">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                    </svg>
+                    <span class="hidden sm:inline text-sm font-medium">Logout</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</nav>
