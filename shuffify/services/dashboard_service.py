@@ -83,7 +83,7 @@ class DashboardService:
             )
 
         data["quick_stats"] = (
-            DashboardService._get_quick_stats(user_id)
+            DashboardService.get_quick_stats(user_id)
         )
 
         data["active_schedules"] = (
@@ -91,7 +91,7 @@ class DashboardService:
         )
 
         data["recent_job_executions"] = (
-            DashboardService._get_recent_executions(
+            DashboardService.get_recent_executions(
                 user_id, limit=5
             )
         )
@@ -155,7 +155,7 @@ class DashboardService:
             return []
 
     @staticmethod
-    def _get_quick_stats(
+    def get_quick_stats(
         user_id: int,
     ) -> Dict[str, int]:
         """
@@ -264,7 +264,7 @@ class DashboardService:
             return []
 
     @staticmethod
-    def _get_recent_executions(
+    def get_recent_executions(
         user_id: int, limit: int = 5
     ) -> List[Dict[str, Any]]:
         """Get recent job executions across all schedules."""

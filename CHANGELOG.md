@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Activity Log Page** - Dedicated page for full activity history and KPI stats
+  - KPI stats header (shuffles, active schedules, scheduled runs, snapshots saved)
+  - Complete unfiltered activity log with icons and timestamps
+  - Recent job execution results with status indicators
 - **Workshop Hub** - Workshop is now accessible as a standalone page from the navigation bar
   - Empty state with playlist selector when no playlist is loaded
   - Select a playlist to enter the full workshop experience
@@ -28,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Settings: removed back-to-dashboard button
 
 ### Changed
+- **Dashboard** - Simplified to playlist tiles only (KPIs and activity feed moved to Activity Log page)
 - **Workshop Playlist Dropdown** - Redesigned dropdown to match green glass-morphism design system
   - Frosted dark glass container (`bg-black/70 backdrop-blur-xl`) replacing opaque dark background
   - Smooth open/close animation (scale + opacity, 150ms)

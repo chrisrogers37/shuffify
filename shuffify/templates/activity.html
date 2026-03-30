@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% from "macros/cards.html" import glass_card %}
+
+{% block title %}Activity - Shuffify{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-spotify-green via-spotify-green/90 to-spotify-dark">
+    <div class="absolute inset-0" style="background-image: url('/static/images/hero-pattern.svg'); opacity: 0.15; pointer-events: none;"></div>
+
+    <!-- Header -->
+    <div class="relative max-w-5xl mx-auto px-4 pt-8">
+        {% call glass_card() %}
+            <div class="flex items-center">
+                <div>
+                    <h1 class="text-2xl font-bold text-white">Activity</h1>
+                    <p class="text-white/70 text-sm">Your shuffle history, stats, and scheduled job results</p>
+                </div>
+            </div>
+        {% endcall %}
+    </div>
+
+    <!-- KPI Stats Cards -->
+    <div class="relative max-w-5xl mx-auto px-4 pt-6">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="p-4 rounded-xl backdrop-blur-md bg-white/10 border border-white/20 text-center">
+                <p class="text-3xl font-bold text-white">{{ stats.total_shuffles }}</p>
+                <p class="text-white/60 text-sm mt-1">Shuffles</p>
+            </div>
+            <div class="p-4 rounded-xl backdrop-blur-md bg-white/10 border border-white/20 text-center">
+                <p class="text-3xl font-bold text-white">{{ stats.active_schedule_count }}</p>
+                <p class="text-white/60 text-sm mt-1">Active Schedules</p>
+            </div>
+            <div class="p-4 rounded-xl backdrop-blur-md bg-white/10 border border-white/20 text-center">
+                <p class="text-3xl font-bold text-white">{{ stats.total_scheduled_runs }}</p>
+                <p class="text-white/60 text-sm mt-1">Scheduled Runs</p>
+            </div>
+            <div class="p-4 rounded-xl backdrop-blur-md bg-white/10 border border-white/20 text-center">
+                <p class="text-3xl font-bold text-white">{{ stats.total_snapshots }}</p>
+                <p class="text-white/60 text-sm mt-1">Snapshots Saved</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activity Log -->
+    <div class="relative max-w-5xl mx-auto px-4 py-6">
+        <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden">
+            <div class="px-6 py-4 border-b border-white/10">
+                <h2 class="text-white font-bold text-lg">Activity Log</h2>
+            </div>
+
+            {% if activities %}
+            <div class="max-h-[32rem] overflow-y-auto">
+                {% for activity in activities %}
+                <div class="flex items-center px-6 py-3 border-b border-white/5 hover:bg-white/5 transition duration-150"
+                     data-type="{{ activity.activity_type }}">
+                    {# Activity Icon #}
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center mr-3 flex-shrink-0
+                        {% if activity.activity_type == 'shuffle' %}bg-purple-500/30 text-purple-300
+                        {% elif 'schedule' in activity.activity_type %}bg-blue-500/30 text-blue-300
+                        {% elif 'workshop' in activity.activity_type %}bg-green-500/30 text-green-300
+                        {% elif 'snapshot' in activity.activity_type %}bg-yellow-500/30 text-yellow-300
+                        {% elif 'raid' in activity.activity_type %}bg-cyan-500/30 text-cyan-300
+                        {% else %}bg-white/10 text-white/60{% endif %}">
+                        {% if activity.activity_type == 'shuffle' %}
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        {% elif 'schedule' in activity.activity_type %}
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        {% elif 'workshop' in activity.activity_type %}
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        {% elif 'raid' in activity.activity_type %}
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                        {% else %}
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        {% endif %}
+                    </div>
+                    {# Activity Details #}
+                    <div class="flex-1 min-w-0">
+                        <p class="text-white text-sm font-medium truncate">
+                            {{ activity.description or (activity.activity_type | replace('_', ' ') | title) }}
+                        </p>
+                        {% if activity.playlist_name %}
+                        <p class="text-white/50 text-xs truncate">{{ activity.playlist_name }}</p>
+                        {% endif %}
+                    </div>
+                    {# Timestamp #}
+                    <span class="text-white/40 text-xs flex-shrink-0 ml-2" title="{{ activity.created_at }}">
+                        {{ activity.created_at.strftime('%b %d, %H:%M') if activity.created_at else '' }}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="px-6 py-12 text-center text-white/50">
+                <svg class="w-12 h-12 mx-auto mb-3 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                </svg>
+                <p class="text-lg font-medium">No activity yet</p>
+                <p class="text-sm mt-1">Shuffle a playlist or set up a schedule to see activity here.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Recent Job Executions -->
+    {% if executions %}
+    <div class="relative max-w-5xl mx-auto px-4 pb-8">
+        <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden">
+            <div class="px-6 py-4 border-b border-white/10">
+                <h2 class="text-white font-bold text-lg">Recent Scheduled Jobs</h2>
+            </div>
+            <div class="divide-y divide-white/5">
+                {% for exec in executions %}
+                <div class="flex items-center justify-between px-6 py-3 hover:bg-white/5 transition duration-150">
+                    <div class="flex items-center min-w-0">
+                        <span class="px-1.5 py-0.5 rounded text-xs font-bold uppercase mr-3
+                            {% if exec.job_type == 'raid' %}bg-cyan-500/60
+                            {% elif exec.job_type == 'shuffle' %}bg-purple-500/60
+                            {% elif exec.job_type == 'rotate' %}bg-orange-500/60
+                            {% else %}bg-white/20{% endif %} text-white">
+                            {{ exec.job_type | replace('_', ' ') }}
+                        </span>
+                        <span class="text-white/80 text-sm truncate">{{ exec.schedule_name }}</span>
+                    </div>
+                    <div class="flex items-center flex-shrink-0 ml-2 gap-3">
+                        {% if exec.status == 'success' %}
+                        <span class="text-green-400 text-xs font-medium">
+                            {% if exec.tracks_added and exec.tracks_added > 0 %}+{{ exec.tracks_added }} tracks{% else %}Done{% endif %}
+                        </span>
+                        {% elif exec.status == 'failed' %}
+                        <span class="text-red-400 text-xs font-medium">Failed</span>
+                        {% else %}
+                        <span class="text-white/40 text-xs">{{ exec.status }}</span>
+                        {% endif %}
+                        <span class="text-white/30 text-xs">
+                            {{ exec.started_at[:16] | replace('T', ' ') if exec.started_at else '' }}
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

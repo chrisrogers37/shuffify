@@ -166,7 +166,7 @@ class TestQuickStats:
         self, db_user, app_context
     ):
         """Should return zeroed stats with no activity."""
-        stats = DashboardService._get_quick_stats(
+        stats = DashboardService.get_quick_stats(
             db_user.id
         )
         assert stats["total_shuffles"] == 0
@@ -178,7 +178,7 @@ class TestQuickStats:
         self, db_user, sample_schedule, app_context
     ):
         """Should count active schedules."""
-        stats = DashboardService._get_quick_stats(
+        stats = DashboardService.get_quick_stats(
             db_user.id
         )
         assert stats["active_schedule_count"] == 1
@@ -190,7 +190,7 @@ class TestQuickStats:
         app_context,
     ):
         """Should count shuffle activities."""
-        stats = DashboardService._get_quick_stats(
+        stats = DashboardService.get_quick_stats(
             db_user.id
         )
         assert stats["total_shuffles"] == 2
@@ -338,7 +338,7 @@ class TestRecentExecutions:
     ):
         """Should return empty list with no executions."""
         result = (
-            DashboardService._get_recent_executions(
+            DashboardService.get_recent_executions(
                 db_user.id
             )
         )
@@ -360,7 +360,7 @@ class TestRecentExecutions:
         db.session.commit()
 
         result = (
-            DashboardService._get_recent_executions(
+            DashboardService.get_recent_executions(
                 db_user.id
             )
         )
@@ -387,7 +387,7 @@ class TestRecentExecutions:
         db.session.commit()
 
         result = (
-            DashboardService._get_recent_executions(
+            DashboardService.get_recent_executions(
                 db_user.id, limit=2
             )
         )
