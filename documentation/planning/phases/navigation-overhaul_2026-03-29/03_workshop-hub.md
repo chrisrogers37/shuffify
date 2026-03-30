@@ -1,6 +1,7 @@
 # Phase 03: Workshop Hub
 
-**Status**: PENDING
+**Status**: IN PROGRESS
+**Started**: 2026-03-29
 **Depends on**: Phase 02
 
 ## Objective
@@ -11,6 +12,7 @@ Make the Workshop a standalone hub accessible from the nav bar without requiring
 
 - `shuffify/routes/workshop.py`
 - `shuffify/templates/workshop.html`
+- `shuffify/templates/partials/navbar.html`
 
 ## Changes
 
@@ -29,16 +31,19 @@ def workshop_hub(client=None, user=None):
     return render_template(
         "workshop.html",
         playlist=None,
-        tracks=[],
         algorithms=algorithms,
         prev_playlist_id=None,
         next_playlist_id=None,
-        upstream_sources_json=[],
-        active_nav='workshop',
+        upstream_sources_json={},
     )
 ```
 
 Minimal context — just enough to render the shell. The playlist dropdown already fetches from `/api/user-playlists` independently.
+
+Notes:
+- `active_nav` not passed — navbar auto-detects from `request.endpoint` via `endpoint_map`
+- `tracks` not passed — template uses `playlist.tracks`, not a standalone variable
+- `upstream_sources_json={}` (dict, not list) — matches the type used by the existing route
 
 ### 3b. Workshop empty state
 
@@ -85,7 +90,17 @@ Key sections to wrap in `{% if playlist %}`:
 2. **Shuffle bar** (lines 129-180): Hide entirely
 3. **Track list** (lines ~200-440): Hide entirely
 4. **Sidebar** (lines ~443-839): Hide entirely
-5. **JS that references playlist data**: Guard with `{% if playlist %}` to avoid JS errors from undefined template variables
+5. **All JS script blocks** (~4,600 lines across 7 blocks): Wrap in a single `{% if playlist %}` conditional. Do NOT wrap the SortableJS CDN `<script src>` tag. One conditional is DRY and avoids loading JS that can't function without playlist data.
+
+### 3d. Wire navbar Workshop link
+
+**File**: `shuffify/templates/partials/navbar.html`
+
+Replace the Workshop placeholder `href="#" data-pending="workshop_hub"` with `href="{{ url_for('main.workshop_hub') }}"` and remove the `data-pending` attribute. The route now exists.
+
+### Tech debt noted
+
+The existing `/workshop/<playlist_id>` route uses manual `session.get('access_token')` auth checking, while the new hub route uses `@require_auth_and_db`. Not fixed in this PR to keep scope tight.
 
 ## Verification
 
@@ -94,7 +109,8 @@ Key sections to wrap in `{% if playlist %}`:
 3. Select a playlist → navigates to `/workshop/<id>` with full workshop
 4. Direct URL `/workshop/<id>` still works as before
 5. Nav bar highlights "Workshop" on both `/workshop` and `/workshop/<id>`
-6. No JS console errors on the empty state page
+6. Navbar Workshop link points to `/workshop` (no longer `#`)
+7. No JS console errors on the empty state page
 7. `flake8 shuffify/` and `pytest tests/ -v`
 
 ## CHANGELOG Entry
