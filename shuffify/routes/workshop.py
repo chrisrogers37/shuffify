@@ -50,6 +50,21 @@ from flask import render_template
 logger = logging.getLogger(__name__)
 
 
+@main.route("/workshop")
+@require_auth_and_db
+def workshop_hub(client=None, user=None):
+    """Render the Workshop hub with no playlist selected."""
+    algorithms = ShuffleService.list_algorithms()
+    return render_template(
+        "workshop.html",
+        playlist=None,
+        algorithms=algorithms,
+        prev_playlist_id=None,
+        next_playlist_id=None,
+        upstream_sources_json={},
+    )
+
+
 @main.route("/workshop/<playlist_id>")
 def workshop(playlist_id):
     """Render the Playlist Workshop page."""

@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Workshop Hub** - Workshop is now accessible as a standalone page from the navigation bar
+  - Empty state with playlist selector when no playlist is loaded
+  - Select a playlist to enter the full workshop experience
 - **Navigation Bar** - Persistent top-level navigation across all authenticated pages
   - 6 items: Tiles, Workshop, Schedules, Activity, Settings, Logout
   - Glass-morphism styling with active state auto-detection via request endpoint
