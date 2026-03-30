@@ -16,9 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Empty state with playlist selector when no playlist is loaded
   - Select a playlist to enter the full workshop experience
 - **Navigation Bar** - Persistent top-level navigation across all authenticated pages
-  - 6 items: Tiles, Workshop, Schedules, Activity, Settings, Logout
+  - 5 items: Tiles, Workshop, Schedules, Activity, Settings
   - Glass-morphism styling with active state auto-detection via request endpoint
   - Responsive: icon-only on mobile, icon+text on desktop
+
+### Changed
+- **Settings** - Converted to slide-out sidebar accessible from navigation bar
+  - AJAX data loading on open, AJAX save without page reload
+  - Logout button moved into settings sidebar footer
+  - Full `/settings` page preserved as no-JS fallback
 
 ### Fixed
 - **Workshop Playlist Dropdown** - Playlists now sorted by user preferences (favorites first, hidden excluded)

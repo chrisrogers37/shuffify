@@ -1,6 +1,7 @@
 # Phase 05: Settings Sidebar
 
-**Status**: PENDING
+**Status**: IN PROGRESS
+**Started**: 2026-03-30
 **Depends on**: Phase 02
 **Parallel with**: Phases 03 and 04
 
@@ -24,7 +25,7 @@ Convert the Settings page into a slide-out sidebar accessible from the nav bar. 
 
 **New file**: `shuffify/templates/partials/settings_sidebar.html`
 
-Port the workshop sidebar pattern (`workshopSidebar` JS object in workshop.html). The sidebar:
+Port the open/close/backdrop mechanics from the workshop sidebar (not the full `workshopSidebar` object — that has tabs and localStorage which aren't needed). The sidebar:
 - Slides in from the right edge
 - Glass-morphism styling: `bg-black/70 backdrop-blur-xl border-l border-white/20`
 - Contains the settings form fields currently in `settings.html`:
@@ -50,9 +51,12 @@ Port the workshop sidebar pattern (`workshopSidebar` JS object in workshop.html)
             </button>
         </div>
 
-        {# Settings Form #}
+        {# Settings Form — fields populated by JS via AJAX on open #}
         <div class="flex-1 overflow-y-auto p-4 space-y-6">
-            {# Same form fields as settings.html #}
+            {# Static HTML form fields: default_algorithm (select), theme (select),
+               auto_snapshot_enabled (toggle), max_snapshots_per_playlist (number),
+               dashboard_show_recent_activity (toggle), notifications_enabled (toggle).
+               Values populated by populateSettingsForm() after fetch. #}
         </div>
 
         {# Footer: Save + Logout #}
@@ -75,25 +79,31 @@ Port the workshop sidebar pattern (`workshopSidebar` JS object in workshop.html)
 
 Remove the Logout nav item added in Phase 02 (it now lives in the settings sidebar footer). The navbar should have 5 items after this: Tiles, Workshop, Schedules, Activity, Settings.
 
-### 5c. AJAX settings save
+### 5c. AJAX settings load (GET route JSON support)
 
 **File**: `shuffify/routes/settings.py`
 
-Add JSON response support to the existing POST handler. Check for `X-Requested-With: XMLHttpRequest` header:
+The POST handler already has full AJAX/JSON support (lines 182-195). No changes needed there.
+
+Add JSON response support to the existing **GET** handler so the sidebar can fetch settings data on open. Check for `X-Requested-With: XMLHttpRequest` header:
 
 ```python
-@main.route("/settings", methods=["POST"])
-@require_auth_and_db
-def update_settings(client=None, user=None):
-    # ... existing validation and save logic ...
+@main.route("/settings")
+def settings():
+    # ... existing auth and data loading ...
 
-    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-        return jsonify({"success": True, "message": "Settings saved"})
+    is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    if is_ajax:
+        return jsonify({
+            "settings": user_settings.to_dict(),
+            "algorithm_options": algorithm_options,
+        })
 
-    # Existing redirect for non-AJAX fallback
-    flash("Settings updated!", "success")
-    return redirect(url_for("main.settings"))
+    # Existing template render for non-AJAX fallback
+    return render_template("settings.html", ...)
 ```
+
+This means the sidebar loads data on demand — no DB query on every page, no context processor needed. The sidebar opens, fetches `GET /settings` with XMLHttpRequest header, populates the form dynamically.
 
 ### 5d. Include in base.html
 
@@ -111,41 +121,54 @@ Or include it directly in the navbar block since it's always present for authent
 
 **File**: `shuffify/templates/partials/navbar.html`
 
-Change Settings nav item from a link to a button that toggles the sidebar:
+Change Settings nav item from a link to a button that toggles the sidebar. Keep `active_nav == 'settings'` conditional so the `/settings` fallback page still highlights it:
 
 ```html
 <button onclick="toggleSettingsSidebar()"
-        class="flex items-center gap-2 px-3 py-2 rounded-lg transition duration-150 text-white/60 hover:text-white hover:bg-white/10">
+        class="flex items-center gap-2 px-3 py-2 rounded-lg transition duration-150
+               {{ 'bg-white/20 text-white' if active_nav == 'settings' else 'text-white/60 hover:text-white hover:bg-white/10' }}">
     {# gear icon #}
     <span class="hidden sm:inline text-sm font-medium">Settings</span>
 </button>
 ```
 
-### 5f. JS toggle functions
+### 5f. JS functions
 
-Add to sidebar partial or base.html:
+Add to sidebar partial (inline `<script>` at bottom). Simple functions — NOT an object like `workshopSidebar` (that pattern has tabs, localStorage, animation guards which are overkill for a single form panel).
 
 ```javascript
-function toggleSettingsSidebar() {
-    const sidebar = document.getElementById('settings-sidebar');
-    const backdrop = document.getElementById('settings-sidebar-backdrop');
-    const isOpen = !sidebar.classList.contains('translate-x-full');
-
-    if (isOpen) {
-        closeSettingsSidebar();
-    } else {
-        sidebar.classList.remove('translate-x-full');
-        backdrop.classList.remove('hidden');
-    }
+function openSettingsSidebar() {
+    // Fetch current settings via AJAX, populate form, then show
+    fetch('/settings', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(r => r.json())
+        .then(data => {
+            populateSettingsForm(data.settings, data.algorithm_options);
+            document.getElementById('settings-sidebar').classList.remove('translate-x-full');
+            document.getElementById('settings-sidebar-backdrop').classList.remove('hidden');
+        });
 }
 
 function closeSettingsSidebar() {
-    const sidebar = document.getElementById('settings-sidebar');
-    const backdrop = document.getElementById('settings-sidebar-backdrop');
-    sidebar.classList.add('translate-x-full');
-    backdrop.classList.add('hidden');
+    document.getElementById('settings-sidebar').classList.add('translate-x-full');
+    document.getElementById('settings-sidebar-backdrop').classList.add('hidden');
 }
+
+function toggleSettingsSidebar() {
+    const sidebar = document.getElementById('settings-sidebar');
+    if (sidebar.classList.contains('translate-x-full')) {
+        openSettingsSidebar();
+    } else {
+        closeSettingsSidebar();
+    }
+}
+
+// Escape key closes sidebar
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeSettingsSidebar();
+});
 ```
+
+`populateSettingsForm()` sets form field values from the JSON response — select values, toggle states, number inputs.
 
 ### 5g. Keep /settings as fallback
 

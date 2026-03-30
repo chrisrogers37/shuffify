@@ -5,6 +5,7 @@ Settings routes: view and update user preferences.
 import logging
 
 from flask import (
+    jsonify,
     session,
     redirect,
     url_for,
@@ -65,6 +66,17 @@ def settings():
             {"value": a["class_name"], "label": a["name"]}
             for a in algorithms
         ]
+
+        # AJAX request from sidebar — return JSON
+        is_ajax = (
+            request.headers.get("X-Requested-With")
+            == "XMLHttpRequest"
+        )
+        if is_ajax:
+            return jsonify({
+                "settings": user_settings.to_dict(),
+                "algorithm_options": algorithm_options,
+            })
 
         return render_template(
             "settings.html",
