@@ -76,6 +76,37 @@ class TestSettingsGetRoute:
         assert b"Settings" in response.data
 
 
+    @patch("shuffify.routes.settings.AuthService")
+    def test_returns_json_for_ajax_request(
+        self, mock_auth, auth_client, test_user
+    ):
+        """Should return JSON settings data for AJAX GET."""
+        mock_client = MagicMock()
+        mock_auth.get_authenticated_client.return_value = (
+            mock_client
+        )
+        mock_auth.get_user_data.return_value = {
+            "id": "route_test_user",
+            "display_name": "Route Test User",
+            "images": [],
+        }
+        mock_auth.validate_session_token.return_value = (
+            True
+        )
+
+        response = auth_client.get(
+            "/settings",
+            headers={
+                "X-Requested-With": "XMLHttpRequest"
+            },
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "settings" in data
+        assert "algorithm_options" in data
+        assert isinstance(data["algorithm_options"], list)
+
+
 class TestSettingsPostRoute:
     """Tests for POST /settings."""
 

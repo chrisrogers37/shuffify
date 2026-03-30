@@ -60,25 +60,15 @@
                     <span class="hidden sm:inline text-sm font-medium">Activity</span>
                 </a>
 
-                {# Settings #}
-                <a href="{{ url_for('main.settings') }}"
-                   class="flex items-center gap-2 px-3 py-2 rounded-lg transition duration-150
-                          {{ 'bg-white/20 text-white' if active_nav == 'settings' else 'text-white/60 hover:text-white hover:bg-white/10' }}">
+                {# Settings — opens sidebar instead of navigating #}
+                <button onclick="toggleSettingsSidebar()"
+                        class="flex items-center gap-2 px-3 py-2 rounded-lg transition duration-150
+                               {{ 'bg-white/20 text-white' if active_nav == 'settings' else 'text-white/60 hover:text-white hover:bg-white/10' }}">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
                     </svg>
                     <span class="hidden sm:inline text-sm font-medium">Settings</span>
-                </a>
-
-                {# Logout — rightmost, subtle styling. Phase 5 moves this into settings sidebar. #}
-                <a href="{{ url_for('main.logout') }}"
-                   class="flex items-center gap-2 px-3 py-2 rounded-lg transition duration-150 text-white/40 hover:text-red-300 hover:bg-white/10 ml-2"
-                   onclick="return confirm('Are you sure you want to log out?')">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                    </svg>
-                    <span class="hidden sm:inline text-sm font-medium">Logout</span>
-                </a>
+                </button>
             </div>
         </div>
     </div>

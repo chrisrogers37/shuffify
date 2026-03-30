@@ -176,6 +176,7 @@
     <!-- Navigation Bar (authenticated users only) -->
     {% if session.get('access_token') %}
         {% include 'partials/navbar.html' %}
+        {% include 'partials/settings_sidebar.html' %}
     {% endif %}
 
     <!-- Main Content -->
