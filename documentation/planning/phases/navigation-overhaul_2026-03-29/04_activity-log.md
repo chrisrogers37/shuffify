@@ -1,6 +1,7 @@
 # Phase 04: Activity Log Page
 
-**Status**: PENDING
+**Status**: IN PROGRESS
+**Started**: 2026-03-30
 **Depends on**: Phase 02
 **Parallel with**: Phases 03 and 05
 
@@ -30,29 +31,28 @@ Create a dedicated Activity Log page. Move KPI stats from dashboard to Activity 
 @require_auth_and_db
 def activity(client=None, user=None):
     """Activity Log page with full history and KPI stats."""
-    stats = DashboardService._get_quick_stats(user.id)
+    stats = DashboardService.get_quick_stats(user.id)
     activities = ActivityLogService.get_recent(user.id, limit=100)
-    executions = (
-        JobExecution.query
-        .filter_by(user_id=user.id)
-        .order_by(JobExecution.executed_at.desc())
-        .limit(20)
-        .all()
-    )
+    executions = DashboardService.get_recent_executions(user.id, limit=20)
 
     return render_template(
         "activity.html",
         stats=stats,
         activities=activities,
         executions=executions,
-        active_nav='activity',
     )
 ```
 
+Notes:
+- `active_nav` not passed — navbar auto-detects from `request.endpoint` via `endpoint_map`
+- `ActivityLogService.get_recent()` returns `List[ActivityLog]` model instances (not dicts)
+- Use `DashboardService.get_recent_executions()` instead of raw `JobExecution.query` (separation of concerns)
+- `_get_quick_stats` and `_get_recent_executions` renamed to public (remove leading underscores) since they now have two consumers
+
 Reuse existing services:
-- `DashboardService._get_quick_stats(user_id)` — already returns shuffles, schedules, runs, snapshots
-- `ActivityLogService.get_recent(user_id, limit)` — already returns formatted activity dicts
-- `JobExecution` query — same pattern as `DashboardService._get_recent_executions()`
+- `DashboardService.get_quick_stats(user_id)` — returns dict with shuffles, schedules, runs, snapshots
+- `ActivityLogService.get_recent(user_id, limit)` — returns List[ActivityLog] model instances
+- `DashboardService.get_recent_executions(user_id, limit)` — returns enriched execution dicts
 
 ### 4b. Activity template
 
@@ -69,10 +69,23 @@ Optional: **Filter bar** at top of activity list — All, Shuffles, Schedules, W
 
 **File**: `shuffify/routes/__init__.py`
 
-Add import at the bottom with the other route module imports:
+Add `activity` to the grouped import block at the bottom with the other route modules:
 
 ```python
-from . import activity  # noqa: F401
+from shuffify.routes import (  # noqa: E402, F401
+    core,
+    playlists,
+    shuffle,
+    workshop,
+    upstream_sources,
+    schedules,
+    settings,
+    snapshots,
+    playlist_pairs,
+    raid_panel,
+    playlist_preferences,
+    activity,
+)
 ```
 
 ### 4d. Dashboard cleanup
@@ -80,8 +93,16 @@ from . import activity  # noqa: F401
 **File**: `shuffify/templates/dashboard.html`
 
 Remove these sections:
-- **KPI Stats Cards** (lines 112-137) — moved to Activity Log
-- **"Since Your Last Visit" / Activity Feed** (lines 139-255) — replaced by Activity Log page
+- **KPI Stats Cards** (lines 85-109) — moved to Activity Log
+- **"Since Your Last Visit" / Activity Feed** (lines 111-227) — replaced by Activity Log page
+
+Also: verify whether `core.py` still needs `DashboardService.get_dashboard_data()` after removal. The onboarding hint (lines 229-248) may depend on dashboard variables — keep only what's needed.
+
+### 4f. Make DashboardService methods public
+
+**File**: `shuffify/services/dashboard_service.py`
+
+Rename `_get_quick_stats` → `get_quick_stats` and `_get_recent_executions` → `get_recent_executions` (remove leading underscores). Update all internal call sites within the service. These methods now have two consumers (dashboard route and activity route) — they're public API.
 
 Dashboard becomes: welcome greeting card + Manage/Refresh toolbar + playlist tiles (favorites, regular, hidden).
 
