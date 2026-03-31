@@ -174,7 +174,7 @@
     </div>
 
     <!-- Navigation Bar (authenticated users only) -->
-    {% if session.get('access_token') %}
+    {% if session.get('spotify_token') %}
         {% include 'partials/navbar.html' %}
         {% include 'partials/settings_sidebar.html' %}
     {% endif %}
