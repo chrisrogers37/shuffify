@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Navbar White Flash** - Fixed white bar appearing at top of page on initial load
+  - Body had no background color, so navbar's backdrop-blur sampled white instead of green
+
 ### Added
 - **Activity Log Page** - Dedicated page for full activity history and KPI stats
   - KPI stats header (shuffles, active schedules, scheduled runs, snapshots saved)
