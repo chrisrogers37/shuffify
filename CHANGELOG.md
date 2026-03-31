@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-03-31
+
 ### Fixed
 - **Navbar White Flash** - Fixed white bar appearing at top of page on initial load
   - Body had no background color, so navbar's backdrop-blur sampled white instead of green
