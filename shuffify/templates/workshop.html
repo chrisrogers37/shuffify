@@ -136,6 +136,39 @@
     </div>
 
     {% if playlist %}
+    <!-- Workshop Horizontal Tab Bar -->
+    <div class="relative max-w-5xl mx-auto px-4 pt-4">
+        <div class="flex border-b border-white/20 overflow-x-auto whitespace-nowrap" role="tablist" aria-label="Workshop sections">
+            <button id="htab-btn-playlist" class="htab-btn px-5 py-2.5 text-sm font-semibold transition duration-150 border-b-2 border-spotify-green text-white flex-shrink-0"
+                    onclick="workshopTabs.switchTab('playlist')" role="tab" aria-selected="true" aria-controls="htab-content-playlist">
+                <svg class="w-4 h-4 inline mr-1.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path></svg>
+                Playlist
+            </button>
+            <button id="htab-btn-raids" class="htab-btn px-5 py-2.5 text-sm font-semibold transition duration-150 border-b-2 border-transparent text-white/60 hover:text-white flex-shrink-0"
+                    onclick="workshopTabs.switchTab('raids')" role="tab" aria-selected="false" aria-controls="htab-content-raids">
+                <svg class="w-4 h-4 inline mr-1.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                Raids
+            </button>
+            <button id="htab-btn-rotation" class="htab-btn px-5 py-2.5 text-sm font-semibold transition duration-150 border-b-2 border-transparent text-white/60 hover:text-white flex-shrink-0"
+                    onclick="workshopTabs.switchTab('rotation')" role="tab" aria-selected="false" aria-controls="htab-content-rotation">
+                <svg class="w-4 h-4 inline mr-1.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                Rotation
+            </button>
+            <button id="htab-btn-schedules" class="htab-btn px-5 py-2.5 text-sm font-semibold transition duration-150 border-b-2 border-transparent text-white/60 hover:text-white flex-shrink-0"
+                    onclick="workshopTabs.switchTab('schedules')" role="tab" aria-selected="false" aria-controls="htab-content-schedules">
+                <svg class="w-4 h-4 inline mr-1.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Schedules
+            </button>
+            <button id="htab-btn-snapshots" class="htab-btn px-5 py-2.5 text-sm font-semibold transition duration-150 border-b-2 border-transparent text-white/60 hover:text-white flex-shrink-0"
+                    onclick="workshopTabs.switchTab('snapshots')" role="tab" aria-selected="false" aria-controls="htab-content-snapshots">
+                <svg class="w-4 h-4 inline mr-1.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path></svg>
+                Snapshots
+            </button>
+        </div>
+    </div>
+
+    <!-- Tab Content: Playlist (default) -->
+    <div id="htab-content-playlist" class="htab-content" role="tabpanel" aria-labelledby="htab-btn-playlist">
     <!-- Shuffle Bar -->
     <div class="relative max-w-5xl mx-auto px-4 pt-4">
         <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 px-4 py-3">
@@ -449,6 +482,36 @@
         </div>
     </div>
 </div>
+
+    </div><!-- /htab-content-playlist -->
+
+    <!-- Tab Content: Raids (placeholder — populated in Phase 02) -->
+    <div id="htab-content-raids" class="htab-content hidden" role="tabpanel" aria-labelledby="htab-btn-raids">
+        <div class="max-w-5xl mx-auto px-4 py-8 text-center">
+            <p class="text-white/40">Raids — coming soon</p>
+        </div>
+    </div>
+
+    <!-- Tab Content: Rotation (placeholder — populated in Phase 03) -->
+    <div id="htab-content-rotation" class="htab-content hidden" role="tabpanel" aria-labelledby="htab-btn-rotation">
+        <div class="max-w-5xl mx-auto px-4 py-8 text-center">
+            <p class="text-white/40">Rotation — coming soon</p>
+        </div>
+    </div>
+
+    <!-- Tab Content: Schedules (placeholder — populated in Phase 04) -->
+    <div id="htab-content-schedules" class="htab-content hidden" role="tabpanel" aria-labelledby="htab-btn-schedules">
+        <div class="max-w-5xl mx-auto px-4 py-8 text-center">
+            <p class="text-white/40">Schedules — coming soon</p>
+        </div>
+    </div>
+
+    <!-- Tab Content: Snapshots (placeholder — populated in Phase 04) -->
+    <div id="htab-content-snapshots" class="htab-content hidden" role="tabpanel" aria-labelledby="htab-btn-snapshots">
+        <div class="max-w-5xl mx-auto px-4 py-8 text-center">
+            <p class="text-white/40">Snapshots — coming soon</p>
+        </div>
+    </div>
 
 <!-- =========================================================================
      Workshop Powertools Sidebar
@@ -1249,6 +1312,61 @@ const workshopState = {
     archivePair: null,
     archiveTracks: [],
     stagedRestorations: [],
+};
+
+// =============================================================================
+// Workshop Horizontal Tabs
+// =============================================================================
+
+const workshopTabs = {
+    activeTab: 'playlist',
+    tabs: ['playlist', 'raids', 'rotation', 'schedules', 'snapshots'],
+
+    switchTab(tabName) {
+        if (!this.tabs.includes(tabName)) return;
+
+        // Deactivate all
+        this.tabs.forEach(function(t) {
+            var btn = document.getElementById('htab-btn-' + t);
+            var panel = document.getElementById('htab-content-' + t);
+            if (btn) {
+                btn.classList.remove('border-spotify-green', 'text-white');
+                btn.classList.add('border-transparent', 'text-white/60');
+                btn.setAttribute('aria-selected', 'false');
+            }
+            if (panel) panel.classList.add('hidden');
+        });
+
+        // Activate selected
+        var btn = document.getElementById('htab-btn-' + tabName);
+        var panel = document.getElementById('htab-content-' + tabName);
+        if (btn) {
+            btn.classList.add('border-spotify-green', 'text-white');
+            btn.classList.remove('border-transparent', 'text-white/60');
+            btn.setAttribute('aria-selected', 'true');
+        }
+        if (panel) panel.classList.remove('hidden');
+
+        this.activeTab = tabName;
+        this._onTabActivated(tabName);
+    },
+
+    _onTabActivated(tabName) {
+        // Lazy-load hooks — populated in Phases 2-4
+    },
+
+    init() {
+        // Check query params for deep-link, otherwise always default to Playlist
+        var params = new URLSearchParams(window.location.search);
+        var setup = params.get('setup');
+        if (setup === 'raids') {
+            this.switchTab('raids');
+        } else if (setup === 'archive' || setup === 'rotation') {
+            this.switchTab('rotation');
+        } else {
+            this.switchTab('playlist');
+        }
+    }
 };
 
 // =============================================================================
@@ -3435,8 +3553,9 @@ const workshopSidebar = {
     },
 };
 
-// Initialize sidebar after DOM is ready
+// Initialize sidebar and horizontal tabs after DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
+    workshopTabs.init();
     workshopSidebar.init();
 });
 </script>
