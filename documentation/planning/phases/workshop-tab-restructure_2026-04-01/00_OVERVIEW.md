@@ -14,11 +14,11 @@ The Workshop page hides powerful features behind a slide-out sidebar ("Powertool
 
 | # | Title | Impact | Effort | Dependencies |
 |---|-------|--------|--------|--------------|
-| 01 | Horizontal Tab Bar + Playlist Tab Wrapper | Structural foundation | Low | None |
-| 02 | Raids Tab | Feature move + track display | Medium | Phase 01 |
-| 03 | Rotation Tab + Archive Bug Fix | Feature move + bug fix | Medium | Phase 01 |
-| 04 | Schedules + Snapshots Tabs | Feature move | Low-Medium | Phase 01 |
-| 05 | Remove Sidebar + Track Inbox + Cleanup | Code removal (~1490 lines) | Medium | Phases 02-04 |
+| 01 | Horizontal Tab Bar + Playlist Tab Wrapper | Structural foundation | Low | None | ✅ |
+| 02 | Raids Tab | Feature move + track display | Medium | Phase 01 | ✅ |
+| 03 | Rotation Tab + Archive Bug Fix | Feature move + bug fix | Medium | Phase 01 | ✅ |
+| 04 | Schedules + Snapshots Tabs | Feature move | Low-Medium | Phase 01 | ✅ |
+| 05 | Remove Sidebar + Track Inbox + Cleanup | Code removal | Medium | Phases 02-04 | ✅ |
 
 ## Dependency Graph
 
