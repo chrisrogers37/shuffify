@@ -804,10 +804,186 @@
         </div>
     </div>
 
-    <!-- Tab Content: Rotation (placeholder — populated in Phase 03) -->
+    <!-- Tab Content: Rotation -->
     <div id="htab-content-rotation" class="htab-content hidden" role="tabpanel" aria-labelledby="htab-btn-rotation">
-        <div class="max-w-5xl mx-auto px-4 py-8 text-center">
-            <p class="text-white/40">Rotation — coming soon</p>
+        <div class="max-w-5xl mx-auto px-4 py-6">
+
+            <!-- Loading state -->
+            <div id="archive-loading" class="hidden text-center py-12">
+                <svg class="w-8 h-8 mx-auto text-white/30 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+                <p class="text-white/40 text-sm mt-2">Loading...</p>
+            </div>
+
+            <!-- Error state -->
+            <div id="archive-error" class="hidden rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-center">
+                <p class="text-red-300 text-sm">Failed to load archive info</p>
+                <button onclick="loadArchivePairInfo()"
+                        class="text-red-300/60 hover:text-red-300 text-xs mt-2 underline transition duration-150">
+                    Retry
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                <!-- Left column: Config -->
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between mb-1">
+                        <h3 class="text-white font-bold text-lg">Archive & Rotation</h3>
+                        <span id="archive-queue-badge" class="hidden px-2 py-0.5 rounded-full bg-yellow-500/80 text-xs font-semibold text-white">0 queued</span>
+                    </div>
+
+                    <!-- No pair state -->
+                    <div id="archive-no-pair" class="hidden">
+                        <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                            <svg class="w-12 h-12 mx-auto text-white/20 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
+                            </svg>
+                            <p class="text-white/60 text-sm mb-1">No archive linked</p>
+                            <p class="text-white/30 text-xs mb-4">Link an archive playlist so removed tracks are automatically preserved.</p>
+                            <button onclick="createArchivePair()"
+                                    class="w-full px-4 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 mb-2">
+                                Create New Archive
+                            </button>
+                            <div class="relative my-3">
+                                <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-white/10"></div></div>
+                                <div class="relative flex justify-center"><span class="bg-[#1a1a2e] px-2 text-white/30 text-xs">or</span></div>
+                            </div>
+                            <select id="archive-link-select"
+                                    class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 mb-2">
+                                <option value="">Link existing playlist...</option>
+                            </select>
+                            <button id="archive-link-btn" onclick="linkExistingArchive()"
+                                    class="w-full px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    disabled>
+                                Link as Archive
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Paired state -->
+                    <div id="archive-paired" class="hidden">
+                        <div class="rounded-xl bg-white/5 border border-white/10 p-4 mb-4">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Archive Playlist</span>
+                                <button onclick="deleteArchivePair()"
+                                        class="text-red-400/60 hover:text-red-400 text-xs transition duration-150"
+                                        title="Remove archive pairing">
+                                    Unlink
+                                </button>
+                            </div>
+                            <p id="archive-pair-name" class="text-white font-medium text-sm truncate"></p>
+                            <p id="archive-pair-track-count" class="text-white/40 text-xs mt-1"></p>
+                            <div class="flex items-center justify-between mt-3 pt-3 border-t border-white/10">
+                                <span class="text-white/60 text-xs">Auto-archive on remove</span>
+                                <button id="auto-archive-toggle" onclick="toggleAutoArchive()"
+                                        class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200">
+                                    <span class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Rotation Schedule Section -->
+                    <div id="rotation-section" class="hidden mb-4">
+                        <span class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Rotation Schedule</span>
+                        <div id="rotation-no-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
+                            <p class="text-white/40 text-xs mb-3">Exchange tracks between this playlist and its archive on a schedule.</p>
+                            <p id="rotation-auto-create-hint" class="hidden text-white/30 text-xs mb-3 italic">An archive playlist will be created automatically when you enable rotation.</p>
+                            <div class="space-y-2">
+                                <div class="flex gap-2">
+                                    <input id="rotation-count-input" type="number" min="1" max="50" value="5"
+                                           class="w-20 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
+                                           placeholder="#">
+                                    <select id="rotation-freq-select" class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
+                                        <option value="daily">Daily</option>
+                                        <option value="every_3d">Every 3 days</option>
+                                        <option value="weekly">Weekly</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-white/50 text-xs mb-1 block">Time of day (UTC)</label>
+                                    <input id="rotation-time-input" type="time" value="09:00"
+                                           class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
+                                </div>
+                                <div class="pt-1 border-t border-white/5">
+                                    <label class="text-white/50 text-xs mb-1 block">Playlist size cap</label>
+                                    <input id="rotation-target-size" type="number" min="1" max="10000"
+                                           class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
+                                           placeholder="e.g. 50">
+                                </div>
+                                <div>
+                                    <label class="text-white/50 text-xs mb-1 block">Protect top N tracks</label>
+                                    <input id="rotation-protect-count" type="number" min="0" max="500" value="0"
+                                           class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
+                                           placeholder="0">
+                                </div>
+                                <button id="rotation-enable-btn" onclick="createRotationSchedule()"
+                                        class="w-full px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
+                                    Enable Rotation
+                                </button>
+                            </div>
+                        </div>
+                        <div id="rotation-has-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
+                            <div class="mb-2">
+                                <div class="flex items-center justify-between">
+                                    <span id="rotation-schedule-mode" class="text-white text-sm font-medium"></span>
+                                    <span id="rotation-schedule-badge" class="px-2 py-0.5 rounded-full text-xs font-semibold"></span>
+                                </div>
+                                <span id="rotation-schedule-detail" class="text-white/40 text-xs block mt-0.5"></span>
+                            </div>
+                            <div class="flex gap-2 mt-3">
+                                <button onclick="runRotationNow()"
+                                        id="rotation-run-btn" title="Run rotation now"
+                                        class="px-3 py-1.5 rounded-lg bg-spotify-green/20 hover:bg-spotify-green/40 text-spotify-green text-xs font-semibold transition duration-150 border border-spotify-green/30">
+                                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                </button>
+                                <button onclick="toggleRotationSchedule()"
+                                        id="rotation-toggle-btn"
+                                        class="flex-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition duration-150 border border-white/20">
+                                </button>
+                                <button onclick="deleteRotationSchedule()"
+                                        class="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-semibold transition duration-150 border border-red-500/20">
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right column: Archive Tracks -->
+                <div>
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-white font-bold text-lg">
+                            Archive Tracks
+                            <span id="inbox-archive-count" class="text-white/40 text-sm font-normal"></span>
+                        </h3>
+                    </div>
+
+                    <div id="inbox-archive-loading" class="hidden text-center py-8">
+                        <div class="inline-block w-6 h-6 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
+                        <p class="text-white/40 text-xs mt-2">Loading archived tracks...</p>
+                    </div>
+                    <div id="inbox-archive-empty" class="hidden text-center py-8">
+                        <svg class="w-12 h-12 mx-auto text-white/15 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
+                        </svg>
+                        <p class="text-white/40 text-sm">No archived tracks</p>
+                        <p class="text-white/25 text-xs mt-1">Link an archive playlist and remove tracks to see them here.</p>
+                    </div>
+                    <div id="inbox-archive-list" class="space-y-1 max-h-[60vh] overflow-y-auto workshop-scrollbar">
+                        <!-- Populated by renderInboxArchiveTracks() -->
+                    </div>
+                    <div id="inbox-archive-actions" class="hidden flex gap-2 mt-3 pt-3 border-t border-white/10">
+                        <button onclick="restoreAllArchiveTracks()"
+                                class="flex-1 px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
+                            Restore All to Playlist
+                        </button>
+                    </div>
+                </div>
+
+            </div>
         </div>
     </div>
 
@@ -1004,6 +1180,8 @@
 
         <!-- Tab Content: Archive & Rotation -->
         <div id="sidebar-tab-archive" class="sidebar-tab-content hidden p-5" role="tabpanel">
+            <p class="text-white/40 text-sm text-center py-4">Archive & Rotation have moved to the <button onclick="workshopTabs.switchTab('rotation')" class="text-spotify-green hover:underline">Rotation tab</button>.</p>
+            <div class="hidden"><!-- Original sidebar content preserved for Phase 5 cleanup -->
             <div class="flex items-center justify-between mb-3">
                 <h3 class="text-white font-bold text-lg">Archive & Rotation</h3>
                 <span id="archive-queue-badge" class="hidden px-2 py-0.5 rounded-full bg-yellow-500/80 text-xs font-semibold text-white">0 queued</span>
@@ -1162,6 +1340,7 @@
                     Retry
                 </button>
             </div>
+            </div><!-- /hidden original sidebar content -->
         </div>
 
         <!-- Tab Content: Raids -->
@@ -1673,6 +1852,26 @@ const workshopTabs = {
             }
             if (typeof loadPendingRaids === 'function') {
                 loadPendingRaids();
+            }
+        }
+        if (tabName === 'rotation') {
+            if (typeof archiveState !== 'undefined' && !archiveState.isLoaded) {
+                if (typeof inlineBackup !== 'undefined' && inlineBackup.loaded) {
+                    archiveState.isLoaded = true;
+                    if (inlineBackup.pair) {
+                        workshopState.archivePair = inlineBackup.pair;
+                    }
+                    if (typeof renderArchivePanel === 'function') renderArchivePanel();
+                    if (typeof loadArchiveTracks === 'function') loadArchiveTracks();
+                    if (typeof loadRotationConfig === 'function') loadRotationConfig();
+                    var loadingEl = document.getElementById('archive-loading');
+                    if (loadingEl) loadingEl.classList.add('hidden');
+                } else if (typeof loadArchivePairInfo === 'function') {
+                    loadArchivePairInfo();
+                }
+            }
+            if (typeof loadArchiveTracksForInbox === 'function') {
+                loadArchiveTracksForInbox();
             }
         }
     },
