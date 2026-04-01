@@ -136,6 +136,39 @@
     </div>
 
     {% if playlist %}
+    <!-- Workshop Horizontal Tab Bar -->
+    <div class="relative max-w-5xl mx-auto px-4 pt-4">
+        <div class="flex border-b border-white/20 overflow-x-auto whitespace-nowrap" role="tablist" aria-label="Workshop sections">
+            <button id="htab-btn-playlist" class="htab-btn px-5 py-2.5 text-sm font-semibold transition duration-150 border-b-2 border-spotify-green text-white flex-shrink-0"
+                    onclick="workshopTabs.switchTab('playlist')" role="tab" aria-selected="true" aria-controls="htab-content-playlist">
+                <svg class="w-4 h-4 inline mr-1.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path></svg>
+                Playlist
+            </button>
+            <button id="htab-btn-raids" class="htab-btn px-5 py-2.5 text-sm font-semibold transition duration-150 border-b-2 border-transparent text-white/60 hover:text-white flex-shrink-0"
+                    onclick="workshopTabs.switchTab('raids')" role="tab" aria-selected="false" aria-controls="htab-content-raids">
+                <svg class="w-4 h-4 inline mr-1.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                Raids
+            </button>
+            <button id="htab-btn-rotation" class="htab-btn px-5 py-2.5 text-sm font-semibold transition duration-150 border-b-2 border-transparent text-white/60 hover:text-white flex-shrink-0"
+                    onclick="workshopTabs.switchTab('rotation')" role="tab" aria-selected="false" aria-controls="htab-content-rotation">
+                <svg class="w-4 h-4 inline mr-1.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                Rotation
+            </button>
+            <button id="htab-btn-schedules" class="htab-btn px-5 py-2.5 text-sm font-semibold transition duration-150 border-b-2 border-transparent text-white/60 hover:text-white flex-shrink-0"
+                    onclick="workshopTabs.switchTab('schedules')" role="tab" aria-selected="false" aria-controls="htab-content-schedules">
+                <svg class="w-4 h-4 inline mr-1.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Schedules
+            </button>
+            <button id="htab-btn-snapshots" class="htab-btn px-5 py-2.5 text-sm font-semibold transition duration-150 border-b-2 border-transparent text-white/60 hover:text-white flex-shrink-0"
+                    onclick="workshopTabs.switchTab('snapshots')" role="tab" aria-selected="false" aria-controls="htab-content-snapshots">
+                <svg class="w-4 h-4 inline mr-1.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path></svg>
+                Snapshots
+            </button>
+        </div>
+    </div>
+
+    <!-- Tab Content: Playlist (default) -->
+    <div id="htab-content-playlist" class="htab-content" role="tabpanel" aria-labelledby="htab-btn-playlist">
     <!-- Shuffle Bar -->
     <div class="relative max-w-5xl mx-auto px-4 pt-4">
         <div class="rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 px-4 py-3">
@@ -283,59 +316,400 @@
 
             </div>
 
-            <!-- Track Inbox Section (Raids + Search) -->
-            <div id="track-inbox" class="mt-6">
-                <button id="inbox-toggle"
-                        onclick="toggleTrackInbox()"
+            <!-- Search & Add Tracks (collapsible) -->
+            <div class="mt-4">
+                <button id="search-toggle-btn"
+                        onclick="toggleSearchSection()"
                         class="w-full flex items-center justify-between px-5 py-3 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 text-white font-bold text-sm hover:bg-white/15 transition duration-150"
                         aria-expanded="false"
-                        aria-controls="inbox-body">
+                        aria-controls="search-body">
                     <span class="flex items-center">
                         <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                         </svg>
-                        Track Inbox
-                        <span id="inbox-pending-badge" class="hidden ml-2 px-2 py-0.5 rounded-full bg-yellow-500/80 text-xs font-semibold"></span>
+                        Search & Add Tracks
                     </span>
-                    <svg id="inbox-chevron" class="w-5 h-5 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg id="search-chevron" class="w-5 h-5 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
                 </button>
 
-                <div id="inbox-body" class="hidden mt-2 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden">
-                    <!-- Sub-view Tabs -->
-                    <div class="flex border-b border-white/10">
-                        <button id="inbox-tab-raids"
-                                onclick="switchInboxTab('raids')"
-                                class="flex-1 px-4 py-2.5 text-sm font-semibold text-white/70 hover:text-white transition duration-150 border-b-2 border-transparent">
-                            Raided Tracks <span id="inbox-raid-count" class="text-white/40"></span>
-                        </button>
-                        <button id="inbox-tab-archived"
-                                onclick="switchInboxTab('archived')"
-                                class="flex-1 px-4 py-2.5 text-sm font-semibold text-white/70 hover:text-white transition duration-150 border-b-2 border-transparent">
-                            Archived <span id="inbox-archive-count" class="text-white/40"></span>
-                        </button>
-                        <button id="inbox-tab-search"
-                                onclick="switchInboxTab('search')"
-                                class="flex-1 px-4 py-2.5 text-sm font-semibold text-white/70 hover:text-white transition duration-150 border-b-2 border-transparent">
-                            Search
+                <div id="search-body" class="hidden mt-2 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 overflow-hidden p-4">
+                    <!-- Search Spotify -->
+                    <div class="mb-4">
+                        <div class="flex items-center space-x-2 mb-3">
+                            <input id="search-input"
+                                   type="text"
+                                   placeholder="Search tracks, artists..."
+                                   class="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-white/30 focus:border-transparent text-sm"
+                                   onkeydown="if(event.key==='Enter'){event.preventDefault(); searchSpotify();}"
+                                   maxlength="200"
+                                   autocomplete="off">
+                            <button id="search-btn"
+                                    onclick="searchSpotify()"
+                                    class="px-3 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white transition duration-150 flex-shrink-0"
+                                    title="Search">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <div id="search-results" class="space-y-1 max-h-[40vh] overflow-y-auto workshop-scrollbar">
+                            <p id="search-placeholder" class="text-white/40 text-sm text-center py-4">
+                                Type a query and press Enter
+                            </p>
+                        </div>
+                        <button id="search-load-more"
+                                onclick="searchSpotifyMore()"
+                                class="hidden w-full mt-2 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-sm transition duration-150">
+                            Load more results
                         </button>
                     </div>
 
-                    <!-- Raided Tracks Sub-view -->
-                    <div id="inbox-raids-content" class="hidden p-4">
-                        <div id="inbox-raids-loading" class="hidden text-center py-4">
-                            <div class="inline-block w-5 h-5 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
+                    <!-- Load External Playlist -->
+                    <div class="pt-4 border-t border-white/10">
+                        <h3 class="text-white font-semibold text-sm mb-2">Load External Playlist</h3>
+                        <div class="flex space-x-2 mb-3">
+                            <input id="external-playlist-input"
+                                   type="text"
+                                   placeholder="Paste URL or search..."
+                                   class="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm placeholder-white/40 focus:ring-2 focus:ring-white/30 focus:border-transparent"
+                                   onkeydown="if(event.key==='Enter') loadExternalPlaylist()">
+                            <button onclick="loadExternalPlaylist()"
+                                    class="px-3 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white text-sm font-semibold transition duration-150 flex-shrink-0">
+                                Load
+                            </button>
+                        </div>
+                        <div id="external-search-results" class="hidden max-h-48 overflow-y-auto workshop-scrollbar space-y-1">
+                        </div>
+                        {% if session.get('external_playlist_history') %}
+                        <div class="mt-3">
+                            <p class="text-white/50 text-xs uppercase tracking-wide font-semibold mb-2">Recently Loaded</p>
+                            <div id="external-recent-list" class="space-y-1 max-h-32 overflow-y-auto workshop-scrollbar">
+                                {% for entry in session.get('external_playlist_history', [])[:5] %}
+                                <button onclick="loadExternalById('{{ entry.id }}')"
+                                        class="w-full text-left px-2 py-1.5 rounded-lg hover:bg-white/10 transition duration-150 text-sm text-white/80 truncate">
+                                    {{ entry.name }} <span class="text-white/40">({{ entry.track_count }} tracks)</span>
+                                </button>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        <div id="external-loading" class="hidden py-3 text-center">
+                            <svg class="w-6 h-6 mx-auto animate-spin text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            <p class="text-white/50 text-xs mt-1">Loading...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+    </div><!-- /htab-content-playlist -->
+
+    <!-- Tab Content: Raids -->
+    <div id="htab-content-raids" class="htab-content hidden" role="tabpanel" aria-labelledby="htab-btn-raids">
+        <div class="max-w-5xl mx-auto px-4 py-6">
+
+            <!-- Loading state -->
+            <div id="raid-loading" class="hidden text-center py-12">
+                <svg class="w-8 h-8 mx-auto text-white/30 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+                <p class="text-white/40 text-sm mt-2">Loading raid status...</p>
+            </div>
+
+            <!-- Error state -->
+            <div id="raid-error" class="hidden rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-center">
+                <p class="text-red-300 text-sm">Failed to load raid status</p>
+                <button onclick="raidPanel.loadStatus()"
+                        class="text-red-300/60 hover:text-red-300 text-xs mt-2 underline transition duration-150">
+                    Retry
+                </button>
+            </div>
+
+            <!-- Main raid content -->
+            <div id="raid-panel-content" class="hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                    <!-- Left column: Config -->
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between mb-1">
+                            <h3 class="text-white font-bold text-lg">Raid Config</h3>
+                            <button onclick="raidPanel.loadStatus()"
+                                    class="text-white/40 hover:text-white/60 transition duration-150" title="Refresh">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <!-- Raid Playlist -->
+                        <div>
+                            <div id="raid-link-no-pair" class="hidden">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Raid Playlist</span>
+                                </div>
+                                <div class="rounded-xl bg-white/5 border border-white/10 p-4 text-center">
+                                    <svg class="w-10 h-10 mx-auto text-white/20 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                                    </svg>
+                                    <p class="text-white/60 text-sm mb-1">No raid playlist linked</p>
+                                    <p class="text-white/30 text-xs mb-3">Link a staging playlist so raided tracks are collected before dripping into your playlist.</p>
+                                    <button onclick="raidPanel.createRaidLink()"
+                                            class="w-full px-4 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 mb-2">
+                                        Create New Raid Playlist
+                                    </button>
+                                    <div class="relative my-3">
+                                        <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-white/10"></div></div>
+                                        <div class="relative flex justify-center"><span class="bg-[#1a1a2e] px-2 text-white/30 text-xs">or</span></div>
+                                    </div>
+                                    <select id="raid-link-select"
+                                            onfocus="raidPanel.populateRaidLinkSelect()"
+                                            onchange="document.getElementById('raid-link-btn').disabled = !this.value"
+                                            class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 mb-2">
+                                        <option value="">Link existing playlist...</option>
+                                    </select>
+                                    <button id="raid-link-btn" onclick="raidPanel.linkExistingRaid()"
+                                            class="w-full px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                                            disabled>
+                                        Link as Raid Playlist
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="raid-link-paired" class="hidden">
+                                <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Raid Playlist</span>
+                                        <button onclick="raidPanel.unlinkRaidPlaylist()"
+                                                class="text-red-400/60 hover:text-red-400 text-xs transition duration-150"
+                                                title="Remove raid link">
+                                            Unlink
+                                        </button>
+                                    </div>
+                                    <p id="raid-link-name" class="text-white font-medium text-sm truncate"></p>
+                                    <p id="raid-link-track-count" class="text-white/40 text-xs mt-1"></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Add External Source -->
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Add External Source</span>
+                            </div>
+                            <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                                <div class="flex gap-2">
+                                    <input id="raid-url-input" type="text"
+                                           placeholder="Paste Spotify playlist URL..."
+                                           class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 placeholder-white/30"
+                                           onkeydown="if(event.key==='Enter'){raidPanel.addExternalUrl();}">
+                                    <button id="raid-add-url-btn" onclick="raidPanel.addExternalUrl()"
+                                            class="px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
+                                        +
+                                    </button>
+                                </div>
+                                <div id="raid-url-feedback" class="hidden mt-2 text-xs"></div>
+                                <p class="text-white/30 text-xs mt-2">Paste a playlist URL from a curator or tastemaker to watch for new tracks.</p>
+                            </div>
+                        </div>
+
+                        <!-- Watched Sources -->
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Watched Sources</span>
+                                <span id="raid-source-count" class="text-white/30 text-xs"></span>
+                            </div>
+                            <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                                <div id="raid-sources-list" class="space-y-1 max-h-[30vh] overflow-y-auto workshop-scrollbar">
+                                    <!-- Populated by raidPanel.renderSources() -->
+                                </div>
+                                <div id="raid-sources-empty" class="hidden text-center py-2">
+                                    <p class="text-white/40 text-sm">No sources watched</p>
+                                    <p class="text-white/20 text-xs mt-1">Paste a Spotify playlist URL above to start watching.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Drip to Playlist -->
+                        <div id="raid-drip-section" class="hidden">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Drip to Playlist</span>
+                            </div>
+                            <div class="rounded-xl bg-white/5 border border-white/10 p-4 space-y-3">
+                                <p class="text-white/40 text-xs">How many songs from the raid playlist should be added to your target playlist each run.</p>
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-white/60 text-xs">Enabled</span>
+                                        <button id="raid-drip-toggle" onclick="raidPanel.toggleDripEnabled()"
+                                                class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200">
+                                            <span class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200"></span>
+                                        </button>
+                                    </div>
+                                    <div id="raid-drip-count-row" class="hidden flex items-center gap-1">
+                                        <span class="text-white/40 text-xs">Add</span>
+                                        <input id="raid-drip-count" type="number" min="1" max="50" value="3"
+                                               oninput="raidPanel.onDripCountChange()"
+                                               class="w-14 bg-white/10 border border-white/20 rounded px-2 py-0.5 text-white text-xs text-center focus:outline-none focus:border-spotify-green/50">
+                                        <span class="text-white/40 text-xs">tracks per run</span>
+                                        <button id="raid-drip-count-save" onclick="raidPanel.saveDripCount()"
+                                                class="hidden ml-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-300 border border-green-400/30 hover:bg-green-500/30 transition">
+                                            Save
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Schedule -->
+                        <div id="raid-schedule-section">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Schedule</span>
+                            </div>
+                            <div id="raid-no-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
+                                <p class="text-white/40 text-xs mb-3">Automatically raid sources and drip tracks on a schedule.</p>
+                                <div class="space-y-2">
+                                    <div>
+                                        <label class="text-white/50 text-xs mb-1 block">Operation</label>
+                                        <select id="raid-schedule-create-type"
+                                                class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
+                                            <option value="raid">Raid Only</option>
+                                            <option value="drip">Drip Only</option>
+                                            <option value="raid_and_drip" selected>Raid &amp; Drip</option>
+                                        </select>
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <select id="raid-schedule-create-freq"
+                                                onchange="raidPanel.onCreateFreqChange()"
+                                                class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
+                                            <option value="every_6h">Every 6 hours</option>
+                                            <option value="every_12h">Every 12 hours</option>
+                                            <option value="daily" selected>Daily</option>
+                                            <option value="every_3d">Every 3 days</option>
+                                            <option value="weekly">Weekly</option>
+                                        </select>
+                                    </div>
+                                    <div id="raid-schedule-create-time-row">
+                                        <label class="text-white/50 text-xs mb-1 block">Time of day (UTC)</label>
+                                        <input id="raid-schedule-create-time" type="time" value="09:00"
+                                               class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
+                                    </div>
+                                    <button id="raid-schedule-create-btn" onclick="raidPanel.createSchedule()"
+                                            class="w-full px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed">
+                                        Enable Schedule
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="raid-schedule-info" class="hidden rounded-xl bg-white/5 border border-white/10 p-4 space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <span id="raid-schedule-type-badge" class="px-1.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-300"></span>
+                                        <select id="raid-schedule-frequency" onchange="raidPanel.onScheduleChange()"
+                                                class="bg-white/10 text-white text-xs rounded-lg border border-white/20 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-400">
+                                            <option value="every_6h">Every 6h</option>
+                                            <option value="every_12h">Every 12h</option>
+                                            <option value="daily" selected>Daily</option>
+                                            <option value="every_3d">Every 3d</option>
+                                            <option value="weekly">Weekly</option>
+                                        </select>
+                                    </div>
+                                    <span id="raid-schedule-enabled-badge" class="px-2 py-0.5 rounded-full text-xs font-semibold"></span>
+                                </div>
+                                <div id="raid-schedule-time-row" class="hidden flex items-center gap-2">
+                                    <label class="text-white/50 text-xs">at</label>
+                                    <input type="time" id="raid-schedule-time" value="09:00"
+                                           onchange="raidPanel.onScheduleChange()"
+                                           class="bg-white/10 text-white text-xs rounded-lg border border-white/20 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-400">
+                                    <button onclick="raidPanel.saveSchedule()" id="raid-schedule-save"
+                                            class="hidden px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-300 border border-green-400/30 hover:bg-green-500/30 transition">
+                                        Save
+                                    </button>
+                                </div>
+                                <div class="flex items-center gap-2 text-xs">
+                                    <span id="raid-schedule-last-run" class="text-white/40"></span>
+                                    <span id="raid-schedule-status-badge" class="px-1.5 py-0.5 rounded-full text-xs font-semibold"></span>
+                                </div>
+                                <div class="flex gap-2 mt-2">
+                                    <button onclick="raidPanel.runScheduleNow()"
+                                            id="raid-schedule-run-btn" title="Run now"
+                                            class="px-3 py-1.5 rounded-lg bg-spotify-green/20 hover:bg-spotify-green/40 text-spotify-green text-xs font-semibold transition duration-150 border border-spotify-green/30">
+                                        <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                    </button>
+                                    <button onclick="raidPanel.toggleSchedule()" id="raid-schedule-toggle"
+                                            class="flex-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition duration-150 border border-white/20">
+                                    </button>
+                                    <button onclick="raidPanel.deleteSchedule()"
+                                            class="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-semibold transition duration-150 border border-red-500/20">
+                                        Delete
+                                    </button>
+                                </div>
+                                <div id="raid-history-section">
+                                    <button onclick="raidPanel.toggleHistory()" class="text-white/40 text-xs hover:text-white/60 transition underline">
+                                        Show history
+                                    </button>
+                                    <div id="raid-history-list" class="hidden mt-2 space-y-1 max-h-40 overflow-y-auto"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Actions</span>
+                            </div>
+                            <div class="space-y-2">
+                                <button id="raid-and-drip-btn" onclick="raidPanel.raidAndDrip()"
+                                        class="hidden w-full inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white font-semibold text-sm transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                    </svg>
+                                    Raid &amp; Drip
+                                </button>
+                                <div class="flex gap-2">
+                                    <button id="raid-now-btn" onclick="raidPanel.raidNow()"
+                                            class="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed">
+                                        <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                        </svg>
+                                        Raid Only
+                                    </button>
+                                    <button id="drip-now-btn" onclick="raidPanel.dripNow()"
+                                            class="hidden flex-1 inline-flex items-center justify-center px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed">
+                                        <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                                        </svg>
+                                        Drip Only
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right column: Pending Raid Tracks -->
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-white font-bold text-lg">
+                                Pending Tracks
+                                <span id="inbox-raid-count" class="text-white/40 text-sm font-normal"></span>
+                            </h3>
+                        </div>
+
+                        <div id="inbox-raids-loading" class="hidden text-center py-8">
+                            <div class="inline-block w-6 h-6 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
                             <p class="text-white/40 text-xs mt-2">Loading raided tracks...</p>
                         </div>
-                        <div id="inbox-raids-empty" class="hidden text-center py-6">
-                            <svg class="w-10 h-10 mx-auto text-white/15 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div id="inbox-raids-empty" class="hidden text-center py-8">
+                            <svg class="w-12 h-12 mx-auto text-white/15 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                             </svg>
                             <p class="text-white/40 text-sm">No pending raided tracks</p>
-                            <p class="text-white/25 text-xs mt-1">Configure raid sources in Tools > Raids and click "Raid Now" to discover new tracks.</p>
+                            <p class="text-white/25 text-xs mt-1">Add sources and click "Raid Now" to discover new tracks.</p>
                         </div>
-                        <div id="inbox-raids-list" class="space-y-1 max-h-[40vh] overflow-y-auto workshop-scrollbar">
+                        <div id="inbox-raids-list" class="space-y-1 max-h-[60vh] overflow-y-auto workshop-scrollbar">
                             <!-- Populated by loadPendingRaids() -->
                         </div>
                         <div id="inbox-raids-actions" class="hidden flex gap-2 mt-3 pt-3 border-t border-white/10">
@@ -350,433 +724,21 @@
                         </div>
                     </div>
 
-                    <!-- Archived Tracks Sub-view -->
-                    <div id="inbox-archive-content" class="hidden p-4">
-                        <div id="inbox-archive-loading" class="hidden text-center py-4">
-                            <div class="inline-block w-5 h-5 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
-                            <p class="text-white/40 text-xs mt-2">Loading archived tracks...</p>
-                        </div>
-                        <div id="inbox-archive-empty" class="hidden text-center py-6">
-                            <svg class="w-10 h-10 mx-auto text-white/15 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
-                            </svg>
-                            <p class="text-white/40 text-sm">No archived tracks</p>
-                            <p class="text-white/25 text-xs mt-1">Link an archive in Tools &gt; Archive &amp; Rotation to see removed tracks here.</p>
-                        </div>
-                        <div id="inbox-archive-list" class="space-y-1 max-h-[40vh] overflow-y-auto workshop-scrollbar">
-                            <!-- Populated by renderInboxArchiveTracks() -->
-                        </div>
-                        <div id="inbox-archive-actions" class="hidden flex gap-2 mt-3 pt-3 border-t border-white/10">
-                            <button onclick="restoreAllArchiveTracks()"
-                                    class="flex-1 px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
-                                Restore All to Playlist
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Search Sub-view -->
-                    <div id="inbox-search-content" class="hidden p-4">
-                        <!-- Search Spotify -->
-                        <div class="mb-4">
-                            <div class="flex items-center space-x-2 mb-3">
-                                <input id="search-input"
-                                       type="text"
-                                       placeholder="Search tracks, artists..."
-                                       class="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-white/30 focus:border-transparent text-sm"
-                                       onkeydown="if(event.key==='Enter'){event.preventDefault(); searchSpotify();}"
-                                       maxlength="200"
-                                       autocomplete="off">
-                                <button id="search-btn"
-                                        onclick="searchSpotify()"
-                                        class="px-3 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white transition duration-150 flex-shrink-0"
-                                        title="Search">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                                    </svg>
-                                </button>
-                            </div>
-                            <div id="search-results" class="space-y-1 max-h-[40vh] overflow-y-auto workshop-scrollbar">
-                                <p id="search-placeholder" class="text-white/40 text-sm text-center py-4">
-                                    Type a query and press Enter
-                                </p>
-                            </div>
-                            <button id="search-load-more"
-                                    onclick="searchSpotifyMore()"
-                                    class="hidden w-full mt-2 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-sm transition duration-150">
-                                Load more results
-                            </button>
-                        </div>
-
-                        <!-- Load External Playlist -->
-                        <div class="pt-4 border-t border-white/10">
-                            <h3 class="text-white font-semibold text-sm mb-2">Load External Playlist</h3>
-                            <div class="flex space-x-2 mb-3">
-                                <input id="external-playlist-input"
-                                       type="text"
-                                       placeholder="Paste URL or search..."
-                                       class="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm placeholder-white/40 focus:ring-2 focus:ring-white/30 focus:border-transparent"
-                                       onkeydown="if(event.key==='Enter') loadExternalPlaylist()">
-                                <button onclick="loadExternalPlaylist()"
-                                        class="px-3 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white text-sm font-semibold transition duration-150 flex-shrink-0">
-                                    Load
-                                </button>
-                            </div>
-                            <div id="external-search-results" class="hidden max-h-48 overflow-y-auto workshop-scrollbar space-y-1">
-                            </div>
-                            {% if session.get('external_playlist_history') %}
-                            <div class="mt-3">
-                                <p class="text-white/50 text-xs uppercase tracking-wide font-semibold mb-2">Recently Loaded</p>
-                                <div id="external-recent-list" class="space-y-1 max-h-32 overflow-y-auto workshop-scrollbar">
-                                    {% for entry in session.get('external_playlist_history', [])[:5] %}
-                                    <button onclick="loadExternalById('{{ entry.id }}')"
-                                            class="w-full text-left px-2 py-1.5 rounded-lg hover:bg-white/10 transition duration-150 text-sm text-white/80 truncate">
-                                        {{ entry.name }} <span class="text-white/40">({{ entry.track_count }} tracks)</span>
-                                    </button>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                            {% endif %}
-                            <div id="external-loading" class="hidden py-3 text-center">
-                                <svg class="w-6 h-6 mx-auto animate-spin text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                                </svg>
-                                <p class="text-white/50 text-xs mt-1">Loading...</p>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
 
-<!-- =========================================================================
-     Workshop Powertools Sidebar
-     A collapsible tabbed panel on the right edge of the viewport.
-     Phases 2-5 will populate each tab with real content.
-     ========================================================================= -->
-
-<!-- Sidebar Toggle Button (visible when sidebar is collapsed) -->
-<button id="sidebar-toggle-btn"
-        onclick="workshopSidebar.toggle()"
-        class="fixed right-0 top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-10 h-24 rounded-l-xl bg-white/15 backdrop-blur-md border border-r-0 border-white/20 text-white/70 hover:text-white hover:bg-white/25 transition-all duration-200 shadow-lg"
-        title="Open Powertools"
-        aria-label="Toggle powertools sidebar"
-        aria-expanded="false"
-        aria-controls="sidebar-panel">
-    <div class="flex flex-col items-center gap-1">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7"></path>
-        </svg>
-        <span class="text-xs font-bold tracking-widest" style="writing-mode: vertical-rl; text-orientation: mixed;">TOOLS</span>
-    </div>
-</button>
-
-<!-- Sidebar Panel -->
-<div id="sidebar-panel"
-     class="fixed top-0 right-0 h-full z-30 flex transition-transform duration-300 ease-in-out translate-x-full"
-     aria-hidden="true">
-
-    <!-- Vertical Tab Bar (left edge of sidebar) -->
-    <div class="flex flex-col items-center py-4 w-14 bg-black/30 backdrop-blur-xl border-l border-white/10 flex-shrink-0">
-        <!-- Close / collapse button -->
-        <button onclick="workshopSidebar.toggle()"
-                class="mb-4 p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition duration-150"
-                title="Close sidebar"
-                aria-label="Close powertools sidebar">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7"></path>
-            </svg>
-        </button>
-
-        <div class="w-8 border-t border-white/10 mb-4"></div>
-
-        <!-- Tab: Snapshots -->
-        <button class="sidebar-tab-btn mb-2 p-2 rounded-lg transition duration-150 text-white/40 hover:text-white hover:bg-white/10"
-                data-tab="snapshots"
-                onclick="workshopSidebar.switchTab('snapshots')"
-                title="Snapshots"
-                aria-label="Snapshots tab"
-                aria-selected="false"
-                role="tab">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
-            </svg>
-        </button>
-
-        <!-- Tab: Archive -->
-        <button class="sidebar-tab-btn mb-2 p-2 rounded-lg transition duration-150 text-white/40 hover:text-white hover:bg-white/10"
-                data-tab="archive"
-                onclick="workshopSidebar.switchTab('archive')"
-                title="Archive"
-                aria-label="Archive tab"
-                aria-selected="false"
-                role="tab">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
-            </svg>
-        </button>
-
-        <!-- Tab: Raids -->
-        <button class="sidebar-tab-btn mb-2 p-2 rounded-lg transition duration-150 text-white/40 hover:text-white hover:bg-white/10"
-                data-tab="raids"
-                onclick="workshopSidebar.switchTab('raids')"
-                title="Raids"
-                aria-label="Raids tab"
-                aria-selected="false"
-                role="tab">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-            </svg>
-        </button>
-
-        <!-- Tab: Schedules -->
-        <button class="sidebar-tab-btn mb-2 p-2 rounded-lg transition duration-150 text-white/40 hover:text-white hover:bg-white/10"
-                data-tab="schedules"
-                onclick="workshopSidebar.switchTab('schedules')"
-                title="Schedules"
-                aria-label="Schedules tab"
-                aria-selected="false"
-                role="tab">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-        </button>
-    </div>
-
-    <!-- Tab Content Area -->
-    <div class="w-80 bg-black/40 backdrop-blur-xl border-l border-white/10 overflow-y-auto sidebar-scrollbar">
-
-        <!-- Tab Content: Snapshots -->
-        <div id="sidebar-tab-snapshots" class="sidebar-tab-content hidden p-5" role="tabpanel">
-            <!-- Header with Take Snapshot button -->
-            <div class="flex items-center justify-between mb-3">
-                <h3 class="text-white font-bold text-lg">Snapshots <span id="snapshot-count-badge" class="hidden text-white/30 text-sm font-normal"></span></h3>
-                <button id="snapshot-take-btn"
-                        onclick="openManualSnapshotDialog()"
-                        class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-xs font-semibold transition duration-150 flex items-center gap-1.5"
-                        title="Take a snapshot of the current playlist state">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                    </svg>
-                    Take Snapshot
-                </button>
-            </div>
-
-            <!-- Manual Snapshot Form (hidden by default) -->
-            <div id="snapshot-create-form" class="hidden mb-3">
-                <div class="rounded-xl bg-white/5 border border-white/10 p-4">
-                    <label class="block text-white/60 text-xs font-semibold mb-1.5">Description (optional)</label>
-                    <input id="snapshot-description-input"
-                           type="text"
-                           maxlength="500"
-                           placeholder="e.g. Before major cleanup"
-                           class="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/20 transition">
-                    <div class="flex gap-2 mt-3">
-                        <button onclick="confirmManualSnapshot()"
-                                class="flex-1 px-3 py-1.5 rounded-lg bg-green-600/80 hover:bg-green-600 text-white text-xs font-semibold transition duration-150">
-                            Save Snapshot
-                        </button>
-                        <button onclick="cancelManualSnapshot()"
-                                class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-xs font-semibold transition duration-150">
-                            Cancel
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Loading State -->
-            <div id="snapshot-loading" class="hidden">
-                <div class="flex items-center justify-center py-8">
-                    <svg class="w-6 h-6 text-white/30 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span class="ml-2 text-white/40 text-sm">Loading snapshots...</span>
-                </div>
-            </div>
-
-            <!-- Error State -->
-            <div id="snapshot-error" class="hidden">
-                <div class="rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-center">
-                    <p id="snapshot-error-message" class="text-red-400/80 text-sm mb-2">Failed to load snapshots</p>
-                    <button onclick="loadSnapshots()"
-                            class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/60 text-xs font-semibold transition duration-150">
-                        Try Again
-                    </button>
-                </div>
-            </div>
-
-            <!-- Empty State -->
-            <div id="snapshot-empty" class="hidden">
-                <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
-                    <svg class="w-10 h-10 mx-auto text-white/15 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                    </svg>
-                    <p class="text-white/50 text-sm mb-1">No snapshots yet</p>
-                    <p class="text-white/30 text-xs">Snapshots are created automatically before shuffles, raids, and commits. You can also take one manually.</p>
-                </div>
-            </div>
-
-            <!-- Snapshot Timeline -->
-            <div id="snapshot-timeline" class="hidden">
-                <div id="snapshot-list" class="space-y-2 snapshot-timeline-container"></div>
-            </div>
-        </div>
-
-        <!-- Tab Content: Archive & Rotation -->
-        <div id="sidebar-tab-archive" class="sidebar-tab-content hidden p-5" role="tabpanel">
-            <div class="flex items-center justify-between mb-3">
-                <h3 class="text-white font-bold text-lg">Archive & Rotation</h3>
-                <span id="archive-queue-badge" class="hidden px-2 py-0.5 rounded-full bg-yellow-500/80 text-xs font-semibold text-white">0 queued</span>
-            </div>
+    <!-- Tab Content: Rotation -->
+    <div id="htab-content-rotation" class="htab-content hidden" role="tabpanel" aria-labelledby="htab-btn-rotation">
+        <div class="max-w-5xl mx-auto px-4 py-6">
 
             <!-- Loading state -->
-            <div id="archive-loading" class="hidden text-center py-6">
+            <div id="archive-loading" class="hidden text-center py-12">
                 <svg class="w-8 h-8 mx-auto text-white/30 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                 </svg>
                 <p class="text-white/40 text-sm mt-2">Loading...</p>
-            </div>
-
-            <!-- No pair state -->
-            <div id="archive-no-pair" class="hidden">
-                <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
-                    <svg class="w-12 h-12 mx-auto text-white/20 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
-                    </svg>
-                    <p class="text-white/60 text-sm mb-1">No archive linked</p>
-                    <p class="text-white/30 text-xs mb-4">Link an archive playlist so removed tracks are automatically preserved.</p>
-                    <button onclick="createArchivePair()"
-                            class="w-full px-4 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 mb-2">
-                        Create New Archive
-                    </button>
-                    <div class="relative my-3">
-                        <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-white/10"></div></div>
-                        <div class="relative flex justify-center"><span class="bg-[#1a1a2e] px-2 text-white/30 text-xs">or</span></div>
-                    </div>
-                    <select id="archive-link-select"
-                            class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 mb-2">
-                        <option value="">Link existing playlist...</option>
-                    </select>
-                    <button id="archive-link-btn" onclick="linkExistingArchive()"
-                            class="w-full px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
-                            disabled>
-                        Link as Archive
-                    </button>
-                </div>
-            </div>
-
-            <!-- Paired state -->
-            <div id="archive-paired" class="hidden">
-                <!-- Pair info card -->
-                <div class="rounded-xl bg-white/5 border border-white/10 p-4 mb-4">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Archive Playlist</span>
-                        <button onclick="deleteArchivePair()"
-                                class="text-red-400/60 hover:text-red-400 text-xs transition duration-150"
-                                title="Remove archive pairing">
-                            Unlink
-                        </button>
-                    </div>
-                    <p id="archive-pair-name" class="text-white font-medium text-sm truncate"></p>
-                    <p id="archive-pair-track-count" class="text-white/40 text-xs mt-1"></p>
-                    <!-- Auto-archive toggle -->
-                    <div class="flex items-center justify-between mt-3 pt-3 border-t border-white/10">
-                        <span class="text-white/60 text-xs">Auto-archive on remove</span>
-                        <button id="auto-archive-toggle" onclick="toggleAutoArchive()"
-                                class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200">
-                            <span class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200"></span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Rotation Schedule Section (always visible when tab is active) -->
-            <div id="rotation-section" class="hidden mb-4">
-                <span class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Rotation Schedule</span>
-
-                <!-- No rotation schedule -->
-                <div id="rotation-no-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
-                    <p class="text-white/40 text-xs mb-3">Exchange tracks between this playlist and its archive on a schedule.</p>
-                    <p id="rotation-auto-create-hint" class="hidden text-white/30 text-xs mb-3 italic">An archive playlist will be created automatically when you enable rotation.</p>
-                    <div class="space-y-2">
-                        <div class="flex gap-2">
-                            <input id="rotation-count-input" type="number" min="1" max="50" value="5"
-                                   class="w-20 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
-                                   placeholder="#">
-                            <select id="rotation-freq-select" class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
-                                <option value="daily">Daily</option>
-                                <option value="every_3d">Every 3 days</option>
-                                <option value="weekly">Weekly</option>
-                            </select>
-                        </div>
-                        <!-- Time of day -->
-                        <div>
-                            <label class="text-white/50 text-xs mb-1 block">Time of day (UTC)</label>
-                            <input id="rotation-time-input" type="time" value="09:00"
-                                   class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
-                        </div>
-                        <!-- Size cap -->
-                        <div class="pt-1 border-t border-white/5">
-                            <label class="text-white/50 text-xs mb-1 block">Playlist size cap</label>
-                            <input id="rotation-target-size" type="number" min="1" max="10000"
-                                   class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
-                                   placeholder="e.g. 50">
-                        </div>
-                        <!-- Protect top N -->
-                        <div>
-                            <label class="text-white/50 text-xs mb-1 block">Protect top N tracks</label>
-                            <input id="rotation-protect-count" type="number" min="0" max="500" value="0"
-                                   class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
-                                   placeholder="0">
-                        </div>
-                        <button id="rotation-enable-btn" onclick="createRotationSchedule()"
-                                class="w-full px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
-                            Enable Rotation
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Existing rotation schedule -->
-                <div id="rotation-has-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
-                    <div class="mb-2">
-                        <div class="flex items-center justify-between">
-                            <span id="rotation-schedule-mode" class="text-white text-sm font-medium"></span>
-                            <span id="rotation-schedule-badge" class="px-2 py-0.5 rounded-full text-xs font-semibold"></span>
-                        </div>
-                        <span id="rotation-schedule-detail" class="text-white/40 text-xs block mt-0.5"></span>
-                    </div>
-                    <div class="flex gap-2 mt-3">
-                        <button onclick="runRotationNow()"
-                                id="rotation-run-btn"
-                                title="Run rotation now"
-                                class="px-3 py-1.5 rounded-lg bg-spotify-green/20 hover:bg-spotify-green/40 text-spotify-green text-xs font-semibold transition duration-150 border border-spotify-green/30">
-                            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                        </button>
-                        <button onclick="toggleRotationSchedule()"
-                                id="rotation-toggle-btn"
-                                class="flex-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition duration-150 border border-white/20">
-                        </button>
-                        <button onclick="deleteRotationSchedule()"
-                                class="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-semibold transition duration-150 border border-red-500/20">
-                            Delete
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Archive summary (track list moved to Track Inbox) -->
-            <div id="archive-tracks-section" class="hidden">
-                <div class="rounded-xl bg-white/5 border border-white/10 p-3">
-                    <p class="text-white/40 text-xs">
-                        <span id="archive-summary-count"></span>
-                        — restore tracks via the <button onclick="toggleTrackInbox(); switchInboxTab('archived');" class="text-spotify-green hover:text-spotify-green/80 underline transition duration-150">Track Inbox</button>
-                    </p>
-                </div>
             </div>
 
             <!-- Error state -->
@@ -787,352 +749,309 @@
                     Retry
                 </button>
             </div>
-        </div>
 
-        <!-- Tab Content: Raids -->
-        <div id="sidebar-tab-raids" class="sidebar-tab-content hidden p-5" role="tabpanel">
-            <div class="flex items-center justify-between mb-3">
-                <h3 class="text-white font-bold text-lg">Raids</h3>
-                <button onclick="raidPanel.loadStatus()"
-                        class="text-white/40 hover:text-white/60 transition duration-150"
-                        title="Refresh raid status">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                    </svg>
-                </button>
-            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-            <!-- Loading state -->
-            <div id="raid-loading" class="hidden text-center py-6">
-                <svg class="w-8 h-8 mx-auto text-white/30 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                </svg>
-                <p class="text-white/40 text-sm mt-2">Loading raid status...</p>
-            </div>
+                <!-- Left column: Config -->
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between mb-1">
+                        <h3 class="text-white font-bold text-lg">Archive & Rotation</h3>
+                        <span id="archive-queue-badge" class="hidden px-2 py-0.5 rounded-full bg-yellow-500/80 text-xs font-semibold text-white">0 queued</span>
+                    </div>
 
-            <!-- Raid panel content -->
-            <div id="raid-panel-content" class="hidden space-y-4">
-
-                <!-- Section 1: Raid Playlist -->
-                <div>
-                    <div id="raid-link-no-pair" class="hidden">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Raid Playlist</span>
-                        </div>
-                        <div class="rounded-xl bg-white/5 border border-white/10 p-4 text-center">
-                            <svg class="w-10 h-10 mx-auto text-white/20 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                    <!-- No pair state -->
+                    <div id="archive-no-pair" class="hidden">
+                        <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                            <svg class="w-12 h-12 mx-auto text-white/20 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
                             </svg>
-                            <p class="text-white/60 text-sm mb-1">No raid playlist linked</p>
-                            <p class="text-white/30 text-xs mb-3">Link a staging playlist so raided tracks are collected before dripping into your playlist.</p>
-                            <button onclick="raidPanel.createRaidLink()"
+                            <p class="text-white/60 text-sm mb-1">No archive linked</p>
+                            <p class="text-white/30 text-xs mb-4">Link an archive playlist so removed tracks are automatically preserved.</p>
+                            <button onclick="createArchivePair()"
                                     class="w-full px-4 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 mb-2">
-                                Create New Raid Playlist
+                                Create New Archive
                             </button>
                             <div class="relative my-3">
                                 <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-white/10"></div></div>
                                 <div class="relative flex justify-center"><span class="bg-[#1a1a2e] px-2 text-white/30 text-xs">or</span></div>
                             </div>
-                            <select id="raid-link-select"
-                                    onfocus="raidPanel.populateRaidLinkSelect()"
-                                    onchange="document.getElementById('raid-link-btn').disabled = !this.value"
+                            <select id="archive-link-select"
                                     class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 mb-2">
                                 <option value="">Link existing playlist...</option>
                             </select>
-                            <button id="raid-link-btn" onclick="raidPanel.linkExistingRaid()"
+                            <button id="archive-link-btn" onclick="linkExistingArchive()"
                                     class="w-full px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
                                     disabled>
-                                Link as Raid Playlist
+                                Link as Archive
                             </button>
                         </div>
                     </div>
 
-                    <div id="raid-link-paired" class="hidden">
-                        <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                    <!-- Paired state -->
+                    <div id="archive-paired" class="hidden">
+                        <div class="rounded-xl bg-white/5 border border-white/10 p-4 mb-4">
                             <div class="flex items-center justify-between mb-2">
-                                <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Raid Playlist</span>
-                                <button onclick="raidPanel.unlinkRaidPlaylist()"
+                                <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Archive Playlist</span>
+                                <button onclick="deleteArchivePair()"
                                         class="text-red-400/60 hover:text-red-400 text-xs transition duration-150"
-                                        title="Remove raid link">
+                                        title="Remove archive pairing">
                                     Unlink
                                 </button>
                             </div>
-                            <p id="raid-link-name" class="text-white font-medium text-sm truncate"></p>
-                            <p id="raid-link-track-count" class="text-white/40 text-xs mt-1"></p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Section 2: Add External Source -->
-                <div>
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Add External Source</span>
-                    </div>
-                    <div class="rounded-xl bg-white/5 border border-white/10 p-4">
-                        <div class="flex gap-2">
-                            <input id="raid-url-input" type="text"
-                                   placeholder="Paste Spotify playlist URL..."
-                                   class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 placeholder-white/30"
-                                   onkeydown="if(event.key==='Enter'){raidPanel.addExternalUrl();}">
-                            <button id="raid-add-url-btn" onclick="raidPanel.addExternalUrl()"
-                                    class="px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
-                                +
-                            </button>
-                        </div>
-                        <div id="raid-url-feedback" class="hidden mt-2 text-xs"></div>
-                        <p class="text-white/30 text-xs mt-2">Paste a playlist URL from a curator or tastemaker to watch for new tracks.</p>
-                    </div>
-                </div>
-
-                <!-- Section 3: Watched Sources -->
-                <div>
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Watched Sources</span>
-                        <span id="raid-source-count" class="text-white/30 text-xs"></span>
-                    </div>
-                    <div class="rounded-xl bg-white/5 border border-white/10 p-4">
-                        <div id="raid-sources-list" class="space-y-1 max-h-[30vh] overflow-y-auto sidebar-scrollbar">
-                            <!-- Populated by raidPanel.renderSources() -->
-                        </div>
-                        <div id="raid-sources-empty" class="hidden text-center py-2">
-                            <p class="text-white/40 text-sm">No sources watched</p>
-                            <p class="text-white/20 text-xs mt-1">Paste a Spotify playlist URL above to start watching.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Section 4: Drip to Playlist -->
-                <div id="raid-drip-section" class="hidden">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Drip to Playlist</span>
-                    </div>
-                    <div class="rounded-xl bg-white/5 border border-white/10 p-4 space-y-3">
-                        <p class="text-white/40 text-xs">How many songs from the raid playlist should be added to your target playlist each run.</p>
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-2">
-                                <span class="text-white/60 text-xs">Enabled</span>
-                                <button id="raid-drip-toggle" onclick="raidPanel.toggleDripEnabled()"
+                            <p id="archive-pair-name" class="text-white font-medium text-sm truncate"></p>
+                            <p id="archive-pair-track-count" class="text-white/40 text-xs mt-1"></p>
+                            <div class="flex items-center justify-between mt-3 pt-3 border-t border-white/10">
+                                <span class="text-white/60 text-xs">Auto-archive on remove</span>
+                                <button id="auto-archive-toggle" onclick="toggleAutoArchive()"
                                         class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200">
                                     <span class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200"></span>
                                 </button>
                             </div>
-                            <div id="raid-drip-count-row" class="hidden flex items-center gap-1">
-                                <span class="text-white/40 text-xs">Add</span>
-                                <input id="raid-drip-count" type="number" min="1" max="50" value="3"
-                                       oninput="raidPanel.onDripCountChange()"
-                                       class="w-14 bg-white/10 border border-white/20 rounded px-2 py-0.5 text-white text-xs text-center focus:outline-none focus:border-spotify-green/50">
-                                <span class="text-white/40 text-xs">tracks per run</span>
-                                <button id="raid-drip-count-save" onclick="raidPanel.saveDripCount()"
-                                        class="hidden ml-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-300 border border-green-400/30 hover:bg-green-500/30 transition">
-                                    Save
+                        </div>
+                    </div>
+
+                    <!-- Rotation Schedule Section -->
+                    <div id="rotation-section" class="hidden mb-4">
+                        <span class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Rotation Schedule</span>
+                        <div id="rotation-no-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
+                            <p class="text-white/40 text-xs mb-3">Exchange tracks between this playlist and its archive on a schedule.</p>
+                            <p id="rotation-auto-create-hint" class="hidden text-white/30 text-xs mb-3 italic">An archive playlist will be created automatically when you enable rotation.</p>
+                            <div class="space-y-2">
+                                <div class="flex gap-2">
+                                    <input id="rotation-count-input" type="number" min="1" max="50" value="5"
+                                           class="w-20 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
+                                           placeholder="#">
+                                    <select id="rotation-freq-select" class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
+                                        <option value="daily">Daily</option>
+                                        <option value="every_3d">Every 3 days</option>
+                                        <option value="weekly">Weekly</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-white/50 text-xs mb-1 block">Time of day (UTC)</label>
+                                    <input id="rotation-time-input" type="time" value="09:00"
+                                           class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
+                                </div>
+                                <div class="pt-1 border-t border-white/5">
+                                    <label class="text-white/50 text-xs mb-1 block">Playlist size cap</label>
+                                    <input id="rotation-target-size" type="number" min="1" max="10000"
+                                           class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
+                                           placeholder="e.g. 50">
+                                </div>
+                                <div>
+                                    <label class="text-white/50 text-xs mb-1 block">Protect top N tracks</label>
+                                    <input id="rotation-protect-count" type="number" min="0" max="500" value="0"
+                                           class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
+                                           placeholder="0">
+                                </div>
+                                <button id="rotation-enable-btn" onclick="createRotationSchedule()"
+                                        class="w-full px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
+                                    Enable Rotation
+                                </button>
+                            </div>
+                        </div>
+                        <div id="rotation-has-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
+                            <div class="mb-2">
+                                <div class="flex items-center justify-between">
+                                    <span id="rotation-schedule-mode" class="text-white text-sm font-medium"></span>
+                                    <span id="rotation-schedule-badge" class="px-2 py-0.5 rounded-full text-xs font-semibold"></span>
+                                </div>
+                                <span id="rotation-schedule-detail" class="text-white/40 text-xs block mt-0.5"></span>
+                            </div>
+                            <div class="flex gap-2 mt-3">
+                                <button onclick="runRotationNow()"
+                                        id="rotation-run-btn" title="Run rotation now"
+                                        class="px-3 py-1.5 rounded-lg bg-spotify-green/20 hover:bg-spotify-green/40 text-spotify-green text-xs font-semibold transition duration-150 border border-spotify-green/30">
+                                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                </button>
+                                <button onclick="toggleRotationSchedule()"
+                                        id="rotation-toggle-btn"
+                                        class="flex-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition duration-150 border border-white/20">
+                                </button>
+                                <button onclick="deleteRotationSchedule()"
+                                        class="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-semibold transition duration-150 border border-red-500/20">
+                                    Delete
                                 </button>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Section 5: Schedule -->
-                <div id="raid-schedule-section">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Schedule</span>
-                    </div>
-
-                    <!-- No schedule: creation form -->
-                    <div id="raid-no-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
-                        <p class="text-white/40 text-xs mb-3">Automatically raid sources and drip tracks on a schedule.</p>
-                        <div class="space-y-2">
-                            <div>
-                                <label class="text-white/50 text-xs mb-1 block">Operation</label>
-                                <select id="raid-schedule-create-type"
-                                        class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
-                                    <option value="raid">Raid Only</option>
-                                    <option value="drip">Drip Only</option>
-                                    <option value="raid_and_drip" selected>Raid &amp; Drip</option>
-                                </select>
-                            </div>
-                            <div class="flex gap-2">
-                                <select id="raid-schedule-create-freq"
-                                        onchange="raidPanel.onCreateFreqChange()"
-                                        class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
-                                    <option value="every_6h">Every 6 hours</option>
-                                    <option value="every_12h">Every 12 hours</option>
-                                    <option value="daily" selected>Daily</option>
-                                    <option value="every_3d">Every 3 days</option>
-                                    <option value="weekly">Weekly</option>
-                                </select>
-                            </div>
-                            <div id="raid-schedule-create-time-row">
-                                <label class="text-white/50 text-xs mb-1 block">Time of day (UTC)</label>
-                                <input id="raid-schedule-create-time" type="time" value="09:00"
-                                       class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
-                            </div>
-                            <button id="raid-schedule-create-btn" onclick="raidPanel.createSchedule()"
-                                    class="w-full px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed">
-                                Enable Schedule
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Existing schedule -->
-                    <div id="raid-schedule-info" class="hidden rounded-xl bg-white/5 border border-white/10 p-4 space-y-2">
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-2">
-                                <span id="raid-schedule-type-badge" class="px-1.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-300"></span>
-                                <select id="raid-schedule-frequency" onchange="raidPanel.onScheduleChange()"
-                                        class="bg-white/10 text-white text-xs rounded-lg border border-white/20 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-400">
-                                    <option value="every_6h">Every 6h</option>
-                                    <option value="every_12h">Every 12h</option>
-                                    <option value="daily" selected>Daily</option>
-                                    <option value="every_3d">Every 3d</option>
-                                    <option value="weekly">Weekly</option>
-                                </select>
-                            </div>
-                            <span id="raid-schedule-enabled-badge" class="px-2 py-0.5 rounded-full text-xs font-semibold"></span>
-                        </div>
-                        <div id="raid-schedule-time-row" class="hidden flex items-center gap-2">
-                            <label class="text-white/50 text-xs">at</label>
-                            <input type="time" id="raid-schedule-time" value="09:00"
-                                   onchange="raidPanel.onScheduleChange()"
-                                   class="bg-white/10 text-white text-xs rounded-lg border border-white/20 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-400">
-                            <button onclick="raidPanel.saveSchedule()" id="raid-schedule-save"
-                                    class="hidden px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-300 border border-green-400/30 hover:bg-green-500/30 transition">
-                                Save
-                            </button>
-                        </div>
-                        <div class="flex items-center gap-2 text-xs">
-                            <span id="raid-schedule-last-run" class="text-white/40"></span>
-                            <span id="raid-schedule-status-badge" class="px-1.5 py-0.5 rounded-full text-xs font-semibold"></span>
-                        </div>
-                        <div class="flex gap-2 mt-2">
-                            <button onclick="raidPanel.runScheduleNow()"
-                                    id="raid-schedule-run-btn"
-                                    title="Run now"
-                                    class="px-3 py-1.5 rounded-lg bg-spotify-green/20 hover:bg-spotify-green/40 text-spotify-green text-xs font-semibold transition duration-150 border border-spotify-green/30">
-                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                            </button>
-                            <button onclick="raidPanel.toggleSchedule()" id="raid-schedule-toggle"
-                                    class="flex-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition duration-150 border border-white/20">
-                            </button>
-                            <button onclick="raidPanel.deleteSchedule()"
-                                    class="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-semibold transition duration-150 border border-red-500/20">
-                                Delete
-                            </button>
-                        </div>
-                        <!-- Execution History -->
-                        <div id="raid-history-section">
-                            <button onclick="raidPanel.toggleHistory()" class="text-white/40 text-xs hover:text-white/60 transition underline">
-                                Show history
-                            </button>
-                            <div id="raid-history-list" class="hidden mt-2 space-y-1 max-h-40 overflow-y-auto"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Section 6: Actions -->
+                <!-- Right column: Archive Tracks -->
                 <div>
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Actions</span>
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-white font-bold text-lg">
+                            Archive Tracks
+                            <span id="inbox-archive-count" class="text-white/40 text-sm font-normal"></span>
+                        </h3>
                     </div>
-                    <div class="space-y-2">
-                        <button id="raid-and-drip-btn" onclick="raidPanel.raidAndDrip()"
-                                class="hidden w-full inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white font-semibold text-sm transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed">
-                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                            </svg>
-                            Raid &amp; Drip
+
+                    <div id="inbox-archive-loading" class="hidden text-center py-8">
+                        <div class="inline-block w-6 h-6 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
+                        <p class="text-white/40 text-xs mt-2">Loading archived tracks...</p>
+                    </div>
+                    <div id="inbox-archive-empty" class="hidden text-center py-8">
+                        <svg class="w-12 h-12 mx-auto text-white/15 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
+                        </svg>
+                        <p class="text-white/40 text-sm">No archived tracks</p>
+                        <p class="text-white/25 text-xs mt-1">Link an archive playlist and remove tracks to see them here.</p>
+                    </div>
+                    <div id="inbox-archive-list" class="space-y-1 max-h-[60vh] overflow-y-auto workshop-scrollbar">
+                        <!-- Populated by renderInboxArchiveTracks() -->
+                    </div>
+                    <div id="inbox-archive-actions" class="hidden flex gap-2 mt-3 pt-3 border-t border-white/10">
+                        <button onclick="restoreAllArchiveTracks()"
+                                class="flex-1 px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
+                            Restore All to Playlist
                         </button>
-                        <div class="flex gap-2">
-                            <button id="raid-now-btn" onclick="raidPanel.raidNow()"
-                                    class="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed">
-                                <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                                </svg>
-                                Raid Only
-                            </button>
-                            <button id="drip-now-btn" onclick="raidPanel.dripNow()"
-                                    class="hidden flex-1 inline-flex items-center justify-center px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed">
-                                <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
-                                </svg>
-                                Drip Only
-                            </button>
-                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Error state -->
-            <div id="raid-error" class="hidden rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-center">
-                <p class="text-red-300 text-sm">Failed to load raid status</p>
-                <button onclick="raidPanel.loadStatus()"
-                        class="text-red-300/60 hover:text-red-300 text-xs mt-2 underline transition duration-150">
-                    Retry
-                </button>
-            </div>
-        </div>
-
-        <!-- Tab Content: Schedules (Per-Playlist) -->
-        <div id="sidebar-tab-schedules" class="sidebar-tab-content hidden p-5" role="tabpanel">
-            <div class="flex items-center justify-between mb-3">
-                <h3 class="text-white font-bold text-lg">Schedules</h3>
-                <button onclick="playlistSchedules.loadSchedules()"
-                        class="text-white/40 hover:text-white/60 transition duration-150"
-                        title="Refresh schedules">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                    </svg>
-                </button>
-            </div>
-
-            <!-- Loading -->
-            <div id="schedules-loading" class="hidden text-center py-6">
-                <svg class="w-8 h-8 mx-auto text-white/30 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                </svg>
-                <p class="text-white/40 text-sm mt-2">Loading schedules...</p>
-            </div>
-
-            <!-- Error -->
-            <div id="schedules-error" class="hidden rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-center">
-                <p class="text-red-300 text-sm">Failed to load schedules</p>
-                <button onclick="playlistSchedules.loadSchedules()"
-                        class="text-red-300/60 hover:text-red-300 text-xs mt-2 underline transition duration-150">
-                    Retry
-                </button>
-            </div>
-
-            <!-- Empty -->
-            <div id="schedules-empty" class="hidden rounded-xl bg-white/5 border border-white/10 p-6 text-center">
-                <svg class="w-10 h-10 mx-auto text-white/15 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                <p class="text-white/50 text-sm mb-1">No schedules for this playlist</p>
-                <p class="text-white/30 text-xs">Schedules automate shuffling and raiding on a timer.</p>
-            </div>
-
-            <!-- Schedule List -->
-            <div id="schedules-list" class="hidden space-y-2">
-                <!-- Populated by playlistSchedules.render() -->
-            </div>
-
-            <!-- Manage All Schedules link -->
-            <div class="mt-4 pt-3 border-t border-white/10">
-                <a href="/schedules" class="text-spotify-green hover:text-green-400 text-sm font-medium transition inline-flex items-center gap-1">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    Manage All Schedules
-                </a>
             </div>
         </div>
     </div>
-</div>
 
-<!-- Sidebar Backdrop (mobile overlay) -->
-<div id="sidebar-backdrop"
-     class="fixed inset-0 z-20 bg-black/50 backdrop-blur-sm hidden transition-opacity duration-300 opacity-0 lg:hidden"
-     onclick="workshopSidebar.close()">
-</div>
+    <!-- Tab Content: Schedules -->
+    <div id="htab-content-schedules" class="htab-content hidden" role="tabpanel" aria-labelledby="htab-btn-schedules">
+        <div class="max-w-5xl mx-auto px-4 py-6">
+            <div class="max-w-2xl">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-white font-bold text-lg">Schedules for This Playlist</h3>
+                    <button onclick="playlistSchedules.loadSchedules()"
+                            class="text-white/40 hover:text-white/60 transition duration-150" title="Refresh">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <div id="schedules-loading" class="hidden text-center py-8">
+                    <svg class="w-8 h-8 mx-auto text-white/30 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    <p class="text-white/40 text-sm mt-2">Loading schedules...</p>
+                </div>
+
+                <div id="schedules-error" class="hidden rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-center">
+                    <p class="text-red-300 text-sm">Failed to load schedules</p>
+                    <button onclick="playlistSchedules.loadSchedules()"
+                            class="text-red-300/60 hover:text-red-300 text-xs mt-2 underline transition duration-150">
+                        Retry
+                    </button>
+                </div>
+
+                <div id="schedules-empty" class="hidden rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                    <svg class="w-10 h-10 mx-auto text-white/15 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <p class="text-white/50 text-sm mb-1">No schedules for this playlist</p>
+                    <p class="text-white/30 text-xs">Schedules automate shuffling and raiding on a timer. Create one from the Raids or Rotation tabs.</p>
+                </div>
+
+                <div id="schedules-list" class="hidden space-y-3">
+                    <!-- Populated by playlistSchedules.render() -->
+                </div>
+
+                <div class="mt-6 pt-4 border-t border-white/10">
+                    <a href="/schedules" class="text-spotify-green hover:text-green-400 text-sm font-medium transition inline-flex items-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Manage All Schedules
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab Content: Snapshots -->
+    <div id="htab-content-snapshots" class="htab-content hidden" role="tabpanel" aria-labelledby="htab-btn-snapshots">
+        <div class="max-w-5xl mx-auto px-4 py-6">
+            <div class="max-w-3xl">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-white font-bold text-lg">
+                        Snapshots
+                        <span id="snapshot-count-badge" class="hidden text-white/30 text-sm font-normal"></span>
+                    </h3>
+                    <button id="snapshot-take-btn"
+                            onclick="openManualSnapshotDialog()"
+                            class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-sm font-semibold transition duration-150 flex items-center gap-2"
+                            title="Take a snapshot of the current playlist state">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                        Take Snapshot
+                    </button>
+                </div>
+
+                <!-- Manual Snapshot Form -->
+                <div id="snapshot-create-form" class="hidden mb-4">
+                    <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                        <label class="block text-white/60 text-xs font-semibold mb-1.5">Description (optional)</label>
+                        <input id="snapshot-description-input"
+                               type="text"
+                               maxlength="500"
+                               placeholder="e.g. Before major cleanup"
+                               class="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/20 transition">
+                        <div class="flex gap-2 mt-3">
+                            <button onclick="confirmManualSnapshot()"
+                                    class="flex-1 px-3 py-1.5 rounded-lg bg-green-600/80 hover:bg-green-600 text-white text-xs font-semibold transition duration-150">
+                                Save Snapshot
+                            </button>
+                            <button onclick="cancelManualSnapshot()"
+                                    class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-xs font-semibold transition duration-150">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Loading State -->
+                <div id="snapshot-loading" class="hidden">
+                    <div class="flex items-center justify-center py-8">
+                        <svg class="w-6 h-6 text-white/30 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span class="ml-2 text-white/40 text-sm">Loading snapshots...</span>
+                    </div>
+                </div>
+
+                <!-- Error State -->
+                <div id="snapshot-error" class="hidden">
+                    <div class="rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-center">
+                        <p id="snapshot-error-message" class="text-red-400/80 text-sm mb-2">Failed to load snapshots</p>
+                        <button onclick="loadSnapshots()"
+                                class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/60 text-xs font-semibold transition duration-150">
+                            Try Again
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Empty State -->
+                <div id="snapshot-empty" class="hidden">
+                    <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                        <svg class="w-10 h-10 mx-auto text-white/15 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                        <p class="text-white/50 text-sm mb-1">No snapshots yet</p>
+                        <p class="text-white/30 text-xs">Snapshots are created automatically before shuffles, raids, and commits. You can also take one manually.</p>
+                    </div>
+                </div>
+
+                <!-- Snapshot Timeline -->
+                <div id="snapshot-timeline" class="hidden">
+                    <div id="snapshot-list" class="space-y-2 snapshot-timeline-container"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- Sidebar removed in Phase 05 — content moved to horizontal tabs above -->
+
 
 <!-- Snapshot Restore Confirmation Modal -->
 <div id="snapshot-restore-modal" class="fixed inset-0 z-50 hidden">
@@ -1249,6 +1168,98 @@ const workshopState = {
     archivePair: null,
     archiveTracks: [],
     stagedRestorations: [],
+};
+
+// =============================================================================
+// Workshop Horizontal Tabs
+// =============================================================================
+
+const workshopTabs = {
+    activeTab: 'playlist',
+    tabs: ['playlist', 'raids', 'rotation', 'schedules', 'snapshots'],
+
+    switchTab(tabName) {
+        if (!this.tabs.includes(tabName)) return;
+
+        // Deactivate all
+        this.tabs.forEach(function(t) {
+            var btn = document.getElementById('htab-btn-' + t);
+            var panel = document.getElementById('htab-content-' + t);
+            if (btn) {
+                btn.classList.remove('border-spotify-green', 'text-white');
+                btn.classList.add('border-transparent', 'text-white/60');
+                btn.setAttribute('aria-selected', 'false');
+            }
+            if (panel) panel.classList.add('hidden');
+        });
+
+        // Activate selected
+        var btn = document.getElementById('htab-btn-' + tabName);
+        var panel = document.getElementById('htab-content-' + tabName);
+        if (btn) {
+            btn.classList.add('border-spotify-green', 'text-white');
+            btn.classList.remove('border-transparent', 'text-white/60');
+            btn.setAttribute('aria-selected', 'true');
+        }
+        if (panel) panel.classList.remove('hidden');
+
+        this.activeTab = tabName;
+        this._onTabActivated(tabName);
+    },
+
+    _onTabActivated(tabName) {
+        if (tabName === 'raids') {
+            if (typeof raidPanel !== 'undefined' && !raidPanel.loaded && !raidPanel.isLoading) {
+                raidPanel.loadStatus();
+            }
+            if (typeof loadPendingRaids === 'function') {
+                loadPendingRaids();
+            }
+        }
+        if (tabName === 'rotation') {
+            if (typeof archiveState !== 'undefined' && !archiveState.isLoaded) {
+                if (typeof inlineBackup !== 'undefined' && inlineBackup.loaded) {
+                    archiveState.isLoaded = true;
+                    if (inlineBackup.pair) {
+                        workshopState.archivePair = inlineBackup.pair;
+                    }
+                    if (typeof renderArchivePanel === 'function') renderArchivePanel();
+                    if (typeof loadArchiveTracks === 'function') loadArchiveTracks();
+                    if (typeof loadRotationConfig === 'function') loadRotationConfig();
+                    var loadingEl = document.getElementById('archive-loading');
+                    if (loadingEl) loadingEl.classList.add('hidden');
+                } else if (typeof loadArchivePairInfo === 'function') {
+                    loadArchivePairInfo();
+                }
+            }
+            if (typeof loadArchiveTracksForInbox === 'function') {
+                loadArchiveTracksForInbox();
+            }
+        }
+        if (tabName === 'schedules') {
+            if (typeof playlistSchedules !== 'undefined' && !playlistSchedules.loaded && !playlistSchedules.isLoading) {
+                playlistSchedules.loadSchedules();
+            }
+        }
+        if (tabName === 'snapshots') {
+            if (typeof snapshotState !== 'undefined' && !snapshotState.isLoaded) {
+                if (typeof loadSnapshots === 'function') loadSnapshots();
+            }
+        }
+    },
+
+    init() {
+        // Check query params for deep-link, otherwise always default to Playlist
+        var params = new URLSearchParams(window.location.search);
+        var setup = params.get('setup');
+        if (setup === 'raids') {
+            this.switchTab('raids');
+        } else if (setup === 'archive' || setup === 'rotation') {
+            this.switchTab('rotation');
+        } else {
+            this.switchTab('playlist');
+        }
+    }
 };
 
 // =============================================================================
@@ -2397,51 +2408,16 @@ document.addEventListener('click', function(e) {
 });
 
 // =============================================================================
-// Track Inbox Toggle + Tab Switching
+// Search Section Toggle (Playlist tab)
 // =============================================================================
-function toggleTrackInbox() {
-    var body = document.getElementById('inbox-body');
-    var chevron = document.getElementById('inbox-chevron');
-    var toggle = document.getElementById('inbox-toggle');
+function toggleSearchSection() {
+    var body = document.getElementById('search-body');
+    var chevron = document.getElementById('search-chevron');
+    var btn = document.getElementById('search-toggle-btn');
     var isHidden = body.classList.contains('hidden');
     body.classList.toggle('hidden');
     chevron.classList.toggle('rotate-180', isHidden);
-    toggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
-
-    // Default to raids tab on first open
-    if (isHidden) {
-        var activeTab = document.querySelector('#inbox-body [id^="inbox-tab-"].border-spotify-green');
-        if (!activeTab) switchInboxTab('raids');
-    }
-}
-
-function switchInboxTab(tabName) {
-    // Deactivate all tabs
-    ['raids', 'archived', 'search'].forEach(function(t) {
-        var tabBtn = document.getElementById('inbox-tab-' + t);
-        var content = document.getElementById('inbox-' + t + '-content');
-        if (tabBtn) {
-            tabBtn.classList.remove('border-spotify-green', 'text-white');
-            tabBtn.classList.add('border-transparent', 'text-white/70');
-        }
-        if (content) content.classList.add('hidden');
-    });
-
-    // Activate selected
-    var activeBtn = document.getElementById('inbox-tab-' + tabName);
-    var activeContent = document.getElementById('inbox-' + tabName + '-content');
-    if (activeBtn) {
-        activeBtn.classList.add('border-spotify-green', 'text-white');
-        activeBtn.classList.remove('border-transparent', 'text-white/70');
-    }
-    if (activeContent) activeContent.classList.remove('hidden');
-
-    // Lazy-load on first open
-    if (tabName === 'raids') {
-        loadPendingRaids();
-    } else if (tabName === 'archived') {
-        loadArchiveTracksForInbox();
-    }
+    btn.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
 }
 
 // =============================================================================
@@ -2644,15 +2620,29 @@ function dismissAllPendingRaids() {
 
 function updatePendingBadge() {
     var count = pendingRaidsState.tracks.length;
-    var badge = document.getElementById('inbox-pending-badge');
     var raidCountEl = document.getElementById('inbox-raid-count');
     if (count > 0) {
-        badge.textContent = count;
-        badge.classList.remove('hidden');
         if (raidCountEl) raidCountEl.textContent = '(' + count + ')';
     } else {
-        badge.classList.add('hidden');
         if (raidCountEl) raidCountEl.textContent = '';
+    }
+    // Update Raids tab badge
+    updateTabBadge('raids', count, 'bg-yellow-500/80');
+}
+
+function updateTabBadge(tabName, count, colorClass) {
+    var btn = document.getElementById('htab-btn-' + tabName);
+    if (!btn) return;
+    var badge = btn.querySelector('.htab-badge');
+    if (count > 0) {
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'htab-badge ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-semibold ' + colorClass;
+            btn.appendChild(badge);
+        }
+        badge.textContent = count;
+    } else if (badge) {
+        badge.remove();
     }
 }
 
@@ -3231,8 +3221,8 @@ var inlineSnapshots = {
     },
 
     takeSnapshot: function() {
-        // Open snapshot create form in sidebar
-        workshopSidebar.open('snapshots');
+        // Switch to snapshots tab and open create form
+        workshopTabs.switchTab('snapshots');
         setTimeout(function() {
             if (typeof openManualSnapshotDialog === 'function') {
                 openManualSnapshotDialog();
@@ -3259,185 +3249,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
 // =============================================================================
-// Workshop Powertools Sidebar
-// Self-contained namespace -- does NOT modify any existing workshopState,
-// SortableJS, or search functionality.
+// Workshop Sidebar (removed — content moved to horizontal tabs)
+// workshopSidebar namespace removed in Phase 05.
 // =============================================================================
 
-const workshopSidebar = {
-    isOpen: false,
-    activeTab: null,
-    _animating: false,
-
-    /** Safely read from localStorage (handles disabled/full storage). */
-    _getStorage(key) {
-        try { return localStorage.getItem(key); } catch (e) { return null; }
-    },
-
-    /** Safely write to localStorage (handles disabled/full storage). */
-    _setStorage(key, value) {
-        try { localStorage.setItem(key, value); } catch (e) { /* silent */ }
-    },
-
-    /** Initialize sidebar on page load. */
-    init() {
-        // Check for deep-link query params (e.g., ?setup=raids or ?setup=archive)
-        const params = new URLSearchParams(window.location.search);
-        const setupTab = params.get('setup');
-
-        if (setupTab && ['raids', 'archive'].includes(setupTab)) {
-            this.open(setupTab, false);
-        } else {
-            // Restore collapsed/open state from localStorage
-            const savedState = this._getStorage('shuffify_sidebar_open');
-            const savedTab = this._getStorage('shuffify_sidebar_tab');
-
-            if (savedState === 'true') {
-                this.open(savedTab || 'snapshots', false);
-            }
-        }
-
-        // Close sidebar on Escape key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && this.isOpen) {
-                this.close();
-            }
-        });
-    },
-
-    /** Toggle sidebar open/closed. */
-    toggle() {
-        if (this._animating) return;
-        if (this.isOpen) {
-            this.close();
-        } else {
-            this.open(this.activeTab || 'snapshots');
-        }
-    },
-
-    /**
-     * Open the sidebar, optionally selecting a tab.
-     * @param {string} tabName - Tab to activate (snapshots|archive|raids|schedules)
-     * @param {boolean} animate - Whether to animate the transition (default true)
-     */
-    open(tabName, animate) {
-        if (typeof animate === 'undefined') animate = true;
-        const panel = document.getElementById('sidebar-panel');
-        const toggleBtn = document.getElementById('sidebar-toggle-btn');
-        const backdrop = document.getElementById('sidebar-backdrop');
-
-        if (animate) {
-            this._animating = true;
-            setTimeout(() => { this._animating = false; }, 300);
-        }
-
-        // Show panel
-        panel.classList.remove('translate-x-full');
-        panel.setAttribute('aria-hidden', 'false');
-
-        // Hide toggle button
-        toggleBtn.classList.add('opacity-0', 'pointer-events-none');
-        toggleBtn.setAttribute('aria-expanded', 'true');
-
-        // Show backdrop on mobile
-        backdrop.classList.remove('hidden');
-        // Force reflow before adding opacity for transition
-        void backdrop.offsetWidth;
-        backdrop.classList.add('opacity-100');
-        backdrop.classList.remove('opacity-0');
-
-        this.isOpen = true;
-        this.switchTab(tabName || 'snapshots');
-
-        // Persist state
-        this._setStorage('shuffify_sidebar_open', 'true');
-    },
-
-    /** Close the sidebar. */
-    close() {
-        if (this._animating) return;
-        this._animating = true;
-
-        const panel = document.getElementById('sidebar-panel');
-        const toggleBtn = document.getElementById('sidebar-toggle-btn');
-        const backdrop = document.getElementById('sidebar-backdrop');
-
-        // Hide panel
-        panel.classList.add('translate-x-full');
-        panel.setAttribute('aria-hidden', 'true');
-
-        // Show toggle button
-        toggleBtn.classList.remove('opacity-0', 'pointer-events-none');
-        toggleBtn.setAttribute('aria-expanded', 'false');
-
-        // Hide backdrop
-        backdrop.classList.remove('opacity-100');
-        backdrop.classList.add('opacity-0');
-        setTimeout(() => {
-            backdrop.classList.add('hidden');
-        }, 300);
-
-        this.isOpen = false;
-
-        // Persist state
-        this._setStorage('shuffify_sidebar_open', 'false');
-
-        setTimeout(() => { this._animating = false; }, 300);
-    },
-
-    /**
-     * Switch to a specific tab.
-     * @param {string} tabName - Tab to activate
-     */
-    switchTab(tabName) {
-        // Deactivate all tabs
-        document.querySelectorAll('.sidebar-tab-btn').forEach(btn => {
-            btn.classList.remove('bg-white/20', 'text-white');
-            btn.classList.add('text-white/40');
-            btn.setAttribute('aria-selected', 'false');
-        });
-
-        // Hide all tab content
-        document.querySelectorAll('.sidebar-tab-content').forEach(panel => {
-            panel.classList.add('hidden');
-        });
-
-        // Activate selected tab button
-        const activeBtn = document.querySelector('.sidebar-tab-btn[data-tab="' + tabName + '"]');
-        if (activeBtn) {
-            activeBtn.classList.add('bg-white/20', 'text-white');
-            activeBtn.classList.remove('text-white/40');
-            activeBtn.setAttribute('aria-selected', 'true');
-        }
-
-        // Show selected tab content
-        const activePanel = document.getElementById('sidebar-tab-' + tabName);
-        if (activePanel) {
-            activePanel.classList.remove('hidden');
-        }
-
-        this.activeTab = tabName;
-        this._setStorage('shuffify_sidebar_tab', tabName);
-
-        // Fire tab activation hooks for lazy-loading (Phases 2-5)
-        if (tabName === 'snapshots' && typeof onSnapshotsTabActivated === 'function') {
-            onSnapshotsTabActivated();
-        }
-        if (tabName === 'archive' && typeof onArchiveTabActivated === 'function') {
-            onArchiveTabActivated();
-        }
-        if (tabName === 'raids' && typeof onRaidsTabActivated === 'function') {
-            onRaidsTabActivated();
-        }
-        if (tabName === 'schedules' && typeof onSchedulesTabActivated === 'function') {
-            onSchedulesTabActivated();
-        }
-    },
-};
-
-// Initialize sidebar after DOM is ready
+// Initialize horizontal tabs after DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    workshopSidebar.init();
+    workshopTabs.init();
 });
 </script>
 
@@ -5941,28 +5759,6 @@ document.addEventListener('click', function(e) {
 .snapshot-timeline-container { max-height: calc(100vh - 140px); overflow-y: auto; padding-bottom: 8px; }
 .snapshot-timeline-container { padding-bottom: 12px; }
 
-/* Workshop Powertools Sidebar */
-.sidebar-scrollbar::-webkit-scrollbar { width: 6px; }
-.sidebar-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 6px; }
-.sidebar-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.sidebar-scrollbar { scrollbar-color: rgba(255, 255, 255, 0.15) transparent; scrollbar-width: thin; }
-
-#sidebar-toggle-btn {
-    transition: opacity 0.2s ease, background-color 0.2s ease;
-}
-
-/* On mobile/tablet, sidebar overlays the full viewport width area */
-@media (max-width: 1023px) {
-    #sidebar-panel {
-        box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
-    }
-}
-
-/* On desktop (lg+), sidebar sits alongside content without backdrop */
-@media (min-width: 1024px) {
-    #sidebar-panel {
-        box-shadow: -4px 0 16px rgba(0, 0, 0, 0.3);
-    }
-}
+/* Sidebar CSS removed — content moved to horizontal tabs */
 </style>
 {% endblock %}

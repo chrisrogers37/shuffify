@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Workshop Page Restructure** - Replaced sidebar ("Powertools") and Track Inbox with horizontal tabs
+  - 5 tabs: Playlist (default), Raids, Rotation, Schedules, Snapshots
+  - Raid config + pending tracks now in Raids tab with two-column layout
+  - Archive/Rotation config + archive tracks now in Rotation tab
+  - Schedules and Snapshots promoted from sidebar to full-width tabs
+  - Search moved to collapsible section in Playlist tab
+  - Tab badges show pending raid counts
+  - Supports `?setup=raids` and `?setup=archive` deep-linking
+
+### Fixed
+- **Archive Tracks Not Displaying** - Archive tracks in Track Inbox never loaded because `workshopState.archivePair` was only set when sidebar Archive tab was activated; now set on Rotation tab activation
+
+### Removed
+- **Powertools Sidebar** - Slide-out sidebar replaced by horizontal tabs
+- **Track Inbox** - Collapsible section replaced by dedicated tabs for raids/archive and search section
+
 ## [3.0.0] - 2026-03-31
 
 ### Fixed
