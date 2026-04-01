@@ -987,17 +987,141 @@
         </div>
     </div>
 
-    <!-- Tab Content: Schedules (placeholder — populated in Phase 04) -->
+    <!-- Tab Content: Schedules -->
     <div id="htab-content-schedules" class="htab-content hidden" role="tabpanel" aria-labelledby="htab-btn-schedules">
-        <div class="max-w-5xl mx-auto px-4 py-8 text-center">
-            <p class="text-white/40">Schedules — coming soon</p>
+        <div class="max-w-5xl mx-auto px-4 py-6">
+            <div class="max-w-2xl">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-white font-bold text-lg">Schedules for This Playlist</h3>
+                    <button onclick="playlistSchedules.loadSchedules()"
+                            class="text-white/40 hover:text-white/60 transition duration-150" title="Refresh">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <div id="schedules-loading" class="hidden text-center py-8">
+                    <svg class="w-8 h-8 mx-auto text-white/30 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    <p class="text-white/40 text-sm mt-2">Loading schedules...</p>
+                </div>
+
+                <div id="schedules-error" class="hidden rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-center">
+                    <p class="text-red-300 text-sm">Failed to load schedules</p>
+                    <button onclick="playlistSchedules.loadSchedules()"
+                            class="text-red-300/60 hover:text-red-300 text-xs mt-2 underline transition duration-150">
+                        Retry
+                    </button>
+                </div>
+
+                <div id="schedules-empty" class="hidden rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                    <svg class="w-10 h-10 mx-auto text-white/15 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <p class="text-white/50 text-sm mb-1">No schedules for this playlist</p>
+                    <p class="text-white/30 text-xs">Schedules automate shuffling and raiding on a timer. Create one from the Raids or Rotation tabs.</p>
+                </div>
+
+                <div id="schedules-list" class="hidden space-y-3">
+                    <!-- Populated by playlistSchedules.render() -->
+                </div>
+
+                <div class="mt-6 pt-4 border-t border-white/10">
+                    <a href="/schedules" class="text-spotify-green hover:text-green-400 text-sm font-medium transition inline-flex items-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Manage All Schedules
+                    </a>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- Tab Content: Snapshots (placeholder — populated in Phase 04) -->
+    <!-- Tab Content: Snapshots -->
     <div id="htab-content-snapshots" class="htab-content hidden" role="tabpanel" aria-labelledby="htab-btn-snapshots">
-        <div class="max-w-5xl mx-auto px-4 py-8 text-center">
-            <p class="text-white/40">Snapshots — coming soon</p>
+        <div class="max-w-5xl mx-auto px-4 py-6">
+            <div class="max-w-3xl">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-white font-bold text-lg">
+                        Snapshots
+                        <span id="snapshot-count-badge" class="hidden text-white/30 text-sm font-normal"></span>
+                    </h3>
+                    <button id="snapshot-take-btn"
+                            onclick="openManualSnapshotDialog()"
+                            class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-sm font-semibold transition duration-150 flex items-center gap-2"
+                            title="Take a snapshot of the current playlist state">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                        Take Snapshot
+                    </button>
+                </div>
+
+                <!-- Manual Snapshot Form -->
+                <div id="snapshot-create-form" class="hidden mb-4">
+                    <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                        <label class="block text-white/60 text-xs font-semibold mb-1.5">Description (optional)</label>
+                        <input id="snapshot-description-input"
+                               type="text"
+                               maxlength="500"
+                               placeholder="e.g. Before major cleanup"
+                               class="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/20 transition">
+                        <div class="flex gap-2 mt-3">
+                            <button onclick="confirmManualSnapshot()"
+                                    class="flex-1 px-3 py-1.5 rounded-lg bg-green-600/80 hover:bg-green-600 text-white text-xs font-semibold transition duration-150">
+                                Save Snapshot
+                            </button>
+                            <button onclick="cancelManualSnapshot()"
+                                    class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-xs font-semibold transition duration-150">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Loading State -->
+                <div id="snapshot-loading" class="hidden">
+                    <div class="flex items-center justify-center py-8">
+                        <svg class="w-6 h-6 text-white/30 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span class="ml-2 text-white/40 text-sm">Loading snapshots...</span>
+                    </div>
+                </div>
+
+                <!-- Error State -->
+                <div id="snapshot-error" class="hidden">
+                    <div class="rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-center">
+                        <p id="snapshot-error-message" class="text-red-400/80 text-sm mb-2">Failed to load snapshots</p>
+                        <button onclick="loadSnapshots()"
+                                class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/60 text-xs font-semibold transition duration-150">
+                            Try Again
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Empty State -->
+                <div id="snapshot-empty" class="hidden">
+                    <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                        <svg class="w-10 h-10 mx-auto text-white/15 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                        <p class="text-white/50 text-sm mb-1">No snapshots yet</p>
+                        <p class="text-white/30 text-xs">Snapshots are created automatically before shuffles, raids, and commits. You can also take one manually.</p>
+                    </div>
+                </div>
+
+                <!-- Snapshot Timeline -->
+                <div id="snapshot-timeline" class="hidden">
+                    <div id="snapshot-list" class="space-y-2 snapshot-timeline-container"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1101,9 +1225,10 @@
 
         <!-- Tab Content: Snapshots -->
         <div id="sidebar-tab-snapshots" class="sidebar-tab-content hidden p-5" role="tabpanel">
-            <!-- Header with Take Snapshot button -->
+            <p class="text-white/40 text-sm text-center py-4">Snapshots have moved to the <button onclick="workshopTabs.switchTab('snapshots')" class="text-spotify-green hover:underline">Snapshots tab</button>.</p>
+            <div class="hidden"><!-- Original sidebar content preserved for Phase 5 cleanup -->
             <div class="flex items-center justify-between mb-3">
-                <h3 class="text-white font-bold text-lg">Snapshots <span id="snapshot-count-badge" class="hidden text-white/30 text-sm font-normal"></span></h3>
+                <h3 class="text-white font-bold text-lg">Snapshots <span class="hidden text-white/30 text-sm font-normal"></span></h3>
                 <button id="snapshot-take-btn"
                         onclick="openManualSnapshotDialog()"
                         class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-xs font-semibold transition duration-150 flex items-center gap-1.5"
@@ -1176,6 +1301,7 @@
             <div id="snapshot-timeline" class="hidden">
                 <div id="snapshot-list" class="space-y-2 snapshot-timeline-container"></div>
             </div>
+            </div><!-- /hidden original sidebar content -->
         </div>
 
         <!-- Tab Content: Archive & Rotation -->
@@ -1630,6 +1756,8 @@
 
         <!-- Tab Content: Schedules (Per-Playlist) -->
         <div id="sidebar-tab-schedules" class="sidebar-tab-content hidden p-5" role="tabpanel">
+            <p class="text-white/40 text-sm text-center py-4">Schedules have moved to the <button onclick="workshopTabs.switchTab('schedules')" class="text-spotify-green hover:underline">Schedules tab</button>.</p>
+            <div class="hidden"><!-- Original sidebar content preserved for Phase 5 cleanup -->
             <div class="flex items-center justify-between mb-3">
                 <h3 class="text-white font-bold text-lg">Schedules</h3>
                 <button onclick="playlistSchedules.loadSchedules()"
@@ -1681,6 +1809,7 @@
                     Manage All Schedules
                 </a>
             </div>
+            </div><!-- /hidden original sidebar content -->
         </div>
     </div>
 </div>
@@ -1872,6 +2001,16 @@ const workshopTabs = {
             }
             if (typeof loadArchiveTracksForInbox === 'function') {
                 loadArchiveTracksForInbox();
+            }
+        }
+        if (tabName === 'schedules') {
+            if (typeof playlistSchedules !== 'undefined' && !playlistSchedules.loaded && !playlistSchedules.isLoading) {
+                playlistSchedules.loadSchedules();
+            }
+        }
+        if (tabName === 'snapshots') {
+            if (typeof snapshotState !== 'undefined' && !snapshotState.isLoaded) {
+                if (typeof loadSnapshots === 'function') loadSnapshots();
             }
         }
     },
