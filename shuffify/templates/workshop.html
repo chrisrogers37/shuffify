@@ -879,7 +879,7 @@
                 </div>
 
                 <!-- Right column: Archive Tracks -->
-                <div>
+                <div id="archive-tracks-section">
                     <div class="flex items-center justify-between mb-3">
                         <h3 class="text-white font-bold text-lg">
                             Archive Tracks
@@ -918,7 +918,7 @@
     <div id="htab-content-schedules" class="htab-content hidden" role="tabpanel" aria-labelledby="htab-btn-schedules">
         <div class="max-w-5xl mx-auto px-4 py-6">
           {% call glass_card() %}
-            <div class="max-w-3xl">
+            <div>
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-white font-bold text-lg">Schedules for This Playlist</h3>
                     <button onclick="playlistSchedules.loadSchedules()"
@@ -952,7 +952,7 @@
                     <p class="text-white/30 text-xs">Schedules automate shuffling and raiding on a timer. Create one from the Raids or Rotation tabs.</p>
                 </div>
 
-                <div id="schedules-list" class="hidden space-y-3">
+                <div id="schedules-list" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                     <!-- Populated by playlistSchedules.render() -->
                 </div>
 
