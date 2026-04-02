@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/cards.html" import glass_card %}
 
 {% block title %}{% if playlist %}Workshop: {{ playlist.name }}{% else %}Workshop{% endif %} - Shuffify{% endblock %}
 
@@ -410,6 +411,7 @@
     <!-- Tab Content: Raids -->
     <div id="htab-content-raids" class="htab-content hidden" role="tabpanel" aria-labelledby="htab-btn-raids">
         <div class="max-w-5xl mx-auto px-4 py-6">
+          {% call glass_card() %}
 
             <!-- Loading state -->
             <div id="raid-loading" class="hidden text-center py-12">
@@ -450,7 +452,7 @@
                                 <div class="flex items-center justify-between mb-2">
                                     <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Raid Playlist</span>
                                 </div>
-                                <div class="rounded-xl bg-white/5 border border-white/10 p-4 text-center">
+                                <div class="rounded-xl bg-white/10 border border-white/20 p-4 text-center">
                                     <svg class="w-10 h-10 mx-auto text-white/20 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
                                     </svg>
@@ -479,7 +481,7 @@
                             </div>
 
                             <div id="raid-link-paired" class="hidden">
-                                <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                                <div class="rounded-xl bg-white/10 border border-white/20 p-4">
                                     <div class="flex items-center justify-between mb-2">
                                         <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Raid Playlist</span>
                                         <button onclick="raidPanel.unlinkRaidPlaylist()"
@@ -499,7 +501,7 @@
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Add External Source</span>
                             </div>
-                            <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                            <div class="rounded-xl bg-white/10 border border-white/20 p-4">
                                 <div class="flex gap-2">
                                     <input id="raid-url-input" type="text"
                                            placeholder="Paste Spotify playlist URL..."
@@ -521,7 +523,7 @@
                                 <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Watched Sources</span>
                                 <span id="raid-source-count" class="text-white/30 text-xs"></span>
                             </div>
-                            <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                            <div class="rounded-xl bg-white/10 border border-white/20 p-4">
                                 <div id="raid-sources-list" class="space-y-1 max-h-[30vh] overflow-y-auto workshop-scrollbar">
                                     <!-- Populated by raidPanel.renderSources() -->
                                 </div>
@@ -537,7 +539,7 @@
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Drip to Playlist</span>
                             </div>
-                            <div class="rounded-xl bg-white/5 border border-white/10 p-4 space-y-3">
+                            <div class="rounded-xl bg-white/10 border border-white/20 p-4 space-y-3">
                                 <p class="text-white/40 text-xs">How many songs from the raid playlist should be added to your target playlist each run.</p>
                                 <div class="flex items-center justify-between">
                                     <div class="flex items-center gap-2">
@@ -567,7 +569,7 @@
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Schedule</span>
                             </div>
-                            <div id="raid-no-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
+                            <div id="raid-no-schedule" class="hidden rounded-xl bg-white/10 border border-white/20 p-4">
                                 <p class="text-white/40 text-xs mb-3">Automatically raid sources and drip tracks on a schedule.</p>
                                 <div class="space-y-2">
                                     <div>
@@ -601,7 +603,7 @@
                                     </button>
                                 </div>
                             </div>
-                            <div id="raid-schedule-info" class="hidden rounded-xl bg-white/5 border border-white/10 p-4 space-y-2">
+                            <div id="raid-schedule-info" class="hidden rounded-xl bg-white/10 border border-white/20 p-4 space-y-2">
                                 <div class="flex items-center justify-between">
                                     <div class="flex items-center gap-2">
                                         <span id="raid-schedule-type-badge" class="px-1.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-300"></span>
@@ -723,12 +725,14 @@
 
                 </div>
             </div>
+          {% endcall %}
         </div>
     </div>
 
     <!-- Tab Content: Rotation -->
     <div id="htab-content-rotation" class="htab-content hidden" role="tabpanel" aria-labelledby="htab-btn-rotation">
         <div class="max-w-5xl mx-auto px-4 py-6">
+          {% call glass_card() %}
 
             <!-- Loading state -->
             <div id="archive-loading" class="hidden text-center py-12">
@@ -758,7 +762,7 @@
 
                     <!-- No pair state -->
                     <div id="archive-no-pair" class="hidden">
-                        <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                        <div class="rounded-xl bg-white/10 border border-white/20 p-6 text-center">
                             <svg class="w-12 h-12 mx-auto text-white/20 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
                             </svg>
@@ -786,7 +790,7 @@
 
                     <!-- Paired state -->
                     <div id="archive-paired" class="hidden">
-                        <div class="rounded-xl bg-white/5 border border-white/10 p-4 mb-4">
+                        <div class="rounded-xl bg-white/10 border border-white/20 p-4 mb-4">
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Archive Playlist</span>
                                 <button onclick="deleteArchivePair()"
@@ -810,7 +814,7 @@
                     <!-- Rotation Schedule Section -->
                     <div id="rotation-section" class="hidden mb-4">
                         <span class="text-white/60 text-xs uppercase tracking-wide font-semibold block mb-2">Rotation Schedule</span>
-                        <div id="rotation-no-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
+                        <div id="rotation-no-schedule" class="hidden rounded-xl bg-white/10 border border-white/20 p-4">
                             <p class="text-white/40 text-xs mb-3">Exchange tracks between this playlist and its archive on a schedule.</p>
                             <p id="rotation-auto-create-hint" class="hidden text-white/30 text-xs mb-3 italic">An archive playlist will be created automatically when you enable rotation.</p>
                             <div class="space-y-2">
@@ -847,7 +851,7 @@
                                 </button>
                             </div>
                         </div>
-                        <div id="rotation-has-schedule" class="hidden rounded-xl bg-white/5 border border-white/10 p-4">
+                        <div id="rotation-has-schedule" class="hidden rounded-xl bg-white/10 border border-white/20 p-4">
                             <div class="mb-2">
                                 <div class="flex items-center justify-between">
                                     <span id="rotation-schedule-mode" class="text-white text-sm font-medium"></span>
@@ -906,13 +910,15 @@
                 </div>
 
             </div>
+          {% endcall %}
         </div>
     </div>
 
     <!-- Tab Content: Schedules -->
     <div id="htab-content-schedules" class="htab-content hidden" role="tabpanel" aria-labelledby="htab-btn-schedules">
         <div class="max-w-5xl mx-auto px-4 py-6">
-            <div class="max-w-2xl">
+          {% call glass_card() %}
+            <div class="max-w-3xl">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-white font-bold text-lg">Schedules for This Playlist</h3>
                     <button onclick="playlistSchedules.loadSchedules()"
@@ -938,7 +944,7 @@
                     </button>
                 </div>
 
-                <div id="schedules-empty" class="hidden rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                <div id="schedules-empty" class="hidden rounded-xl bg-white/10 border border-white/20 p-6 text-center">
                     <svg class="w-10 h-10 mx-auto text-white/15 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
@@ -959,13 +965,15 @@
                     </a>
                 </div>
             </div>
+          {% endcall %}
         </div>
     </div>
 
     <!-- Tab Content: Snapshots -->
     <div id="htab-content-snapshots" class="htab-content hidden" role="tabpanel" aria-labelledby="htab-btn-snapshots">
         <div class="max-w-5xl mx-auto px-4 py-6">
-            <div class="max-w-3xl">
+          {% call glass_card() %}
+            <div>
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-white font-bold text-lg">
                         Snapshots
@@ -985,7 +993,7 @@
 
                 <!-- Manual Snapshot Form -->
                 <div id="snapshot-create-form" class="hidden mb-4">
-                    <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+                    <div class="rounded-xl bg-white/10 border border-white/20 p-4">
                         <label class="block text-white/60 text-xs font-semibold mb-1.5">Description (optional)</label>
                         <input id="snapshot-description-input"
                                type="text"
@@ -1029,7 +1037,7 @@
 
                 <!-- Empty State -->
                 <div id="snapshot-empty" class="hidden">
-                    <div class="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+                    <div class="rounded-xl bg-white/10 border border-white/20 p-6 text-center">
                         <svg class="w-10 h-10 mx-auto text-white/15 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
@@ -1044,6 +1052,7 @@
                     <div id="snapshot-list" class="space-y-2 snapshot-timeline-container"></div>
                 </div>
             </div>
+          {% endcall %}
         </div>
     </div>
 
@@ -3395,7 +3404,7 @@ function renderSnapshotTimeline() {
             lastGroup = group;
         }
 
-        html += '<div class="snapshot-card rounded-lg bg-white/5 border border-white/10 p-3 hover:bg-white/8 transition duration-150">'
+        html += '<div class="snapshot-card rounded-lg bg-white/10 border border-white/20 p-3 hover:bg-white/15 transition duration-150">'
             + '<div class="flex items-start justify-between gap-2">'
             + '<div class="min-w-0 flex-1">'
             + '<div class="flex items-center gap-2 mb-1">'
@@ -5485,7 +5494,7 @@ var playlistSchedules = {
             }
 
             var card = document.createElement('div');
-            card.className = 'rounded-xl bg-white/5 border border-white/10 p-3 transition-all duration-200';
+            card.className = 'rounded-xl bg-white/10 border border-white/20 p-3 transition-all duration-200';
             card.id = 'sched-card-' + sched.id;
             card.innerHTML =
                 '<div class="flex items-center justify-between mb-1">' +
@@ -5599,7 +5608,7 @@ function renderRotationPanel(data) {
 
     // Archive Pair Status
     if (data.has_pair && data.pair) {
-        html += '<div class="rounded-xl bg-white/5 border border-white/10 p-4 mb-3">';
+        html += '<div class="rounded-xl bg-white/10 border border-white/20 p-4 mb-3">';
         html += '<div class="flex items-center gap-2 mb-2">';
         html += '<span class="w-2 h-2 rounded-full bg-green-400"></span>';
         html += '<span class="text-white/80 text-sm font-semibold">Archive Paired</span>';
@@ -5607,7 +5616,7 @@ function renderRotationPanel(data) {
         html += '<p class="text-white/50 text-xs">Archive: ' + (data.pair.archive_playlist_name || data.pair.archive_playlist_id) + '</p>';
         html += '</div>';
     } else {
-        html += '<div class="rounded-xl bg-white/5 border border-white/10 p-4 mb-3">';
+        html += '<div class="rounded-xl bg-white/10 border border-white/20 p-4 mb-3">';
         html += '<div class="flex items-center gap-2 mb-2">';
         html += '<span class="w-2 h-2 rounded-full bg-yellow-400"></span>';
         html += '<span class="text-white/60 text-sm font-semibold">No Archive Pair</span>';
@@ -5624,7 +5633,7 @@ function renderRotationPanel(data) {
         const count = params.rotation_count || 5;
         const freq = (sched.schedule_value || 'daily').replace(/_/g, ' ');
 
-        html += '<div class="rounded-xl bg-white/5 border border-white/10 p-4 mb-3">';
+        html += '<div class="rounded-xl bg-white/10 border border-white/20 p-4 mb-3">';
         html += '<div class="flex items-center justify-between mb-2">';
         html += '<span class="text-white/80 text-sm font-semibold">Active Rotation</span>';
         if (sched.is_enabled) {
@@ -5650,7 +5659,7 @@ function renderRotationPanel(data) {
         html += '</div>';
         html += '</div>';
     } else if (data.has_pair) {
-        html += '<div class="rounded-xl bg-white/5 border border-white/10 p-4 mb-3 text-center">';
+        html += '<div class="rounded-xl bg-white/10 border border-white/20 p-4 mb-3 text-center">';
         html += '<p class="text-white/50 text-sm mb-2">No rotation schedule configured.</p>';
         html += '<a href="/schedules" class="inline-block px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition border border-white/20">';
         html += 'Set Up Rotation</a>';

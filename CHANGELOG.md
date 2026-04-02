@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Workshop Tab Contrast Improvement** - Added glass-card containers to Raids, Rotation, Schedules, and Snapshots tabs for better visual contrast matching the Playlist tab
+  - Inner cards upgraded from `bg-white/5` to `bg-white/10` with stronger borders
+  - Snapshots tab widened to use full available horizontal space
+  - Schedules tab widened from `max-w-2xl` to `max-w-3xl`
 - **Workshop Page Restructure** - Replaced sidebar ("Powertools") and Track Inbox with horizontal tabs
   - 5 tabs: Playlist (default), Raids, Rotation, Schedules, Snapshots
   - Raid config + pending tracks now in Raids tab with two-column layout
