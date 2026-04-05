@@ -229,4 +229,4 @@ When adding new files to `.claude/`:
 
 See `CLAUDE.md` for comprehensive project documentation, or ask the team.
 
-Last updated: 2026-01-26
+Last updated: 2026-04-05

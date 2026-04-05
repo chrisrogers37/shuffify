@@ -22,14 +22,14 @@ Shuffify is a web application that provides advanced playlist management for Spo
 ```
 ┌─────────────────────────────────────┐
 │  Presentation Layer                 │
-│  • routes/      - Flask routes (8 modules) │
+│  • routes/      - Flask routes (12 modules) │
 │  • templates/   - Jinja2 HTML     │
 │  • static/      - CSS, JS          │
 │  • schemas/     - Pydantic schemas │
 └───────────────┬─────────────────────┘
                 │
 ┌───────────────▼─────────────────────┐
-│  Services Layer (15 services)       │
+│  Services Layer (20 services)       │
 │  • auth_service.py    - OAuth flow │
 │  • playlist_service.py - Playlists │
 │  • shuffle_service.py  - Shuffling │
@@ -45,11 +45,16 @@ Shuffify is a web application that provides advanced playlist management for Spo
 │  • login_history_service - Logins  │
 │  • playlist_snapshot_service       │
 │  • user_settings_service - Prefs   │
+│  • playlist_pair_service - Archives│
+│  • raid_sync_service   - Raid sync │
+│  • playlist_preference_service     │
+│  • pending_raid_service - Pending  │
+│  • raid_link_service   - Links     │
 └───────────────┬─────────────────────┘
                 │
 ┌───────────────▼─────────────────────┐
 │  Business Logic Layer               │
-│  • shuffle_algorithms/ - 7 algos  │
+│  • shuffle_algorithms/ - 8 algos  │
 │  • spotify/     - Modular API      │
 │  • models/     - Data + DB models  │
 └───────────────┬─────────────────────┘
@@ -73,9 +78,9 @@ Shuffify is a web application that provides advanced playlist management for Spo
 |-----------|-----------|
 | **Backend** | Flask 3.1.x (Python 3.12+) |
 | **Frontend** | Tailwind CSS, vanilla JavaScript |
-| **API Client** | spotipy (Spotify API wrapper) |
+| **API Client** | SpotifyHTTPClient (direct HTTP) + spotipy (legacy facade) |
 | **Validation** | Pydantic v2 (request/response validation) |
-| **Database** | SQLAlchemy + PostgreSQL/SQLite (9 models) |
+| **Database** | SQLAlchemy + PostgreSQL/SQLite (14 models) |
 | **Scheduler** | APScheduler (background job execution) |
 | **Server** | Gunicorn (prod), Flask dev server (local, port 8000) |
 | **Session** | Flask-Session 0.8.x (Redis-based, filesystem fallback) |
@@ -85,7 +90,7 @@ Shuffify is a web application that provides advanced playlist management for Spo
 
 ---
 
-## Shuffle Algorithms (7 total, 6 visible)
+## Shuffle Algorithms (8 total, 7 visible)
 
 | Algorithm | Description |
 |-----------|-------------|
@@ -97,7 +102,9 @@ Shuffify is a web application that provides advanced playlist management for Spo
 | **AlbumSequenceShuffle** | Keep album tracks together, shuffle albums |
 | **TempoGradientShuffle** | Sort by BPM for DJ-style transitions *(hidden — needs Audio Features API)* |
 
-All algorithms inherit from `ShuffleAlgorithm` base class and auto-register via registry pattern.
+| **NewestFirstShuffle** | Sort by date added (newest first) with jitter |
+
+All algorithms implement the `ShuffleAlgorithm` protocol and are explicitly registered in `registry.py`.
 
 ---
 
@@ -106,13 +113,13 @@ All algorithms inherit from `ShuffleAlgorithm` base class and auto-register via 
 | File | Purpose |
 |------|---------|
 | `shuffify/__init__.py` | Flask app factory, Redis/DB/Scheduler init |
-| `shuffify/routes/` | 8 feature-based route modules (core, playlists, shuffle, workshop, upstream_sources, schedules, settings, snapshots) |
-| `shuffify/services/` | 15 service modules |
-| `shuffify/schemas/` | 4 Pydantic validation modules (requests, schedule_requests, settings_requests, snapshot_requests) |
-| `shuffify/spotify/` | Modular Spotify client (credentials, auth, api, cache, client, exceptions, url_parser) |
+| `shuffify/routes/` | 12 feature-based route modules (core, playlists, shuffle, workshop, upstream_sources, schedules, settings, snapshots, playlist_pairs, raid_panel, playlist_preferences, activity) |
+| `shuffify/services/` | 20 service modules |
+| `shuffify/schemas/` | 9 Pydantic validation modules (requests, schedule_requests, settings_requests, snapshot_requests, playlist_pair_requests, raid_requests, raid_link_requests, pending_raid_requests, playlist_preference_requests) |
+| `shuffify/spotify/` | Modular Spotify client (http_client, api, cache, auth, credentials, client, error_handling, exceptions, url_parser) |
 | `shuffify/shuffle_algorithms/registry.py` | Algorithm registration |
 | `shuffify/models/playlist.py` | Playlist data model |
-| `shuffify/models/db.py` | SQLAlchemy models (User, UserSettings, WorkshopSession, UpstreamSource, Schedule, JobExecution, LoginHistory, PlaylistSnapshot, ActivityLog) |
+| `shuffify/models/db.py` | SQLAlchemy models (14 models — User, UserSettings, WorkshopSession, UpstreamSource, Schedule, JobExecution, LoginHistory, PlaylistSnapshot, ActivityLog, PlaylistPair, RaidPlaylistLink, PlaylistPreference, PendingRaidTrack, ScrapedPlaylistCache) |
 | `shuffify/error_handlers.py` | Global exception handlers |
 | `config.py` | Configuration (dev/prod) with Redis/DB/Scheduler settings |
 
@@ -161,19 +168,20 @@ All algorithms inherit from `ShuffleAlgorithm` base class and auto-register via 
 - Multi-level undo system (StateService)
 - Docker containerization with health checks
 - Flask 3.x upgrade (3.1.x)
-- 15 services (auth, playlist, shuffle, state, token, scheduler, job_executor, user, workshop_session, upstream_source, activity_log, dashboard, login_history, playlist_snapshot, user_settings)
-- Pydantic validation layer (4 schema modules)
+- 20 services (auth, playlist, shuffle, state, token, scheduler, job_executor, user, workshop_session, upstream_source, activity_log, dashboard, login_history, playlist_snapshot, user_settings, playlist_pair, raid_sync, playlist_preference, pending_raid, raid_link)
+- Pydantic validation layer (9 schema modules)
 - Modular Spotify client (credentials, auth, api, cache, client, exceptions, url_parser)
 - Retry logic with exponential backoff
 - Redis-based sessions and API response caching
-- SQLAlchemy database (9 models — see Key Files)
+- SQLAlchemy database (14 models — see Key Files)
 - APScheduler for background job execution
 - Fernet token encryption for stored refresh tokens
 - Playlist Workshop (track management, merging, raiding)
-- Route modularization (8 feature-based route modules)
+- Route modularization (12 feature-based route modules)
 - PostgreSQL support (production via Neon) with Alembic migrations
 - User persistence (login tracking, settings, snapshots, activity log, dashboard)
-- 953 tests, all passing
+- Raid system (pending raids, raid links, drip controls, public scraper pathway)
+- 1714 tests, all passing
 
 **Planned:**
 - Live playlist preview

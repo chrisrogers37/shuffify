@@ -17,11 +17,11 @@
 ## Architecture (4-Layer)
 
 ```
-Routes → Services (15) → Business Logic → External APIs
+Routes → Services (20) → Business Logic → External APIs
 ```
 
 **NEVER violate layer boundaries:**
-- Routes call services (auth, playlist, shuffle, state, token, scheduler, job_executor, user, workshop_session, upstream_source, activity_log, dashboard, login_history, playlist_snapshot, user_settings)
+- Routes call services (auth, playlist, shuffle, state, token, scheduler, job_executor, user, workshop_session, upstream_source, activity_log, dashboard, login_history, playlist_snapshot, user_settings, playlist_pair, raid_sync, playlist_preference, pending_raid, raid_link)
 - Services call business logic (algorithms, spotify client, models)
 - Business logic calls external APIs (Spotify Web API, database)
 - Templates only handle presentation
@@ -33,14 +33,14 @@ Routes → Services (15) → Business Logic → External APIs
 | Path | Purpose |
 |------|---------|
 | `shuffify/` | Main application code |
-| `shuffify/services/` | 15 service modules |
-| `shuffify/schemas/` | 4 Pydantic validation modules |
-| `shuffify/shuffle_algorithms/` | 7 shuffle algorithms (6 visible, 1 hidden) |
-| `shuffify/spotify/` | Modular Spotify client (credentials, auth, api, cache) |
+| `shuffify/services/` | 20 service modules |
+| `shuffify/schemas/` | 9 Pydantic validation modules |
+| `shuffify/shuffle_algorithms/` | 8 shuffle algorithms (7 visible, 1 hidden) |
+| `shuffify/spotify/` | Modular Spotify client (http_client, api, cache, auth, credentials, error_handling, exceptions) |
 | `shuffify/models/` | Data models (playlist.py) + DB models (db.py) |
-| `shuffify/templates/` | Jinja2 templates (6: base, dashboard, index, workshop, schedules, settings) |
+| `shuffify/templates/` | Jinja2 templates (7: base, dashboard, index, workshop, schedules, settings, activity) |
 | `shuffify/static/` | CSS, JS, images |
-| `tests/` | Test suite (953 tests) |
+| `tests/` | Test suite (1714 tests) |
 | `documentation/` | All markdown docs |
 | `requirements/` | Dependencies (base, dev, prod) |
 
@@ -66,8 +66,8 @@ Routes → Services (15) → Business Logic → External APIs
 | File | Contains |
 |------|----------|
 | `shuffify/__init__.py` | Flask app factory, Redis/DB/Scheduler init |
-| `shuffify/routes/` | 8 feature-based route modules |
-| `shuffify/services/` | 15 service layer modules |
+| `shuffify/routes/` | 12 feature-based route modules |
+| `shuffify/services/` | 20 service layer modules |
 | `shuffify/schemas/requests.py` | Pydantic validation schemas |
 | `shuffify/schemas/schedule_requests.py` | Schedule CRUD validation |
 | `shuffify/schemas/settings_requests.py` | Settings CRUD validation |
@@ -76,7 +76,7 @@ Routes → Services (15) → Business Logic → External APIs
 | `shuffify/spotify/auth.py` | OAuth flow, token management |
 | `shuffify/spotify/client.py` | Facade for backward compat |
 | `shuffify/shuffle_algorithms/registry.py` | Algorithm registration |
-| `shuffify/models/db.py` | SQLAlchemy models (9 models — User, UserSettings, WorkshopSession, UpstreamSource, Schedule, JobExecution, LoginHistory, PlaylistSnapshot, ActivityLog) |
+| `shuffify/models/db.py` | SQLAlchemy models (14 models — User, UserSettings, WorkshopSession, UpstreamSource, Schedule, JobExecution, LoginHistory, PlaylistSnapshot, ActivityLog, PlaylistPair, RaidPlaylistLink, PlaylistPreference, PendingRaidTrack, ScrapedPlaylistCache) |
 | `shuffify/models/playlist.py` | Playlist data model |
 | `shuffify/error_handlers.py` | Global exception handlers |
 | `config.py` | Configuration classes (dev/prod) |
@@ -126,7 +126,7 @@ All in: `shuffify/shuffle_algorithms/`
 ## Testing
 
 ```bash
-# All tests (953 total)
+# All tests (1714 total)
 pytest tests/ -v
 
 # Specific test file
@@ -178,9 +178,9 @@ templates → business logic (should be in services)
 
 - **Flask** 3.1.x + **Flask-Session** 0.8.x
 - **Pydantic** v2 for request validation
-- **SQLAlchemy** for database (9 models)
+- **SQLAlchemy** for database (14 models)
 - **APScheduler** for background job execution
 - **spotipy** for Spotify API
-- **953** tests, all passing
+- **1714** tests, all passing
 - Retry logic with exponential backoff
 - Fernet encryption for stored tokens

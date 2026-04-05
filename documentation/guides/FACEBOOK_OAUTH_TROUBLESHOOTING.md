@@ -10,8 +10,8 @@ This guide helps resolve issues with Facebook login for Spotify OAuth in Shuffif
 
 **Debugging Steps:**
 1. Check application logs for OAuth errors
-2. Visit `/debug/oauth` endpoint to verify configuration
-3. Run `python test_oauth.py` to test OAuth setup
+2. Verify environment variables are set correctly (see Step 1 below)
+3. Check the Spotify Developer Dashboard for app configuration
 
 **Common Causes:**
 - Incorrect redirect URI in Spotify Developer Dashboard
@@ -80,15 +80,14 @@ SPOTIFY_REDIRECT_URI=http://localhost:8000/callback
 
 ### Step 3: Test OAuth Flow
 
-1. Run the test script:
+1. Start the dev server:
    ```bash
-   python test_oauth.py
+   python run.py
    ```
 
-2. Check the debug endpoint:
-   ```
-   http://localhost:8000/debug/oauth
-   ```
+2. Attempt the full OAuth flow in your browser at `http://localhost:8000`
+
+> **Note:** The `test_oauth.py` script and `/debug/oauth` endpoint referenced in older versions of this guide have been removed. Use the application logs and browser dev tools for debugging.
 
 ### Step 4: Monitor Application Logs
 
@@ -130,11 +129,11 @@ The updated code includes:
 
 ### Automated Test:
 ```bash
-# Test OAuth configuration
-python test_oauth.py
+# Run the test suite (includes OAuth flow tests)
+pytest tests/ -v -k "oauth or callback or login"
 
-# Check application logs
-tail -f logs/app.log
+# Check application logs (printed to stdout in dev mode)
+python run.py
 ```
 
 ## Production Considerations

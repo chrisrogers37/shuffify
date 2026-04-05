@@ -9,23 +9,41 @@ This directory contains all project documentation organized by purpose.
 ```
 documentation/
 ├── README.md          # This file - documentation index
+├── production-database-setup.md  # Neon PostgreSQL setup guide
 ├── evaluation/        # Active system evaluations and assessments
 │   ├── README.md
 │   ├── 03_extensibility_evaluation.md
 │   ├── 04_future_features_readiness.md
 │   └── 05_brainstorm_enhancements.md
+├── guides/            # How-to guides and critiques
+│   ├── credential-rotation.md
+│   ├── FACEBOOK_OAUTH_TROUBLESHOOTING.md
+│   ├── infrastructure_critiques.md
+│   └── UX_CRITIQUES.md
 ├── planning/          # Development plans and feature phases
 │   └── phases/        # (empty — all archived)
-└── archive/           # Completed evaluations and legacy documents
-    ├── tech-debt-cleanup_2026-02-19/  # Tech debt cleanup (5 phases, all complete)
+└── archive/           # Completed evaluations, plans, and design docs
     ├── 01_architecture_evaluation.md
     ├── 02_modularity_assessment.md
     ├── separation_of_concerns_evaluation.md
-    ├── tech_debt_q1-2026_2026-02-10/  # Completed tech debt session
-    ├── post-workshop-cleanup_2026-02-11/  # Post-workshop tech debt (4 phases)
-    ├── playlist-workshop_2026-02-10/  # Workshop Enhancement Suite (6 phases, all complete)
-    ├── user-persistence_2026-02-12/  # User Persistence Suite (7 phases, all complete)
-    └── workshop-powertools_2026-02-13/  # Workshop Powertools Suite (5 phases, all complete)
+    ├── raid-playlist-redesign_2026-03-23.md
+    ├── swap-only-rotation-design_2026-03-10.md
+    ├── tech_debt_q1-2026_2026-02-10/
+    ├── post-workshop-cleanup_2026-02-11/
+    ├── playlist-workshop_2026-02-10/
+    ├── user-persistence_2026-02-12/
+    ├── workshop-powertools_2026-02-13/
+    ├── security-audit_2026-02-15/
+    ├── tech-debt-cleanup_2026-02-19/
+    ├── landing-page-redesign_2026-02-22/
+    ├── codebase-cleanup_2026-02-22/
+    ├── structural-cleanup_2026-02-25/
+    ├── dashboard-enhancements_2026-02-25/
+    ├── spotify-api-migration_2026-02-28/
+    ├── scheduling-workshop-overhaul_2026-03-02/
+    ├── dropdown-design-alignment_2026-03-28/
+    ├── navigation-overhaul_2026-03-29/
+    └── workshop-tab-restructure_2026-04-01/
 ```
 
 ---
@@ -42,6 +60,7 @@ Active evaluation documents for ongoing development planning:
 ## Guides
 
 - **[Production Database Setup](production-database-setup.md)** - How to connect PostgreSQL (Neon, Railway, Docker, or any instance) to your Shuffify deployment
+- **[Credential Rotation](guides/credential-rotation.md)** - How to rotate every secret used by the application
 - **[Infrastructure Critiques](guides/infrastructure_critiques.md)** - Infrastructure improvement notes and status
 - **[UX Critiques](guides/UX_CRITIQUES.md)** - UX improvement notes for landing page
 - **[Facebook OAuth Troubleshooting](guides/FACEBOOK_OAUTH_TROUBLESHOOTING.md)** - Legacy OAuth troubleshooting guide
@@ -71,7 +90,19 @@ Evaluations and plans that have been fully implemented:
 - **[Playlist Workshop Plans](archive/playlist-workshop_2026-02-10/00_OVERVIEW.md)** - Workshop feature implementation plans (6 phases)
 - **[User Persistence Plans](archive/user-persistence_2026-02-12/00_OVERVIEW.md)** - User persistence implementation plans (7 phases)
 - **[Workshop Powertools Plans](archive/workshop-powertools_2026-02-13/00_OVERVIEW.md)** - Workshop powertools implementation plans (5 phases)
+- **[Security Audit](archive/security-audit_2026-02-15/00_SECURITY_AUDIT.md)** - Security audit and remediation (5 phases)
 - **[Tech Debt Cleanup](archive/tech-debt-cleanup_2026-02-19/00_TECH_DEBT.md)** - Tech debt remediation (5 phases, PRs #83-87)
+- **[Landing Page Redesign](archive/landing-page-redesign_2026-02-22/00_OVERVIEW.md)** - Dark theme, animated hero, scroll motion, mobile responsive
+- **[Codebase Cleanup](archive/codebase-cleanup_2026-02-22/00_TECH_DEBT.md)** - DB commits, route auth, executor split, template decomposition
+- **[Structural Cleanup](archive/structural-cleanup_2026-02-25/00_TECH_DEBT.md)** - Test fixtures, function decomposition, route helpers, JS extraction
+- **[Dashboard Enhancements](archive/dashboard-enhancements_2026-02-25/00_OVERVIEW.md)** - Error handling, tile layout, shuffle overlay, playlist management
+- **[Spotify API Migration](archive/spotify-api-migration_2026-02-28/00_OVERVIEW.md)** - Direct HTTP client, search fix, raid pivot, graceful degradation
+- **[Scheduling Workshop Overhaul](archive/scheduling-workshop-overhaul_2026-03-02/00_OVERVIEW.md)** - Schedule creation fix, raid/rotation config, scheduler scaling
+- **[Swap-Only Rotation Design](archive/swap-only-rotation-design_2026-03-10.md)** - Rotation mode design document
+- **[Raid Playlist Redesign](archive/raid-playlist-redesign_2026-03-23.md)** - Raid system redesign document
+- **[Dropdown Design Alignment](archive/dropdown-design-alignment_2026-03-28/00_OVERVIEW.md)** - Dropdown UI consistency
+- **[Navigation Overhaul](archive/navigation-overhaul_2026-03-29/00_OVERVIEW.md)** - Navigation bar, workshop hub, activity log, settings sidebar
+- **[Workshop Tab Restructure](archive/workshop-tab-restructure_2026-04-01/00_OVERVIEW.md)** - Horizontal tabs, raids/rotation/schedules/snapshots tabs, sidebar removal
 
 ---
 
@@ -135,4 +166,4 @@ This documentation index should be updated whenever:
 - Documentation is reorganized
 - Documentation is deprecated or archived
 
-Last updated: 2026-02-22
+Last updated: 2026-04-05

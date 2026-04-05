@@ -46,7 +46,7 @@ The application is built with a security-first mindset, using environment variab
 - **Backend:** Flask 3.1.x (Python 3.12+)
 - **Frontend:** Tailwind CSS with custom animations
 - **API:** Spotify Web API (via spotipy)
-- **Database:** SQLAlchemy + PostgreSQL/SQLite (9 models)
+- **Database:** SQLAlchemy + PostgreSQL/SQLite (14 models)
 - **Scheduler:** APScheduler for background jobs
 - **Server:** Gunicorn (production), Flask dev server (local)
 - **Caching:** Redis for sessions and API response caching
@@ -66,15 +66,15 @@ shuffify/
 ├── documentation/            # Project documentation and evaluations
 ├── shuffify/
 │   ├── __init__.py           # App factory (Redis, DB, Scheduler init)
-│   ├── routes/               # 8 feature-based route modules
-│   ├── services/             # 15 service modules (business logic layer)
-│   ├── schemas/              # Pydantic validation schemas (4 modules)
-│   ├── models/               # Data models + SQLAlchemy DB models (9 models)
+│   ├── routes/               # 12 feature-based route modules
+│   ├── services/             # 20 service modules (business logic layer)
+│   ├── schemas/              # Pydantic validation schemas (9 modules)
+│   ├── models/               # Data models + SQLAlchemy DB models (14 models)
 │   ├── spotify/              # Modular Spotify client (auth, api, cache)
-│   ├── shuffle_algorithms/   # 7 shuffle algorithms with registry
-│   ├── templates/            # Jinja2 templates (6 pages)
+│   ├── shuffle_algorithms/   # 8 shuffle algorithms with registry (7 visible)
+│   ├── templates/            # Jinja2 templates (7 pages)
 │   └── static/               # Static assets (images, public pages)
-├── tests/                    # 953 tests
+├── tests/                    # 1714 tests
 ├── Dockerfile                # Defines the application container
 └── docker-compose.yml        # Orchestrates the local Docker environment
 ```
@@ -84,12 +84,12 @@ shuffify/
 - **User Persistence Enhancement Suite** (7 phases) — PostgreSQL, user dimension, login tracking, settings, snapshots, activity log, personalized dashboard
 - **Playlist Workshop Enhancement Suite** (6 phases) — Track management, playlist merging, external raiding, user database, scheduled operations
 - **7 Shuffle Algorithms** — Added ArtistSpacing, AlbumSequence, TempoGradient (hidden)
-- **SQLAlchemy Database** — 9 models (User, UserSettings, WorkshopSession, UpstreamSource, Schedule, JobExecution, LoginHistory, PlaylistSnapshot, ActivityLog)
+- **SQLAlchemy Database** — 14 models (User, UserSettings, WorkshopSession, UpstreamSource, Schedule, JobExecution, LoginHistory, PlaylistSnapshot, ActivityLog, PlaylistPair, RaidPlaylistLink, PlaylistPreference, PendingRaidTrack, ScrapedPlaylistCache)
 - **PostgreSQL Production** — Neon PostgreSQL with Alembic migrations
 - **APScheduler Integration** — Background job execution for automated shuffle/raid
 - **Fernet Token Encryption** — Secure storage of Spotify refresh tokens
-- **15 Service Layer Modules** — Full separation of concerns
-- **953 Tests** — Comprehensive coverage across all modules
+- **20 Service Layer Modules** — Full separation of concerns
+- **1714 Tests** — Comprehensive coverage across all modules
 
 ## License
 
