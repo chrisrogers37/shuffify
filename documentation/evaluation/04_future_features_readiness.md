@@ -709,7 +709,7 @@ Phase 4: Advanced (3-4 days) — PENDING
 - No build process (could add Vite for JS bundling/minification)
 - No WebSocket infrastructure (needed for real-time updates)
 - Limited JavaScript architecture (vanilla JS, no framework, no module system)
-- 3 monolithic templates (944 lines total) — no component decomposition
+- 7 templates (8,428 lines total) — workshop.html alone is 5,161 lines
 
 **Effort Estimate:** 6-10 days total *(reduced, some quick wins done)*
 
@@ -948,7 +948,7 @@ This could mean:
 
 ```
 COMPLETED (Feb 2026):
-├── ✅ Service layer extraction (10 services)
+├── ✅ Service layer extraction (20 services)
 ├── ✅ Feature A: Database (SQLAlchemy + User/Schedule/JobExecution)
 ├── ✅ Feature C1: Automations (APScheduler + SchedulerService)
 ├── ✅ Feature C2: Raiding (UpstreamSourceService + raid jobs)

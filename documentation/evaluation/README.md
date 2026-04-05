@@ -39,7 +39,7 @@ These documents have been moved to [`documentation/archive/`](../archive/):
 - ArtistSpacingShuffle, AlbumSequenceShuffle (added Feb 2026)
 - TempoGradientShuffle (hidden — requires deprecated Spotify Audio Features API)
 
-**Services:** 15 extracted service classes:
+**Services:** 20 extracted service classes:
 - `AuthService` — OAuth flow and token management
 - `PlaylistService` — Playlist CRUD and validation
 - `ShuffleService` — Algorithm orchestration and execution
@@ -55,17 +55,22 @@ These documents have been moved to [`documentation/archive/`](../archive/):
 - `LoginHistoryService` — Sign-in event recording and querying
 - `PlaylistSnapshotService` — Point-in-time playlist capture and restore
 - `UserSettingsService` — User preference CRUD
+- `PlaylistPairService` — Production/archive playlist pairing
+- `RaidSyncService` — Raid synchronization operations
+- `PlaylistPreferenceService` — Per-user playlist display preferences
+- `PendingRaidService` — Pending raid track management
+- `RaidLinkService` — Raid playlist link management
 
 **Infrastructure:**
 - Redis-based sessions (primary) with filesystem fallback
 - Redis-based Spotify API response caching with configurable TTLs
-- SQLAlchemy database (9 models: User, UserSettings, WorkshopSession, UpstreamSource, Schedule, JobExecution, LoginHistory, PlaylistSnapshot, ActivityLog)
+- SQLAlchemy database (14 models: User, UserSettings, WorkshopSession, UpstreamSource, Schedule, JobExecution, LoginHistory, PlaylistSnapshot, ActivityLog, PlaylistPair, RaidPlaylistLink, PlaylistPreference, PendingRaidTrack, ScrapedPlaylistCache)
 - PostgreSQL (production via Neon) with Alembic migrations
 - APScheduler for background job execution
 - Fernet symmetric encryption for stored refresh tokens
-- Pydantic v2 request validation schemas (4 modules)
+- Pydantic v2 request validation schemas (9 modules)
 - Retry logic with exponential backoff in Spotify API calls
-- 953 tests across algorithms, services, schemas, models, and Spotify modules
+- 1714 tests across algorithms, services, schemas, models, and Spotify modules
 
 **Spotify Module:** Modular architecture with dependency injection:
 - `SpotifyCredentials` — DI for OAuth credentials
@@ -76,7 +81,7 @@ These documents have been moved to [`documentation/archive/`](../archive/):
 - Custom exception hierarchy (`SpotifyError` base → Auth, Token, API, RateLimit, NotFound)
 
 ### Resolved Gaps (previously critical)
-- ~~No service layer~~ → 15 services extracted (Jan-Feb 2026)
+- ~~No service layer~~ → 20 services extracted (Jan-Apr 2026)
 - ~~No validation framework~~ → Pydantic v2 schemas in `shuffify/schemas/`
 - ~~Token refresh bug~~ → Fixed in SpotifyAuthManager
 - ~~No rate limiting~~ → Exponential backoff retry logic in SpotifyAPI
@@ -95,7 +100,7 @@ These documents have been moved to [`documentation/archive/`](../archive/):
 
 | Feature | Readiness | Status |
 |---------|-----------|--------|
-| Database Persistence | ✅ 10/10 | **COMPLETED** — SQLAlchemy + PostgreSQL, 9 models, Alembic migrations |
+| Database Persistence | ✅ 10/10 | **COMPLETED** — SQLAlchemy + PostgreSQL, 14 models, Alembic migrations |
 | User Logins | ✅ 9/10 | **COMPLETED** — Spotify-linked User with login tracking, settings, activity log |
 | Spotify Automations | ✅ 10/10 | **COMPLETED** — APScheduler + SchedulerService |
 | Playlist Raiding | ✅ 10/10 | **COMPLETED** — UpstreamSourceService + raid jobs |

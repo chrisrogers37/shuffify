@@ -105,7 +105,7 @@ black shuffify/
 - **Backend**: Flask 3.1.x (Python 3.12+)
 - **Frontend**: Tailwind CSS with custom animations, vanilla JavaScript
 - **API**: Spotify Web API (via spotipy library)
-- **Database**: SQLAlchemy + PostgreSQL/SQLite (11 models — see Models section)
+- **Database**: SQLAlchemy + PostgreSQL/SQLite (14 models — see Models section)
 - **Scheduler**: APScheduler for background job execution
 - **Server**: Gunicorn (production), Flask dev server (local)
 - **Containerization**: Docker with health checks
@@ -123,12 +123,12 @@ black shuffify/
 │  Presentation Layer                     │
 │  • templates/     - Jinja2 templates   │
 │  • static/        - CSS, JS, images    │
-│  • routes/        - Flask routes (11 modules) │
+│  • routes/        - Flask routes (12 modules) │
 │  • schemas/       - Pydantic validation │
 └─────────────────┬───────────────────────┘
                   │
 ┌─────────────────▼───────────────────────┐
-│  Services Layer (18 services)           │
+│  Services Layer (20 services)           │
 │  • auth_service.py      - OAuth flow   │
 │  • playlist_service.py  - Playlist ops │
 │  • shuffle_service.py   - Algorithms   │
@@ -147,6 +147,8 @@ black shuffify/
 │  • playlist_pair_service   - Archives  │
 │  • raid_sync_service       - Raid sync │
 │  • playlist_preference_service         │
+│  • pending_raid_service  - Pending raids│
+│  • raid_link_service     - Raid links  │
 └─────────────────┬───────────────────────┘
                   │
 ┌─────────────────▼───────────────────────┐
@@ -166,23 +168,24 @@ black shuffify/
 └─────────────────────────────────────────┘
 ```
 
-### Route Endpoints (57 total)
+### Route Endpoints (83 total)
 
-Routes are split across 11 modules in `shuffify/routes/`:
+Routes are split across 12 modules in `shuffify/routes/`:
 
 | Module | Routes | Purpose |
 |--------|--------|---------|
 | `core.py` | 7 | Home, login/callback/logout, health, terms, privacy |
-| `playlists.py` | 4 | Playlist fetch, refresh, stats, user-playlists API |
+| `playlists.py` | 5 | Playlist fetch, refresh, stats, user-playlists API |
 | `shuffle.py` | 2 | Shuffle execution, undo |
-| `workshop.py` | 11 | Workshop UI, preview-shuffle, commit, search, external playlists, session CRUD |
+| `workshop.py` | 12 | Workshop UI, preview-shuffle, commit, search, external playlists, session CRUD |
 | `settings.py` | 2 | View/update user settings |
 | `upstream_sources.py` | 3 | List/add/delete upstream raid sources |
-| `schedules.py` | 8 | Schedule CRUD, toggle, manual run, execution history, rotation status |
+| `schedules.py` | 9 | Schedule CRUD, toggle, manual run, execution history, rotation status |
 | `snapshots.py` | 5 | List/create/view/restore/delete playlist snapshots |
-| `playlist_pairs.py` | 6 | Archive playlist pairing CRUD, list pairs |
-| `raid_panel.py` | 5 | Raid status, watch/unwatch, raid-now, schedule toggle |
+| `playlist_pairs.py` | 8 | Archive playlist pairing CRUD, list pairs |
+| `raid_panel.py` | 25 | Raid status, watch/unwatch, raid-now, pending raids, raid links, drip controls |
 | `playlist_preferences.py` | 4 | Save order, toggle hidden/pinned, reset preferences |
+| `activity.py` | 1 | Activity log page |
 
 ### Key Design Principle: SEPARATION OF CONCERNS
 
@@ -266,15 +269,20 @@ All algorithms implement the `ShuffleAlgorithm` protocol and are registered in `
 
 ### Spotify Integration
 
-**Module**: `shuffify/spotify/client.py`
+**Module**: `shuffify/spotify/` (modular package)
 
-**Key Methods**:
-- `get_user_playlists()` - Fetch user's playlists
-- `get_playlist_tracks()` - Get tracks from a playlist
-- `reorder_playlist()` - Apply new track order to Spotify
-- `get_current_user()` - User profile information
+**Components**:
+- `http_client.py` — `SpotifyHTTPClient`: direct HTTP client with retry logic, rate limit backoff, token refresh, and pagination
+- `api.py` — `SpotifyAPI`: high-level data operations with Redis caching support
+- `client.py` — `SpotifyClient`: legacy facade combining auth + API (still supported)
+- `auth.py` — `SpotifyAuthManager`: OAuth flow and token management
+- `cache.py` — `SpotifyCache`: Redis caching layer with per-data-type TTLs
+- `credentials.py` — `SpotifyCredentials`: DI for OAuth credentials
+- `error_handling.py` — `api_error_handler` decorator for unexpected exceptions
+- `exceptions.py` — Custom exception hierarchy (`SpotifyError` → Auth, Token, API, RateLimit, NotFound)
+- `url_parser.py` — Spotify URL/URI parsing utilities
 
-**Error Handling**: All Spotify API calls wrapped with exception handling and logging.
+**Error Handling**: HTTP-level errors (401, 429, 5xx) handled by `SpotifyHTTPClient` with exponential backoff. Application-level errors wrapped by `api_error_handler` decorator.
 
 ### Models
 
@@ -292,9 +300,12 @@ All algorithms implement the `ShuffleAlgorithm` protocol and are registered in `
 - `JobExecution` — Execution history log with status and results
 - `LoginHistory` — Sign-in event tracking (IP, user agent, timestamps)
 - `PlaylistSnapshot` — Point-in-time playlist track orderings with retention management
-- `ActivityLog` — Unified audit trail for all user actions (17 activity types)
+- `ActivityLog` — Unified audit trail for all user actions (29 activity types)
 - `PlaylistPair` — Production/archive playlist pairing for track rotation
+- `RaidPlaylistLink` — Links between raid sources and target playlists
 - `PlaylistPreference` — Per-user playlist display ordering, visibility, and pinning
+- `PendingRaidTrack` — Tracks pending review from raid sources before promotion
+- `ScrapedPlaylistCache` — Cached tracks scraped from public Spotify pages (1hr TTL)
 
 ---
 
@@ -393,7 +404,7 @@ class MyAlgorithm(ShuffleAlgorithm):
 
 **Adding a new route**:
 
-Routes are organized in `shuffify/routes/` as feature modules (core, playlists, shuffle, workshop, upstream_sources, schedules, settings, snapshots). Add new routes to an existing module or create a new one:
+Routes are organized in `shuffify/routes/` as feature modules (core, playlists, shuffle, workshop, upstream_sources, schedules, settings, snapshots, playlist_pairs, raid_panel, playlist_preferences, activity). Add new routes to an existing module or create a new one:
 
 ```python
 # shuffify/routes/my_feature.py (or add to existing module)
@@ -470,7 +481,7 @@ tests/
 ├── algorithms/             # Tests for all 8 shuffle algorithms
 ├── spotify/                # Spotify client, API, cache tests
 ├── schemas/                # Pydantic schema validation tests
-├── services/               # Service layer tests (17 services)
+├── services/               # Service layer tests (20 services)
 ├── models/                 # Database model tests
 ├── routes/                 # All route tests (13 files)
 ├── test_app_factory.py     # App initialization tests
@@ -482,7 +493,7 @@ tests/
 └── conftest.py             # Shared fixtures (app context, db, mocks)
 ```
 
-**1296 tests** covering all modules.
+**1714 tests** covering all modules.
 
 **Test Template**:
 
@@ -684,14 +695,33 @@ documentation/
 │   └── 05_brainstorm_enhancements.md
 ├── planning/              # Development plans
 │   └── phases/            # (empty — all archived)
-├── archive/               # Completed evaluations and plans
+├── guides/                # How-to guides and critiques
+│   ├── credential-rotation.md
+│   ├── FACEBOOK_OAUTH_TROUBLESHOOTING.md
+│   ├── infrastructure_critiques.md
+│   └── UX_CRITIQUES.md
+├── archive/               # Completed evaluations and plans (16 subdirs + standalone files)
 │   ├── 01_architecture_evaluation.md
 │   ├── 02_modularity_assessment.md
+│   ├── separation_of_concerns_evaluation.md
+│   ├── raid-playlist-redesign_2026-03-23.md
+│   ├── swap-only-rotation-design_2026-03-10.md
 │   ├── tech_debt_q1-2026_2026-02-10/
 │   ├── post-workshop-cleanup_2026-02-11/
-│   ├── playlist-workshop_2026-02-10/  (6 phases, all complete)
-│   ├── user-persistence_2026-02-12/   (7 phases, all complete)
-│   └── workshop-powertools_2026-02-13/ (5 phases, all complete)
+│   ├── playlist-workshop_2026-02-10/
+│   ├── user-persistence_2026-02-12/
+│   ├── workshop-powertools_2026-02-13/
+│   ├── security-audit_2026-02-15/
+│   ├── tech-debt-cleanup_2026-02-19/
+│   ├── landing-page-redesign_2026-02-22/
+│   ├── codebase-cleanup_2026-02-22/
+│   ├── structural-cleanup_2026-02-25/
+│   ├── dashboard-enhancements_2026-02-25/
+│   ├── spotify-api-migration_2026-02-28/
+│   ├── scheduling-workshop-overhaul_2026-03-02/
+│   ├── dropdown-design-alignment_2026-03-28/
+│   ├── navigation-overhaul_2026-03-29/
+│   └── workshop-tab-restructure_2026-04-01/
 ```
 
 **Rules**:
@@ -820,20 +850,20 @@ if session.get('undo_stack'):
 - ~~Flask 3.x upgrade~~ (v3.1.x)
 - ~~Redis session storage~~
 - ~~Caching layer for Spotify API responses~~
-- ~~Service layer extraction~~ (18 services)
-- ~~Pydantic validation layer~~ (7 schema modules)
+- ~~Service layer extraction~~ (20 services)
+- ~~Pydantic validation layer~~ (9 schema modules)
 - ~~8 shuffle algorithms~~ (7 visible + 1 hidden)
 - ~~Playlist Workshop~~ (track management, merging, raiding)
-- ~~SQLAlchemy database~~ (11 models — see Models section)
+- ~~SQLAlchemy database~~ (14 models — see Models section)
 - ~~APScheduler background jobs~~ (scheduled shuffle/raid operations)
 - ~~Fernet token encryption~~ (secure refresh token storage)
 - ~~Refresh playlists button~~
-- ~~Route modularization~~ (split routes.py into 8 feature modules)
+- ~~Route modularization~~ (split routes.py into 12 feature modules)
 - ~~PostgreSQL support~~ (production database via Neon)
 - ~~Alembic migrations~~ (database schema management via Flask-Migrate)
 - ~~User persistence suite~~ (user dimension, login tracking, settings, snapshots, activity log, dashboard)
 - ~~Playlist snapshots~~ (point-in-time capture with auto-snapshot and restoration)
-- ~~Activity logging~~ (unified audit trail with 17 activity types)
+- ~~Activity logging~~ (unified audit trail with 29 activity types)
 - ~~Personalized dashboard~~ (welcome messaging, stats, activity feed)
 - ~~Workshop Powertools~~ (sidebar framework, snapshot browser, archive pairing, smart raid, scheduled rotation)
 
@@ -858,17 +888,20 @@ if session.get('undo_stack'):
 | File | Contains |
 |------|----------|
 | `shuffify/__init__.py` | Flask app factory, Redis/DB/Scheduler initialization |
-| `shuffify/routes/` | 11 feature-based route modules (core, playlists, shuffle, workshop, upstream_sources, schedules, settings, snapshots, playlist_pairs, raid_panel, playlist_preferences) |
-| `shuffify/services/` | 18 service modules (auth, playlist, shuffle, state, token, scheduler, user, workshop_session, upstream_source, activity_log, dashboard, login_history, playlist_snapshot, user_settings, playlist_pair, raid_sync, playlist_preference) + executors package |
-| `shuffify/services/executors/` | Job executor package (base_executor, raid_executor, shuffle_executor, rotate_executor) |
-| `shuffify/schemas/` | 7 Pydantic validation modules (requests, schedule_requests, settings_requests, snapshot_requests, playlist_pair_requests, raid_requests, playlist_preference_requests) |
+| `shuffify/routes/` | 12 feature-based route modules (core, playlists, shuffle, workshop, upstream_sources, schedules, settings, snapshots, playlist_pairs, raid_panel, playlist_preferences, activity) |
+| `shuffify/services/` | 20 service modules (auth, playlist, shuffle, state, token, scheduler, user, workshop_session, upstream_source, activity_log, dashboard, login_history, playlist_snapshot, user_settings, playlist_pair, raid_sync, playlist_preference, pending_raid, raid_link, job_executor) + executors package |
+| `shuffify/services/executors/` | Job executor package (base_executor, raid_executor, shuffle_executor, rotate_executor, drip_executor) |
+| `shuffify/services/source_resolver/` | Strategy pattern for resolving external playlists — tries DirectAPI → Search → PublicScraper pathways in priority order |
+| `shuffify/schemas/` | 9 Pydantic validation modules (requests, schedule_requests, settings_requests, snapshot_requests, playlist_pair_requests, raid_requests, raid_link_requests, pending_raid_requests, playlist_preference_requests) |
 | `shuffify/spotify/client.py` | Spotify API wrapper (facade) |
+| `shuffify/spotify/http_client.py` | Direct HTTP client for Spotify Web API — handles retries, rate limits, token refresh, pagination |
 | `shuffify/spotify/api.py` | Spotify Web API data operations with caching support |
 | `shuffify/spotify/cache.py` | Redis caching layer for Spotify API responses |
+| `shuffify/spotify/error_handling.py` | `api_error_handler` decorator for converting unexpected exceptions |
 | `shuffify/shuffle_algorithms/registry.py` | Algorithm registration system (8 algorithms) |
 | `shuffify/models/playlist.py` | Playlist data model |
-| `shuffify/models/db.py` | SQLAlchemy models (11 models — User, UserSettings, WorkshopSession, UpstreamSource, Schedule, JobExecution, LoginHistory, PlaylistSnapshot, ActivityLog, PlaylistPair, PlaylistPreference) |
-| `shuffify/enums.py` | Shared enums (ScheduleFrequency, JobType, SnapshotType, ActivityType, RotationMode) |
+| `shuffify/models/db.py` | SQLAlchemy models (14 models — User, UserSettings, WorkshopSession, UpstreamSource, Schedule, JobExecution, LoginHistory, PlaylistSnapshot, ActivityLog, PlaylistPair, RaidPlaylistLink, PlaylistPreference, PendingRaidTrack, ScrapedPlaylistCache) |
+| `shuffify/enums.py` | Shared enums (ScheduleType, IntervalValue, JobType, SnapshotType, ActivityType, RotationMode, PendingRaidStatus) |
 | `shuffify/scheduler.py` | APScheduler initialization and startup |
 | `shuffify/error_handlers.py` | Global exception handlers |
 | `config.py` | Configuration classes (dev, prod) with Redis/DB/Scheduler settings |
@@ -895,7 +928,7 @@ if session.get('undo_stack'):
 - View routes: `flask routes`
 - All documentation: See `documentation/` directory
 - Algorithm docs: `shuffify/shuffle_algorithms/README.md`
-- 1296 tests across all modules
+- 1714 tests across all modules
 
 ---
 

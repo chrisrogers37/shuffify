@@ -461,7 +461,7 @@ AJAX/JSON endpoints:
 - POST /undo/<id>            - Undoes last shuffle
 ```
 
-All routes are in a single `main` Blueprint in `shuffify/routes.py` (407 lines). No versioned API, no API key auth, no rate limiting beyond Spotify's own limits.
+Routes are split across 12 feature-based modules in `shuffify/routes/` (83 total endpoints). No versioned API, no API key auth, no rate limiting beyond Spotify's own limits.
 
 ### 6.2 Proposed: Public API Layer
 
@@ -537,16 +537,20 @@ def require_api_key(f):
 
 ## 7. UI Component Extensibility
 
-### 7.1 Current: Monolithic Templates
+### 7.1 Current: Large Templates
 
 ```
 templates/
-├── base.html       - Layout, nav, JS utilities (210 lines)
-├── index.html      - Login/landing page (332 lines)
-└── dashboard.html  - Main app with playlist management (402 lines)
+├── base.html        - Layout, nav, JS utilities (279 lines)
+├── index.html       - Landing page (877 lines)
+├── dashboard.html   - Personalized dashboard (1,045 lines)
+├── workshop.html    - Playlist workshop (5,161 lines)
+├── schedules.html   - Schedule management (751 lines)
+├── settings.html    - User settings (160 lines)
+└── activity.html    - Activity log (155 lines)
 ```
 
-**Total:** 944 lines across 3 templates. No component decomposition, no Jinja2 macros used currently.
+**Total:** 8,428 lines across 7 templates. Workshop is the largest at 5,161 lines.
 
 ### 7.2 Proposed: Component-Based Structure
 
@@ -764,7 +768,7 @@ plugins/
 | Automation Extension | 0/10 | Not implemented, no trigger/action system |
 | Data Source Extension | 3/10 | Spotify-only but well-modularized internally (auth, API, cache, credentials separated) |
 | API Extension | 3/10 | Internal AJAX only, no versioned public API |
-| UI Extension | 4/10 | 3 monolithic templates (944 lines total), no component decomposition |
+| UI Extension | 4/10 | 7 templates (8,428 lines total), workshop.html is 5,161 lines |
 | Plugin Support | 0/10 | No plugin system |
 
 **Overall: 2.7/10**
@@ -795,7 +799,7 @@ plugins/
   - 6 visible to users; TempoGradientShuffle hidden due to deprecated Spotify Audio Features API
   - `_hidden_algorithms` mechanism allows hiding without removing code
   - Adding a new algorithm requires: 1 new file, import in registry, optional test file
-- **Service layer** — 10 services (Auth, Playlist, Shuffle, State, Token, Scheduler, JobExecutor, User, WorkshopSession, UpstreamSource) with dependency injection
+- **Service layer** — 20 services (Auth, Playlist, Shuffle, State, Token, Scheduler, JobExecutor, User, WorkshopSession, UpstreamSource, ActivityLog, Dashboard, LoginHistory, PlaylistSnapshot, UserSettings, PlaylistPair, RaidSync, PlaylistPreference, PendingRaid, RaidLink) with dependency injection
 - **Spotify module** — well-modularized (auth, API, cache, credentials, exceptions) but no abstract music service interface
 - **Flask blueprint** pattern allows route extension
 - **Configuration** is environment-based with dev/prod classes
@@ -812,7 +816,7 @@ plugins/
 The shuffle algorithm module is a **proven template for all future extension points**. Apply the same Protocol + Registry pattern to notifications, automations, and data sources. The service layer extraction makes this feasible — each new system can follow the same dependency injection pattern.
 
 ### Priority Actions
-1. ✅ Extract services with interfaces (enables everything else) — **COMPLETED** (10 services)
+1. ✅ Extract services with interfaces (enables everything else) — **COMPLETED** (20 services)
 2. ✅ Add database persistence (SQLAlchemy) — **COMPLETED** (User, Schedule, JobExecution models)
 3. ✅ Add background job system (APScheduler) — **COMPLETED** (SchedulerService + JobExecutorService)
 4. Implement NotificationChannel protocol — **PENDING**

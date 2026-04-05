@@ -13,7 +13,7 @@ Shuffify uses SQLite by default for local development. For production, it suppor
 - Configures connection pooling (pool size 5, recycle every 300s)
 - Runs Alembic migrations on startup to create/update all tables
 
-**Tables created** (9 total):
+**Tables created** (14 total):
 
 | Table | Purpose |
 |-------|---------|
@@ -26,6 +26,11 @@ Shuffify uses SQLite by default for local development. For production, it suppor
 | `login_history` | Login/logout event tracking |
 | `playlist_snapshots` | Point-in-time playlist track order captures |
 | `activity_log` | Audit trail of all user actions |
+| `playlist_pairs` | Production/archive playlist pairing for track rotation |
+| `raid_playlist_links` | Links between raid sources and target playlists |
+| `playlist_preferences` | Per-user playlist display ordering, visibility, and pinning |
+| `pending_raid_tracks` | Tracks pending review from raid sources |
+| `scraped_playlist_cache` | Cached tracks scraped from public Spotify pages |
 
 ---
 
@@ -66,7 +71,7 @@ The app automatically converts `postgres://` to `postgresql://` for SQLAlchemy c
 
 On the next deploy/restart, the app will:
 1. Connect to the Neon database
-2. Run all Alembic migrations to create the 9 tables
+2. Run all Alembic migrations to create the 14 tables
 3. Begin storing user data persistently
 
 No manual migration step is needed -- migrations run automatically on startup.
@@ -222,8 +227,13 @@ Expected output:
  alembic_version
  job_executions
  login_history
+ pending_raid_tracks
+ playlist_pairs
+ playlist_preferences
  playlist_snapshots
+ raid_playlist_links
  schedules
+ scraped_playlist_cache
  upstream_sources
  user_settings
  users
