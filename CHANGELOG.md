@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Track-Level Locks** - Per-track position locks to protect individual tracks from automated operations
+  - Two lock tiers: Standard (30-day auto-expiry, 1 click) and Super (permanent, 2 clicks)
+  - Click-through cycle in Workshop: unlocked -> standard -> super -> unlocked
+  - Locked tracks excluded from all shuffle algorithms (locked positions preserved, unlocked tracks shuffled around them)
+  - Locked tracks excluded from rotation swap-out pool (never archived)
+  - Locked tracks fully immovable in Workshop (drag-and-drop disabled)
+  - Drip inserts at top; lock positions automatically reconciled after all operations
+  - Visual indicators: amber left border for standard locks, red left border for super locks
+  - Lock/unlock icons with distinct SVGs per tier (open padlock, closed padlock, shield)
+  - "Unlock All" toolbar button when locks are active
+  - New `TrackLock` database model with unique constraint per user/playlist/track
+  - New `TrackLockService` with toggle, set, unlock, bulk-unlock, query, cleanup, and position reconciliation
+  - New `LockTier` enum and `TRACK_LOCK`/`TRACK_UNLOCK` activity types
+  - API endpoints: GET/POST `/workshop/<id>/locks`, POST `.../toggle`, POST `.../unlock-all`
+  - `split_locked_tracks()` and `reassemble_with_locks()` utilities in shuffle algorithm utils
+  - Pydantic validation schemas for lock requests
+  - Comprehensive test coverage for service, routes, and utility functions
+
 ### Changed
 - **Workshop Tab Contrast Improvement** - Added glass-card containers to Raids, Rotation, Schedules, and Snapshots tabs for better visual contrast matching the Playlist tab
   - Inner cards upgraded from `bg-white/5` to `bg-white/10` with stronger borders

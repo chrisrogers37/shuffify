@@ -379,14 +379,31 @@ def _rotate_swap(
     archive_set = set(archive_uris)
     eligible_uris = prod_uris[protect_count:]
 
+    # Exclude locked tracks from the eligible pool
+    locked_uris = _get_locked_uris(
+        schedule.user_id, target_id
+    )
+    if locked_uris:
+        eligible_uris = [
+            u for u in eligible_uris
+            if u not in locked_uris
+        ]
+        logger.info(
+            "Schedule %s: %d tracks locked, "
+            "%d eligible after filtering",
+            schedule.id, len(locked_uris),
+            len(eligible_uris),
+        )
+
     # Warn when all tracks are protected — no
     # verification needed since nothing was modified.
     if not eligible_uris and prod_uris:
         logger.warning(
-            "Schedule %s: protect_count (%d) >= "
-            "playlist size (%d) — no tracks "
-            "eligible for rotation",
+            "Schedule %s: protect_count (%d) + "
+            "locks (%d) >= playlist size (%d) "
+            "— no tracks eligible for rotation",
             schedule.id, protect_count,
+            len(locked_uris),
             len(prod_uris),
         )
         return {
@@ -500,3 +517,21 @@ def _rotate_swap(
         "tracks_added": swapped,
         "tracks_total": actual_total,
     }
+
+
+def _get_locked_uris(user_id, playlist_id):
+    """Query locked track URIs, with graceful fallback."""
+    try:
+        from shuffify.services.track_lock_service import (
+            TrackLockService,
+        )
+        return TrackLockService.get_locked_uris(
+            user_id, playlist_id
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to query track locks for "
+            "%s: %s — proceeding without locks",
+            playlist_id, e,
+        )
+        return set()

@@ -132,6 +132,17 @@ def execute_drip(
             user_id, target_id, drip_uris
         )
 
+        # Reconcile lock positions (drip at pos 0
+        # shifts all existing tracks down)
+        new_total_uris = drip_uris + [
+            t.get("uri")
+            for t in target_tracks
+            if t.get("uri")
+        ]
+        _reconcile_locks(
+            user_id, target_id, new_total_uris
+        )
+
         logger.info(
             "Schedule %s: dripped %d tracks from "
             "'%s' to '%s'",
@@ -264,4 +275,21 @@ def _mark_dripped_as_promoted(
         logger.warning(
             "Failed to mark dripped tracks as "
             "promoted: %s", e
+        )
+
+
+def _reconcile_locks(user_id, playlist_id, new_uris):
+    """Reconcile lock positions after drip."""
+    try:
+        from shuffify.services.track_lock_service import (
+            TrackLockService,
+        )
+        TrackLockService.update_positions_after_reorder(
+            user_id, playlist_id, new_uris
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to reconcile locks after "
+            "drip for %s: %s",
+            playlist_id, e,
         )

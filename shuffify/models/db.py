@@ -18,6 +18,7 @@ from shuffify.enums import (
     IntervalValue,
     SnapshotType,
     PendingRaidStatus,
+    LockTier,
 )
 
 logger = logging.getLogger(__name__)
@@ -1211,6 +1212,125 @@ class PlaylistPreference(db.Model):
             f"order={self.sort_order} "
             f"{'hidden' if self.is_hidden else 'visible'} "
             f"{'pinned' if self.is_pinned else 'unpinned'}>"
+        )
+
+
+class TrackLock(db.Model):
+    """
+    Per-track position lock within a playlist.
+
+    Two lock tiers:
+    - 'standard': auto-expires after 30 days.
+    - 'super': permanent until manually removed.
+
+    Locked tracks are excluded from shuffle reordering,
+    rotation swap-outs, and cannot be dragged in the
+    Workshop UI.
+    """
+
+    __tablename__ = "track_locks"
+
+    STANDARD_EXPIRY_DAYS = 30
+
+    id = db.Column(
+        db.Integer, primary_key=True, autoincrement=True
+    )
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    spotify_playlist_id = db.Column(
+        db.String(255), nullable=False
+    )
+    track_uri = db.Column(
+        db.String(255), nullable=False
+    )
+    position = db.Column(
+        db.Integer, nullable=False
+    )
+    lock_tier = db.Column(
+        db.String(20),
+        nullable=False,
+        default=LockTier.STANDARD,
+    )
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    expires_at = db.Column(
+        db.DateTime, nullable=True
+    )
+
+    user = db.relationship(
+        "User",
+        backref=db.backref(
+            "track_locks",
+            lazy="dynamic",
+            cascade="all, delete-orphan",
+        ),
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "user_id",
+            "spotify_playlist_id",
+            "track_uri",
+            name="uq_track_lock_user_playlist_track",
+        ),
+        db.Index(
+            "ix_track_lock_playlist",
+            "user_id",
+            "spotify_playlist_id",
+        ),
+    )
+
+    @property
+    def is_expired(self) -> bool:
+        """Check if this lock has expired."""
+        if self.expires_at is None:
+            return False
+        now = datetime.now(timezone.utc)
+        expires = self.expires_at
+        # Handle naive datetimes from SQLite
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        return now > expires
+
+    @property
+    def is_active(self) -> bool:
+        """Check if this lock is currently active."""
+        return not self.is_expired
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize to dictionary."""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "spotify_playlist_id": self.spotify_playlist_id,
+            "track_uri": self.track_uri,
+            "position": self.position,
+            "lock_tier": self.lock_tier,
+            "created_at": (
+                self.created_at.isoformat()
+                if self.created_at
+                else None
+            ),
+            "expires_at": (
+                self.expires_at.isoformat()
+                if self.expires_at
+                else None
+            ),
+        }
+
+    def __repr__(self) -> str:
+        return (
+            f"<TrackLock {self.id}: "
+            f"playlist={self.spotify_playlist_id} "
+            f"pos={self.position} "
+            f"tier={self.lock_tier}>"
         )
 
 

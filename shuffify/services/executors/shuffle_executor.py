@@ -85,14 +85,61 @@ def execute_shuffle(
             )
             return {"tracks_added": 0, "tracks_total": 0}
 
+        # Query track locks for this playlist
+        locked_positions = _get_locked_positions(
+            schedule.user_id, target_id
+        )
+
         algorithm_class = ShuffleRegistry.get_algorithm(
             algorithm_name
         )
         algorithm = algorithm_class()
         params = schedule.algorithm_params or {}
-        shuffled_uris = algorithm.shuffle(
-            tracks, **params
-        )
+
+        if locked_positions:
+            from shuffify.shuffle_algorithms.utils import (
+                split_locked_tracks,
+                reassemble_with_locks,
+            )
+
+            validated_locks, unlocked_tracks = (
+                split_locked_tracks(
+                    tracks, locked_positions
+                )
+            )
+
+            if validated_locks and not unlocked_tracks:
+                logger.info(
+                    "Schedule %d: all tracks locked "
+                    "— skipping shuffle",
+                    schedule.id,
+                )
+                return {
+                    "tracks_added": 0,
+                    "tracks_total": len(tracks),
+                    "skipped_reason": (
+                        "all_tracks_locked"
+                    ),
+                }
+
+            shuffled_uris = algorithm.shuffle(
+                unlocked_tracks, **params
+            )
+            shuffled_uris = reassemble_with_locks(
+                shuffled_uris,
+                validated_locks,
+                len(tracks),
+            )
+            logger.info(
+                "Schedule %d: shuffled with %d "
+                "locked tracks",
+                schedule.id,
+                len(validated_locks),
+            )
+        else:
+            shuffled_uris = algorithm.shuffle(
+                tracks, **params
+            )
 
         logger.info(
             "Schedule %d: applying %d shuffled tracks "
@@ -104,6 +151,12 @@ def execute_shuffle(
 
         api.update_playlist_tracks(
             target_id, shuffled_uris
+        )
+
+        # Reconcile lock positions after reorder
+        _reconcile_locks(
+            schedule.user_id, target_id,
+            shuffled_uris,
         )
 
         logger.info(
@@ -175,4 +228,39 @@ def _auto_snapshot_before_shuffle(
         logger.warning(
             "Auto-snapshot before scheduled "
             f"shuffle failed: {snap_err}"
+        )
+
+
+def _get_locked_positions(user_id, playlist_id):
+    """Query locked track positions, with graceful fallback."""
+    try:
+        from shuffify.services.track_lock_service import (
+            TrackLockService,
+        )
+        return TrackLockService.get_locked_positions(
+            user_id, playlist_id
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to query track locks for "
+            "%s: %s — proceeding without locks",
+            playlist_id, e,
+        )
+        return {}
+
+
+def _reconcile_locks(user_id, playlist_id, new_uris):
+    """Reconcile lock positions after reorder."""
+    try:
+        from shuffify.services.track_lock_service import (
+            TrackLockService,
+        )
+        TrackLockService.update_positions_after_reorder(
+            user_id, playlist_id, new_uris
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to reconcile locks after "
+            "shuffle for %s: %s",
+            playlist_id, e,
         )
