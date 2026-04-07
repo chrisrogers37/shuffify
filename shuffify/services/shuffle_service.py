@@ -82,15 +82,21 @@ class ShuffleService:
         tracks: List[Dict[str, Any]],
         params: Optional[Dict[str, Any]] = None,
         spotify_client: Optional[SpotifyClient] = None,
+        locked_positions: Optional[Dict[int, str]] = None,
     ) -> List[str]:
         """
         Execute a shuffle algorithm on a list of tracks.
+
+        When locked_positions is provided, locked tracks are
+        excluded from the shuffle and reassembled at their
+        original positions afterward.
 
         Args:
             algorithm_name: The name of the algorithm to use.
             tracks: List of track dictionaries with at least 'uri' key.
             params: Optional algorithm parameters.
             spotify_client: Optional SpotifyClient for algorithms that need it.
+            locked_positions: Optional {position: uri} map of locked tracks.
 
         Returns:
             List of track URIs in the new shuffled order.
@@ -99,25 +105,73 @@ class ShuffleService:
             InvalidAlgorithmError: If the algorithm doesn't exist.
             ShuffleExecutionError: If shuffle execution fails.
         """
+        from shuffify.shuffle_algorithms.utils import (
+            split_locked_tracks,
+            reassemble_with_locks,
+        )
+
         params = params or {}
 
         try:
             algorithm = ShuffleService.get_algorithm(algorithm_name)
 
-            # Some algorithms accept a Spotify client for additional features
             if spotify_client:
                 params["sp"] = spotify_client
 
-            shuffled_uris = algorithm.shuffle(tracks, **params)
+            # Split locked tracks out before shuffling
+            validated_locks, unlocked_tracks = (
+                split_locked_tracks(
+                    tracks, locked_positions or {}
+                )
+            )
 
-            logger.info(f"Executed {algorithm_name} on {len(tracks)} tracks")
+            if validated_locks and not unlocked_tracks:
+                logger.info(
+                    "All tracks locked — returning "
+                    "original order for %s",
+                    algorithm_name,
+                )
+                return [
+                    t["uri"] for t in tracks
+                    if t.get("uri")
+                ]
+
+            shuffled_uris = algorithm.shuffle(
+                unlocked_tracks, **params
+            )
+
+            if validated_locks:
+                shuffled_uris = reassemble_with_locks(
+                    shuffled_uris,
+                    validated_locks,
+                    len(tracks),
+                )
+                logger.info(
+                    "Executed %s on %d tracks "
+                    "(%d locked)",
+                    algorithm_name,
+                    len(tracks),
+                    len(validated_locks),
+                )
+            else:
+                logger.info(
+                    "Executed %s on %d tracks",
+                    algorithm_name,
+                    len(tracks),
+                )
+
             return shuffled_uris
 
         except InvalidAlgorithmError:
             raise
         except Exception as e:
-            logger.error(f"Shuffle execution failed: {e}", exc_info=True)
-            raise ShuffleExecutionError(f"Failed to execute shuffle: {e}")
+            logger.error(
+                "Shuffle execution failed: %s",
+                e, exc_info=True,
+            )
+            raise ShuffleExecutionError(
+                f"Failed to execute shuffle: {e}"
+            )
 
     @staticmethod
     def shuffle_changed_order(

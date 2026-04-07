@@ -40,6 +40,80 @@ def split_keep_first(
     return uris[:keep_first], uris[keep_first:]
 
 
+def split_locked_tracks(
+    tracks: List[Dict[str, Any]],
+    locked_positions: Dict[int, str],
+) -> Tuple[Dict[int, str], List[Dict[str, Any]]]:
+    """
+    Separate locked and unlocked tracks.
+
+    Validates that locked positions reference tracks that actually
+    exist at those positions. Invalid entries are silently dropped.
+
+    Args:
+        tracks: Full list of track dictionaries with 'uri' keys.
+        locked_positions: Dict of {position: uri} for locked tracks.
+
+    Returns:
+        Tuple of (validated_locked_map, unlocked_tracks).
+    """
+    if not locked_positions:
+        return {}, list(tracks)
+
+    validated = {}
+    locked_indices = set()
+    for pos, uri in locked_positions.items():
+        pos = int(pos)
+        if 0 <= pos < len(tracks):
+            track_uri = tracks[pos].get("uri")
+            if track_uri == uri:
+                validated[pos] = uri
+                locked_indices.add(pos)
+
+    unlocked = [
+        t for i, t in enumerate(tracks)
+        if i not in locked_indices
+    ]
+    return validated, unlocked
+
+
+def reassemble_with_locks(
+    shuffled_uris: List[str],
+    locked_positions: Dict[int, str],
+    total_length: int,
+) -> List[str]:
+    """
+    Reassemble a full URI list by placing locked tracks at their
+    positions and filling remaining slots with shuffled URIs.
+
+    Args:
+        shuffled_uris: URIs from the shuffle algorithm (unlocked only).
+        locked_positions: Dict of {position: uri} for locked tracks.
+        total_length: Total number of tracks in the playlist.
+
+    Returns:
+        Complete URI list with locks in place.
+    """
+    if not locked_positions:
+        return shuffled_uris
+
+    result = [None] * total_length
+
+    for pos, uri in locked_positions.items():
+        pos = int(pos)
+        if 0 <= pos < total_length:
+            result[pos] = uri
+
+    unlocked_idx = 0
+    for i in range(total_length):
+        if result[i] is None:
+            if unlocked_idx < len(shuffled_uris):
+                result[i] = shuffled_uris[unlocked_idx]
+                unlocked_idx += 1
+
+    return [u for u in result if u is not None]
+
+
 def split_into_sections(
     items: List[str], section_count: int
 ) -> List[List[str]]:

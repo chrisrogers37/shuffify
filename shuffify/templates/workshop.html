@@ -104,6 +104,15 @@
                     {% endif %}
                 </div>
                 <div class="flex items-center space-x-2 flex-shrink-0">
+                    <button id="unlock-all-btn"
+                            onclick="unlockAllTracks()"
+                            class="hidden inline-flex items-center px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 font-medium text-sm transition duration-150 border border-white/20"
+                            title="Remove all track locks">
+                        <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"></path>
+                        </svg>
+                        Unlock All
+                    </button>
                     <button id="undo-preview-btn"
                             onclick="undoPreview()"
                             class="hidden inline-flex items-center px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition duration-150 border border-white/20"
@@ -294,6 +303,21 @@
                             <span class="w-24 text-right text-white/50 text-sm hidden sm:block">
                                 {{ '%d:%02d' | format(track.duration_ms // 60000, (track.duration_ms % 60000) // 1000) }}
                             </span>
+
+                            <!-- Lock Button -->
+                            <button class="lock-btn w-8 text-center text-white/20 hover:text-amber-400 transition duration-150 ml-1 flex-shrink-0"
+                                    onclick="toggleTrackLock('{{ track.uri }}', {{ loop.index0 }}, this)"
+                                    title="Lock track in position">
+                                <svg class="lock-icon-open w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"></path>
+                                </svg>
+                                <svg class="lock-icon-standard w-4 h-4 mx-auto hidden" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM12 17c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3-9H9V6c0-1.66 1.34-3 3-3s3 1.34 3 3v2z"></path>
+                                </svg>
+                                <svg class="lock-icon-super w-4 h-4 mx-auto hidden" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 6c1.4 0 2.8 1.1 2.8 2.5V11c.6 0 1.2.6 1.2 1.2v3.5c0 .7-.6 1.3-1.2 1.3H9.2c-.7 0-1.2-.6-1.2-1.2v-3.5c0-.7.5-1.3 1.2-1.3V9.5C9.2 8.1 10.6 7 12 7zm0 1.2c-.8 0-1.5.5-1.5 1.3V11h3V9.5c0-.8-.7-1.3-1.5-1.3z"></path>
+                                </svg>
+                            </button>
 
                             <!-- Delete Button -->
                             <button class="delete-track-btn w-8 text-center text-white/20 hover:text-red-400 transition duration-150 ml-1 flex-shrink-0"
@@ -1168,6 +1192,8 @@ const workshopState = {
     isDirty: false,
     isSaving: false,
     isShuffling: false,
+    // Track locks: { track_uri: { tier, position, expires_at } }
+    locks: {},
     // Archive pairing state
     archiveQueue: [],
     archivePair: null,
@@ -1469,6 +1495,13 @@ document.addEventListener('DOMContentLoaded', () => {
         ghostClass: 'sortable-ghost',
         chosenClass: 'sortable-chosen',
         dragClass: 'sortable-drag',
+        filter: '.track-locked',
+        onMove: function(evt) {
+            // Prevent dropping onto a locked track's position
+            if (evt.related && evt.related.classList.contains('track-locked')) {
+                return false;
+            }
+        },
         onEnd: function(evt) {
             updateWorkingUrisFromDOM();
             markDirty();
@@ -1477,7 +1510,186 @@ document.addEventListener('DOMContentLoaded', () => {
 
     updateWorkshopAlgorithmParams();
     document.getElementById('workshop-algorithm').addEventListener('change', updateWorkshopAlgorithmParams);
+
+    // Load track locks from server
+    loadTrackLocks();
 });
+
+
+// =============================================================================
+// Track Lock Management
+// =============================================================================
+
+function loadTrackLocks() {
+    fetch('/workshop/' + workshopState.playlistId + '/locks', {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success && data.locks) {
+            workshopState.locks = {};
+            data.locks.forEach(function(lock) {
+                workshopState.locks[lock.track_uri] = {
+                    tier: lock.lock_tier,
+                    position: lock.position,
+                    expires_at: lock.expires_at,
+                };
+            });
+            applyAllLockStates();
+            updateUnlockAllButton();
+        }
+    })
+    .catch(function(err) {
+        console.error('Failed to load track locks:', err);
+    });
+}
+
+function toggleTrackLock(uri, position, buttonElement) {
+    var trackItem = buttonElement.closest('.track-item');
+    if (!trackItem) return;
+
+    // Get current DOM position
+    var allItems = Array.from(document.querySelectorAll('#track-list .track-item'));
+    var domIndex = allItems.indexOf(trackItem);
+    if (domIndex === -1) domIndex = position;
+
+    fetch('/workshop/' + workshopState.playlistId + '/locks/toggle', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({
+            track_uri: uri,
+            position: domIndex,
+        }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            if (data.lock) {
+                workshopState.locks[uri] = {
+                    tier: data.lock.lock_tier,
+                    position: data.lock.position,
+                    expires_at: data.lock.expires_at,
+                };
+            } else {
+                delete workshopState.locks[uri];
+            }
+            applyLockStateToElement(trackItem, uri);
+            updateUnlockAllButton();
+
+            var msg = data.lock
+                ? 'Track locked (' + data.lock.lock_tier + ')'
+                : 'Track unlocked';
+            showNotification(msg, 'success');
+        } else {
+            showNotification(data.message || 'Failed to toggle lock', 'error');
+        }
+    })
+    .catch(function(err) {
+        console.error('Toggle lock error:', err);
+        showNotification('Failed to toggle track lock', 'error');
+    });
+}
+
+function unlockAllTracks() {
+    if (Object.keys(workshopState.locks).length === 0) return;
+
+    fetch('/workshop/' + workshopState.playlistId + '/locks/unlock-all', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({}),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            workshopState.locks = {};
+            applyAllLockStates();
+            updateUnlockAllButton();
+            showNotification('All tracks unlocked', 'success');
+        }
+    })
+    .catch(function(err) {
+        console.error('Unlock all error:', err);
+        showNotification('Failed to unlock tracks', 'error');
+    });
+}
+
+function applyLockStateToElement(el, uri) {
+    var lock = workshopState.locks[uri];
+    var lockBtn = el.querySelector('.lock-btn');
+    var dragHandle = el.querySelector('.drag-handle');
+    var iconOpen = el.querySelector('.lock-icon-open');
+    var iconStandard = el.querySelector('.lock-icon-standard');
+    var iconSuper = el.querySelector('.lock-icon-super');
+
+    if (!lockBtn) return;
+
+    // Reset
+    el.classList.remove('track-locked', 'track-locked-standard', 'track-locked-super');
+    if (iconOpen) iconOpen.classList.remove('hidden');
+    if (iconStandard) iconStandard.classList.add('hidden');
+    if (iconSuper) iconSuper.classList.add('hidden');
+    lockBtn.classList.remove('text-amber-400', 'text-red-400');
+    lockBtn.classList.add('text-white/20');
+    if (dragHandle) {
+        dragHandle.classList.remove('opacity-30', 'cursor-not-allowed');
+        dragHandle.classList.add('cursor-grab');
+    }
+
+    if (!lock) return;
+
+    el.classList.add('track-locked');
+    lockBtn.classList.remove('text-white/20');
+
+    if (lock.tier === 'standard') {
+        el.classList.add('track-locked-standard');
+        lockBtn.classList.add('text-amber-400');
+        if (iconOpen) iconOpen.classList.add('hidden');
+        if (iconStandard) iconStandard.classList.remove('hidden');
+    } else if (lock.tier === 'super') {
+        el.classList.add('track-locked-super');
+        lockBtn.classList.add('text-red-400');
+        if (iconOpen) iconOpen.classList.add('hidden');
+        if (iconSuper) iconSuper.classList.remove('hidden');
+    }
+
+    // Disable drag handle for locked tracks
+    if (dragHandle) {
+        dragHandle.classList.remove('cursor-grab');
+        dragHandle.classList.add('opacity-30', 'cursor-not-allowed');
+    }
+}
+
+function applyAllLockStates() {
+    var items = document.querySelectorAll('#track-list .track-item');
+    items.forEach(function(el) {
+        applyLockStateToElement(el, el.dataset.uri);
+    });
+}
+
+function updateUnlockAllButton() {
+    var btn = document.getElementById('unlock-all-btn');
+    if (!btn) return;
+    var hasLocks = Object.keys(workshopState.locks).length > 0;
+    btn.classList.toggle('hidden', !hasLocks);
+}
+
+function getLockedPositionsMap() {
+    var map = {};
+    var items = Array.from(document.querySelectorAll('#track-list .track-item'));
+    items.forEach(function(el, index) {
+        var uri = el.dataset.uri;
+        if (workshopState.locks[uri]) {
+            map[String(index)] = uri;
+        }
+    });
+    return map;
+}
 
 
 // =============================================================================
@@ -1539,6 +1751,12 @@ function previewShuffle() {
     paramInputs.forEach(input => {
         body[input.name] = input.value;
     });
+
+    // Include locked positions so server skips them during shuffle
+    const lockedPositions = getLockedPositionsMap();
+    if (Object.keys(lockedPositions).length > 0) {
+        body.locked_positions = lockedPositions;
+    }
 
     const btn = document.getElementById('preview-shuffle-btn');
     const originalText = btn.textContent;
@@ -2189,12 +2407,20 @@ function createTrackElement(track, position) {
             '<p class="text-white/50 text-xs truncate">' + escapeHtml(artists) + '</p>' +
         '</div>' +
         '<span class="w-24 text-right text-white/50 text-sm hidden sm:block">' + durationStr + '</span>' +
+        '<button class="lock-btn w-8 text-center text-white/20 hover:text-amber-400 transition duration-150 ml-1 flex-shrink-0" onclick="toggleTrackLock(\'' + track.uri + '\', ' + (position - 1) + ', this)" title="Lock track in position">' +
+            '<svg class="lock-icon-open w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"></path></svg>' +
+            '<svg class="lock-icon-standard w-4 h-4 mx-auto hidden" fill="currentColor" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM12 17c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3-9H9V6c0-1.66 1.34-3 3-3s3 1.34 3 3v2z"></path></svg>' +
+            '<svg class="lock-icon-super w-4 h-4 mx-auto hidden" fill="currentColor" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 6c1.4 0 2.8 1.1 2.8 2.5V11c.6 0 1.2.6 1.2 1.2v3.5c0 .7-.6 1.3-1.2 1.3H9.2c-.7 0-1.2-.6-1.2-1.2v-3.5c0-.7.5-1.3 1.2-1.3V9.5C9.2 8.1 10.6 7 12 7zm0 1.2c-.8 0-1.5.5-1.5 1.3V11h3V9.5c0-.8-.7-1.3-1.5-1.3z"></path></svg>' +
+        '</button>' +
         '<button class="delete-track-btn w-8 text-center text-white/20 hover:text-red-400 transition duration-150 ml-1 flex-shrink-0" onclick="deleteTrack(\'' + track.uri + '\', this)" title="Remove from playlist">' +
             '<svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>' +
         '</button>' +
         '<span class="drag-handle w-8 text-center text-white/30 hover:text-white/60 cursor-grab active:cursor-grabbing ml-1 flex-shrink-0">' +
             '<svg class="w-5 h-5 mx-auto" fill="currentColor" viewBox="0 0 24 24"><path d="M8 6h2v2H8V6zm6 0h2v2h-2V6zM8 11h2v2H8v-2zm6 0h2v2h-2v-2zm-6 5h2v2H8v-2zm6 0h2v2h-2v-2z"/></svg>' +
         '</span>';
+
+    // Apply lock state if this track is locked
+    applyLockStateToElement(el, track.uri);
 
     return el;
 }
@@ -5146,6 +5372,11 @@ document.addEventListener('click', function(e) {
 .sortable-ghost { opacity: 0.4; background: rgba(29, 185, 84, 0.2) !important; border-radius: 8px; }
 .sortable-chosen { background: rgba(255, 255, 255, 0.08) !important; }
 .sortable-drag { background: rgba(29, 185, 84, 0.3) !important; border-radius: 8px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3); }
+
+/* Track lock visual states */
+.track-locked-standard { border-left: 3px solid rgba(251, 191, 36, 0.7) !important; background: rgba(251, 191, 36, 0.05) !important; }
+.track-locked-super { border-left: 3px solid rgba(239, 68, 68, 0.7) !important; background: rgba(239, 68, 68, 0.05) !important; }
+.track-locked .drag-handle { pointer-events: none; }
 
 .rotate-180 { transform: rotate(180deg); }
 .source-track-item { background: rgba(255, 255, 255, 0.02); }

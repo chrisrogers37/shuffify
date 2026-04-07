@@ -310,5 +310,6 @@ from shuffify.routes import (  # noqa: E402, F401
     playlist_pairs,
     raid_panel,
     playlist_preferences,
+    track_locks,
     activity,
 )

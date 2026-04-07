@@ -96,6 +96,15 @@ class ShuffleRequest(BaseModel):
     # TempoGradientShuffle specific
     direction: Literal["ascending", "descending"] = "ascending"
 
+    # Track locks: {position: track_uri} for locked tracks
+    locked_positions: Optional[Dict[str, str]] = Field(
+        default=None,
+        description=(
+            "Map of position (as string key) to track URI "
+            "for tracks that should stay in place"
+        ),
+    )
+
     class Config:
         extra = "ignore"
 

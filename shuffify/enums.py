@@ -51,6 +51,12 @@ class SnapshotType(StrEnum):
     SCHEDULED_PRE_EXECUTION = "scheduled_pre_execution"
 
 
+class LockTier(StrEnum):
+    """Tiers for per-track playlist locks."""
+    STANDARD = "standard"  # 30-day auto-expiry
+    SUPER = "super"        # permanent
+
+
 class PendingRaidStatus(StrEnum):
     """Status of a pending raid track."""
     PENDING = "pending"
@@ -86,6 +92,8 @@ class ActivityType(StrEnum):
     RAID_DRIP = "raid_drip"
     RAID_LINK_CREATE = "raid_link_create"
     RAID_LINK_DELETE = "raid_link_delete"
+    TRACK_LOCK = "track_lock"
+    TRACK_UNLOCK = "track_unlock"
     SETTINGS_CHANGE = "settings_change"
     LOGIN = "login"
     LOGOUT = "logout"
