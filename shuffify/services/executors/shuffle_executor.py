@@ -86,8 +86,13 @@ def execute_shuffle(
             return {"tracks_added": 0, "tracks_total": 0}
 
         # Query track locks for this playlist
-        locked_positions = _get_locked_positions(
-            schedule.user_id, target_id
+        from shuffify.services.track_lock_service import (
+            TrackLockService,
+        )
+        locked_positions = (
+            TrackLockService.safe_get_locked_positions(
+                schedule.user_id, target_id
+            )
         )
 
         algorithm_class = ShuffleRegistry.get_algorithm(
@@ -154,7 +159,7 @@ def execute_shuffle(
         )
 
         # Reconcile lock positions after reorder
-        _reconcile_locks(
+        TrackLockService.safe_reconcile_positions(
             schedule.user_id, target_id,
             shuffled_uris,
         )
@@ -231,36 +236,3 @@ def _auto_snapshot_before_shuffle(
         )
 
 
-def _get_locked_positions(user_id, playlist_id):
-    """Query locked track positions, with graceful fallback."""
-    try:
-        from shuffify.services.track_lock_service import (
-            TrackLockService,
-        )
-        return TrackLockService.get_locked_positions(
-            user_id, playlist_id
-        )
-    except Exception as e:
-        logger.warning(
-            "Failed to query track locks for "
-            "%s: %s — proceeding without locks",
-            playlist_id, e,
-        )
-        return {}
-
-
-def _reconcile_locks(user_id, playlist_id, new_uris):
-    """Reconcile lock positions after reorder."""
-    try:
-        from shuffify.services.track_lock_service import (
-            TrackLockService,
-        )
-        TrackLockService.update_positions_after_reorder(
-            user_id, playlist_id, new_uris
-        )
-    except Exception as e:
-        logger.warning(
-            "Failed to reconcile locks after "
-            "shuffle for %s: %s",
-            playlist_id, e,
-        )
