@@ -19,7 +19,7 @@ from shuffify.services.base import safe_commit
 
 logger = logging.getLogger(__name__)
 
-STANDARD_EXPIRY_DAYS = 30
+STANDARD_EXPIRY_DAYS = TrackLock.STANDARD_EXPIRY_DAYS
 
 
 class TrackLockError(Exception):
@@ -34,8 +34,7 @@ class TrackLockService:
     @staticmethod
     def _active_filter():
         """SQLAlchemy filter clause for non-expired locks."""
-        # Use naive UTC for SQLite compatibility
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         return db.or_(
             TrackLock.expires_at.is_(None),
             TrackLock.expires_at > now,
@@ -289,7 +288,7 @@ class TrackLockService:
         Returns:
             Number of expired locks deleted.
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         count = TrackLock.query.filter(
             TrackLock.expires_at.isnot(None),
             TrackLock.expires_at <= now,
@@ -352,3 +351,62 @@ class TrackLockService:
             TrackLockError,
         )
         return updated
+
+    # ---------------------------------------------------------
+    # Graceful-fallback helpers for callers (executors, routes)
+    # that should never crash when lock queries fail.
+    # ---------------------------------------------------------
+
+    @staticmethod
+    def safe_get_locked_positions(
+        user_id: int,
+        playlist_id: str,
+    ) -> Dict[int, str]:
+        """get_locked_positions with graceful fallback to {}."""
+        try:
+            return TrackLockService.get_locked_positions(
+                user_id, playlist_id
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to query track locks for "
+                "%s: %s — proceeding without locks",
+                playlist_id, e,
+            )
+            return {}
+
+    @staticmethod
+    def safe_get_locked_uris(
+        user_id: int,
+        playlist_id: str,
+    ) -> Set[str]:
+        """get_locked_uris with graceful fallback to empty set."""
+        try:
+            return TrackLockService.get_locked_uris(
+                user_id, playlist_id
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to query track locks for "
+                "%s: %s — proceeding without locks",
+                playlist_id, e,
+            )
+            return set()
+
+    @staticmethod
+    def safe_reconcile_positions(
+        user_id: int,
+        playlist_id: str,
+        new_uris: List[str],
+    ) -> None:
+        """update_positions_after_reorder with graceful fallback."""
+        try:
+            TrackLockService.update_positions_after_reorder(
+                user_id, playlist_id, new_uris
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to reconcile locks after "
+                "reorder for %s: %s",
+                playlist_id, e,
+            )

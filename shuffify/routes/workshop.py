@@ -192,17 +192,9 @@ def workshop_preview_shuffle(
             "Request must include 'tracks' array.", 400
         )
 
-    # Parse locked_positions from request
-    raw_locks = data.get("locked_positions")
-    locked_positions = None
-    if raw_locks and isinstance(raw_locks, dict):
-        locked_positions = {
-            int(k): v for k, v in raw_locks.items()
-        }
-
     shuffled_uris = ShuffleService.execute(
         shuffle_request.algorithm, tracks, params,
-        locked_positions=locked_positions,
+        locked_positions=shuffle_request.locked_positions,
     )
 
     logger.info(
@@ -250,19 +242,12 @@ def _reconcile_locks_after_commit(
     user_id, playlist_id, track_uris
 ):
     """Reconcile lock positions after a workshop commit."""
-    try:
-        from shuffify.services.track_lock_service import (
-            TrackLockService,
-        )
-        TrackLockService.update_positions_after_reorder(
-            user_id, playlist_id, track_uris
-        )
-    except Exception as e:
-        logger.warning(
-            "Failed to reconcile locks after "
-            "commit for %s: %s",
-            playlist_id, e,
-        )
+    from shuffify.services.track_lock_service import (
+        TrackLockService,
+    )
+    TrackLockService.safe_reconcile_positions(
+        user_id, playlist_id, track_uris
+    )
 
 
 def _log_workshop_commit_activity(
