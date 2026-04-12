@@ -234,5 +234,3 @@ def _auto_snapshot_before_shuffle(
             "Auto-snapshot before scheduled "
             f"shuffle failed: {snap_err}"
         )
-
-

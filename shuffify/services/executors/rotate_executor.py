@@ -520,5 +520,3 @@ def _rotate_swap(
         "tracks_added": swapped,
         "tracks_total": actual_total,
     }
-
-

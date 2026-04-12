@@ -279,5 +279,3 @@ def _mark_dripped_as_promoted(
             "Failed to mark dripped tracks as "
             "promoted: %s", e
         )
-
-
