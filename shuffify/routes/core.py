@@ -333,7 +333,10 @@ def callback():
         return redirect(url_for("main.index"))
 
     except AuthenticationError as e:
-        logger.error(f"Authentication failed: {e}")
+        if "not registered" in str(e):
+            logger.warning(f"Authentication failed: {e}")
+        else:
+            logger.error(f"Authentication failed: {e}")
         session.pop("spotify_token", None)
         session.pop("user_data", None)
         flash(

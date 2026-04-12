@@ -368,6 +368,7 @@ class TrackLockService:
                 user_id, playlist_id
             )
         except Exception as e:
+            db.session.rollback()
             logger.warning(
                 "Failed to query track locks for "
                 "%s: %s — proceeding without locks",
@@ -386,6 +387,7 @@ class TrackLockService:
                 user_id, playlist_id
             )
         except Exception as e:
+            db.session.rollback()
             logger.warning(
                 "Failed to query track locks for "
                 "%s: %s — proceeding without locks",
@@ -405,6 +407,7 @@ class TrackLockService:
                 user_id, playlist_id, new_uris
             )
         except Exception as e:
+            db.session.rollback()
             logger.warning(
                 "Failed to reconcile locks after "
                 "reorder for %s: %s",
