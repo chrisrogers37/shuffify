@@ -362,10 +362,28 @@ class TestSecurityHeaders:
             response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
         )
 
-    def test_hsts_not_present_in_debug_mode(self, client):
+    def test_hsts_not_present_in_debug_mode(self):
         """HSTS should NOT be sent in debug/development mode."""
-        response = client.get("/health")
-        assert "Strict-Transport-Security" not in response.headers
+        import os
+        from unittest.mock import patch
+
+        os.environ.pop("DATABASE_URL", None)
+
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+            },
+        ):
+            from shuffify import create_app
+
+            app = create_app("development")
+            app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
+
+            with app.test_client() as debug_client:
+                response = debug_client.get("/health")
+                assert "Strict-Transport-Security" not in response.headers
 
     def test_hsts_present_in_production_mode(self):
         """HSTS should be sent when debug is False (production)."""
