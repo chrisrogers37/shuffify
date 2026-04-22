@@ -135,14 +135,11 @@ def _init_redis(app):
             return client
         except redis.ConnectionError as e:
             logger.warning(
-                "Redis connection failed: %s. "
-                "Falling back to filesystem sessions.",
+                "Redis connection failed: %s. Falling back to filesystem sessions.",
                 e,
             )
     else:
-        logger.warning(
-            "REDIS_URL not configured. Using filesystem sessions."
-        )
+        logger.warning("REDIS_URL not configured. Using filesystem sessions.")
 
     app.config["SESSION_TYPE"] = "filesystem"
     app.config["SESSION_FILE_DIR"] = "./.flask_session/"
@@ -219,11 +216,11 @@ def _init_database(app):
                 # In development without migrations dir, fall back to
                 # db.create_all() for convenience.
                 migrations_dir = os.path.join(
-                    os.path.dirname(os.path.dirname(__file__)),
-                    'migrations'
+                    os.path.dirname(os.path.dirname(__file__)), "migrations"
                 )
                 if os.path.isdir(migrations_dir):
                     from flask_migrate import upgrade
+
                     try:
                         upgrade()
                     except Exception as mig_err:
@@ -269,9 +266,7 @@ def _apply_security_headers(app):
         # Prevent clickjacking
         response.headers["X-Frame-Options"] = "DENY"
         # Control referrer information leakage
-        response.headers["Referrer-Policy"] = (
-            "strict-origin-when-cross-origin"
-        )
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
         # HSTS: only in production (development uses HTTP)
         if not app.debug:
@@ -308,7 +303,7 @@ def create_app(config_name=None):
 
     # Validate required environment variables
     try:
-        validate_required_env_vars()
+        validate_required_env_vars(config_name)
         logger.info("Environment validation passed")
     except ValueError as e:
         logger.error("Environment validation failed: %s", str(e))
@@ -342,24 +337,20 @@ def create_app(config_name=None):
     # Apply rate limits to auth endpoints
     if _limiter is not None:
         try:
-            app.view_functions["main.login"] = _limiter.limit(
-                "10/minute"
-            )(app.view_functions["main.login"])
-            app.view_functions["main.callback"] = _limiter.limit(
-                "20/minute"
-            )(app.view_functions["main.callback"])
+            app.view_functions["main.login"] = _limiter.limit("10/minute")(
+                app.view_functions["main.login"]
+            )
+            app.view_functions["main.callback"] = _limiter.limit("20/minute")(
+                app.view_functions["main.callback"]
+            )
             # Resource-intensive endpoints
-            app.view_functions["main.shuffle"] = _limiter.limit(
-                "5/minute"
-            )(app.view_functions["main.shuffle"])
-            app.view_functions[
-                "main.workshop_commit"
-            ] = _limiter.limit("10/minute")(
+            app.view_functions["main.shuffle"] = _limiter.limit("5/minute")(
+                app.view_functions["main.shuffle"]
+            )
+            app.view_functions["main.workshop_commit"] = _limiter.limit("10/minute")(
                 app.view_functions["main.workshop_commit"]
             )
-            app.view_functions[
-                "main.run_schedule_now"
-            ] = _limiter.limit("5/minute")(
+            app.view_functions["main.run_schedule_now"] = _limiter.limit("5/minute")(
                 app.view_functions["main.run_schedule_now"]
             )
             logger.info(
@@ -369,9 +360,7 @@ def create_app(config_name=None):
                 "/schedules/*/run=5/min"
             )
         except Exception as e:
-            logger.warning(
-                "Failed to apply rate limits: %s", e
-            )
+            logger.warning("Failed to apply rate limits: %s", e)
 
     # Register global error handlers
     from shuffify.error_handlers import register_error_handlers

@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Callback route validates the returned state against the stored session state
   - Mismatched or missing state rejects the callback with a user-friendly error
   - State token consumed (removed from session) after validation to prevent replay
+- **Production SECRET_KEY Enforcement** - Production config no longer falls back to a weak default `SECRET_KEY`
+  - `ProdConfig` overrides `SECRET_KEY` with `os.environ.get('SECRET_KEY')` — no hardcoded fallback
+  - `validate_required_env_vars()` now requires `SECRET_KEY` when `config_name='production'`
+  - Application fails fast on startup if `SECRET_KEY` is not set in production environment
+  - Development default remains for local dev convenience
 
 ### Added
 - **Track-Level Locks** - Per-track position locks to protect individual tracks from automated operations
