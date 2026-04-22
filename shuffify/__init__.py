@@ -268,6 +268,21 @@ def _apply_security_headers(app):
         # Control referrer information leakage
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
+        # Content Security Policy — defense-in-depth against XSS
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' https://cdn.tailwindcss.com "
+            "https://cdn.jsdelivr.net 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' https://i.scdn.co https://*.spotifycdn.com data:; "
+            "connect-src 'self'; "
+            "font-src 'self'; "
+            "object-src 'none'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
+
         # HSTS: only in production (development uses HTTP)
         if not app.debug:
             response.headers["Strict-Transport-Security"] = (
