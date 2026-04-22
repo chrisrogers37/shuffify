@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Callback route validates the returned state against the stored session state
   - Mismatched or missing state rejects the callback with a user-friendly error
   - State token consumed (removed from session) after validation to prevent replay
+- **Content-Security-Policy Header** - Added CSP header to all responses for defense-in-depth against XSS
+  - Restricts scripts to `'self'`, Tailwind CDN, jsdelivr (SortableJS), and inline scripts
+  - Restricts images to `'self'`, Spotify image CDNs (`i.scdn.co`, `*.spotifycdn.com`), and data URIs
+  - Blocks object embeds, restricts frame ancestors, locks down base-uri and form-action to `'self'`
+  - Complements existing Jinja2 autoescaping with a browser-enforced second layer
 - **Production SECRET_KEY Enforcement** - Production config no longer falls back to a weak default `SECRET_KEY`
   - `ProdConfig` overrides `SECRET_KEY` with `os.environ.get('SECRET_KEY')` — no hardcoded fallback
   - `validate_required_env_vars()` now requires `SECRET_KEY` when `config_name='production'`

@@ -396,6 +396,43 @@ class TestSecurityHeaders:
                 assert "max-age=31536000" in hsts
                 assert "includeSubDomains" in hsts
 
+    def test_csp_header_present(self, client):
+        """All responses should include Content-Security-Policy."""
+        response = client.get("/health")
+        csp = response.headers.get("Content-Security-Policy")
+        assert csp is not None
+
+    def test_csp_default_src_self(self, client):
+        """CSP should restrict default-src to 'self'."""
+        csp = client.get("/health").headers["Content-Security-Policy"]
+        assert "default-src 'self'" in csp
+
+    def test_csp_script_src_allows_cdns(self, client):
+        """CSP should allow Tailwind and jsdelivr CDNs for scripts."""
+        csp = client.get("/health").headers["Content-Security-Policy"]
+        assert "https://cdn.tailwindcss.com" in csp
+        assert "https://cdn.jsdelivr.net" in csp
+
+    def test_csp_img_src_allows_spotify(self, client):
+        """CSP should allow Spotify image CDNs."""
+        csp = client.get("/health").headers["Content-Security-Policy"]
+        assert "https://i.scdn.co" in csp
+
+    def test_csp_blocks_object_embeds(self, client):
+        """CSP should block object/embed elements."""
+        csp = client.get("/health").headers["Content-Security-Policy"]
+        assert "object-src 'none'" in csp
+
+    def test_csp_frame_ancestors_none(self, client):
+        """CSP should prevent framing (reinforces X-Frame-Options)."""
+        csp = client.get("/health").headers["Content-Security-Policy"]
+        assert "frame-ancestors 'none'" in csp
+
+    def test_csp_on_non_health_routes(self, client):
+        """CSP should be present on all routes."""
+        response = client.get("/")
+        assert response.headers.get("Content-Security-Policy") is not None
+
     def test_security_headers_on_non_health_routes(self, client):
         """Security headers should be on all routes, not just /health."""
         response = client.get("/")
