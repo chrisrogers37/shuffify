@@ -8,6 +8,7 @@ target + raid playlist + archive + dismissed tracks.
 import logging
 
 from shuffify.models.db import (
+    db,
     PlaylistPair,
     RaidPlaylistLink,
     PendingRaidTrack,
@@ -38,16 +39,9 @@ def build_full_exclusion_set(api, target_id, user_id):
     try:
         target_tracks = api.get_playlist_tracks(target_id)
         target_track_count = len(target_tracks)
-        exclusion |= {
-            t.get("uri")
-            for t in target_tracks
-            if t.get("uri")
-        }
+        exclusion |= {t.get("uri") for t in target_tracks if t.get("uri")}
     except Exception as e:
-        logger.warning(
-            "Could not fetch target tracks for "
-            "dedupe: %s", e
-        )
+        logger.warning("Could not fetch target tracks for dedupe: %s", e)
 
     try:
         link = RaidPlaylistLink.query.filter_by(
@@ -55,19 +49,11 @@ def build_full_exclusion_set(api, target_id, user_id):
             target_playlist_id=target_id,
         ).first()
         if link:
-            raid_tracks = api.get_playlist_tracks(
-                link.raid_playlist_id
-            )
-            exclusion |= {
-                t.get("uri")
-                for t in raid_tracks
-                if t.get("uri")
-            }
+            raid_tracks = api.get_playlist_tracks(link.raid_playlist_id)
+            exclusion |= {t.get("uri") for t in raid_tracks if t.get("uri")}
     except Exception as e:
-        logger.warning(
-            "Could not fetch raid playlist tracks "
-            "for dedupe: %s", e
-        )
+        db.session.rollback()
+        logger.warning("Could not fetch raid playlist tracks for dedupe: %s", e)
 
     try:
         pair = PlaylistPair.query.filter_by(
@@ -75,19 +61,11 @@ def build_full_exclusion_set(api, target_id, user_id):
             production_playlist_id=target_id,
         ).first()
         if pair:
-            archive_tracks = api.get_playlist_tracks(
-                pair.archive_playlist_id
-            )
-            exclusion |= {
-                t.get("uri")
-                for t in archive_tracks
-                if t.get("uri")
-            }
+            archive_tracks = api.get_playlist_tracks(pair.archive_playlist_id)
+            exclusion |= {t.get("uri") for t in archive_tracks if t.get("uri")}
     except Exception as e:
-        logger.warning(
-            "Could not fetch archive tracks for "
-            "dedupe: %s", e
-        )
+        db.session.rollback()
+        logger.warning("Could not fetch archive tracks for dedupe: %s", e)
 
     try:
         dismissed = PendingRaidTrack.query.filter_by(
@@ -97,9 +75,7 @@ def build_full_exclusion_set(api, target_id, user_id):
         ).all()
         exclusion |= {t.track_uri for t in dismissed}
     except Exception as e:
-        logger.warning(
-            "Could not fetch dismissed tracks for "
-            "dedupe: %s", e
-        )
+        db.session.rollback()
+        logger.warning("Could not fetch dismissed tracks for dedupe: %s", e)
 
     return exclusion, target_track_count

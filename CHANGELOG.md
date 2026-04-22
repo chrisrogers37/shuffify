@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Restricts images to `'self'`, Spotify image CDNs (`i.scdn.co`, `*.spotifycdn.com`), and data URIs
   - Blocks object embeds, restricts frame ancestors, locks down base-uri and form-action to `'self'`
   - Complements existing Jinja2 autoescaping with a browser-enforced second layer
+- **DB Session Rollback in Raid Dedupe** - Added missing `db.session.rollback()` in 3 exception handlers in `raid_dedupe.py`
+  - Prevents cascading `InFailedSqlTransaction` errors when a DB query fails during deduplication
+  - Applies to `RaidPlaylistLink`, `PlaylistPair`, and `PendingRaidTrack` query exception handlers
 - **Production SECRET_KEY Enforcement** - Production config no longer falls back to a weak default `SECRET_KEY`
   - `ProdConfig` overrides `SECRET_KEY` with `os.environ.get('SECRET_KEY')` — no hardcoded fallback
   - `validate_required_env_vars()` now requires `SECRET_KEY` when `config_name='production'`
