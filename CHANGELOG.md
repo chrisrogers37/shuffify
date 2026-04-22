@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **db_app Fixture Flakiness in Batch Test Runs** - Fixed intermittent `no such table` errors during test teardown
+  - Root cause: fixtures called `create_app("development")` then overrode `SQLALCHEMY_DATABASE_URI` to `:memory:`, but the engine was already cached with the file-based URI from `_init_database`
+  - Added `TestConfig` class to `config.py` with `sqlite:///:memory:` URI so the engine is correctly initialized with StaticPool from the start
+  - Updated `db_app` and `app` fixtures to use `create_app("testing")`
+  - Added resilient teardown: `try/except` around `db.drop_all()` and `db.engine.dispose()` for proper cleanup
+
 ### Security
 - **OAuth CSRF State Parameter** - Added `state` parameter to OAuth authorization flow per RFC 6749 Section 10.12
   - Login route generates a cryptographically random state token via `secrets.token_urlsafe(32)` and stores it in session

@@ -150,5 +150,23 @@ class DevConfig(Config):
     SCHEDULER_ENABLED = os.getenv("SCHEDULER_ENABLED", "true").lower() == "true"
 
 
+class TestConfig(Config):
+    """Test configuration for isolated, in-memory test runs.
+
+    Uses SQLite in-memory so Flask-SQLAlchemy auto-configures StaticPool,
+    ensuring all connections share the same database within a test.
+    """
+
+    CONFIG_NAME = "testing"
+    TESTING = True
+    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+    SCHEDULER_ENABLED = False
+
+
 # Dictionary for easy config selection
-config = {"development": DevConfig, "production": ProdConfig, "default": DevConfig}
+config = {
+    "development": DevConfig,
+    "production": ProdConfig,
+    "testing": TestConfig,
+    "default": DevConfig,
+}
