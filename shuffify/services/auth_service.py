@@ -28,9 +28,12 @@ class AuthService:
     """Service for managing Spotify OAuth authentication."""
 
     @staticmethod
-    def get_auth_url() -> str:
+    def get_auth_url(state: Optional[str] = None) -> str:
         """
         Generate the Spotify authorization URL.
+
+        Args:
+            state: Optional CSRF state token for OAuth security.
 
         Returns:
             The authorization URL to redirect users to.
@@ -40,7 +43,7 @@ class AuthService:
         """
         try:
             client = SpotifyClient()
-            return client.get_auth_url()
+            return client.get_auth_url(state=state)
         except Exception as e:
             logger.error(f"Failed to generate auth URL: {e}", exc_info=True)
             raise AuthenticationError(f"Failed to generate authorization URL: {e}")

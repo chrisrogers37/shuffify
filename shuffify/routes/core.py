@@ -2,7 +2,9 @@
 Core routes: home page, static pages, health check, authentication.
 """
 
+import hmac
 import logging
+import secrets
 from datetime import datetime, timezone
 
 from flask import (
@@ -58,9 +60,7 @@ def index():
             return render_template("index.html")
 
         try:
-            client = AuthService.get_authenticated_client(
-                session["spotify_token"]
-            )
+            client = AuthService.get_authenticated_client(session["spotify_token"])
             user = AuthService.get_user_data(client)
 
             playlist_service = PlaylistService(client)
@@ -77,30 +77,24 @@ def index():
             try:
                 db_user = get_db_user()
                 if db_user:
-                    dashboard_data = (
-                        DashboardService.get_dashboard_data(
-                            user_id=db_user.id,
-                            last_login_at=getattr(
-                                db_user,
-                                "last_login_at",
-                                None,
-                            ),
-                        )
+                    dashboard_data = DashboardService.get_dashboard_data(
+                        user_id=db_user.id,
+                        last_login_at=getattr(
+                            db_user,
+                            "last_login_at",
+                            None,
+                        ),
                     )
-                    preferences = (
-                        PlaylistPreferenceService
-                        .get_user_preferences(db_user.id)
+                    preferences = PlaylistPreferenceService.get_user_preferences(
+                        db_user.id
                     )
                     if preferences:
                         (
                             favorite_playlists,
                             visible_playlists,
                             hidden_playlists,
-                        ) = (
-                            PlaylistPreferenceService
-                            .apply_preferences(
-                                playlists, preferences
-                            )
+                        ) = PlaylistPreferenceService.apply_preferences(
+                            playlists, preferences
                         )
             except Exception as e:
                 logger.warning(
@@ -110,10 +104,7 @@ def index():
                     e,
                 )
 
-            logger.debug(
-                f"User {user.get('display_name', 'Unknown')} "
-                f"loaded dashboard"
-            )
+            logger.debug(f"User {user.get('display_name', 'Unknown')} loaded dashboard")
             return render_template(
                 "dashboard.html",
                 favorite_playlists=favorite_playlists,
@@ -167,13 +158,13 @@ def health():
         overall_status = "healthy"
 
     return (
-        jsonify({
-            "status": overall_status,
-            "timestamp": datetime.now(
-                timezone.utc
-            ).isoformat(),
-            "scheduler": scheduler_metrics,
-        }),
+        jsonify(
+            {
+                "status": overall_status,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "scheduler": scheduler_metrics,
+            }
+        ),
         200,
     )
 
@@ -199,19 +190,19 @@ def login():
         # Clear any existing session data
         session.pop("spotify_token", None)
         session.pop("user_data", None)
+
+        state = secrets.token_urlsafe(32)
+        session["oauth_state"] = state
         session.modified = True
 
-        auth_url = AuthService.get_auth_url()
-        logger.debug(
-            f"Redirecting to Spotify auth: {auth_url}"
-        )
+        auth_url = AuthService.get_auth_url(state=state)
+        logger.debug(f"Redirecting to Spotify auth: {auth_url}")
         return redirect(auth_url)
 
     except AuthenticationError as e:
         logger.error(f"Login error: {e}")
         flash(
-            "An error occurred during login. "
-            "Please try again.",
+            "An error occurred during login. Please try again.",
             "error",
         )
         return redirect(url_for("main.index"))
@@ -220,17 +211,14 @@ def login():
 @main.route("/callback")
 def callback():
     """Handle OAuth callback from Spotify."""
-    logger.debug(
-        f"Callback received with args: {request.args}"
-    )
+    logger.debug(f"Callback received with args: {request.args}")
 
     # Check for OAuth errors
     error = request.args.get("error")
     if error:
         logger.error(f"OAuth error: {error}")
         flash(
-            f"OAuth Error: "
-            f"{request.args.get('error_description', 'Unknown error')}",
+            f"OAuth Error: {request.args.get('error_description', 'Unknown error')}",
             "error",
         )
         return redirect(url_for("main.index"))
@@ -240,32 +228,36 @@ def callback():
     if not code:
         logger.error("No authorization code in callback")
         flash(
-            "No authorization code received from Spotify. "
-            "Please try again.",
+            "No authorization code received from Spotify. Please try again.",
+            "error",
+        )
+        return redirect(url_for("main.index"))
+
+    # Validate CSRF state parameter
+    callback_state = request.args.get("state")
+    stored_state = session.pop("oauth_state", None)
+    if not stored_state or not hmac.compare_digest(stored_state, callback_state or ""):
+        logger.error("OAuth state mismatch: possible CSRF attack")
+        flash(
+            "Authentication failed due to a security check. Please try again.",
             "error",
         )
         return redirect(url_for("main.index"))
 
     try:
         # Exchange code for token
-        token_data = AuthService.exchange_code_for_token(
-            code
-        )
+        token_data = AuthService.exchange_code_for_token(code)
         session["spotify_token"] = token_data
 
         # Validate by fetching user data
-        _, user_data = (
-            AuthService.authenticate_and_get_user(token_data)
-        )
+        _, user_data = AuthService.authenticate_and_get_user(token_data)
         session["user_data"] = user_data
 
         # Upsert user record in database (non-blocking)
         is_new_user = False
         db_user = None
         try:
-            result = UserService.upsert_from_spotify(
-                user_data
-            )
+            result = UserService.upsert_from_spotify(user_data)
             is_new_user = result.is_new
             db_user = result.user
         except Exception as e:
@@ -285,8 +277,7 @@ def callback():
                     token_data["refresh_token"],
                 )
                 logger.debug(
-                    f"Stored encrypted refresh token "
-                    f"for user {user_data['id']}"
+                    f"Stored encrypted refresh token for user {user_data['id']}"
                 )
             except Exception as e:
                 logger.warning(
@@ -297,9 +288,7 @@ def callback():
         # Record login event (non-blocking)
         if db_user:
             try:
-                flask_session_id = getattr(
-                    session, "sid", None
-                )
+                flask_session_id = getattr(session, "sid", None)
                 LoginHistoryService.record_login(
                     user_id=db_user.id,
                     request=request,
@@ -320,9 +309,7 @@ def callback():
             log_activity(
                 user_id=db_user.id,
                 activity_type=ActivityType.LOGIN,
-                description=(
-                    "Logged in via Spotify OAuth"
-                ),
+                description=("Logged in via Spotify OAuth"),
             )
 
         logger.info(
@@ -340,8 +327,7 @@ def callback():
         session.pop("spotify_token", None)
         session.pop("user_data", None)
         flash(
-            "Error connecting to Spotify. "
-            "Please try again.",
+            "Error connecting to Spotify. Please try again.",
             "error",
         )
         return redirect(url_for("main.index"))
@@ -354,31 +340,22 @@ def logout():
     try:
         user_data = session.get("user_data")
         if user_data and user_data.get("id"):
-            db_user = UserService.get_by_spotify_id(
-                user_data["id"]
-            )
+            db_user = UserService.get_by_spotify_id(user_data["id"])
             if db_user:
-                flask_session_id = getattr(
-                    session, "sid", None
-                )
+                flask_session_id = getattr(session, "sid", None)
                 LoginHistoryService.record_logout(
                     user_id=db_user.id,
                     session_id=flask_session_id,
                 )
     except Exception as e:
-        logger.warning(
-            f"Failed to record logout: {e}. "
-            f"Logout continues."
-        )
+        logger.warning(f"Failed to record logout: {e}. Logout continues.")
 
     # Log logout activity (non-blocking)
     try:
         user_data = session.get("user_data", {})
         spotify_id = user_data.get("id")
         if spotify_id:
-            db_user = UserService.get_by_spotify_id(
-                spotify_id
-            )
+            db_user = UserService.get_by_spotify_id(spotify_id)
             if db_user:
                 log_activity(
                     user_id=db_user.id,

@@ -8,6 +8,7 @@ Health endpoint (/health) is tested in tests/test_health_db.py.
 import time
 from unittest.mock import patch, MagicMock
 
+
 class TestIndexRoute:
     """Tests for GET /."""
 
@@ -33,9 +34,7 @@ class TestIndexRoute:
     ):
         mock_is_auth.return_value = True
         mock_client = MagicMock()
-        mock_auth_svc.get_authenticated_client.return_value = (
-            mock_client
-        )
+        mock_auth_svc.get_authenticated_client.return_value = mock_client
         mock_auth_svc.get_user_data.return_value = {
             "id": "user123",
             "display_name": "Test User",
@@ -63,8 +62,8 @@ class TestIndexRoute:
         from shuffify.services import AuthenticationError
 
         mock_is_auth.return_value = True
-        mock_auth_svc.get_authenticated_client.side_effect = (
-            AuthenticationError("expired")
+        mock_auth_svc.get_authenticated_client.side_effect = AuthenticationError(
+            "expired"
         )
 
         resp = auth_client.get("/")
@@ -98,29 +97,36 @@ class TestLoginRoute:
             assert resp.status_code == 302
 
     @patch("shuffify.routes.core.AuthService")
-    def test_with_legal_consent_redirects_to_spotify(
-        self, mock_auth_svc, db_app
-    ):
+    def test_with_legal_consent_redirects_to_spotify(self, mock_auth_svc, db_app):
         mock_auth_svc.get_auth_url.return_value = (
             "https://accounts.spotify.com/authorize?test=1"
         )
         with db_app.test_client() as client:
             resp = client.get("/login?legal_consent=true")
             assert resp.status_code == 302
-            assert (
-                "accounts.spotify.com"
-                in resp.headers["Location"]
-            )
+            assert "accounts.spotify.com" in resp.headers["Location"]
 
     @patch("shuffify.routes.core.AuthService")
-    def test_auth_error_during_login_redirects(
-        self, mock_auth_svc, db_app
-    ):
+    def test_login_stores_oauth_state_in_session(self, mock_auth_svc, db_app):
+        """Login should generate a CSRF state token matching session value."""
+        mock_auth_svc.get_auth_url.return_value = (
+            "https://accounts.spotify.com/authorize?test=1"
+        )
+        with db_app.test_client() as client:
+            resp = client.get("/login?legal_consent=true")
+            assert resp.status_code == 302
+            call_kwargs = mock_auth_svc.get_auth_url.call_args
+            state_value = call_kwargs.kwargs.get("state")
+            assert state_value is not None
+            assert len(state_value) > 0
+            with client.session_transaction() as sess:
+                assert sess.get("oauth_state") == state_value
+
+    @patch("shuffify.routes.core.AuthService")
+    def test_auth_error_during_login_redirects(self, mock_auth_svc, db_app):
         from shuffify.services import AuthenticationError
 
-        mock_auth_svc.get_auth_url.side_effect = (
-            AuthenticationError("config error")
-        )
+        mock_auth_svc.get_auth_url.side_effect = AuthenticationError("config error")
         with db_app.test_client() as client:
             resp = client.get("/login?legal_consent=true")
             assert resp.status_code == 302
@@ -133,8 +139,7 @@ class TestCallbackRoute:
         """OAuth error parameter should redirect to index."""
         with db_app.test_client() as client:
             resp = client.get(
-                "/callback?error=access_denied"
-                "&error_description=User+denied+access"
+                "/callback?error=access_denied&error_description=User+denied+access"
             )
             assert resp.status_code == 302
 
@@ -142,6 +147,34 @@ class TestCallbackRoute:
         """No authorization code should redirect to index."""
         with db_app.test_client() as client:
             resp = client.get("/callback")
+            assert resp.status_code == 302
+
+    def test_missing_state_redirects(self, db_app):
+        """Callback without state parameter should reject."""
+        with db_app.test_client() as client:
+            resp = client.get("/callback?code=test_auth_code")
+            assert resp.status_code == 302
+
+    def test_mismatched_state_redirects(self, db_app):
+        """Callback with wrong state should reject."""
+        with db_app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["oauth_state"] = "correct_state"
+            resp = client.get("/callback?code=test_auth_code&state=wrong_state")
+            assert resp.status_code == 302
+
+    def test_state_without_session_redirects(self, db_app):
+        """Callback with state but no session state should reject."""
+        with db_app.test_client() as client:
+            resp = client.get("/callback?code=test_auth_code&state=some_state")
+            assert resp.status_code == 302
+
+    def test_session_state_but_no_url_state_redirects(self, db_app):
+        """Session has state but URL omits state parameter — should reject."""
+        with db_app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["oauth_state"] = "stored_state"
+            resp = client.get("/callback?code=test_auth_code")
             assert resp.status_code == 302
 
     @patch("shuffify.routes.core.LoginHistoryService")
@@ -171,41 +204,73 @@ class TestCallbackRoute:
         )
         mock_upsert_result = MagicMock()
         mock_upsert_result.is_new = False
-        mock_user_svc.upsert_from_spotify.return_value = (
-            mock_upsert_result
-        )
+        mock_user_svc.upsert_from_spotify.return_value = mock_upsert_result
         mock_user_svc.get_by_spotify_id.return_value = None
 
         with db_app.test_client() as client:
-            resp = client.get(
-                "/callback?code=test_auth_code"
-            )
+            with client.session_transaction() as sess:
+                sess["oauth_state"] = "valid_state"
+            resp = client.get("/callback?code=test_auth_code&state=valid_state")
             assert resp.status_code == 302
             assert resp.headers["Location"].endswith("/")
 
+    @patch("shuffify.routes.core.LoginHistoryService")
+    @patch("shuffify.routes.core.UserService")
     @patch("shuffify.routes.core.AuthService")
-    def test_auth_failure_during_callback(
-        self, mock_auth_svc, db_app
+    def test_state_consumed_after_callback(
+        self,
+        mock_auth_svc,
+        mock_user_svc,
+        mock_login_hist,
+        db_app,
     ):
+        """State token should be removed from session after use."""
+        mock_auth_svc.exchange_code_for_token.return_value = {
+            "access_token": "new_token",
+            "token_type": "Bearer",
+            "expires_at": time.time() + 3600,
+            "refresh_token": "new_refresh",
+        }
+        mock_client = MagicMock()
+        mock_auth_svc.authenticate_and_get_user.return_value = (
+            mock_client,
+            {
+                "id": "user123",
+                "display_name": "Test User",
+                "images": [],
+            },
+        )
+        mock_upsert_result = MagicMock()
+        mock_upsert_result.is_new = False
+        mock_user_svc.upsert_from_spotify.return_value = mock_upsert_result
+        mock_user_svc.get_by_spotify_id.return_value = None
+
+        with db_app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["oauth_state"] = "one_time_state"
+            client.get("/callback?code=test_auth_code&state=one_time_state")
+            with client.session_transaction() as sess:
+                assert "oauth_state" not in sess
+
+    @patch("shuffify.routes.core.AuthService")
+    def test_auth_failure_during_callback(self, mock_auth_svc, db_app):
         from shuffify.services import AuthenticationError
 
-        mock_auth_svc.exchange_code_for_token.side_effect = (
-            AuthenticationError("invalid code")
+        mock_auth_svc.exchange_code_for_token.side_effect = AuthenticationError(
+            "invalid code"
         )
 
         with db_app.test_client() as client:
-            resp = client.get(
-                "/callback?code=bad_code"
-            )
+            with client.session_transaction() as sess:
+                sess["oauth_state"] = "valid_state"
+            resp = client.get("/callback?code=bad_code&state=valid_state")
             assert resp.status_code == 302
 
 
 class TestLogoutRoute:
     """Tests for GET /logout."""
 
-    def test_logout_clears_session_and_redirects(
-        self, auth_client
-    ):
+    def test_logout_clears_session_and_redirects(self, auth_client):
         """Logout should clear session and redirect to index."""
         resp = auth_client.get("/logout")
         assert resp.status_code == 302
@@ -256,9 +321,7 @@ class TestDashboardDisplayNameFallback:
         """Dashboard shows 'Welcome!' when display_name is None."""
         mock_is_auth.return_value = True
         mock_client = MagicMock()
-        mock_auth_svc.get_authenticated_client.return_value = (
-            mock_client
-        )
+        mock_auth_svc.get_authenticated_client.return_value = mock_client
         mock_auth_svc.get_user_data.return_value = {
             "id": "user_no_name",
             "display_name": None,
@@ -295,9 +358,7 @@ class TestDashboardDisplayNameFallback:
         """Returning user sees 'Welcome back!' not 'Welcome back, None!'."""
         mock_is_auth.return_value = True
         mock_client = MagicMock()
-        mock_auth_svc.get_authenticated_client.return_value = (
-            mock_client
-        )
+        mock_auth_svc.get_authenticated_client.return_value = mock_client
         mock_auth_svc.get_user_data.return_value = {
             "id": "user_no_name_returning",
             "display_name": None,
