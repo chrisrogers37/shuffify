@@ -157,9 +157,12 @@ class SpotifyClient:
     # Authentication Methods
     # =========================================================================
 
-    def get_auth_url(self) -> str:
+    def get_auth_url(self, state: Optional[str] = None) -> str:
         """
         Get the Spotify authorization URL.
+
+        Args:
+            state: Optional CSRF state token for OAuth security.
 
         Returns:
             Authorization URL for user to visit.
@@ -167,7 +170,7 @@ class SpotifyClient:
         Raises:
             SpotifyAuthError: If URL generation fails.
         """
-        return self._auth_manager.get_auth_url()
+        return self._auth_manager.get_auth_url(state=state)
 
     def get_token(self, code: str) -> Dict[str, Any]:
         """
@@ -283,9 +286,7 @@ class SpotifyClient:
         self._ensure_authenticated()
         return self._api.update_playlist_tracks(playlist_id, track_uris)
 
-    def search_playlists(
-        self, query: str, limit: int = 10
-    ) -> List[Dict[str, Any]]:
+    def search_playlists(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         """
         Search for playlists by name.
 

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **OAuth CSRF State Parameter** - Added `state` parameter to OAuth authorization flow per RFC 6749 Section 10.12
+  - Login route generates a cryptographically random state token via `secrets.token_urlsafe(32)` and stores it in session
+  - State token threaded through `AuthService` and `SpotifyClient` to `SpotifyAuthManager`
+  - Callback route validates the returned state against the stored session state
+  - Mismatched or missing state rejects the callback with a user-friendly error
+  - State token consumed (removed from session) after validation to prevent replay
+
 ### Added
 - **Track-Level Locks** - Per-track position locks to protect individual tracks from automated operations
   - Two lock tiers: Standard (30-day auto-expiry, 1 click) and Super (permanent, 2 clicks)
