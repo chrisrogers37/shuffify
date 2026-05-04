@@ -1,5 +1,5 @@
 -r base.txt
 
 # Production
-sentry-sdk>=2.58.0,<3.0
+sentry-sdk>=2.59.0,<3.0
 psycopg2>=2.9.9
