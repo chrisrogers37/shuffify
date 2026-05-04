@@ -5,7 +5,7 @@ gunicorn==25.3.0
 numpy>=2.4.4
 pydantic>=2.0.0
 requests==2.33.1
-python-jose>=3.4.0
+python-jose>=3.5.0
 cryptography>=46.0.5
 redis>=7.4.0
 Flask-SQLAlchemy>=3.1.1
