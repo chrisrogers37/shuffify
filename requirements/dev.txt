@@ -12,7 +12,7 @@ isort==8.0.1
 mypy==2.1.0
 
 # Security & Quality
-safety>=3.0.0
+safety>=3.7.0
 bandit==1.9.4
 
 # Development
