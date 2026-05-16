@@ -1,8 +1,15 @@
 # F1 — `verify_playlist_state` URI-set verifier
 
 **Investigation:** [00_INVESTIGATION.md](00_INVESTIGATION.md)
+**Status:** COMPLETE — Started 2026-05-16 (combined PR with F3)
 **Targets:** RC1, RC2 (partial — F3 finishes RC2), RC3, RC4, RC5
 **Risk:** Low. Effort: Medium.
+
+## Implementation decisions (2026-05-16, weigh-development-paths)
+
+- **`PlaylistVerificationError` lives in `base_executor.py`**, subclassing `JobExecutionError`. Verification is an executor invariant, not a Spotify-API concept. Existing `except JobExecutionError` handlers catch it for free; F2 will narrow the catch by type before the generic handler.
+- **Cache bypass:** the helper passes `skip_cache=True` to `get_playlist_tracks` (which already supports it — `spotify/api.py:273`). Cheaper than invalidating shared cache state. The original plan options ("invalidate before fetch" vs "add a kwarg") are both made moot by the existing kwarg.
+- **Test layout:** consolidate in `tests/services/test_verify_playlist_state.py` (flat layout matches the rest of the project). The existing `TestVerifyPlaylistSizeDrift` class in `test_job_executor_rotate.py:1961-2017` is removed; those 4 tests were direct unit tests of the helper, not rotate-specific.
 
 ## Context
 

@@ -19,6 +19,15 @@ from shuffify.services.executors.shuffle_executor import (
 )
 
 
+# Executor paths touch TrackLockService (db.session) even
+# in their except-branch fallbacks, so all tests need a
+# Flask app context.
+@pytest.fixture(autouse=True)
+def _app_ctx(db_app):
+    with db_app.app_context():
+        yield
+
+
 @pytest.fixture
 def mock_schedule():
     """Create a mock Schedule model instance."""

@@ -128,6 +128,35 @@ def execute_drip(
             target_id, drip_uris, position=0
         )
         api.playlist_remove_items(raid_id, drip_uris)
+
+        # F1: verify both sides of the drip. Catches the
+        # add-then-remove failure modes (RC4) where
+        # tracks get marked PROMOTED but don't actually
+        # land on target or aren't removed from raid.
+        from shuffify.services.executors.base_executor import (
+            JobExecutorService,
+        )
+        prev_target_uris = [
+            t.get("uri") for t in target_tracks
+            if t.get("uri")
+        ]
+        # drip adds at position=0, so expected order is
+        # drip_uris first, then existing target tracks.
+        expected_target = list(drip_uris) + prev_target_uris
+        JobExecutorService.verify_playlist_state(
+            api, target_id, expected_target,
+            schedule.id, "drip target",
+        )
+
+        drip_set = set(drip_uris)
+        expected_raid = [
+            u for u in raid_uris if u not in drip_set
+        ]
+        JobExecutorService.verify_playlist_state(
+            api, raid_id, expected_raid,
+            schedule.id, "drip raid",
+        )
+
         _mark_dripped_as_promoted(
             user_id, target_id, drip_uris
         )

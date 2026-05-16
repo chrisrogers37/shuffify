@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Strict post-write playlist verification** - Replaces rotate executor's 50%-tolerance count check with `JobExecutorService.verify_playlist_state` URI-multiset compare across all executors
+  - Captured a real silent loss on 2026-05-13 (WOOKLYN, Schedule 11: `swap size mismatch — expected 241 tracks, got 240`). The old verifier only warned because drift was <50%; the new verifier raises `PlaylistVerificationError` for any divergence (missing tracks, extra tracks, or substitutions).
+  - Verifies post-write state for: rotate Phase 1 overflow + archive, rotate Phase 2 swap + archive, shuffle, drip (target + raid), raid pull
+  - F3: rotate Phase 2 now computes the correct expected URI set `(prod ∖ swap_out) ∪ swap_in` instead of the original `len(prod_uris)` count, which was wrong whenever `swap_in`/`swap_out` differed (locks, protect_count, depleted eligible pool)
+  - URI-multiset compare honors duplicate counts, so legitimate same-track-listed-twice playlists still pass and silent same-count substitutions fail
+  - Verify call uses `skip_cache=True` on `get_playlist_tracks` so the post-write read can't return a stale cached pre-write state
+  - New exception class `shuffify.services.executors.PlaylistVerificationError(JobExecutionError)` carries `expected`, `actual`, `missing`, `extra`, `playlist_id`, `phase`, `schedule_id` for downstream rollback (F2) and Sentry capture (F5)
+  - New test module `tests/services/test_verify_playlist_state.py` (12 cases); legacy `TestVerifyPlaylistSizeDrift` class removed; `test_job_executor_rotate.py`'s `_make_api` upgraded to a stateful mock that applies writes; pre-existing app-context bug in executor tests fixed via autouse `db_app` fixture
+  - Closes the second deliverable in the WOOKLYN silent-loss investigation
+
 ### Added
 - **Forensic SQL: WOOKLYN loss timeline** - Read-only Postgres script for reconstructing silent track-loss history on any playlist
   - `scripts/forensics/wooklyn_loss_timeline.sql` — seven-section report (matched playlists, schedules, executions, snapshots, activity log, drift detection, restore quick-card)

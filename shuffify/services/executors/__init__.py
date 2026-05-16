@@ -17,9 +17,11 @@ Public API (backward-compatible):
 from shuffify.services.executors.base_executor import (
     JobExecutorService,
     JobExecutionError,
+    PlaylistVerificationError,
 )
 
 __all__ = [
     "JobExecutorService",
     "JobExecutionError",
+    "PlaylistVerificationError",
 ]

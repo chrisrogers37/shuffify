@@ -9,6 +9,7 @@ rotate_executor).
 """
 
 import logging
+from collections import Counter
 from datetime import datetime, timezone
 from typing import List
 
@@ -31,6 +32,42 @@ class JobExecutionError(Exception):
     """Raised when a scheduled job fails to execute."""
 
     pass
+
+
+class PlaylistVerificationError(JobExecutionError):
+    """Raised when post-write playlist state diverges from expected.
+
+    Compares actual URIs to expected URIs as multisets so duplicate
+    track counts must also match. Carries enough detail for F2 to
+    drive an auto-rollback (missing/extra URI lists, schedule_id,
+    phase label).
+    """
+
+    def __init__(
+        self,
+        playlist_id: str,
+        expected: List[str],
+        actual: List[str],
+        schedule_id: int,
+        phase: str,
+    ):
+        self.playlist_id = playlist_id
+        self.expected = expected
+        self.actual = actual
+        self.schedule_id = schedule_id
+        self.phase = phase
+
+        exp_counter = Counter(expected)
+        act_counter = Counter(actual)
+        self.missing = list((exp_counter - act_counter).elements())
+        self.extra = list((act_counter - exp_counter).elements())
+
+        super().__init__(
+            f"Schedule {schedule_id}: {phase} verification failed "
+            f"— expected {len(expected)} tracks, got "
+            f"{len(actual)}, missing {len(self.missing)}, "
+            f"extra {len(self.extra)}"
+        )
 
 
 class JobExecutorService:
@@ -406,3 +443,48 @@ class JobExecutorService:
     ) -> None:
         """Add tracks to a playlist in batches."""
         api.playlist_add_items(playlist_id, uris)
+
+    @staticmethod
+    def verify_playlist_state(
+        api: SpotifyAPI,
+        playlist_id: str,
+        expected_uris: List[str],
+        schedule_id: int,
+        phase: str,
+    ) -> List[str]:
+        """Re-fetch playlist and verify URI multiset matches expected.
+
+        Bypasses the Spotify cache (skip_cache=True) so the read
+        reflects the post-write state, not a pre-write cached copy.
+
+        Args:
+            api: SpotifyAPI client.
+            playlist_id: Target playlist.
+            expected_uris: URIs the playlist should contain (order
+                ignored; duplicate counts honored).
+            schedule_id: For error attribution.
+            phase: Short label like "swap", "shuffle", "drip target".
+
+        Returns:
+            The actual URI list (in fetch order) on success.
+
+        Raises:
+            PlaylistVerificationError: If actual multiset diverges
+                from expected.
+        """
+        verified = api.get_playlist_tracks(
+            playlist_id, skip_cache=True,
+        )
+        actual_uris = [
+            t["uri"] for t in (verified or []) if t.get("uri")
+        ]
+
+        if Counter(actual_uris) != Counter(expected_uris):
+            raise PlaylistVerificationError(
+                playlist_id=playlist_id,
+                expected=expected_uris,
+                actual=actual_uris,
+                schedule_id=schedule_id,
+                phase=phase,
+            )
+        return actual_uris

@@ -211,48 +211,6 @@ def _sample_at_most(pool, count):
     return random.sample(pool, count)
 
 
-def _verify_playlist_size(
-    api, target_id, expected, schedule_id, phase,
-):
-    """Re-fetch playlist to get actual track count.
-
-    Logs a warning if the actual size differs from
-    expected, indicating a silent API failure. Raises
-    JobExecutionError if drift exceeds 50% of expected
-    size, indicating a serious Spotify failure.
-
-    Returns:
-        Actual track count.
-    """
-    from shuffify.services.executors.base_executor import (
-        JobExecutionError,
-    )
-
-    verified = api.get_playlist_tracks(target_id)
-    actual = sum(
-        1 for t in verified if t.get("uri")
-    ) if verified else 0
-
-    if actual != expected:
-        drift = abs(actual - expected)
-        threshold = max(1, expected // 2)
-        if drift > threshold:
-            raise JobExecutionError(
-                "Schedule {}: {} size drift too "
-                "large — expected {} tracks, got "
-                "{}".format(
-                    schedule_id, phase,
-                    expected, actual,
-                )
-            )
-        logger.warning(
-            "Schedule %s: %s size mismatch — "
-            "expected %d tracks, got %d",
-            schedule_id, phase, expected, actual,
-        )
-    return actual
-
-
 def _purge_archive_overlaps(
     api, archive_id, archive_uris, prod_set,
 ):
@@ -441,10 +399,28 @@ def _rotate_swap(
                 api, archive_id, new_to_archive
             )
 
-        expected = len(prod_uris) - len(overflow_uris)
-        actual_total = _verify_playlist_size(
-            api, target_id, expected,
-            schedule.id, "overflow removal",
+        # Verify production: original ∖ overflow.
+        overflow_set = set(overflow_uris)
+        expected_prod = [
+            u for u in prod_uris
+            if u not in overflow_set
+        ]
+        verified_prod = (
+            JobExecutorService.verify_playlist_state(
+                api, target_id, expected_prod,
+                schedule.id, "overflow",
+            )
+        )
+        actual_total = len(verified_prod)
+
+        # Verify archive: previous (post-purge) ∪
+        # new_to_archive.
+        expected_archive = (
+            list(archive_uris) + new_to_archive
+        )
+        JobExecutorService.verify_playlist_state(
+            api, archive_id, expected_archive,
+            schedule.id, "overflow archive",
         )
 
         logger.info(
@@ -469,6 +445,11 @@ def _rotate_swap(
     # Randomly select swap-out tracks from eligible
     swap_out_uris = _sample_at_most(
         eligible_uris, len(swap_in_uris)
+    )
+
+    swapped = min(
+        len(swap_in_uris),
+        len(swap_out_uris),
     )
 
     if swap_in_uris and swap_out_uris:
@@ -499,15 +480,41 @@ def _rotate_swap(
             api, target_id, swap_in_uris
         )
 
-    swapped = min(
-        len(swap_in_uris),
-        len(swap_out_uris),
-    )
+        # F3: expected production =
+        # (prod ∖ swap_out) ∪ swap_in. The original size
+        # is wrong when swap_in/swap_out differ (e.g.
+        # eligible pool depleted by locks/protect).
+        swap_out_set = set(swap_out_uris)
+        expected_prod = [
+            u for u in prod_uris
+            if u not in swap_out_set
+        ]
+        expected_prod.extend(swap_in_uris)
+        verified_prod = (
+            JobExecutorService.verify_playlist_state(
+                api, target_id, expected_prod,
+                schedule.id, "swap",
+            )
+        )
+        actual_total = len(verified_prod)
 
-    actual_total = _verify_playlist_size(
-        api, target_id, len(prod_uris),
-        schedule.id, "swap",
-    )
+        # F3: expected archive =
+        # (archive ∖ swap_in) ∪ new_to_archive.
+        swap_in_set = set(swap_in_uris)
+        expected_archive = [
+            u for u in archive_uris
+            if u not in swap_in_set
+        ]
+        expected_archive.extend(new_to_archive)
+        JobExecutorService.verify_playlist_state(
+            api, archive_id, expected_archive,
+            schedule.id, "swap archive",
+        )
+    else:
+        # Nothing to swap (archive empty or eligible pool
+        # depleted). No writes happened, so the prod size
+        # is unchanged.
+        actual_total = len(prod_uris)
 
     logger.info(
         "Schedule %s: swapped %d tracks between "

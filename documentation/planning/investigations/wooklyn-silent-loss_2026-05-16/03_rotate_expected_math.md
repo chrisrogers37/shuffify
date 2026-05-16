@@ -1,9 +1,15 @@
 # F3 — Correct the rotate expected-URI computation
 
 **Investigation:** [00_INVESTIGATION.md](00_INVESTIGATION.md)
+**Status:** COMPLETE — Started 2026-05-16 (combined PR with F1)
 **Targets:** RC2 (wrong baseline in rotate Phase 2)
 **Depends on:** F1 (uses `verify_playlist_state` for the verify step)
 **Risk:** Low. Effort: Small.
+
+## Implementation decisions (2026-05-16, weigh-development-paths)
+
+- **Ship combined with F1** as one PR — they are interdependent: F1 removes `_verify_playlist_size`, leaving Phase 2 needing F3's correct expected-URI computation.
+- **Archive-side verification is included** here (originally floated as defer-eligible). Symmetric with prod verification; catches archive-side write failures in both Phase 1 (overflow archive) and Phase 2 (swap-out archive). One extra paginated fetch per rotation.
 
 ## Context
 

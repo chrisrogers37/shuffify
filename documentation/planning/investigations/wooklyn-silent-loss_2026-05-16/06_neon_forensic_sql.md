@@ -1,7 +1,7 @@
 # F6 — Neon forensic SQL for WOOKLYN loss timeline
 
 **Investigation:** [00_INVESTIGATION.md](00_INVESTIGATION.md)
-**Status:** IN PROGRESS — Started 2026-05-16
+**Status:** COMPLETE — Merged 2026-05-16 (PR #304, commit `d12141a`)
 **Targets:** "What has WOOKLYN actually lost, and which snapshot do I restore from?"
 **Risk:** None — read-only SQL. Effort: Small.
 

@@ -11,18 +11,27 @@ from unittest.mock import patch, MagicMock
 from shuffify.services.executors import (
     JobExecutorService,
     JobExecutionError,
+    PlaylistVerificationError,
 )
 from shuffify.services.executors.rotate_executor import (
     execute_rotate,
     _purge_archive_overlaps,
     _checked_remove,
-    _verify_playlist_size,
 )
 from shuffify.spotify.exceptions import (
     SpotifyAPIError,
     SpotifyNotFoundError,
 )
 from shuffify.enums import JobType
+
+
+# Rotate-executor tests need a Flask app context because the
+# executor calls TrackLockService.safe_get_locked_uris, which
+# touches db.session even in its except-branch fallback.
+@pytest.fixture(autouse=True)
+def _app_ctx(db_app):
+    with db_app.app_context():
+        yield
 
 
 def _make_schedule(
@@ -56,47 +65,84 @@ def _make_api(
     prod_tracks=None, archive_tracks=None,
     post_removal_prod=None,
 ):
-    """Create a mock SpotifyAPI.
+    """Create a stateful mock SpotifyAPI.
+
+    `playlist_add_items` and `playlist_remove_items` mutate
+    internal state so a follow-up `get_playlist_tracks`
+    reflects the writes — which is what F1's
+    `verify_playlist_state` reads back to confirm the
+    post-write state.
 
     Args:
         prod_tracks: Initial production playlist tracks.
         archive_tracks: Initial archive playlist tracks.
-        post_removal_prod: Tracks returned for the
-            verification re-fetch of the production
-            playlist. If None, returns prod_tracks.
+        post_removal_prod: Optional override that forces
+            the second-and-later get_playlist_tracks(target1)
+            return value, regardless of what writes happened.
+            Use this only to simulate a Spotify silent
+            failure for PlaylistVerificationError tests.
     """
     api = MagicMock()
 
-    # Track how many times target1 is fetched.
-    # First call returns initial tracks, subsequent
-    # calls return post_removal_prod (for verification).
-    target_fetch_count = {"n": 0}
-    final_prod = (
-        post_removal_prod
-        if post_removal_prod is not None
-        else prod_tracks
-    )
+    state = {
+        "target1": [
+            t["uri"] for t in (prod_tracks or [])
+            if t.get("uri")
+        ],
+        "archive1": [
+            t["uri"] for t in (archive_tracks or [])
+            if t.get("uri")
+        ],
+    }
 
-    def get_tracks(playlist_id):
+    target_fetch_count = {"n": 0}
+    forced_post = post_removal_prod  # may be None
+
+    def get_tracks(playlist_id, skip_cache=False):
         if playlist_id == "target1":
             target_fetch_count["n"] += 1
-            if target_fetch_count["n"] == 1:
-                return prod_tracks or []
-            # Subsequent calls return post-removal state
-            return final_prod or []
-        if playlist_id == "archive1":
-            return archive_tracks or []
-        return []
+            if (
+                forced_post is not None
+                and target_fetch_count["n"] >= 2
+            ):
+                return list(forced_post)
+        return [
+            {"uri": u, "name": u}
+            for u in state.get(playlist_id, [])
+        ]
+
+    def add_items(
+        playlist_id, uris, position=None,
+    ):
+        if playlist_id not in state:
+            state[playlist_id] = []
+        if position is None:
+            state[playlist_id].extend(uris)
+        else:
+            state[playlist_id] = (
+                state[playlist_id][:position]
+                + list(uris)
+                + state[playlist_id][position:]
+            )
+
+    def remove_items(playlist_id, uris):
+        to_remove = set(uris)
+        state[playlist_id] = [
+            u for u in state.get(playlist_id, [])
+            if u not in to_remove
+        ]
+        return True
 
     api.get_playlist_tracks = MagicMock(
         side_effect=get_tracks
     )
     api.playlist_remove_items = MagicMock(
-        return_value=True
+        side_effect=remove_items
     )
     api.playlist_add_items = MagicMock(
-        return_value=None
+        side_effect=add_items
     )
+    api._state = state
     return api
 
 
@@ -137,14 +183,9 @@ class TestExecuteRotateSwap:
 
         prod = _make_tracks(["p1", "p2", "p3"])
         archive = _make_tracks(["a1", "a2", "a3"])
-        # After swap: 2 removed, 2 added = still 3
-        post_prod = _make_tracks(
-            ["p3", "a2", "a3"]
-        )
         api = _make_api(
             prod_tracks=prod,
             archive_tracks=archive,
-            post_removal_prod=post_prod,
         )
         schedule = _make_schedule(
             rotation_count=2,
@@ -785,11 +826,15 @@ class TestVerification:
         "shuffify.services.executors.rotate_executor"
         ".random"
     )
-    def test_overflow_returns_verified_total(
+    def test_overflow_raises_when_post_state_drifts(
         self, mock_random, mock_pair, mock_snap
     ):
-        """Phase 1 returns actual count from re-fetch,
-        not calculated."""
+        """F1: Phase 1 raises PlaylistVerificationError when
+        the post-write playlist size diverges from
+        expected. (Replaces the pre-F1 loose-verify test
+        which asserted the old behavior of returning the
+        drifted count.)
+        """
         mock_pair.return_value = _make_pair()
         mock_snap.is_auto_snapshot_enabled.return_value = (
             False
@@ -797,8 +842,8 @@ class TestVerification:
 
         uris = ["u{}".format(i) for i in range(8)]
         prod = _make_tracks(uris)
-        # Simulate removal partially failing:
-        # expected 5 but got 7
+        # Simulate Spotify partially failing the removal:
+        # expected 5 but got 7 (silent loss class).
         post_prod = _make_tracks(uris[:7])
         api = _make_api(
             prod_tracks=prod,
@@ -812,10 +857,8 @@ class TestVerification:
             lambda lst, n: lst[:n]
         )
 
-        result = execute_rotate(schedule, api)
-
-        # Should return actual 7, not calculated 5
-        assert result["tracks_total"] == 7
+        with pytest.raises(PlaylistVerificationError):
+            execute_rotate(schedule, api)
 
     @patch(
         "shuffify.services.executors.rotate_executor"
@@ -829,10 +872,14 @@ class TestVerification:
         "shuffify.services.executors.rotate_executor"
         ".random"
     )
-    def test_swap_returns_verified_total(
+    def test_swap_raises_on_unexpected_extra_track(
         self, mock_random, mock_pair, mock_snap
     ):
-        """Phase 2 returns actual count from re-fetch."""
+        """F1: Phase 2 raises PlaylistVerificationError
+        when the post-write playlist contains an extra
+        track that the executor did not add. (Replaces the
+        pre-F1 loose-verify test which accepted the drift.)
+        """
         mock_pair.return_value = _make_pair()
         mock_snap.is_auto_snapshot_enabled.return_value = (
             False
@@ -840,8 +887,6 @@ class TestVerification:
 
         prod = _make_tracks(["p1", "p2", "p3"])
         archive = _make_tracks(["a1", "a2"])
-        # Simulate: after swap, playlist gained a track
-        # (unexpected)
         post_prod = _make_tracks(
             ["p3", "a1", "a2", "extra"]
         )
@@ -858,10 +903,8 @@ class TestVerification:
             lambda lst, n: lst[:n]
         )
 
-        result = execute_rotate(schedule, api)
-
-        # Should reflect the actual re-fetched count
-        assert result["tracks_total"] == 4
+        with pytest.raises(PlaylistVerificationError):
+            execute_rotate(schedule, api)
 
 
 # =============================================================================
@@ -967,14 +1010,9 @@ class TestExecuteRotateValidation:
         archive = _make_tracks(
             ["a{}".format(i) for i in range(10)]
         )
-        post_prod = _make_tracks(
-            uris[5:]
-            + ["a{}".format(i) for i in range(5, 10)]
-        )
         api = _make_api(
             prod_tracks=prod,
             archive_tracks=archive,
-            post_removal_prod=post_prod,
         )
         schedule = _make_schedule()
         schedule.algorithm_params = {
@@ -1084,7 +1122,6 @@ class TestExecuteRotateValidation:
         assert result["tracks_total"] == 2
 
 
-
 # =============================================================================
 # PROTECT COUNT INTEGRATION
 # =============================================================================
@@ -1120,13 +1157,9 @@ class TestProtectCount:
         archive = _make_tracks(
             ["a1", "a2", "a3"]
         )
-        post_prod = _make_tracks(
-            ["p1", "p2", "p5", "a2", "a3"]
-        )
         api = _make_api(
             prod_tracks=prod,
             archive_tracks=archive,
-            post_removal_prod=post_prod,
         )
         schedule = _make_schedule(
             rotation_count=2,
@@ -1262,13 +1295,9 @@ class TestTargetSize:
         archive = _make_tracks(
             ["a{}".format(i) for i in range(5)]
         )
-        post_prod = _make_tracks(
-            uris[3:] + ["a2", "a3", "a4"]
-        )
         api = _make_api(
             prod_tracks=prod,
             archive_tracks=archive,
-            post_removal_prod=post_prod,
         )
         schedule = _make_schedule(
             rotation_count=3,
@@ -1445,13 +1474,9 @@ class TestOperationOrdering:
             ["p1", "p2", "p3", "p4"]
         )
         archive = _make_tracks(["a1", "a2"])
-        post_prod = _make_tracks(
-            ["p3", "p4", "a1", "a2"]
-        )
         api = _make_api(
             prod_tracks=prod,
             archive_tracks=archive,
-            post_removal_prod=post_prod,
         )
         mock_random.sample.side_effect = (
             lambda lst, n: lst[:n]
@@ -1479,9 +1504,16 @@ class TestOperationOrdering:
             target_size=4,
         )
 
+        # This test asserts call ordering only — patch out
+        # verify_playlist_state since the test's mocks
+        # short-circuit the state mutation that verify
+        # would otherwise see.
         with patch.object(
             JobExecutorService, "_batch_add_tracks",
             side_effect=track_add,
+        ), patch.object(
+            JobExecutorService, "verify_playlist_state",
+            return_value=[],
         ):
             execute_rotate(schedule, api)
 
@@ -1574,8 +1606,13 @@ class TestCheckedRemove:
             archive_tracks=archive,
         )
         # No overlaps so no purge call;
-        # first remove (swap prod-remove) fails
-        api.playlist_remove_items.return_value = False
+        # first remove (swap prod-remove) returns falsy
+        # so _checked_remove raises. side_effect takes
+        # precedence over return_value with the stateful
+        # mock — override to return False.
+        api.playlist_remove_items.side_effect = (
+            lambda *a, **k: False
+        )
         schedule = _make_schedule(
             rotation_count=2,
             target_size=3,
@@ -1615,9 +1652,11 @@ class TestCheckedRemove:
         uris = ["u{}".format(i) for i in range(8)]
         prod = _make_tracks(uris)
         api = _make_api(prod_tracks=prod)
-        # Purge has no overlaps so no call;
-        # overflow remove returns False
-        api.playlist_remove_items.return_value = False
+        # Purge has no overlaps so no call; overflow remove
+        # returns falsy so _checked_remove raises.
+        api.playlist_remove_items.side_effect = (
+            lambda *a, **k: False
+        )
         schedule = _make_schedule(
             rotation_count=2,
             target_size=5,
@@ -1953,65 +1992,64 @@ class TestPurgeArchiveErrorHandling:
             execute_rotate(schedule, api)
 
 
+# Verifier-helper unit tests live in
+# tests/services/test_verify_playlist_state.py. This file
+# only exercises the rotate integration of F1 strict
+# verification below.
+
+
 # =============================================================================
-# VERIFY PLAYLIST SIZE DRIFT (Fix #5 bonus)
+# F1 STRICT VERIFICATION INTEGRATION
 # =============================================================================
 
 
-class TestVerifyPlaylistSizeDrift:
-    """Tests for _verify_playlist_size drift detection."""
+class TestRotateStrictVerification:
+    """End-to-end rotate tests that exercise the F1
+    PlaylistVerificationError path by forcing the API mock
+    to return a post-write state that diverges from what
+    the executor wrote.
+    """
 
-    def test_small_drift_returns_actual(self):
-        """Small drift logs warning but returns actual."""
-        api = MagicMock()
-        api.get_playlist_tracks.return_value = (
-            _make_tracks(["u1", "u2", "u3"])
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".PlaylistSnapshotService"
+    )
+    @patch(
+        "shuffify.services.playlist_pair_service"
+        ".PlaylistPairService.get_pair_for_playlist"
+    )
+    @patch(
+        "shuffify.services.executors.rotate_executor"
+        ".random"
+    )
+    def test_swap_raises_when_post_state_drifts(
+        self, mock_random, mock_pair, mock_snap,
+    ):
+        """If Spotify silently drops a track during the
+        swap, the post-write fetch diverges from the
+        executor's expected set and verification raises.
+        """
+        mock_pair.return_value = _make_pair()
+        mock_snap.is_auto_snapshot_enabled.return_value = (
+            False
+        )
+        mock_random.sample.side_effect = (
+            lambda lst, n: lst[:n]
         )
 
-        result = _verify_playlist_size(
-            api, "playlist1", 4, 42, "test",
+        prod = _make_tracks(["p1", "p2", "p3"])
+        archive = _make_tracks(["a1", "a2"])
+        # Force the verify re-fetch to claim one track went
+        # missing — simulates the WOOKLYN-class silent loss.
+        post_prod = _make_tracks(["p3", "a1"])
+        api = _make_api(
+            prod_tracks=prod,
+            archive_tracks=archive,
+            post_removal_prod=post_prod,
         )
-        assert result == 3
-
-    def test_large_drift_raises(self):
-        """Drift > 50% of expected raises error."""
-        api = MagicMock()
-        # Expected 10 tracks, got 2 (drift=8 > 5)
-        api.get_playlist_tracks.return_value = (
-            _make_tracks(["u1", "u2"])
-        )
-
-        with pytest.raises(
-            JobExecutionError,
-            match="size drift too large",
-        ):
-            _verify_playlist_size(
-                api, "playlist1", 10, 42, "test",
-            )
-
-    def test_exact_match_no_error(self):
-        """Exact match raises nothing."""
-        api = MagicMock()
-        api.get_playlist_tracks.return_value = (
-            _make_tracks(["u1", "u2", "u3"])
+        schedule = _make_schedule(
+            rotation_count=2, target_size=3,
         )
 
-        result = _verify_playlist_size(
-            api, "playlist1", 3, 42, "test",
-        )
-        assert result == 3
-
-    def test_zero_expected_one_actual_raises(self):
-        """Drift from 0 expected to 1 actual raises
-        (threshold=max(1,0)=1, drift=1 > 1 is false,
-        so it warns instead)."""
-        api = MagicMock()
-        api.get_playlist_tracks.return_value = (
-            _make_tracks(["u1"])
-        )
-
-        # drift=1, threshold=max(1,0)=1, 1>1 is false
-        result = _verify_playlist_size(
-            api, "playlist1", 0, 42, "test",
-        )
-        assert result == 1
+        with pytest.raises(PlaylistVerificationError):
+            execute_rotate(schedule, api)

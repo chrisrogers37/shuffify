@@ -158,6 +158,18 @@ def execute_shuffle(
             target_id, shuffled_uris
         )
 
+        # F1: verify post-write state. Catches silent
+        # multi-batch truncation in update_playlist_tracks
+        # (RC3) — the function returns True even if
+        # batches 2+ silently dropped.
+        from shuffify.services.executors.base_executor import (
+            JobExecutorService,
+        )
+        JobExecutorService.verify_playlist_state(
+            api, target_id, shuffled_uris,
+            schedule.id, "shuffle",
+        )
+
         # Reconcile lock positions after reorder
         TrackLockService.safe_reconcile_positions(
             schedule.user_id, target_id,

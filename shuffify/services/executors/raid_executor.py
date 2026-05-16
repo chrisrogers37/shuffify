@@ -104,7 +104,8 @@ def execute_raid(
         track_dicts = _build_track_dicts(api, new_uris)
 
         _add_to_raid_playlist(
-            api, schedule.user_id, target_id, new_uris
+            api, schedule.user_id, target_id, new_uris,
+            schedule_id=schedule.id,
         )
 
         staged = PendingRaidService.stage_tracks(
@@ -181,12 +182,22 @@ def _auto_snapshot_before_raid(
 
 
 def _add_to_raid_playlist(
-    api, user_id, target_id, uris,
+    api, user_id, target_id, uris, schedule_id=None,
 ):
     """Add raided tracks to the raid Spotify playlist
-    if a RaidPlaylistLink exists."""
+    if a RaidPlaylistLink exists, and verify the resulting
+    state (F1).
+
+    The previous implementation swallowed errors as a
+    warning and reported staged-DB counts as Spotify
+    reality. Now any HTTP failure or post-write divergence
+    propagates so the orchestrator can fail/rollback.
+    """
     from shuffify.services.raid_link_service import (
         RaidLinkService,
+    )
+    from shuffify.services.executors.base_executor import (
+        JobExecutorService,
     )
 
     link = RaidLinkService.get_link_for_playlist(
@@ -195,19 +206,30 @@ def _add_to_raid_playlist(
     if not link:
         return
 
-    try:
-        api.playlist_add_items(
-            link.raid_playlist_id, uris
-        )
-        logger.info(
-            "Added %d tracks to raid playlist %s",
-            len(uris), link.raid_playlist_id,
-        )
-    except Exception as e:
-        logger.warning(
-            "Failed to add tracks to raid "
-            "playlist: %s", e
-        )
+    # Capture pre-write raid contents for the post-write
+    # verification expected set.
+    prev_raid_tracks = api.get_playlist_tracks(
+        link.raid_playlist_id
+    )
+    prev_raid_uris = [
+        t.get("uri") for t in (prev_raid_tracks or [])
+        if t.get("uri")
+    ]
+
+    api.playlist_add_items(
+        link.raid_playlist_id, uris
+    )
+    logger.info(
+        "Added %d tracks to raid playlist %s",
+        len(uris), link.raid_playlist_id,
+    )
+
+    expected_raid = prev_raid_uris + list(uris)
+    JobExecutorService.verify_playlist_state(
+        api, link.raid_playlist_id, expected_raid,
+        schedule_id if schedule_id is not None else 0,
+        "raid pull",
+    )
 
 
 def _fetch_raid_sources_with_limits(
