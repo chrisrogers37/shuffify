@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Forensic SQL: WOOKLYN loss timeline** - Read-only Postgres script for reconstructing silent track-loss history on any playlist
+  - `scripts/forensics/wooklyn_loss_timeline.sql` — seven-section report (matched playlists, schedules, executions, snapshots, activity log, drift detection, restore quick-card)
+  - Joins `schedules × job_executions × playlist_snapshots × activity_log` and surfaces `drift_pre_to_next < 0` rows (silent losses missed by today's permissive verifier)
+  - Resolves playlists via UNION of `schedules.target_playlist_name` and `playlist_snapshots.playlist_name`, so renamed playlists still surface
+  - Read-only enforced via `SET default_transaction_read_only = on` + 60s `statement_timeout`
+  - Parameterized: `playlist_name_pattern` (required) and `days_back` (default 60, override via `-v days_back=N`)
+  - `scripts/forensics/run_wooklyn_timeline.sh` wrapper and `scripts/forensics/README.md` for setup + interpretation
+  - First deliverable in the WOOKLYN silent-loss investigation (`documentation/planning/investigations/wooklyn-silent-loss_2026-05-16/`)
+
 ### Fixed
 - **db_app Fixture Flakiness in Batch Test Runs** - Fixed intermittent `no such table` errors during test teardown
   - Root cause: fixtures called `create_app("development")` then overrode `SQLALCHEMY_DATABASE_URI` to `:memory:`, but the engine was already cached with the file-based URI from `_init_database`
