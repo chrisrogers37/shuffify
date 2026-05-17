@@ -22,7 +22,10 @@ from shuffify.services.token_service import (
 from shuffify.spotify.auth import SpotifyAuthManager, TokenInfo
 from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.credentials import SpotifyCredentials
-from shuffify.spotify.exceptions import SpotifyTokenError
+from shuffify.spotify.exceptions import (
+    SpotifyPartialBatchError,
+    SpotifyTokenError,
+)
 from shuffify.shuffle_algorithms.utils import extract_uris
 from shuffify.enums import JobType, ActivityType
 
@@ -115,6 +118,56 @@ def verify_playlist_state(
     return actual_uris
 
 
+def _rollback_trigger_phrase(error) -> str:
+    """Short human description for the rollback activity log."""
+    if isinstance(error, PlaylistVerificationError):
+        return "verification failure"
+    if isinstance(error, SpotifyPartialBatchError):
+        return f"partial {error.method} write failure"
+    return "execution failure"
+
+
+def _rollback_metadata(error, schedule, restored) -> dict:
+    """Build the ActivityLog metadata payload for a rollback.
+
+    Shape depends on the error type so the audit trail keeps
+    the right fields for each failure mode.
+    """
+    base = {
+        "schedule_id": schedule.id,
+        "job_type": schedule.job_type,
+        "restored": restored,
+        "triggered_by": "scheduler",
+    }
+    if isinstance(error, PlaylistVerificationError):
+        base.update({
+            "failure_type": "verification",
+            "phase": error.phase,
+            "failing_playlist_id": error.playlist_id,
+            "expected_count": len(error.expected),
+            "actual_count": len(error.actual),
+            "missing_total": len(error.missing),
+            "extra_total": len(error.extra),
+            "missing_uris": error.missing[:50],
+            "extra_uris": error.extra[:50],
+        })
+    elif isinstance(error, SpotifyPartialBatchError):
+        base.update({
+            "failure_type": "partial_batch",
+            "method": error.method,
+            "failing_playlist_id": error.playlist_id,
+            "completed_batches": error.completed_batches,
+            "total_batches": error.total_batches,
+            "completed_count": len(error.completed_uris),
+            "remaining_count": len(error.remaining_uris),
+            "remaining_uris": error.remaining_uris[:50],
+            "cause": (
+                str(error.cause) if error.cause else None
+            ),
+        })
+    return base
+
+
 class JobExecutorService:
     """Service that executes scheduled playlist operations."""
 
@@ -167,7 +220,10 @@ class JobExecutorService:
                 execution, schedule, result
             )
 
-        except PlaylistVerificationError as ve:
+        except (
+            PlaylistVerificationError,
+            SpotifyPartialBatchError,
+        ) as ve:
             JobExecutorService._record_rollback(
                 execution, schedule, api, ve, schedule_id,
             )
@@ -301,13 +357,17 @@ class JobExecutorService:
         execution: JobExecution,
         schedule: Schedule,
         api: SpotifyAPI,
-        ve: "PlaylistVerificationError",
+        ve,
         schedule_id: int,
     ) -> None:
-        """Handle a PlaylistVerificationError by restoring the
-        auto-snapshots taken during this job, marking the
-        execution `failed_rolled_back`, and emitting a
-        structured ActivityLog entry.
+        """Handle a verification or partial-write failure by
+        restoring the auto-snapshots taken during this job,
+        marking the execution `failed_rolled_back`, and
+        emitting a structured ActivityLog entry.
+
+        Accepts either a `PlaylistVerificationError` (F1) or a
+        `SpotifyPartialBatchError` (F4). The metadata payload
+        is shaped to the error type.
 
         If restoration itself fails (Spotify down, snapshot
         missing), falls through to `_record_failure` so the
@@ -319,13 +379,25 @@ class JobExecutorService:
         )
         from shuffify.models.db import PlaylistSnapshot
 
-        logger.error(
-            "Schedule %s: verification failed in phase "
-            "'%s' on playlist %s — attempting snapshot "
-            "rollback. Missing=%d, extra=%d.",
-            schedule_id, ve.phase, ve.playlist_id,
-            len(ve.missing), len(ve.extra),
-        )
+        if isinstance(ve, PlaylistVerificationError):
+            logger.error(
+                "Schedule %s: verification failed in phase "
+                "'%s' on playlist %s — attempting snapshot "
+                "rollback. Missing=%d, extra=%d.",
+                schedule_id, ve.phase, ve.playlist_id,
+                len(ve.missing), len(ve.extra),
+            )
+        else:
+            logger.error(
+                "Schedule %s: partial %s write on playlist "
+                "%s (batch %d/%d) — attempting snapshot "
+                "rollback. Completed=%d, remaining=%d. "
+                "Cause: %s",
+                schedule_id, ve.method, ve.playlist_id,
+                ve.completed_batches, ve.total_batches,
+                len(ve.completed_uris),
+                len(ve.remaining_uris), ve.cause,
+            )
 
         restored = []
         try:
@@ -439,29 +511,16 @@ class JobExecutorService:
                     "Scheduled "
                     f"{schedule.job_type} on "
                     f"'{schedule.target_playlist_name}'"
-                    f" rolled back after verification "
-                    f"failure"
+                    f" rolled back after "
+                    f"{_rollback_trigger_phrase(ve)}"
                 ),
                 playlist_id=schedule.target_playlist_id,
                 playlist_name=(
                     schedule.target_playlist_name
                 ),
-                metadata={
-                    "schedule_id": schedule.id,
-                    "job_type": schedule.job_type,
-                    "phase": ve.phase,
-                    "failing_playlist_id": (
-                        ve.playlist_id
-                    ),
-                    "expected_count": len(ve.expected),
-                    "actual_count": len(ve.actual),
-                    "missing_total": len(ve.missing),
-                    "extra_total": len(ve.extra),
-                    "missing_uris": ve.missing[:50],
-                    "extra_uris": ve.extra[:50],
-                    "restored": restored,
-                    "triggered_by": "scheduler",
-                },
+                metadata=_rollback_metadata(
+                    ve, schedule, restored,
+                ),
             )
         except Exception:
             pass

@@ -14,6 +14,8 @@ from typing import Dict, List, Any, Optional, TYPE_CHECKING
 from .auth import TokenInfo, SpotifyAuthManager
 from .error_handling import api_error_handler
 from .exceptions import (
+    SpotifyAPIError,
+    SpotifyPartialBatchError,
     SpotifyTokenExpiredError,
 )
 from .http_client import SpotifyHTTPClient
@@ -335,11 +337,15 @@ class SpotifyAPI:
             track_uris: List of track URIs in the desired order.
 
         Returns:
-            True if update succeeded.
+            True if every batch was confirmed by Spotify.
 
         Raises:
             SpotifyNotFoundError: If playlist doesn't exist.
-            SpotifyAPIError: If the update fails.
+            SpotifyPartialBatchError: If a batch fails mid-flight.
+                The exception carries the URIs that were written
+                vs. the ones that were not.
+            SpotifyAPIError: If the update fails for non-batch
+                reasons.
         """
         self._ensure_valid_token()
 
@@ -350,33 +356,70 @@ class SpotifyAPI:
                 json={"uris": []},
             )
             logger.info(f"Cleared playlist {playlist_id}")
-            # Invalidate cache after modification
             if self._cache:
                 self._cache.invalidate_playlist(playlist_id)
             return True
 
-        # Replace first batch (up to 100 tracks)
-        self._http.put(
-            f"/playlists/{playlist_id}/items",
-            json={"uris": track_uris[: self.BATCH_SIZE]},
+        total_batches = (
+            (len(track_uris) + self.BATCH_SIZE - 1)
+            // self.BATCH_SIZE
         )
+        completed: List[str] = []
 
-        # Add remaining tracks in batches
-        for i in range(
-            self.BATCH_SIZE, len(track_uris), self.BATCH_SIZE
+        # Batch 1: PUT (replaces playlist contents)
+        first = track_uris[: self.BATCH_SIZE]
+        try:
+            self._http.put(
+                f"/playlists/{playlist_id}/items",
+                json={"uris": first},
+            )
+        except SpotifyAPIError as e:
+            raise SpotifyPartialBatchError(
+                playlist_id=playlist_id,
+                method="update",
+                completed_batches=0,
+                total_batches=total_batches,
+                completed_uris=[],
+                remaining_uris=list(track_uris),
+                cause=e,
+            )
+        completed.extend(first)
+
+        # Batches 2+: POST (append). Index `batch_idx` is
+        # 1-based; failure on the second batch raises with
+        # completed_batches=1.
+        for batch_idx, i in enumerate(
+            range(self.BATCH_SIZE, len(track_uris), self.BATCH_SIZE),
+            start=1,
         ):
             batch = track_uris[i: i + self.BATCH_SIZE]
-            self._http.post(
-                f"/playlists/{playlist_id}/items",
-                json={"uris": batch},
-            )
+            try:
+                self._http.post(
+                    f"/playlists/{playlist_id}/items",
+                    json={"uris": batch},
+                )
+            except SpotifyAPIError as e:
+                # PUT already mutated the playlist; invalidate
+                # cache before raising so callers re-fetching
+                # the playlist see the half-written state.
+                if self._cache:
+                    self._cache.invalidate_playlist(playlist_id)
+                raise SpotifyPartialBatchError(
+                    playlist_id=playlist_id,
+                    method="update",
+                    completed_batches=batch_idx,
+                    total_batches=total_batches,
+                    completed_uris=list(completed),
+                    remaining_uris=list(track_uris[i:]),
+                    cause=e,
+                )
+            completed.extend(batch)
 
         logger.info(
             f"Updated playlist {playlist_id} with "
             f"{len(track_uris)} tracks"
         )
 
-        # Invalidate cache after modification
         if self._cache:
             self._cache.invalidate_playlist(playlist_id)
             if self._user_id:
@@ -430,7 +473,7 @@ class SpotifyAPI:
         playlist_id: str,
         track_uris: List[str],
         position: Optional[int] = None,
-    ) -> None:
+    ) -> bool:
         """
         Add tracks to a playlist in batches.
 
@@ -440,24 +483,59 @@ class SpotifyAPI:
             position: Optional insertion position (0-based).
                 Each batch offsets from this position to
                 maintain correct ordering.
+
+        Returns:
+            True if every batch was confirmed by Spotify.
+
+        Raises:
+            SpotifyPartialBatchError: If a batch fails mid-flight.
+                The exception carries the URIs that were written
+                vs. the ones that were not.
+            SpotifyAPIError: For non-batch HTTP failures.
         """
         self._ensure_valid_token()
 
         if not track_uris:
-            return
+            return True
 
-        for i in range(0, len(track_uris), self.BATCH_SIZE):
+        total_batches = (
+            (len(track_uris) + self.BATCH_SIZE - 1)
+            // self.BATCH_SIZE
+        )
+        completed: List[str] = []
+
+        for batch_idx, i in enumerate(
+            range(0, len(track_uris), self.BATCH_SIZE)
+        ):
             batch = track_uris[i: i + self.BATCH_SIZE]
             payload: Dict[str, Any] = {"uris": batch}
             if position is not None:
                 payload["position"] = position + i
-            self._http.post(
-                f"/playlists/{playlist_id}/items",
-                json=payload,
-            )
+            try:
+                self._http.post(
+                    f"/playlists/{playlist_id}/items",
+                    json=payload,
+                )
+            except SpotifyAPIError as e:
+                # Earlier batches already mutated the playlist;
+                # invalidate cache before raising.
+                if self._cache and batch_idx > 0:
+                    self._cache.invalidate_playlist(playlist_id)
+                raise SpotifyPartialBatchError(
+                    playlist_id=playlist_id,
+                    method="add",
+                    completed_batches=batch_idx,
+                    total_batches=total_batches,
+                    completed_uris=list(completed),
+                    remaining_uris=list(track_uris[i:]),
+                    cause=e,
+                )
+            completed.extend(batch)
 
         if self._cache:
             self._cache.invalidate_playlist(playlist_id)
+
+        return True
 
     @api_error_handler
     def playlist_remove_items(
@@ -466,32 +544,61 @@ class SpotifyAPI:
         """
         Remove specific tracks from a playlist.
 
+        Note: Spotify silently no-ops on URIs that aren't on
+        the playlist. This method only raises on HTTP-level
+        failures; "URI was on the playlist but didn't get
+        removed" is caught by `verify_playlist_state`, not
+        here.
+
         Args:
             playlist_id: The Spotify playlist ID.
             track_uris: List of track URIs to remove.
 
         Returns:
-            True if removal succeeded.
+            True if every batch was confirmed by Spotify.
 
         Raises:
             SpotifyNotFoundError: If playlist doesn't exist.
-            SpotifyAPIError: If the removal fails.
+            SpotifyPartialBatchError: If a batch fails mid-flight.
+            SpotifyAPIError: For non-batch HTTP failures.
         """
         self._ensure_valid_token()
 
         if not track_uris:
             return True
 
-        for i in range(0, len(track_uris), self.BATCH_SIZE):
+        total_batches = (
+            (len(track_uris) + self.BATCH_SIZE - 1)
+            // self.BATCH_SIZE
+        )
+        completed: List[str] = []
+
+        for batch_idx, i in enumerate(
+            range(0, len(track_uris), self.BATCH_SIZE)
+        ):
             batch = track_uris[i: i + self.BATCH_SIZE]
-            self._http.delete(
-                f"/playlists/{playlist_id}/tracks",
-                json={
-                    "tracks": [
-                        {"uri": u} for u in batch
-                    ]
-                },
-            )
+            try:
+                self._http.delete(
+                    f"/playlists/{playlist_id}/tracks",
+                    json={
+                        "tracks": [
+                            {"uri": u} for u in batch
+                        ]
+                    },
+                )
+            except SpotifyAPIError as e:
+                if self._cache and batch_idx > 0:
+                    self._cache.invalidate_playlist(playlist_id)
+                raise SpotifyPartialBatchError(
+                    playlist_id=playlist_id,
+                    method="remove",
+                    completed_batches=batch_idx,
+                    total_batches=total_batches,
+                    completed_uris=list(completed),
+                    remaining_uris=list(track_uris[i:]),
+                    cause=e,
+                )
+            completed.extend(batch)
 
         logger.info(
             "Removed %d tracks from playlist %s",
