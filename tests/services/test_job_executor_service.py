@@ -19,6 +19,12 @@ from shuffify.services.executors.shuffle_executor import (
 )
 
 
+# Executor paths touch TrackLockService (db.session) even in
+# their except-branch fallbacks, so every test in this module
+# needs the shared app_ctx fixture (defined in tests/conftest.py).
+pytestmark = pytest.mark.usefixtures("app_ctx")
+
+
 @pytest.fixture
 def mock_schedule():
     """Create a mock Schedule model instance."""

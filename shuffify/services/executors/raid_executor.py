@@ -19,6 +19,11 @@ from shuffify.spotify.exceptions import (
     SpotifyNotFoundError,
 )
 from shuffify.enums import SnapshotType
+from shuffify.shuffle_algorithms.utils import extract_uris
+from shuffify.services.executors.base_executor import (
+    JobExecutionError,
+    verify_playlist_state,
+)
 from shuffify.services.playlist_snapshot_service import (
     PlaylistSnapshotService,
 )
@@ -40,10 +45,6 @@ def execute_raid(
     Pull new tracks from source playlists, add to the raid
     playlist (if linked), and stage in PendingRaidTrack.
     """
-    from shuffify.services.executors.base_executor import (
-        JobExecutionError,
-    )
-
     target_id = schedule.target_playlist_id
     source_ids = schedule.source_playlist_ids or []
 
@@ -104,7 +105,8 @@ def execute_raid(
         track_dicts = _build_track_dicts(api, new_uris)
 
         _add_to_raid_playlist(
-            api, schedule.user_id, target_id, new_uris
+            api, schedule.user_id, target_id, new_uris,
+            schedule.id,
         )
 
         staged = PendingRaidService.stage_tracks(
@@ -152,11 +154,7 @@ def _auto_snapshot_before_raid(
             return
 
         target_tracks = api.get_playlist_tracks(target_id)
-        pre_raid_uris = [
-            t.get("uri")
-            for t in target_tracks
-            if t.get("uri")
-        ]
+        pre_raid_uris = extract_uris(target_tracks or [])
         if pre_raid_uris:
             PlaylistSnapshotService.create_snapshot(
                 user_id=schedule.user_id,
@@ -181,10 +179,13 @@ def _auto_snapshot_before_raid(
 
 
 def _add_to_raid_playlist(
-    api, user_id, target_id, uris,
+    api, user_id, target_id, uris, schedule_id,
 ):
     """Add raided tracks to the raid Spotify playlist
-    if a RaidPlaylistLink exists."""
+    if a RaidPlaylistLink exists, and verify the resulting
+    state. Any HTTP failure or post-write divergence
+    propagates so the orchestrator can fail/rollback.
+    """
     from shuffify.services.raid_link_service import (
         RaidLinkService,
     )
@@ -195,19 +196,27 @@ def _add_to_raid_playlist(
     if not link:
         return
 
-    try:
-        api.playlist_add_items(
-            link.raid_playlist_id, uris
-        )
-        logger.info(
-            "Added %d tracks to raid playlist %s",
-            len(uris), link.raid_playlist_id,
-        )
-    except Exception as e:
-        logger.warning(
-            "Failed to add tracks to raid "
-            "playlist: %s", e
-        )
+    # The raid playlist is distinct from `target_id`, so its
+    # contents aren't fetched anywhere upstream. Read here
+    # to build the post-write expected URI set.
+    prev_raid_tracks = api.get_playlist_tracks(
+        link.raid_playlist_id
+    )
+    prev_raid_uris = extract_uris(prev_raid_tracks or [])
+
+    api.playlist_add_items(
+        link.raid_playlist_id, uris
+    )
+    logger.info(
+        "Added %d tracks to raid playlist %s",
+        len(uris), link.raid_playlist_id,
+    )
+
+    expected_raid = prev_raid_uris + list(uris)
+    verify_playlist_state(
+        api, link.raid_playlist_id, expected_raid,
+        schedule_id, "raid pull",
+    )
 
 
 def _fetch_raid_sources_with_limits(

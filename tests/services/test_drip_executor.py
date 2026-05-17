@@ -137,27 +137,47 @@ class TestExecuteDrip:
         user, raid_link, schedule, mock_api,
     ):
         """Drip moves tracks from raid to target."""
-        raid_tracks = [
-            {"uri": f"spotify:track:{i}"}
-            for i in range(5)
-        ]
-        target_tracks = [
-            {"uri": "spotify:track:existing"}
-        ]
+        # Stateful mock so F1's post-write verify reads
+        # back what add/remove actually wrote.
+        state = {
+            "raid_drip": [
+                f"spotify:track:{i}" for i in range(5)
+            ],
+            "target_drip": ["spotify:track:existing"],
+        }
 
-        call_count = [0]
+        def get_tracks_side_effect(pid, skip_cache=False):
+            return [
+                {"uri": u} for u in state.get(pid, [])
+            ]
 
-        def get_tracks_side_effect(pid):
-            if pid == "raid_drip":
-                return raid_tracks
-            return target_tracks
+        def add_side_effect(pid, uris, position=None):
+            if position is None:
+                state.setdefault(pid, []).extend(uris)
+            else:
+                cur = state.setdefault(pid, [])
+                state[pid] = (
+                    cur[:position]
+                    + list(uris)
+                    + cur[position:]
+                )
+
+        def remove_side_effect(pid, uris):
+            drop = set(uris)
+            state[pid] = [
+                u for u in state.get(pid, [])
+                if u not in drop
+            ]
+            return True
 
         mock_api.get_playlist_tracks.side_effect = (
             get_tracks_side_effect
         )
-        mock_api.playlist_add_items.return_value = None
-        mock_api.playlist_remove_items.return_value = (
-            True
+        mock_api.playlist_add_items.side_effect = (
+            add_side_effect
+        )
+        mock_api.playlist_remove_items.side_effect = (
+            remove_side_effect
         )
 
         result = execute_drip(schedule, mock_api)
