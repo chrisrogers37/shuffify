@@ -77,6 +77,7 @@ class ActivityType(StrEnum):
     SCHEDULE_DELETE = "schedule_delete"
     SCHEDULE_TOGGLE = "schedule_toggle"
     SCHEDULE_RUN = "schedule_run"
+    SCHEDULE_RUN_ROLLED_BACK = "schedule_run_rolled_back"
     SNAPSHOT_CREATE = "snapshot_create"
     SNAPSHOT_RESTORE = "snapshot_restore"
     SNAPSHOT_DELETE = "snapshot_delete"
