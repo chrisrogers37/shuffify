@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Auto-rollback from snapshot on verification failure** - Closes the silent-loss loop: when `PlaylistVerificationError` fires (from the strict verifier shipped earlier), the executor now restores the playlist to its pre-job auto-snapshot instead of leaving it in a broken state
+  - `JobExecutorService.execute` catches `PlaylistVerificationError` and routes to `_record_rollback` (new); all other exceptions still go to `_record_failure` unchanged
+  - Pre-snapshots created during the job are discovered post-hoc via `(user_id, created_at >= execution.started_at)` rather than threading IDs through executor return values — works for shuffle, rotate, drip (dual target+raid), raid, and any future executor without per-executor changes
+  - When multiple snapshots exist for the same playlist (e.g. rotate snapshotting prod + archive), the latest per playlist wins
+  - `JobExecution.status` set to `failed_rolled_back`; `Schedule.last_status` mirrors it; `execute_now` raises `JobExecutionError` for the new status so the UI surfaces it
+  - New `PlaylistSnapshotService.restore_to_playlist(snapshot_id, user_id, api)` convenience that wraps `get_snapshot` + `api.update_playlist_tracks` and returns the applied snapshot
+  - New `ActivityType.SCHEDULE_RUN_ROLLED_BACK` activity entry carries a structured payload: `phase`, `failing_playlist_id`, `expected_count`, `actual_count`, `missing_total`, `extra_total`, `missing_uris[:50]`, `extra_uris[:50]`, and `restored[]` (one record per playlist)
+  - Restoration failure (Spotify down, snapshot missing) falls through to `_record_failure` so the user still sees the failure rather than a silently-broken job
+  - 11 new tests in `tests/services/test_snapshot_rollback.py` covering restore, status transitions, structured payload, snapshot-time-window filtering, no-snapshot fallback, dual-playlist restore for drip, latest-snapshot-per-playlist precedence, restore-failure fallthrough, and execute() routing for both PVE and non-PVE exceptions
+  - Third deliverable in the WOOKLYN silent-loss investigation; combines with the strict verifier to give defense-in-depth: verify catches the bug, rollback un-does the damage
+
 ### Fixed
 - **Strict post-write playlist verification** - Replaces rotate executor's 50%-tolerance count check with `JobExecutorService.verify_playlist_state` URI-multiset compare across all executors
   - Captured a real silent loss on 2026-05-13 (WOOKLYN, Schedule 11: `swap size mismatch — expected 241 tracks, got 240`). The old verifier only warned because drift was <50%; the new verifier raises `PlaylistVerificationError` for any divergence (missing tracks, extra tracks, or substitutions).

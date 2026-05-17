@@ -1,9 +1,27 @@
 # F2 — Auto-rollback from snapshot on verification failure
 
+**Status:** COMPLETE — Started 2026-05-17
 **Investigation:** [00_INVESTIGATION.md](00_INVESTIGATION.md)
 **Targets:** RC6 (snapshots taken but unused), RC7 (audit-trail divergence)
 **Depends on:** F1 (`PlaylistVerificationError` and `verify_playlist_state` exist)
 **Risk:** Medium. Effort: Medium.
+
+## Implementation note
+
+The plan's section A (threading `_rollback_snapshots` through every executor
+return dict) was skipped in favor of plan section D (post-hoc snapshot lookup)
+as the **primary** path. The post-hoc query
+`PlaylistSnapshot.query.filter(user_id == X, created_at >= execution.started_at)`
+correctly captures every auto-snapshot taken during the job — including drip's
+two snapshots (target + raid) and rotate's two snapshots (prod + archive) —
+without per-executor changes. This is DRYer, automatically robust against
+future executors that someone adds without reading this doc, and removes ~80
+lines of threading code that would have lived in four executor files.
+
+`JobExecution.error_metadata_json` column was NOT added — the existing
+`error_message` field (1000 chars, str(PVE) summary) is enough for status
+display, and the full structured diff lives on the `ActivityLog` row's
+`metadata_json`. No migration required.
 
 ## Context
 

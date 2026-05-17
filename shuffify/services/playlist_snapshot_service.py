@@ -178,6 +178,43 @@ class PlaylistSnapshotService:
         return snapshot.track_uris
 
     @staticmethod
+    def restore_to_playlist(
+        snapshot_id: int,
+        user_id: int,
+        api,
+    ) -> "PlaylistSnapshot":
+        """Restore a snapshot to its source playlist via the
+        Spotify API. Used by the executor rollback path.
+
+        Args:
+            snapshot_id: The snapshot database ID.
+            user_id: The internal database user ID (ownership).
+            api: SpotifyAPI client.
+
+        Returns:
+            The PlaylistSnapshot that was applied (caller can
+            read playlist_id, track_uris, track_count).
+
+        Raises:
+            PlaylistSnapshotNotFoundError: If not found or not
+                owned.
+            Whatever the Spotify API raises on write failure.
+        """
+        snapshot = PlaylistSnapshotService.get_snapshot(
+            snapshot_id, user_id
+        )
+        uris = snapshot.track_uris or []
+        api.update_playlist_tracks(
+            snapshot.playlist_id, uris
+        )
+        logger.info(
+            "Restored snapshot %s to playlist %s "
+            "(%d tracks)",
+            snapshot_id, snapshot.playlist_id, len(uris),
+        )
+        return snapshot
+
+    @staticmethod
     def delete_snapshot(
         snapshot_id: int, user_id: int
     ) -> bool:

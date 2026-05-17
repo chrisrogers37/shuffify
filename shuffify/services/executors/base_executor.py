@@ -167,6 +167,10 @@ class JobExecutorService:
                 execution, schedule, result
             )
 
+        except PlaylistVerificationError as ve:
+            JobExecutorService._record_rollback(
+                execution, schedule, api, ve, schedule_id,
+            )
         except Exception as e:
             JobExecutorService._record_failure(
                 execution, schedule, e, schedule_id
@@ -293,6 +297,176 @@ class JobExecutorService:
             db.session.rollback()
 
     @staticmethod
+    def _record_rollback(
+        execution: JobExecution,
+        schedule: Schedule,
+        api: SpotifyAPI,
+        ve: "PlaylistVerificationError",
+        schedule_id: int,
+    ) -> None:
+        """Handle a PlaylistVerificationError by restoring the
+        auto-snapshots taken during this job, marking the
+        execution `failed_rolled_back`, and emitting a
+        structured ActivityLog entry.
+
+        If restoration itself fails (Spotify down, snapshot
+        missing), falls through to `_record_failure` so the
+        execution is still recorded as failed.
+        """
+        from shuffify.services.playlist_snapshot_service import (  # noqa: E501
+            PlaylistSnapshotService,
+            PlaylistSnapshotError,
+        )
+        from shuffify.models.db import PlaylistSnapshot
+
+        logger.error(
+            "Schedule %s: verification failed in phase "
+            "'%s' on playlist %s — attempting snapshot "
+            "rollback. Missing=%d, extra=%d.",
+            schedule_id, ve.phase, ve.playlist_id,
+            len(ve.missing), len(ve.extra),
+        )
+
+        restored = []
+        try:
+            user_id = (
+                schedule.user_id if schedule else None
+            )
+            since = (
+                execution.started_at if execution else None
+            )
+            if not user_id or not since:
+                raise PlaylistSnapshotError(
+                    "Missing user_id or job start time; "
+                    "cannot scope snapshots."
+                )
+
+            # All auto-snapshots created since the job
+            # started belong to this run.
+            pre_snapshots = (
+                PlaylistSnapshot.query
+                .filter(
+                    PlaylistSnapshot.user_id == user_id,
+                    PlaylistSnapshot.created_at >= since,
+                )
+                .order_by(
+                    PlaylistSnapshot.created_at.asc()
+                )
+                .all()
+            )
+
+            if not pre_snapshots:
+                raise PlaylistSnapshotError(
+                    "No pre-snapshot available for "
+                    "rollback (auto-snapshots disabled "
+                    "or empty source playlists)."
+                )
+
+            # One snapshot per playlist — restore the most
+            # recent if multiple were taken.
+            latest_by_playlist = {}
+            for snap in pre_snapshots:
+                latest_by_playlist[snap.playlist_id] = snap
+
+            for playlist_id, snap in (
+                latest_by_playlist.items()
+            ):
+                applied = (
+                    PlaylistSnapshotService
+                    .restore_to_playlist(
+                        snap.id, user_id, api,
+                    )
+                )
+                restored.append(
+                    {
+                        "playlist_id": playlist_id,
+                        "snapshot_id": snap.id,
+                        "track_count": (
+                            applied.track_count
+                        ),
+                    }
+                )
+        except Exception as restore_err:
+            logger.error(
+                "Schedule %s: rollback failed: %s. "
+                "Falling back to plain failure.",
+                schedule_id, restore_err, exc_info=True,
+            )
+            JobExecutorService._record_failure(
+                execution, schedule, ve, schedule_id,
+            )
+            return
+
+        # Persist the rolled-back status
+        try:
+            if execution:
+                execution.status = "failed_rolled_back"
+                execution.completed_at = datetime.now(
+                    timezone.utc
+                )
+                execution.error_message = str(ve)[:1000]
+
+            if schedule:
+                schedule.last_run_at = datetime.now(
+                    timezone.utc
+                )
+                schedule.last_status = (
+                    "failed_rolled_back"
+                )
+                schedule.last_error = str(ve)[:1000]
+
+            db.session.commit()
+        except Exception as db_err:
+            logger.error(
+                "Schedule %s: failed to persist "
+                "rollback status: %s",
+                schedule_id, db_err,
+            )
+            db.session.rollback()
+
+        # Log a structured activity entry (non-blocking).
+        try:
+            from shuffify.services.activity_log_service import (  # noqa: E501
+                ActivityLogService,
+            )
+
+            ActivityLogService.log(
+                user_id=schedule.user_id,
+                activity_type=(
+                    ActivityType.SCHEDULE_RUN_ROLLED_BACK
+                ),
+                description=(
+                    "Scheduled "
+                    f"{schedule.job_type} on "
+                    f"'{schedule.target_playlist_name}'"
+                    f" rolled back after verification "
+                    f"failure"
+                ),
+                playlist_id=schedule.target_playlist_id,
+                playlist_name=(
+                    schedule.target_playlist_name
+                ),
+                metadata={
+                    "schedule_id": schedule.id,
+                    "job_type": schedule.job_type,
+                    "phase": ve.phase,
+                    "failing_playlist_id": (
+                        ve.playlist_id
+                    ),
+                    "expected_count": len(ve.expected),
+                    "actual_count": len(ve.actual),
+                    "missing_total": len(ve.missing),
+                    "extra_total": len(ve.extra),
+                    "missing_uris": ve.missing[:50],
+                    "extra_uris": ve.extra[:50],
+                    "restored": restored,
+                    "triggered_by": "scheduler",
+                },
+            )
+        except Exception:
+            pass
+
+    @staticmethod
     def execute_now(
         schedule_id: int, user_id: int
     ) -> dict:
@@ -323,7 +497,9 @@ class JobExecutorService:
         db.session.expire(schedule)
         db.session.refresh(schedule)
 
-        if schedule.last_status == "failed":
+        if schedule.last_status in (
+            "failed", "failed_rolled_back",
+        ):
             raise JobExecutionError(
                 schedule.last_error or "Unknown error"
             )
