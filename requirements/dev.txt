@@ -19,6 +19,9 @@ bandit==1.9.4
 ipython==9.13.0
 # python-dotenv version is inherited from base.txt
 
+# Observability (mirrors prod.txt so tests can patch sentry_sdk)
+sentry-sdk>=2.59.0,<3.0
+
 # Security: pin wheel to patched version (CVE-2026-24049)
 wheel>=0.47.0
 
