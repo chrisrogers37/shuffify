@@ -19,13 +19,10 @@ from shuffify.services.executors.shuffle_executor import (
 )
 
 
-# Executor paths touch TrackLockService (db.session) even
-# in their except-branch fallbacks, so all tests need a
-# Flask app context.
-@pytest.fixture(autouse=True)
-def _app_ctx(db_app):
-    with db_app.app_context():
-        yield
+# Executor paths touch TrackLockService (db.session) even in
+# their except-branch fallbacks, so every test in this module
+# needs the shared app_ctx fixture (defined in tests/conftest.py).
+pytestmark = pytest.mark.usefixtures("app_ctx")
 
 
 @pytest.fixture

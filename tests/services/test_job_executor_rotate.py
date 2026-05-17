@@ -25,13 +25,11 @@ from shuffify.spotify.exceptions import (
 from shuffify.enums import JobType
 
 
-# Rotate-executor tests need a Flask app context because the
-# executor calls TrackLockService.safe_get_locked_uris, which
-# touches db.session even in its except-branch fallback.
-@pytest.fixture(autouse=True)
-def _app_ctx(db_app):
-    with db_app.app_context():
-        yield
+# Executor paths touch TrackLockService.safe_get_locked_uris
+# (db.session) even in their except-branch fallback, so every
+# test in this module needs the shared app_ctx fixture
+# (defined in tests/conftest.py).
+pytestmark = pytest.mark.usefixtures("app_ctx")
 
 
 def _make_schedule(
@@ -1511,8 +1509,9 @@ class TestOperationOrdering:
         with patch.object(
             JobExecutorService, "_batch_add_tracks",
             side_effect=track_add,
-        ), patch.object(
-            JobExecutorService, "verify_playlist_state",
+        ), patch(
+            "shuffify.services.executors.rotate_executor"
+            ".verify_playlist_state",
             return_value=[],
         ):
             execute_rotate(schedule, api)

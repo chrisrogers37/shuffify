@@ -17,6 +17,11 @@ from shuffify.spotify.exceptions import (
     SpotifyNotFoundError,
 )
 from shuffify.enums import SnapshotType, PendingRaidStatus
+from shuffify.shuffle_algorithms.utils import extract_uris
+from shuffify.services.executors.base_executor import (
+    JobExecutionError,
+    verify_playlist_state,
+)
 from shuffify.services.playlist_snapshot_service import (
     PlaylistSnapshotService,
 )
@@ -31,9 +36,6 @@ def execute_drip(
     Move tracks from raid playlist to the top of the
     target playlist.
     """
-    from shuffify.services.executors.base_executor import (
-        JobExecutionError,
-    )
     from shuffify.services.raid_link_service import (
         RaidLinkService,
     )
@@ -74,11 +76,7 @@ def execute_drip(
         raid_id = link.raid_playlist_id
 
         raid_tracks = api.get_playlist_tracks(raid_id)
-        raid_uris = [
-            t["uri"]
-            for t in raid_tracks
-            if t.get("uri")
-        ]
+        raid_uris = extract_uris(raid_tracks or [])
 
         if not raid_uris:
             logger.info(
@@ -129,21 +127,15 @@ def execute_drip(
         )
         api.playlist_remove_items(raid_id, drip_uris)
 
-        # F1: verify both sides of the drip. Catches the
-        # add-then-remove failure modes (RC4) where
-        # tracks get marked PROMOTED but don't actually
-        # land on target or aren't removed from raid.
-        from shuffify.services.executors.base_executor import (
-            JobExecutorService,
-        )
-        prev_target_uris = [
-            t.get("uri") for t in target_tracks
-            if t.get("uri")
-        ]
+        # Verify before marking PROMOTED in the DB —
+        # otherwise tracks can be flagged as promoted while
+        # absent from the target (failed add) or still
+        # living in the raid playlist (failed remove).
+        prev_target_uris = extract_uris(target_tracks)
         # drip adds at position=0, so expected order is
         # drip_uris first, then existing target tracks.
         expected_target = list(drip_uris) + prev_target_uris
-        JobExecutorService.verify_playlist_state(
+        verify_playlist_state(
             api, target_id, expected_target,
             schedule.id, "drip target",
         )
@@ -152,7 +144,7 @@ def execute_drip(
         expected_raid = [
             u for u in raid_uris if u not in drip_set
         ]
-        JobExecutorService.verify_playlist_state(
+        verify_playlist_state(
             api, raid_id, expected_raid,
             schedule.id, "drip raid",
         )
@@ -163,11 +155,7 @@ def execute_drip(
 
         # Reconcile lock positions (drip at pos 0
         # shifts all existing tracks down)
-        new_total_uris = drip_uris + [
-            t.get("uri")
-            for t in target_tracks
-            if t.get("uri")
-        ]
+        new_total_uris = drip_uris + prev_target_uris
         from shuffify.services.track_lock_service import (
             TrackLockService,
         )
@@ -226,11 +214,7 @@ def _auto_snapshot_before_drip(
 
         # Snapshot target
         target_tracks = api.get_playlist_tracks(target_id)
-        target_uris = [
-            t.get("uri")
-            for t in target_tracks
-            if t.get("uri")
-        ]
+        target_uris = extract_uris(target_tracks or [])
         if target_uris:
             PlaylistSnapshotService.create_snapshot(
                 user_id=schedule.user_id,
@@ -251,11 +235,7 @@ def _auto_snapshot_before_drip(
 
         # Snapshot raid playlist
         raid_tracks = api.get_playlist_tracks(raid_id)
-        raid_uris = [
-            t.get("uri")
-            for t in raid_tracks
-            if t.get("uri")
-        ]
+        raid_uris = extract_uris(raid_tracks or [])
         if raid_uris:
             PlaylistSnapshotService.create_snapshot(
                 user_id=schedule.user_id,

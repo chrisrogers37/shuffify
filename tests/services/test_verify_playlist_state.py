@@ -1,5 +1,5 @@
 """
-Unit tests for JobExecutorService.verify_playlist_state and
+Unit tests for verify_playlist_state and
 PlaylistVerificationError.
 
 Covers:
@@ -18,8 +18,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from shuffify.services.executors import (
-    JobExecutorService,
     PlaylistVerificationError,
+    verify_playlist_state,
 )
 
 
@@ -34,7 +34,7 @@ class TestVerifyPlaylistStateMatch:
             ["u1", "u2", "u3"]
         )
 
-        result = JobExecutorService.verify_playlist_state(
+        result = verify_playlist_state(
             api, "p1", ["u1", "u2", "u3"], 42, "test",
         )
 
@@ -44,7 +44,7 @@ class TestVerifyPlaylistStateMatch:
         api = MagicMock()
         api.get_playlist_tracks.return_value = []
 
-        result = JobExecutorService.verify_playlist_state(
+        result = verify_playlist_state(
             api, "p1", [], 42, "empty",
         )
 
@@ -58,7 +58,7 @@ class TestVerifyPlaylistStateMatch:
         )
 
         # No raise — same multiset.
-        JobExecutorService.verify_playlist_state(
+        verify_playlist_state(
             api, "p1", ["u1", "u2", "u3"], 42, "test",
         )
 
@@ -68,7 +68,7 @@ class TestVerifyPlaylistStateMatch:
             ["u1"]
         )
 
-        JobExecutorService.verify_playlist_state(
+        verify_playlist_state(
             api, "p1", ["u1"], 42, "test",
         )
 
@@ -85,7 +85,7 @@ class TestVerifyPlaylistStateDivergence:
         )
 
         with pytest.raises(PlaylistVerificationError) as ex:
-            JobExecutorService.verify_playlist_state(
+            verify_playlist_state(
                 api, "p1",
                 ["u1", "u2", "u3"], 42, "swap",
             )
@@ -103,7 +103,7 @@ class TestVerifyPlaylistStateDivergence:
         )
 
         with pytest.raises(PlaylistVerificationError) as ex:
-            JobExecutorService.verify_playlist_state(
+            verify_playlist_state(
                 api, "p1",
                 ["u1", "u2"], 42, "swap",
             )
@@ -122,7 +122,7 @@ class TestVerifyPlaylistStateDivergence:
         )
 
         with pytest.raises(PlaylistVerificationError) as ex:
-            JobExecutorService.verify_playlist_state(
+            verify_playlist_state(
                 api, "p1",
                 ["u1", "u2", "u3"], 42, "swap",
             )
@@ -140,7 +140,7 @@ class TestVerifyPlaylistStateDivergence:
         )
 
         with pytest.raises(PlaylistVerificationError) as ex:
-            JobExecutorService.verify_playlist_state(
+            verify_playlist_state(
                 api, "p1",
                 ["u1", "u1", "u2"], 42, "shuffle",
             )
@@ -156,7 +156,7 @@ class TestVerifyPlaylistStateDivergence:
         )
 
         with pytest.raises(PlaylistVerificationError) as ex:
-            JobExecutorService.verify_playlist_state(
+            verify_playlist_state(
                 api, "p1",
                 ["u1", "u2"], 42, "shuffle",
             )
@@ -171,7 +171,7 @@ class TestVerifyPlaylistStateDivergence:
         )
 
         with pytest.raises(PlaylistVerificationError) as ex:
-            JobExecutorService.verify_playlist_state(
+            verify_playlist_state(
                 api, "p1",
                 ["u1", "u2", "u3"], 42, "swap",
             )
@@ -192,7 +192,7 @@ class TestVerifyPlaylistStateAPIResilience:
         api = MagicMock()
         api.get_playlist_tracks.return_value = None
 
-        result = JobExecutorService.verify_playlist_state(
+        result = verify_playlist_state(
             api, "p1", [], 42, "test",
         )
 
@@ -211,7 +211,7 @@ class TestVerifyPlaylistStateAPIResilience:
             {"uri": "u2", "name": "u2"},
         ]
 
-        result = JobExecutorService.verify_playlist_state(
+        result = verify_playlist_state(
             api, "p1", ["u1", "u2"], 42, "test",
         )
 

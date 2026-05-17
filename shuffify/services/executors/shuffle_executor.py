@@ -12,6 +12,11 @@ from shuffify.spotify.exceptions import (
 )
 from shuffify.enums import SnapshotType
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
+from shuffify.shuffle_algorithms.utils import extract_uris
+from shuffify.services.executors.base_executor import (
+    JobExecutionError,
+    verify_playlist_state,
+)
 from shuffify.services.playlist_snapshot_service import (
     PlaylistSnapshotService,
 )
@@ -23,10 +28,6 @@ def execute_shuffle(
     schedule: Schedule, api: SpotifyAPI
 ) -> dict:
     """Run a shuffle algorithm on the target playlist."""
-    from shuffify.services.executors.base_executor import (
-        JobExecutionError,
-    )
-
     target_id = schedule.target_playlist_id
     algorithm_name = schedule.algorithm_name
 
@@ -158,14 +159,10 @@ def execute_shuffle(
             target_id, shuffled_uris
         )
 
-        # F1: verify post-write state. Catches silent
-        # multi-batch truncation in update_playlist_tracks
-        # (RC3) — the function returns True even if
-        # batches 2+ silently dropped.
-        from shuffify.services.executors.base_executor import (
-            JobExecutorService,
-        )
-        JobExecutorService.verify_playlist_state(
+        # Catches silent multi-batch truncation:
+        # update_playlist_tracks returns True even if a
+        # POST batch after the initial PUT fails.
+        verify_playlist_state(
             api, target_id, shuffled_uris,
             schedule.id, "shuffle",
         )
@@ -212,11 +209,7 @@ def _auto_snapshot_before_shuffle(
     """Create an auto-snapshot before a scheduled shuffle
     if enabled."""
     try:
-        pre_shuffle_uris = [
-            t["uri"]
-            for t in raw_tracks
-            if t.get("uri")
-        ]
+        pre_shuffle_uris = extract_uris(raw_tracks)
         if (
             pre_shuffle_uris
             and PlaylistSnapshotService

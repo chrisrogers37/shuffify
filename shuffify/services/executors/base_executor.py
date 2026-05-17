@@ -23,6 +23,7 @@ from shuffify.spotify.auth import SpotifyAuthManager, TokenInfo
 from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.credentials import SpotifyCredentials
 from shuffify.spotify.exceptions import SpotifyTokenError
+from shuffify.shuffle_algorithms.utils import extract_uris
 from shuffify.enums import JobType, ActivityType
 
 logger = logging.getLogger(__name__)
@@ -38,9 +39,9 @@ class PlaylistVerificationError(JobExecutionError):
     """Raised when post-write playlist state diverges from expected.
 
     Compares actual URIs to expected URIs as multisets so duplicate
-    track counts must also match. Carries enough detail for F2 to
-    drive an auto-rollback (missing/extra URI lists, schedule_id,
-    phase label).
+    track counts must also match. Downstream consumers (rollback,
+    structured logging) read `missing`, `extra`, `playlist_id`,
+    `phase`, and `schedule_id` directly off the instance.
     """
 
     def __init__(
@@ -68,6 +69,50 @@ class PlaylistVerificationError(JobExecutionError):
             f"{len(actual)}, missing {len(self.missing)}, "
             f"extra {len(self.extra)}"
         )
+
+
+def verify_playlist_state(
+    api: SpotifyAPI,
+    playlist_id: str,
+    expected_uris: List[str],
+    schedule_id: int,
+    phase: str,
+) -> List[str]:
+    """Re-fetch playlist and verify URI multiset matches expected.
+
+    Belt-and-suspenders: write methods on SpotifyAPI already invalidate
+    the playlist cache, but skip_cache=True here ensures correctness
+    even if a future write path forgets to invalidate.
+
+    Args:
+        api: SpotifyAPI client.
+        playlist_id: Target playlist.
+        expected_uris: URIs the playlist should contain (order
+            ignored; duplicate counts honored).
+        schedule_id: For error attribution.
+        phase: Short label like "swap", "shuffle", "drip target".
+
+    Returns:
+        The actual URI list (in fetch order) on success.
+
+    Raises:
+        PlaylistVerificationError: If actual multiset diverges
+            from expected.
+    """
+    verified = api.get_playlist_tracks(
+        playlist_id, skip_cache=True,
+    )
+    actual_uris = extract_uris(verified or [])
+
+    if Counter(actual_uris) != Counter(expected_uris):
+        raise PlaylistVerificationError(
+            playlist_id=playlist_id,
+            expected=expected_uris,
+            actual=actual_uris,
+            schedule_id=schedule_id,
+            phase=phase,
+        )
+    return actual_uris
 
 
 class JobExecutorService:
@@ -443,48 +488,3 @@ class JobExecutorService:
     ) -> None:
         """Add tracks to a playlist in batches."""
         api.playlist_add_items(playlist_id, uris)
-
-    @staticmethod
-    def verify_playlist_state(
-        api: SpotifyAPI,
-        playlist_id: str,
-        expected_uris: List[str],
-        schedule_id: int,
-        phase: str,
-    ) -> List[str]:
-        """Re-fetch playlist and verify URI multiset matches expected.
-
-        Bypasses the Spotify cache (skip_cache=True) so the read
-        reflects the post-write state, not a pre-write cached copy.
-
-        Args:
-            api: SpotifyAPI client.
-            playlist_id: Target playlist.
-            expected_uris: URIs the playlist should contain (order
-                ignored; duplicate counts honored).
-            schedule_id: For error attribution.
-            phase: Short label like "swap", "shuffle", "drip target".
-
-        Returns:
-            The actual URI list (in fetch order) on success.
-
-        Raises:
-            PlaylistVerificationError: If actual multiset diverges
-                from expected.
-        """
-        verified = api.get_playlist_tracks(
-            playlist_id, skip_cache=True,
-        )
-        actual_uris = [
-            t["uri"] for t in (verified or []) if t.get("uri")
-        ]
-
-        if Counter(actual_uris) != Counter(expected_uris):
-            raise PlaylistVerificationError(
-                playlist_id=playlist_id,
-                expected=expected_uris,
-                actual=actual_uris,
-                schedule_id=schedule_id,
-                phase=phase,
-            )
-        return actual_uris

@@ -16,11 +16,32 @@ from shuffify.spotify.exceptions import (
     SpotifyNotFoundError,
 )
 from shuffify.enums import SnapshotType, RotationMode
+from shuffify.shuffle_algorithms.utils import extract_uris
+from shuffify.services.executors.base_executor import (
+    JobExecutionError,
+    JobExecutorService,
+    verify_playlist_state,
+)
 from shuffify.services.playlist_snapshot_service import (
     PlaylistSnapshotService,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _expected_after(prev_uris, removed_uris, added_uris):
+    """Compute the URI list a playlist should contain after
+    `removed_uris` are removed and `added_uris` are appended.
+
+    Used by every verify call site so the expected-set
+    formula lives in one place. Removal is a set-difference
+    (Spotify removes every occurrence of a given URI), then
+    additions are appended in order.
+    """
+    removed_set = set(removed_uris)
+    return [u for u in prev_uris if u not in removed_set] + list(
+        added_uris
+    )
 
 
 def execute_rotate(
@@ -30,10 +51,6 @@ def execute_rotate(
     Rotate tracks between production and archive
     playlists.
     """
-    from shuffify.services.executors.base_executor import (
-        JobExecutionError,
-    )
-
     target_id = schedule.target_playlist_id
     (
         rotation_mode, rotation_count,
@@ -104,9 +121,6 @@ def _validate_rotation_config(
         JobExecutionError: If mode is invalid or no
             pair found.
     """
-    from shuffify.services.executors.base_executor import (
-        JobExecutionError,
-    )
     from shuffify.services.playlist_pair_service import (
         PlaylistPairService,
     )
@@ -229,10 +243,6 @@ def _purge_archive_overlaps(
             since proceeding with stale overlaps would
             contaminate the swap-in pool.
     """
-    from shuffify.services.executors.base_executor import (
-        JobExecutionError,
-    )
-
     overlaps, cleaned = [], []
     for u in archive_uris:
         (overlaps if u in prod_set
@@ -273,10 +283,6 @@ def _checked_remove(
     Raises JobExecutionError if the Spotify API returns
     a falsy result, indicating a silent failure.
     """
-    from shuffify.services.executors.base_executor import (
-        JobExecutionError,
-    )
-
     result = api.playlist_remove_items(
         playlist_id, uris
     )
@@ -313,18 +319,10 @@ def _rotate_swap(
     swap rotation_count tracks between production and
     archive.
     """
-    from shuffify.services.executors.base_executor import (
-        JobExecutorService,
-    )
-
     archive_tracks = api.get_playlist_tracks(
         archive_id
     )
-    archive_uris = [
-        t["uri"]
-        for t in archive_tracks
-        if t.get("uri")
-    ]
+    archive_uris = extract_uris(archive_tracks or [])
 
     prod_set = set(prod_uris)
 
@@ -399,26 +397,19 @@ def _rotate_swap(
                 api, archive_id, new_to_archive
             )
 
-        # Verify production: original ∖ overflow.
-        overflow_set = set(overflow_uris)
-        expected_prod = [
-            u for u in prod_uris
-            if u not in overflow_set
-        ]
-        verified_prod = (
-            JobExecutorService.verify_playlist_state(
-                api, target_id, expected_prod,
-                schedule.id, "overflow",
-            )
+        expected_prod = _expected_after(
+            prod_uris, overflow_uris, [],
+        )
+        verified_prod = verify_playlist_state(
+            api, target_id, expected_prod,
+            schedule.id, "overflow",
         )
         actual_total = len(verified_prod)
 
-        # Verify archive: previous (post-purge) ∪
-        # new_to_archive.
-        expected_archive = (
-            list(archive_uris) + new_to_archive
+        expected_archive = _expected_after(
+            archive_uris, [], new_to_archive,
         )
-        JobExecutorService.verify_playlist_state(
+        verify_playlist_state(
             api, archive_id, expected_archive,
             schedule.id, "overflow archive",
         )
@@ -480,33 +471,22 @@ def _rotate_swap(
             api, target_id, swap_in_uris
         )
 
-        # F3: expected production =
-        # (prod ∖ swap_out) ∪ swap_in. The original size
-        # is wrong when swap_in/swap_out differ (e.g.
-        # eligible pool depleted by locks/protect).
-        swap_out_set = set(swap_out_uris)
-        expected_prod = [
-            u for u in prod_uris
-            if u not in swap_out_set
-        ]
-        expected_prod.extend(swap_in_uris)
-        verified_prod = (
-            JobExecutorService.verify_playlist_state(
-                api, target_id, expected_prod,
-                schedule.id, "swap",
-            )
+        # Asymmetric swap (locks/protect/depleted pool can
+        # make swap_in and swap_out differ in length) means
+        # we can't verify against the original prod size.
+        expected_prod = _expected_after(
+            prod_uris, swap_out_uris, swap_in_uris,
+        )
+        verified_prod = verify_playlist_state(
+            api, target_id, expected_prod,
+            schedule.id, "swap",
         )
         actual_total = len(verified_prod)
 
-        # F3: expected archive =
-        # (archive ∖ swap_in) ∪ new_to_archive.
-        swap_in_set = set(swap_in_uris)
-        expected_archive = [
-            u for u in archive_uris
-            if u not in swap_in_set
-        ]
-        expected_archive.extend(new_to_archive)
-        JobExecutorService.verify_playlist_state(
+        expected_archive = _expected_after(
+            archive_uris, swap_in_uris, new_to_archive,
+        )
+        verify_playlist_state(
             api, archive_id, expected_archive,
             schedule.id, "swap archive",
         )
