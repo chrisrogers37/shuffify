@@ -32,6 +32,34 @@ from shuffify.enums import JobType, ActivityType
 logger = logging.getLogger(__name__)
 
 
+def _tag_sentry_scope(schedule, schedule_id):
+    """Attach schedule context to the current Sentry scope.
+
+    Background jobs run outside the Flask request context, so the
+    FlaskIntegration can't auto-tag them. This makes Sentry's UI
+    filterable by schedule, playlist, job type, and user.
+
+    Silent no-op when sentry-sdk is missing or no DSN is configured
+    (sentry_sdk.Hub.current is the no-op hub in that case).
+    """
+    try:
+        import sentry_sdk
+    except ImportError:
+        return
+    try:
+        scope = sentry_sdk.get_current_scope()
+        scope.set_tag("schedule_id", schedule_id)
+        if schedule is not None:
+            scope.set_tag("job_type", str(schedule.job_type))
+            scope.set_tag(
+                "playlist_id", schedule.target_playlist_id
+            )
+            scope.set_user({"id": str(schedule.user_id)})
+    except Exception:
+        # Never let observability tagging break job execution.
+        pass
+
+
 class JobExecutionError(Exception):
     """Raised when a scheduled job fails to execute."""
 
@@ -197,6 +225,8 @@ class JobExecutorService:
                     f"skipping"
                 )
                 return
+
+            _tag_sentry_scope(schedule, schedule_id)
 
             execution = (
                 JobExecutorService._create_execution_record(

@@ -1,5 +1,6 @@
 # F5 — Wire up Sentry in production
 
+**Status:** COMPLETE — Started 2026-05-17
 **Investigation:** [00_INVESTIGATION.md](00_INVESTIGATION.md)
 **Targets:** RC8 (no production observability)
 **Risk:** Low. Effort: Small.

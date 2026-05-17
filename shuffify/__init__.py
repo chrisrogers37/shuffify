@@ -256,6 +256,116 @@ def _init_database(app):
         )
 
 
+_SENTRY_PII_DENYLIST = (
+    "refresh_token",
+    "access_token",
+    "encrypted_refresh_token",
+    "encrypted_",
+    "authorization",
+    "cookie",
+    "secret_key",
+    "client_secret",
+    "email",
+    "session",
+)
+
+
+def _strip_pii(event, hint):
+    """Sentry before_send hook: redact known-sensitive keys.
+
+    Walks request headers, request data, extras, and breadcrumbs;
+    replaces any value whose key contains a denylisted substring
+    with a fixed redaction sentinel. Cookies and Authorization are
+    stripped wholesale.
+    """
+    def _redact(obj):
+        if isinstance(obj, dict):
+            return {
+                k: (
+                    "[Filtered]"
+                    if any(
+                        token in str(k).lower()
+                        for token in _SENTRY_PII_DENYLIST
+                    )
+                    else _redact(v)
+                )
+                for k, v in obj.items()
+            }
+        if isinstance(obj, list):
+            return [_redact(item) for item in obj]
+        return obj
+
+    if not isinstance(event, dict):
+        return event
+
+    if "request" in event:
+        event["request"] = _redact(event["request"])
+    if "extra" in event:
+        event["extra"] = _redact(event["extra"])
+    if "contexts" in event:
+        event["contexts"] = _redact(event["contexts"])
+    if "breadcrumbs" in event:
+        event["breadcrumbs"] = _redact(event["breadcrumbs"])
+    return event
+
+
+def _init_sentry(config_class):
+    """Initialize sentry_sdk if SENTRY_DSN is configured.
+
+    Safe no-op when the DSN is empty (dev, tests, or production with
+    Sentry disabled). Imports sentry_sdk lazily so the module is
+    optional at install time.
+    """
+    dsn = getattr(config_class, "SENTRY_DSN", "") or ""
+    if not dsn:
+        logger.info("Sentry disabled (no SENTRY_DSN configured)")
+        return False
+
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.flask import FlaskIntegration
+        from sentry_sdk.integrations.sqlalchemy import (
+            SqlalchemyIntegration,
+        )
+        from sentry_sdk.integrations.logging import LoggingIntegration
+    except ImportError as e:
+        logger.warning(
+            "sentry-sdk not installed: %s. Skipping Sentry init.", e
+        )
+        return False
+
+    release = getattr(config_class, "SENTRY_RELEASE", "") or None
+
+    sentry_sdk.init(
+        dsn=dsn,
+        environment=getattr(
+            config_class, "SENTRY_ENVIRONMENT", "production"
+        ),
+        traces_sample_rate=getattr(
+            config_class, "SENTRY_TRACES_SAMPLE_RATE", 0.0
+        ),
+        profiles_sample_rate=getattr(
+            config_class, "SENTRY_PROFILES_SAMPLE_RATE", 0.0
+        ),
+        send_default_pii=False,
+        release=release,
+        integrations=[
+            FlaskIntegration(),
+            SqlalchemyIntegration(),
+            LoggingIntegration(
+                level=logging.INFO,
+                event_level=logging.WARNING,
+            ),
+        ],
+        before_send=_strip_pii,
+    )
+    logger.info(
+        "Sentry initialized (environment=%s)",
+        getattr(config_class, "SENTRY_ENVIRONMENT", "production"),
+    )
+    return True
+
+
 def _apply_security_headers(app):
     """Register security headers on all responses."""
 
@@ -328,6 +438,10 @@ def create_app(config_name=None):
             logger.warning(
                 "Continuing in development mode with missing environment variables"
             )
+
+    # Initialize Sentry before Flask so FlaskIntegration can hook
+    # the WSGI app on construction.
+    _init_sentry(config[config_name])
 
     app = Flask(__name__)
     app.config.from_object(config[config_name])

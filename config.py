@@ -91,6 +91,17 @@ class Config:
     PORT = int(os.getenv("PORT", 8000))
     HOST = os.getenv("HOST", "0.0.0.0")
 
+    # Sentry observability (no-op when SENTRY_DSN is empty)
+    SENTRY_DSN = os.getenv("SENTRY_DSN", "")
+    SENTRY_ENVIRONMENT = os.getenv("SENTRY_ENVIRONMENT", "production")
+    SENTRY_TRACES_SAMPLE_RATE = float(
+        os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.0")
+    )
+    SENTRY_PROFILES_SAMPLE_RATE = float(
+        os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.0")
+    )
+    SENTRY_RELEASE = os.getenv("GIT_SHA", "")
+
     @classmethod
     def get_spotify_credentials(cls) -> dict:
         return {
