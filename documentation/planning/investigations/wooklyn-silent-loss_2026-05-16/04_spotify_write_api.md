@@ -1,8 +1,30 @@
 # F4 — Tighten Spotify write-API contracts
 
+**Status:** COMPLETE — Started 2026-05-17
 **Investigation:** [00_INVESTIGATION.md](00_INVESTIGATION.md)
 **Targets:** RC3 (shuffle multi-batch partial-write), RC4/RC5 (add/remove partial-write)
 **Risk:** Low. Effort: Medium.
+
+## Implementation note
+
+The plan's return-type change from `bool`/`None` to `list[str]` was skipped.
+The same diagnostic information lives on `SpotifyPartialBatchError` (which is
+raised on failure), so on success the return value would only repeat the input
+URI list — pure noise. Keeping `bool` (`True` on full success) preserves the
+existing `if success:` checks in `playlist_service.update_playlist_tracks` and
+in `spotify/client.py` without touching call sites.
+
+`_batch_add_tracks` shortfall check (plan section E) was also dropped: the
+underlying `playlist_add_items` now raises `SpotifyPartialBatchError` on
+per-batch HTTP failure, so a separate shortfall test in `_batch_add_tracks`
+would only fire if `playlist_add_items` returned `True` while quietly losing
+tracks — which can't happen given the new contract. Silent-dedupe / Spotify
+side-effects that pass HTTP are F1's job.
+
+F2's rollback handler was extended in the same change: `execute()` now catches
+`(PlaylistVerificationError, SpotifyPartialBatchError)` and `_record_rollback`
+shapes its activity-log payload from whichever error type fired. Two helpers
+(`_rollback_trigger_phrase`, `_rollback_metadata`) encapsulate the branching.
 
 ## Context
 
