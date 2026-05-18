@@ -136,15 +136,26 @@ def update_settings(client=None, user=None):
         "auto_snapshot_enabled",
         "dashboard_show_recent_activity",
     ]
+    truthy_strings = ("true", "on", "1", "yes")
     for field in bool_fields:
         if field in data:
-            val = data[field]
-            if isinstance(val, str):
-                data[field] = val.lower() in (
-                    "true",
-                    "on",
-                    "1",
-                    "yes",
+            if request.is_json:
+                val = data[field]
+                if isinstance(val, str):
+                    data[field] = val.lower() in truthy_strings
+            else:
+                # Form encoding: a field may be submitted multiple
+                # times (e.g. a sibling hidden default + a checkbox
+                # carrying the user's actual choice). `to_dict()`
+                # silently drops all but one, which is exactly the
+                # bug that wedged auto_snapshot_enabled off in
+                # prod on 2026-03-30. Read every value via
+                # `getlist` and let any truthy value win, so the
+                # checkbox's `value="true"` is always honored when
+                # checked, regardless of DOM order.
+                vals = request.form.getlist(field)
+                data[field] = any(
+                    str(v).lower() in truthy_strings for v in vals
                 )
         else:
             # Unchecked checkboxes are absent from form data
