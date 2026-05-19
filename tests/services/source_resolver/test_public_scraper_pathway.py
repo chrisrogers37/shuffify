@@ -1009,15 +1009,21 @@ class TestCachePoisoningRegression:
 
     @patch(
         "shuffify.services.source_resolver"
+        ".public_scraper_pathway._sleep_with_backoff"
+    )
+    @patch(
+        "shuffify.services.source_resolver"
         ".public_scraper_pathway.requests.get"
     )
     def test_429_response_does_not_cache(
-        self, mock_get, mock_source, db_app
+        self, mock_get, mock_sleep, mock_source, db_app
     ):
         from shuffify.models.db import ScrapedPlaylistCache
 
         with db_app.app_context():
-            mock_get.return_value = Mock(status_code=429, text="")
+            mock_get.return_value = Mock(
+                status_code=429, text="", headers={}
+            )
             pathway = PublicScraperPathway()
             result = pathway.resolve(mock_source)
 
@@ -1130,3 +1136,297 @@ class TestCachePoisoningRegression:
             ).first()
             assert row is not None
             assert row.track_count == 0
+
+
+# ======================================================================
+# Tests: Retry/backoff for transient errors (issue #315)
+# ======================================================================
+
+
+@patch(
+    "shuffify.services.source_resolver"
+    ".public_scraper_pathway._sleep_with_backoff"
+)
+class TestRetryBackoff:
+    """Retry behavior for transient scraper failures.
+
+    Spotify's public pages routinely 429 under load. Before #315, the
+    scraper gave up on the first non-200, which made external raids
+    flaky. After #315, transient codes (429/5xx) and network errors
+    retry up to ``MAX_ATTEMPTS`` with exponential backoff; permanent
+    codes (403/404/410) short-circuit immediately.
+
+    Sleep is patched out class-wide so the suite stays fast.
+    """
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.requests.get"
+    )
+    def test_429_then_200_succeeds(
+        self,
+        mock_get,
+        mock_sleep,
+        mock_source,
+        db_app,
+    ):
+        """A single 429 followed by 200 should produce a successful
+        result without burning the second pathway — the retry path
+        recovers from transient rate-limits."""
+        with db_app.app_context():
+            mock_get.side_effect = [
+                Mock(status_code=429, text="", headers={}),
+                Mock(status_code=200, text=LEGACY_URL_HTML),
+            ]
+            pathway = PublicScraperPathway()
+            result = pathway.resolve(mock_source)
+
+            assert result.success is True
+            assert len(result.track_uris) > 0
+            assert mock_get.call_count == 2
+            assert mock_sleep.call_count == 1
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.requests.get"
+    )
+    def test_all_429s_exhaust_attempts_no_cache(
+        self,
+        mock_get,
+        mock_sleep,
+        mock_source,
+        db_app,
+    ):
+        """Three 429s in a row exhaust retries. The result is unconfirmed
+        and the cache must stay clean so the next call can retry."""
+        from shuffify.models.db import ScrapedPlaylistCache
+
+        with db_app.app_context():
+            mock_get.return_value = Mock(
+                status_code=429, text="", headers={}
+            )
+            pathway = PublicScraperPathway()
+            result = pathway.resolve(mock_source)
+
+            assert result.success is False
+            # MAX_ATTEMPTS per pathway, two pathways tried.
+            assert mock_get.call_count == 6
+            row = ScrapedPlaylistCache.query.filter_by(
+                playlist_id="pl_test123"
+            ).first()
+            assert row is None
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.requests.get"
+    )
+    def test_403_short_circuits_no_retry(
+        self,
+        mock_get,
+        mock_sleep,
+        mock_source,
+        db_app,
+    ):
+        """403 is permanent — one shot per pathway, no retries, no
+        cache write. Spotify returning 403 for foreign playlists is
+        the common steady-state since Feb 2026; retrying it just
+        burns budget."""
+        from shuffify.models.db import ScrapedPlaylistCache
+
+        with db_app.app_context():
+            mock_get.return_value = Mock(
+                status_code=403, text="", headers={}
+            )
+            pathway = PublicScraperPathway()
+            result = pathway.resolve(mock_source)
+
+            assert result.success is False
+            # One attempt per pathway, no retry sleeps.
+            assert mock_get.call_count == 2
+            assert mock_sleep.call_count == 0
+            row = ScrapedPlaylistCache.query.filter_by(
+                playlist_id="pl_test123"
+            ).first()
+            assert row is None
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.requests.get"
+    )
+    def test_timeout_then_200_succeeds(
+        self,
+        mock_get,
+        mock_sleep,
+        mock_source,
+        db_app,
+    ):
+        """A timeout on the first attempt retries and succeeds on the
+        second. Network blips shouldn't kill an entire raid."""
+        import requests as req
+
+        with db_app.app_context():
+            mock_get.side_effect = [
+                req.Timeout("slow"),
+                Mock(status_code=200, text=LEGACY_URL_HTML),
+            ]
+            pathway = PublicScraperPathway()
+            result = pathway.resolve(mock_source)
+
+            assert result.success is True
+            assert len(result.track_uris) > 0
+            assert mock_get.call_count == 2
+            assert mock_sleep.call_count == 1
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.requests.get"
+    )
+    def test_200_zero_retries(
+        self,
+        mock_get,
+        mock_sleep,
+        mock_source,
+        db_app,
+    ):
+        """Happy path: 200 first try => exactly one call to requests.get
+        and zero sleeps. Retry logic must not add overhead to the
+        common case."""
+        with db_app.app_context():
+            mock_get.return_value = Mock(
+                status_code=200, text=LEGACY_URL_HTML
+            )
+            pathway = PublicScraperPathway()
+            result = pathway.resolve(mock_source)
+
+            assert result.success is True
+            assert mock_get.call_count == 1
+            assert mock_sleep.call_count == 0
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.requests.get"
+    )
+    def test_retry_after_header_honored(
+        self,
+        mock_get,
+        mock_sleep,
+        mock_source,
+        db_app,
+    ):
+        """When the 429 response carries ``Retry-After``, the sleep
+        helper receives it and can use it instead of the default
+        backoff. We don't sleep for real; we just confirm the helper
+        was invoked with the header value."""
+        with db_app.app_context():
+            mock_get.side_effect = [
+                Mock(
+                    status_code=429,
+                    text="",
+                    headers={"Retry-After": "2"},
+                ),
+                Mock(status_code=200, text=LEGACY_URL_HTML),
+            ]
+            pathway = PublicScraperPathway()
+            result = pathway.resolve(mock_source)
+
+            assert result.success is True
+            assert mock_sleep.call_count == 1
+            call_kwargs = mock_sleep.call_args.kwargs
+            assert call_kwargs.get("retry_after") == "2"
+
+
+# ======================================================================
+# Tests: _sleep_with_backoff helper (issue #315)
+# ======================================================================
+
+
+class TestSleepWithBackoff:
+    """Direct tests for the backoff helper. Patches ``time.sleep`` so
+    we can verify the computed delay without actually waiting."""
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.time.sleep"
+    )
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.random.uniform",
+        return_value=0.0,
+    )
+    def test_exponential_backoff_doubles_per_attempt(
+        self, _mock_rand, mock_sleep
+    ):
+        from shuffify.services.source_resolver.public_scraper_pathway import (
+            _sleep_with_backoff,
+            BACKOFF_BASE,
+        )
+
+        _sleep_with_backoff(0)
+        _sleep_with_backoff(1)
+        _sleep_with_backoff(2)
+
+        delays = [call.args[0] for call in mock_sleep.call_args_list]
+        assert delays == [
+            BACKOFF_BASE,
+            BACKOFF_BASE * 2,
+            BACKOFF_BASE * 4,
+        ]
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.time.sleep"
+    )
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.random.uniform",
+        return_value=0.0,
+    )
+    def test_retry_after_overrides_exponential(
+        self, _mock_rand, mock_sleep
+    ):
+        from shuffify.services.source_resolver.public_scraper_pathway import (
+            _sleep_with_backoff,
+        )
+
+        _sleep_with_backoff(0, retry_after="5")
+        assert mock_sleep.call_args.args[0] == 5.0
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.time.sleep"
+    )
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.random.uniform",
+        return_value=0.0,
+    )
+    def test_unparseable_retry_after_falls_back_to_exponential(
+        self, _mock_rand, mock_sleep
+    ):
+        from shuffify.services.source_resolver.public_scraper_pathway import (
+            _sleep_with_backoff,
+            BACKOFF_BASE,
+        )
+
+        _sleep_with_backoff(1, retry_after="soon")
+        assert mock_sleep.call_args.args[0] == BACKOFF_BASE * 2
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.time.sleep"
+    )
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.random.uniform",
+        return_value=0.0,
+    )
+    def test_max_backoff_caps_long_waits(
+        self, _mock_rand, mock_sleep
+    ):
+        from shuffify.services.source_resolver.public_scraper_pathway import (
+            _sleep_with_backoff,
+            MAX_BACKOFF,
+        )
+
+        _sleep_with_backoff(0, retry_after="999")
+        assert mock_sleep.call_args.args[0] == MAX_BACKOFF

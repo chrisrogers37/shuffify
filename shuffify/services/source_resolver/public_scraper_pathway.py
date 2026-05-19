@@ -7,7 +7,9 @@ arrays that Spotify embeds in server-rendered HTML.
 
 import json
 import logging
+import random
 import re
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -42,6 +44,19 @@ REQUEST_HEADERS = {
     ),
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+# ---------------------------------------------------------------------------
+# Retry / backoff configuration
+# ---------------------------------------------------------------------------
+# Transient codes get retried with exponential backoff + jitter. The set is
+# intentionally narrow — only codes Spotify might recover from within
+# seconds. Permanent codes short-circuit immediately so the resolver can
+# move on instead of burning attempts on a known-bad source.
+TRANSIENT_STATUS_CODES = frozenset({429, 502, 503, 504})
+PERMANENT_STATUS_CODES = frozenset({403, 404, 410})
+MAX_ATTEMPTS = 3
+BACKOFF_BASE = 1.0  # seconds — doubled each attempt
+MAX_BACKOFF = 30  # seconds — ceiling for any single sleep
 
 # ---------------------------------------------------------------------------
 # Cache configuration
@@ -229,52 +244,126 @@ class PublicScraperPathway:
     ) -> ScrapeOutcome:
         """Fetch ``url`` and extract track URIs, classifying the outcome.
 
-        ``confirmed`` is True only when the HTTP response was 200 and the
-        body was parsed. All other cases (non-200 status, network errors,
-        timeouts) return ``confirmed=False`` so the caller can skip the
-        cache write.
+        Retries transient failures (429/5xx, network errors, timeouts) up
+        to ``MAX_ATTEMPTS`` with exponential backoff + jitter, honoring
+        ``Retry-After`` when present. Permanent failures (403/404/410)
+        short-circuit on the first response so the resolver doesn't burn
+        attempts on a known-bad source.
+
+        ``confirmed`` is True only when an HTTP 200 was received and the
+        body was parsed. All other cases return ``confirmed=False`` so the
+        caller can skip the cache write.
         """
-        try:
-            resp = requests.get(
-                url,
-                timeout=REQUEST_TIMEOUT,
-                headers=REQUEST_HEADERS,
-            )
-        except Exception as e:
-            logger.warning(
-                "%s scrape failed for %s: %s",
+        last_error: Optional[str] = None
+
+        for attempt in range(MAX_ATTEMPTS):
+            try:
+                resp = requests.get(
+                    url,
+                    timeout=REQUEST_TIMEOUT,
+                    headers=REQUEST_HEADERS,
+                )
+            except (
+                requests.Timeout,
+                requests.ConnectionError,
+            ) as e:
+                last_error = f"{type(e).__name__}: {e}"
+                logger.warning(
+                    "%s scrape network error for %s "
+                    "(attempt %d/%d): %s",
+                    label,
+                    playlist_id,
+                    attempt + 1,
+                    MAX_ATTEMPTS,
+                    e,
+                )
+                if attempt < MAX_ATTEMPTS - 1:
+                    _sleep_with_backoff(attempt)
+                    continue
+                return ScrapeOutcome(
+                    uris=[],
+                    confirmed=False,
+                    error=last_error,
+                )
+            except Exception as e:
+                # Non-retryable client-side error (e.g. bad URL,
+                # bad headers). Surface immediately.
+                logger.warning(
+                    "%s scrape failed for %s: %s",
+                    label,
+                    playlist_id,
+                    e,
+                )
+                return ScrapeOutcome(
+                    uris=[],
+                    confirmed=False,
+                    error=f"{type(e).__name__}: {e}",
+                )
+
+            status = resp.status_code
+
+            if status == 200:
+                return ScrapeOutcome(
+                    uris=_extract_uris(resp.text),
+                    confirmed=True,
+                )
+
+            if status in PERMANENT_STATUS_CODES:
+                logger.warning(
+                    "%s returned %d for %s (permanent, no retry)",
+                    label,
+                    status,
+                    playlist_id,
+                )
+                return ScrapeOutcome(
+                    uris=[],
+                    confirmed=False,
+                    error=f"HTTP {status}",
+                )
+
+            if status in TRANSIENT_STATUS_CODES:
+                last_error = f"HTTP {status}"
+                logger.warning(
+                    "%s returned %d for %s "
+                    "(transient, attempt %d/%d)",
+                    label,
+                    status,
+                    playlist_id,
+                    attempt + 1,
+                    MAX_ATTEMPTS,
+                )
+                if attempt < MAX_ATTEMPTS - 1:
+                    _sleep_with_backoff(
+                        attempt,
+                        retry_after=resp.headers.get("Retry-After"),
+                    )
+                    continue
+                return ScrapeOutcome(
+                    uris=[],
+                    confirmed=False,
+                    error=last_error,
+                )
+
+            # Any other non-200 (unexpected — e.g. 418, 500 without
+            # a known transient mapping): log at DEBUG, do not retry.
+            logger.debug(
+                "%s returned %d for %s (unclassified, no retry)",
                 label,
+                status,
                 playlist_id,
-                e,
             )
             return ScrapeOutcome(
                 uris=[],
                 confirmed=False,
-                error=f"{type(e).__name__}: {e}",
+                error=f"HTTP {status}",
             )
 
-        if resp.status_code != 200:
-            log_level = (
-                logging.WARNING
-                if resp.status_code in (403, 429)
-                else logging.DEBUG
-            )
-            logger.log(
-                log_level,
-                "%s returned %d for %s",
-                label,
-                resp.status_code,
-                playlist_id,
-            )
-            return ScrapeOutcome(
-                uris=[],
-                confirmed=False,
-                error=f"HTTP {resp.status_code}",
-            )
-
+        # Defensive: loop should always return via one of the branches
+        # above. If we somehow exit normally, surface the last error.
         return ScrapeOutcome(
-            uris=_extract_uris(resp.text),
-            confirmed=True,
+            uris=[],
+            confirmed=False,
+            error=last_error or "scrape exhausted attempts",
         )
 
     # ------------------------------------------------------------------
@@ -363,6 +452,32 @@ class PublicScraperPathway:
             logger.warning(
                 "Scraper cache write error: %s", e
             )
+
+
+# ======================================================================
+# Retry helpers
+# ======================================================================
+
+
+def _sleep_with_backoff(
+    attempt: int, retry_after: Optional[str] = None
+) -> None:
+    """Sleep before the next retry attempt.
+
+    Honors a server-provided ``Retry-After`` value (seconds) when present
+    and parseable; otherwise uses exponential backoff (``BACKOFF_BASE``
+    doubled per attempt). Adds 0–0.5s of jitter so a burst of concurrent
+    raids doesn't thunder against Spotify in lockstep, and caps any
+    single sleep at ``MAX_BACKOFF`` to keep worst-case latency bounded.
+    """
+    base = BACKOFF_BASE * (2**attempt)
+    if retry_after:
+        try:
+            base = float(retry_after)
+        except (TypeError, ValueError):
+            pass
+    delay = min(base, MAX_BACKOFF) + random.uniform(0, 0.5)
+    time.sleep(delay)
 
 
 # ======================================================================
