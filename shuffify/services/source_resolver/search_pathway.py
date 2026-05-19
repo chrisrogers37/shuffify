@@ -27,19 +27,25 @@ class SearchPathway:
 
     def resolve(self, source, api=None) -> ResolveResult:
         if api is None:
+            # Search needs the API client. Without it the pathway
+            # is not applicable — fall through silently.
             return ResolveResult(
                 track_uris=[],
                 pathway_name=self.name,
                 success=False,
+                applicable=False,
                 error_message="No API client provided",
             )
 
         query = getattr(source, "search_query", None)
         if not query:
+            # Misconfigured source: no query to search for. Not
+            # applicable — let the resolver try the next pathway.
             return ResolveResult(
                 track_uris=[],
                 pathway_name=self.name,
                 success=False,
+                applicable=False,
                 error_message="No search query configured",
             )
 

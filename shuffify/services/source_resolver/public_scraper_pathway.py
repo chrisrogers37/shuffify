@@ -29,7 +29,11 @@ PUBLIC_URL = "https://open.spotify.com/playlist/{playlist_id}"
 # ---------------------------------------------------------------------------
 # Request configuration
 # ---------------------------------------------------------------------------
-REQUEST_TIMEOUT = 10
+# Fallback timeout (seconds) used when no Flask app context is active
+# (e.g. unit tests that exercise the pathway directly). The canonical
+# value is ``config.Config.SOURCE_RESOLVER_TIMEOUT``; see
+# ``_get_request_timeout()`` below.
+DEFAULT_REQUEST_TIMEOUT = 10
 
 # Browser-like headers to avoid 403s from Spotify's bot detection.
 REQUEST_HEADERS = {
@@ -137,10 +141,13 @@ class PublicScraperPathway:
     def resolve(self, source, api=None) -> ResolveResult:
         playlist_id = source.source_playlist_id
         if not playlist_id:
+            # No playlist ID → pathway not applicable. Fall through
+            # silently so the resolver doesn't log a hard failure.
             return ResolveResult(
                 track_uris=[],
                 pathway_name=self.name,
                 success=False,
+                applicable=False,
                 error_message="No playlist ID on source",
             )
 
@@ -255,12 +262,13 @@ class PublicScraperPathway:
         caller can skip the cache write.
         """
         last_error: Optional[str] = None
+        timeout = _get_request_timeout()
 
         for attempt in range(MAX_ATTEMPTS):
             try:
                 resp = requests.get(
                     url,
-                    timeout=REQUEST_TIMEOUT,
+                    timeout=timeout,
                     headers=REQUEST_HEADERS,
                 )
             except (
@@ -469,6 +477,30 @@ class PublicScraperPathway:
                     "Scraper cache rollback failed: %s",
                     rollback_err,
                 )
+
+
+# ======================================================================
+# Configuration helpers
+# ======================================================================
+
+
+def _get_request_timeout() -> int:
+    """Resolve the scrape HTTP timeout from Flask config when available.
+
+    Reads ``SOURCE_RESOLVER_TIMEOUT`` from the active Flask app config.
+    Falls back to ``DEFAULT_REQUEST_TIMEOUT`` when no app context is
+    active (e.g. unit tests) or the key isn't configured. Looked up
+    lazily on every scrape so per-environment overrides don't require
+    a process restart.
+    """
+    try:
+        from flask import current_app
+
+        return current_app.config.get(
+            "SOURCE_RESOLVER_TIMEOUT", DEFAULT_REQUEST_TIMEOUT
+        )
+    except Exception:
+        return DEFAULT_REQUEST_TIMEOUT
 
 
 # ======================================================================

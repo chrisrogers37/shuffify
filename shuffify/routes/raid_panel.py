@@ -418,14 +418,10 @@ def raid_add_url(playlist_id, client=None, user=None):
     if err:
         return err
 
-    # 1. Parse URL to playlist ID
-    source_playlist_id = parse_spotify_playlist_url(
-        req.url
-    )
-    if not source_playlist_id:
-        return json_error(
-            "Invalid Spotify playlist URL", 400
-        )
+    # 1. Parse URL to playlist ID. The schema validator already
+    # rejected unparseable URLs at the 400 boundary, so this call
+    # is guaranteed to return a non-empty ID.
+    source_playlist_id = parse_spotify_playlist_url(req.url)
 
     # 2. Guard: not self-referencing
     if source_playlist_id == playlist_id:

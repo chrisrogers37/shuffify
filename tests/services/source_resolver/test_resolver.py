@@ -209,6 +209,57 @@ class TestResolveAll:
         assert result.source_results[1][1].success is False
 
 
+class TestApplicableFallthrough:
+    """Tests for ResolveResult.applicable as a fallthrough signal.
+
+    ``can_handle()`` is the primary gate, but a pathway may discover
+    mid-call that the input isn't workable (e.g. a missing API client
+    or empty search query). In that case the pathway returns
+    ``ResolveResult(applicable=False)`` and the resolver should move
+    on silently, not log a hard failure or count it against the
+    "all pathways exhausted" tally.
+    """
+
+    def test_applicable_false_falls_through_to_next(self, mock_api):
+        p1 = _make_pathway(name="p1", result=ResolveResult(
+            track_uris=[],
+            pathway_name="p1",
+            success=False,
+            applicable=False,
+        ))
+        p2 = _make_pathway(name="p2", result=ResolveResult(
+            track_uris=["spotify:track:b"],
+            pathway_name="p2",
+            success=True,
+        ))
+        resolver = SourceResolver(pathways=[p1, p2])
+        source = _make_source()
+
+        result = resolver.resolve(source, api=mock_api)
+        assert result.pathway_name == "p2"
+        assert result.success is True
+
+    def test_all_pathways_not_applicable(self, mock_api):
+        p1 = _make_pathway(name="p1", result=ResolveResult(
+            track_uris=[],
+            pathway_name="p1",
+            success=False,
+            applicable=False,
+        ))
+        p2 = _make_pathway(name="p2", result=ResolveResult(
+            track_uris=[],
+            pathway_name="p2",
+            success=False,
+            applicable=False,
+        ))
+        resolver = SourceResolver(pathways=[p1, p2])
+        source = _make_source()
+
+        result = resolver.resolve(source, api=mock_api)
+        assert result.success is False
+        assert result.pathway_name == "none"
+
+
 class TestDefaultPathways:
     """Tests for default pathway configuration."""
 

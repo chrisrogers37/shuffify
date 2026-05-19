@@ -10,6 +10,7 @@ from shuffify.enums import IntervalValue
 from shuffify.services.schedule_utils import (
     TIME_RE as _TIME_RE,
 )
+from shuffify.spotify.url_parser import parse_spotify_playlist_url
 
 
 class WatchPlaylistRequest(BaseModel):
@@ -155,6 +156,13 @@ class AddRaidUrlRequest(BaseModel):
         if len(v) > 1024:
             raise ValueError(
                 "url must be 1024 chars or fewer"
+            )
+        # Fail fast at the schema boundary if the URL is not a
+        # recognizable Spotify playlist URL/URI/ID. Pushes the
+        # 400 ahead of any business logic.
+        if parse_spotify_playlist_url(v) is None:
+            raise ValueError(
+                "Invalid Spotify playlist URL"
             )
         return v
 

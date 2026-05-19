@@ -150,12 +150,15 @@ class TestResolve:
         result = pathway.resolve(mock_source, api=None)
         assert result.success is False
         assert "No API client" in result.error_message
+        # No API client → not applicable, resolver falls through.
+        assert result.applicable is False
 
     def test_no_playlist_id_returns_failure(self, pathway, mock_api):
         source = Mock(source_playlist_id=None, source_type="external")
         result = pathway.resolve(source, api=mock_api)
         assert result.success is False
         assert "No playlist ID" in result.error_message
+        assert result.applicable is False
 
     def test_skips_tracks_without_uri(
         self, pathway, mock_source, mock_api

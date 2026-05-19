@@ -90,16 +90,21 @@ class TestResolve:
         result = pathway.resolve(source, api=mock_api)
         assert result.success is False
         assert "No search query" in result.error_message
+        # No query → not applicable, so the resolver falls through.
+        assert result.applicable is False
 
     def test_empty_query_returns_failure(self, pathway, mock_api):
         source = Mock(source_type="search_query", search_query="")
         result = pathway.resolve(source, api=mock_api)
         assert result.success is False
+        assert result.applicable is False
 
     def test_no_api_returns_failure(self, pathway, mock_source):
         result = pathway.resolve(mock_source, api=None)
         assert result.success is False
         assert "No API client" in result.error_message
+        # No API client → pathway is not applicable.
+        assert result.applicable is False
 
     def test_empty_results(self, pathway, mock_source, mock_api):
         mock_api.search_tracks.return_value = []

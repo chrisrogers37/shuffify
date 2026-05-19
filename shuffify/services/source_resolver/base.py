@@ -14,12 +14,27 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ResolveResult:
-    """Result of resolving a single source."""
+    """Result of resolving a single source.
+
+    Attributes:
+        track_uris: URIs the pathway resolved (empty on failure).
+        pathway_name: Identifier of the pathway that produced this result.
+        success: True iff the pathway completed and returned tracks.
+        partial: True if results are a subset (e.g. search returns top-N).
+        applicable: False means "this pathway did not apply to the input"
+            — the resolver should skip silently to the next pathway
+            without logging a failure. ``can_handle()`` is the primary
+            gate, but ``applicable=False`` covers cases that only become
+            visible inside ``resolve()`` (e.g. ``api=None`` for a pathway
+            that needs an API client, or a search source with no query).
+        error_message: Short, log-friendly failure reason.
+    """
 
     track_uris: List[str]
     pathway_name: str
     success: bool
     partial: bool = False
+    applicable: bool = True
     error_message: Optional[str] = None
 
 

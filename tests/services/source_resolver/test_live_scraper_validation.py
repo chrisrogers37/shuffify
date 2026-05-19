@@ -31,7 +31,7 @@ from shuffify.services.source_resolver.public_scraper_pathway import (
     EMBED_URL,
     PUBLIC_URL,
     REQUEST_HEADERS,
-    REQUEST_TIMEOUT,
+    DEFAULT_REQUEST_TIMEOUT as REQUEST_TIMEOUT,
     _extract_uris,
     _extract_from_next_data,
     _extract_from_track_list,

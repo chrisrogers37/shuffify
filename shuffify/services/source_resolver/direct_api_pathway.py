@@ -30,10 +30,14 @@ class DirectAPIPathway:
 
     def resolve(self, source, api=None) -> ResolveResult:
         if api is None:
+            # No API client → this pathway cannot apply. Signal to
+            # the resolver to fall through silently rather than log
+            # a hard failure.
             return ResolveResult(
                 track_uris=[],
                 pathway_name=self.name,
                 success=False,
+                applicable=False,
                 error_message="No API client provided",
             )
 
@@ -43,6 +47,7 @@ class DirectAPIPathway:
                 track_uris=[],
                 pathway_name=self.name,
                 success=False,
+                applicable=False,
                 error_message="No playlist ID on source",
             )
 
