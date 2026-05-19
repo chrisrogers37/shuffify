@@ -873,12 +873,14 @@ class TestCaching:
             result = pathway.resolve(mock_source)
             assert result.success is True
 
-            # Verify cache row was created
+            # Verify cache row was created. ``track_count`` is no
+            # longer written by the scraper (issue #318 — dead field);
+            # callers should derive the count from ``track_uris``.
             row = ScrapedPlaylistCache.query.filter_by(
                 playlist_id="pl_test123"
             ).first()
             assert row is not None
-            assert row.track_count > 0
+            assert len(row.track_uris) > 0
             assert row.scrape_pathway == "embed"
 
     def test_cache_read_error_returns_none(self, db_app):
@@ -1080,7 +1082,9 @@ class TestCachePoisoningRegression:
                 playlist_id="pl_test123"
             ).first()
             assert row is not None
-            assert row.track_count == len(result.track_uris)
+            # ``track_count`` is no longer written by the scraper
+            # (issue #318); derive the count from ``track_uris``.
+            assert len(row.track_uris) == len(result.track_uris)
 
     @patch(
         "shuffify.services.source_resolver"
@@ -1430,3 +1434,233 @@ class TestSleepWithBackoff:
 
         _sleep_with_backoff(0, retry_after="999")
         assert mock_sleep.call_args.args[0] == MAX_BACKOFF
+
+
+# ======================================================================
+# Tests: scraper hygiene (issue #318)
+# ======================================================================
+
+
+class TestScraperFailureModes:
+    """Characterization tests for failure modes not covered elsewhere.
+
+    Supplements ``TestExtractFromNextData``, ``TestExtractFromTrackList``,
+    ``TestCaching``, ``TestCachePoisoningRegression``, and
+    ``TestRetryBackoff``. Each test here asserts an invariant that the
+    other suites only indirectly exercise.
+    """
+
+    # -- Malformed HTML doesn't crash ----------------------------------
+
+    def test_extract_uris_on_garbage_returns_empty_no_raise(self):
+        """``_extract_uris`` must never raise, regardless of input.
+
+        The scraper is in the hot path of every external raid; a bare
+        exception here would propagate up to the executor and surface
+        as a generic failure instead of "empty source".
+        """
+        garbage_inputs = [
+            "",  # totally empty
+            "<html",  # truncated tag
+            "<script>not json at all</script>",
+            (
+                '<script id="__NEXT_DATA__" type="application/json">'
+                "{broken json"
+                "</script>"
+            ),
+            '<script>{"trackList": 42}</script>',  # wrong type
+            '<script>{"trackList": null}</script>',
+            (
+                '<script id="__NEXT_DATA__" type="application/json">'
+                'null</script>'
+            ),
+            "\x00\x01\x02 binary junk \xff",
+        ]
+        for html in garbage_inputs:
+            result = _extract_uris(html)
+            assert isinstance(result, list)
+            assert result == []
+
+    def test_extract_from_track_list_handles_non_dict_items(self):
+        """trackList containing non-dict entries (strings, None, ints)
+        is silently skipped rather than raising. Defensive against
+        Spotify shipping a partially-broken page."""
+        html = """
+        <script>{"trackList": [
+            "spotify:track:aaaaaaaaaaaaaaaaaaaaaa",
+            null,
+            42,
+            {"uri": "spotify:track:bbbbbbbbbbbbbbbbbbbbbb"}
+        ]}</script>
+        """
+        result = _extract_from_track_list(html)
+        # Only the well-formed dict entry should be picked up.
+        assert result == ["spotify:track:bbbbbbbbbbbbbbbbbbbbbb"]
+
+    # -- Cache TTL boundary --------------------------------------------
+
+    def test_cache_hit_just_under_ttl_returns_cached(
+        self, mock_source, db_app
+    ):
+        """A cache row whose ``expires_at`` is still in the future
+        (even by one second) must be served from cache without an
+        HTTP call. Pairs with the existing
+        ``test_expired_cache_triggers_rescrape`` to bracket the TTL
+        boundary on both sides."""
+        from datetime import datetime, timedelta, timezone
+        from shuffify.models.db import (
+            ScrapedPlaylistCache, db,
+        )
+
+        with db_app.app_context():
+            now = datetime.now(timezone.utc)
+            row = ScrapedPlaylistCache(
+                playlist_id="pl_test123",
+                scraped_at=now - timedelta(seconds=3599),
+                scrape_pathway="embed",
+                # Expires in 1 second — still inside the TTL window.
+                expires_at=now + timedelta(seconds=1),
+            )
+            row.track_uris = [
+                "spotify:track:aaaaaaaaaaaaaaaaaaaaaa",
+            ]
+            db.session.add(row)
+            db.session.commit()
+
+            with patch(
+                "shuffify.services.source_resolver"
+                ".public_scraper_pathway.requests.get"
+            ) as mock_get:
+                pathway = PublicScraperPathway()
+                result = pathway.resolve(mock_source)
+
+                assert result.success is True
+                assert result.track_uris == [
+                    "spotify:track:aaaaaaaaaaaaaaaaaaaaaa",
+                ]
+                # No HTTP call — served straight from cache.
+                assert mock_get.call_count == 0
+
+    # -- Concurrent cache write idempotency ----------------------------
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.requests.get"
+    )
+    def test_set_cached_is_idempotent_for_same_playlist(
+        self, mock_get, mock_source, db_app
+    ):
+        """Two successive ``_set_cached`` calls for the same playlist
+        must upsert into a single row, not insert duplicates. The
+        unique constraint on ``playlist_id`` would otherwise raise
+        on the second write."""
+        from shuffify.models.db import ScrapedPlaylistCache
+
+        with db_app.app_context():
+            PublicScraperPathway._set_cached(
+                "pl_test123",
+                ["spotify:track:aaaaaaaaaaaaaaaaaaaaaa"],
+                pathway="embed",
+            )
+            PublicScraperPathway._set_cached(
+                "pl_test123",
+                [
+                    "spotify:track:bbbbbbbbbbbbbbbbbbbbbb",
+                    "spotify:track:cccccccccccccccccccccc",
+                ],
+                pathway="public_page",
+            )
+
+            rows = ScrapedPlaylistCache.query.filter_by(
+                playlist_id="pl_test123"
+            ).all()
+            assert len(rows) == 1
+            assert rows[0].scrape_pathway == "public_page"
+            assert rows[0].track_uris == [
+                "spotify:track:bbbbbbbbbbbbbbbbbbbbbb",
+                "spotify:track:cccccccccccccccccccccc",
+            ]
+
+    # -- Commit-failure rollback (L2) ----------------------------------
+
+    def test_set_cached_rolls_back_on_commit_failure(
+        self, db_app
+    ):
+        """If ``db.session.commit`` raises, ``_set_cached`` must
+        catch the exception, roll back, and leave the session in
+        a state that subsequent operations can use. Without the
+        rollback, SQLAlchemy holds the failed transaction and
+        every later query raises ``PendingRollbackError``."""
+        from shuffify.models.db import (
+            ScrapedPlaylistCache, db,
+        )
+
+        with db_app.app_context():
+            real_commit = db.session.commit
+            with patch.object(
+                db.session,
+                "commit",
+                side_effect=Exception("boom"),
+            ) as mock_commit, patch.object(
+                db.session,
+                "rollback",
+                wraps=db.session.rollback,
+            ) as mock_rollback:
+                PublicScraperPathway._set_cached(
+                    "pl_test123",
+                    ["spotify:track:aaaaaaaaaaaaaaaaaaaaaa"],
+                    pathway="embed",
+                )
+                assert mock_commit.called
+                assert mock_rollback.called
+
+            # Session must now be usable. Re-bind the real commit
+            # and prove we can write a fresh row.
+            db.session.commit = real_commit  # type: ignore[assignment]
+            count_before = ScrapedPlaylistCache.query.count()
+            PublicScraperPathway._set_cached(
+                "pl_after_rollback",
+                ["spotify:track:dddddddddddddddddddddd"],
+                pathway="embed",
+            )
+            assert (
+                ScrapedPlaylistCache.query.count()
+                == count_before + 1
+            )
+
+    # -- L1: track_count is no longer written for new rows -------------
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.requests.get"
+    )
+    def test_set_cached_does_not_write_track_count(
+        self, mock_get, mock_source, db_app
+    ):
+        """``track_count`` is dead — no reader anywhere — so the
+        scraper no longer populates it. The column defaults to 0
+        at the schema level, which is all callers can observe.
+
+        Pinning this lets a future cleanup PR safely drop the column
+        via Alembic without surprising anyone."""
+        from shuffify.models.db import ScrapedPlaylistCache
+
+        with db_app.app_context():
+            mock_get.return_value = Mock(
+                status_code=200,
+                text=NEXT_DATA_TRACKS_ITEMS_HTML,
+            )
+
+            pathway = PublicScraperPathway()
+            result = pathway.resolve(mock_source)
+            assert result.success is True
+
+            row = ScrapedPlaylistCache.query.filter_by(
+                playlist_id="pl_test123"
+            ).first()
+            assert row is not None
+            # Column defaults to 0 since the constructor no
+            # longer sets it. The actual count lives on
+            # ``len(row.track_uris)``.
+            assert row.track_count == 0
+            assert len(row.track_uris) == 3
