@@ -78,6 +78,14 @@ class Config:
     CACHE_USER_TTL = 600  # 10 minutes for user profile data
     CACHE_AUDIO_FEATURES_TTL = 86400  # 24 hours for audio features (rarely change)
 
+    # Source resolver — HTTP timeout (seconds) for public Spotify scrapes.
+    # Tunable per-environment so production can dial down latency budget
+    # without code changes. Retry/backoff constants live in the pathway
+    # module since they're stable algorithmic knobs, not ops controls.
+    SOURCE_RESOLVER_TIMEOUT = int(
+        os.getenv("SOURCE_RESOLVER_TIMEOUT", "10")
+    )
+
     # Database configuration
     SQLALCHEMY_DATABASE_URI = _resolve_database_url("sqlite:///shuffify.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False

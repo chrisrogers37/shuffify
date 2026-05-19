@@ -51,12 +51,32 @@ class SourceResolver:
         ]
 
     def resolve(self, source: Any, api: Any = None) -> ResolveResult:
-        """Try each applicable pathway until one succeeds."""
+        """Try each applicable pathway until one succeeds.
+
+        Pathways may decline a source in two ways:
+
+        - ``can_handle(source)`` returns False — declined before resolve().
+        - ``resolve()`` returns ``ResolveResult(applicable=False)`` — the
+          pathway determined mid-call that the input wasn't workable
+          (e.g. missing API client, missing search query). This is not
+          a failure; it's a "not applicable" signal.
+
+        Either way, the resolver skips silently to the next pathway.
+        """
         for pathway in self._pathways:
             if not pathway.can_handle(source):
                 continue
 
             result = pathway.resolve(source, api=api)
+
+            if not result.applicable:
+                logger.debug(
+                    "Pathway %s not applicable to %s",
+                    pathway.name,
+                    getattr(source, "source_playlist_id", "?"),
+                )
+                continue
+
             if result.success or result.partial:
                 logger.info(
                     "Resolved source %s via %s (%d tracks)",

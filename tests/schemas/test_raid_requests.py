@@ -162,20 +162,27 @@ class TestRaidNowRequestInvalid:
 # =============================================================================
 
 
+# Real 22-char Spotify playlist ID used in the valid-URL fixtures.
+_VALID_PLAYLIST_ID = "37i9dQZF1DXcBWIGoYBM5M"
+_VALID_PLAYLIST_URL = (
+    f"https://open.spotify.com/playlist/{_VALID_PLAYLIST_ID}"
+)
+
+
 class TestAddRaidUrlRequestValid:
     """Tests for valid AddRaidUrlRequest payloads."""
 
     def test_minimal_request(self):
         req = AddRaidUrlRequest(
-            url="https://open.spotify.com/playlist/abc123",
+            url=_VALID_PLAYLIST_URL,
         )
-        assert "abc123" in req.url
+        assert _VALID_PLAYLIST_ID in req.url
         assert req.auto_schedule is True
         assert req.schedule_value == "daily"
 
     def test_full_request(self):
         req = AddRaidUrlRequest(
-            url="https://open.spotify.com/playlist/abc123",
+            url=_VALID_PLAYLIST_URL,
             auto_schedule=False,
             schedule_value="weekly",
         )
@@ -184,15 +191,13 @@ class TestAddRaidUrlRequestValid:
 
     def test_url_whitespace_stripped(self):
         req = AddRaidUrlRequest(
-            url="  https://open.spotify.com/playlist/abc  "
+            url=f"  {_VALID_PLAYLIST_URL}  "
         )
-        assert req.url == (
-            "https://open.spotify.com/playlist/abc"
-        )
+        assert req.url == _VALID_PLAYLIST_URL
 
     def test_extra_fields_ignored(self):
         req = AddRaidUrlRequest(
-            url="https://open.spotify.com/playlist/abc",
+            url=_VALID_PLAYLIST_URL,
             unknown_field="ignored",
         )
         assert req.url is not None
@@ -203,10 +208,22 @@ class TestAddRaidUrlRequestValid:
             "every_12h", "every_3d",
         ]:
             req = AddRaidUrlRequest(
-                url="https://example.com/p",
+                url=_VALID_PLAYLIST_URL,
                 schedule_value=val,
             )
             assert req.schedule_value == val
+
+    def test_accepts_spotify_uri(self):
+        """URI form is accepted by the validator."""
+        req = AddRaidUrlRequest(
+            url=f"spotify:playlist:{_VALID_PLAYLIST_ID}",
+        )
+        assert req.url == f"spotify:playlist:{_VALID_PLAYLIST_ID}"
+
+    def test_accepts_bare_playlist_id(self):
+        """Bare 22-char playlist ID is accepted."""
+        req = AddRaidUrlRequest(url=_VALID_PLAYLIST_ID)
+        assert req.url == _VALID_PLAYLIST_ID
 
 
 class TestAddRaidUrlRequestInvalid:
@@ -227,8 +244,28 @@ class TestAddRaidUrlRequestInvalid:
     def test_invalid_schedule_value_raises(self):
         with pytest.raises(ValidationError):
             AddRaidUrlRequest(
-                url="https://example.com/p",
+                url=_VALID_PLAYLIST_URL,
                 schedule_value="every_minute",
+            )
+
+    def test_non_spotify_url_raises(self):
+        """Non-Spotify URLs are rejected at the schema boundary."""
+        with pytest.raises(ValidationError) as exc:
+            AddRaidUrlRequest(url="https://example.com/p")
+        assert "Invalid Spotify playlist URL" in str(exc.value)
+
+    def test_malformed_spotify_url_raises(self):
+        """Spotify domain but wrong path → rejected."""
+        with pytest.raises(ValidationError):
+            AddRaidUrlRequest(
+                url="https://open.spotify.com/album/abc123",
+            )
+
+    def test_short_id_raises(self):
+        """22-char check is enforced."""
+        with pytest.raises(ValidationError):
+            AddRaidUrlRequest(
+                url="https://open.spotify.com/playlist/abc123",
             )
 
 
@@ -263,7 +300,7 @@ class TestScheduleTime:
 
     def test_add_url_with_schedule_time(self):
         req = AddRaidUrlRequest(
-            url="https://example.com/p",
+            url=_VALID_PLAYLIST_URL,
             schedule_time="09:00",
         )
         assert req.schedule_time == "09:00"

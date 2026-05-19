@@ -761,6 +761,8 @@ class TestResolve:
         result = pathway.resolve(source)
         assert result.success is False
         assert "No playlist ID" in result.error_message
+        # No playlist ID → not applicable, resolver falls through.
+        assert result.applicable is False
 
     def test_name_property(self, pathway):
         assert pathway.name == "public_scraper"
@@ -1342,6 +1344,51 @@ class TestRetryBackoff:
 # ======================================================================
 # Tests: _sleep_with_backoff helper (issue #315)
 # ======================================================================
+
+
+class TestRequestTimeoutConfig:
+    """The HTTP timeout is sourced from Flask config when available.
+
+    Falls back to ``DEFAULT_REQUEST_TIMEOUT`` outside an app context so
+    direct unit tests don't need to spin up a Flask app just to scrape.
+    """
+
+    def test_uses_default_outside_app_context(self):
+        from shuffify.services.source_resolver.public_scraper_pathway import (
+            _get_request_timeout,
+            DEFAULT_REQUEST_TIMEOUT,
+        )
+
+        assert _get_request_timeout() == DEFAULT_REQUEST_TIMEOUT
+
+    def test_reads_from_flask_config(self, db_app):
+        from shuffify.services.source_resolver.public_scraper_pathway import (
+            _get_request_timeout,
+        )
+
+        with db_app.app_context():
+            db_app.config["SOURCE_RESOLVER_TIMEOUT"] = 25
+            assert _get_request_timeout() == 25
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.requests.get"
+    )
+    def test_scrape_passes_configured_timeout(
+        self, mock_get, mock_source, db_app
+    ):
+        """The configured timeout flows through to ``requests.get``."""
+        with db_app.app_context():
+            db_app.config["SOURCE_RESOLVER_TIMEOUT"] = 7
+            mock_get.return_value = Mock(
+                status_code=200, text="<html></html>"
+            )
+
+            pathway = PublicScraperPathway()
+            pathway.resolve(mock_source)
+
+            call_kwargs = mock_get.call_args
+            assert call_kwargs.kwargs["timeout"] == 7
 
 
 class TestSleepWithBackoff:

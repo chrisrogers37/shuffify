@@ -235,13 +235,18 @@ class TestRaidAddUrlValidation:
     def test_self_reference_returns_400(
         self, mock_parse, mock_auth, auth_client
     ):
+        # Mock the route's parser to claim this URL points at "p1"
+        # so the self-reference guard fires. The schema validator
+        # uses the real parser and accepts a well-formed URL.
         mock_auth.return_value = MagicMock()
         mock_parse.return_value = "p1"
         resp = auth_client.post(
             "/playlist/p1/raid-add-url",
             json={
-                "url": "https://open.spotify.com"
-                "/playlist/p1",
+                "url": (
+                    "https://open.spotify.com/playlist/"
+                    "37i9dQZF1DXcBWIGoYBM5M"
+                ),
             },
         )
         assert resp.status_code == 400
@@ -277,8 +282,10 @@ class TestRaidAddUrlValidation:
         resp = auth_client.post(
             "/playlist/p1/raid-add-url",
             json={
-                "url": "https://open.spotify.com"
-                "/playlist/ext1",
+                "url": (
+                    "https://open.spotify.com/playlist/"
+                    "37i9dQZF1DXcBWIGoYBM5M"
+                ),
             },
         )
         assert resp.status_code == 400
@@ -313,8 +320,10 @@ class TestRaidAddUrlValidation:
         resp = auth_client.post(
             "/playlist/p1/raid-add-url",
             json={
-                "url": "https://open.spotify.com"
-                "/playlist/ext1",
+                "url": (
+                    "https://open.spotify.com/playlist/"
+                    "37i9dQZF1DXcBWIGoYBM5M"
+                ),
             },
         )
         assert resp.status_code == 404
