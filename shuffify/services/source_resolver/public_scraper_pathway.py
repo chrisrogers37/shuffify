@@ -8,6 +8,7 @@ arrays that Spotify embeds in server-rendered HTML.
 import json
 import logging
 import re
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -71,6 +72,31 @@ URI_PATTERN = re.compile(r'"(spotify:track:[a-zA-Z0-9]{22})"')
 URL_PATTERN = re.compile(r"/track/([a-zA-Z0-9]{22})")
 
 
+@dataclass
+class ScrapeOutcome:
+    """Result of a single scrape attempt against one Spotify URL.
+
+    Distinguishes "we successfully fetched and parsed a page" (``confirmed``)
+    from "the request failed before we could see the page" (``not confirmed``).
+    The caller uses ``confirmed`` to gate cache writes: only confirmed outcomes
+    are cacheable, since caching a transient failure would block subsequent
+    retries for the full cache TTL.
+
+    Attributes:
+        uris: Track URIs extracted from the page. May be empty even when
+            ``confirmed`` is True (genuinely empty playlist).
+        confirmed: True iff the HTTP response was 200 and the body was
+            parsed (regardless of whether tracks were found).
+        error: Short, log-friendly description of the failure mode when
+            ``confirmed`` is False. Populated for transient/permanent
+            failures; None on confirmed scrapes.
+    """
+
+    uris: List[str]
+    confirmed: bool
+    error: Optional[str] = None
+
+
 class PublicScraperPathway:
     """Pathway 3: Extract track URIs from Spotify's public web pages.
 
@@ -124,101 +150,132 @@ class PublicScraperPathway:
             )
 
         # Strategy 1: Embed endpoint (lighter, more structured)
-        uris = self._scrape_embed(playlist_id)
-        if uris:
-            self._set_cached(playlist_id, uris, "embed")
+        embed = self._scrape_embed(playlist_id)
+        if embed.uris:
+            self._set_cached(playlist_id, embed.uris, "embed")
             return ResolveResult(
-                track_uris=uris,
+                track_uris=embed.uris,
                 pathway_name=self.name,
                 success=True,
             )
 
         # Strategy 2: Public page (heavier, but may have more data)
-        uris = self._scrape_public_page(playlist_id)
-        if uris:
+        public = self._scrape_public_page(playlist_id)
+        if public.uris:
             self._set_cached(
-                playlist_id, uris, "public_page"
+                playlist_id, public.uris, "public_page"
             )
             return ResolveResult(
-                track_uris=uris,
+                track_uris=public.uris,
                 pathway_name=self.name,
                 success=True,
             )
 
-        # Both strategies failed — cache the empty result too
-        self._set_cached(playlist_id, [], "none")
+        # Neither strategy returned tracks. Two cases:
+        #
+        # (a) At least one strategy confirmed the page (200 OK with parsed
+        #     body but no extractable tracks) — the playlist genuinely has
+        #     no tracks. Cache the empty result so we don't repeatedly
+        #     hit Spotify for a known-empty playlist.
+        #
+        # (b) Both strategies were unconfirmed (403/429/timeout/network
+        #     error) — the playlist's state is unknown. Do NOT cache; let
+        #     the next call retry. This avoids the cache-poisoning bug
+        #     where one transient failure blocks an hour of raids.
+        if embed.confirmed or public.confirmed:
+            self._set_cached(playlist_id, [], "none")
+            return ResolveResult(
+                track_uris=[],
+                pathway_name=self.name,
+                success=False,
+                error_message="Scraping returned no tracks",
+            )
+
+        # Both unconfirmed — surface the failure without caching.
+        failure_reason = embed.error or public.error or "scrape failed"
         return ResolveResult(
             track_uris=[],
             pathway_name=self.name,
             success=False,
-            error_message="Scraping returned no tracks",
+            error_message=f"Scrape unconfirmed: {failure_reason}",
         )
 
     # ------------------------------------------------------------------
     # Scrape strategies
     # ------------------------------------------------------------------
 
-    def _scrape_embed(self, playlist_id: str) -> List[str]:
-        """Extract URIs from the embed endpoint."""
-        url = EMBED_URL.format(playlist_id=playlist_id)
-        try:
-            resp = requests.get(
-                url,
-                timeout=REQUEST_TIMEOUT,
-                headers=REQUEST_HEADERS,
-            )
-            if resp.status_code != 200:
-                log_level = (
-                    logging.WARNING
-                    if resp.status_code in (403, 429)
-                    else logging.DEBUG
-                )
-                logger.log(
-                    log_level,
-                    "Embed returned %d for %s",
-                    resp.status_code,
-                    playlist_id,
-                )
-                return []
-            return _extract_uris(resp.text)
-        except Exception as e:
-            logger.warning(
-                "Embed scrape failed for %s: %s",
-                playlist_id,
-                e,
-            )
-            return []
+    def _scrape_embed(self, playlist_id: str) -> ScrapeOutcome:
+        """Extract URIs from the embed endpoint.
 
-    def _scrape_public_page(self, playlist_id: str) -> List[str]:
+        Returns a ScrapeOutcome whose ``confirmed`` field signals whether
+        the resolver can treat the result as authoritative for caching.
+        """
+        return self._do_scrape(
+            EMBED_URL.format(playlist_id=playlist_id),
+            playlist_id,
+            label="Embed",
+        )
+
+    def _scrape_public_page(self, playlist_id: str) -> ScrapeOutcome:
         """Extract URIs from the public playlist page."""
-        url = PUBLIC_URL.format(playlist_id=playlist_id)
+        return self._do_scrape(
+            PUBLIC_URL.format(playlist_id=playlist_id),
+            playlist_id,
+            label="Public page",
+        )
+
+    def _do_scrape(
+        self, url: str, playlist_id: str, label: str
+    ) -> ScrapeOutcome:
+        """Fetch ``url`` and extract track URIs, classifying the outcome.
+
+        ``confirmed`` is True only when the HTTP response was 200 and the
+        body was parsed. All other cases (non-200 status, network errors,
+        timeouts) return ``confirmed=False`` so the caller can skip the
+        cache write.
+        """
         try:
             resp = requests.get(
                 url,
                 timeout=REQUEST_TIMEOUT,
                 headers=REQUEST_HEADERS,
             )
-            if resp.status_code != 200:
-                log_level = (
-                    logging.WARNING
-                    if resp.status_code in (403, 429)
-                    else logging.DEBUG
-                )
-                logger.log(
-                    log_level,
-                    "Public page returned %d for %s",
-                    resp.status_code,
-                    playlist_id,
-                )
-                return []
-            return _extract_uris(resp.text)
         except Exception as e:
             logger.warning(
-                "Public page scrape failed for %s: %s",
+                "%s scrape failed for %s: %s",
+                label,
                 playlist_id,
                 e,
             )
-            return []
+            return ScrapeOutcome(
+                uris=[],
+                confirmed=False,
+                error=f"{type(e).__name__}: {e}",
+            )
+
+        if resp.status_code != 200:
+            log_level = (
+                logging.WARNING
+                if resp.status_code in (403, 429)
+                else logging.DEBUG
+            )
+            logger.log(
+                log_level,
+                "%s returned %d for %s",
+                label,
+                resp.status_code,
+                playlist_id,
+            )
+            return ScrapeOutcome(
+                uris=[],
+                confirmed=False,
+                error=f"HTTP {resp.status_code}",
+            )
+
+        return ScrapeOutcome(
+            uris=_extract_uris(resp.text),
+            confirmed=True,
+        )
 
     # ------------------------------------------------------------------
     # Cache helpers (database-backed)

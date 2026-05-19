@@ -965,3 +965,168 @@ class TestCaching:
             ).first()
             assert row is not None
             assert row.track_count == 0
+
+
+# ======================================================================
+# Tests: Cache-poisoning regression (issue #314)
+# ======================================================================
+
+
+class TestCachePoisoningRegression:
+    """Regression tests for the 2026-03 silent-failure bug.
+
+    Before the fix, *any* failed scrape (403, 429, timeout, network
+    error) cached an empty result for one hour, blocking every
+    subsequent raid of that source. The fix gates cache writes on
+    a "confirmed" outcome: only scrapes that received a 200 and
+    parsed the body may cache. Transient failures must not poison
+    the cache.
+    """
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.requests.get"
+    )
+    def test_403_response_does_not_cache(
+        self, mock_get, mock_source, db_app
+    ):
+        from shuffify.models.db import ScrapedPlaylistCache
+
+        with db_app.app_context():
+            mock_get.return_value = Mock(status_code=403, text="")
+            pathway = PublicScraperPathway()
+            result = pathway.resolve(mock_source)
+
+            assert result.success is False
+            assert "unconfirmed" in result.error_message.lower()
+            row = ScrapedPlaylistCache.query.filter_by(
+                playlist_id="pl_test123"
+            ).first()
+            assert row is None, (
+                "403 must not poison the cache — next raid "
+                "should be free to retry"
+            )
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.requests.get"
+    )
+    def test_429_response_does_not_cache(
+        self, mock_get, mock_source, db_app
+    ):
+        from shuffify.models.db import ScrapedPlaylistCache
+
+        with db_app.app_context():
+            mock_get.return_value = Mock(status_code=429, text="")
+            pathway = PublicScraperPathway()
+            result = pathway.resolve(mock_source)
+
+            assert result.success is False
+            row = ScrapedPlaylistCache.query.filter_by(
+                playlist_id="pl_test123"
+            ).first()
+            assert row is None
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.requests.get"
+    )
+    def test_network_exception_does_not_cache(
+        self, mock_get, mock_source, db_app
+    ):
+        from shuffify.models.db import ScrapedPlaylistCache
+
+        with db_app.app_context():
+            mock_get.side_effect = Exception("Connection refused")
+            pathway = PublicScraperPathway()
+            result = pathway.resolve(mock_source)
+
+            assert result.success is False
+            row = ScrapedPlaylistCache.query.filter_by(
+                playlist_id="pl_test123"
+            ).first()
+            assert row is None
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.requests.get"
+    )
+    def test_mixed_embed_403_then_public_200_with_tracks_caches(
+        self, mock_get, mock_source, db_app
+    ):
+        """If embed 403s but public page returns tracks, normal
+        success path applies — cache stores the found tracks."""
+        from shuffify.models.db import ScrapedPlaylistCache
+
+        with db_app.app_context():
+            embed_resp = Mock(status_code=403, text="")
+            page_resp = Mock(
+                status_code=200, text=LEGACY_URL_HTML
+            )
+            mock_get.side_effect = [embed_resp, page_resp]
+
+            pathway = PublicScraperPathway()
+            result = pathway.resolve(mock_source)
+
+            assert result.success is True
+            assert len(result.track_uris) > 0
+            row = ScrapedPlaylistCache.query.filter_by(
+                playlist_id="pl_test123"
+            ).first()
+            assert row is not None
+            assert row.track_count == len(result.track_uris)
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.requests.get"
+    )
+    def test_mixed_embed_403_then_public_403_does_not_cache(
+        self, mock_get, mock_source, db_app
+    ):
+        """Both strategies 403 → no cache write, even though the
+        old code would have cached empty."""
+        from shuffify.models.db import ScrapedPlaylistCache
+
+        with db_app.app_context():
+            embed_resp = Mock(status_code=403, text="")
+            page_resp = Mock(status_code=403, text="")
+            mock_get.side_effect = [embed_resp, page_resp]
+
+            pathway = PublicScraperPathway()
+            result = pathway.resolve(mock_source)
+
+            assert result.success is False
+            row = ScrapedPlaylistCache.query.filter_by(
+                playlist_id="pl_test123"
+            ).first()
+            assert row is None
+
+    @patch(
+        "shuffify.services.source_resolver"
+        ".public_scraper_pathway.requests.get"
+    )
+    def test_confirmed_empty_still_caches(
+        self, mock_get, mock_source, db_app
+    ):
+        """A 200 response with no extractable tracks IS a confirmed
+        empty playlist — cache it so we don't re-scrape repeatedly.
+
+        Companion to `test_failed_scrape_caches_empty` (which uses
+        the same setup); kept here to document the post-fix
+        invariant explicitly."""
+        from shuffify.models.db import ScrapedPlaylistCache
+
+        with db_app.app_context():
+            mock_get.return_value = Mock(
+                status_code=200, text="<html></html>"
+            )
+
+            pathway = PublicScraperPathway()
+            result = pathway.resolve(mock_source)
+
+            assert result.success is False
+            row = ScrapedPlaylistCache.query.filter_by(
+                playlist_id="pl_test123"
+            ).first()
+            assert row is not None
+            assert row.track_count == 0
