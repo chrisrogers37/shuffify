@@ -2,7 +2,11 @@
 
 import logging
 
-from shuffify.spotify.exceptions import SpotifyNotFoundError
+from shuffify.spotify.exceptions import (
+    SpotifyAPIError,
+    SpotifyNotFoundError,
+    SpotifyTokenExpiredError,
+)
 from .base import ResolveResult
 
 logger = logging.getLogger(__name__)
@@ -56,15 +60,25 @@ class DirectAPIPathway:
                 success=False,
                 error_message="Playlist not found via API",
             )
-        except Exception as e:
+        except SpotifyTokenExpiredError:
+            # Let the executor's auth-refresh layer
+            # (`JobExecutorService._get_spotify_api`) catch and
+            # re-arm the token. Falling through to SearchPathway
+            # / PublicScraperPathway here would burn two extra
+            # network calls and obscure the real cause.
+            raise
+        except SpotifyAPIError as e:
             logger.warning(
-                "DirectAPI failed for %s: %s", playlist_id, e
+                "DirectAPI failed for %s: %s: %s",
+                playlist_id,
+                type(e).__name__,
+                e,
             )
             return ResolveResult(
                 track_uris=[],
                 pathway_name=self.name,
                 success=False,
-                error_message=str(e),
+                error_message=f"{type(e).__name__}: {e}",
             )
 
         uris = [
