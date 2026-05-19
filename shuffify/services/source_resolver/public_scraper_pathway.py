@@ -432,14 +432,18 @@ class PublicScraperPathway:
 
             if existing:
                 existing.track_uris = uris
-                existing.track_count = len(uris)
                 existing.scraped_at = now
                 existing.scrape_pathway = pathway
                 existing.expires_at = expires
             else:
+                # NOTE: ScrapedPlaylistCache.track_count is no longer
+                # written here — it was dead weight (no reader anywhere
+                # in the codebase). The column is intentionally left
+                # in the schema for now; a future cleanup PR can drop
+                # it via Alembic migration once a few releases have
+                # shipped without writers.
                 row = ScrapedPlaylistCache(
                     playlist_id=playlist_id,
-                    track_count=len(uris),
                     scraped_at=now,
                     scrape_pathway=pathway,
                     expires_at=expires,
@@ -452,6 +456,19 @@ class PublicScraperPathway:
             logger.warning(
                 "Scraper cache write error: %s", e
             )
+            # L2: roll back so the session stays usable for
+            # subsequent operations within the same request /
+            # job. Without this, SQLAlchemy may leave the
+            # transaction in a failed state and every following
+            # query in the same scope will raise
+            # ``PendingRollbackError``.
+            try:
+                db.session.rollback()
+            except Exception as rollback_err:
+                logger.warning(
+                    "Scraper cache rollback failed: %s",
+                    rollback_err,
+                )
 
 
 # ======================================================================

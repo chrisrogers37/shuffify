@@ -29,7 +29,21 @@ class SourceResolver:
 
     @staticmethod
     def _default_pathways() -> List[ResolvePathway]:
-        """Default pathway chain in priority order."""
+        """Default pathway chain in priority order.
+
+        The order is deliberate and reflects a cost/accuracy tradeoff:
+
+        1. ``DirectAPIPathway`` — cheapest and most accurate. Uses the
+           authenticated Spotify API to fetch the playlist's tracks
+           directly. Always preferred when it can handle the source.
+        2. ``SearchPathway`` — fuzzy fallback for search-query sources.
+           Issues a Spotify search and returns the top results; accuracy
+           depends on query specificity.
+        3. ``PublicScraperPathway`` — fragile last-resort. Scrapes
+           Spotify's public/embed HTML pages. Required since Feb 2026
+           because `/playlists/{id}/items` returns 403 for foreign
+           playlists, but the page structure can change without notice.
+        """
         return [
             DirectAPIPathway(),
             SearchPathway(),
