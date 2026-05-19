@@ -88,6 +88,7 @@ class ActivityType(StrEnum):
     RAID_WATCH_ADD = "raid_watch_add"
     RAID_WATCH_REMOVE = "raid_watch_remove"
     RAID_SYNC_NOW = "raid_sync_now"
+    RAID_SOURCE_RESOLVE_FAILED = "raid_source_resolve_failed"
     RAID_PROMOTE = "raid_promote"
     RAID_DISMISS = "raid_dismiss"
     RAID_DRIP = "raid_drip"

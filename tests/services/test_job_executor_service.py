@@ -165,6 +165,185 @@ class TestExecuteRaid:
         assert result["tracks_added"] == 0
 
 
+class TestRaidSourceFailureLogging:
+    """Issue #316: ResolveResult.error_message must surface
+    as a structured log line and an ActivityLog entry instead
+    of being silently discarded by the raid executor."""
+
+    @patch(
+        "shuffify.services.executors.raid_executor"
+        "._log_failed_source_activity"
+    )
+    @patch(
+        "shuffify.services.executors.raid_executor"
+        ".SourceResolver"
+    )
+    @patch(
+        "shuffify.services.executors.raid_executor"
+        ".PendingRaidService"
+    )
+    def test_failed_resolve_emits_structured_warning(
+        self,
+        mock_pending,
+        mock_resolver_cls,
+        mock_activity_helper,
+        mock_schedule,
+        mock_api,
+        caplog,
+    ):
+        """A source whose ResolveResult has success=False must
+        produce a logger.warning carrying source_id /
+        source_playlist_id / source_name / pathway / partial /
+        error_message."""
+        import logging
+        from shuffify.services.source_resolver.base import (
+            ResolveAllResult,
+            ResolveResult,
+        )
+
+        mock_schedule.job_type = "raid"
+        mock_schedule.source_playlist_ids = ["src_bad"]
+        mock_pending.stage_tracks.return_value = 0
+
+        target_tracks = [
+            {"id": "t1", "uri": "spotify:track:t1"}
+        ]
+        mock_api.get_playlist_tracks.return_value = (
+            target_tracks
+        )
+
+        failing_source = Mock(
+            id=42,
+            source_playlist_id="src_bad",
+            source_name="Bad Source Playlist",
+            source_type="external",
+            raid_count=5,
+        )
+        failed = ResolveResult(
+            track_uris=[],
+            pathway_name="public_scraper",
+            success=False,
+            partial=False,
+            error_message="HTTP 429 from scraper",
+        )
+        mock_resolver_cls.return_value.resolve_all.return_value = (  # noqa: E501
+            ResolveAllResult(
+                new_uris=[],
+                source_results=[(failing_source, failed)],
+            )
+        )
+
+        with caplog.at_level(
+            logging.WARNING,
+            logger=(
+                "shuffify.services.executors.raid_executor"
+            ),
+        ):
+            execute_raid(mock_schedule, mock_api)
+
+        warning_records = [
+            r for r in caplog.records
+            if r.levelno == logging.WARNING
+            and "Raid source resolution failed"
+            in r.getMessage()
+        ]
+        assert warning_records, (
+            "Expected a structured warning for the failed "
+            "source resolve; got: "
+            f"{[r.getMessage() for r in caplog.records]}"
+        )
+        msg = warning_records[0].getMessage()
+        assert "src_bad" in msg
+        assert "Bad Source Playlist" in msg
+        assert "public_scraper" in msg
+        assert "HTTP 429 from scraper" in msg
+
+        # Activity-log helper should have fired exactly once
+        # with this source + result.
+        mock_activity_helper.assert_called_once()
+        kwargs = mock_activity_helper.call_args.kwargs
+        assert kwargs["user_id"] == mock_schedule.user_id
+        assert kwargs["source"] is failing_source
+        assert kwargs["result"] is failed
+
+    @patch(
+        "shuffify.services.executors.raid_executor"
+        "._log_failed_source_activity"
+    )
+    @patch(
+        "shuffify.services.executors.raid_executor"
+        ".SourceResolver"
+    )
+    @patch(
+        "shuffify.services.executors.raid_executor"
+        ".PendingRaidService"
+    )
+    def test_successful_resolve_does_not_warn(
+        self,
+        mock_pending,
+        mock_resolver_cls,
+        mock_activity_helper,
+        mock_schedule,
+        mock_api,
+        caplog,
+    ):
+        """Happy path: a successful resolve must NOT emit the
+        failure warning or activity entry."""
+        import logging
+        from shuffify.services.source_resolver.base import (
+            ResolveAllResult,
+            ResolveResult,
+        )
+
+        mock_schedule.job_type = "raid"
+        mock_schedule.source_playlist_ids = ["src_ok"]
+        mock_pending.stage_tracks.return_value = 1
+
+        target_tracks = [
+            {"id": "t1", "uri": "spotify:track:t1"}
+        ]
+
+        def get_tracks(pid):
+            if pid == "target_pl":
+                return target_tracks
+            return []
+
+        mock_api.get_playlist_tracks.side_effect = get_tracks
+
+        ok_source = Mock(
+            id=99,
+            source_playlist_id="src_ok",
+            source_name="Good Source",
+            source_type="external",
+            raid_count=5,
+        )
+        ok = ResolveResult(
+            track_uris=["spotify:track:new1"],
+            pathway_name="direct_api",
+            success=True,
+        )
+        mock_resolver_cls.return_value.resolve_all.return_value = (  # noqa: E501
+            ResolveAllResult(
+                new_uris=["spotify:track:new1"],
+                source_results=[(ok_source, ok)],
+            )
+        )
+
+        with caplog.at_level(
+            logging.WARNING,
+            logger=(
+                "shuffify.services.executors.raid_executor"
+            ),
+        ):
+            execute_raid(mock_schedule, mock_api)
+
+        assert not any(
+            "Raid source resolution failed" in r.getMessage()
+            for r in caplog.records
+        ), "Happy path must not produce failure log spam"
+        mock_activity_helper.assert_not_called()
+
+
 class TestExecuteShuffle:
     """Tests for the shuffle execution logic."""
 

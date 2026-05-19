@@ -18,7 +18,7 @@ from shuffify.spotify.exceptions import (
     SpotifyAPIError,
     SpotifyNotFoundError,
 )
-from shuffify.enums import SnapshotType
+from shuffify.enums import ActivityType, SnapshotType
 from shuffify.shuffle_algorithms.utils import extract_uris
 from shuffify.services.executors.base_executor import (
     JobExecutionError,
@@ -244,6 +244,28 @@ def _fetch_raid_sources_with_limits(
     all_new_uris = []
 
     for source, result in results.source_results:
+        if result and not result.success:
+            # Surface failed resolves so "raid does nothing"
+            # is debuggable. Happy path stays quiet — only
+            # success=False triggers this log line.
+            logger.warning(
+                "Raid source resolution failed: "
+                "source_id=%s source_playlist_id=%s "
+                "source_name=%s pathway=%s partial=%s "
+                "error=%s",
+                getattr(source, "id", None),
+                getattr(source, "source_playlist_id", None),
+                getattr(source, "source_name", None),
+                result.pathway_name,
+                result.partial,
+                result.error_message,
+            )
+            _log_failed_source_activity(
+                user_id=user_id,
+                source=source,
+                result=result,
+            )
+
         raid_count = source.raid_count or 5
         source_uris = (
             result.track_uris if result else []
@@ -321,6 +343,54 @@ def _load_sources(source_ids, user_id):
         ]
 
     return sources
+
+
+def _log_failed_source_activity(user_id, source, result):
+    """Write an ActivityLog entry for a failed source resolve.
+
+    Non-blocking — ActivityLogService.log already swallows
+    its own exceptions, but we wrap defensively so even an
+    import error can't escape into the raid loop.
+    """
+    if not user_id:
+        return
+    try:
+        from shuffify.services.activity_log_service import (
+            ActivityLogService,
+        )
+
+        source_name = (
+            getattr(source, "source_name", None)
+            or getattr(source, "source_playlist_id", None)
+            or "unknown source"
+        )
+        ActivityLogService.log(
+            user_id=user_id,
+            activity_type=(
+                ActivityType.RAID_SOURCE_RESOLVE_FAILED
+            ),
+            description=(
+                f"Raid source '{source_name}' failed to "
+                f"resolve via {result.pathway_name}"
+            ),
+            metadata={
+                "source_id": getattr(source, "id", None),
+                "source_playlist_id": getattr(
+                    source, "source_playlist_id", None
+                ),
+                "source_name": getattr(
+                    source, "source_name", None
+                ),
+                "pathway": result.pathway_name,
+                "partial": result.partial,
+                "error_message": result.error_message,
+            },
+        )
+    except Exception as e:
+        logger.debug(
+            "Failed to log raid source failure activity: %s",
+            e,
+        )
 
 
 def _update_source_tracking(results):
