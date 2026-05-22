@@ -82,9 +82,7 @@ class Config:
     # Tunable per-environment so production can dial down latency budget
     # without code changes. Retry/backoff constants live in the pathway
     # module since they're stable algorithmic knobs, not ops controls.
-    SOURCE_RESOLVER_TIMEOUT = int(
-        os.getenv("SOURCE_RESOLVER_TIMEOUT", "10")
-    )
+    SOURCE_RESOLVER_TIMEOUT = int(os.getenv("SOURCE_RESOLVER_TIMEOUT", "10"))
 
     # Database configuration
     SQLALCHEMY_DATABASE_URI = _resolve_database_url("sqlite:///shuffify.db")
@@ -102,12 +100,8 @@ class Config:
     # Sentry observability (no-op when SENTRY_DSN is empty)
     SENTRY_DSN = os.getenv("SENTRY_DSN", "")
     SENTRY_ENVIRONMENT = os.getenv("SENTRY_ENVIRONMENT", "production")
-    SENTRY_TRACES_SAMPLE_RATE = float(
-        os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.0")
-    )
-    SENTRY_PROFILES_SAMPLE_RATE = float(
-        os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.0")
-    )
+    SENTRY_TRACES_SAMPLE_RATE = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.0"))
+    SENTRY_PROFILES_SAMPLE_RATE = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.0"))
     SENTRY_RELEASE = os.getenv("GIT_SHA", "")
 
     @classmethod
@@ -178,6 +172,7 @@ class TestConfig(Config):
 
     CONFIG_NAME = "testing"
     TESTING = True
+    WTF_CSRF_ENABLED = False
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     SCHEDULER_ENABLED = False
 

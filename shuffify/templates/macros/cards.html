@@ -149,6 +149,7 @@
               action="{{ url_for('main.shuffle', playlist_id=playlist.id) }}"
               method="POST"
               data-playlist-id="{{ playlist.id }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="algorithm" class="shuffle-algorithm-input" value="BasicShuffle">
         </form>
 
@@ -158,6 +159,7 @@
               action="{{ url_for('main.undo', playlist_id=playlist.id) }}"
               method="POST"
               data-playlist-id="{{ playlist.id }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         </form>
     </div>
 

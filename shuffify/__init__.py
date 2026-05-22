@@ -7,6 +7,7 @@ from flask_session import Session
 import redis
 from flask_limiter import Limiter
 from flask_migrate import Migrate
+from flask_wtf.csrf import CSRFProtect
 from config import config, validate_required_env_vars
 
 logging.basicConfig(level=logging.DEBUG)
@@ -278,15 +279,13 @@ def _strip_pii(event, hint):
     with a fixed redaction sentinel. Cookies and Authorization are
     stripped wholesale.
     """
+
     def _redact(obj):
         if isinstance(obj, dict):
             return {
                 k: (
                     "[Filtered]"
-                    if any(
-                        token in str(k).lower()
-                        for token in _SENTRY_PII_DENYLIST
-                    )
+                    if any(token in str(k).lower() for token in _SENTRY_PII_DENYLIST)
                     else _redact(v)
                 )
                 for k, v in obj.items()
@@ -329,24 +328,16 @@ def _init_sentry(config_class):
         )
         from sentry_sdk.integrations.logging import LoggingIntegration
     except ImportError as e:
-        logger.warning(
-            "sentry-sdk not installed: %s. Skipping Sentry init.", e
-        )
+        logger.warning("sentry-sdk not installed: %s. Skipping Sentry init.", e)
         return False
 
     release = getattr(config_class, "SENTRY_RELEASE", "") or None
 
     sentry_sdk.init(
         dsn=dsn,
-        environment=getattr(
-            config_class, "SENTRY_ENVIRONMENT", "production"
-        ),
-        traces_sample_rate=getattr(
-            config_class, "SENTRY_TRACES_SAMPLE_RATE", 0.0
-        ),
-        profiles_sample_rate=getattr(
-            config_class, "SENTRY_PROFILES_SAMPLE_RATE", 0.0
-        ),
+        environment=getattr(config_class, "SENTRY_ENVIRONMENT", "production"),
+        traces_sample_rate=getattr(config_class, "SENTRY_TRACES_SAMPLE_RATE", 0.0),
+        profiles_sample_rate=getattr(config_class, "SENTRY_PROFILES_SAMPLE_RATE", 0.0),
         send_default_pii=False,
         release=release,
         integrations=[
@@ -451,6 +442,7 @@ def create_app(config_name=None):
     logger.info("CONFIG_NAME: %s", app.config.get("CONFIG_NAME", config_name))
 
     # Initialize extensions
+    CSRFProtect(app)
     global _redis_client, _limiter
     _redis_client = _init_redis(app)
     Session(app)
