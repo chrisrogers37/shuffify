@@ -15,15 +15,15 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: shuffify_dev
-      POSTGRES_USER: shuffify
-      POSTGRES_PASSWORD: shuffify_dev_password
+      POSTGRES_DB: ${POSTGRES_DB:-shuffify_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-shuffify}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U shuffify -d shuffify_dev"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-shuffify} -d ${POSTGRES_DB:-shuffify_dev}"]
       interval: 5s
       timeout: 5s
       retries: 5
