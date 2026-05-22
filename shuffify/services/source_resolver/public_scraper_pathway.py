@@ -42,10 +42,7 @@ REQUEST_HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/122.0.0.0 Safari/537.36"
     ),
-    "Accept": (
-        "text/html,application/xhtml+xml,"
-        "application/xml;q=0.9,*/*;q=0.8"
-    ),
+    "Accept": ("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"),
     "Accept-Language": "en-US,en;q=0.9",
 }
 
@@ -184,9 +181,7 @@ class PublicScraperPathway:
         # Strategy 2: Public page (heavier, but may have more data)
         public = self._scrape_public_page(playlist_id)
         if public.uris:
-            self._set_cached(
-                playlist_id, public.uris, "public_page"
-            )
+            self._set_cached(playlist_id, public.uris, "public_page")
             return ResolveResult(
                 track_uris=public.uris,
                 pathway_name=self.name,
@@ -246,9 +241,7 @@ class PublicScraperPathway:
             label="Public page",
         )
 
-    def _do_scrape(
-        self, url: str, playlist_id: str, label: str
-    ) -> ScrapeOutcome:
+    def _do_scrape(self, url: str, playlist_id: str, label: str) -> ScrapeOutcome:
         """Fetch ``url`` and extract track URIs, classifying the outcome.
 
         Retries transient failures (429/5xx, network errors, timeouts) up
@@ -277,8 +270,7 @@ class PublicScraperPathway:
             ) as e:
                 last_error = f"{type(e).__name__}: {e}"
                 logger.warning(
-                    "%s scrape network error for %s "
-                    "(attempt %d/%d): %s",
+                    "%s scrape network error for %s (attempt %d/%d): %s",
                     label,
                     playlist_id,
                     attempt + 1,
@@ -332,8 +324,7 @@ class PublicScraperPathway:
             if status in TRANSIENT_STATUS_CODES:
                 last_error = f"HTTP {status}"
                 logger.warning(
-                    "%s returned %d for %s "
-                    "(transient, attempt %d/%d)",
+                    "%s returned %d for %s (transient, attempt %d/%d)",
                     label,
                     status,
                     playlist_id,
@@ -391,22 +382,17 @@ class PublicScraperPathway:
             now = datetime.now(timezone.utc)
             row = (
                 ScrapedPlaylistCache.query.filter(
-                    ScrapedPlaylistCache.playlist_id
-                    == playlist_id,
+                    ScrapedPlaylistCache.playlist_id == playlist_id,
                     ScrapedPlaylistCache.expires_at > now,
                 )
-                .order_by(
-                    ScrapedPlaylistCache.scraped_at.desc()
-                )
+                .order_by(ScrapedPlaylistCache.scraped_at.desc())
                 .first()
             )
             if row is None:
                 return None
             return row.track_uris
         except Exception as e:
-            logger.warning(
-                "Scraper cache read error: %s", e
-            )
+            logger.warning("Scraper cache read error: %s", e)
             return None
 
     @staticmethod
@@ -427,15 +413,13 @@ class PublicScraperPathway:
 
             # Delete expired rows for this playlist
             ScrapedPlaylistCache.query.filter(
-                ScrapedPlaylistCache.playlist_id
-                == playlist_id,
+                ScrapedPlaylistCache.playlist_id == playlist_id,
                 ScrapedPlaylistCache.expires_at <= now,
             ).delete()
 
             # Upsert: update existing or create new
             existing = ScrapedPlaylistCache.query.filter(
-                ScrapedPlaylistCache.playlist_id
-                == playlist_id,
+                ScrapedPlaylistCache.playlist_id == playlist_id,
             ).first()
 
             if existing:
@@ -444,12 +428,6 @@ class PublicScraperPathway:
                 existing.scrape_pathway = pathway
                 existing.expires_at = expires
             else:
-                # NOTE: ScrapedPlaylistCache.track_count is no longer
-                # written here — it was dead weight (no reader anywhere
-                # in the codebase). The column is intentionally left
-                # in the schema for now; a future cleanup PR can drop
-                # it via Alembic migration once a few releases have
-                # shipped without writers.
                 row = ScrapedPlaylistCache(
                     playlist_id=playlist_id,
                     scraped_at=now,
@@ -461,9 +439,7 @@ class PublicScraperPathway:
 
             db.session.commit()
         except Exception as e:
-            logger.warning(
-                "Scraper cache write error: %s", e
-            )
+            logger.warning("Scraper cache write error: %s", e)
             # L2: roll back so the session stays usable for
             # subsequent operations within the same request /
             # job. Without this, SQLAlchemy may leave the
@@ -508,9 +484,7 @@ def _get_request_timeout() -> int:
 # ======================================================================
 
 
-def _sleep_with_backoff(
-    attempt: int, retry_after: Optional[str] = None
-) -> None:
+def _sleep_with_backoff(attempt: int, retry_after: Optional[str] = None) -> None:
     """Sleep before the next retry attempt.
 
     Honors a server-provided ``Retry-After`` value (seconds) when present
@@ -682,9 +656,7 @@ def _walk_json_for_tracks(data: Any) -> List[str]:
                         return  # Found tracks, stop walking
 
             # Check for trackList pattern (embed-style)
-            if "trackList" in node and isinstance(
-                node["trackList"], list
-            ):
+            if "trackList" in node and isinstance(node["trackList"], list):
                 for item in node["trackList"]:
                     uri = _get_track_uri_from_item(item)
                     _collect(uri)
@@ -739,9 +711,7 @@ def _get_track_uri_from_item(item: Any) -> Optional[str]:
         return uri
 
     # Format 3: ID only — construct URI
-    track_id = item.get("id") or (
-        track.get("id") if isinstance(track, dict) else None
-    )
+    track_id = item.get("id") or (track.get("id") if isinstance(track, dict) else None)
     if isinstance(track_id, str) and len(track_id) == 22:
         return f"spotify:track:{track_id}"
 

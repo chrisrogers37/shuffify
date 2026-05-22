@@ -10,6 +10,7 @@ from enum import StrEnum
 
 class JobType(StrEnum):
     """Types of scheduled jobs."""
+
     RAID = "raid"
     SHUFFLE = "shuffle"
     RAID_AND_SHUFFLE = "raid_and_shuffle"
@@ -20,19 +21,20 @@ class JobType(StrEnum):
 
 class RotationMode(StrEnum):
     """Modes for the scheduled rotation job type."""
+
     SWAP = "swap"
-    # TODO: Re-implement archive_oldest mode (see git history)
-    # TODO: Re-implement refresh mode (see git history)
 
 
 class ScheduleType(StrEnum):
     """Schedule trigger types."""
+
     INTERVAL = "interval"
     CRON = "cron"
 
 
 class IntervalValue(StrEnum):
     """Predefined interval values for interval schedules."""
+
     EVERY_6H = "every_6h"
     EVERY_12H = "every_12h"
     DAILY = "daily"
@@ -42,6 +44,7 @@ class IntervalValue(StrEnum):
 
 class SnapshotType(StrEnum):
     """Types of playlist snapshots."""
+
     AUTO_PRE_SHUFFLE = "auto_pre_shuffle"
     AUTO_PRE_RAID = "auto_pre_raid"
     AUTO_PRE_COMMIT = "auto_pre_commit"
@@ -53,12 +56,14 @@ class SnapshotType(StrEnum):
 
 class LockTier(StrEnum):
     """Tiers for per-track playlist locks."""
+
     STANDARD = "standard"  # 30-day auto-expiry
-    SUPER = "super"        # permanent
+    SUPER = "super"  # permanent
 
 
 class PendingRaidStatus(StrEnum):
     """Status of a pending raid track."""
+
     PENDING = "pending"
     PROMOTED = "promoted"
     DISMISSED = "dismissed"
@@ -66,6 +71,7 @@ class PendingRaidStatus(StrEnum):
 
 class ActivityType(StrEnum):
     """Types of user activities tracked in the activity log."""
+
     SHUFFLE = "shuffle"
     WORKSHOP_COMMIT = "workshop_commit"
     WORKSHOP_SESSION_SAVE = "workshop_session_save"

@@ -8,7 +8,7 @@ separating them from data operations.
 
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, Any, Optional
 from urllib.parse import urlencode
 
@@ -57,9 +57,6 @@ class TokenInfo:
     scope: Optional[str] = None
     expires_in: Optional[int] = None
 
-    # Original dict for compatibility
-    _raw: Dict[str, Any] = field(default_factory=dict, repr=False)
-
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "TokenInfo":
         """
@@ -97,7 +94,6 @@ class TokenInfo:
             refresh_token=data.get("refresh_token"),
             scope=data.get("scope"),
             expires_in=data.get("expires_in"),
-            _raw=data.copy(),
         )
 
     def to_dict(self) -> Dict[str, Any]:

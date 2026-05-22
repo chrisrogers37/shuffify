@@ -71,6 +71,13 @@ class ArtistSpacingShuffle(ShuffleAlgorithm):
         """
         min_spacing = kwargs.get("min_spacing", 1)
 
+        if not isinstance(min_spacing, int):
+            raise ValueError(
+                f"min_spacing must be an integer, got {type(min_spacing).__name__}"
+            )
+        if min_spacing < 1:
+            raise ValueError(f"min_spacing must be >= 1, got {min_spacing}")
+
         uris = extract_uris(tracks)
         if len(uris) <= 1:
             return uris

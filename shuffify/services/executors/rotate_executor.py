@@ -1,9 +1,6 @@
 """
 Rotate executor: swap rotation and pairing logic for
 production/archive playlist management.
-
-Currently only supports swap mode. See git history for
-prior archive_oldest and refresh implementations.
 """
 
 import logging
@@ -19,7 +16,6 @@ from shuffify.enums import SnapshotType, RotationMode
 from shuffify.shuffle_algorithms.utils import extract_uris
 from shuffify.services.executors.base_executor import (
     JobExecutionError,
-    JobExecutorService,
     verify_playlist_state,
 )
 from shuffify.services.playlist_snapshot_service import (
@@ -39,54 +35,48 @@ def _expected_after(prev_uris, removed_uris, added_uris):
     additions are appended in order.
     """
     removed_set = set(removed_uris)
-    return [u for u in prev_uris if u not in removed_set] + list(
-        added_uris
-    )
+    return [u for u in prev_uris if u not in removed_set] + list(added_uris)
 
 
-def execute_rotate(
-    schedule: Schedule, api: SpotifyAPI
-) -> dict:
+def execute_rotate(schedule: Schedule, api: SpotifyAPI) -> dict:
     """
     Rotate tracks between production and archive
     playlists.
     """
     target_id = schedule.target_playlist_id
     (
-        rotation_mode, rotation_count,
-        target_size, protect_count, pair,
+        rotation_mode,
+        rotation_count,
+        target_size,
+        protect_count,
+        pair,
     ) = _validate_rotation_config(schedule)
     archive_id = pair.archive_playlist_id
 
     try:
-        prod_tracks = api.get_playlist_tracks(
-            target_id
-        )
+        prod_tracks = api.get_playlist_tracks(target_id)
         if not prod_tracks:
             return {
                 "tracks_added": 0,
                 "tracks_total": 0,
             }
 
-        prod_uris = [
-            t["uri"]
-            for t in prod_tracks
-            if t.get("uri")
-        ]
+        prod_uris = [t["uri"] for t in prod_tracks if t.get("uri")]
 
-        _auto_snapshot_before_rotate(
-            schedule, prod_uris, rotation_mode
-        )
+        _auto_snapshot_before_rotate(schedule, prod_uris, rotation_mode)
 
         if target_size is None or target_size < 1:
             raise JobExecutionError(
-                "Swap rotation requires a playlist "
-                "size cap (target_size) of at least 1"
+                "Swap rotation requires a playlist size cap (target_size) of at least 1"
             )
         return _rotate_swap(
-            api, schedule, target_id,
-            archive_id, prod_uris,
-            rotation_count, target_size,
+            api,
+            schedule,
+            target_id,
+            archive_id,
+            prod_uris,
+            rotation_count,
+            target_size,
             protect_count,
         )
 
@@ -94,16 +84,12 @@ def execute_rotate(
         raise
     except SpotifyNotFoundError:
         raise JobExecutionError(
-            "Playlist not found during rotation. "
-            "Target: {}, Archive: {}".format(
+            "Playlist not found during rotation. Target: {}, Archive: {}".format(
                 target_id, archive_id
             )
         )
     except SpotifyAPIError as e:
-        raise JobExecutionError(
-            "Spotify API error during "
-            "rotation: {}".format(e)
-        )
+        raise JobExecutionError("Spotify API error during rotation: {}".format(e))
 
 
 def _validate_rotation_config(
@@ -126,44 +112,34 @@ def _validate_rotation_config(
     )
 
     params = schedule.algorithm_params or {}
-    rotation_mode = params.get(
-        "rotation_mode", RotationMode.SWAP
-    )
-    rotation_count = max(
-        1, int(params.get("rotation_count", 5))
-    )
+    rotation_mode = params.get("rotation_mode", RotationMode.SWAP)
+    rotation_count = max(1, int(params.get("rotation_count", 5)))
     target_size = params.get("target_size")
     if target_size is not None:
         target_size = max(1, int(target_size))
-    protect_count = max(
-        0, int(params.get("protect_count", 0))
-    )
+    protect_count = max(0, int(params.get("protect_count", 0)))
 
     valid_modes = set(RotationMode)
     if rotation_mode not in valid_modes:
-        raise JobExecutionError(
-            "Invalid rotation_mode: "
-            "{}".format(rotation_mode)
-        )
+        raise JobExecutionError("Invalid rotation_mode: {}".format(rotation_mode))
 
     pair = PlaylistPairService.get_pair_for_playlist(
         user_id=schedule.user_id,
-        production_playlist_id=(
-            schedule.target_playlist_id
-        ),
+        production_playlist_id=(schedule.target_playlist_id),
     )
     if not pair:
         raise JobExecutionError(
             "No archive pair found for playlist "
             "{}. Create a pair in the workshop "
-            "first.".format(
-                schedule.target_playlist_id
-            )
+            "first.".format(schedule.target_playlist_id)
         )
 
     return (
-        rotation_mode, rotation_count,
-        target_size, protect_count, pair,
+        rotation_mode,
+        rotation_count,
+        target_size,
+        protect_count,
+        pair,
     )
 
 
@@ -175,44 +151,23 @@ def _auto_snapshot_before_rotate(
     """Create an auto-snapshot before rotation if
     enabled."""
     try:
-        if (
-            prod_uris
-            and PlaylistSnapshotService
-            .is_auto_snapshot_enabled(
-                schedule.user_id
-            )
+        if prod_uris and PlaylistSnapshotService.is_auto_snapshot_enabled(
+            schedule.user_id
         ):
             PlaylistSnapshotService.create_snapshot(
                 user_id=schedule.user_id,
-                playlist_id=(
-                    schedule.target_playlist_id
-                ),
+                playlist_id=(schedule.target_playlist_id),
                 playlist_name=(
-                    schedule.target_playlist_name
-                    or schedule.target_playlist_id
+                    schedule.target_playlist_name or schedule.target_playlist_id
                 ),
                 track_uris=prod_uris,
-                snapshot_type=(
-                    SnapshotType.AUTO_PRE_ROTATE
-                ),
+                snapshot_type=(SnapshotType.AUTO_PRE_ROTATE),
                 trigger_description=(
-                    "Before scheduled "
-                    "{} rotation".format(
-                        rotation_mode
-                    )
+                    "Before scheduled {} rotation".format(rotation_mode)
                 ),
             )
     except Exception as snap_err:
-        logger.warning(
-            "Auto-snapshot before rotation "
-            "failed: %s", snap_err
-        )
-
-
-# TODO: Re-implement archive_oldest mode
-# (see git history for prior _rotate_archive)
-# TODO: Re-implement refresh mode
-# (see git history for prior _rotate_refresh)
+        logger.warning("Auto-snapshot before rotation failed: %s", snap_err)
 
 
 def _sample_at_most(pool, count):
@@ -226,7 +181,10 @@ def _sample_at_most(pool, count):
 
 
 def _purge_archive_overlaps(
-    api, archive_id, archive_uris, prod_set,
+    api,
+    archive_id,
+    archive_uris,
+    prod_set,
 ):
     """Remove tracks from archive that already exist
     in the production playlist.
@@ -245,14 +203,16 @@ def _purge_archive_overlaps(
     """
     overlaps, cleaned = [], []
     for u in archive_uris:
-        (overlaps if u in prod_set
-         else cleaned).append(u)
+        (overlaps if u in prod_set else cleaned).append(u)
 
     if overlaps:
         try:
             _checked_remove(
-                api, archive_id, overlaps,
-                None, "archive overlap purge",
+                api,
+                archive_id,
+                overlaps,
+                None,
+                "archive overlap purge",
             )
         except (
             SpotifyAPIError,
@@ -264,41 +224,51 @@ def _purge_archive_overlaps(
                 "tracks from archive {}. Aborting "
                 "rotation to prevent "
                 "duplicates.".format(
-                    len(overlaps), archive_id,
+                    len(overlaps),
+                    archive_id,
                 )
             )
         logger.info(
-            "Purged %d overlapping tracks from "
-            "archive %s",
-            len(overlaps), archive_id,
+            "Purged %d overlapping tracks from archive %s",
+            len(overlaps),
+            archive_id,
         )
     return cleaned, len(overlaps)
 
 
 def _checked_remove(
-    api, playlist_id, uris, schedule_id, phase,
+    api,
+    playlist_id,
+    uris,
+    schedule_id,
+    phase,
 ):
     """Remove tracks and verify the operation succeeded.
 
     Raises JobExecutionError if the Spotify API returns
     a falsy result, indicating a silent failure.
     """
-    result = api.playlist_remove_items(
-        playlist_id, uris
-    )
+    result = api.playlist_remove_items(playlist_id, uris)
     if not result:
         raise JobExecutionError(
             "Schedule {}: {} failed — "
             "playlist_remove_items returned falsy "
             "for playlist {}".format(
-                schedule_id, phase, playlist_id,
+                schedule_id,
+                phase,
+                playlist_id,
             )
         )
 
 
 def _rotate_swap(
-    api, schedule, target_id, archive_id,
-    prod_uris, rotation_count, target_size,
+    api,
+    schedule,
+    target_id,
+    archive_id,
+    prod_uris,
+    rotation_count,
+    target_size,
     protect_count=0,
 ):
     """Exchange tracks between production and archive.
@@ -319,9 +289,7 @@ def _rotate_swap(
     swap rotation_count tracks between production and
     archive.
     """
-    archive_tracks = api.get_playlist_tracks(
-        archive_id
-    )
+    archive_tracks = api.get_playlist_tracks(archive_id)
     archive_uris = extract_uris(archive_tracks or [])
 
     prod_set = set(prod_uris)
@@ -329,7 +297,10 @@ def _rotate_swap(
     # Step 0: Purge archive tracks that overlap with
     # production to keep the archive clean.
     archive_uris, purged = _purge_archive_overlaps(
-        api, archive_id, archive_uris, prod_set,
+        api,
+        archive_id,
+        archive_uris,
+        prod_set,
     )
 
     archive_set = set(archive_uris)
@@ -339,18 +310,14 @@ def _rotate_swap(
     from shuffify.services.track_lock_service import (
         TrackLockService,
     )
-    locked_uris = TrackLockService.safe_get_locked_uris(
-        schedule.user_id, target_id
-    )
+
+    locked_uris = TrackLockService.safe_get_locked_uris(schedule.user_id, target_id)
     if locked_uris:
-        eligible_uris = [
-            u for u in eligible_uris
-            if u not in locked_uris
-        ]
+        eligible_uris = [u for u in eligible_uris if u not in locked_uris]
         logger.info(
-            "Schedule %s: %d tracks locked, "
-            "%d eligible after filtering",
-            schedule.id, len(locked_uris),
+            "Schedule %s: %d tracks locked, %d eligible after filtering",
+            schedule.id,
+            len(locked_uris),
             len(eligible_uris),
         )
 
@@ -361,7 +328,8 @@ def _rotate_swap(
             "Schedule %s: protect_count (%d) + "
             "locks (%d) >= playlist size (%d) "
             "— no tracks eligible for rotation",
-            schedule.id, protect_count,
+            schedule.id,
+            protect_count,
             len(locked_uris),
             len(prod_uris),
         )
@@ -372,138 +340,168 @@ def _rotate_swap(
         }
 
     # Phase 1: Archive overflow to reach target_size
-    if (
-        target_size is not None
-        and len(prod_uris) > target_size
-    ):
-        overflow = len(prod_uris) - target_size
-        overflow_uris = _sample_at_most(
-            eligible_uris, overflow
+    if target_size is not None and len(prod_uris) > target_size:
+        return _overflow_to_archive(
+            api,
+            schedule,
+            target_id,
+            archive_id,
+            prod_uris,
+            archive_uris,
+            archive_set,
+            eligible_uris,
+            target_size,
         )
-
-        # Remove from production FIRST
-        _checked_remove(
-            api, target_id, overflow_uris,
-            schedule.id, "overflow prod-remove",
-        )
-
-        # Then archive (deduped)
-        new_to_archive = [
-            u for u in overflow_uris
-            if u not in archive_set
-        ]
-        if new_to_archive:
-            JobExecutorService._batch_add_tracks(
-                api, archive_id, new_to_archive
-            )
-
-        expected_prod = _expected_after(
-            prod_uris, overflow_uris, [],
-        )
-        verified_prod = verify_playlist_state(
-            api, target_id, expected_prod,
-            schedule.id, "overflow",
-        )
-        actual_total = len(verified_prod)
-
-        expected_archive = _expected_after(
-            archive_uris, [], new_to_archive,
-        )
-        verify_playlist_state(
-            api, archive_id, expected_archive,
-            schedule.id, "overflow archive",
-        )
-
-        logger.info(
-            "Schedule %s: archived %d overflow "
-            "tracks from '%s' (cap %d, "
-            "actual %d)",
-            schedule.id, len(overflow_uris),
-            schedule.target_playlist_name,
-            target_size, actual_total,
-        )
-
-        return {
-            "tracks_added": 0,
-            "tracks_total": actual_total,
-        }
 
     # Phase 2: Normal swap (playlist at or under cap)
-    # Swap-in uses first N from archive (FIFO: oldest
-    # archived tracks rotate back in first).
-    swap_in_uris = archive_uris[:rotation_count]
-
-    # Randomly select swap-out tracks from eligible
-    swap_out_uris = _sample_at_most(
-        eligible_uris, len(swap_in_uris)
+    swapped, actual_total = _execute_swap(
+        api,
+        schedule,
+        target_id,
+        archive_id,
+        prod_uris,
+        archive_uris,
+        archive_set,
+        eligible_uris,
+        rotation_count,
     )
-
-    swapped = min(
-        len(swap_in_uris),
-        len(swap_out_uris),
-    )
-
-    if swap_in_uris and swap_out_uris:
-        # Remove outgoing from production first
-        _checked_remove(
-            api, target_id, swap_out_uris,
-            schedule.id, "swap prod-remove",
-        )
-
-        # Then archive outgoing (deduped)
-        new_to_archive = [
-            u for u in swap_out_uris
-            if u not in archive_set
-        ]
-        if new_to_archive:
-            JobExecutorService._batch_add_tracks(
-                api, archive_id, new_to_archive
-            )
-
-        # Remove incoming from archive first
-        _checked_remove(
-            api, archive_id, swap_in_uris,
-            schedule.id, "swap archive-remove",
-        )
-
-        # Then add incoming to production
-        JobExecutorService._batch_add_tracks(
-            api, target_id, swap_in_uris
-        )
-
-        # Asymmetric swap (locks/protect/depleted pool can
-        # make swap_in and swap_out differ in length) means
-        # we can't verify against the original prod size.
-        expected_prod = _expected_after(
-            prod_uris, swap_out_uris, swap_in_uris,
-        )
-        verified_prod = verify_playlist_state(
-            api, target_id, expected_prod,
-            schedule.id, "swap",
-        )
-        actual_total = len(verified_prod)
-
-        expected_archive = _expected_after(
-            archive_uris, swap_in_uris, new_to_archive,
-        )
-        verify_playlist_state(
-            api, archive_id, expected_archive,
-            schedule.id, "swap archive",
-        )
-    else:
-        # Nothing to swap (archive empty or eligible pool
-        # depleted). No writes happened, so the prod size
-        # is unchanged.
-        actual_total = len(prod_uris)
 
     logger.info(
-        "Schedule %s: swapped %d tracks between "
-        "'%s' and archive (purged %d overlaps)",
-        schedule.id, swapped,
-        schedule.target_playlist_name, purged,
+        "Schedule %s: swapped %d tracks between '%s' and archive (purged %d overlaps)",
+        schedule.id,
+        swapped,
+        schedule.target_playlist_name,
+        purged,
     )
 
     return {
         "tracks_added": swapped,
         "tracks_total": actual_total,
     }
+
+
+def _overflow_to_archive(
+    api,
+    schedule,
+    target_id,
+    archive_id,
+    prod_uris,
+    archive_uris,
+    archive_set,
+    eligible_uris,
+    target_size,
+):
+    """Phase 1: move excess tracks from production to archive."""
+    overflow = len(prod_uris) - target_size
+    overflow_uris = _sample_at_most(eligible_uris, overflow)
+
+    _checked_remove(
+        api,
+        target_id,
+        overflow_uris,
+        schedule.id,
+        "overflow prod-remove",
+    )
+
+    new_to_archive = [u for u in overflow_uris if u not in archive_set]
+    if new_to_archive:
+        api.playlist_add_items(archive_id, new_to_archive)
+
+    expected_prod = _expected_after(prod_uris, overflow_uris, [])
+    verified_prod = verify_playlist_state(
+        api,
+        target_id,
+        expected_prod,
+        schedule.id,
+        "overflow",
+    )
+    actual_total = len(verified_prod)
+
+    expected_archive = _expected_after(archive_uris, [], new_to_archive)
+    verify_playlist_state(
+        api,
+        archive_id,
+        expected_archive,
+        schedule.id,
+        "overflow archive",
+    )
+
+    logger.info(
+        "Schedule %s: archived %d overflow tracks from '%s' (cap %d, actual %d)",
+        schedule.id,
+        len(overflow_uris),
+        schedule.target_playlist_name,
+        target_size,
+        actual_total,
+    )
+
+    return {
+        "tracks_added": 0,
+        "tracks_total": actual_total,
+    }
+
+
+def _execute_swap(
+    api,
+    schedule,
+    target_id,
+    archive_id,
+    prod_uris,
+    archive_uris,
+    archive_set,
+    eligible_uris,
+    rotation_count,
+):
+    """Phase 2: swap tracks between production and archive.
+
+    Returns (swapped_count, actual_total).
+    """
+    swap_in_uris = archive_uris[:rotation_count]
+    swap_out_uris = _sample_at_most(eligible_uris, len(swap_in_uris))
+
+    swapped = min(len(swap_in_uris), len(swap_out_uris))
+
+    if not (swap_in_uris and swap_out_uris):
+        return 0, len(prod_uris)
+
+    _checked_remove(
+        api,
+        target_id,
+        swap_out_uris,
+        schedule.id,
+        "swap prod-remove",
+    )
+
+    new_to_archive = [u for u in swap_out_uris if u not in archive_set]
+    if new_to_archive:
+        api.playlist_add_items(archive_id, new_to_archive)
+
+    _checked_remove(
+        api,
+        archive_id,
+        swap_in_uris,
+        schedule.id,
+        "swap archive-remove",
+    )
+
+    api.playlist_add_items(target_id, swap_in_uris)
+
+    expected_prod = _expected_after(prod_uris, swap_out_uris, swap_in_uris)
+    verified_prod = verify_playlist_state(
+        api,
+        target_id,
+        expected_prod,
+        schedule.id,
+        "swap",
+    )
+
+    expected_archive = _expected_after(archive_uris, swap_in_uris, new_to_archive)
+    verify_playlist_state(
+        api,
+        archive_id,
+        expected_archive,
+        schedule.id,
+        "swap archive",
+    )
+
+    return swapped, len(verified_prod)
