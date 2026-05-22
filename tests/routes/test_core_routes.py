@@ -339,6 +339,25 @@ class TestLogoutRoute:
             resp = client.get("/logout")
             assert resp.status_code == 302
 
+    @patch("shuffify.routes.core.AuthService")
+    def test_logout_attempts_token_revocation(self, mock_auth_svc, auth_client):
+        """Logout should call revoke_access_token with the session token."""
+        resp = auth_client.get("/logout")
+        assert resp.status_code == 302
+        mock_auth_svc.revoke_access_token.assert_called_once_with("test_token")
+
+    @patch("shuffify.routes.core.AuthService")
+    def test_logout_continues_when_revocation_fails(
+        self,
+        mock_auth_svc,
+        auth_client,
+    ):
+        """Revocation failure must not block logout."""
+        mock_auth_svc.revoke_access_token.side_effect = Exception("boom")
+        resp = auth_client.get("/logout")
+        assert resp.status_code == 302
+        assert resp.headers["Location"].endswith("/")
+
 
 class TestTermsRoute:
     """Tests for GET /terms."""

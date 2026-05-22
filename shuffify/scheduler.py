@@ -51,30 +51,23 @@ def get_scheduler_metrics() -> dict:
     """Return a copy of current scheduler health metrics."""
     return {
         **_metrics,
-        "scheduler_running": (
-            _scheduler is not None and _scheduler.running
-        ),
+        "scheduler_running": (_scheduler is not None and _scheduler.running),
     }
 
 
 def _on_job_executed(event):
     """Listener for successful job execution."""
     _metrics["jobs_executed"] += 1
-    _metrics["last_execution_at"] = datetime.now(
-        timezone.utc
-    ).isoformat()
+    _metrics["last_execution_at"] = datetime.now(timezone.utc).isoformat()
     logger.info(f"Job {event.job_id} executed successfully")
 
 
 def _on_job_error(event):
     """Listener for failed job execution."""
     _metrics["jobs_failed"] += 1
-    _metrics["last_execution_at"] = datetime.now(
-        timezone.utc
-    ).isoformat()
+    _metrics["last_execution_at"] = datetime.now(timezone.utc).isoformat()
     logger.error(
-        f"Job {event.job_id} failed with exception: "
-        f"{event.exception}",
+        f"Job {event.job_id} failed with exception: {event.exception}",
         exc_info=event.traceback,
     )
 
@@ -82,9 +75,7 @@ def _on_job_error(event):
 def _on_job_missed(event):
     """Listener for missed job execution."""
     _metrics["jobs_missed"] += 1
-    logger.warning(
-        f"Job {event.job_id} missed its scheduled run time"
-    )
+    logger.warning(f"Job {event.job_id} missed its scheduled run time")
 
 
 def _try_acquire_scheduler_lock(db_url: str) -> bool:
@@ -113,24 +104,19 @@ def _try_acquire_scheduler_lock(db_url: str) -> bool:
 
         engine = create_engine(db_url, pool_size=1)
         conn = engine.connect()
-        result = conn.execute(
-            text(f"SELECT pg_try_advisory_lock({lock_id})")
-        )
+        result = conn.execute(text(f"SELECT pg_try_advisory_lock({lock_id})"))
         acquired = result.scalar()
 
         if acquired:
             # Keep connection alive — lock released on close
             _lock_connection = conn
-            logger.info(
-                "Acquired scheduler advisory lock"
-            )
+            logger.info("Acquired scheduler advisory lock")
             return True
         else:
             conn.close()
             engine.dispose()
             logger.info(
-                "Another process holds the scheduler lock, "
-                "skipping scheduler init"
+                "Another process holds the scheduler lock, skipping scheduler init"
             )
             return False
 
@@ -165,26 +151,16 @@ def init_scheduler(app) -> Optional[BackgroundScheduler]:
 
     # In development, Werkzeug reloader spawns two processes.
     # Only start the scheduler in the main process.
-    if (
-        app.debug
-        and os.environ.get("WERKZEUG_RUN_MAIN") != "true"
-    ):
-        logger.info(
-            "Skipping scheduler init in Werkzeug reloader "
-            "child process"
-        )
+    if app.debug and os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        logger.info("Skipping scheduler init in Werkzeug reloader child process")
         return None
 
     if _scheduler is not None and _scheduler.running:
-        logger.warning(
-            "Scheduler already running, skipping re-init"
-        )
+        logger.warning("Scheduler already running, skipping re-init")
         return _scheduler
 
     try:
-        db_url = app.config.get(
-            "SQLALCHEMY_DATABASE_URI", "sqlite:///shuffify.db"
-        )
+        db_url = app.config.get("SQLALCHEMY_DATABASE_URI", "sqlite:///shuffify.db")
 
         # Advisory lock: prevent duplicate schedulers
         if not _try_acquire_scheduler_lock(db_url):
@@ -193,23 +169,23 @@ def init_scheduler(app) -> Optional[BackgroundScheduler]:
         # Separate jobstore engine with small pool
         from sqlalchemy import create_engine
 
-        jobstore_engine = create_engine(
-            db_url, pool_size=2, pool_pre_ping=True
-        )
+        jobstore_engine = create_engine(db_url, pool_size=2, pool_pre_ping=True)
 
-        pool_size = app.config.get(
-            "SCHEDULER_THREAD_POOL_SIZE", 10
-        )
+        pool_size = app.config.get("SCHEDULER_THREAD_POOL_SIZE", 10)
 
+        # SQLAlchemyJobStore serializes job state with pickle.
+        # APScheduler 3.x has no config knob to swap serializers.
+        # The risk is low: the pickle boundary is internal (this
+        # app writes jobs to its own DB and reads them back), so
+        # exploitation requires DB write access — at which point
+        # the attacker already owns the application. Tracked as
+        # a known limitation; re-evaluate if upgrading to
+        # APScheduler 4.x which redesigned serialization.
         jobstores = {
-            "default": SQLAlchemyJobStore(
-                engine=jobstore_engine
-            ),
+            "default": SQLAlchemyJobStore(engine=jobstore_engine),
         }
         executors = {
-            "default": ThreadPoolExecutor(
-                max_workers=pool_size
-            ),
+            "default": ThreadPoolExecutor(max_workers=pool_size),
         }
         job_defaults = {
             "coalesce": True,
@@ -224,17 +200,14 @@ def init_scheduler(app) -> Optional[BackgroundScheduler]:
         )
 
         # Add event listeners
-        _scheduler.add_listener(
-            _on_job_executed, EVENT_JOB_EXECUTED
-        )
+        _scheduler.add_listener(_on_job_executed, EVENT_JOB_EXECUTED)
         _scheduler.add_listener(_on_job_error, EVENT_JOB_ERROR)
         _scheduler.add_listener(_on_job_missed, EVENT_JOB_MISSED)
 
         _scheduler.start()
         _app = app
         logger.info(
-            "APScheduler started successfully "
-            "(pool_size=%d)",
+            "APScheduler started successfully (pool_size=%d)",
             pool_size,
         )
 
@@ -265,9 +238,7 @@ def _register_existing_jobs():
     try:
         from shuffify.models.db import Schedule
 
-        enabled_schedules = Schedule.query.filter_by(
-            is_enabled=True
-        ).all()
+        enabled_schedules = Schedule.query.filter_by(is_enabled=True).all()
         registered = 0
 
         for schedule in enabled_schedules:
@@ -275,10 +246,7 @@ def _register_existing_jobs():
                 add_job_for_schedule(schedule)
                 registered += 1
             except Exception as e:
-                logger.error(
-                    f"Failed to register job for schedule "
-                    f"{schedule.id}: {e}"
-                )
+                logger.error(f"Failed to register job for schedule {schedule.id}: {e}")
 
         logger.info(
             f"Registered {registered}/"
@@ -287,9 +255,7 @@ def _register_existing_jobs():
         )
 
     except Exception as e:
-        logger.error(
-            f"Failed to load schedules from database: {e}"
-        )
+        logger.error(f"Failed to load schedules from database: {e}")
 
 
 def get_scheduler() -> Optional[BackgroundScheduler]:
@@ -333,8 +299,7 @@ def add_job_for_schedule(schedule):
     )
 
     logger.info(
-        f"Registered job {job_id} with trigger={trigger}, "
-        f"kwargs={trigger_kwargs}"
+        f"Registered job {job_id} with trigger={trigger}, kwargs={trigger_kwargs}"
     )
 
 
@@ -353,15 +318,10 @@ def remove_job_for_schedule(schedule_id: int):
         _scheduler.remove_job(job_id)
         logger.info(f"Removed job {job_id}")
     except Exception:
-        logger.debug(
-            f"Job {job_id} not found in scheduler "
-            f"(already removed)"
-        )
+        logger.debug(f"Job {job_id} not found in scheduler (already removed)")
 
 
-def _parse_schedule(
-    schedule_type: str, schedule_value: str
-) -> Tuple[str, Dict]:
+def _parse_schedule(schedule_type: str, schedule_value: str) -> Tuple[str, Dict]:
     """
     Convert schedule configuration to APScheduler trigger args.
 
@@ -402,10 +362,7 @@ def _parse_schedule(
         }
 
     else:
-        logger.warning(
-            f"Unknown schedule_type '{schedule_type}', "
-            f"defaulting to daily"
-        )
+        logger.warning(f"Unknown schedule_type '{schedule_type}', defaulting to daily")
         return "interval", {"days": 1}
 
 
@@ -431,8 +388,7 @@ def _execute_scheduled_job(schedule_id: int):
             JobExecutorService.execute(schedule_id)
         except Exception as e:
             logger.error(
-                f"Scheduled job for schedule {schedule_id} "
-                f"failed: {e}",
+                f"Scheduled job for schedule {schedule_id} failed: {e}",
                 exc_info=True,
             )
 
@@ -448,9 +404,7 @@ def _cleanup_stale_executions(max_age_minutes: int = 30):
     try:
         from shuffify.models.db import JobExecution
 
-        stale = JobExecution.query.filter_by(
-            status="running"
-        ).all()
+        stale = JobExecution.query.filter_by(status="running").all()
 
         if not stale:
             return
@@ -462,15 +416,12 @@ def _cleanup_stale_executions(max_age_minutes: int = 30):
             # Ensure timezone-aware comparison
             if started.tzinfo is None:
                 started = started.replace(tzinfo=timezone.utc)
-            age_minutes = (
-                now - started
-            ).total_seconds() / 60
+            age_minutes = (now - started).total_seconds() / 60
             if age_minutes > max_age_minutes:
                 execution.status = "failed"
                 execution.completed_at = now
                 execution.error_message = (
-                    "Marked as failed: stale execution "
-                    "from prior process"
+                    "Marked as failed: stale execution from prior process"
                 )
                 cleaned += 1
 
@@ -484,9 +435,7 @@ def _cleanup_stale_executions(max_age_minutes: int = 30):
             )
 
     except Exception as e:
-        logger.warning(
-            "Failed to clean up stale executions: %s", e
-        )
+        logger.warning("Failed to clean up stale executions: %s", e)
 
 
 def shutdown_scheduler():

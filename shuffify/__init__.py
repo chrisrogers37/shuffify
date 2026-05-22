@@ -466,13 +466,17 @@ def create_app(config_name=None):
 
     app.register_blueprint(main_blueprint)
 
-    # Apply rate limits to auth endpoints
+    # Apply rate limits to auth endpoints.
+    # Traditional account lockout does not apply: this is an
+    # OAuth-only app — users never enter credentials here.
+    # Per-IP rate limiting on /login and /callback is the
+    # appropriate brute-force protection for OAuth flows.
     if _limiter is not None:
         try:
             app.view_functions["main.login"] = _limiter.limit("10/minute")(
                 app.view_functions["main.login"]
             )
-            app.view_functions["main.callback"] = _limiter.limit("20/minute")(
+            app.view_functions["main.callback"] = _limiter.limit("10/minute")(
                 app.view_functions["main.callback"]
             )
             # Resource-intensive endpoints
@@ -487,7 +491,7 @@ def create_app(config_name=None):
             )
             logger.info(
                 "Rate limits applied: /login=10/min, "
-                "/callback=20/min, /shuffle=5/min, "
+                "/callback=10/min, /shuffle=5/min, "
                 "/workshop/commit=10/min, "
                 "/schedules/*/run=5/min"
             )
