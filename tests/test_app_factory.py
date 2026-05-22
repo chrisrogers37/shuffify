@@ -29,14 +29,14 @@ class TestCreateApp:
             assert app is not None
             assert app.config["DEBUG"] is True
 
-    def test_create_app_uses_flask_env_default(self):
-        """Should use FLASK_ENV when config_name not provided."""
+    def test_create_app_uses_app_config_default(self):
+        """Should use APP_CONFIG when config_name not provided."""
         with patch.dict(
             "os.environ",
             {
                 "SPOTIFY_CLIENT_ID": "test_id",
                 "SPOTIFY_CLIENT_SECRET": "test_secret",
-                "FLASK_ENV": "development",
+                "APP_CONFIG": "development",
                 "REDIS_URL": "",
             },
         ):
@@ -46,8 +46,11 @@ class TestCreateApp:
 
             assert app.config["DEBUG"] is True
 
-    def test_create_app_with_redis_url(self):
+    def test_create_app_with_redis_url(self, monkeypatch):
         """Should configure Redis session when REDIS_URL provided."""
+        from config import DevConfig
+
+        monkeypatch.setattr(DevConfig, "REDIS_URL", "redis://localhost:6379/0")
         mock_redis = MagicMock(spec=redis.Redis)
         mock_redis.ping.return_value = True
 
@@ -341,6 +344,94 @@ class TestSecretKeyValidation:
         # NOT the hardcoded 'a_default_secret_key_for_development'
         assert ProdConfig.SECRET_KEY != "a_default_secret_key_for_development"
 
+    def test_base_config_no_hardcoded_fallback(self):
+        """Base Config should not have a hardcoded SECRET_KEY fallback."""
+        from config import Config
+
+        assert Config.SECRET_KEY != "a_default_secret_key_for_development"
+
+    def test_dev_config_always_has_secret_key(self):
+        """DevConfig should auto-generate a SECRET_KEY if not in env."""
+        from config import DevConfig
+
+        assert DevConfig.SECRET_KEY is not None
+        assert len(DevConfig.SECRET_KEY) > 0
+
+    def test_test_config_has_explicit_secret_key(self):
+        """TestConfig should have an explicit SECRET_KEY."""
+        from config import TestConfig
+
+        assert TestConfig.SECRET_KEY == "test-secret-key"
+
+
+class TestRedisProductionRequirement:
+    """Tests for Redis requirement in production."""
+
+    def test_production_raises_without_redis_url(self):
+        """Production should fail loudly when REDIS_URL is not set."""
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+                "SECRET_KEY": "test-secret",
+                "REDIS_URL": "",
+            },
+        ):
+            from shuffify import create_app
+
+            with pytest.raises(RuntimeError, match="REDIS_URL must be set"):
+                create_app("production")
+
+    def test_production_raises_on_redis_connection_failure(self, monkeypatch):
+        """Production should fail loudly when Redis connection fails."""
+        from config import ProdConfig
+
+        monkeypatch.setattr(ProdConfig, "REDIS_URL", "redis://localhost:6379/0")
+
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+                "SECRET_KEY": "test-secret",
+                "REDIS_URL": "redis://localhost:6379/0",
+            },
+        ):
+            with patch("shuffify.redis.from_url") as mock_from_url:
+                mock_redis_client = Mock()
+                mock_redis_client.ping.side_effect = redis.ConnectionError(
+                    "Connection refused"
+                )
+                mock_from_url.return_value = mock_redis_client
+
+                from shuffify import create_app
+
+                with pytest.raises(RuntimeError, match="Redis connection failed"):
+                    create_app("production")
+
+    def test_development_falls_back_to_filesystem(self):
+        """Development should fall back to filesystem when Redis fails."""
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+                "REDIS_URL": "redis://localhost:6379/0",
+            },
+        ):
+            with patch("shuffify.redis.from_url") as mock_from_url:
+                mock_redis_client = Mock()
+                mock_redis_client.ping.side_effect = redis.ConnectionError(
+                    "Connection refused"
+                )
+                mock_from_url.return_value = mock_redis_client
+
+                from shuffify import create_app
+
+                app = create_app("development")
+                assert app.config["SESSION_TYPE"] == "filesystem"
+
 
 class TestSecurityHeaders:
     """Tests for security response headers."""
@@ -385,12 +476,17 @@ class TestSecurityHeaders:
                 response = debug_client.get("/health")
                 assert "Strict-Transport-Security" not in response.headers
 
-    def test_hsts_present_in_production_mode(self):
+    def test_hsts_present_in_production_mode(self, monkeypatch):
         """HSTS should be sent when debug is False (production)."""
         import os
         from unittest.mock import patch
+        from config import ProdConfig
 
+        monkeypatch.setattr(ProdConfig, "REDIS_URL", "redis://localhost:6379/0")
         os.environ.pop("DATABASE_URL", None)
+
+        mock_redis = MagicMock(spec=redis.Redis)
+        mock_redis.ping.return_value = True
 
         with patch.dict(
             "os.environ",
@@ -399,20 +495,21 @@ class TestSecurityHeaders:
                 "SPOTIFY_CLIENT_SECRET": "test_secret",
                 "SPOTIFY_REDIRECT_URI": "http://localhost:5000/callback",
                 "SECRET_KEY": "test-secret-key-for-testing",
-                "REDIS_URL": "",
+                "REDIS_URL": "redis://localhost:6379/0",
             },
         ):
-            from shuffify import create_app
+            with patch("shuffify.redis.from_url", return_value=mock_redis):
+                from shuffify import create_app
 
-            app = create_app("production")
-            app.config["TESTING"] = True
+                app = create_app("production")
+                app.config["TESTING"] = True
 
-            with app.test_client() as prod_client:
-                response = prod_client.get("/health")
-                hsts = response.headers.get("Strict-Transport-Security")
-                assert hsts is not None
-                assert "max-age=31536000" in hsts
-                assert "includeSubDomains" in hsts
+                with app.test_client() as prod_client:
+                    response = prod_client.get("/health")
+                    hsts = response.headers.get("Strict-Transport-Security")
+                    assert hsts is not None
+                    assert "max-age=31536000" in hsts
+                    assert "includeSubDomains" in hsts
 
     def test_csp_header_present(self, client):
         """All responses should include Content-Security-Policy."""

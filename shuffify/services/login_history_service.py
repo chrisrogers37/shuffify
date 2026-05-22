@@ -58,14 +58,7 @@ class LoginHistoryService:
         Raises:
             LoginHistoryError: If recording fails.
         """
-        # Extract IP address, preferring X-Forwarded-For for proxied
-        # requests
-        ip_address = (
-            request.headers.get(
-                "X-Forwarded-For", ""
-            ).split(",")[0].strip()
-            or request.remote_addr
-        )
+        ip_address = request.remote_addr
 
         # Extract and truncate user agent to fit column length
         user_agent = request.headers.get("User-Agent", "")
@@ -81,8 +74,7 @@ class LoginHistoryService:
         )
         db.session.add(entry)
         safe_commit(
-            f"record login for user_id={user_id}, "
-            f"type={login_type}, ip={ip_address}",
+            f"record login for user_id={user_id}, type={login_type}, ip={ip_address}",
             LoginHistoryError,
         )
         return entry
@@ -111,9 +103,7 @@ class LoginHistoryService:
         Raises:
             LoginHistoryError: If the update fails.
         """
-        query = LoginHistory.query.filter_by(
-            user_id=user_id
-        ).filter(
+        query = LoginHistory.query.filter_by(user_id=user_id).filter(
             LoginHistory.logged_out_at.is_(None)
         )
 
@@ -121,9 +111,7 @@ class LoginHistoryService:
             query = query.filter_by(session_id=session_id)
 
         # Get the most recent open login record
-        entry = query.order_by(
-            LoginHistory.logged_in_at.desc()
-        ).first()
+        entry = query.order_by(LoginHistory.logged_in_at.desc()).first()
 
         if not entry:
             logger.debug(

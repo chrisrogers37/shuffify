@@ -31,7 +31,7 @@ RUN mkdir -p .flask_session && \
 
 # Set environment variables
 ENV FLASK_APP=run.py
-ENV FLASK_ENV=production
+ENV APP_CONFIG=production
 
 # Expose port
 EXPOSE 8000

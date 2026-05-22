@@ -9,9 +9,9 @@ import redis
 from flask_limiter import Limiter
 from flask_migrate import Migrate
 from flask_wtf.csrf import CSRFProtect
+from werkzeug.middleware.proxy_fix import ProxyFix
 from config import config, validate_required_env_vars
 
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Global Redis client for caching (initialized in create_app)
@@ -121,8 +121,10 @@ def is_db_available() -> bool:
 def _init_redis(app):
     """Configure Redis for session storage and caching.
 
-    Returns Redis client if available, None otherwise.
+    In production, raises RuntimeError if Redis is unavailable.
+    In development/testing, falls back to filesystem sessions.
     """
+    is_prod = app.config.get("CONFIG_NAME") == "production"
     redis_url = app.config.get("REDIS_URL")
     if redis_url:
         try:
@@ -136,11 +138,18 @@ def _init_redis(app):
             logger.info("Redis caching enabled")
             return client
         except redis.ConnectionError as e:
+            if is_prod:
+                raise RuntimeError(f"Redis connection failed in production: {e}") from e
             logger.warning(
                 "Redis connection failed: %s. Falling back to filesystem sessions.",
                 e,
             )
     else:
+        if is_prod:
+            raise RuntimeError(
+                "REDIS_URL must be set in production. "
+                "Filesystem sessions are not acceptable for production use."
+            )
         logger.warning("REDIS_URL not configured. Using filesystem sessions.")
 
     app.config["SESSION_TYPE"] = "filesystem"
@@ -420,11 +429,15 @@ def _apply_security_headers(app):
 def create_app(config_name=None):
     """Create and configure the Flask application."""
     if config_name is None:
-        config_name = os.getenv("FLASK_ENV", "production")
+        config_name = os.getenv("APP_CONFIG", "production")
 
     # Ensure config_name is a string
     if not isinstance(config_name, str):
         config_name = "production"  # Default to production if not a string
+
+    logging.basicConfig(
+        level=logging.DEBUG if config_name != "production" else logging.INFO
+    )
 
     logger.info("Creating app with config: %s", config_name)
 
@@ -447,6 +460,9 @@ def create_app(config_name=None):
 
     app = Flask(__name__)
     app.config.from_object(config[config_name])
+
+    # Trust one level of proxy so request.remote_addr reflects the real client IP.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     # Log important config values
     logger.info("SPOTIFY_REDIRECT_URI: %s", app.config.get("SPOTIFY_REDIRECT_URI"))
