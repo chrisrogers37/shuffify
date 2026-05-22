@@ -8,14 +8,15 @@ import secrets
 from datetime import datetime, timezone
 
 from flask import (
-    session,
-    redirect,
-    url_for,
-    request,
+    current_app,
     flash,
     jsonify,
+    redirect,
     render_template,
+    request,
     send_from_directory,
+    session,
+    url_for,
 )
 
 from shuffify.routes import (
@@ -247,10 +248,17 @@ def callback():
     try:
         # Exchange code for token
         token_data = AuthService.exchange_code_for_token(code)
-        session["spotify_token"] = token_data
 
         # Validate by fetching user data
         _, user_data = AuthService.authenticate_and_get_user(token_data)
+
+        # Regenerate session ID to prevent session fixation attacks.
+        # Flask-Session's regenerate() deletes the old server-side
+        # record, issues a new SID, and marks the session modified.
+        # We then clear stale pre-auth data before writing auth state.
+        current_app.session_interface.regenerate(session)
+        session.clear()
+        session["spotify_token"] = token_data
         session["user_data"] = user_data
 
         # Upsert user record in database (non-blocking)
