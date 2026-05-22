@@ -1,8 +1,9 @@
 import os
 import atexit
 import logging
+import secrets
 from typing import Optional
-from flask import Flask
+from flask import Flask, g
 from flask_session import Session
 import redis
 from flask_limiter import Limiter
@@ -358,7 +359,15 @@ def _init_sentry(config_class):
 
 
 def _apply_security_headers(app):
-    """Register security headers on all responses."""
+    """Register CSP nonce generation and security headers."""
+
+    @app.before_request
+    def _generate_csp_nonce():
+        g.csp_nonce = secrets.token_urlsafe(32)
+
+    @app.context_processor
+    def _inject_csp_nonce():
+        return {"csp_nonce": getattr(g, "csp_nonce", "")}
 
     @app.after_request
     def set_security_headers(response):
@@ -369,12 +378,14 @@ def _apply_security_headers(app):
         # Control referrer information leakage
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
-        # Content Security Policy — defense-in-depth against XSS
+        nonce = getattr(g, "csp_nonce", "")
+
+        # Content Security Policy — nonce-based, no unsafe-inline
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' https://cdn.tailwindcss.com "
-            "https://cdn.jsdelivr.net 'unsafe-inline'; "
-            "style-src 'self' 'unsafe-inline'; "
+            f"script-src 'self' https://cdn.tailwindcss.com "
+            f"https://cdn.jsdelivr.net 'nonce-{nonce}'; "
+            f"style-src 'self' 'nonce-{nonce}'; "
             "img-src 'self' https://i.scdn.co https://*.spotifycdn.com data:; "
             "connect-src 'self'; "
             "font-src 'self'; "

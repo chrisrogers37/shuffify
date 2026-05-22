@@ -9,7 +9,7 @@
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='images/favicon.ico') }}">
     <!-- Tailwind CSS via CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
+    <script nonce="{{ csp_nonce }}">
         tailwind.config = {
             theme: {
                 extend: {
@@ -43,7 +43,7 @@
             }
         }
     </script>
-    <style>
+    <style nonce="{{ csp_nonce }}">
         body {
             margin: 0;
             padding: 0;
@@ -197,7 +197,7 @@
     <script src="/static/js/notifications.js"></script>
 
     <!-- CSRF: auto-inject token on mutating fetch requests -->
-    <script>
+    <script nonce="{{ csp_nonce }}">
     (function() {
         var meta = document.querySelector('meta[name="csrf-token"]');
         if (!meta) return;
@@ -224,7 +224,7 @@
     </script>
 
     <!-- JavaScript for AJAX operations -->
-    <script>
+    <script nonce="{{ csp_nonce }}">
         function showFlashMessage(message, category) {
             const flashContainer = document.getElementById('flash-messages');
             const messageDiv = document.createElement('div');

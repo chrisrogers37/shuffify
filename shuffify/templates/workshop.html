@@ -1178,7 +1178,7 @@
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 <script src="/static/js/schedule-edit.js"></script>
 
-<script>
+<script nonce="{{ csp_nonce }}">
 // =============================================================================
 // Workshop State Management
 // =============================================================================
@@ -2605,7 +2605,7 @@ function displayExternalTracks(playlistInfo, tracks) {
 }
 </script>
 
-<script>
+<script nonce="{{ csp_nonce }}">
 // =============================================================================
 // Algo Params Popover Toggle
 // =============================================================================
@@ -2898,14 +2898,14 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<script>
+<script nonce="{{ csp_nonce }}">
 // Initialize horizontal tabs after DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     workshopTabs.init();
 });
 </script>
 
-<script>
+<script nonce="{{ csp_nonce }}">
 // =============================================================================
 // Snapshot Browser Panel
 // Surfaces the existing snapshot API in the workshop sidebar Snapshots tab.
@@ -3208,7 +3208,7 @@ function onSnapshotsTabActivated() {
 </script>
 
 <!-- Archive Playlist Pairing (Phase 3) -->
-<script>
+<script nonce="{{ csp_nonce }}">
 // =============================================================================
 // Archive Pairing State & Functions
 // =============================================================================
@@ -4026,7 +4026,7 @@ function updateArchiveQueueBadge() {
 </script>
 
 <!-- Smart Raid Panel (Phase 4) -->
-<script>
+<script nonce="{{ csp_nonce }}">
 var RAID_TIME_CAPABLE = ['daily', 'every_3d', 'weekly'];
 
 var raidPanel = {
@@ -4994,7 +4994,7 @@ function onRaidsTabActivated() {
 </script>
 
 <!-- ==================== Rotation Panel (Phase 5) ==================== -->
-<script>
+<script nonce="{{ csp_nonce }}">
 const rotationState = {
     isLoaded: false,
     isLoading: false,
@@ -5290,7 +5290,7 @@ function renderRotationPanel(data) {
 
 {% if not playlist %}
 <!-- Hub Playlist Dropdown JS -->
-<script>
+<script nonce="{{ csp_nonce }}">
 let hubDropdownOpen = false;
 let hubPlaylists = null;
 
@@ -5363,7 +5363,7 @@ document.addEventListener('click', function(e) {
 </script>
 {% endif %}
 
-<style>
+<style nonce="{{ csp_nonce }}">
 .workshop-scrollbar::-webkit-scrollbar { width: 8px; }
 .workshop-scrollbar::-webkit-scrollbar-thumb { background: rgba(20, 120, 60, 0.5); border-radius: 6px; }
 .workshop-scrollbar::-webkit-scrollbar-track { background: transparent; }

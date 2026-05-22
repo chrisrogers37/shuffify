@@ -203,7 +203,12 @@ def login():
 @main.route("/callback")
 def callback():
     """Handle OAuth callback from Spotify."""
-    logger.debug(f"Callback received with args: {request.args}")
+    logger.debug(
+        "Callback received (code=%s, state=%s, error=%s)",
+        "present" if request.args.get("code") else "absent",
+        "present" if request.args.get("state") else "absent",
+        request.args.get("error", "none"),
+    )
 
     # Check for OAuth errors
     error = request.args.get("error")
