@@ -252,6 +252,49 @@ class TestCallbackRoute:
             with client.session_transaction() as sess:
                 assert "oauth_state" not in sess
 
+    @patch("shuffify.routes.core.LoginHistoryService")
+    @patch("shuffify.routes.core.UserService")
+    @patch("shuffify.routes.core.AuthService")
+    def test_session_regenerated_after_successful_oauth(
+        self,
+        mock_auth_svc,
+        mock_user_svc,
+        mock_login_hist,
+        db_app,
+    ):
+        """Session ID must change after OAuth to prevent session fixation."""
+        mock_auth_svc.exchange_code_for_token.return_value = {
+            "access_token": "new_token",
+            "token_type": "Bearer",
+            "expires_at": time.time() + 3600,
+            "refresh_token": "new_refresh",
+        }
+        mock_client = MagicMock()
+        mock_auth_svc.authenticate_and_get_user.return_value = (
+            mock_client,
+            {"id": "user123", "display_name": "Test User", "images": []},
+        )
+        mock_upsert_result = MagicMock()
+        mock_upsert_result.is_new = False
+        mock_user_svc.upsert_from_spotify.return_value = mock_upsert_result
+        mock_user_svc.get_by_spotify_id.return_value = None
+
+        with db_app.test_client() as client:
+            # Plant a pre-auth marker in the session
+            with client.session_transaction() as sess:
+                sess["oauth_state"] = "valid_state"
+                sess["pre_auth_marker"] = "should_be_gone"
+
+            resp = client.get("/callback?code=test_auth_code&state=valid_state")
+            assert resp.status_code == 302
+
+            with client.session_transaction() as sess:
+                # Auth data present in regenerated session
+                assert "spotify_token" in sess
+                assert "user_data" in sess
+                # Pre-auth data wiped by session.clear()
+                assert "pre_auth_marker" not in sess
+
     @patch("shuffify.routes.core.AuthService")
     def test_auth_failure_during_callback(self, mock_auth_svc, db_app):
         from shuffify.services import AuthenticationError

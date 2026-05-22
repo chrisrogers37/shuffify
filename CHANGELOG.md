@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Dedicated `CSRFError` handler returns a clear "refresh the page" message
   - CSRF disabled in test config (`WTF_CSRF_ENABLED = False`) so test suite is unaffected
   - Closes #357
+- **Session regenerated after OAuth login to prevent session fixation** — After successful Spotify OAuth callback, the session is now cleared and regenerated with a new session ID before storing authentication data. Previously, the pre-authentication session ID was preserved, allowing an attacker who planted a session cookie to hijack the authenticated session. The fix calls `session.clear()` after token exchange and user validation, then re-populates only the auth data — any pre-auth session state (including attacker-planted markers) is discarded. Closes #358.
 
 ### Changed
 - **Source resolver hygiene — dead field removed, rollback hardening, characterization tests** - Low-priority cleanup chasing #314 and #315 in the scraper module

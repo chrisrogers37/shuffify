@@ -247,10 +247,16 @@ def callback():
     try:
         # Exchange code for token
         token_data = AuthService.exchange_code_for_token(code)
-        session["spotify_token"] = token_data
 
         # Validate by fetching user data
         _, user_data = AuthService.authenticate_and_get_user(token_data)
+
+        # Regenerate session to prevent session fixation attacks.
+        # Clearing the session causes Flask-Session to issue a new
+        # session ID on the next response, so any pre-auth session
+        # cookie an attacker planted becomes useless.
+        session.clear()
+        session["spotify_token"] = token_data
         session["user_data"] = user_data
 
         # Upsert user record in database (non-blocking)
