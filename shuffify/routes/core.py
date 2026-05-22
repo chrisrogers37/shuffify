@@ -8,14 +8,15 @@ import secrets
 from datetime import datetime, timezone
 
 from flask import (
-    session,
-    redirect,
-    url_for,
-    request,
+    current_app,
     flash,
     jsonify,
+    redirect,
     render_template,
+    request,
     send_from_directory,
+    session,
+    url_for,
 )
 
 from shuffify.routes import (
@@ -251,10 +252,11 @@ def callback():
         # Validate by fetching user data
         _, user_data = AuthService.authenticate_and_get_user(token_data)
 
-        # Regenerate session to prevent session fixation attacks.
-        # Clearing the session causes Flask-Session to issue a new
-        # session ID on the next response, so any pre-auth session
-        # cookie an attacker planted becomes useless.
+        # Regenerate session ID to prevent session fixation attacks.
+        # Flask-Session's regenerate() deletes the old server-side
+        # record, issues a new SID, and marks the session modified.
+        # We then clear stale pre-auth data before writing auth state.
+        current_app.session_interface.regenerate(session)
         session.clear()
         session["spotify_token"] = token_data
         session["user_data"] = user_data

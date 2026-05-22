@@ -280,10 +280,11 @@ class TestCallbackRoute:
         mock_user_svc.get_by_spotify_id.return_value = None
 
         with db_app.test_client() as client:
-            # Plant a pre-auth marker in the session
+            # Plant a pre-auth marker and capture session ID
             with client.session_transaction() as sess:
                 sess["oauth_state"] = "valid_state"
                 sess["pre_auth_marker"] = "should_be_gone"
+                pre_auth_sid = getattr(sess, "sid", None)
 
             resp = client.get("/callback?code=test_auth_code&state=valid_state")
             assert resp.status_code == 302
@@ -294,6 +295,10 @@ class TestCallbackRoute:
                 assert "user_data" in sess
                 # Pre-auth data wiped by session.clear()
                 assert "pre_auth_marker" not in sess
+                # Session ID changed (regenerated)
+                post_auth_sid = getattr(sess, "sid", None)
+                if pre_auth_sid is not None:
+                    assert post_auth_sid != pre_auth_sid
 
     @patch("shuffify.routes.core.AuthService")
     def test_auth_failure_during_callback(self, mock_auth_svc, db_app):
