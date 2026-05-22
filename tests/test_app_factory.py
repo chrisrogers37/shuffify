@@ -425,6 +425,34 @@ class TestSecurityHeaders:
         csp = client.get("/health").headers["Content-Security-Policy"]
         assert "default-src 'self'" in csp
 
+    def test_csp_uses_nonce_not_unsafe_inline(self, client):
+        """CSP should use nonce-based policy, not unsafe-inline."""
+        csp = client.get("/health").headers["Content-Security-Policy"]
+        assert "'unsafe-inline'" not in csp
+        assert "'nonce-" in csp
+
+    def test_csp_nonce_differs_per_request(self, client):
+        """Each request should get a unique CSP nonce."""
+        import re
+
+        csp1 = client.get("/health").headers["Content-Security-Policy"]
+        csp2 = client.get("/health").headers["Content-Security-Policy"]
+        nonces1 = re.findall(r"'nonce-([^']+)'", csp1)
+        nonces2 = re.findall(r"'nonce-([^']+)'", csp2)
+        assert nonces1
+        assert nonces2
+        assert nonces1[0] != nonces2[0]
+
+    def test_csp_nonce_in_script_and_style_src(self, client):
+        """CSP nonce should appear in both script-src and style-src."""
+        import re
+
+        csp = client.get("/health").headers["Content-Security-Policy"]
+        nonces = re.findall(r"'nonce-([^']+)'", csp)
+        # Same nonce used for both directives
+        assert len(nonces) == 2
+        assert nonces[0] == nonces[1]
+
     def test_csp_script_src_allows_cdns(self, client):
         """CSP should allow Tailwind and jsdelivr CDNs for scripts."""
         csp = client.get("/health").headers["Content-Security-Policy"]

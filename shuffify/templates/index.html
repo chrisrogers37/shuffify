@@ -353,7 +353,7 @@
     </div>
 </div>
 
-<style>
+<style nonce="{{ csp_nonce }}">
     /* Force legal links to be white */
     .legal-links a {
         color: #1DB954 !important;
@@ -658,7 +658,7 @@
     }
 </style>
 
-<script>
+<script nonce="{{ csp_nonce }}">
     // Enable/disable login button based on checkbox and update CTA text
     document.addEventListener('DOMContentLoaded', function() {
         const checkbox = document.getElementById('legal-consent');
@@ -711,7 +711,7 @@
     });
 </script>
 
-<script>
+<script nonce="{{ csp_nonce }}">
 (function() {
     'use strict';
 

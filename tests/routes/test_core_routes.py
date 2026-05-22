@@ -5,6 +5,7 @@ Tests cover /, /login, /callback, /logout, /terms, /privacy.
 Health endpoint (/health) is tested in tests/test_health_db.py.
 """
 
+import logging
 import time
 from unittest.mock import patch, MagicMock
 
@@ -313,6 +314,14 @@ class TestCallbackRoute:
                 sess["oauth_state"] = "valid_state"
             resp = client.get("/callback?code=bad_code&state=valid_state")
             assert resp.status_code == 302
+
+    def test_callback_does_not_log_auth_code(self, db_app, caplog):
+        """Authorization code must not appear in log output."""
+        secret_code = "AQDx7_SENSITIVE_AUTH_CODE_12345"
+        with caplog.at_level(logging.DEBUG, logger="shuffify.routes.core"):
+            with db_app.test_client() as client:
+                client.get(f"/callback?code={secret_code}")
+        assert secret_code not in caplog.text
 
 
 class TestLogoutRoute:
