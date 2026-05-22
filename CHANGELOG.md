@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - CSRF disabled in test config (`WTF_CSRF_ENABLED = False`) so test suite is unaffected
   - Closes #357
 - **Session regenerated after OAuth login to prevent session fixation** — After successful Spotify OAuth callback, the session is now cleared and regenerated with a new session ID before storing authentication data. Previously, the pre-authentication session ID was preserved, allowing an attacker who planted a session cookie to hijack the authenticated session. The fix calls `session.clear()` after token exchange and user validation, then re-populates only the auth data — any pre-auth session state (including attacker-planted markers) is discarded. Closes #358.
+- **Health endpoint no longer exposes scheduler metrics** - The `/health` endpoint now returns only `status` and `timestamp`. Internal scheduler metrics (job counts, failure counts, last execution time) are stripped from the unauthenticated response. Closes #362
+- **PostgreSQL port no longer exposed to host network** - Removed host port mapping (`5432:5432`) from `docker-compose.yml` so the database is only reachable from other containers via Docker's internal network. Closes #363
 
 ### Changed
 - **Source resolver hygiene — dead field removed, rollback hardening, characterization tests** - Low-priority cleanup chasing #314 and #315 in the scraper module
