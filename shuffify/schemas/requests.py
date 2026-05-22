@@ -4,10 +4,13 @@ Request validation schemas using Pydantic.
 Provides type-safe validation for all API request parameters.
 """
 
+import re
 from typing import Literal, Annotated, Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
+
+TRACK_URI_RE = re.compile(r"^spotify:track:[a-zA-Z0-9]{22}$")
 
 
 class ShuffleRequestBase(BaseModel):
@@ -220,9 +223,9 @@ class WorkshopCommitRequest(BaseModel):
     @field_validator("track_uris")
     @classmethod
     def validate_track_uris(cls, v: List[str]) -> List[str]:
-        """Ensure all URIs look like Spotify track URIs."""
+        """Ensure all URIs are valid Spotify track URIs."""
         for uri in v:
-            if not uri.startswith("spotify:track:"):
+            if not TRACK_URI_RE.match(uri):
                 raise ValueError(f"Invalid track URI format: {uri}")
         return v
 
@@ -283,8 +286,8 @@ class ExternalPlaylistRequest(BaseModel):
         return v
 
     def model_post_init(self, __context) -> None:
-        """Ensure at least one of url or query is provided."""
+        """Ensure exactly one of url or query is provided."""
         if not self.url and not self.query:
-            raise ValueError(
-                "Either 'url' or 'query' must be provided"
-            )
+            raise ValueError("Either 'url' or 'query' must be provided")
+        if self.url and self.query:
+            raise ValueError("Provide 'url' or 'query', not both")
