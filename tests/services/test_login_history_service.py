@@ -19,11 +19,13 @@ from shuffify.services.login_history_service import (
 def app_ctx(db_app):
     """Provide app context with a test user."""
     with db_app.app_context():
-        result = UserService.upsert_from_spotify({
-            "id": "user123",
-            "display_name": "Test User",
-            "images": [],
-        })
+        result = UserService.upsert_from_spotify(
+            {
+                "id": "user123",
+                "display_name": "Test User",
+                "images": [],
+            }
+        )
         yield result.user
 
 
@@ -37,9 +39,7 @@ def mock_request():
         "User-Agent": "Mozilla/5.0 TestBrowser",
     }
     req.headers = Mock()
-    req.headers.get = lambda key, default="": (
-        headers_data.get(key, default)
-    )
+    req.headers.get = lambda key, default="": headers_data.get(key, default)
     return req
 
 
@@ -53,18 +53,14 @@ def mock_request_with_proxy():
         "User-Agent": "Chrome/100",
     }
     req.headers = Mock()
-    req.headers.get = lambda key, default="": (
-        headers_data.get(key, default)
-    )
+    req.headers.get = lambda key, default="": headers_data.get(key, default)
     return req
 
 
 class TestRecordLogin:
     """Tests for record_login."""
 
-    def test_record_login_basic(
-        self, app_ctx, mock_request
-    ):
+    def test_record_login_basic(self, app_ctx, mock_request):
         """Should create a login history record."""
         entry = LoginHistoryService.record_login(
             user_id=app_ctx.id,
@@ -82,21 +78,19 @@ class TestRecordLogin:
         assert entry.logged_in_at is not None
         assert entry.logged_out_at is None
 
-    def test_record_login_uses_forwarded_ip(
-        self, app_ctx, mock_request_with_proxy
-    ):
-        """Should prefer X-Forwarded-For over remote_addr."""
+    def test_record_login_uses_remote_addr(self, app_ctx, mock_request_with_proxy):
+        """Should use remote_addr (ProxyFix corrects it at WSGI layer)."""
         entry = LoginHistoryService.record_login(
             user_id=app_ctx.id,
             request=mock_request_with_proxy,
             login_type="oauth_initial",
         )
 
-        assert entry.ip_address == "203.0.113.50"
+        # ProxyFix sets remote_addr from X-Forwarded-For at the
+        # WSGI layer, so the service reads remote_addr directly.
+        assert entry.ip_address == "10.0.0.1"
 
-    def test_record_login_falls_back_to_remote_addr(
-        self, app_ctx, mock_request
-    ):
+    def test_record_login_falls_back_to_remote_addr(self, app_ctx, mock_request):
         """Should use remote_addr when X-Forwarded-For is empty."""
         entry = LoginHistoryService.record_login(
             user_id=app_ctx.id,
@@ -106,9 +100,7 @@ class TestRecordLogin:
 
         assert entry.ip_address == "192.168.1.100"
 
-    def test_record_login_truncates_long_user_agent(
-        self, app_ctx
-    ):
+    def test_record_login_truncates_long_user_agent(self, app_ctx):
         """Should truncate user agent strings longer than 512."""
         req = Mock()
         req.remote_addr = "1.2.3.4"
@@ -127,9 +119,7 @@ class TestRecordLogin:
 
         assert len(entry.user_agent) == 512
 
-    def test_record_login_no_session_id(
-        self, app_ctx, mock_request
-    ):
+    def test_record_login_no_session_id(self, app_ctx, mock_request):
         """Should allow None session_id."""
         entry = LoginHistoryService.record_login(
             user_id=app_ctx.id,
@@ -139,9 +129,7 @@ class TestRecordLogin:
 
         assert entry.session_id is None
 
-    def test_record_login_different_types(
-        self, app_ctx, mock_request
-    ):
+    def test_record_login_different_types(self, app_ctx, mock_request):
         """Should record different login types."""
         for login_type in [
             "oauth_initial",
@@ -159,9 +147,7 @@ class TestRecordLogin:
 class TestRecordLogout:
     """Tests for record_logout."""
 
-    def test_record_logout_updates_most_recent(
-        self, app_ctx, mock_request
-    ):
+    def test_record_logout_updates_most_recent(self, app_ctx, mock_request):
         """Should set logged_out_at on the most recent open record."""
         entry = LoginHistoryService.record_login(
             user_id=app_ctx.id,
@@ -181,9 +167,7 @@ class TestRecordLogout:
         updated = db.session.get(LoginHistory, entry.id)
         assert updated.logged_out_at is not None
 
-    def test_record_logout_no_matching_record(
-        self, app_ctx
-    ):
+    def test_record_logout_no_matching_record(self, app_ctx):
         """Should return False when no open record exists."""
         result = LoginHistoryService.record_logout(
             user_id=app_ctx.id,
@@ -192,9 +176,7 @@ class TestRecordLogout:
 
         assert result is False
 
-    def test_record_logout_without_session_id(
-        self, app_ctx, mock_request
-    ):
+    def test_record_logout_without_session_id(self, app_ctx, mock_request):
         """Should match any open record when session_id is None."""
         LoginHistoryService.record_login(
             user_id=app_ctx.id,
@@ -208,9 +190,7 @@ class TestRecordLogout:
 
         assert result is True
 
-    def test_record_logout_only_updates_open_record(
-        self, app_ctx, mock_request
-    ):
+    def test_record_logout_only_updates_open_record(self, app_ctx, mock_request):
         """Should not re-update an already logged-out record."""
         # First login and logout
         LoginHistoryService.record_login(
@@ -231,9 +211,7 @@ class TestRecordLogout:
         )
         assert result is False
 
-    def test_record_logout_correct_session(
-        self, app_ctx, mock_request
-    ):
+    def test_record_logout_correct_session(self, app_ctx, mock_request):
         """Should only logout the matching session."""
         LoginHistoryService.record_login(
             user_id=app_ctx.id,

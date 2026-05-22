@@ -1,4 +1,5 @@
 import os
+import secrets
 import sys
 from dotenv import load_dotenv
 
@@ -48,7 +49,7 @@ def validate_required_env_vars(config_name=None):
 class Config:
     """Base configuration."""
 
-    SECRET_KEY = os.getenv("SECRET_KEY", "a_default_secret_key_for_development")
+    SECRET_KEY = os.environ.get("SECRET_KEY")
     SESSION_COOKIE_NAME = os.getenv("SESSION_COOKIE_NAME", "shuffify_session")
     SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
     SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
@@ -69,7 +70,7 @@ class Config:
     # Session security settings for OAuth
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"  # More permissive for OAuth flows
-    SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
+    SESSION_COOKIE_SECURE = True
 
     # Redis caching configuration for Spotify API responses
     CACHE_KEY_PREFIX = "shuffify:cache:"
@@ -116,7 +117,6 @@ class Config:
 class ProdConfig(Config):
     """Production configuration."""
 
-    # Note: FLASK_ENV was removed in Flask 3.0. Use config_name parameter instead.
     CONFIG_NAME = "production"
     SECRET_KEY = os.environ.get("SECRET_KEY")  # No fallback — validated on startup
     DEBUG = False
@@ -148,8 +148,8 @@ class ProdConfig(Config):
 class DevConfig(Config):
     """Development configuration."""
 
-    # Note: FLASK_ENV was removed in Flask 3.0. Use config_name parameter instead.
     CONFIG_NAME = "development"
+    SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_hex(32)
     DEBUG = True
     TESTING = True
     SESSION_COOKIE_SECURE = False
@@ -171,8 +171,10 @@ class TestConfig(Config):
     """
 
     CONFIG_NAME = "testing"
+    SECRET_KEY = "test-secret-key"
     TESTING = True
     WTF_CSRF_ENABLED = False
+    SESSION_COOKIE_SECURE = False
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     SCHEDULER_ENABLED = False
 
