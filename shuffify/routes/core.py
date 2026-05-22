@@ -350,7 +350,7 @@ def logout():
     except Exception:
         pass
 
-    # Record logout event before clearing session
+    # Record logout event and activity before clearing session
     try:
         user_data = session.get("user_data")
         if user_data and user_data.get("id"):
@@ -361,23 +361,13 @@ def logout():
                     user_id=db_user.id,
                     session_id=flask_session_id,
                 )
-    except Exception as e:
-        logger.warning(f"Failed to record logout: {e}. Logout continues.")
-
-    # Log logout activity (non-blocking)
-    try:
-        user_data = session.get("user_data", {})
-        spotify_id = user_data.get("id")
-        if spotify_id:
-            db_user = UserService.get_by_spotify_id(spotify_id)
-            if db_user:
                 log_activity(
                     user_id=db_user.id,
                     activity_type=ActivityType.LOGOUT,
                     description="Logged out",
                 )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to record logout: {e}")
 
     session.clear()
     return redirect(url_for("main.index"))

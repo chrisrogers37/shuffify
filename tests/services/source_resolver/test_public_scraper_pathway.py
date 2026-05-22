@@ -349,7 +349,7 @@ class TestExtractFromTrackList:
         assert _extract_from_track_list(html) == []
 
     def test_invalid_json_in_script(self):
-        html = '<script>trackList is not JSON</script>'
+        html = "<script>trackList is not JSON</script>"
         assert _extract_from_track_list(html) == []
 
     def test_track_list_not_a_list(self):
@@ -425,10 +425,7 @@ class TestExtractWithRegex:
 
     def test_deduplicates_across_patterns(self):
         result = _extract_with_regex(MIXED_LEGACY_HTML)
-        uris = [
-            u for u in result
-            if u == "spotify:track:aaaaaaaaaaaaaaaaaaaaaa"
-        ]
+        uris = [u for u in result if u == "spotify:track:aaaaaaaaaaaaaaaaaaaaaa"]
         assert len(uris) == 1
 
     def test_empty_html(self):
@@ -498,31 +495,19 @@ class TestGetTrackUriFromItem:
 
     def test_nested_track_uri(self):
         item = {"track": {"uri": "spotify:track:aaaaaaaaaaaaaaaaaaaaaa"}}
-        assert (
-            _get_track_uri_from_item(item)
-            == "spotify:track:aaaaaaaaaaaaaaaaaaaaaa"
-        )
+        assert _get_track_uri_from_item(item) == "spotify:track:aaaaaaaaaaaaaaaaaaaaaa"
 
     def test_flat_uri(self):
         item = {"uri": "spotify:track:bbbbbbbbbbbbbbbbbbbbbb"}
-        assert (
-            _get_track_uri_from_item(item)
-            == "spotify:track:bbbbbbbbbbbbbbbbbbbbbb"
-        )
+        assert _get_track_uri_from_item(item) == "spotify:track:bbbbbbbbbbbbbbbbbbbbbb"
 
     def test_id_only_nested(self):
         item = {"track": {"id": "aaaaaaaaaaaaaaaaaaaaaa"}}
-        assert (
-            _get_track_uri_from_item(item)
-            == "spotify:track:aaaaaaaaaaaaaaaaaaaaaa"
-        )
+        assert _get_track_uri_from_item(item) == "spotify:track:aaaaaaaaaaaaaaaaaaaaaa"
 
     def test_id_only_flat(self):
         item = {"id": "bbbbbbbbbbbbbbbbbbbbbb"}
-        assert (
-            _get_track_uri_from_item(item)
-            == "spotify:track:bbbbbbbbbbbbbbbbbbbbbb"
-        )
+        assert _get_track_uri_from_item(item) == "spotify:track:bbbbbbbbbbbbbbbbbbbbbb"
 
     def test_non_track_uri_ignored(self):
         item = {"uri": "spotify:album:aaaaaaaaaaaaaaaaaaaaaa"}
@@ -562,7 +547,11 @@ class TestWalkJsonForTracks:
                     "c": {
                         "tracks": {
                             "items": [
-                                {"track": {"uri": "spotify:track:aaaaaaaaaaaaaaaaaaaaaa"}}
+                                {
+                                    "track": {
+                                        "uri": "spotify:track:aaaaaaaaaaaaaaaaaaaaaa"
+                                    }
+                                }
                             ]
                         }
                     }
@@ -577,9 +566,9 @@ class TestWalkJsonForTracks:
         assert _walk_json_for_tracks({"data": {}}) == []
 
     def test_handles_lists(self):
-        data = [{"tracks": {"items": [
-            {"uri": "spotify:track:aaaaaaaaaaaaaaaaaaaaaa"}
-        ]}}]
+        data = [
+            {"tracks": {"items": [{"uri": "spotify:track:aaaaaaaaaaaaaaaaaaaaaa"}]}}
+        ]
         result = _walk_json_for_tracks(data)
         assert len(result) == 1
 
@@ -662,16 +651,9 @@ class TestCanHandle:
 class TestResolve:
     """Tests for PublicScraperPathway.resolve()."""
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
-    def test_embed_success_with_next_data(
-        self, mock_get, pathway, mock_source
-    ):
-        resp = Mock(
-            status_code=200, text=NEXT_DATA_TRACKS_ITEMS_HTML
-        )
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
+    def test_embed_success_with_next_data(self, mock_get, pathway, mock_source):
+        resp = Mock(status_code=200, text=NEXT_DATA_TRACKS_ITEMS_HTML)
         mock_get.return_value = resp
 
         result = pathway.resolve(mock_source)
@@ -680,16 +662,9 @@ class TestResolve:
         assert len(result.track_uris) == 3
         assert mock_get.call_count == 1
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
-    def test_embed_success_with_track_list(
-        self, mock_get, pathway, mock_source
-    ):
-        resp = Mock(
-            status_code=200, text=SCRIPT_TRACK_LIST_HTML
-        )
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
+    def test_embed_success_with_track_list(self, mock_get, pathway, mock_source):
+        resp = Mock(status_code=200, text=SCRIPT_TRACK_LIST_HTML)
         mock_get.return_value = resp
 
         result = pathway.resolve(mock_source)
@@ -697,67 +672,41 @@ class TestResolve:
         assert len(result.track_uris) == 2
         assert mock_get.call_count == 1
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
-    def test_embed_success_with_regex_fallback(
-        self, mock_get, pathway, mock_source
-    ):
-        resp = Mock(
-            status_code=200, text=LEGACY_URI_HTML
-        )
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
+    def test_embed_success_with_regex_fallback(self, mock_get, pathway, mock_source):
+        resp = Mock(status_code=200, text=LEGACY_URI_HTML)
         mock_get.return_value = resp
 
         result = pathway.resolve(mock_source)
         assert result.success is True
         assert len(result.track_uris) == 2
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
-    def test_embed_fails_falls_to_public_page(
-        self, mock_get, pathway, mock_source
-    ):
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
+    def test_embed_fails_falls_to_public_page(self, mock_get, pathway, mock_source):
         embed_resp = Mock(status_code=404, text="")
-        page_resp = Mock(
-            status_code=200, text=LEGACY_URL_HTML
-        )
+        page_resp = Mock(status_code=200, text=LEGACY_URL_HTML)
         mock_get.side_effect = [embed_resp, page_resp]
 
         result = pathway.resolve(mock_source)
         assert result.success is True
         assert mock_get.call_count == 2
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
-    def test_both_strategies_fail(
-        self, mock_get, pathway, mock_source
-    ):
-        mock_get.return_value = Mock(
-            status_code=200, text="<html></html>"
-        )
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
+    def test_both_strategies_fail(self, mock_get, pathway, mock_source):
+        mock_get.return_value = Mock(status_code=200, text="<html></html>")
 
         result = pathway.resolve(mock_source)
         assert result.success is False
         assert "no tracks" in result.error_message.lower()
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
     def test_http_error(self, mock_get, pathway, mock_source):
         mock_get.side_effect = Exception("Connection refused")
         result = pathway.resolve(mock_source)
         assert result.success is False
 
     def test_no_playlist_id(self, pathway):
-        source = Mock(
-            source_playlist_id=None, source_type="external"
-        )
+        source = Mock(source_playlist_id=None, source_type="external")
         result = pathway.resolve(source)
         assert result.success is False
         assert "No playlist ID" in result.error_message
@@ -767,24 +716,15 @@ class TestResolve:
     def test_name_property(self, pathway):
         assert pathway.name == "public_scraper"
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
-    def test_browser_headers_sent(
-        self, mock_get, pathway, mock_source
-    ):
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
+    def test_browser_headers_sent(self, mock_get, pathway, mock_source):
         """Verify browser-like headers are used for requests."""
-        mock_get.return_value = Mock(
-            status_code=200, text=NEXT_DATA_TRACKS_ITEMS_HTML
-        )
+        mock_get.return_value = Mock(status_code=200, text=NEXT_DATA_TRACKS_ITEMS_HTML)
 
         pathway.resolve(mock_source)
 
         call_kwargs = mock_get.call_args
-        headers = call_kwargs.kwargs.get(
-            "headers", call_kwargs[1].get("headers", {})
-        )
+        headers = call_kwargs.kwargs.get("headers", call_kwargs[1].get("headers", {}))
         assert "Mozilla" in headers.get("User-Agent", "")
         assert "Accept" in headers
 
@@ -797,20 +737,18 @@ class TestResolve:
 class TestCaching:
     """Tests for database cache integration."""
 
-    def test_cache_hit_returns_cached(
-        self, mock_source, db_app
-    ):
+    def test_cache_hit_returns_cached(self, mock_source, db_app):
         """Pre-populated cache row is returned directly."""
         from datetime import datetime, timedelta, timezone
         from shuffify.models.db import (
-            ScrapedPlaylistCache, db,
+            ScrapedPlaylistCache,
+            db,
         )
 
         with db_app.app_context():
             now = datetime.now(timezone.utc)
             row = ScrapedPlaylistCache(
                 playlist_id="pl_test123",
-                track_count=2,
                 scraped_at=now,
                 scrape_pathway="embed",
                 expires_at=now + timedelta(hours=1),
@@ -827,20 +765,18 @@ class TestCaching:
             assert result.success is True
             assert len(result.track_uris) == 2
 
-    def test_cache_hit_empty_returns_failure(
-        self, mock_source, db_app
-    ):
+    def test_cache_hit_empty_returns_failure(self, mock_source, db_app):
         """Cached empty result returns failure."""
         from datetime import datetime, timedelta, timezone
         from shuffify.models.db import (
-            ScrapedPlaylistCache, db,
+            ScrapedPlaylistCache,
+            db,
         )
 
         with db_app.app_context():
             now = datetime.now(timezone.utc)
             row = ScrapedPlaylistCache(
                 playlist_id="pl_test123",
-                track_count=0,
                 scraped_at=now,
                 scrape_pathway="none",
                 expires_at=now + timedelta(hours=1),
@@ -853,13 +789,8 @@ class TestCaching:
             result = pathway.resolve(mock_source)
             assert result.success is False
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
-    def test_cache_miss_fetches_and_stores(
-        self, mock_get, mock_source, db_app
-    ):
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
+    def test_cache_miss_fetches_and_stores(self, mock_get, mock_source, db_app):
         """Cache miss triggers scraping and stores result."""
         from shuffify.models.db import (
             ScrapedPlaylistCache,
@@ -875,12 +806,7 @@ class TestCaching:
             result = pathway.resolve(mock_source)
             assert result.success is True
 
-            # Verify cache row was created. ``track_count`` is no
-            # longer written by the scraper (issue #318 — dead field);
-            # callers should derive the count from ``track_uris``.
-            row = ScrapedPlaylistCache.query.filter_by(
-                playlist_id="pl_test123"
-            ).first()
+            row = ScrapedPlaylistCache.query.filter_by(playlist_id="pl_test123").first()
             assert row is not None
             assert len(row.track_uris) > 0
             assert row.scrape_pathway == "embed"
@@ -888,36 +814,24 @@ class TestCaching:
     def test_cache_read_error_returns_none(self, db_app):
         """DB errors in _get_cached return None gracefully."""
         with db_app.app_context():
-            with patch(
-                "shuffify.models.db"
-                ".ScrapedPlaylistCache.query"
-            ) as mock_q:
-                mock_q.filter.side_effect = Exception(
-                    "DB down"
-                )
-                result = PublicScraperPathway._get_cached(
-                    "pl_test123"
-                )
+            with patch("shuffify.models.db.ScrapedPlaylistCache.query") as mock_q:
+                mock_q.filter.side_effect = Exception("DB down")
+                result = PublicScraperPathway._get_cached("pl_test123")
                 assert result is None
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
-    def test_expired_cache_triggers_rescrape(
-        self, mock_get, mock_source, db_app
-    ):
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
+    def test_expired_cache_triggers_rescrape(self, mock_get, mock_source, db_app):
         """Expired cache row is ignored; fresh scrape runs."""
         from datetime import datetime, timedelta, timezone
         from shuffify.models.db import (
-            ScrapedPlaylistCache, db,
+            ScrapedPlaylistCache,
+            db,
         )
 
         with db_app.app_context():
             now = datetime.now(timezone.utc)
             row = ScrapedPlaylistCache(
                 playlist_id="pl_test123",
-                track_count=1,
                 scraped_at=now - timedelta(hours=2),
                 scrape_pathway="embed",
                 expires_at=now - timedelta(hours=1),
@@ -937,38 +851,26 @@ class TestCaching:
             result = pathway.resolve(mock_source)
             assert result.success is True
             # Should have new tracks, not the old cached one
-            assert (
-                "spotify:track:oldoldoldoldoldoldoldold"
-                not in result.track_uris
-            )
+            assert "spotify:track:oldoldoldoldoldoldoldold" not in result.track_uris
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
-    def test_failed_scrape_caches_empty(
-        self, mock_get, mock_source, db_app
-    ):
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
+    def test_failed_scrape_caches_empty(self, mock_get, mock_source, db_app):
         """Both strategies failing still caches empty."""
         from shuffify.models.db import (
             ScrapedPlaylistCache,
         )
 
         with db_app.app_context():
-            mock_get.return_value = Mock(
-                status_code=200, text="<html></html>"
-            )
+            mock_get.return_value = Mock(status_code=200, text="<html></html>")
 
             pathway = PublicScraperPathway()
             result = pathway.resolve(mock_source)
             assert result.success is False
 
             # Verify empty was cached
-            row = ScrapedPlaylistCache.query.filter_by(
-                playlist_id="pl_test123"
-            ).first()
+            row = ScrapedPlaylistCache.query.filter_by(playlist_id="pl_test123").first()
             assert row is not None
-            assert row.track_count == 0
+            assert len(row.track_uris) == 0
 
 
 # ======================================================================
@@ -987,13 +889,8 @@ class TestCachePoisoningRegression:
     the cache.
     """
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
-    def test_403_response_does_not_cache(
-        self, mock_get, mock_source, db_app
-    ):
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
+    def test_403_response_does_not_cache(self, mock_get, mock_source, db_app):
         from shuffify.models.db import ScrapedPlaylistCache
 
         with db_app.app_context():
@@ -1003,47 +900,31 @@ class TestCachePoisoningRegression:
 
             assert result.success is False
             assert "unconfirmed" in result.error_message.lower()
-            row = ScrapedPlaylistCache.query.filter_by(
-                playlist_id="pl_test123"
-            ).first()
+            row = ScrapedPlaylistCache.query.filter_by(playlist_id="pl_test123").first()
             assert row is None, (
-                "403 must not poison the cache — next raid "
-                "should be free to retry"
+                "403 must not poison the cache — next raid should be free to retry"
             )
 
     @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway._sleep_with_backoff"
+        "shuffify.services.source_resolver.public_scraper_pathway._sleep_with_backoff"
     )
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
     def test_429_response_does_not_cache(
         self, mock_get, mock_sleep, mock_source, db_app
     ):
         from shuffify.models.db import ScrapedPlaylistCache
 
         with db_app.app_context():
-            mock_get.return_value = Mock(
-                status_code=429, text="", headers={}
-            )
+            mock_get.return_value = Mock(status_code=429, text="", headers={})
             pathway = PublicScraperPathway()
             result = pathway.resolve(mock_source)
 
             assert result.success is False
-            row = ScrapedPlaylistCache.query.filter_by(
-                playlist_id="pl_test123"
-            ).first()
+            row = ScrapedPlaylistCache.query.filter_by(playlist_id="pl_test123").first()
             assert row is None
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
-    def test_network_exception_does_not_cache(
-        self, mock_get, mock_source, db_app
-    ):
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
+    def test_network_exception_does_not_cache(self, mock_get, mock_source, db_app):
         from shuffify.models.db import ScrapedPlaylistCache
 
         with db_app.app_context():
@@ -1052,15 +933,10 @@ class TestCachePoisoningRegression:
             result = pathway.resolve(mock_source)
 
             assert result.success is False
-            row = ScrapedPlaylistCache.query.filter_by(
-                playlist_id="pl_test123"
-            ).first()
+            row = ScrapedPlaylistCache.query.filter_by(playlist_id="pl_test123").first()
             assert row is None
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
     def test_mixed_embed_403_then_public_200_with_tracks_caches(
         self, mock_get, mock_source, db_app
     ):
@@ -1070,9 +946,7 @@ class TestCachePoisoningRegression:
 
         with db_app.app_context():
             embed_resp = Mock(status_code=403, text="")
-            page_resp = Mock(
-                status_code=200, text=LEGACY_URL_HTML
-            )
+            page_resp = Mock(status_code=200, text=LEGACY_URL_HTML)
             mock_get.side_effect = [embed_resp, page_resp]
 
             pathway = PublicScraperPathway()
@@ -1080,18 +954,11 @@ class TestCachePoisoningRegression:
 
             assert result.success is True
             assert len(result.track_uris) > 0
-            row = ScrapedPlaylistCache.query.filter_by(
-                playlist_id="pl_test123"
-            ).first()
+            row = ScrapedPlaylistCache.query.filter_by(playlist_id="pl_test123").first()
             assert row is not None
-            # ``track_count`` is no longer written by the scraper
-            # (issue #318); derive the count from ``track_uris``.
             assert len(row.track_uris) == len(result.track_uris)
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
     def test_mixed_embed_403_then_public_403_does_not_cache(
         self, mock_get, mock_source, db_app
     ):
@@ -1108,18 +975,11 @@ class TestCachePoisoningRegression:
             result = pathway.resolve(mock_source)
 
             assert result.success is False
-            row = ScrapedPlaylistCache.query.filter_by(
-                playlist_id="pl_test123"
-            ).first()
+            row = ScrapedPlaylistCache.query.filter_by(playlist_id="pl_test123").first()
             assert row is None
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
-    def test_confirmed_empty_still_caches(
-        self, mock_get, mock_source, db_app
-    ):
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
+    def test_confirmed_empty_still_caches(self, mock_get, mock_source, db_app):
         """A 200 response with no extractable tracks IS a confirmed
         empty playlist — cache it so we don't re-scrape repeatedly.
 
@@ -1129,19 +989,15 @@ class TestCachePoisoningRegression:
         from shuffify.models.db import ScrapedPlaylistCache
 
         with db_app.app_context():
-            mock_get.return_value = Mock(
-                status_code=200, text="<html></html>"
-            )
+            mock_get.return_value = Mock(status_code=200, text="<html></html>")
 
             pathway = PublicScraperPathway()
             result = pathway.resolve(mock_source)
 
             assert result.success is False
-            row = ScrapedPlaylistCache.query.filter_by(
-                playlist_id="pl_test123"
-            ).first()
+            row = ScrapedPlaylistCache.query.filter_by(playlist_id="pl_test123").first()
             assert row is not None
-            assert row.track_count == 0
+            assert len(row.track_uris) == 0
 
 
 # ======================================================================
@@ -1149,10 +1005,7 @@ class TestCachePoisoningRegression:
 # ======================================================================
 
 
-@patch(
-    "shuffify.services.source_resolver"
-    ".public_scraper_pathway._sleep_with_backoff"
-)
+@patch("shuffify.services.source_resolver.public_scraper_pathway._sleep_with_backoff")
 class TestRetryBackoff:
     """Retry behavior for transient scraper failures.
 
@@ -1165,10 +1018,7 @@ class TestRetryBackoff:
     Sleep is patched out class-wide so the suite stays fast.
     """
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
     def test_429_then_200_succeeds(
         self,
         mock_get,
@@ -1192,10 +1042,7 @@ class TestRetryBackoff:
             assert mock_get.call_count == 2
             assert mock_sleep.call_count == 1
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
     def test_all_429s_exhaust_attempts_no_cache(
         self,
         mock_get,
@@ -1208,24 +1055,17 @@ class TestRetryBackoff:
         from shuffify.models.db import ScrapedPlaylistCache
 
         with db_app.app_context():
-            mock_get.return_value = Mock(
-                status_code=429, text="", headers={}
-            )
+            mock_get.return_value = Mock(status_code=429, text="", headers={})
             pathway = PublicScraperPathway()
             result = pathway.resolve(mock_source)
 
             assert result.success is False
             # MAX_ATTEMPTS per pathway, two pathways tried.
             assert mock_get.call_count == 6
-            row = ScrapedPlaylistCache.query.filter_by(
-                playlist_id="pl_test123"
-            ).first()
+            row = ScrapedPlaylistCache.query.filter_by(playlist_id="pl_test123").first()
             assert row is None
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
     def test_403_short_circuits_no_retry(
         self,
         mock_get,
@@ -1240,9 +1080,7 @@ class TestRetryBackoff:
         from shuffify.models.db import ScrapedPlaylistCache
 
         with db_app.app_context():
-            mock_get.return_value = Mock(
-                status_code=403, text="", headers={}
-            )
+            mock_get.return_value = Mock(status_code=403, text="", headers={})
             pathway = PublicScraperPathway()
             result = pathway.resolve(mock_source)
 
@@ -1250,15 +1088,10 @@ class TestRetryBackoff:
             # One attempt per pathway, no retry sleeps.
             assert mock_get.call_count == 2
             assert mock_sleep.call_count == 0
-            row = ScrapedPlaylistCache.query.filter_by(
-                playlist_id="pl_test123"
-            ).first()
+            row = ScrapedPlaylistCache.query.filter_by(playlist_id="pl_test123").first()
             assert row is None
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
     def test_timeout_then_200_succeeds(
         self,
         mock_get,
@@ -1283,10 +1116,7 @@ class TestRetryBackoff:
             assert mock_get.call_count == 2
             assert mock_sleep.call_count == 1
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
     def test_200_zero_retries(
         self,
         mock_get,
@@ -1298,9 +1128,7 @@ class TestRetryBackoff:
         and zero sleeps. Retry logic must not add overhead to the
         common case."""
         with db_app.app_context():
-            mock_get.return_value = Mock(
-                status_code=200, text=LEGACY_URL_HTML
-            )
+            mock_get.return_value = Mock(status_code=200, text=LEGACY_URL_HTML)
             pathway = PublicScraperPathway()
             result = pathway.resolve(mock_source)
 
@@ -1308,10 +1136,7 @@ class TestRetryBackoff:
             assert mock_get.call_count == 1
             assert mock_sleep.call_count == 0
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
     def test_retry_after_header_honored(
         self,
         mock_get,
@@ -1370,19 +1195,12 @@ class TestRequestTimeoutConfig:
             db_app.config["SOURCE_RESOLVER_TIMEOUT"] = 25
             assert _get_request_timeout() == 25
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
-    def test_scrape_passes_configured_timeout(
-        self, mock_get, mock_source, db_app
-    ):
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
+    def test_scrape_passes_configured_timeout(self, mock_get, mock_source, db_app):
         """The configured timeout flows through to ``requests.get``."""
         with db_app.app_context():
             db_app.config["SOURCE_RESOLVER_TIMEOUT"] = 7
-            mock_get.return_value = Mock(
-                status_code=200, text="<html></html>"
-            )
+            mock_get.return_value = Mock(status_code=200, text="<html></html>")
 
             pathway = PublicScraperPathway()
             pathway.resolve(mock_source)
@@ -1395,18 +1213,12 @@ class TestSleepWithBackoff:
     """Direct tests for the backoff helper. Patches ``time.sleep`` so
     we can verify the computed delay without actually waiting."""
 
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.time.sleep")
     @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.time.sleep"
-    )
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.random.uniform",
+        "shuffify.services.source_resolver.public_scraper_pathway.random.uniform",
         return_value=0.0,
     )
-    def test_exponential_backoff_doubles_per_attempt(
-        self, _mock_rand, mock_sleep
-    ):
+    def test_exponential_backoff_doubles_per_attempt(self, _mock_rand, mock_sleep):
         from shuffify.services.source_resolver.public_scraper_pathway import (
             _sleep_with_backoff,
             BACKOFF_BASE,
@@ -1423,18 +1235,12 @@ class TestSleepWithBackoff:
             BACKOFF_BASE * 4,
         ]
 
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.time.sleep")
     @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.time.sleep"
-    )
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.random.uniform",
+        "shuffify.services.source_resolver.public_scraper_pathway.random.uniform",
         return_value=0.0,
     )
-    def test_retry_after_overrides_exponential(
-        self, _mock_rand, mock_sleep
-    ):
+    def test_retry_after_overrides_exponential(self, _mock_rand, mock_sleep):
         from shuffify.services.source_resolver.public_scraper_pathway import (
             _sleep_with_backoff,
         )
@@ -1442,13 +1248,9 @@ class TestSleepWithBackoff:
         _sleep_with_backoff(0, retry_after="5")
         assert mock_sleep.call_args.args[0] == 5.0
 
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.time.sleep")
     @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.time.sleep"
-    )
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.random.uniform",
+        "shuffify.services.source_resolver.public_scraper_pathway.random.uniform",
         return_value=0.0,
     )
     def test_unparseable_retry_after_falls_back_to_exponential(
@@ -1462,18 +1264,12 @@ class TestSleepWithBackoff:
         _sleep_with_backoff(1, retry_after="soon")
         assert mock_sleep.call_args.args[0] == BACKOFF_BASE * 2
 
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.time.sleep")
     @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.time.sleep"
-    )
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.random.uniform",
+        "shuffify.services.source_resolver.public_scraper_pathway.random.uniform",
         return_value=0.0,
     )
-    def test_max_backoff_caps_long_waits(
-        self, _mock_rand, mock_sleep
-    ):
+    def test_max_backoff_caps_long_waits(self, _mock_rand, mock_sleep):
         from shuffify.services.source_resolver.public_scraper_pathway import (
             _sleep_with_backoff,
             MAX_BACKOFF,
@@ -1517,10 +1313,7 @@ class TestScraperFailureModes:
             ),
             '<script>{"trackList": 42}</script>',  # wrong type
             '<script>{"trackList": null}</script>',
-            (
-                '<script id="__NEXT_DATA__" type="application/json">'
-                'null</script>'
-            ),
+            ('<script id="__NEXT_DATA__" type="application/json">null</script>'),
             "\x00\x01\x02 binary junk \xff",
         ]
         for html in garbage_inputs:
@@ -1546,9 +1339,7 @@ class TestScraperFailureModes:
 
     # -- Cache TTL boundary --------------------------------------------
 
-    def test_cache_hit_just_under_ttl_returns_cached(
-        self, mock_source, db_app
-    ):
+    def test_cache_hit_just_under_ttl_returns_cached(self, mock_source, db_app):
         """A cache row whose ``expires_at`` is still in the future
         (even by one second) must be served from cache without an
         HTTP call. Pairs with the existing
@@ -1556,7 +1347,8 @@ class TestScraperFailureModes:
         boundary on both sides."""
         from datetime import datetime, timedelta, timezone
         from shuffify.models.db import (
-            ScrapedPlaylistCache, db,
+            ScrapedPlaylistCache,
+            db,
         )
 
         with db_app.app_context():
@@ -1575,8 +1367,7 @@ class TestScraperFailureModes:
             db.session.commit()
 
             with patch(
-                "shuffify.services.source_resolver"
-                ".public_scraper_pathway.requests.get"
+                "shuffify.services.source_resolver.public_scraper_pathway.requests.get"
             ) as mock_get:
                 pathway = PublicScraperPathway()
                 result = pathway.resolve(mock_source)
@@ -1590,10 +1381,7 @@ class TestScraperFailureModes:
 
     # -- Concurrent cache write idempotency ----------------------------
 
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
+    @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
     def test_set_cached_is_idempotent_for_same_playlist(
         self, mock_get, mock_source, db_app
     ):
@@ -1618,9 +1406,7 @@ class TestScraperFailureModes:
                 pathway="public_page",
             )
 
-            rows = ScrapedPlaylistCache.query.filter_by(
-                playlist_id="pl_test123"
-            ).all()
+            rows = ScrapedPlaylistCache.query.filter_by(playlist_id="pl_test123").all()
             assert len(rows) == 1
             assert rows[0].scrape_pathway == "public_page"
             assert rows[0].track_uris == [
@@ -1630,29 +1416,31 @@ class TestScraperFailureModes:
 
     # -- Commit-failure rollback (L2) ----------------------------------
 
-    def test_set_cached_rolls_back_on_commit_failure(
-        self, db_app
-    ):
+    def test_set_cached_rolls_back_on_commit_failure(self, db_app):
         """If ``db.session.commit`` raises, ``_set_cached`` must
         catch the exception, roll back, and leave the session in
         a state that subsequent operations can use. Without the
         rollback, SQLAlchemy holds the failed transaction and
         every later query raises ``PendingRollbackError``."""
         from shuffify.models.db import (
-            ScrapedPlaylistCache, db,
+            ScrapedPlaylistCache,
+            db,
         )
 
         with db_app.app_context():
             real_commit = db.session.commit
-            with patch.object(
-                db.session,
-                "commit",
-                side_effect=Exception("boom"),
-            ) as mock_commit, patch.object(
-                db.session,
-                "rollback",
-                wraps=db.session.rollback,
-            ) as mock_rollback:
+            with (
+                patch.object(
+                    db.session,
+                    "commit",
+                    side_effect=Exception("boom"),
+                ) as mock_commit,
+                patch.object(
+                    db.session,
+                    "rollback",
+                    wraps=db.session.rollback,
+                ) as mock_rollback,
+            ):
                 PublicScraperPathway._set_cached(
                     "pl_test123",
                     ["spotify:track:aaaaaaaaaaaaaaaaaaaaaa"],
@@ -1670,44 +1458,4 @@ class TestScraperFailureModes:
                 ["spotify:track:dddddddddddddddddddddd"],
                 pathway="embed",
             )
-            assert (
-                ScrapedPlaylistCache.query.count()
-                == count_before + 1
-            )
-
-    # -- L1: track_count is no longer written for new rows -------------
-
-    @patch(
-        "shuffify.services.source_resolver"
-        ".public_scraper_pathway.requests.get"
-    )
-    def test_set_cached_does_not_write_track_count(
-        self, mock_get, mock_source, db_app
-    ):
-        """``track_count`` is dead — no reader anywhere — so the
-        scraper no longer populates it. The column defaults to 0
-        at the schema level, which is all callers can observe.
-
-        Pinning this lets a future cleanup PR safely drop the column
-        via Alembic without surprising anyone."""
-        from shuffify.models.db import ScrapedPlaylistCache
-
-        with db_app.app_context():
-            mock_get.return_value = Mock(
-                status_code=200,
-                text=NEXT_DATA_TRACKS_ITEMS_HTML,
-            )
-
-            pathway = PublicScraperPathway()
-            result = pathway.resolve(mock_source)
-            assert result.success is True
-
-            row = ScrapedPlaylistCache.query.filter_by(
-                playlist_id="pl_test123"
-            ).first()
-            assert row is not None
-            # Column defaults to 0 since the constructor no
-            # longer sets it. The actual count lives on
-            # ``len(row.track_uris)``.
-            assert row.track_count == 0
-            assert len(row.track_uris) == 3
+            assert ScrapedPlaylistCache.query.count() == count_before + 1

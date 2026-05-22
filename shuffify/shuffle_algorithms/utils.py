@@ -21,9 +21,7 @@ def extract_uris(tracks: List[Dict[str, Any]]) -> List[str]:
     return [track["uri"] for track in tracks if track.get("uri")]
 
 
-def split_keep_first(
-    uris: List[str], keep_first: int
-) -> Tuple[List[str], List[str]]:
+def split_keep_first(uris: List[str], keep_first: int) -> Tuple[List[str], List[str]]:
     """
     Split a URI list into kept (pinned) and shuffleable portions.
 
@@ -70,10 +68,7 @@ def split_locked_tracks(
                 validated[pos] = uri
                 locked_indices.add(pos)
 
-    unlocked = [
-        t for i, t in enumerate(tracks)
-        if i not in locked_indices
-    ]
+    unlocked = [t for i, t in enumerate(tracks) if i not in locked_indices]
     return validated, unlocked
 
 
@@ -93,6 +88,9 @@ def reassemble_with_locks(
 
     Returns:
         Complete URI list with locks in place.
+
+    Raises:
+        ValueError: If shuffled_uris exceed available unlocked slots.
     """
     if not locked_positions:
         return shuffled_uris
@@ -104,6 +102,15 @@ def reassemble_with_locks(
         if 0 <= pos < total_length:
             result[pos] = uri
 
+    available_slots = sum(1 for r in result if r is None)
+    if len(shuffled_uris) > available_slots:
+        raise ValueError(
+            f"reassemble_with_locks: {len(shuffled_uris)} URIs "
+            f"exceed {available_slots} available slots "
+            f"(total_length={total_length}, "
+            f"locked={total_length - available_slots})"
+        )
+
     unlocked_idx = 0
     for i in range(total_length):
         if result[i] is None:
@@ -114,9 +121,7 @@ def reassemble_with_locks(
     return [u for u in result if u is not None]
 
 
-def split_into_sections(
-    items: List[str], section_count: int
-) -> List[List[str]]:
+def split_into_sections(items: List[str], section_count: int) -> List[List[str]]:
     """
     Divide a list into N sections of roughly equal size.
 

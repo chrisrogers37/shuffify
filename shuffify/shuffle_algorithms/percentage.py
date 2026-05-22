@@ -41,7 +41,7 @@ class PercentageShuffle(ShuffleAlgorithm):
         self,
         tracks: List[Dict[str, Any]],
         features: Optional[Dict[str, Dict[str, Any]]] = None,
-        **kwargs
+        **kwargs,
     ) -> List[str]:
         """
         Shuffle a portion of the playlist while keeping the rest in order.
@@ -58,6 +58,19 @@ class PercentageShuffle(ShuffleAlgorithm):
         """
         shuffle_percentage = kwargs.get("shuffle_percentage", 50.0)
         shuffle_location = kwargs.get("shuffle_location", "front")
+
+        if not isinstance(shuffle_percentage, (int, float)):
+            raise ValueError(
+                f"shuffle_percentage must be numeric, got {type(shuffle_percentage).__name__}"
+            )
+        if not 0.0 <= shuffle_percentage <= 100.0:
+            raise ValueError(
+                f"shuffle_percentage must be between 0 and 100, got {shuffle_percentage}"
+            )
+        if shuffle_location not in ("front", "back"):
+            raise ValueError(
+                f"shuffle_location must be 'front' or 'back', got {shuffle_location!r}"
+            )
 
         uris = extract_uris(tracks)
 

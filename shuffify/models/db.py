@@ -41,9 +41,7 @@ class User(db.Model):
     __tablename__ = "users"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    spotify_id = db.Column(
-        db.String(255), unique=True, nullable=False, index=True
-    )
+    spotify_id = db.Column(db.String(255), unique=True, nullable=False, index=True)
     display_name = db.Column(db.String(255), nullable=True)
     email = db.Column(db.String(255), nullable=True)
     profile_image_url = db.Column(db.String(1024), nullable=True)
@@ -54,14 +52,10 @@ class User(db.Model):
 
     # Login tracking
     last_login_at = db.Column(db.DateTime, nullable=True)
-    login_count = db.Column(
-        db.Integer, nullable=False, default=0
-    )
+    login_count = db.Column(db.Integer, nullable=False, default=0)
 
     # Account status
-    is_active = db.Column(
-        db.Boolean, nullable=False, default=True
-    )
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
 
     # Extended Spotify profile fields
     country = db.Column(db.String(10), nullable=True)
@@ -123,25 +117,15 @@ class User(db.Model):
             "email": self.email,
             "profile_image_url": self.profile_image_url,
             "last_login_at": (
-                self.last_login_at.isoformat()
-                if self.last_login_at
-                else None
+                self.last_login_at.isoformat() if self.last_login_at else None
             ),
             "login_count": self.login_count,
             "is_active": self.is_active,
             "country": self.country,
             "spotify_product": self.spotify_product,
             "spotify_uri": self.spotify_uri,
-            "created_at": (
-                self.created_at.isoformat()
-                if self.created_at
-                else None
-            ),
-            "updated_at": (
-                self.updated_at.isoformat()
-                if self.updated_at
-                else None
-            ),
+            "created_at": (self.created_at.isoformat() if self.created_at else None),
+            "updated_at": (self.updated_at.isoformat() if self.updated_at else None),
         }
 
     def __repr__(self) -> str:
@@ -158,9 +142,7 @@ class UserSettings(db.Model):
 
     __tablename__ = "user_settings"
 
-    id = db.Column(
-        db.Integer, primary_key=True, autoincrement=True
-    )
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(
         db.Integer,
         db.ForeignKey("users.id"),
@@ -170,33 +152,19 @@ class UserSettings(db.Model):
     )
 
     # Shuffle defaults
-    default_algorithm = db.Column(
-        db.String(64), nullable=True
-    )
-    default_algorithm_params = db.Column(
-        db.JSON, nullable=True
-    )
+    default_algorithm = db.Column(db.String(64), nullable=True)
+    default_algorithm_params = db.Column(db.JSON, nullable=True)
 
     # UI preferences
-    theme = db.Column(
-        db.String(10), nullable=False, default="system"
-    )
+    theme = db.Column(db.String(10), nullable=False, default="system")
 
     # Feature toggles
-    notifications_enabled = db.Column(
-        db.Boolean, nullable=False, default=False
-    )
-    auto_snapshot_enabled = db.Column(
-        db.Boolean, nullable=False, default=True
-    )
-    max_snapshots_per_playlist = db.Column(
-        db.Integer, nullable=False, default=10
-    )
+    notifications_enabled = db.Column(db.Boolean, nullable=False, default=False)
+    auto_snapshot_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    max_snapshots_per_playlist = db.Column(db.Integer, nullable=False, default=10)
 
     # Dashboard preferences
-    dashboard_show_recent_activity = db.Column(
-        db.Boolean, nullable=False, default=True
-    )
+    dashboard_show_recent_activity = db.Column(db.Boolean, nullable=False, default=True)
 
     # Extensible JSON field for future preferences
     extra = db.Column(db.JSON, nullable=True)
@@ -226,8 +194,7 @@ class UserSettings(db.Model):
             name="ck_user_settings_theme",
         ),
         db.CheckConstraint(
-            "max_snapshots_per_playlist >= 1 "
-            "AND max_snapshots_per_playlist <= 50",
+            "max_snapshots_per_playlist >= 1 AND max_snapshots_per_playlist <= 50",
             name="ck_user_settings_max_snapshots",
         ),
     )
@@ -238,38 +205,19 @@ class UserSettings(db.Model):
             "id": self.id,
             "user_id": self.user_id,
             "default_algorithm": self.default_algorithm,
-            "default_algorithm_params": (
-                self.default_algorithm_params or {}
-            ),
+            "default_algorithm_params": (self.default_algorithm_params or {}),
             "theme": self.theme,
             "notifications_enabled": self.notifications_enabled,
-            "auto_snapshot_enabled": (
-                self.auto_snapshot_enabled
-            ),
-            "max_snapshots_per_playlist": (
-                self.max_snapshots_per_playlist
-            ),
-            "dashboard_show_recent_activity": (
-                self.dashboard_show_recent_activity
-            ),
+            "auto_snapshot_enabled": (self.auto_snapshot_enabled),
+            "max_snapshots_per_playlist": (self.max_snapshots_per_playlist),
+            "dashboard_show_recent_activity": (self.dashboard_show_recent_activity),
             "extra": self.extra or {},
-            "created_at": (
-                self.created_at.isoformat()
-                if self.created_at
-                else None
-            ),
-            "updated_at": (
-                self.updated_at.isoformat()
-                if self.updated_at
-                else None
-            ),
+            "created_at": (self.created_at.isoformat() if self.created_at else None),
+            "updated_at": (self.updated_at.isoformat() if self.updated_at else None),
         }
 
     def __repr__(self) -> str:
-        return (
-            f"<UserSettings user_id={self.user_id} "
-            f"theme={self.theme}>"
-        )
+        return f"<UserSettings user_id={self.user_id} theme={self.theme}>"
 
 
 class WorkshopSession(db.Model):
@@ -308,11 +256,7 @@ class WorkshopSession(db.Model):
     user = db.relationship("User", back_populates="workshop_sessions")
 
     # Composite index for efficient lookup
-    __table_args__ = (
-        db.Index(
-            "ix_workshop_user_playlist", "user_id", "playlist_id"
-        ),
-    )
+    __table_args__ = (db.Index("ix_workshop_user_playlist", "user_id", "playlist_id"),)
 
     @property
     def track_uris(self) -> List[str]:
@@ -323,8 +267,7 @@ class WorkshopSession(db.Model):
             return json.loads(self.track_uris_json)
         except (json.JSONDecodeError, TypeError):
             logger.warning(
-                f"Failed to decode track_uris_json for "
-                f"WorkshopSession {self.id}"
+                f"Failed to decode track_uris_json for WorkshopSession {self.id}"
             )
             return []
 
@@ -342,16 +285,8 @@ class WorkshopSession(db.Model):
             "session_name": self.session_name,
             "track_uris": self.track_uris,
             "track_count": len(self.track_uris),
-            "created_at": (
-                self.created_at.isoformat()
-                if self.created_at
-                else None
-            ),
-            "updated_at": (
-                self.updated_at.isoformat()
-                if self.updated_at
-                else None
-            ),
+            "created_at": (self.created_at.isoformat() if self.created_at else None),
+            "updated_at": (self.updated_at.isoformat() if self.updated_at else None),
         }
 
     def __repr__(self) -> str:
@@ -377,14 +312,10 @@ class UpstreamSource(db.Model):
         nullable=False,
         index=True,
     )
-    target_playlist_id = db.Column(
-        db.String(255), nullable=False, index=True
-    )
+    target_playlist_id = db.Column(db.String(255), nullable=False, index=True)
     source_playlist_id = db.Column(db.String(255), nullable=True)
     source_url = db.Column(db.String(1024), nullable=True)
-    source_type = db.Column(
-        db.String(20), nullable=False, default="external"
-    )
+    source_type = db.Column(db.String(20), nullable=False, default="external")
     source_name = db.Column(db.String(255), nullable=True)
     search_query = db.Column(db.String(500), nullable=True)
     last_resolved_at = db.Column(db.DateTime, nullable=True)
@@ -393,9 +324,7 @@ class UpstreamSource(db.Model):
         db.String(20), nullable=True
     )  # "success", "partial", "failed"
     last_track_count = db.Column(db.Integer, nullable=True)
-    raid_count = db.Column(
-        db.Integer, nullable=False, default=5
-    )
+    raid_count = db.Column(db.Integer, nullable=False, default=5)
     created_at = db.Column(
         db.DateTime,
         nullable=False,
@@ -412,8 +341,7 @@ class UpstreamSource(db.Model):
             "target_playlist_id",
         ),
         db.CheckConstraint(
-            "source_type IN ('own', 'external', "
-            "'search_query')",
+            "source_type IN ('own', 'external', 'search_query')",
             name="ck_upstream_source_type",
         ),
         db.CheckConstraint(
@@ -434,19 +362,13 @@ class UpstreamSource(db.Model):
             "source_name": self.source_name,
             "search_query": self.search_query,
             "last_resolved_at": (
-                self.last_resolved_at.isoformat()
-                if self.last_resolved_at
-                else None
+                self.last_resolved_at.isoformat() if self.last_resolved_at else None
             ),
             "last_resolve_pathway": self.last_resolve_pathway,
             "last_resolve_status": self.last_resolve_status,
             "last_track_count": self.last_track_count,
             "raid_count": self.raid_count,
-            "created_at": (
-                self.created_at.isoformat()
-                if self.created_at
-                else None
-            ),
+            "created_at": (self.created_at.isoformat() if self.created_at else None),
         }
 
     def __repr__(self) -> str:
@@ -476,35 +398,23 @@ class Schedule(db.Model):
         nullable=False,
         index=True,
     )
-    job_type = db.Column(
-        db.String(20), nullable=False
-    )
-    target_playlist_id = db.Column(
-        db.String(64), nullable=False
-    )
-    target_playlist_name = db.Column(
-        db.String(255), nullable=True
-    )
-    source_playlist_ids = db.Column(
-        db.JSON, nullable=True, default=list
-    )
-    algorithm_name = db.Column(
-        db.String(64), nullable=True
-    )
-    algorithm_params = db.Column(
-        db.JSON, nullable=True, default=dict
-    )
+    job_type = db.Column(db.String(20), nullable=False)
+    target_playlist_id = db.Column(db.String(64), nullable=False)
+    target_playlist_name = db.Column(db.String(255), nullable=True)
+    source_playlist_ids = db.Column(db.JSON, nullable=True, default=list)
+    algorithm_name = db.Column(db.String(64), nullable=True)
+    algorithm_params = db.Column(db.JSON, nullable=True, default=dict)
     schedule_type = db.Column(
-        db.String(10), nullable=False,
+        db.String(10),
+        nullable=False,
         default=ScheduleType.INTERVAL,
     )
     schedule_value = db.Column(
-        db.String(100), nullable=False,
+        db.String(100),
+        nullable=False,
         default=IntervalValue.DAILY,
     )
-    is_enabled = db.Column(
-        db.Boolean, nullable=False, default=True
-    )
+    is_enabled = db.Column(db.Boolean, nullable=False, default=True)
     last_run_at = db.Column(db.DateTime, nullable=True)
     last_status = db.Column(db.String(20), nullable=True)
     last_error = db.Column(db.Text, nullable=True)
@@ -540,23 +450,11 @@ class Schedule(db.Model):
             "schedule_type": self.schedule_type,
             "schedule_value": self.schedule_value,
             "is_enabled": self.is_enabled,
-            "last_run_at": (
-                self.last_run_at.isoformat()
-                if self.last_run_at
-                else None
-            ),
+            "last_run_at": (self.last_run_at.isoformat() if self.last_run_at else None),
             "last_status": self.last_status,
             "last_error": self.last_error,
-            "created_at": (
-                self.created_at.isoformat()
-                if self.created_at
-                else None
-            ),
-            "updated_at": (
-                self.updated_at.isoformat()
-                if self.updated_at
-                else None
-            ),
+            "created_at": (self.created_at.isoformat() if self.created_at else None),
+            "updated_at": (self.updated_at.isoformat() if self.updated_at else None),
         }
 
     __table_args__ = (
@@ -607,12 +505,8 @@ class JobExecution(db.Model):
         default=lambda: datetime.now(timezone.utc),
     )
     completed_at = db.Column(db.DateTime, nullable=True)
-    status = db.Column(
-        db.String(20), nullable=False, default="running"
-    )
-    tracks_added = db.Column(
-        db.Integer, nullable=True, default=0
-    )
+    status = db.Column(db.String(20), nullable=False, default="running")
+    tracks_added = db.Column(db.Integer, nullable=True, default=0)
     tracks_total = db.Column(db.Integer, nullable=True)
     error_message = db.Column(db.Text, nullable=True)
 
@@ -627,15 +521,9 @@ class JobExecution(db.Model):
         return {
             "id": self.id,
             "schedule_id": self.schedule_id,
-            "started_at": (
-                self.started_at.isoformat()
-                if self.started_at
-                else None
-            ),
+            "started_at": (self.started_at.isoformat() if self.started_at else None),
             "completed_at": (
-                self.completed_at.isoformat()
-                if self.completed_at
-                else None
+                self.completed_at.isoformat() if self.completed_at else None
             ),
             "status": self.status,
             "tracks_added": self.tracks_added,
@@ -680,14 +568,11 @@ class LoginHistory(db.Model):
     login_type = db.Column(db.String(20), nullable=False)
 
     # Relationships
-    user = db.relationship(
-        "User", back_populates="login_history"
-    )
+    user = db.relationship("User", back_populates="login_history")
 
     __table_args__ = (
         db.CheckConstraint(
-            "login_type IN ('oauth_initial', "
-            "'oauth_refresh', 'session_resume')",
+            "login_type IN ('oauth_initial', 'oauth_refresh', 'session_resume')",
             name="ck_login_history_type",
         ),
     )
@@ -698,14 +583,10 @@ class LoginHistory(db.Model):
             "id": self.id,
             "user_id": self.user_id,
             "logged_in_at": (
-                self.logged_in_at.isoformat()
-                if self.logged_in_at
-                else None
+                self.logged_in_at.isoformat() if self.logged_in_at else None
             ),
             "logged_out_at": (
-                self.logged_out_at.isoformat()
-                if self.logged_out_at
-                else None
+                self.logged_out_at.isoformat() if self.logged_out_at else None
             ),
             "ip_address": self.ip_address,
             "user_agent": self.user_agent,
@@ -732,33 +613,23 @@ class PlaylistSnapshot(db.Model):
 
     __tablename__ = "playlist_snapshots"
 
-    id = db.Column(
-        db.Integer, primary_key=True, autoincrement=True
-    )
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(
         db.Integer,
         db.ForeignKey("users.id"),
         nullable=False,
         index=True,
     )
-    playlist_id = db.Column(
-        db.String(255), nullable=False, index=True
-    )
-    playlist_name = db.Column(
-        db.String(255), nullable=False
-    )
+    playlist_id = db.Column(db.String(255), nullable=False, index=True)
+    playlist_name = db.Column(db.String(255), nullable=False)
     track_uris_json = db.Column(db.Text, nullable=False)
-    track_count = db.Column(
-        db.Integer, nullable=False, default=0
-    )
+    track_count = db.Column(db.Integer, nullable=False, default=0)
     snapshot_type = db.Column(
         db.String(30),
         nullable=False,
         default=SnapshotType.MANUAL,
     )
-    trigger_description = db.Column(
-        db.String(500), nullable=True
-    )
+    trigger_description = db.Column(db.String(500), nullable=True)
     created_at = db.Column(
         db.DateTime,
         nullable=False,
@@ -768,9 +639,7 @@ class PlaylistSnapshot(db.Model):
     # Relationships
     user = db.relationship(
         "User",
-        backref=db.backref(
-            "playlist_snapshots", lazy="dynamic"
-        ),
+        backref=db.backref("playlist_snapshots", lazy="dynamic"),
     )
 
     __table_args__ = (
@@ -799,8 +668,7 @@ class PlaylistSnapshot(db.Model):
             return json.loads(self.track_uris_json)
         except (json.JSONDecodeError, TypeError):
             logger.warning(
-                f"Failed to decode track_uris_json for "
-                f"PlaylistSnapshot {self.id}"
+                f"Failed to decode track_uris_json for PlaylistSnapshot {self.id}"
             )
             return []
 
@@ -820,11 +688,7 @@ class PlaylistSnapshot(db.Model):
             "track_count": self.track_count,
             "snapshot_type": self.snapshot_type,
             "trigger_description": self.trigger_description,
-            "created_at": (
-                self.created_at.isoformat()
-                if self.created_at
-                else None
-            ),
+            "created_at": (self.created_at.isoformat() if self.created_at else None),
         }
 
     def __repr__(self) -> str:
@@ -848,27 +712,17 @@ class ActivityLog(db.Model):
 
     __tablename__ = "activity_log"
 
-    id = db.Column(
-        db.Integer, primary_key=True, autoincrement=True
-    )
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(
         db.Integer,
         db.ForeignKey("users.id"),
         nullable=False,
         index=True,
     )
-    activity_type = db.Column(
-        db.String(50), nullable=False, index=True
-    )
-    description = db.Column(
-        db.String(500), nullable=False
-    )
-    playlist_id = db.Column(
-        db.String(255), nullable=True
-    )
-    playlist_name = db.Column(
-        db.String(255), nullable=True
-    )
+    activity_type = db.Column(db.String(50), nullable=False, index=True)
+    description = db.Column(db.String(500), nullable=False)
+    playlist_id = db.Column(db.String(255), nullable=True)
+    playlist_name = db.Column(db.String(255), nullable=True)
     metadata_json = db.Column(db.JSON, nullable=True)
     created_at = db.Column(
         db.DateTime,
@@ -906,19 +760,11 @@ class ActivityLog(db.Model):
             "playlist_id": self.playlist_id,
             "playlist_name": self.playlist_name,
             "metadata": self.metadata_json,
-            "created_at": (
-                self.created_at.isoformat()
-                if self.created_at
-                else None
-            ),
+            "created_at": (self.created_at.isoformat() if self.created_at else None),
         }
 
     def __repr__(self) -> str:
-        return (
-            f"<ActivityLog {self.id}: "
-            f"{self.activity_type} "
-            f"by user {self.user_id}>"
-        )
+        return f"<ActivityLog {self.id}: {self.activity_type} by user {self.user_id}>"
 
 
 class PlaylistPair(db.Model):
@@ -931,30 +777,18 @@ class PlaylistPair(db.Model):
 
     __tablename__ = "playlist_pairs"
 
-    id = db.Column(
-        db.Integer, primary_key=True, autoincrement=True
-    )
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(
         db.Integer,
         db.ForeignKey("users.id"),
         nullable=False,
         index=True,
     )
-    production_playlist_id = db.Column(
-        db.String(255), nullable=False
-    )
-    production_playlist_name = db.Column(
-        db.String(255), nullable=True
-    )
-    archive_playlist_id = db.Column(
-        db.String(255), nullable=False
-    )
-    archive_playlist_name = db.Column(
-        db.String(255), nullable=True
-    )
-    auto_archive_on_remove = db.Column(
-        db.Boolean, nullable=False, default=True
-    )
+    production_playlist_id = db.Column(db.String(255), nullable=False)
+    production_playlist_name = db.Column(db.String(255), nullable=True)
+    archive_playlist_id = db.Column(db.String(255), nullable=False)
+    archive_playlist_name = db.Column(db.String(255), nullable=True)
+    auto_archive_on_remove = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(
         db.DateTime,
         nullable=False,
@@ -968,9 +802,7 @@ class PlaylistPair(db.Model):
     )
 
     # Relationships
-    user = db.relationship(
-        "User", back_populates="playlist_pairs"
-    )
+    user = db.relationship("User", back_populates="playlist_pairs")
 
     # Unique constraint: one pair per user per production playlist
     __table_args__ = (
@@ -986,29 +818,13 @@ class PlaylistPair(db.Model):
         return {
             "id": self.id,
             "user_id": self.user_id,
-            "production_playlist_id": (
-                self.production_playlist_id
-            ),
-            "production_playlist_name": (
-                self.production_playlist_name
-            ),
+            "production_playlist_id": (self.production_playlist_id),
+            "production_playlist_name": (self.production_playlist_name),
             "archive_playlist_id": self.archive_playlist_id,
-            "archive_playlist_name": (
-                self.archive_playlist_name
-            ),
-            "auto_archive_on_remove": (
-                self.auto_archive_on_remove
-            ),
-            "created_at": (
-                self.created_at.isoformat()
-                if self.created_at
-                else None
-            ),
-            "updated_at": (
-                self.updated_at.isoformat()
-                if self.updated_at
-                else None
-            ),
+            "archive_playlist_name": (self.archive_playlist_name),
+            "auto_archive_on_remove": (self.auto_archive_on_remove),
+            "created_at": (self.created_at.isoformat() if self.created_at else None),
+            "updated_at": (self.updated_at.isoformat() if self.updated_at else None),
         }
 
     def __repr__(self) -> str:
@@ -1030,33 +846,19 @@ class RaidPlaylistLink(db.Model):
 
     __tablename__ = "raid_playlist_links"
 
-    id = db.Column(
-        db.Integer, primary_key=True, autoincrement=True
-    )
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(
         db.Integer,
         db.ForeignKey("users.id"),
         nullable=False,
         index=True,
     )
-    target_playlist_id = db.Column(
-        db.String(255), nullable=False
-    )
-    target_playlist_name = db.Column(
-        db.String(255), nullable=True
-    )
-    raid_playlist_id = db.Column(
-        db.String(255), nullable=False
-    )
-    raid_playlist_name = db.Column(
-        db.String(255), nullable=True
-    )
-    drip_count = db.Column(
-        db.Integer, nullable=False, default=3
-    )
-    drip_enabled = db.Column(
-        db.Boolean, nullable=False, default=False
-    )
+    target_playlist_id = db.Column(db.String(255), nullable=False)
+    target_playlist_name = db.Column(db.String(255), nullable=True)
+    raid_playlist_id = db.Column(db.String(255), nullable=False)
+    raid_playlist_name = db.Column(db.String(255), nullable=True)
+    drip_count = db.Column(db.Integer, nullable=False, default=3)
+    drip_enabled = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(
         db.DateTime,
         nullable=False,
@@ -1070,9 +872,7 @@ class RaidPlaylistLink(db.Model):
     )
 
     # Relationships
-    user = db.relationship(
-        "User", back_populates="raid_playlist_links"
-    )
+    user = db.relationship("User", back_populates="raid_playlist_links")
 
     __table_args__ = (
         db.UniqueConstraint(
@@ -1091,28 +891,14 @@ class RaidPlaylistLink(db.Model):
         return {
             "id": self.id,
             "user_id": self.user_id,
-            "target_playlist_id": (
-                self.target_playlist_id
-            ),
-            "target_playlist_name": (
-                self.target_playlist_name
-            ),
+            "target_playlist_id": (self.target_playlist_id),
+            "target_playlist_name": (self.target_playlist_name),
             "raid_playlist_id": self.raid_playlist_id,
-            "raid_playlist_name": (
-                self.raid_playlist_name
-            ),
+            "raid_playlist_name": (self.raid_playlist_name),
             "drip_count": self.drip_count,
             "drip_enabled": self.drip_enabled,
-            "created_at": (
-                self.created_at.isoformat()
-                if self.created_at
-                else None
-            ),
-            "updated_at": (
-                self.updated_at.isoformat()
-                if self.updated_at
-                else None
-            ),
+            "created_at": (self.created_at.isoformat() if self.created_at else None),
+            "updated_at": (self.updated_at.isoformat() if self.updated_at else None),
         }
 
     def __repr__(self) -> str:
@@ -1134,27 +920,17 @@ class PlaylistPreference(db.Model):
 
     __tablename__ = "playlist_preferences"
 
-    id = db.Column(
-        db.Integer, primary_key=True, autoincrement=True
-    )
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(
         db.Integer,
         db.ForeignKey("users.id"),
         nullable=False,
         index=True,
     )
-    spotify_playlist_id = db.Column(
-        db.String(255), nullable=False
-    )
-    sort_order = db.Column(
-        db.Integer, nullable=False, default=0
-    )
-    is_hidden = db.Column(
-        db.Boolean, nullable=False, default=False
-    )
-    is_pinned = db.Column(
-        db.Boolean, nullable=False, default=False
-    )
+    spotify_playlist_id = db.Column(db.String(255), nullable=False)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    is_hidden = db.Column(db.Boolean, nullable=False, default=False)
+    is_pinned = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(
         db.DateTime,
         nullable=False,
@@ -1193,16 +969,8 @@ class PlaylistPreference(db.Model):
             "sort_order": self.sort_order,
             "is_hidden": self.is_hidden,
             "is_pinned": self.is_pinned,
-            "created_at": (
-                self.created_at.isoformat()
-                if self.created_at
-                else None
-            ),
-            "updated_at": (
-                self.updated_at.isoformat()
-                if self.updated_at
-                else None
-            ),
+            "created_at": (self.created_at.isoformat() if self.created_at else None),
+            "updated_at": (self.updated_at.isoformat() if self.updated_at else None),
         }
 
     def __repr__(self) -> str:
@@ -1232,24 +1000,16 @@ class TrackLock(db.Model):
 
     STANDARD_EXPIRY_DAYS = 30
 
-    id = db.Column(
-        db.Integer, primary_key=True, autoincrement=True
-    )
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(
         db.Integer,
         db.ForeignKey("users.id"),
         nullable=False,
         index=True,
     )
-    spotify_playlist_id = db.Column(
-        db.String(255), nullable=False
-    )
-    track_uri = db.Column(
-        db.String(255), nullable=False
-    )
-    position = db.Column(
-        db.Integer, nullable=False
-    )
+    spotify_playlist_id = db.Column(db.String(255), nullable=False)
+    track_uri = db.Column(db.String(255), nullable=False)
+    position = db.Column(db.Integer, nullable=False)
     lock_tier = db.Column(
         db.String(20),
         nullable=False,
@@ -1260,9 +1020,7 @@ class TrackLock(db.Model):
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
-    expires_at = db.Column(
-        db.DateTime, nullable=True
-    )
+    expires_at = db.Column(db.DateTime, nullable=True)
 
     user = db.relationship(
         "User",
@@ -1313,16 +1071,8 @@ class TrackLock(db.Model):
             "track_uri": self.track_uri,
             "position": self.position,
             "lock_tier": self.lock_tier,
-            "created_at": (
-                self.created_at.isoformat()
-                if self.created_at
-                else None
-            ),
-            "expires_at": (
-                self.expires_at.isoformat()
-                if self.expires_at
-                else None
-            ),
+            "created_at": (self.created_at.isoformat() if self.created_at else None),
+            "expires_at": (self.expires_at.isoformat() if self.expires_at else None),
         }
 
     def __repr__(self) -> str:
@@ -1346,41 +1096,21 @@ class PendingRaidTrack(db.Model):
 
     __tablename__ = "pending_raid_tracks"
 
-    id = db.Column(
-        db.Integer, primary_key=True, autoincrement=True
-    )
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(
         db.Integer,
         db.ForeignKey("users.id"),
         nullable=False,
     )
-    target_playlist_id = db.Column(
-        db.String(255), nullable=False
-    )
-    track_uri = db.Column(
-        db.String(255), nullable=False
-    )
-    track_name = db.Column(
-        db.String(500), nullable=False
-    )
-    track_artists = db.Column(
-        db.String(1000), nullable=True
-    )
-    track_album = db.Column(
-        db.String(500), nullable=True
-    )
-    track_image_url = db.Column(
-        db.String(1024), nullable=True
-    )
-    track_duration_ms = db.Column(
-        db.Integer, nullable=True
-    )
-    source_playlist_id = db.Column(
-        db.String(255), nullable=True
-    )
-    source_name = db.Column(
-        db.String(255), nullable=True
-    )
+    target_playlist_id = db.Column(db.String(255), nullable=False)
+    track_uri = db.Column(db.String(255), nullable=False)
+    track_name = db.Column(db.String(500), nullable=False)
+    track_artists = db.Column(db.String(1000), nullable=True)
+    track_album = db.Column(db.String(500), nullable=True)
+    track_image_url = db.Column(db.String(1024), nullable=True)
+    track_duration_ms = db.Column(db.Integer, nullable=True)
+    source_playlist_id = db.Column(db.String(255), nullable=True)
+    source_name = db.Column(db.String(255), nullable=True)
     status = db.Column(
         db.String(20),
         nullable=False,
@@ -1391,9 +1121,7 @@ class PendingRaidTrack(db.Model):
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
-    resolved_at = db.Column(
-        db.DateTime, nullable=True
-    )
+    resolved_at = db.Column(db.DateTime, nullable=True)
 
     # Relationships
     user = db.relationship(
@@ -1419,8 +1147,7 @@ class PendingRaidTrack(db.Model):
             "status",
         ),
         db.CheckConstraint(
-            "status IN ('pending', 'promoted', "
-            "'dismissed')",
+            "status IN ('pending', 'promoted', 'dismissed')",
             name="ck_pending_raid_status",
         ),
     )
@@ -1440,24 +1167,12 @@ class PendingRaidTrack(db.Model):
             "source_playlist_id": self.source_playlist_id,
             "source_name": self.source_name,
             "status": self.status,
-            "created_at": (
-                self.created_at.isoformat()
-                if self.created_at
-                else None
-            ),
-            "resolved_at": (
-                self.resolved_at.isoformat()
-                if self.resolved_at
-                else None
-            ),
+            "created_at": (self.created_at.isoformat() if self.created_at else None),
+            "resolved_at": (self.resolved_at.isoformat() if self.resolved_at else None),
         }
 
     def __repr__(self) -> str:
-        return (
-            f"<PendingRaidTrack {self.id}: "
-            f"'{self.track_name}' "
-            f"status={self.status}>"
-        )
+        return f"<PendingRaidTrack {self.id}: '{self.track_name}' status={self.status}>"
 
 
 # =============================================================================
@@ -1477,27 +1192,16 @@ class ScrapedPlaylistCache(db.Model):
 
     __tablename__ = "scraped_playlist_cache"
 
-    id = db.Column(
-        db.Integer, primary_key=True, autoincrement=True
-    )
-    playlist_id = db.Column(
-        db.String(255), nullable=False, index=True
-    )
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    playlist_id = db.Column(db.String(255), nullable=False, index=True)
     track_uris_json = db.Column(db.Text, nullable=False)
-    track_count = db.Column(
-        db.Integer, nullable=False, default=0
-    )
     scraped_at = db.Column(
         db.DateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
-    scrape_pathway = db.Column(
-        db.String(50), nullable=True
-    )
-    expires_at = db.Column(
-        db.DateTime, nullable=False
-    )
+    scrape_pathway = db.Column(db.String(50), nullable=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
 
     __table_args__ = (
         db.Index(
@@ -1520,8 +1224,7 @@ class ScrapedPlaylistCache(db.Model):
             return json.loads(self.track_uris_json)
         except (json.JSONDecodeError, TypeError):
             logger.warning(
-                "Failed to decode track_uris_json for "
-                "ScrapedPlaylistCache %s",
+                "Failed to decode track_uris_json for ScrapedPlaylistCache %s",
                 self.id,
             )
             return []
@@ -1532,8 +1235,4 @@ class ScrapedPlaylistCache(db.Model):
         self.track_uris_json = json.dumps(uris)
 
     def __repr__(self) -> str:
-        return (
-            f"<ScrapedPlaylistCache "
-            f"playlist={self.playlist_id} "
-            f"tracks={self.track_count}>"
-        )
+        return f"<ScrapedPlaylistCache playlist={self.playlist_id}>"

@@ -29,7 +29,7 @@ MAX_DELAY = 16  # seconds
 
 def _calculate_backoff_delay(attempt: int) -> float:
     """Calculate exponential backoff delay, capped at MAX_DELAY."""
-    return min(BASE_DELAY * (2 ** attempt), MAX_DELAY)
+    return min(BASE_DELAY * (2**attempt), MAX_DELAY)
 
 
 class SpotifyHTTPClient:
@@ -56,10 +56,12 @@ class SpotifyHTTPClient:
         self._access_token = access_token
         self._on_token_refresh = on_token_refresh
         self._session = requests.Session()
-        self._session.headers.update({
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        })
+        self._session.headers.update(
+            {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            }
+        )
 
     def update_token(self, access_token: str) -> None:
         """Update the bearer token for future requests."""
@@ -159,11 +161,16 @@ class SpotifyHTTPClient:
         On 401, attempts a single token refresh before failing.
         """
         token_refreshed = False
+        attempt = 0
 
-        for attempt in range(MAX_RETRIES + 1):
+        while attempt <= MAX_RETRIES:
             try:
                 response = self._session.request(
-                    method, url, params=params, json=json, timeout=30,
+                    method,
+                    url,
+                    params=params,
+                    json=json,
+                    timeout=30,
                 )
 
                 # --- Success ---
@@ -180,41 +187,37 @@ class SpotifyHTTPClient:
                             new_token = self._on_token_refresh()
                             self.update_token(new_token)
                             token_refreshed = True
+                            attempt = 0  # reset retry budget after refresh
                             continue
                         except Exception as e:
                             logger.error("Token refresh failed: %s", e)
-                    raise SpotifyTokenExpiredError(
-                        "Token expired or invalid"
-                    )
+                    raise SpotifyTokenExpiredError("Token expired or invalid")
 
                 # --- 404 Not Found ---
                 if response.status_code == 404:
-                    raise SpotifyNotFoundError(
-                        f"Resource not found: {url}"
-                    )
+                    raise SpotifyNotFoundError(f"Resource not found: {url}")
 
                 # --- 429 Rate Limited ---
                 if response.status_code == 429:
                     if attempt >= MAX_RETRIES:
-                        retry_after = int(
-                            response.headers.get("Retry-After", 60)
-                        )
+                        retry_after = int(response.headers.get("Retry-After", 60))
                         raise SpotifyRateLimitError(
                             f"Rate limited after {MAX_RETRIES + 1} attempts",
                             retry_after=retry_after,
                         )
-                    retry_after = int(
-                        response.headers.get("Retry-After", 1)
-                    )
+                    retry_after = int(response.headers.get("Retry-After", 1))
                     delay = max(
                         retry_after,
                         _calculate_backoff_delay(attempt),
                     )
                     logger.warning(
                         "Rate limited (429), retry %d/%d in %ss",
-                        attempt + 1, MAX_RETRIES + 1, delay,
+                        attempt + 1,
+                        MAX_RETRIES + 1,
+                        delay,
                     )
                     time.sleep(delay)
+                    attempt += 1
                     continue
 
                 # --- 5xx Server Error ---
@@ -228,35 +231,37 @@ class SpotifyHTTPClient:
                     logger.warning(
                         "Server error %d, retry %d/%d in %ss",
                         response.status_code,
-                        attempt + 1, MAX_RETRIES + 1, delay,
+                        attempt + 1,
+                        MAX_RETRIES + 1,
+                        delay,
                     )
                     time.sleep(delay)
+                    attempt += 1
                     continue
 
                 # --- Other client errors (400, 403, etc.) ---
                 try:
                     body = response.json()
-                    msg = body.get("error", {}).get(
-                        "message", response.text
-                    )
+                    msg = body.get("error", {}).get("message", response.text)
                 except Exception:
                     msg = response.text
-                raise SpotifyAPIError(
-                    f"API error {response.status_code}: {msg}"
-                )
+                raise SpotifyAPIError(f"API error {response.status_code}: {msg}")
 
             except (ConnectionError, Timeout, RequestException) as e:
                 if attempt >= MAX_RETRIES:
                     raise SpotifyAPIError(
-                        f"Network error after {MAX_RETRIES + 1} "
-                        f"attempts: {e}"
+                        f"Network error after {MAX_RETRIES + 1} attempts: {e}"
                     )
                 delay = _calculate_backoff_delay(attempt)
                 logger.warning(
                     "Network error, retry %d/%d in %ss: %s",
-                    attempt + 1, MAX_RETRIES + 1, delay, e,
+                    attempt + 1,
+                    MAX_RETRIES + 1,
+                    delay,
+                    e,
                 )
                 time.sleep(delay)
+                attempt += 1
 
             except (
                 SpotifyNotFoundError,
@@ -267,6 +272,4 @@ class SpotifyHTTPClient:
                 raise
 
         # Should not reach here
-        raise SpotifyAPIError(
-            f"Request failed after {MAX_RETRIES + 1} attempts"
-        )
+        raise SpotifyAPIError(f"Request failed after {MAX_RETRIES + 1} attempts")

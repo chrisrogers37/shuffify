@@ -29,6 +29,11 @@ from shuffify.spotify.exceptions import (
 from shuffify.shuffle_algorithms.utils import extract_uris
 from shuffify.enums import JobType, ActivityType
 
+# Sentinel token used when constructing a SpotifyAPI with only a
+# refresh token. The access_token is intentionally invalid so the
+# client triggers an auto-refresh on the first API call.
+_EXPIRED_ACCESS_TOKEN = "expired_placeholder"
+
 logger = logging.getLogger(__name__)
 
 
@@ -51,9 +56,7 @@ def _tag_sentry_scope(schedule, schedule_id):
         scope.set_tag("schedule_id", schedule_id)
         if schedule is not None:
             scope.set_tag("job_type", str(schedule.job_type))
-            scope.set_tag(
-                "playlist_id", schedule.target_playlist_id
-            )
+            scope.set_tag("playlist_id", schedule.target_playlist_id)
             scope.set_user({"id": str(schedule.user_id)})
     except Exception:
         # Never let observability tagging break job execution.
@@ -131,7 +134,8 @@ def verify_playlist_state(
             from expected.
     """
     verified = api.get_playlist_tracks(
-        playlist_id, skip_cache=True,
+        playlist_id,
+        skip_cache=True,
     )
     actual_uris = extract_uris(verified or [])
 
@@ -168,32 +172,124 @@ def _rollback_metadata(error, schedule, restored) -> dict:
         "triggered_by": "scheduler",
     }
     if isinstance(error, PlaylistVerificationError):
-        base.update({
-            "failure_type": "verification",
-            "phase": error.phase,
-            "failing_playlist_id": error.playlist_id,
-            "expected_count": len(error.expected),
-            "actual_count": len(error.actual),
-            "missing_total": len(error.missing),
-            "extra_total": len(error.extra),
-            "missing_uris": error.missing[:50],
-            "extra_uris": error.extra[:50],
-        })
+        base.update(
+            {
+                "failure_type": "verification",
+                "phase": error.phase,
+                "failing_playlist_id": error.playlist_id,
+                "expected_count": len(error.expected),
+                "actual_count": len(error.actual),
+                "missing_total": len(error.missing),
+                "extra_total": len(error.extra),
+                "missing_uris": error.missing[:50],
+                "extra_uris": error.extra[:50],
+            }
+        )
     elif isinstance(error, SpotifyPartialBatchError):
-        base.update({
-            "failure_type": "partial_batch",
-            "method": error.method,
-            "failing_playlist_id": error.playlist_id,
-            "completed_batches": error.completed_batches,
-            "total_batches": error.total_batches,
-            "completed_count": len(error.completed_uris),
-            "remaining_count": len(error.remaining_uris),
-            "remaining_uris": error.remaining_uris[:50],
-            "cause": (
-                str(error.cause) if error.cause else None
-            ),
-        })
+        base.update(
+            {
+                "failure_type": "partial_batch",
+                "method": error.method,
+                "failing_playlist_id": error.playlist_id,
+                "completed_batches": error.completed_batches,
+                "total_batches": error.total_batches,
+                "completed_count": len(error.completed_uris),
+                "remaining_count": len(error.remaining_uris),
+                "remaining_uris": error.remaining_uris[:50],
+                "cause": (str(error.cause) if error.cause else None),
+            }
+        )
     return base
+
+
+def _restore_job_snapshots(execution, schedule, api, schedule_id):
+    """Restore auto-snapshots taken during this job.
+
+    Returns a list of restoration dicts on success, or None if
+    restoration fails (caller should fall back to plain failure).
+    """
+    from shuffify.services.playlist_snapshot_service import (  # noqa: E501
+        PlaylistSnapshotService,
+        PlaylistSnapshotError,
+    )
+    from shuffify.models.db import PlaylistSnapshot
+
+    try:
+        user_id = schedule.user_id if schedule else None
+        since = execution.started_at if execution else None
+        if not user_id or not since:
+            raise PlaylistSnapshotError(
+                "Missing user_id or job start time; cannot scope snapshots."
+            )
+
+        pre_snapshots = (
+            PlaylistSnapshot.query.filter(
+                PlaylistSnapshot.user_id == user_id,
+                PlaylistSnapshot.created_at >= since,
+            )
+            .order_by(PlaylistSnapshot.created_at.asc())
+            .all()
+        )
+
+        if not pre_snapshots:
+            raise PlaylistSnapshotError(
+                "No pre-snapshot available for rollback "
+                "(auto-snapshots disabled or empty "
+                "source playlists)."
+            )
+
+        # One snapshot per playlist — keep the most recent.
+        latest_by_playlist = {}
+        for snap in pre_snapshots:
+            latest_by_playlist[snap.playlist_id] = snap
+
+        restored = []
+        for playlist_id, snap in latest_by_playlist.items():
+            applied = PlaylistSnapshotService.restore_to_playlist(
+                snap.id,
+                user_id,
+                api,
+            )
+            restored.append(
+                {
+                    "playlist_id": playlist_id,
+                    "snapshot_id": snap.id,
+                    "track_count": applied.track_count,
+                }
+            )
+        return restored
+
+    except Exception as restore_err:
+        logger.error(
+            "Schedule %s: rollback failed: %s. Falling back to plain failure.",
+            schedule_id,
+            restore_err,
+            exc_info=True,
+        )
+        return None
+
+
+def _persist_rollback_status(execution, schedule, ve, schedule_id):
+    """Write failed_rolled_back status to db."""
+    try:
+        if execution:
+            execution.status = "failed_rolled_back"
+            execution.completed_at = datetime.now(timezone.utc)
+            execution.error_message = str(ve)[:1000]
+
+        if schedule:
+            schedule.last_run_at = datetime.now(timezone.utc)
+            schedule.last_status = "failed_rolled_back"
+            schedule.last_error = str(ve)[:1000]
+
+        db.session.commit()
+    except Exception as db_err:
+        logger.error(
+            "Schedule %s: failed to persist rollback status: %s",
+            schedule_id,
+            db_err,
+        )
+        db.session.rollback()
 
 
 class JobExecutorService:
@@ -213,54 +309,40 @@ class JobExecutorService:
         try:
             schedule = db.session.get(Schedule, schedule_id)
             if not schedule:
-                logger.error(
-                    f"Schedule {schedule_id} not found, "
-                    f"skipping"
-                )
+                logger.error(f"Schedule {schedule_id} not found, skipping")
                 return
 
             if not schedule.is_enabled:
-                logger.info(
-                    f"Schedule {schedule_id} is disabled, "
-                    f"skipping"
-                )
+                logger.info(f"Schedule {schedule_id} is disabled, skipping")
                 return
 
             _tag_sentry_scope(schedule, schedule_id)
 
-            execution = (
-                JobExecutorService._create_execution_record(
-                    schedule_id
-                )
-            )
+            execution = JobExecutorService._create_execution_record(schedule_id)
 
             user = db.session.get(User, schedule.user_id)
             if not user:
-                raise JobExecutionError(
-                    f"User {schedule.user_id} not found"
-                )
+                raise JobExecutionError(f"User {schedule.user_id} not found")
 
             api = JobExecutorService._get_spotify_api(user)
 
-            result = JobExecutorService._execute_job_type(
-                schedule, api
-            )
+            result = JobExecutorService._execute_job_type(schedule, api)
 
-            JobExecutorService._record_success(
-                execution, schedule, result
-            )
+            JobExecutorService._record_success(execution, schedule, result)
 
         except (
             PlaylistVerificationError,
             SpotifyPartialBatchError,
         ) as ve:
             JobExecutorService._record_rollback(
-                execution, schedule, api, ve, schedule_id,
+                execution,
+                schedule,
+                api,
+                ve,
+                schedule_id,
             )
         except Exception as e:
-            JobExecutorService._record_failure(
-                execution, schedule, e, schedule_id
-            )
+            JobExecutorService._record_failure(execution, schedule, e, schedule_id)
 
     @staticmethod
     def _create_execution_record(
@@ -288,12 +370,8 @@ class JobExecutorService:
         """Record a successful job execution."""
         execution.status = "success"
         execution.completed_at = datetime.now(timezone.utc)
-        execution.tracks_added = result.get(
-            "tracks_added", 0
-        )
-        execution.tracks_total = result.get(
-            "tracks_total", 0
-        )
+        execution.tracks_added = result.get("tracks_added", 0)
+        execution.tracks_total = result.get("tracks_total", 0)
 
         schedule.last_run_at = datetime.now(timezone.utc)
         schedule.last_status = "success"
@@ -309,30 +387,20 @@ class JobExecutorService:
 
             ActivityLogService.log(
                 user_id=schedule.user_id,
-                activity_type=(
-                    ActivityType.SCHEDULE_RUN
-                ),
+                activity_type=(ActivityType.SCHEDULE_RUN),
                 description=(
                     f"Scheduled "
                     f"{schedule.job_type} on "
                     f"'{schedule.target_playlist_name}'"
                     f" completed"
                 ),
-                playlist_id=(
-                    schedule.target_playlist_id
-                ),
-                playlist_name=(
-                    schedule.target_playlist_name
-                ),
+                playlist_id=(schedule.target_playlist_id),
+                playlist_name=(schedule.target_playlist_name),
                 metadata={
                     "schedule_id": schedule.id,
                     "job_type": schedule.job_type,
-                    "tracks_added": result.get(
-                        "tracks_added", 0
-                    ),
-                    "tracks_total": result.get(
-                        "tracks_total", 0
-                    ),
+                    "tracks_added": result.get("tracks_added", 0),
+                    "tracks_total": result.get("tracks_total", 0),
                     "triggered_by": "scheduler",
                 },
             )
@@ -355,31 +423,23 @@ class JobExecutorService:
     ) -> None:
         """Record a failed job execution."""
         logger.error(
-            f"Schedule {schedule_id} execution "
-            f"failed: {error}",
+            f"Schedule {schedule_id} execution failed: {error}",
             exc_info=True,
         )
         try:
             if execution:
                 execution.status = "failed"
-                execution.completed_at = datetime.now(
-                    timezone.utc
-                )
+                execution.completed_at = datetime.now(timezone.utc)
                 execution.error_message = str(error)[:1000]
 
             if schedule:
-                schedule.last_run_at = datetime.now(
-                    timezone.utc
-                )
+                schedule.last_run_at = datetime.now(timezone.utc)
                 schedule.last_status = "failed"
                 schedule.last_error = str(error)[:1000]
 
             db.session.commit()
         except Exception as db_err:
-            logger.error(
-                f"Failed to record execution failure: "
-                f"{db_err}"
-            )
+            logger.error(f"Failed to record execution failure: {db_err}")
             db.session.rollback()
 
     @staticmethod
@@ -403,19 +463,17 @@ class JobExecutorService:
         missing), falls through to `_record_failure` so the
         execution is still recorded as failed.
         """
-        from shuffify.services.playlist_snapshot_service import (  # noqa: E501
-            PlaylistSnapshotService,
-            PlaylistSnapshotError,
-        )
-        from shuffify.models.db import PlaylistSnapshot
 
         if isinstance(ve, PlaylistVerificationError):
             logger.error(
                 "Schedule %s: verification failed in phase "
                 "'%s' on playlist %s — attempting snapshot "
                 "rollback. Missing=%d, extra=%d.",
-                schedule_id, ve.phase, ve.playlist_id,
-                len(ve.missing), len(ve.extra),
+                schedule_id,
+                ve.phase,
+                ve.playlist_id,
+                len(ve.missing),
+                len(ve.extra),
             )
         else:
             logger.error(
@@ -423,108 +481,37 @@ class JobExecutorService:
                 "%s (batch %d/%d) — attempting snapshot "
                 "rollback. Completed=%d, remaining=%d. "
                 "Cause: %s",
-                schedule_id, ve.method, ve.playlist_id,
-                ve.completed_batches, ve.total_batches,
+                schedule_id,
+                ve.method,
+                ve.playlist_id,
+                ve.completed_batches,
+                ve.total_batches,
                 len(ve.completed_uris),
-                len(ve.remaining_uris), ve.cause,
+                len(ve.remaining_uris),
+                ve.cause,
             )
 
-        restored = []
-        try:
-            user_id = (
-                schedule.user_id if schedule else None
-            )
-            since = (
-                execution.started_at if execution else None
-            )
-            if not user_id or not since:
-                raise PlaylistSnapshotError(
-                    "Missing user_id or job start time; "
-                    "cannot scope snapshots."
-                )
-
-            # All auto-snapshots created since the job
-            # started belong to this run.
-            pre_snapshots = (
-                PlaylistSnapshot.query
-                .filter(
-                    PlaylistSnapshot.user_id == user_id,
-                    PlaylistSnapshot.created_at >= since,
-                )
-                .order_by(
-                    PlaylistSnapshot.created_at.asc()
-                )
-                .all()
-            )
-
-            if not pre_snapshots:
-                raise PlaylistSnapshotError(
-                    "No pre-snapshot available for "
-                    "rollback (auto-snapshots disabled "
-                    "or empty source playlists)."
-                )
-
-            # One snapshot per playlist — restore the most
-            # recent if multiple were taken.
-            latest_by_playlist = {}
-            for snap in pre_snapshots:
-                latest_by_playlist[snap.playlist_id] = snap
-
-            for playlist_id, snap in (
-                latest_by_playlist.items()
-            ):
-                applied = (
-                    PlaylistSnapshotService
-                    .restore_to_playlist(
-                        snap.id, user_id, api,
-                    )
-                )
-                restored.append(
-                    {
-                        "playlist_id": playlist_id,
-                        "snapshot_id": snap.id,
-                        "track_count": (
-                            applied.track_count
-                        ),
-                    }
-                )
-        except Exception as restore_err:
-            logger.error(
-                "Schedule %s: rollback failed: %s. "
-                "Falling back to plain failure.",
-                schedule_id, restore_err, exc_info=True,
-            )
+        restored = _restore_job_snapshots(
+            execution,
+            schedule,
+            api,
+            schedule_id,
+        )
+        if restored is None:
             JobExecutorService._record_failure(
-                execution, schedule, ve, schedule_id,
+                execution,
+                schedule,
+                ve,
+                schedule_id,
             )
             return
 
-        # Persist the rolled-back status
-        try:
-            if execution:
-                execution.status = "failed_rolled_back"
-                execution.completed_at = datetime.now(
-                    timezone.utc
-                )
-                execution.error_message = str(ve)[:1000]
-
-            if schedule:
-                schedule.last_run_at = datetime.now(
-                    timezone.utc
-                )
-                schedule.last_status = (
-                    "failed_rolled_back"
-                )
-                schedule.last_error = str(ve)[:1000]
-
-            db.session.commit()
-        except Exception as db_err:
-            logger.error(
-                "Schedule %s: failed to persist "
-                "rollback status: %s",
-                schedule_id, db_err,
-            )
-            db.session.rollback()
+        _persist_rollback_status(
+            execution,
+            schedule,
+            ve,
+            schedule_id,
+        )
 
         # Log a structured activity entry (non-blocking).
         try:
@@ -534,9 +521,7 @@ class JobExecutorService:
 
             ActivityLogService.log(
                 user_id=schedule.user_id,
-                activity_type=(
-                    ActivityType.SCHEDULE_RUN_ROLLED_BACK
-                ),
+                activity_type=(ActivityType.SCHEDULE_RUN_ROLLED_BACK),
                 description=(
                     "Scheduled "
                     f"{schedule.job_type} on "
@@ -545,20 +530,18 @@ class JobExecutorService:
                     f"{_rollback_trigger_phrase(ve)}"
                 ),
                 playlist_id=schedule.target_playlist_id,
-                playlist_name=(
-                    schedule.target_playlist_name
-                ),
+                playlist_name=(schedule.target_playlist_name),
                 metadata=_rollback_metadata(
-                    ve, schedule, restored,
+                    ve,
+                    schedule,
+                    restored,
                 ),
             )
         except Exception:
             pass
 
     @staticmethod
-    def execute_now(
-        schedule_id: int, user_id: int
-    ) -> dict:
+    def execute_now(schedule_id: int, user_id: int) -> dict:
         """
         Manually trigger a schedule execution (from the UI).
 
@@ -571,13 +554,9 @@ class JobExecutorService:
         )
 
         try:
-            schedule = SchedulerService.get_schedule(
-                schedule_id, user_id
-            )
+            schedule = SchedulerService.get_schedule(schedule_id, user_id)
         except ScheduleNotFoundError:
-            raise JobExecutionError(
-                f"Schedule {schedule_id} not found"
-            )
+            raise JobExecutionError(f"Schedule {schedule_id} not found")
 
         # Execute synchronously
         JobExecutorService.execute(schedule_id)
@@ -587,17 +566,14 @@ class JobExecutorService:
         db.session.refresh(schedule)
 
         if schedule.last_status in (
-            "failed", "failed_rolled_back",
+            "failed",
+            "failed_rolled_back",
         ):
-            raise JobExecutionError(
-                schedule.last_error or "Unknown error"
-            )
+            raise JobExecutionError(schedule.last_error or "Unknown error")
 
         # Return detailed result from latest execution
         latest = (
-            JobExecution.query.filter_by(
-                schedule_id=schedule_id
-            )
+            JobExecution.query.filter_by(schedule_id=schedule_id)
             .order_by(JobExecution.started_at.desc())
             .first()
         )
@@ -605,19 +581,13 @@ class JobExecutorService:
         result = {
             "status": schedule.last_status or "unknown",
             "last_run_at": (
-                schedule.last_run_at.isoformat()
-                if schedule.last_run_at
-                else None
+                schedule.last_run_at.isoformat() if schedule.last_run_at else None
             ),
         }
 
         if latest:
-            result["tracks_total"] = (
-                latest.tracks_total or 0
-            )
-            result["tracks_added"] = (
-                latest.tracks_added or 0
-            )
+            result["tracks_total"] = latest.tracks_total or 0
+            result["tracks_added"] = latest.tracks_added or 0
             if latest.error_message:
                 result["error"] = latest.error_message
 
@@ -641,28 +611,23 @@ class JobExecutorService:
             )
 
         try:
-            refresh_token = TokenService.decrypt_token(
-                user.encrypted_refresh_token
-            )
+            refresh_token = TokenService.decrypt_token(user.encrypted_refresh_token)
         except TokenEncryptionError as e:
             raise JobExecutionError(
-                f"Failed to decrypt refresh token for user "
-                f"{user.spotify_id}: {e}"
+                f"Failed to decrypt refresh token for user {user.spotify_id}: {e}"
             )
 
         try:
             from flask import current_app
 
-            credentials = SpotifyCredentials.from_flask_config(
-                current_app.config
-            )
+            credentials = SpotifyCredentials.from_flask_config(current_app.config)
             auth_manager = SpotifyAuthManager(credentials)
 
             # Create a token_info with an expired access token
             # and valid refresh token. SpotifyAPI will
             # auto-refresh on first call.
             token_info = TokenInfo(
-                access_token="expired_placeholder",
+                access_token=_EXPIRED_ACCESS_TOKEN,
                 token_type="Bearer",
                 expires_at=0,
                 refresh_token=refresh_token,
@@ -676,33 +641,22 @@ class JobExecutorService:
 
             # Update stored refresh token if it was rotated
             new_token = api.token_info
-            if (
-                new_token.refresh_token
-                and new_token.refresh_token != refresh_token
-            ):
-                user.encrypted_refresh_token = (
-                    TokenService.encrypt_token(
-                        new_token.refresh_token
-                    )
+            if new_token.refresh_token and new_token.refresh_token != refresh_token:
+                user.encrypted_refresh_token = TokenService.encrypt_token(
+                    new_token.refresh_token
                 )
                 db.session.commit()
-                logger.info(
-                    f"Updated rotated refresh token for "
-                    f"user {user.spotify_id}"
-                )
+                logger.info(f"Updated rotated refresh token for user {user.spotify_id}")
 
             return api
 
         except SpotifyTokenError as e:
             raise JobExecutionError(
-                f"Failed to refresh Spotify token for user "
-                f"{user.spotify_id}: {e}"
+                f"Failed to refresh Spotify token for user {user.spotify_id}: {e}"
             )
 
     @staticmethod
-    def _execute_job_type(
-        schedule: Schedule, api: SpotifyAPI
-    ) -> dict:
+    def _execute_job_type(schedule: Schedule, api: SpotifyAPI) -> dict:
         """Execute the appropriate operation based on job type."""
         from shuffify.services.executors.raid_executor import (
             execute_raid,
@@ -724,32 +678,16 @@ class JobExecutorService:
         elif schedule.job_type == JobType.RAID_AND_SHUFFLE:
             result = execute_raid(schedule, api)
             shuffle_result = execute_shuffle(schedule, api)
-            result["tracks_total"] = shuffle_result[
-                "tracks_total"
-            ]
+            result["tracks_total"] = shuffle_result["tracks_total"]
             return result
         elif schedule.job_type == JobType.RAID_AND_DRIP:
             result = execute_raid(schedule, api)
             drip_result = execute_drip(schedule, api)
-            result["tracks_dripped"] = drip_result.get(
-                "tracks_added", 0
-            )
+            result["tracks_dripped"] = drip_result.get("tracks_added", 0)
             return result
         elif schedule.job_type == JobType.ROTATE:
             return execute_rotate(schedule, api)
         elif schedule.job_type == JobType.DRIP:
             return execute_drip(schedule, api)
         else:
-            raise JobExecutionError(
-                f"Unknown job type: {schedule.job_type}"
-            )
-
-    @staticmethod
-    def _batch_add_tracks(
-        api: SpotifyAPI,
-        playlist_id: str,
-        uris: List[str],
-        batch_size: int = 100,
-    ) -> None:
-        """Add tracks to a playlist in batches."""
-        api.playlist_add_items(playlist_id, uris)
+            raise JobExecutionError(f"Unknown job type: {schedule.job_type}")
