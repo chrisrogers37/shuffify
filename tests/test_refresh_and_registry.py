@@ -79,6 +79,7 @@ class TestRefreshPlaylistsRoute:
 
         app = create_app("development")
         app.config["TESTING"] = True
+        app.config["WTF_CSRF_ENABLED"] = False
         return app
 
     @pytest.fixture
@@ -153,9 +154,7 @@ class TestRefreshPlaylistsRoute:
 
         client.post("/refresh-playlists")
 
-        mock_service.get_user_playlists.assert_called_once_with(
-            skip_cache=True
-        )
+        mock_service.get_user_playlists.assert_called_once_with(skip_cache=True)
 
     @patch("shuffify.is_db_available")
     @patch("shuffify.routes.get_db_user")
@@ -180,9 +179,7 @@ class TestRefreshPlaylistsRoute:
         mock_get_db_user.return_value = mock_user
 
         mock_service = Mock()
-        mock_service.get_user_playlists.side_effect = PlaylistError(
-            "API error"
-        )
+        mock_service.get_user_playlists.side_effect = PlaylistError("API error")
         mock_playlist_service_cls.return_value = mock_service
 
         response = client.post("/refresh-playlists")

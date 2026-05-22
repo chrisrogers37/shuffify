@@ -184,9 +184,7 @@ def handle_state_error(error: StateError):
 def handle_user_service_error(error: UserServiceError):
     """Handle user service errors."""
     logger.error(f"User service error: {error}")
-    return json_error_response(
-        "User operation failed.", 500
-    )
+    return json_error_response("User operation failed.", 500)
 
 
 def handle_user_not_found(error: UserNotFoundError):
@@ -200,9 +198,7 @@ def handle_workshop_session_not_found(
 ):
     """Handle workshop session not found."""
     logger.info(f"Workshop session not found: {error}")
-    return json_error_response(
-        "Saved session not found.", 404
-    )
+    return json_error_response("Saved session not found.", 404)
 
 
 def handle_workshop_session_limit(
@@ -218,9 +214,7 @@ def handle_workshop_session_error(
 ):
     """Handle general workshop session errors."""
     logger.error(f"Workshop session error: {error}")
-    return json_error_response(
-        "Workshop session operation failed.", 500
-    )
+    return json_error_response("Workshop session operation failed.", 500)
 
 
 def handle_upstream_source_not_found(
@@ -236,9 +230,7 @@ def handle_upstream_source_error(
 ):
     """Handle general upstream source errors."""
     logger.error(f"Upstream source error: {error}")
-    return json_error_response(
-        "Source operation failed.", 500
-    )
+    return json_error_response("Source operation failed.", 500)
 
 
 # =============================================================================
@@ -251,9 +243,7 @@ def handle_schedule_not_found(
 ):
     """Handle schedule not found errors."""
     logger.info(f"Schedule not found: {error}")
-    return json_error_response(
-        "Schedule not found.", 404
-    )
+    return json_error_response("Schedule not found.", 404)
 
 
 def handle_schedule_error(error: ScheduleError):
@@ -267,9 +257,7 @@ def handle_job_execution_error(
 ):
     """Handle job execution failures."""
     logger.error(f"Job execution error: {error}")
-    return json_error_response(
-        f"Job execution failed: {error}", 500
-    )
+    return json_error_response(f"Job execution failed: {error}", 500)
 
 
 # =============================================================================
@@ -282,9 +270,7 @@ def handle_spotify_token_expired(
 ):
     """Handle expired Spotify tokens."""
     logger.warning(f"Spotify token expired: {error}")
-    return json_error_response(
-        "Session expired. Please log in again.", 401
-    )
+    return json_error_response("Session expired. Please log in again.", 401)
 
 
 def handle_spotify_rate_limit(
@@ -293,14 +279,11 @@ def handle_spotify_rate_limit(
     """Handle Spotify API rate limiting."""
     logger.warning(f"Spotify rate limit: {error}")
     response, status = json_error_response(
-        "Spotify is rate limiting requests. "
-        "Please wait a moment and try again.",
+        "Spotify is rate limiting requests. Please wait a moment and try again.",
         429,
     )
     if hasattr(error, "retry_after") and error.retry_after:
-        response.headers["Retry-After"] = str(
-            error.retry_after
-        )
+        response.headers["Retry-After"] = str(error.retry_after)
     return response, status
 
 
@@ -309,9 +292,7 @@ def handle_spotify_not_found(
 ):
     """Handle Spotify resource not found."""
     logger.info(f"Spotify resource not found: {error}")
-    return json_error_response(
-        "Spotify resource not found.", 404
-    )
+    return json_error_response("Spotify resource not found.", 404)
 
 
 def handle_spotify_auth_error(
@@ -320,8 +301,7 @@ def handle_spotify_auth_error(
     """Handle Spotify authentication errors."""
     logger.warning(f"Spotify auth error: {error}")
     return json_error_response(
-        "Spotify authentication failed. "
-        "Please log in again.",
+        "Spotify authentication failed. Please log in again.",
         401,
     )
 
@@ -331,9 +311,7 @@ def handle_spotify_api_error(
 ):
     """Handle general Spotify API errors."""
     logger.error(f"Spotify API error: {error}")
-    return json_error_response(
-        "Spotify API error. Please try again.", 500
-    )
+    return json_error_response("Spotify API error. Please try again.", 500)
 
 
 def handle_spotify_error(error: SpotifyError):
@@ -348,6 +326,20 @@ def handle_spotify_error(error: SpotifyError):
 # =============================================================================
 # HTTP Error Codes
 # =============================================================================
+
+
+def handle_csrf_error(error):
+    """Handle CSRF validation failures."""
+    logger.warning(
+        "CSRF validation failed on %s %s: %s",
+        request.method,
+        request.path,
+        error,
+    )
+    return json_error_response(
+        "Your request could not be verified. Please refresh the page and try again.",
+        400,
+    )
 
 
 def handle_bad_request(error):
@@ -383,12 +375,9 @@ def handle_internal_error(error):
     if (
         request.path.startswith("/api/")
         or request.is_json
-        or request.headers.get("X-Requested-With")
-        == "XMLHttpRequest"
+        or request.headers.get("X-Requested-With") == "XMLHttpRequest"
     ):
-        return json_error_response(
-            "An unexpected error occurred.", 500
-        )
+        return json_error_response("An unexpected error occurred.", 500)
     # Render HTML error page for browser navigation
     return render_template("errors/500.html"), 500
 
@@ -409,9 +398,11 @@ def handle_rate_limit_exceeded(error):
         "Too many requests. Please wait a moment and try again.",
         429,
     )
-    retry_after = error.description if isinstance(
-        error.description, str
-    ) and error.description.isdigit() else None
+    retry_after = (
+        error.description
+        if isinstance(error.description, str) and error.description.isdigit()
+        else None
+    )
     if retry_after:
         response.headers["Retry-After"] = retry_after
     elif hasattr(error, "retry_after"):
@@ -426,7 +417,10 @@ def handle_rate_limit_exceeded(error):
 
 def register_error_handlers(app):
     """Register global error handlers with the Flask app."""
+    from flask_wtf.csrf import CSRFError
+
     handlers = [
+        (CSRFError, handle_csrf_error),
         (ValidationError, handle_validation_error),
         (AuthenticationError, handle_authentication_error),
         (TokenValidationError, handle_token_validation_error),

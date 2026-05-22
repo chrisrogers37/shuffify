@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}Shuffify{% endblock %}</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}">
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='images/favicon.ico') }}">
@@ -194,6 +195,33 @@
 
     <!-- Shared JavaScript -->
     <script src="/static/js/notifications.js"></script>
+
+    <!-- CSRF: auto-inject token on mutating fetch requests -->
+    <script>
+    (function() {
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        if (!meta) return;
+        var token = meta.getAttribute('content');
+        var _fetch = window.fetch;
+        window.fetch = function(url, opts) {
+            opts = opts || {};
+            var method = (opts.method || 'GET').toUpperCase();
+            if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+                if (opts.headers instanceof Headers) {
+                    if (!opts.headers.has('X-CSRFToken')) {
+                        opts.headers.set('X-CSRFToken', token);
+                    }
+                } else {
+                    opts.headers = opts.headers || {};
+                    if (!opts.headers['X-CSRFToken']) {
+                        opts.headers['X-CSRFToken'] = token;
+                    }
+                }
+            }
+            return _fetch.call(this, url, opts);
+        };
+    })();
+    </script>
 
     <!-- JavaScript for AJAX operations -->
     <script>

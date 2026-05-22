@@ -23,6 +23,7 @@
     <!-- Settings Form -->
     <div class="relative max-w-3xl mx-auto px-4 py-6">
         <form id="settings-form" method="POST" action="{{ url_for('main.update_settings') }}" class="space-y-6">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
             <!-- Shuffle Defaults Section -->
             {% call glass_card('Shuffle Defaults') %}

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **CSRF protection on all state-changing endpoints** - Added Flask-WTF CSRFProtect to validate CSRF tokens on all POST/PUT/DELETE/PATCH requests, closing the CSRF vulnerability on 51 state-changing endpoints
+  - Flask-WTF CSRFProtect initialized globally in the app factory
+  - CSRF token exposed via `<meta name="csrf-token">` in `base.html`
+  - Global `fetch()` wrapper auto-injects `X-CSRFToken` header on mutating requests — zero changes needed to existing AJAX calls
+  - Hidden `csrf_token` fields added to the 3 HTML forms (settings, shuffle, undo) for defense in depth
+  - Dedicated `CSRFError` handler returns a clear "refresh the page" message
+  - CSRF disabled in test config (`WTF_CSRF_ENABLED = False`) so test suite is unaffected
+  - Closes #357
+
 ### Changed
 - **Source resolver hygiene — dead field removed, rollback hardening, characterization tests** - Low-priority cleanup chasing #314 and #315 in the scraper module
   - **L1 dead field**: `PublicScraperPathway._set_cached` no longer writes `ScrapedPlaylistCache.track_count`. The column has no reader anywhere in the codebase — every caller derives the count from `len(track_uris)` instead. The column is intentionally left in the schema for now; a future cleanup PR can drop it via Alembic migration once a few releases have shipped without writers. No migration in this PR
