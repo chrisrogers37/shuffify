@@ -399,7 +399,7 @@ class Schedule(db.Model):
         index=True,
     )
     job_type = db.Column(db.String(20), nullable=False)
-    target_playlist_id = db.Column(db.String(64), nullable=False)
+    target_playlist_id = db.Column(db.String(255), nullable=False)
     target_playlist_name = db.Column(db.String(255), nullable=True)
     source_playlist_ids = db.Column(db.JSON, nullable=True, default=list)
     algorithm_name = db.Column(db.String(64), nullable=True)
@@ -514,6 +514,11 @@ class JobExecution(db.Model):
     schedule = db.relationship(
         "Schedule",
         backref=db.backref("executions", lazy="dynamic"),
+    )
+
+    __table_args__ = (
+        db.Index("ix_job_executions_status", "status"),
+        db.Index("ix_job_executions_started_at", "started_at"),
     )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -958,6 +963,10 @@ class PlaylistPreference(db.Model):
             "spotify_playlist_id",
             name="uq_user_spotify_playlist",
         ),
+        db.Index(
+            "ix_playlist_preferences_spotify_playlist_id",
+            "spotify_playlist_id",
+        ),
     )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -1101,6 +1110,7 @@ class PendingRaidTrack(db.Model):
         db.Integer,
         db.ForeignKey("users.id"),
         nullable=False,
+        index=True,
     )
     target_playlist_id = db.Column(db.String(255), nullable=False)
     track_uri = db.Column(db.String(255), nullable=False)

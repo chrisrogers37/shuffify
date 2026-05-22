@@ -1,0 +1,7 @@
+# Production override — removes host source mount.
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+services:
+  app:
+    volumes:
+      - flask_session:/app/.flask_session
+    restart: unless-stopped

@@ -7,11 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **docker-compose.prod.yml** - Production override that drops the host source mount (`-v .:/app`) and adds `restart: unless-stopped`. Closes #345
+- **Database indexes** - Added missing indexes on PendingRaidTrack(user_id), JobExecution(status, started_at), PlaylistPreference(spotify_playlist_id) via Alembic migration. Closes #348
+- **Track URI format validation** - WorkshopCommitRequest now validates full `spotify:track:<22-char-id>` format instead of prefix-only check. Closes #351
+- **ExternalPlaylistRequest mutual exclusion** - Providing both `url` and `query` now raises a validation error. Closes #351
+- **Test coverage** - Added tests for activity routes, schedule_utils edge cases, cross-algorithm boundary conditions, and schema validation. Closes #353
+
 ### Changed
 - **Replaced deprecated `FLASK_ENV` with `APP_CONFIG`** - Config selector env var renamed from `FLASK_ENV` (removed in Flask 3.0) to `APP_CONFIG` across app factory, run.py, Dockerfile, and .env.example. Closes #355
 - **`SESSION_COOKIE_SECURE` defaults to `True`** - Base Config now defaults secure cookies on; DevConfig and TestConfig explicitly override to `False`. Closes #355
 - **`migrations/env.py` guards `fileConfig` call** - Prevents crash when `config_file_name` is None (Flask-Migrate invocation path). Closes #355
 - **Dependency hygiene** - Moved `gunicorn` from base.txt to prod.txt (not needed in dev/test); moved CVE security pins (wheel, authlib, nltk, tornado) from dev.txt to base.txt so production inherits them. Closes #344
+- **dependabot.yml** - Removed stale `spotipy` entry from production-dependencies group. Closes #354
 
 ### Removed
 - **Unused dependencies removed** - `python-jose`, `numpy`, and `marshmallow` stripped from requirements/base.txt (no imports found in codebase). Closes #343
@@ -20,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **`logging.basicConfig(level=DEBUG)` no longer runs at import time** - Moved into `create_app()` with level set to INFO in production, DEBUG otherwise. Prevents debug logging from polluting any process that imports the shuffify package. Closes #338
 - **`REDIS_URL` now fails loudly in production** - `_init_redis` raises `RuntimeError` if Redis is unavailable in production instead of silently falling back to filesystem sessions. Development still falls back gracefully. Closes #339
+- **Schedule.target_playlist_id column width** - Widened from String(64) to String(255) to match all other playlist ID columns. Alembic migration included. Closes #352
 
 ### Security
 - **X-Forwarded-For no longer trusted without proxy validation** - Added `werkzeug.middleware.proxy_fix.ProxyFix` with `x_for=1` to the WSGI app, replacing manual header parsing in `login_history_service.py`. Only one level of proxy is trusted, preventing IP spoofing via crafted headers. Closes #340

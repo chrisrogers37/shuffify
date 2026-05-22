@@ -12,8 +12,9 @@ from shuffify.schemas import (
     PlaylistQueryParams,
     BasicShuffleParams,
     BalancedShuffleParams,
-    StratifiedShuffleParams,
     PercentageShuffleParams,
+    WorkshopCommitRequest,
+    ExternalPlaylistRequest,
     parse_shuffle_request,
 )
 
@@ -25,171 +26,160 @@ class TestShuffleRequest:
         """Test that defaults are applied correctly."""
         request = ShuffleRequest()
 
-        assert request.algorithm == 'BasicShuffle'
+        assert request.algorithm == "BasicShuffle"
         assert request.keep_first == 0
         assert request.section_count == 4
         assert request.shuffle_percentage == 50.0
-        assert request.shuffle_location == 'front'
+        assert request.shuffle_location == "front"
 
     def test_valid_basic_shuffle(self):
         """Test valid BasicShuffle request."""
-        request = ShuffleRequest(
-            algorithm='BasicShuffle',
-            keep_first=5
-        )
+        request = ShuffleRequest(algorithm="BasicShuffle", keep_first=5)
 
-        assert request.algorithm == 'BasicShuffle'
+        assert request.algorithm == "BasicShuffle"
         assert request.keep_first == 5
         params = request.get_algorithm_params()
-        assert params == {'keep_first': 5}
+        assert params == {"keep_first": 5}
 
     def test_valid_balanced_shuffle(self):
         """Test valid BalancedShuffle request."""
         request = ShuffleRequest(
-            algorithm='BalancedShuffle',
-            keep_first=2,
-            section_count=8
+            algorithm="BalancedShuffle", keep_first=2, section_count=8
         )
 
-        assert request.algorithm == 'BalancedShuffle'
+        assert request.algorithm == "BalancedShuffle"
         params = request.get_algorithm_params()
-        assert params == {'keep_first': 2, 'section_count': 8}
+        assert params == {"keep_first": 2, "section_count": 8}
 
     def test_valid_stratified_shuffle(self):
         """Test valid StratifiedShuffle request."""
         request = ShuffleRequest(
-            algorithm='StratifiedShuffle',
-            keep_first=1,
-            section_count=10
+            algorithm="StratifiedShuffle", keep_first=1, section_count=10
         )
 
-        assert request.algorithm == 'StratifiedShuffle'
+        assert request.algorithm == "StratifiedShuffle"
         params = request.get_algorithm_params()
-        assert params == {'keep_first': 1, 'section_count': 10}
+        assert params == {"keep_first": 1, "section_count": 10}
 
     def test_valid_percentage_shuffle(self):
         """Test valid PercentageShuffle request."""
         request = ShuffleRequest(
-            algorithm='PercentageShuffle',
+            algorithm="PercentageShuffle",
             shuffle_percentage=75.5,
-            shuffle_location='back'
+            shuffle_location="back",
         )
 
-        assert request.algorithm == 'PercentageShuffle'
+        assert request.algorithm == "PercentageShuffle"
         params = request.get_algorithm_params()
-        assert params == {'shuffle_percentage': 75.5, 'shuffle_location': 'back'}
+        assert params == {"shuffle_percentage": 75.5, "shuffle_location": "back"}
 
     def test_invalid_algorithm_empty(self):
         """Test that empty algorithm raises ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
-            ShuffleRequest(algorithm='')
+            ShuffleRequest(algorithm="")
 
-        assert 'Algorithm name cannot be empty' in str(exc_info.value)
+        assert "Algorithm name cannot be empty" in str(exc_info.value)
 
     def test_invalid_algorithm_whitespace(self):
         """Test that whitespace-only algorithm raises ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
-            ShuffleRequest(algorithm='   ')
+            ShuffleRequest(algorithm="   ")
 
-        assert 'Algorithm name cannot be empty' in str(exc_info.value)
+        assert "Algorithm name cannot be empty" in str(exc_info.value)
 
     def test_invalid_algorithm_unknown(self):
         """Test that unknown algorithm raises ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
-            ShuffleRequest(algorithm='UnknownShuffle')
+            ShuffleRequest(algorithm="UnknownShuffle")
 
-        assert 'Invalid algorithm' in str(exc_info.value)
-        assert 'UnknownShuffle' in str(exc_info.value)
+        assert "Invalid algorithm" in str(exc_info.value)
+        assert "UnknownShuffle" in str(exc_info.value)
 
     def test_negative_keep_first(self):
         """Test that negative keep_first raises ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
             ShuffleRequest(keep_first=-1)
 
-        assert 'greater than or equal to 0' in str(exc_info.value).lower()
+        assert "greater than or equal to 0" in str(exc_info.value).lower()
 
     def test_zero_section_count(self):
         """Test that zero section_count raises ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
             ShuffleRequest(section_count=0)
 
-        assert 'greater than or equal to 1' in str(exc_info.value).lower()
+        assert "greater than or equal to 1" in str(exc_info.value).lower()
 
     def test_section_count_too_large(self):
         """Test that section_count over 100 raises ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
             ShuffleRequest(section_count=101)
 
-        assert 'less than or equal to 100' in str(exc_info.value).lower()
+        assert "less than or equal to 100" in str(exc_info.value).lower()
 
     def test_negative_shuffle_percentage(self):
         """Test that negative shuffle_percentage raises ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
             ShuffleRequest(shuffle_percentage=-10.0)
 
-        assert 'greater than or equal to 0' in str(exc_info.value).lower()
+        assert "greater than or equal to 0" in str(exc_info.value).lower()
 
     def test_shuffle_percentage_over_100(self):
         """Test that shuffle_percentage over 100 raises ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
             ShuffleRequest(shuffle_percentage=150.0)
 
-        assert 'less than or equal to 100' in str(exc_info.value).lower()
+        assert "less than or equal to 100" in str(exc_info.value).lower()
 
     def test_invalid_shuffle_location(self):
         """Test that invalid shuffle_location raises ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
-            ShuffleRequest(shuffle_location='middle')
+            ShuffleRequest(shuffle_location="middle")
 
         # Pydantic should complain about invalid literal
         error_str = str(exc_info.value).lower()
-        assert 'front' in error_str or 'back' in error_str
+        assert "front" in error_str or "back" in error_str
 
     def test_algorithm_name_stripped(self):
         """Test that algorithm name is stripped of whitespace."""
-        request = ShuffleRequest(algorithm='  BasicShuffle  ')
-        assert request.algorithm == 'BasicShuffle'
+        request = ShuffleRequest(algorithm="  BasicShuffle  ")
+        assert request.algorithm == "BasicShuffle"
 
     def test_valid_newest_first_shuffle(self):
         """Test valid NewestFirstShuffle request."""
-        request = ShuffleRequest(
-            algorithm='NewestFirstShuffle',
-            jitter=10
-        )
+        request = ShuffleRequest(algorithm="NewestFirstShuffle", jitter=10)
 
-        assert request.algorithm == 'NewestFirstShuffle'
+        assert request.algorithm == "NewestFirstShuffle"
         params = request.get_algorithm_params()
-        assert params == {'jitter': 10}
+        assert params == {"jitter": 10}
 
     def test_newest_first_default_jitter(self):
         """Test NewestFirstShuffle with default jitter."""
-        request = ShuffleRequest(algorithm='NewestFirstShuffle')
+        request = ShuffleRequest(algorithm="NewestFirstShuffle")
         assert request.jitter == 5
         params = request.get_algorithm_params()
-        assert params == {'jitter': 5}
+        assert params == {"jitter": 5}
 
     def test_jitter_below_minimum(self):
         """Test that jitter below 1 raises ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
             ShuffleRequest(jitter=0)
 
-        assert 'greater than or equal to 1' in str(exc_info.value).lower()
+        assert "greater than or equal to 1" in str(exc_info.value).lower()
 
     def test_jitter_above_maximum(self):
         """Test that jitter above 50 raises ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
             ShuffleRequest(jitter=51)
 
-        assert 'less than or equal to 50' in str(exc_info.value).lower()
+        assert "less than or equal to 50" in str(exc_info.value).lower()
 
     def test_extra_fields_ignored(self):
         """Test that extra fields are ignored."""
         request = ShuffleRequest(
-            algorithm='BasicShuffle',
-            unknown_field='should be ignored'
+            algorithm="BasicShuffle", unknown_field="should be ignored"
         )
-        assert request.algorithm == 'BasicShuffle'
-        assert not hasattr(request, 'unknown_field')
+        assert request.algorithm == "BasicShuffle"
+        assert not hasattr(request, "unknown_field")
 
 
 class TestParseShuffleRequest:
@@ -198,21 +188,18 @@ class TestParseShuffleRequest:
     def test_parse_string_form_data(self):
         """Test parsing string form data (as received from Flask)."""
         form_data = {
-            'algorithm': 'BasicShuffle',
-            'keep_first': '5'  # String from form
+            "algorithm": "BasicShuffle",
+            "keep_first": "5",  # String from form
         }
 
         request = parse_shuffle_request(form_data)
-        assert request.algorithm == 'BasicShuffle'
+        assert request.algorithm == "BasicShuffle"
         assert request.keep_first == 5
         assert isinstance(request.keep_first, int)
 
     def test_parse_float_parameter(self):
         """Test parsing float parameter from string."""
-        form_data = {
-            'algorithm': 'PercentageShuffle',
-            'shuffle_percentage': '75.5'
-        }
+        form_data = {"algorithm": "PercentageShuffle", "shuffle_percentage": "75.5"}
 
         request = parse_shuffle_request(form_data)
         assert request.shuffle_percentage == 75.5
@@ -223,15 +210,12 @@ class TestParseShuffleRequest:
         form_data = {}
 
         request = parse_shuffle_request(form_data)
-        assert request.algorithm == 'BasicShuffle'
+        assert request.algorithm == "BasicShuffle"
         assert request.keep_first == 0
 
     def test_parse_jitter_from_string(self):
         """Test parsing jitter integer parameter from string."""
-        form_data = {
-            'algorithm': 'NewestFirstShuffle',
-            'jitter': '10'
-        }
+        form_data = {"algorithm": "NewestFirstShuffle", "jitter": "10"}
 
         request = parse_shuffle_request(form_data)
         assert request.jitter == 10
@@ -239,18 +223,14 @@ class TestParseShuffleRequest:
 
     def test_parse_invalid_integer(self):
         """Test parsing invalid integer raises ValidationError."""
-        form_data = {
-            'keep_first': 'not_a_number'
-        }
+        form_data = {"keep_first": "not_a_number"}
 
         with pytest.raises(ValidationError):
             parse_shuffle_request(form_data)
 
     def test_parse_invalid_float(self):
         """Test parsing invalid float raises ValidationError."""
-        form_data = {
-            'shuffle_percentage': 'invalid'
-        }
+        form_data = {"shuffle_percentage": "invalid"}
 
         with pytest.raises(ValidationError):
             parse_shuffle_request(form_data)
@@ -266,27 +246,27 @@ class TestPlaylistQueryParams:
 
     def test_features_true_string(self):
         """Test parsing 'true' string."""
-        params = PlaylistQueryParams(features='true')
+        params = PlaylistQueryParams(features="true")
         assert params.features is True
 
     def test_features_false_string(self):
         """Test parsing 'false' string."""
-        params = PlaylistQueryParams(features='false')
+        params = PlaylistQueryParams(features="false")
         assert params.features is False
 
     def test_features_yes_string(self):
         """Test parsing 'yes' string."""
-        params = PlaylistQueryParams(features='yes')
+        params = PlaylistQueryParams(features="yes")
         assert params.features is True
 
     def test_features_1_string(self):
         """Test parsing '1' string."""
-        params = PlaylistQueryParams(features='1')
+        params = PlaylistQueryParams(features="1")
         assert params.features is True
 
     def test_features_0_string(self):
         """Test parsing '0' string."""
-        params = PlaylistQueryParams(features='0')
+        params = PlaylistQueryParams(features="0")
         assert params.features is False
 
     def test_features_bool_true(self):
@@ -301,10 +281,10 @@ class TestPlaylistQueryParams:
 
     def test_features_case_insensitive(self):
         """Test that boolean parsing is case insensitive."""
-        assert PlaylistQueryParams(features='TRUE').features is True
-        assert PlaylistQueryParams(features='True').features is True
-        assert PlaylistQueryParams(features='YES').features is True
-        assert PlaylistQueryParams(features='Y').features is True
+        assert PlaylistQueryParams(features="TRUE").features is True
+        assert PlaylistQueryParams(features="True").features is True
+        assert PlaylistQueryParams(features="YES").features is True
+        assert PlaylistQueryParams(features="Y").features is True
 
 
 class TestBasicShuffleParams:
@@ -358,7 +338,7 @@ class TestPercentageShuffleParams:
         """Test default values."""
         params = PercentageShuffleParams()
         assert params.shuffle_percentage == 50.0
-        assert params.shuffle_location == 'front'
+        assert params.shuffle_location == "front"
 
     def test_valid_percentage(self):
         """Test valid percentage values."""
@@ -370,8 +350,75 @@ class TestPercentageShuffleParams:
 
     def test_valid_locations(self):
         """Test valid shuffle_location values."""
-        params = PercentageShuffleParams(shuffle_location='front')
-        assert params.shuffle_location == 'front'
+        params = PercentageShuffleParams(shuffle_location="front")
+        assert params.shuffle_location == "front"
 
-        params = PercentageShuffleParams(shuffle_location='back')
-        assert params.shuffle_location == 'back'
+        params = PercentageShuffleParams(shuffle_location="back")
+        assert params.shuffle_location == "back"
+
+
+class TestWorkshopCommitRequest:
+    """Tests for WorkshopCommitRequest track URI validation."""
+
+    def test_valid_track_uris(self):
+        req = WorkshopCommitRequest(
+            track_uris=[
+                "spotify:track:4uLU6hMCjMI75M1A2tKUQC",
+                "spotify:track:7GhIk7Il098yCjg4BQjzvb",
+            ]
+        )
+        assert len(req.track_uris) == 2
+
+    def test_empty_list_accepted(self):
+        req = WorkshopCommitRequest(track_uris=[])
+        assert req.track_uris == []
+
+    def test_rejects_prefix_only(self):
+        with pytest.raises(ValidationError, match="Invalid track URI"):
+            WorkshopCommitRequest(track_uris=["spotify:track:"])
+
+    def test_rejects_non_track_uri(self):
+        with pytest.raises(ValidationError, match="Invalid track URI"):
+            WorkshopCommitRequest(track_uris=["spotify:album:4uLU6hMCjMI75M1A2tKUQC"])
+
+    def test_rejects_plain_string(self):
+        with pytest.raises(ValidationError, match="Invalid track URI"):
+            WorkshopCommitRequest(track_uris=["not-a-uri"])
+
+
+class TestExternalPlaylistRequest:
+    """Tests for ExternalPlaylistRequest mutual exclusion."""
+
+    def test_url_only(self):
+        req = ExternalPlaylistRequest(url="https://open.spotify.com/playlist/abc123")
+        assert req.url is not None
+        assert req.query is None
+
+    def test_query_only(self):
+        req = ExternalPlaylistRequest(query="chill vibes")
+        assert req.query == "chill vibes"
+        assert req.url is None
+
+    def test_neither_raises(self):
+        with pytest.raises(ValidationError, match="url.*query"):
+            ExternalPlaylistRequest()
+
+    def test_both_raises(self):
+        with pytest.raises(ValidationError, match="not both"):
+            ExternalPlaylistRequest(
+                url="https://open.spotify.com/playlist/abc",
+                query="chill vibes",
+            )
+
+    def test_whitespace_url_treated_as_none(self):
+        req = ExternalPlaylistRequest(url="  ", query="fallback")
+        assert req.url is None
+        assert req.query == "fallback"
+
+    def test_whitespace_query_treated_as_none(self):
+        req = ExternalPlaylistRequest(
+            url="https://open.spotify.com/playlist/abc",
+            query="   ",
+        )
+        assert req.url is not None
+        assert req.query is None
