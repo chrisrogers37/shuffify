@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **docker-compose.prod.yml** - Production override that drops the host source mount (`-v .:/app`) and adds `restart: unless-stopped`. Closes #345
+- **docker-compose source mount fix** - Moved host source mount (`-v .:/app`) from `docker-compose.yml` into new `docker-compose.override.yml` (auto-loaded in dev, skipped in prod). `docker-compose.prod.yml` adds `restart: unless-stopped`. Closes #345
 - **Database indexes** - Added missing indexes on PendingRaidTrack(user_id), JobExecution(status, started_at), PlaylistPreference(spotify_playlist_id) via Alembic migration. Closes #348
 - **Track URI format validation** - WorkshopCommitRequest now validates full `spotify:track:<22-char-id>` format instead of prefix-only check. Closes #351
 - **ExternalPlaylistRequest mutual exclusion** - Providing both `url` and `query` now raises a validation error. Closes #351

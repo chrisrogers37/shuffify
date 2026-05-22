@@ -31,9 +31,7 @@ def _make_mock_playlist():
                 "duration_ms": 180000 + (i * 1000),
                 "is_local": False,
                 "artists": [f"Artist {i}"],
-                "artist_urls": [
-                    f"https://open.spotify.com/artist/artist{i}"
-                ],
+                "artist_urls": [f"https://open.spotify.com/artist/artist{i}"],
                 "album_name": f"Album {i}",
                 "album_image_url": f"https://example.com/album{i}.jpg",
                 "track_url": f"https://open.spotify.com/track/track{i}",
@@ -121,9 +119,7 @@ class TestWorkshopPreviewShuffle:
         mock_get_db_user.return_value = mock_user
 
         mock_playlist = _make_mock_playlist()
-        shuffled = [
-            f"spotify:track:track{i}" for i in [3, 1, 5, 2, 4]
-        ]
+        shuffled = [f"spotify:track:track{i}" for i in [3, 1, 5, 2, 4]]
         mock_shuffle_svc.execute.return_value = shuffled
         algo_mock = Mock()
         algo_mock.name = "Basic"
@@ -213,9 +209,7 @@ class TestWorkshopCommit:
         mock_user.id = 1
         mock_user.spotify_id = "user123"
         mock_get_db_user.return_value = mock_user
-        mock_snap.is_auto_snapshot_enabled.return_value = (
-            False
-        )
+        mock_snap.is_auto_snapshot_enabled.return_value = False
 
         mock_playlist = _make_mock_playlist()
         mock_ps_instance = Mock()
@@ -231,7 +225,7 @@ class TestWorkshopCommit:
         )
 
         new_uris = [
-            f"spotify:track:track{i}" for i in [5, 4, 3, 2, 1]
+            f"spotify:track:{'abcdefghijklmnopqrstu'}{i}" for i in [5, 4, 3, 2, 1]
         ]
         response = authenticated_client.post(
             "/workshop/playlist123/commit",
@@ -271,9 +265,7 @@ class TestWorkshopCommit:
         mock_user.id = 1
         mock_user.spotify_id = "user123"
         mock_get_db_user.return_value = mock_user
-        mock_snap.is_auto_snapshot_enabled.return_value = (
-            False
-        )
+        mock_snap.is_auto_snapshot_enabled.return_value = False
 
         mock_playlist = _make_mock_playlist()
         mock_ps_instance = Mock()
@@ -283,9 +275,7 @@ class TestWorkshopCommit:
         mock_shuffle_svc.shuffle_changed_order.return_value = False
         mock_state_svc.ensure_playlist_initialized.return_value = Mock()
 
-        same_uris = [
-            f"spotify:track:track{i}" for i in range(1, 6)
-        ]
+        same_uris = [f"spotify:track:{'abcdefghijklmnopqrstu'}{i}" for i in range(1, 6)]
         response = authenticated_client.post(
             "/workshop/playlist123/commit",
             data=json.dumps({"track_uris": same_uris}),

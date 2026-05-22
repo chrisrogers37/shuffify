@@ -9,7 +9,6 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - .:/app
       - flask_session:/app/.flask_session
 
   db:

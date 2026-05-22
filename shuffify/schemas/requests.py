@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 
-TRACK_URI_RE = re.compile(r"^spotify:track:[a-zA-Z0-9]{1,}$")
+TRACK_URI_RE = re.compile(r"^spotify:track:[a-zA-Z0-9]{22}$")
 
 
 class ShuffleRequestBase(BaseModel):
