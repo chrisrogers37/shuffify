@@ -165,6 +165,32 @@ class AuthService:
             raise AuthenticationError(f"Failed to fetch user profile: {e}")
 
     @staticmethod
+    def revoke_access_token(access_token: str) -> bool:
+        """
+        Best-effort revocation of a Spotify access token.
+
+        Fire-and-forget: failures are logged at DEBUG and swallowed
+        so the logout flow is never blocked.
+
+        Args:
+            access_token: The access token to revoke.
+
+        Returns:
+            True if the provider accepted the revocation.
+        """
+        try:
+            from shuffify.spotify.auth import SpotifyAuthManager
+            from shuffify.spotify.credentials import SpotifyCredentials
+            from flask import current_app
+
+            credentials = SpotifyCredentials.from_flask_config(current_app.config)
+            auth_manager = SpotifyAuthManager(credentials)
+            return auth_manager.revoke_token(access_token)
+        except Exception as e:
+            logger.debug("Token revocation skipped: %s", e)
+            return False
+
+    @staticmethod
     def authenticate_and_get_user(
         token: Dict[str, Any],
     ) -> Tuple[SpotifyClient, Dict[str, Any]]:

@@ -1,0 +1,55 @@
+# Version control
+.git
+.gitignore
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Python artifacts
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+dist
+build
+*.eggs
+
+# Virtual environments
+venv
+.venv
+
+# Tests
+tests
+pytest.ini
+.pytest_cache
+.coverage
+htmlcov
+
+# Documentation
+documentation
+*.md
+!requirements/*.md
+
+# IDE and editor
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node (Tailwind tooling)
+node_modules
+
+# Session and cache
+.flask_session
+
+# Docker
+docker-compose.yml
+Dockerfile

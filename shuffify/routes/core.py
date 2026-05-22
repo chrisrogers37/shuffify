@@ -340,6 +340,16 @@ def callback():
 @main.route("/logout")
 def logout():
     """Clear session and log out."""
+    # Best-effort token revocation (fire-and-forget)
+    try:
+        token_data = session.get("spotify_token")
+        if token_data:
+            access_token = token_data.get("access_token")
+            if access_token:
+                AuthService.revoke_access_token(access_token)
+    except Exception:
+        pass
+
     # Record logout event before clearing session
     try:
         user_data = session.get("user_data")

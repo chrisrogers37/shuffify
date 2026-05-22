@@ -208,9 +208,7 @@ class SpotifyAuthManager:
             return url
         except Exception as e:
             logger.error(f"Failed to generate auth URL: {e}")
-            raise SpotifyAuthError(
-                f"Failed to generate authorization URL: {e}"
-            )
+            raise SpotifyAuthError(f"Failed to generate authorization URL: {e}")
 
     def exchange_code(self, code: str) -> TokenInfo:
         """
@@ -245,18 +243,12 @@ class SpotifyAuthManager:
             )
 
             if response.status_code != 200:
-                error_msg = response.json().get(
-                    "error_description", response.text
-                )
-                raise SpotifyTokenError(
-                    f"Token exchange failed: {error_msg}"
-                )
+                error_msg = response.json().get("error_description", response.text)
+                raise SpotifyTokenError(f"Token exchange failed: {error_msg}")
 
             token_data = response.json()
             if not token_data:
-                raise SpotifyTokenError(
-                    "No token returned from Spotify"
-                )
+                raise SpotifyTokenError("No token returned from Spotify")
 
             token_info = TokenInfo.from_dict(token_data)
             logger.info("Successfully exchanged code for token")
@@ -267,12 +259,8 @@ class SpotifyAuthManager:
         except SpotifyAuthError:
             raise
         except Exception as e:
-            logger.error(
-                f"Token exchange failed: {e}", exc_info=True
-            )
-            raise SpotifyTokenError(
-                f"Token exchange failed: {e}"
-            )
+            logger.error(f"Token exchange failed: {e}", exc_info=True)
+            raise SpotifyTokenError(f"Token exchange failed: {e}")
 
     def refresh_token(self, token_info: TokenInfo) -> TokenInfo:
         """
@@ -288,9 +276,7 @@ class SpotifyAuthManager:
             SpotifyTokenError: If refresh fails or no refresh_token available.
         """
         if not token_info.refresh_token:
-            raise SpotifyTokenError(
-                "Cannot refresh: no refresh_token available"
-            )
+            raise SpotifyTokenError("Cannot refresh: no refresh_token available")
 
         try:
             response = requests.post(
@@ -307,25 +293,17 @@ class SpotifyAuthManager:
             )
 
             if response.status_code != 200:
-                error_msg = response.json().get(
-                    "error_description", response.text
-                )
-                raise SpotifyTokenError(
-                    f"Token refresh failed: {error_msg}"
-                )
+                error_msg = response.json().get("error_description", response.text)
+                raise SpotifyTokenError(f"Token refresh failed: {error_msg}")
 
             new_token_data = response.json()
             if not new_token_data:
-                raise SpotifyTokenError(
-                    "No token returned from refresh"
-                )
+                raise SpotifyTokenError("No token returned from refresh")
 
             # Spotify may not return a new refresh_token.
             # Preserve the original so we can refresh again later.
             if "refresh_token" not in new_token_data:
-                new_token_data["refresh_token"] = (
-                    token_info.refresh_token
-                )
+                new_token_data["refresh_token"] = token_info.refresh_token
 
             new_token_info = TokenInfo.from_dict(new_token_data)
             logger.info("Successfully refreshed token")
@@ -334,12 +312,8 @@ class SpotifyAuthManager:
         except SpotifyTokenError:
             raise
         except Exception as e:
-            logger.error(
-                f"Token refresh failed: {e}", exc_info=True
-            )
-            raise SpotifyTokenError(
-                f"Token refresh failed: {e}"
-            )
+            logger.error(f"Token refresh failed: {e}", exc_info=True)
+            raise SpotifyTokenError(f"Token refresh failed: {e}")
 
     def ensure_valid_token(self, token_info: TokenInfo) -> TokenInfo:
         """
@@ -359,6 +333,50 @@ class SpotifyAuthManager:
 
         logger.info("Token expired, attempting refresh")
         return self.refresh_token(token_info)
+
+    _REVOKE_URL = "https://accounts.spotify.com/api/revoke"
+
+    def revoke_token(self, access_token: str) -> bool:
+        """
+        Best-effort token revocation.
+
+        Posts to Spotify's revocation endpoint. Spotify does not
+        currently support RFC 7009 — the call will return a non-200
+        and be silently ignored. If Spotify adds support in the
+        future, this will start working with no code change.
+
+        Args:
+            access_token: The access token to revoke.
+
+        Returns:
+            True if the revocation request succeeded, False otherwise.
+        """
+        try:
+            response = requests.post(
+                self._REVOKE_URL,
+                data={
+                    "token": access_token,
+                    "token_type_hint": "access_token",
+                },
+                auth=(
+                    self._credentials.client_id,
+                    self._credentials.client_secret,
+                ),
+                timeout=2,
+            )
+            # RFC 7009: 200 means revoked (or already invalid)
+            if response.status_code == 200:
+                logger.debug("Token revocation accepted")
+                return True
+
+            logger.debug(
+                "Token revocation not supported (HTTP %d)",
+                response.status_code,
+            )
+            return False
+        except Exception as e:
+            logger.debug("Token revocation failed: %s", e)
+            return False
 
     def validate_token(self, token_data: Optional[Dict[str, Any]]) -> bool:
         """
