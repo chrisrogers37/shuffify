@@ -292,7 +292,7 @@ class SpotifyClient:
 
         Args:
             query: Search query string.
-            limit: Maximum number of results (1-10).
+            limit: Maximum number of results (1-50).
 
         Returns:
             List of playlist summary dictionaries.
