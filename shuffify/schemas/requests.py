@@ -96,9 +96,6 @@ class ShuffleRequest(BaseModel):
     # NewestFirstShuffle specific
     jitter: Annotated[int, Field(ge=1, le=50)] = 5
 
-    # TempoGradientShuffle specific
-    direction: Literal["ascending", "descending"] = "ascending"
-
     # Track locks: {position: track_uri} for locked tracks
     locked_positions: Optional[Dict[str, str]] = Field(
         default=None,
@@ -136,7 +133,6 @@ class ShuffleRequest(BaseModel):
         "ArtistSpacingShuffle": ["min_spacing"],
         "AlbumSequenceShuffle": ["shuffle_within_albums"],
         "NewestFirstShuffle": ["jitter"],
-        "TempoGradientShuffle": ["direction"],
     }
 
     def get_algorithm_params(self) -> Dict[str, Any]:
@@ -206,7 +202,7 @@ def parse_shuffle_request(form_data: Dict[str, Any]) -> ShuffleRequest:
             parsed["shuffle_percentage"] = form_data["shuffle_percentage"]
 
     # String parameters
-    for key in ["shuffle_location", "shuffle_within_albums", "direction"]:
+    for key in ["shuffle_location", "shuffle_within_albums"]:
         if key in form_data:
             parsed[key] = str(form_data[key])
 
