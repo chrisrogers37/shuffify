@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **dependabot.yml** - Removed stale `spotipy` entry from production-dependencies group. Closes #354
 
 ### Removed
+- **TempoGradientShuffle removed** - Algorithm depended on Spotify's deprecated Audio Features API (Nov 2024). Removed from registry, schema validation, and all tests. Audio features infrastructure left for separate cleanup. Closes #334
 - **Unused dependencies removed** - `python-jose`, `numpy`, and `marshmallow` stripped from requirements/base.txt (no imports found in codebase). Closes #343
 - **Hardcoded `SECRET_KEY` fallback removed from base Config** - `Config.SECRET_KEY` no longer defaults to `"a_default_secret_key_for_development"`. DevConfig auto-generates a random key; TestConfig uses an explicit test key; ProdConfig requires the env var (unchanged). Closes #341
 

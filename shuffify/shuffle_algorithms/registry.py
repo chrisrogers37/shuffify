@@ -6,7 +6,6 @@ from .percentage import PercentageShuffle
 from .stratified import StratifiedShuffle
 from .artist_spacing import ArtistSpacingShuffle
 from .album_sequence import AlbumSequenceShuffle
-from .tempo_gradient import TempoGradientShuffle
 from .newest_first import NewestFirstShuffle
 
 
@@ -20,12 +19,8 @@ class ShuffleRegistry:
         "StratifiedShuffle": StratifiedShuffle,
         "ArtistSpacingShuffle": ArtistSpacingShuffle,
         "AlbumSequenceShuffle": AlbumSequenceShuffle,
-        "TempoGradientShuffle": TempoGradientShuffle,
         "NewestFirstShuffle": NewestFirstShuffle,
     }
-    # TempoGradientShuffle hidden: Spotify deprecated Audio Features API
-    # (Nov 2024). Unhide when extended API access is granted.
-    _hidden_algorithms = {"TempoGradientShuffle"}
 
     @classmethod
     def register(cls, algorithm_class: Type[ShuffleAlgorithm]) -> None:
@@ -46,16 +41,8 @@ class ShuffleRegistry:
 
     @classmethod
     def list_algorithms(cls) -> List[dict]:
-        """List all visible algorithms with their metadata."""
+        """List all algorithms with their metadata."""
         result = []
-        # Filter out hidden algorithms first
-        visible_algorithms = {
-            name: algo_class
-            for name, algo_class in cls._algorithms.items()
-            if name not in cls._hidden_algorithms
-        }
-
-        # Define the desired order of algorithms
         desired_order = [
             BasicShuffle,
             PercentageShuffle,
@@ -64,12 +51,10 @@ class ShuffleRegistry:
             ArtistSpacingShuffle,
             AlbumSequenceShuffle,
             NewestFirstShuffle,
-            TempoGradientShuffle,
         ]
 
-        # Create metadata for visible algorithms in the specified order
         for algo_class in desired_order:
-            if algo_class.__name__ in visible_algorithms:
+            if algo_class.__name__ in cls._algorithms:
                 algo = algo_class()
                 result.append(
                     {

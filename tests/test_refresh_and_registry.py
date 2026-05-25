@@ -13,16 +13,10 @@ from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 class TestRegistryHiddenAlgorithms:
     """Tests for algorithm visibility in the registry."""
 
-    def test_tempo_gradient_is_registered(self):
-        """TempoGradientShuffle should be registered (available by name)."""
-        algo_class = ShuffleRegistry.get_algorithm("TempoGradientShuffle")
-        assert algo_class is not None
-
-    def test_tempo_gradient_is_hidden_from_listing(self):
-        """TempoGradientShuffle should not appear in list_algorithms."""
-        algorithms = ShuffleRegistry.list_algorithms()
-        class_names = [a["class_name"] for a in algorithms]
-        assert "TempoGradientShuffle" not in class_names
+    def test_tempo_gradient_is_removed(self):
+        """TempoGradientShuffle should no longer be registered."""
+        with pytest.raises(ValueError, match="Unknown shuffle algorithm"):
+            ShuffleRegistry.get_algorithm("TempoGradientShuffle")
 
     def test_artist_spacing_is_visible(self):
         """ArtistSpacingShuffle should appear in list_algorithms."""
@@ -36,15 +30,10 @@ class TestRegistryHiddenAlgorithms:
         class_names = [a["class_name"] for a in algorithms]
         assert "AlbumSequenceShuffle" in class_names
 
-    def test_visible_algorithm_count(self):
-        """Should have 7 visible algorithms (8 total minus 1 hidden)."""
-        algorithms = ShuffleRegistry.list_algorithms()
-        assert len(algorithms) == 7
-
-    def test_all_algorithms_count(self):
-        """Should have 8 total registered algorithms."""
+    def test_algorithm_count(self):
+        """Should have 7 registered algorithms."""
         all_algos = ShuffleRegistry.get_available_algorithms()
-        assert len(all_algos) == 8
+        assert len(all_algos) == 7
 
     def test_algorithm_display_order(self):
         """Algorithms should appear in the defined order."""

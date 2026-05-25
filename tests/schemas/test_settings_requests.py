@@ -81,12 +81,10 @@ class TestUserSettingsUpdateRequestValid:
             "StratifiedShuffle",
             "ArtistSpacingShuffle",
             "AlbumSequenceShuffle",
-            "TempoGradientShuffle",
+            "NewestFirstShuffle",
         ]
         for name in valid_names:
-            req = UserSettingsUpdateRequest(
-                default_algorithm=name
-            )
+            req = UserSettingsUpdateRequest(default_algorithm=name)
             assert req.default_algorithm == name
 
     def test_all_valid_themes(self):
@@ -110,37 +108,27 @@ class TestUserSettingsUpdateRequestValid:
 
     def test_algorithm_none_is_valid(self):
         """Should accept None as algorithm (no default)."""
-        req = UserSettingsUpdateRequest(
-            default_algorithm=None
-        )
+        req = UserSettingsUpdateRequest(default_algorithm=None)
         assert req.default_algorithm is None
 
     def test_algorithm_empty_string_becomes_none(self):
         """Should normalize empty string algorithm to None."""
-        req = UserSettingsUpdateRequest(
-            default_algorithm=""
-        )
+        req = UserSettingsUpdateRequest(default_algorithm="")
         assert req.default_algorithm is None
 
     def test_algorithm_whitespace_only_becomes_none(self):
         """Should normalize whitespace-only algorithm to None."""
-        req = UserSettingsUpdateRequest(
-            default_algorithm="   "
-        )
+        req = UserSettingsUpdateRequest(default_algorithm="   ")
         assert req.default_algorithm is None
 
     def test_max_snapshots_boundary_min(self):
         """Should accept minimum value of 1."""
-        req = UserSettingsUpdateRequest(
-            max_snapshots_per_playlist=1
-        )
+        req = UserSettingsUpdateRequest(max_snapshots_per_playlist=1)
         assert req.max_snapshots_per_playlist == 1
 
     def test_max_snapshots_boundary_max(self):
         """Should accept maximum value of 50."""
-        req = UserSettingsUpdateRequest(
-            max_snapshots_per_playlist=50
-        )
+        req = UserSettingsUpdateRequest(max_snapshots_per_playlist=50)
         assert req.max_snapshots_per_playlist == 50
 
     def test_extra_fields_ignored(self):
@@ -164,9 +152,7 @@ class TestUserSettingsUpdateRequestInvalid:
     def test_invalid_algorithm_name(self):
         """Should reject unknown algorithm names."""
         with pytest.raises(ValidationError) as exc_info:
-            UserSettingsUpdateRequest(
-                default_algorithm="NonexistentShuffle"
-            )
+            UserSettingsUpdateRequest(default_algorithm="NonexistentShuffle")
         assert "Invalid algorithm" in str(exc_info.value)
         assert "NonexistentShuffle" in str(exc_info.value)
 
@@ -180,31 +166,19 @@ class TestUserSettingsUpdateRequestInvalid:
     def test_max_snapshots_below_min(self):
         """Should reject max_snapshots below 1."""
         with pytest.raises(ValidationError) as exc_info:
-            UserSettingsUpdateRequest(
-                max_snapshots_per_playlist=0
-            )
-        assert (
-            "greater than or equal to 1"
-            in str(exc_info.value).lower()
-        )
+            UserSettingsUpdateRequest(max_snapshots_per_playlist=0)
+        assert "greater than or equal to 1" in str(exc_info.value).lower()
 
     def test_max_snapshots_above_max(self):
         """Should reject max_snapshots above 50."""
         with pytest.raises(ValidationError) as exc_info:
-            UserSettingsUpdateRequest(
-                max_snapshots_per_playlist=51
-            )
-        assert (
-            "less than or equal to 50"
-            in str(exc_info.value).lower()
-        )
+            UserSettingsUpdateRequest(max_snapshots_per_playlist=51)
+        assert "less than or equal to 50" in str(exc_info.value).lower()
 
     def test_max_snapshots_negative(self):
         """Should reject negative max_snapshots."""
         with pytest.raises(ValidationError):
-            UserSettingsUpdateRequest(
-                max_snapshots_per_playlist=-5
-            )
+            UserSettingsUpdateRequest(max_snapshots_per_playlist=-5)
 
     def test_theme_empty_string(self):
         """Should reject empty string theme after strip."""
