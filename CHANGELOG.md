@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **`search_playlists` total_tracks always returned 0** - Fixed wrong key lookup: the code tried `item["items"]` (which doesn't exist on playlist search results) before falling back to `item["tracks"]`. Simplified to use `item.get("tracks", {})` directly. Closes #335
 - **Logout handler: swallowed exception + redundant user lookup** - Token revocation failure now logs a warning instead of silently swallowing with bare `except: pass`. Replaced direct `UserService.get_by_spotify_id()` call with the session-cached `get_db_user()` helper. Closes #349
+- **Search limit test and docstring aligned to 50** - `test_search_clamps_limit_max` expected clamping at 10 but code already clamps at 50 (Spotify's actual max). Updated test assertion and `SpotifyClient.search_playlists` docstring. Closes #350
 - **`logging.basicConfig(level=DEBUG)` no longer runs at import time** - Moved into `create_app()` with level set to INFO in production, DEBUG otherwise. Prevents debug logging from polluting any process that imports the shuffify package. Closes #338
 - **`REDIS_URL` now fails loudly in production** - `_init_redis` raises `RuntimeError` if Redis is unavailable in production instead of silently falling back to filesystem sessions. Development still falls back gracefully. Closes #339
 - **Schedule.target_playlist_id column width** - Widened from String(64) to String(255) to match all other playlist ID columns. Alembic migration included. Closes #352
