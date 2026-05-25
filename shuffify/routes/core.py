@@ -347,27 +347,25 @@ def logout():
             access_token = token_data.get("access_token")
             if access_token:
                 AuthService.revoke_access_token(access_token)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Token revocation failed during logout: %s", e)
 
     # Record logout event and activity before clearing session
     try:
-        user_data = session.get("user_data")
-        if user_data and user_data.get("id"):
-            db_user = UserService.get_by_spotify_id(user_data["id"])
-            if db_user:
-                flask_session_id = getattr(session, "sid", None)
-                LoginHistoryService.record_logout(
-                    user_id=db_user.id,
-                    session_id=flask_session_id,
-                )
-                log_activity(
-                    user_id=db_user.id,
-                    activity_type=ActivityType.LOGOUT,
-                    description="Logged out",
-                )
+        db_user = get_db_user()
+        if db_user:
+            flask_session_id = getattr(session, "sid", None)
+            LoginHistoryService.record_logout(
+                user_id=db_user.id,
+                session_id=flask_session_id,
+            )
+            log_activity(
+                user_id=db_user.id,
+                activity_type=ActivityType.LOGOUT,
+                description="Logged out",
+            )
     except Exception as e:
-        logger.warning(f"Failed to record logout: {e}")
+        logger.warning("Failed to record logout: %s", e)
 
     session.clear()
     return redirect(url_for("main.index"))
