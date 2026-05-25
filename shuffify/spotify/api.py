@@ -774,10 +774,7 @@ class SpotifyAPI:
             for item in results["playlists"]["items"]:
                 if item is None:
                     continue
-                # Defensive fallback: search response may use
-                # "items" or "tracks" for the total count depending
-                # on API version. Handle both safely.
-                total_key = item.get("items", item.get("tracks", {}))
+                total_key = item.get("tracks", {})
                 playlists.append(
                     {
                         "id": item["id"],

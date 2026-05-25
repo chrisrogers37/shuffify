@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Hardcoded `SECRET_KEY` fallback removed from base Config** - `Config.SECRET_KEY` no longer defaults to `"a_default_secret_key_for_development"`. DevConfig auto-generates a random key; TestConfig uses an explicit test key; ProdConfig requires the env var (unchanged). Closes #341
 
 ### Fixed
+- **`search_playlists` total_tracks always returned 0** - Fixed wrong key lookup: the code tried `item["items"]` (which doesn't exist on playlist search results) before falling back to `item["tracks"]`. Simplified to use `item.get("tracks", {})` directly. Closes #335
 - **`logging.basicConfig(level=DEBUG)` no longer runs at import time** - Moved into `create_app()` with level set to INFO in production, DEBUG otherwise. Prevents debug logging from polluting any process that imports the shuffify package. Closes #338
 - **`REDIS_URL` now fails loudly in production** - `_init_redis` raises `RuntimeError` if Redis is unavailable in production instead of silently falling back to filesystem sessions. Development still falls back gracefully. Closes #339
 - **Schedule.target_playlist_id column width** - Widened from String(64) to String(255) to match all other playlist ID columns. Alembic migration included. Closes #352
