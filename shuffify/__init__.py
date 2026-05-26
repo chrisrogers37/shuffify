@@ -121,10 +121,13 @@ def is_db_available() -> bool:
 def _init_redis(app):
     """Configure Redis for session storage and caching.
 
-    In production, raises RuntimeError if Redis is unavailable.
-    In development/testing, falls back to filesystem sessions.
+    Falls back to filesystem sessions (and disables Redis-backed caching)
+    when REDIS_URL is unset or unreachable. The fallback path is the
+    documented production deployment mode for installations without a
+    provisioned Redis — sessions live on the container filesystem, the
+    Spotify API cache is disabled, and Flask-Limiter uses in-memory
+    storage. See CLAUDE.md "Production Infrastructure" for the tradeoff.
     """
-    is_prod = app.config.get("CONFIG_NAME") == "production"
     redis_url = app.config.get("REDIS_URL")
     if redis_url:
         try:
@@ -138,18 +141,11 @@ def _init_redis(app):
             logger.info("Redis caching enabled")
             return client
         except redis.ConnectionError as e:
-            if is_prod:
-                raise RuntimeError(f"Redis connection failed in production: {e}") from e
             logger.warning(
                 "Redis connection failed: %s. Falling back to filesystem sessions.",
                 e,
             )
     else:
-        if is_prod:
-            raise RuntimeError(
-                "REDIS_URL must be set in production. "
-                "Filesystem sessions are not acceptable for production use."
-            )
         logger.warning("REDIS_URL not configured. Using filesystem sessions.")
 
     app.config["SESSION_TYPE"] = "filesystem"

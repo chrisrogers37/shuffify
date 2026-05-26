@@ -271,12 +271,21 @@ def _fetch_raid_sources_with_limits(
             result.track_uris if result else []
         )
 
-        if len(source_uris) > raid_count:
-            source_uris = random.sample(
-                source_uris, raid_count
-            )
+        # Filter against exclusion BEFORE sampling. Sampling raid_count
+        # from the raw source first collapses yield to near-zero when the
+        # source heavily overlaps the user's catalog (the dominant case
+        # for slow-rotation editorial sources after weeks of raiding):
+        # raid_count=10 from a 100-URI source with 94% overlap averages
+        # ~0.6 new tracks/run. Filtering first makes raid_count mean
+        # "up to N *new* tracks per run", matching user intent.
+        fresh_uris = [
+            uri for uri in source_uris if uri not in exclusion_set
+        ]
 
-        all_new_uris.extend(source_uris)
+        if len(fresh_uris) > raid_count:
+            fresh_uris = random.sample(fresh_uris, raid_count)
+
+        all_new_uris.extend(fresh_uris)
 
     # Update tracking fields on resolved sources
     _update_source_tracking(results)
