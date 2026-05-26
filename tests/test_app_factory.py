@@ -365,10 +365,16 @@ class TestSecretKeyValidation:
 
 
 class TestRedisProductionRequirement:
-    """Tests for Redis requirement in production."""
+    """Tests for Redis behavior in production.
 
-    def test_production_raises_without_redis_url(self):
-        """Production should fail loudly when REDIS_URL is not set."""
+    Production deployments without a provisioned Redis (the documented
+    default for self-hosted/single-instance installs) must fall back to
+    filesystem sessions rather than crash on boot. See CLAUDE.md
+    "Production Infrastructure" for the tradeoff.
+    """
+
+    def test_production_falls_back_when_redis_url_unset(self):
+        """Production should warn + fall back to filesystem when REDIS_URL is unset."""
         with patch.dict(
             "os.environ",
             {
@@ -380,11 +386,11 @@ class TestRedisProductionRequirement:
         ):
             from shuffify import create_app
 
-            with pytest.raises(RuntimeError, match="REDIS_URL must be set"):
-                create_app("production")
+            app = create_app("production")
+            assert app.config["SESSION_TYPE"] == "filesystem"
 
-    def test_production_raises_on_redis_connection_failure(self, monkeypatch):
-        """Production should fail loudly when Redis connection fails."""
+    def test_production_falls_back_on_redis_connection_failure(self, monkeypatch):
+        """Production should warn + fall back to filesystem when Redis is unreachable."""
         from config import ProdConfig
 
         monkeypatch.setattr(ProdConfig, "REDIS_URL", "redis://localhost:6379/0")
@@ -407,8 +413,8 @@ class TestRedisProductionRequirement:
 
                 from shuffify import create_app
 
-                with pytest.raises(RuntimeError, match="Redis connection failed"):
-                    create_app("production")
+                app = create_app("production")
+                assert app.config["SESSION_TYPE"] == "filesystem"
 
     def test_development_falls_back_to_filesystem(self):
         """Development should fall back to filesystem when Redis fails."""
