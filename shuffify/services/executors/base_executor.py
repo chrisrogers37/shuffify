@@ -15,6 +15,7 @@ from typing import List
 
 from shuffify.models.db import db, Schedule, JobExecution, User
 from shuffify.services.base import safe_commit
+from shuffify.services.playlist_lock import playlist_lock
 from shuffify.services.token_service import (
     TokenService,
     TokenEncryptionError,
@@ -309,8 +310,6 @@ class JobExecutorService:
         other's verification (e.g. a shuffle + a rotate that both
         fire at ``0 9 * * *`` on the same target).
         """
-        from shuffify.services.playlist_lock import playlist_lock
-
         execution = None
         schedule = None
         api = None

@@ -21,18 +21,22 @@ anyway, so racing is impossible.
 
 import hashlib
 import logging
-import time
 from contextlib import contextmanager
 from typing import Iterator
 
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 
 from shuffify.models.db import db
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_S = 60.0
-POLL_INTERVAL_S = 0.25
+
+# Postgres SQLSTATE for "lock_not_available" — raised by
+# pg_advisory_lock when the session's `lock_timeout` elapses
+# before the lock can be acquired.
+_PG_LOCK_NOT_AVAILABLE = "55P03"
 
 
 def _playlist_lock_key(playlist_id: str) -> int:
@@ -88,29 +92,30 @@ def playlist_lock(
     conn = db.engine.connect()
     acquired = False
     try:
-        deadline = time.monotonic() + timeout_s
-        while True:
-            row = conn.execute(
-                text("SELECT pg_try_advisory_lock(:k)"), {"k": key}
-            ).scalar()
-            if row:
-                acquired = True
-                logger.debug(
-                    "playlist_lock acquired: playlist_id=%s key=%d",
-                    playlist_id,
-                    key,
-                )
-                break
-            if time.monotonic() >= deadline:
-                logger.warning(
-                    "playlist_lock timeout: playlist_id=%s "
-                    "key=%d after %.1fs",
-                    playlist_id,
-                    key,
-                    timeout_s,
-                )
-                break
-            time.sleep(POLL_INTERVAL_S)
+        # Bound the lock wait server-side so contended cases cost one
+        # blocking call instead of N poll roundtrips. lock_timeout is
+        # per-session and applies to any subsequent statement that
+        # waits for a lock — including pg_advisory_lock.
+        timeout_ms = max(1, int(timeout_s * 1000))
+        conn.execute(text(f"SET lock_timeout = {timeout_ms}"))
+        try:
+            conn.execute(text("SELECT pg_advisory_lock(:k)"), {"k": key})
+            acquired = True
+            logger.debug(
+                "playlist_lock acquired: playlist_id=%s key=%d",
+                playlist_id,
+                key,
+            )
+        except OperationalError as e:
+            pgcode = getattr(getattr(e, "orig", None), "pgcode", None)
+            if pgcode != _PG_LOCK_NOT_AVAILABLE:
+                raise
+            logger.warning(
+                "playlist_lock timeout: playlist_id=%s key=%d after %.1fs",
+                playlist_id,
+                key,
+                timeout_s,
+            )
         yield acquired
     finally:
         if acquired:

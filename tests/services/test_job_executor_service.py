@@ -450,22 +450,26 @@ class TestExecuteLocking:
     lock times out so two schedules racing on the same target don't
     interleave reads and writes."""
 
-    def test_skips_work_when_lock_not_acquired(self, mock_schedule):
-        """Lock returns False → no execution record, no API calls."""
+    @staticmethod
+    def _fake_lock(acquired: bool):
+        """Build a context manager that yields the given bool."""
         from contextlib import contextmanager
 
         @contextmanager
-        def fake_lock_busy(_pid, **_kw):
-            yield False
+        def _ctx(_pid, **_kw):
+            yield acquired
 
+        return _ctx
+
+    def test_skips_work_when_lock_not_acquired(self, mock_schedule):
+        """Lock returns False → no execution record, no API calls."""
         with patch(
             "shuffify.services.executors.base_executor.db"
         ) as fake_db, patch(
-            "shuffify.services.playlist_lock.playlist_lock",
-            fake_lock_busy,
+            "shuffify.services.executors.base_executor.playlist_lock",
+            self._fake_lock(False),
         ), patch.object(
-            JobExecutorService,
-            "_create_execution_record",
+            JobExecutorService, "_create_execution_record",
         ) as create_record, patch.object(
             JobExecutorService, "_get_spotify_api"
         ) as get_api:
@@ -479,20 +483,13 @@ class TestExecuteLocking:
     def test_proceeds_when_lock_acquired(self, mock_schedule, mock_user):
         """Lock returns True → executor proceeds through the
         full happy path."""
-        from contextlib import contextmanager
-
-        @contextmanager
-        def fake_lock_free(_pid, **_kw):
-            yield True
-
         with patch(
             "shuffify.services.executors.base_executor.db"
         ) as fake_db, patch(
-            "shuffify.services.playlist_lock.playlist_lock",
-            fake_lock_free,
+            "shuffify.services.executors.base_executor.playlist_lock",
+            self._fake_lock(True),
         ), patch.object(
-            JobExecutorService,
-            "_create_execution_record",
+            JobExecutorService, "_create_execution_record",
         ) as create_record, patch.object(
             JobExecutorService, "_get_spotify_api"
         ) as get_api, patch.object(
