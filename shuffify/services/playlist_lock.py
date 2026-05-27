@@ -47,9 +47,7 @@ def _playlist_lock_key(playlist_id: str) -> int:
     is fast and collision-resistant; 8 bytes (64 bits) is the right
     width for bigint.
     """
-    digest = hashlib.blake2b(
-        playlist_id.encode("utf-8"), digest_size=8
-    ).digest()
+    digest = hashlib.blake2b(playlist_id.encode("utf-8"), digest_size=8).digest()
     return int.from_bytes(digest, "big", signed=True)
 
 
@@ -93,11 +91,11 @@ def playlist_lock(
     acquired = False
     try:
         # Bound the lock wait server-side so contended cases cost one
-        # blocking call instead of N poll roundtrips. lock_timeout is
-        # per-session and applies to any subsequent statement that
-        # waits for a lock — including pg_advisory_lock.
+        # blocking call instead of N poll roundtrips. SET LOCAL scopes
+        # lock_timeout to this transaction so it resets on ROLLBACK /
+        # COMMIT — without LOCAL the timeout bleeds into the pool.
         timeout_ms = max(1, int(timeout_s * 1000))
-        conn.execute(text(f"SET lock_timeout = {timeout_ms}"))
+        conn.execute(text(f"SET LOCAL lock_timeout = {timeout_ms}"))
         try:
             conn.execute(text("SELECT pg_advisory_lock(:k)"), {"k": key})
             acquired = True
@@ -120,9 +118,7 @@ def playlist_lock(
     finally:
         if acquired:
             try:
-                conn.execute(
-                    text("SELECT pg_advisory_unlock(:k)"), {"k": key}
-                )
+                conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": key})
                 logger.debug(
                     "playlist_lock released: playlist_id=%s key=%d",
                     playlist_id,
@@ -130,8 +126,7 @@ def playlist_lock(
                 )
             except Exception as e:
                 logger.warning(
-                    "playlist_lock release failed: "
-                    "playlist_id=%s key=%d err=%s",
+                    "playlist_lock release failed: playlist_id=%s key=%d err=%s",
                     playlist_id,
                     key,
                     e,

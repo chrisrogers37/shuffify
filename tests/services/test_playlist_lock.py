@@ -119,10 +119,9 @@ class TestPlaylistLockPostgres:
             (c.args[0].text if hasattr(c.args[0], "text") else str(c.args[0]))
             for c in conn.execute.call_args_list
         ]
-        assert any("SET lock_timeout" in q for q in calls)
+        assert any("SET LOCAL lock_timeout" in q for q in calls)
         assert any(
-            "pg_advisory_lock" in q and "pg_advisory_unlock" not in q
-            for q in calls
+            "pg_advisory_lock" in q and "pg_advisory_unlock" not in q for q in calls
         )
         assert any("pg_advisory_unlock" in q for q in calls)
         conn.close.assert_called_once()
