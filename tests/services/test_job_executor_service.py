@@ -443,3 +443,66 @@ class TestGetSpotifyApi:
             match="no stored refresh token",
         ):
             JobExecutorService._get_spotify_api(mock_user)
+
+
+class TestExecuteLocking:
+    """JobExecutorService.execute must skip cleanly when the playlist
+    lock times out so two schedules racing on the same target don't
+    interleave reads and writes."""
+
+    @staticmethod
+    def _fake_lock(acquired: bool):
+        """Build a context manager that yields the given bool."""
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _ctx(_pid, **_kw):
+            yield acquired
+
+        return _ctx
+
+    def test_skips_work_when_lock_not_acquired(self, mock_schedule):
+        """Lock returns False → no execution record, no API calls."""
+        with patch(
+            "shuffify.services.executors.base_executor.db"
+        ) as fake_db, patch(
+            "shuffify.services.executors.base_executor.playlist_lock",
+            self._fake_lock(False),
+        ), patch.object(
+            JobExecutorService, "_create_execution_record",
+        ) as create_record, patch.object(
+            JobExecutorService, "_get_spotify_api"
+        ) as get_api:
+            fake_db.session.get.return_value = mock_schedule
+
+            JobExecutorService.execute(mock_schedule.id)
+
+            create_record.assert_not_called()
+            get_api.assert_not_called()
+
+    def test_proceeds_when_lock_acquired(self, mock_schedule, mock_user):
+        """Lock returns True → executor proceeds through the
+        full happy path."""
+        with patch(
+            "shuffify.services.executors.base_executor.db"
+        ) as fake_db, patch(
+            "shuffify.services.executors.base_executor.playlist_lock",
+            self._fake_lock(True),
+        ), patch.object(
+            JobExecutorService, "_create_execution_record",
+        ) as create_record, patch.object(
+            JobExecutorService, "_get_spotify_api"
+        ) as get_api, patch.object(
+            JobExecutorService, "_execute_job_type",
+            return_value={"tracks_added": 0, "tracks_total": 10},
+        ), patch.object(
+            JobExecutorService, "_record_success"
+        ) as record_success:
+            fake_db.session.get.side_effect = [mock_schedule, mock_user]
+            create_record.return_value = Mock()
+
+            JobExecutorService.execute(mock_schedule.id)
+
+            create_record.assert_called_once_with(mock_schedule.id)
+            get_api.assert_called_once_with(mock_user)
+            record_success.assert_called_once()

@@ -15,6 +15,7 @@ from typing import List
 
 from shuffify.models.db import db, Schedule, JobExecution, User
 from shuffify.services.base import safe_commit
+from shuffify.services.playlist_lock import playlist_lock
 from shuffify.services.token_service import (
     TokenService,
     TokenEncryptionError,
@@ -302,9 +303,16 @@ class JobExecutorService:
 
         This is the main entry point called by the scheduler.
         It handles all error scenarios and records the execution.
+
+        Runs are serialized per target playlist via
+        :func:`playlist_lock` so two schedules sharing a cron firing
+        time on the same playlist can't interleave and corrupt each
+        other's verification (e.g. a shuffle + a rotate that both
+        fire at ``0 9 * * *`` on the same target).
         """
         execution = None
         schedule = None
+        api = None
 
         try:
             schedule = db.session.get(Schedule, schedule_id)
@@ -318,17 +326,29 @@ class JobExecutorService:
 
             _tag_sentry_scope(schedule, schedule_id)
 
-            execution = JobExecutorService._create_execution_record(schedule_id)
+            with playlist_lock(schedule.target_playlist_id) as acquired:
+                if not acquired:
+                    logger.warning(
+                        "Schedule %s: skipping run — another job is "
+                        "in progress on playlist %s and the lock did "
+                        "not release within the timeout. Next "
+                        "scheduled fire will retry.",
+                        schedule_id,
+                        schedule.target_playlist_id,
+                    )
+                    return
 
-            user = db.session.get(User, schedule.user_id)
-            if not user:
-                raise JobExecutionError(f"User {schedule.user_id} not found")
+                execution = JobExecutorService._create_execution_record(schedule_id)
 
-            api = JobExecutorService._get_spotify_api(user)
+                user = db.session.get(User, schedule.user_id)
+                if not user:
+                    raise JobExecutionError(f"User {schedule.user_id} not found")
 
-            result = JobExecutorService._execute_job_type(schedule, api)
+                api = JobExecutorService._get_spotify_api(user)
 
-            JobExecutorService._record_success(execution, schedule, result)
+                result = JobExecutorService._execute_job_type(schedule, api)
+
+                JobExecutorService._record_success(execution, schedule, result)
 
         except (
             PlaylistVerificationError,
