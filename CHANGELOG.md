@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Container runs as non-root** - Added `USER nobody` to the Dockerfile so gunicorn no longer runs as root in the production container (`.flask_session` is already chowned to `nobody:nogroup`, and gunicorn binds a non-privileged port). Closes #395
+- **HSTS `preload` directive** - Added `preload` to the production `Strict-Transport-Security` header (now `max-age=31536000; includeSubDomains; preload`). Closes #401
+
 ### Added
 - **Per-playlist execution lock** - New `shuffify.services.playlist_lock.playlist_lock` context manager serializes `JobExecutorService.execute()` runs that target the same playlist, using Postgres session-level advisory locks on a dedicated pool connection. Prevents the race where two schedules sharing a cron firing time on the same playlist interleave reads and writes (e.g. a shuffle's post-write verification reading mid-flight rotate state and failing with `expected N tracks, got N-K`). No-op on SQLite (dev/test, single-process). Lock acquisition has a 60-second timeout; on timeout the run is skipped with a `WARNING` log and the next cron fire retries.
 - **docker-compose source mount fix** - Moved host source mount (`-v .:/app`) from `docker-compose.yml` into new `docker-compose.override.yml` (auto-loaded in dev, skipped in prod). `docker-compose.prod.yml` adds `restart: unless-stopped`. Closes #345
