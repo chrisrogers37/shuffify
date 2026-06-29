@@ -516,6 +516,7 @@ class TestSecurityHeaders:
                     assert hsts is not None
                     assert "max-age=31536000" in hsts
                     assert "includeSubDomains" in hsts
+                    assert "preload" in hsts
 
     def test_csp_header_present(self, client):
         """All responses should include Content-Security-Policy."""

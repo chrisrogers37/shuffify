@@ -40,5 +40,10 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:8000/health || exit 1
 
+# Drop root privileges: run the app as the non-root 'nobody' user.
+# The .flask_session dir above is chowned to nobody:nogroup so the filesystem
+# session fallback stays writable; gunicorn binds :8000 (>1024, no root needed).
+USER nobody
+
 # Run the application
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--preload", "run:app"]

@@ -403,7 +403,7 @@ def _apply_security_headers(app):
         # HSTS: only in production (development uses HTTP)
         if not app.debug:
             response.headers["Strict-Transport-Security"] = (
-                "max-age=31536000; includeSubDomains"
+                "max-age=31536000; includeSubDomains; preload"
             )
 
         # No-cache headers for development mode
