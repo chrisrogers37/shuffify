@@ -10,7 +10,6 @@ from unittest.mock import patch, Mock, MagicMock
 
 from shuffify.models.playlist import Playlist
 
-
 # =============================================================================
 # Fixtures
 # =============================================================================
@@ -88,6 +87,66 @@ class TestWorkshopPage:
         assert b"Workshop Test Playlist" in response.data
         assert b"Track 1" in response.data
         assert b"Save to Spotify" in response.data
+
+    @patch("shuffify.routes.workshop.AuthService")
+    @patch("shuffify.routes.workshop.PlaylistService")
+    @patch("shuffify.routes.workshop.ShuffleService")
+    def test_workshop_escapes_malicious_track_uri(
+        self,
+        mock_shuffle_svc,
+        mock_playlist_svc,
+        mock_auth_svc,
+        authenticated_client,
+        sample_user,
+    ):
+        """track.uri is JS-escaped (tojson) in onclick handlers — XSS guard (#267)."""
+        mock_auth_svc.validate_session_token.return_value = True
+        mock_auth_svc.get_authenticated_client.return_value = Mock()
+        mock_auth_svc.get_user_data.return_value = sample_user
+
+        malicious_uri = "spotify:track:x'));alert(document.cookie);//"
+        playlist = Playlist(
+            id="playlist123",
+            name="Workshop Test Playlist",
+            owner_id="user123",
+            description="A test playlist",
+            tracks=[
+                {
+                    "id": "track1",
+                    "name": "Track 1",
+                    "uri": malicious_uri,
+                    "duration_ms": 180000,
+                    "is_local": False,
+                    "artists": ["Artist 1"],
+                    "artist_urls": ["https://open.spotify.com/artist/artist1"],
+                    "album_name": "Album 1",
+                    "album_image_url": "https://example.com/album1.jpg",
+                    "track_url": "https://open.spotify.com/track/track1",
+                }
+            ],
+        )
+        mock_ps_instance = Mock()
+        mock_ps_instance.get_playlist.return_value = playlist
+        mock_playlist_svc.return_value = mock_ps_instance
+        mock_shuffle_svc.list_algorithms.return_value = [
+            {
+                "name": "Basic",
+                "class_name": "BasicShuffle",
+                "description": "Random shuffle",
+                "parameters": {},
+            }
+        ]
+
+        response = authenticated_client.get("/workshop/playlist123")
+        assert response.status_code == 200
+        # tojson JS-escapes the single quote (') rather than HTML-escaping
+        # it (&#39;), so it cannot break out of the onclick JS string. (#267)
+        assert b"\\u0027" in response.data
+        # The vulnerable single-quote-delimited inline calls must be gone. (The
+        # data-uri="" attribute legitimately HTML-escapes the quote — that is
+        # the safe attribute context, read back cleanly via element.dataset.)
+        assert b"toggleTrackLock('" not in response.data
+        assert b"deleteTrack('" not in response.data
 
 
 # =============================================================================
