@@ -120,6 +120,14 @@ WS1 (correctness fixes) ──► WS2 (CI lock-in) ──► everything else
 
 ## Tracking
 
-- Each item references SR-IDs in `findings-tracker.md`; update the `Status` field there as items land.
-- Recommend promoting Critical/High findings (SR-001 … SR-016) to GitHub issues with the SR-ID in the title, so Dependabot-style automation and PR references work naturally.
+All findings are filed as GitHub issues (2026-07-07) — see the mapping table at the top of [`findings-tracker.md`](./findings-tracker.md):
+
+- **P0/P1 individual issues:** [#439](https://github.com/chrisrogers37/shuffify/issues/439)–[#454](https://github.com/chrisrogers37/shuffify/issues/454) (SR-001 … SR-016, with SR-020 folded into #454)
+- **P2 clusters:** [#455](https://github.com/chrisrogers37/shuffify/issues/455) reliability/ops, [#456](https://github.com/chrisrogers37/shuffify/issues/456) Spotify/data layer, [#457](https://github.com/chrisrogers37/shuffify/issues/457) backend structure, [#458](https://github.com/chrisrogers37/shuffify/issues/458) presentation/tooling
+- **P3 cluster:** [#459](https://github.com/chrisrogers37/shuffify/issues/459) low-severity findings
+- **P4 cluster:** [#460](https://github.com/chrisrogers37/shuffify/issues/460) nice-to-have product roadmap (Workstream 7)
+
+Conventions:
+- Reference the SR-ID and issue number in fix commits/PRs; update the `Status` field in the tracker as items land.
+- Check off cluster-issue checklist items as their sub-findings are fixed; close the cluster when all are done.
 - Add a CHANGELOG entry per fix, per existing project convention.

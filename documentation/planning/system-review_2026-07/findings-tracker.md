@@ -4,7 +4,36 @@
 **Baseline commit:** `f038083` (main)
 **Baseline health:** `flake8 shuffify/` — 0 errors. `pytest tests/ -m "not integration"` — **1,894 passed, 2 failed** (see SR-020), 22 network-integration tests deselected.
 
-This tracker triages findings from a full-system review covering the services/executor layer, presentation layer (routes/schemas/templates), Spotify integration, data models, infrastructure, tests, CI/CD, and documentation. Each finding has a stable ID (`SR-NNN`) so it can be referenced from commits, PRs, or promoted into GitHub issues.
+This tracker triages findings from a full-system review covering the services/executor layer, presentation layer (routes/schemas/templates), Spotify integration, data models, infrastructure, tests, CI/CD, and documentation. Each finding has a stable ID (`SR-NNN`) so it can be referenced from commits and PRs.
+
+**All findings are filed as GitHub issues** (2026-07-07): Critical (P0) and High (P1) findings individually, Medium (P2)/Low (P3)/enhancements as thematic cluster issues. See the mapping table below. When an issue closes, update the corresponding `Status` field here.
+
+## GitHub issue mapping
+
+| Finding | Priority | Issue |
+|---------|----------|-------|
+| SR-001 | P0 | [#439](https://github.com/chrisrogers37/shuffify/issues/439) |
+| SR-002 | P0 | [#440](https://github.com/chrisrogers37/shuffify/issues/440) |
+| SR-003 | P0 | [#441](https://github.com/chrisrogers37/shuffify/issues/441) |
+| SR-004 | P0 | [#442](https://github.com/chrisrogers37/shuffify/issues/442) |
+| SR-005 | P1 | [#443](https://github.com/chrisrogers37/shuffify/issues/443) |
+| SR-006 | P1 | [#444](https://github.com/chrisrogers37/shuffify/issues/444) |
+| SR-007 | P1 | [#445](https://github.com/chrisrogers37/shuffify/issues/445) |
+| SR-008 | P1 | [#446](https://github.com/chrisrogers37/shuffify/issues/446) |
+| SR-009 | P1 | [#447](https://github.com/chrisrogers37/shuffify/issues/447) |
+| SR-010 | P1 | [#448](https://github.com/chrisrogers37/shuffify/issues/448) |
+| SR-011 | P1 | [#449](https://github.com/chrisrogers37/shuffify/issues/449) |
+| SR-012 | P1 | [#450](https://github.com/chrisrogers37/shuffify/issues/450) |
+| SR-013 | P1 | [#451](https://github.com/chrisrogers37/shuffify/issues/451) |
+| SR-014 | P1 | [#452](https://github.com/chrisrogers37/shuffify/issues/452) |
+| SR-015 | P1 | [#453](https://github.com/chrisrogers37/shuffify/issues/453) |
+| SR-016, SR-020 | P1 | [#454](https://github.com/chrisrogers37/shuffify/issues/454) (SR-020's failing tests block CI enablement, so both are tracked there) |
+| SR-017, SR-018, SR-019, SR-025, SR-034, SR-035, SR-036 | P2 cluster | [#455](https://github.com/chrisrogers37/shuffify/issues/455) — Reliability & operations hardening |
+| SR-030, SR-031, SR-032, SR-033 | P2 cluster | [#456](https://github.com/chrisrogers37/shuffify/issues/456) — Spotify integration & data-layer cleanup |
+| SR-021, SR-022, SR-023, SR-024, SR-028, SR-029 | P2 cluster | [#457](https://github.com/chrisrogers37/shuffify/issues/457) — Backend structural debt |
+| SR-026, SR-027, SR-037 | P2 cluster | [#458](https://github.com/chrisrogers37/shuffify/issues/458) — Presentation layer & tooling |
+| SR-038 … SR-045 | P3 cluster | [#459](https://github.com/chrisrogers37/shuffify/issues/459) — Low-severity findings |
+| Workstream 7 enhancements | P4 cluster | [#460](https://github.com/chrisrogers37/shuffify/issues/460) — Nice-to-have product roadmap |
 
 **Verification legend:**
 - ✅ **Verified** — traced through the code by hand during this review.
