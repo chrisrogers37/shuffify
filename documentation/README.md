@@ -14,17 +14,17 @@ documentation/
 │   ├── README.md
 │   ├── 03_extensibility_evaluation.md
 │   ├── 04_future_features_readiness.md
-│   ├── 05_brainstorm_enhancements.md
-│   └── system-review_2026-07/
-│       ├── findings-tracker.md      # Triaged findings (SR-001 … SR-045)
-│       └── enhancement-plan.md      # Sequenced workstreams based on findings
+│   └── 05_brainstorm_enhancements.md
 ├── guides/            # How-to guides and critiques
 │   ├── credential-rotation.md
 │   ├── FACEBOOK_OAUTH_TROUBLESHOOTING.md
 │   ├── infrastructure_critiques.md
 │   └── UX_CRITIQUES.md
 ├── planning/          # Development plans and feature phases
-│   └── phases/        # (empty — all archived)
+│   ├── phases/        # (empty — all archived)
+│   └── system-review_2026-07/
+│       ├── findings-tracker.md      # Triaged findings (SR-001 … SR-045) → GitHub issues
+│       └── enhancement-plan.md      # Sequenced workstreams based on findings
 └── archive/           # Completed evaluations, plans, and design docs
     ├── 01_architecture_evaluation.md
     ├── 02_modularity_assessment.md
@@ -59,8 +59,6 @@ Active evaluation documents for ongoing development planning:
 - **[Extensibility Evaluation](evaluation/03_extensibility_evaluation.md)** - Service extensibility patterns, plugin architecture proposals
 - **[Future Features Readiness](evaluation/04_future_features_readiness.md)** - Readiness for planned features (database, automations, notifications, UI)
 - **[Brainstorm Enhancements](evaluation/05_brainstorm_enhancements.md)** - Enhancement ideas and tracking
-- **[System Review 2026-07 — Findings Tracker](evaluation/system-review_2026-07/findings-tracker.md)** - Full-system review: 45 triaged findings (bugs, security, architecture, tech debt, testing/CI) with severity and suggested fixes
-- **[System Review 2026-07 — Enhancement Plan](evaluation/system-review_2026-07/enhancement-plan.md)** - Seven sequenced workstreams derived from the findings tracker
 
 ## Guides
 
@@ -72,7 +70,8 @@ Active evaluation documents for ongoing development planning:
 
 ## Planning (Active)
 
-No active plans — all sessions archived.
+- **[System Review 2026-07 — Findings Tracker](planning/system-review_2026-07/findings-tracker.md)** - Full-system review: 45 triaged findings (bugs, security, architecture, tech debt, testing/CI) with severity, suggested fixes, and links to the GitHub issues tracking each item
+- **[System Review 2026-07 — Enhancement Plan](planning/system-review_2026-07/enhancement-plan.md)** - Seven sequenced workstreams derived from the findings tracker
 
 ## Planning (Archived)
 
