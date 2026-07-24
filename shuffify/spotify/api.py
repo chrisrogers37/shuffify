@@ -9,7 +9,7 @@ Supports optional Redis caching for improved performance.
 """
 
 import logging
-from typing import Dict, List, Any, Optional, TYPE_CHECKING
+from typing import Callable, Dict, List, Any, Optional, TYPE_CHECKING
 
 from .auth import TokenInfo, SpotifyAuthManager
 from .error_handling import api_error_handler
@@ -64,15 +64,21 @@ class SpotifyAPI:
         auth_manager: Optional[SpotifyAuthManager] = None,
         auto_refresh: bool = True,
         cache: Optional["SpotifyCache"] = None,
+        on_token_refresh: Optional[Callable[[TokenInfo], None]] = None,
     ):
         """
         Initialize the API client.
 
         Args:
-            token_info: Valid TokenInfo with access token.
+            token_info: TokenInfo with an access token. May be expired -- it
+                will be refreshed on construction when auto_refresh is enabled.
             auth_manager: Optional auth manager for token refresh.
             auto_refresh: Whether to automatically refresh expired tokens.
             cache: Optional SpotifyCache instance for caching API responses.
+            on_token_refresh: Optional callback invoked with the new TokenInfo
+                whenever the access token is refreshed (at construction or on a
+                401 retry). Used to persist the refreshed token, e.g. back to
+                the Flask session. Background jobs pass None.
 
         Raises:
             SpotifyTokenExpiredError: If token is expired and cannot be refreshed.
@@ -80,11 +86,14 @@ class SpotifyAPI:
         self._auth_manager = auth_manager
         self._auto_refresh = auto_refresh and auth_manager is not None
         self._cache = cache
+        self._on_token_refresh = on_token_refresh
 
-        # Ensure token is valid
+        # Ensure token is valid, refreshing if needed.
+        refreshed_at_init = False
         if token_info.is_expired:
             if self._auto_refresh:
                 token_info = auth_manager.ensure_valid_token(token_info)
+                refreshed_at_init = True
             else:
                 raise SpotifyTokenExpiredError("Token is expired")
 
@@ -101,9 +110,29 @@ class SpotifyAPI:
             " (with cache)" if cache else "",
         )
 
+        # If we refreshed while constructing, let the caller persist the new
+        # token (e.g. write it back to the session) so the next request reuses
+        # it instead of refreshing again.
+        if refreshed_at_init:
+            self._notify_token_refresh()
+
+    def _notify_token_refresh(self) -> None:
+        """Invoke the on_token_refresh callback with the current token.
+
+        Best-effort: a failing callback is logged and swallowed so token
+        persistence can never break an API call.
+        """
+        if self._on_token_refresh is None:
+            return
+        try:
+            self._on_token_refresh(self._token_info)
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning("on_token_refresh callback failed: %s", e)
+
     def _handle_token_refresh(self) -> str:
         """Callback for SpotifyHTTPClient on 401 responses."""
         self._token_info = self._auth_manager.ensure_valid_token(self._token_info)
+        self._notify_token_refresh()
         return self._token_info.access_token
 
     @property
@@ -132,6 +161,7 @@ class SpotifyAPI:
         logger.info("Token expired, refreshing...")
         self._token_info = self._auth_manager.ensure_valid_token(self._token_info)
         self._http.update_token(self._token_info.access_token)
+        self._notify_token_refresh()
 
     def _get_user_id(self) -> str:
         """Get the current user's ID, caching the result."""

@@ -10,7 +10,7 @@ for better separation of concerns.
 """
 
 import logging
-from typing import Dict, List, Any, Optional, TYPE_CHECKING
+from typing import Callable, Dict, List, Any, Optional, TYPE_CHECKING
 
 from .auth import SpotifyAuthManager, TokenInfo
 from .api import SpotifyAPI
@@ -52,6 +52,7 @@ class SpotifyClient:
         token: Optional[Dict[str, Any]] = None,
         credentials: Optional[Dict[str, str]] = None,
         cache: Optional["SpotifyCache"] = None,
+        on_token_refresh: Optional[Callable[["TokenInfo"], None]] = None,
     ):
         """
         Initialize the Spotify client.
@@ -72,6 +73,7 @@ class SpotifyClient:
         self._token_info: Optional[TokenInfo] = None
         self._api: Optional[SpotifyAPI] = None
         self._cache = cache
+        self._on_token_refresh = on_token_refresh
 
         if token:
             self._initialize_with_token(token)
@@ -117,15 +119,19 @@ class SpotifyClient:
         try:
             self._token_info = TokenInfo.from_dict(token)
 
-            # Validate token (will raise if expired)
-            self._token_info.validate()
-
-            # Create API client
+            # NOTE: Do not pre-validate expiry here. SpotifyAPI(auto_refresh=True)
+            # transparently refreshes an expired token on construction (and on
+            # 401 retries). Raising on expiry here caused an hourly forced
+            # logout even when a valid refresh_token was present (SR-003).
+            # Structurally invalid tokens still fail via TokenInfo.from_dict,
+            # and an expired token with no refresh_token still raises through
+            # the refresh path below.
             self._api = SpotifyAPI(
                 self._token_info,
                 self._auth_manager,
                 auto_refresh=True,
                 cache=self._cache,
+                on_token_refresh=self._on_token_refresh,
             )
             logger.info(
                 "SpotifyClient initialized with valid token%s",
@@ -133,7 +139,7 @@ class SpotifyClient:
             )
 
         except SpotifyTokenError as e:
-            logger.error(f"Token validation failed: {e}")
+            logger.error(f"Token initialization failed: {e}")
             raise ValueError(f"Invalid or expired token: {e}")
 
     @property

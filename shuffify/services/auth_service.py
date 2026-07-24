@@ -5,9 +5,12 @@ Handles OAuth URL generation, token exchange, validation, and session management
 """
 
 import logging
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, TYPE_CHECKING
 
 from shuffify.spotify.client import SpotifyClient
+
+if TYPE_CHECKING:
+    from shuffify.spotify.auth import TokenInfo
 
 logger = logging.getLogger(__name__)
 
@@ -139,10 +142,41 @@ class AuthService:
             AuthenticationError: If client creation fails.
         """
         try:
-            return SpotifyClient(token=token)
+            return SpotifyClient(
+                token=token,
+                on_token_refresh=AuthService._persist_token_to_session,
+            )
         except Exception as e:
             logger.error(f"Failed to create authenticated client: {e}", exc_info=True)
             raise AuthenticationError(f"Failed to create Spotify client: {e}")
+
+    @staticmethod
+    def _persist_token_to_session(token_info: "TokenInfo") -> None:
+        """
+        Write a refreshed Spotify token back to the Flask session.
+
+        Wired as SpotifyAPI's ``on_token_refresh`` callback so a token refreshed
+        mid-request is persisted for subsequent requests instead of being
+        discarded (SR-004). No-ops outside a request context -- background
+        scheduled jobs have no session to update, so they simply skip this.
+
+        Best-effort: failures are logged and swallowed so token persistence can
+        never break the request that triggered the refresh.
+
+        Args:
+            token_info: The freshly refreshed TokenInfo.
+        """
+        from flask import session, has_request_context
+
+        if not has_request_context():
+            return
+
+        try:
+            session["spotify_token"] = token_info.to_dict()
+            session.modified = True
+            logger.debug("Persisted refreshed Spotify token to session")
+        except Exception as e:
+            logger.warning("Failed to persist refreshed token to session: %s", e)
 
     @staticmethod
     def get_user_data(client: SpotifyClient) -> Dict[str, Any]:

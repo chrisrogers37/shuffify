@@ -214,6 +214,60 @@ class TestSpotifyAPIInit:
                 auto_refresh=False,
             )
 
+    def test_on_token_refresh_fired_on_construction_refresh(
+        self, expired_token_info, auth_manager
+    ):
+        """Refreshing an expired token at construction should notify
+        on_token_refresh with the new token, so the caller can persist
+        it back to the session (SR-004)."""
+        new_token = TokenInfo(
+            access_token='new_token',
+            token_type='Bearer',
+            expires_at=time.time() + 3600,
+            refresh_token='new_refresh',
+        )
+        received = []
+        with patch.object(
+            auth_manager, 'ensure_valid_token',
+            return_value=new_token,
+        ):
+            with patch('shuffify.spotify.api.SpotifyHTTPClient'):
+                SpotifyAPI(
+                    expired_token_info, auth_manager,
+                    auto_refresh=True,
+                    on_token_refresh=received.append,
+                )
+
+        assert len(received) == 1
+        assert received[0].access_token == 'new_token'
+
+    def test_on_token_refresh_fired_on_401_retry(
+        self, valid_token_info, auth_manager
+    ):
+        """The HTTP 401 refresh path should also notify on_token_refresh so
+        long-lived clients persist the new token (SR-004)."""
+        new_token = TokenInfo(
+            access_token='new_token_401',
+            token_type='Bearer',
+            expires_at=time.time() + 3600,
+            refresh_token='new_refresh',
+        )
+        received = []
+        with patch('shuffify.spotify.api.SpotifyHTTPClient'):
+            api = SpotifyAPI(
+                valid_token_info, auth_manager,
+                auto_refresh=True,
+                on_token_refresh=received.append,
+            )
+            with patch.object(
+                auth_manager, 'ensure_valid_token',
+                return_value=new_token,
+            ):
+                access_token = api._handle_token_refresh()
+
+        assert access_token == 'new_token_401'
+        assert received[-1].access_token == 'new_token_401'
+
     def test_token_info_property(
         self, valid_token_info, auth_manager
     ):

@@ -157,7 +157,10 @@ class TestAuthServiceGetAuthenticatedClient:
         client = AuthService.get_authenticated_client(sample_token)
 
         assert client == mock_instance
-        mock_client_class.assert_called_once_with(token=sample_token)
+        mock_client_class.assert_called_once_with(
+            token=sample_token,
+            on_token_refresh=AuthService._persist_token_to_session,
+        )
 
     @patch("shuffify.services.auth_service.SpotifyClient")
     def test_get_authenticated_client_failure(self, mock_client_class, sample_token):
@@ -204,7 +207,10 @@ class TestAuthServiceAuthenticateAndGetUser:
 
         assert client == mock_instance
         assert user == sample_user
-        mock_client_class.assert_called_once_with(token=sample_token)
+        mock_client_class.assert_called_once_with(
+            token=sample_token,
+            on_token_refresh=AuthService._persist_token_to_session,
+        )
 
     @patch("shuffify.services.auth_service.SpotifyClient")
     def test_authenticate_and_get_user_client_failure(
@@ -227,3 +233,90 @@ class TestAuthServiceAuthenticateAndGetUser:
 
         with pytest.raises(AuthenticationError):
             AuthService.authenticate_and_get_user(sample_token)
+
+
+class TestAuthServiceTokenRefreshPersistence:
+    """Refreshed tokens must be written back to the session (SR-003 + SR-004)."""
+
+    @staticmethod
+    def _expired_token():
+        import time
+
+        return {
+            "access_token": "expired_access",
+            "token_type": "Bearer",
+            "expires_at": time.time() - 100,
+            "expires_in": 0,
+            "refresh_token": "test_refresh_token",
+        }
+
+    @staticmethod
+    def _refreshed_token_info():
+        import time
+
+        from shuffify.spotify.auth import TokenInfo
+
+        return TokenInfo(
+            access_token="refreshed_access",
+            token_type="Bearer",
+            expires_at=time.time() + 3600,
+            refresh_token="test_refresh_token",
+        )
+
+    @staticmethod
+    def _test_credentials():
+        from shuffify.spotify.credentials import SpotifyCredentials
+
+        return SpotifyCredentials(
+            client_id="test_client_id",
+            client_secret="test_client_secret",
+            redirect_uri="http://localhost:5000/callback",
+        )
+
+    def test_get_authenticated_client_persists_refreshed_token_to_session(self, app):
+        """When building the client triggers a token refresh, the new token
+        must be written back to session['spotify_token'] so subsequent
+        requests don't refresh again or fail (SR-004)."""
+        from flask import session
+        from shuffify.spotify.auth import SpotifyAuthManager
+
+        refreshed = self._refreshed_token_info()
+
+        with app.test_request_context():
+            session["spotify_token"] = self._expired_token()
+
+            with patch("shuffify.spotify.api.SpotifyHTTPClient"), patch(
+                "shuffify.spotify.client.SpotifyCredentials.from_flask_config",
+                return_value=self._test_credentials(),
+            ), patch.object(
+                SpotifyAuthManager,
+                "ensure_valid_token",
+                return_value=refreshed,
+            ):
+                AuthService.get_authenticated_client(session["spotify_token"])
+
+            assert session["spotify_token"]["access_token"] == "refreshed_access"
+            assert session.modified is True
+
+    def test_refresh_callback_is_noop_without_request_context(self, app):
+        """Background executors have no request context; a refresh during
+        client creation must not raise (SR-004)."""
+        from shuffify.spotify.auth import SpotifyAuthManager
+
+        refreshed = self._refreshed_token_info()
+
+        # No request context -- callback must no-op, not raise.
+        with app.app_context():
+            with patch("shuffify.spotify.api.SpotifyHTTPClient"), patch(
+                "shuffify.spotify.client.SpotifyCredentials.from_flask_config",
+                return_value=self._test_credentials(),
+            ), patch.object(
+                SpotifyAuthManager,
+                "ensure_valid_token",
+                return_value=refreshed,
+            ):
+                client = AuthService.get_authenticated_client(
+                    self._expired_token()
+                )
+
+        assert client.is_authenticated
