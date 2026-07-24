@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch, MagicMock
 from shuffify.spotify.client import SpotifyClient
 from shuffify.spotify.cache import SpotifyCache
 from shuffify.spotify.credentials import SpotifyCredentials
-from shuffify.spotify.auth import TokenInfo
+from shuffify.spotify.auth import TokenInfo, SpotifyAuthManager
 
 
 # =============================================================================
@@ -124,15 +124,50 @@ class TestSpotifyClientInit:
 
             assert client._cache is mock_cache
 
-    def test_init_with_expired_token_raises(
+    def test_init_with_expired_token_refreshes(
         self, credentials_dict, expired_token
     ):
-        """Should raise ValueError for expired token."""
+        """Expired token with a refresh_token should refresh transparently
+        instead of raising -- eliminates the hourly forced logout (SR-003)."""
+        refreshed = TokenInfo(
+            access_token='refreshed_access_token',
+            token_type='Bearer',
+            expires_at=time.time() + 3600,
+            refresh_token='test_refresh_token',
+        )
+        with patch('shuffify.spotify.api.SpotifyHTTPClient'):
+            with patch.object(
+                SpotifyAuthManager,
+                'ensure_valid_token',
+                return_value=refreshed,
+            ):
+                client = SpotifyClient(
+                    token=expired_token,
+                    credentials=credentials_dict,
+                )
+
+                assert client.is_authenticated
+                assert (
+                    client.token_info.access_token
+                    == 'refreshed_access_token'
+                )
+
+    def test_init_with_expired_token_no_refresh_token_raises(
+        self, credentials_dict
+    ):
+        """An expired token with no refresh_token cannot be refreshed
+        and should still raise (SR-003 guardrail)."""
+        token = {
+            'access_token': 'expired_token',
+            'token_type': 'Bearer',
+            'expires_at': time.time() - 100,
+            'expires_in': 0,
+        }
         with pytest.raises(
             ValueError, match="Invalid or expired token"
         ):
             SpotifyClient(
-                token=expired_token,
+                token=token,
                 credentials=credentials_dict,
             )
 
