@@ -53,7 +53,7 @@ class TestActivityRoute:
 
     @patch("shuffify.routes.activity.DashboardService")
     @patch("shuffify.routes.activity.ActivityLogService")
-    @patch("shuffify.routes.core.AuthService")
+    @patch("shuffify.routes.AuthService")
     def test_renders_activity_page(
         self,
         mock_auth,
@@ -84,7 +84,7 @@ class TestActivityRoute:
 
     @patch("shuffify.routes.activity.DashboardService")
     @patch("shuffify.routes.activity.ActivityLogService")
-    @patch("shuffify.routes.core.AuthService")
+    @patch("shuffify.routes.AuthService")
     def test_passes_stats_and_activities_to_template(
         self,
         mock_auth,
