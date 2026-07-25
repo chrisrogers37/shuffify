@@ -375,6 +375,53 @@ class TestRaidNow:
         assert result["tracks_added"] == 0
         assert result["tracks_total"] == 50
 
+    def test_raid_now_search_only_does_not_pass_none_source_ids_inline(
+        self, user
+    ):
+        """A search-only target (no playlist sources, no schedule) must be
+        raidable via the inline path without passing None placeholders as
+        source ids (SR-006)."""
+        UpstreamSourceService.add_search_source(
+            spotify_id="user123",
+            target_playlist_id="tgt_inline",
+            search_query="chillhop",
+            source_name="Chillhop",
+        )
+
+        with patch.object(
+            RaidSyncService,
+            "_execute_raid_inline",
+            return_value={
+                "tracks_added": 0,
+                "tracks_total": 0,
+                "status": "success",
+            },
+        ) as mock_inline:
+            RaidSyncService.raid_now("user123", "tgt_inline")
+
+        mock_inline.assert_called_once()
+        passed_ids = mock_inline.call_args.args[2]
+        assert None not in passed_ids
+
+
+class TestWatchSearchQuery:
+    """Tests for RaidSyncService.watch_search_query."""
+
+    @patch("shuffify.scheduler.add_job_for_schedule")
+    def test_registers_apscheduler_job_on_new_schedule(
+        self, mock_add_job, user
+    ):
+        """Creating a raid schedule for a search query must register it with
+        APScheduler immediately, not wait for an app restart (SR-001)."""
+        RaidSyncService.watch_search_query(
+            spotify_id="user123",
+            target_playlist_id="target_sq",
+            target_playlist_name="Target SQ",
+            search_query="deep house",
+        )
+
+        mock_add_job.assert_called_once()
+
 
 # =============================================================================
 # _find_raid_schedule

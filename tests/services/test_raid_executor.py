@@ -74,16 +74,12 @@ class TestFetchRaidSourcesWithLimits:
         )
 
         with db_app.app_context():
-            with patch(
-                "shuffify.services.executors.raid_executor._load_sources",
-                return_value=[source],
-            ):
-                result = _fetch_raid_sources_with_limits(
-                    api=MagicMock(),
-                    source_ids=["src1"],
-                    exclusion_set=excluded,
-                    user_id=None,
-                )
+            result = _fetch_raid_sources_with_limits(
+                api=MagicMock(),
+                sources=[source],
+                exclusion_set=excluded,
+                user_id=None,
+            )
 
         assert set(result) == fresh, (
             f"Expected all 6 fresh URIs, got {len(result)}: {result}"
@@ -107,16 +103,12 @@ class TestFetchRaidSourcesWithLimits:
         )
 
         with db_app.app_context():
-            with patch(
-                "shuffify.services.executors.raid_executor._load_sources",
-                return_value=[source],
-            ):
-                result = _fetch_raid_sources_with_limits(
-                    api=MagicMock(),
-                    source_ids=["src2"],
-                    exclusion_set=excluded,
-                    user_id=None,
-                )
+            result = _fetch_raid_sources_with_limits(
+                api=MagicMock(),
+                sources=[source],
+                exclusion_set=excluded,
+                user_id=None,
+            )
 
         assert excluded.isdisjoint(result)
 
@@ -138,16 +130,12 @@ class TestFetchRaidSourcesWithLimits:
         )
 
         with db_app.app_context():
-            with patch(
-                "shuffify.services.executors.raid_executor._load_sources",
-                return_value=[source],
-            ):
-                result = _fetch_raid_sources_with_limits(
-                    api=MagicMock(),
-                    source_ids=["src3"],
-                    exclusion_set=excluded,
-                    user_id=None,
-                )
+            result = _fetch_raid_sources_with_limits(
+                api=MagicMock(),
+                sources=[source],
+                exclusion_set=excluded,
+                user_id=None,
+            )
 
         assert len(result) == 5
         assert set(result).issubset(set(source_uris))
@@ -170,15 +158,90 @@ class TestFetchRaidSourcesWithLimits:
         )
 
         with db_app.app_context():
-            with patch(
-                "shuffify.services.executors.raid_executor._load_sources",
-                return_value=[source],
-            ):
-                result = _fetch_raid_sources_with_limits(
-                    api=MagicMock(),
-                    source_ids=["src4"],
-                    exclusion_set=excluded,
-                    user_id=None,
-                )
+            result = _fetch_raid_sources_with_limits(
+                api=MagicMock(),
+                sources=[source],
+                exclusion_set=excluded,
+                user_id=None,
+            )
 
         assert result == []
+
+
+class TestLoadSourcesTargetScoping:
+    """_load_sources must scope to the target playlist and include all
+    source types (SR-001, SR-002)."""
+
+    def test_excludes_other_targets_search_sources(self, db_app):
+        """A search source on target A must not be loaded when raiding
+        target B -- prevents cross-playlist leakage (SR-002)."""
+        from shuffify.services.executors.raid_executor import (
+            _load_sources,
+        )
+        from shuffify.services.user_service import UserService
+        from shuffify.models.db import UpstreamSource, db
+
+        with db_app.app_context():
+            result = UserService.upsert_from_spotify(
+                {"id": "leak_user", "display_name": "L", "images": []}
+            )
+            uid = result.user.id
+            db.session.add_all([
+                UpstreamSource(
+                    user_id=uid,
+                    target_playlist_id="targetA",
+                    source_type="search_query",
+                    search_query="jazz",
+                    raid_count=5,
+                ),
+                UpstreamSource(
+                    user_id=uid,
+                    target_playlist_id="targetB",
+                    source_type="search_query",
+                    search_query="rock",
+                    raid_count=5,
+                ),
+            ])
+            db.session.commit()
+
+            loaded = _load_sources([], uid, "targetA")
+
+            queries = [s.search_query for s in loaded]
+            assert "jazz" in queries
+            assert "rock" not in queries
+
+    def test_includes_search_sources_for_target_with_empty_source_ids(
+        self, db_app
+    ):
+        """A search source (no source_playlist_id) must be loaded for its
+        target even when source_ids is empty -- the schedule's playlist-only
+        list omits it (SR-001)."""
+        from shuffify.services.executors.raid_executor import (
+            _load_sources,
+        )
+        from shuffify.services.user_service import UserService
+        from shuffify.models.db import UpstreamSource, db
+
+        with db_app.app_context():
+            result = UserService.upsert_from_spotify(
+                {"id": "search_user", "display_name": "S", "images": []}
+            )
+            uid = result.user.id
+            db.session.add(
+                UpstreamSource(
+                    user_id=uid,
+                    target_playlist_id="tgt",
+                    source_type="search_query",
+                    search_query="ambient",
+                    raid_count=5,
+                )
+            )
+            db.session.commit()
+
+            loaded = _load_sources([], uid, "tgt")
+
+            assert any(
+                s.source_type == "search_query"
+                and s.search_query == "ambient"
+                for s in loaded
+            )

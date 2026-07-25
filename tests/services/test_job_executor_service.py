@@ -157,12 +157,78 @@ class TestExecuteRaid:
     def test_raid_no_sources_skips(
         self, mock_schedule, mock_api
     ):
-        """Should skip when no source playlists."""
+        """Should skip when no sources are configured for the target."""
         mock_schedule.source_playlist_ids = []
         result = execute_raid(
             mock_schedule, mock_api
         )
         assert result["tracks_added"] == 0
+
+    @patch(
+        "shuffify.services.executors.raid_executor"
+        "._update_source_tracking"
+    )
+    @patch(
+        "shuffify.services.executors.raid_executor"
+        "._add_to_raid_playlist"
+    )
+    @patch(
+        "shuffify.services.executors.raid_executor"
+        ".SourceResolver"
+    )
+    @patch(
+        "shuffify.services.executors.raid_executor"
+        ".PendingRaidService"
+    )
+    def test_raid_with_search_source_does_not_skip(
+        self, mock_pending, mock_resolver_cls,
+        mock_add_raid, mock_tracking,
+        mock_schedule, mock_api,
+    ):
+        """A schedule with empty source_playlist_ids but a search
+        UpstreamSource for its target must still raid, not silently skip
+        (SR-001). Search sources live only in UpstreamSource, so they are
+        absent from the schedule's denormalized source_playlist_ids list."""
+        from shuffify.models.db import UpstreamSource
+        from shuffify.services.source_resolver.base import (
+            ResolveAllResult, ResolveResult,
+        )
+
+        mock_schedule.job_type = "raid"
+        mock_schedule.source_playlist_ids = []
+        mock_pending.stage_tracks.return_value = 1
+        mock_api.get_playlist_tracks.return_value = [
+            {"id": "old", "uri": "spotify:track:old"}
+        ]
+
+        search_source = UpstreamSource(
+            target_playlist_id="target_pl",
+            source_type="search_query",
+            search_query="lofi beats",
+            raid_count=5,
+        )
+        mock_resolver_cls.return_value.resolve_all.return_value = (
+            ResolveAllResult(
+                new_uris=["spotify:track:new1"],
+                source_results=[(
+                    search_source,
+                    ResolveResult(
+                        track_uris=["spotify:track:new1"],
+                        pathway_name="search",
+                        success=True,
+                    ),
+                )],
+            )
+        )
+
+        with patch(
+            "shuffify.services.executors.raid_executor._load_sources",
+            return_value=[search_source],
+        ):
+            result = execute_raid(mock_schedule, mock_api)
+
+        assert result["tracks_added"] == 1
+        mock_pending.stage_tracks.assert_called_once()
 
 
 class TestRaidSourceFailureLogging:
