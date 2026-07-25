@@ -416,7 +416,25 @@ class TestExecuteShuffle:
     def test_shuffle_reorders_playlist(
         self, mock_schedule, mock_api
     ):
-        """Should call update_playlist_tracks."""
+        """Should call update_playlist_tracks and pass order-sensitive
+        verification when the write lands in the written order."""
+        original = mock_api.get_playlist_tracks.return_value
+        written = {}
+
+        def _update(pid, uris):
+            written["uris"] = list(uris)
+            return True
+
+        def _get(pid, skip_cache=False):
+            # Real Spotify returns tracks in the order they were written;
+            # echo the write on the verification re-fetch (SR-007).
+            if skip_cache and written.get("uris"):
+                return [{"uri": u} for u in written["uris"]]
+            return original
+
+        mock_api.update_playlist_tracks.side_effect = _update
+        mock_api.get_playlist_tracks.side_effect = _get
+
         result = execute_shuffle(
             mock_schedule, mock_api
         )
@@ -452,6 +470,39 @@ class TestExecuteShuffle:
             mock_schedule, mock_api
         )
         assert result["tracks_total"] == 0
+
+    def test_shuffle_verification_is_order_sensitive(
+        self, mock_schedule, mock_api
+    ):
+        """A shuffle whose write landed in the wrong order (same tracks,
+        different sequence) must fail verification, not pass silently
+        (SR-007). The old multiset check accepted any permutation."""
+        from shuffify.services.executors import (
+            PlaylistVerificationError,
+        )
+
+        original = mock_api.get_playlist_tracks.return_value
+        written = {}
+
+        def _update(pid, uris):
+            written["uris"] = list(uris)
+            return True
+
+        def _get(pid, skip_cache=False):
+            # Verification re-fetch: simulate a write that landed reversed
+            # (same multiset, wrong order).
+            if skip_cache and written.get("uris"):
+                return [
+                    {"uri": u}
+                    for u in reversed(written["uris"])
+                ]
+            return original
+
+        mock_api.update_playlist_tracks.side_effect = _update
+        mock_api.get_playlist_tracks.side_effect = _get
+
+        with pytest.raises(PlaylistVerificationError):
+            execute_shuffle(mock_schedule, mock_api)
 
 
 class TestGetSpotifyApi:

@@ -112,8 +112,9 @@ def verify_playlist_state(
     expected_uris: List[str],
     schedule_id: int,
     phase: str,
+    ordered: bool = False,
 ) -> List[str]:
-    """Re-fetch playlist and verify URI multiset matches expected.
+    """Re-fetch playlist and verify it matches expected.
 
     Belt-and-suspenders: write methods on SpotifyAPI already invalidate
     the playlist cache, but skip_cache=True here ensures correctness
@@ -122,17 +123,21 @@ def verify_playlist_state(
     Args:
         api: SpotifyAPI client.
         playlist_id: Target playlist.
-        expected_uris: URIs the playlist should contain (order
-            ignored; duplicate counts honored).
+        expected_uris: URIs the playlist should contain.
         schedule_id: For error attribution.
         phase: Short label like "swap", "shuffle", "drip target".
+        ordered: When True, require the exact URI sequence (order-sensitive).
+            When False (default), compare as a multiset (order ignored,
+            duplicate counts honored). Order-sensitive checks catch a shuffle
+            that didn't reorder or a drip that appended instead of prepended —
+            both preserve the multiset but not the sequence (SR-007).
 
     Returns:
         The actual URI list (in fetch order) on success.
 
     Raises:
-        PlaylistVerificationError: If actual multiset diverges
-            from expected.
+        PlaylistVerificationError: If the actual state diverges from expected
+            (by sequence when ordered, otherwise by multiset).
     """
     verified = api.get_playlist_tracks(
         playlist_id,
@@ -140,7 +145,12 @@ def verify_playlist_state(
     )
     actual_uris = extract_uris(verified or [])
 
-    if Counter(actual_uris) != Counter(expected_uris):
+    if ordered:
+        diverged = actual_uris != expected_uris
+    else:
+        diverged = Counter(actual_uris) != Counter(expected_uris)
+
+    if diverged:
         raise PlaylistVerificationError(
             playlist_id=playlist_id,
             expected=expected_uris,

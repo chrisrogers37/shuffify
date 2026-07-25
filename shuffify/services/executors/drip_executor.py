@@ -135,9 +135,12 @@ def execute_drip(
         # drip adds at position=0, so expected order is
         # drip_uris first, then existing target tracks.
         expected_target = list(drip_uris) + prev_target_uris
+        # Order-sensitive: a drip that appended to the end instead of
+        # prepending has the same multiset but the wrong sequence (SR-007).
         verify_playlist_state(
             api, target_id, expected_target,
             schedule.id, "drip target",
+            ordered=True,
         )
 
         drip_set = set(drip_uris)
