@@ -48,10 +48,20 @@ def execute_raid(
     target_id = schedule.target_playlist_id
     source_ids = schedule.source_playlist_ids or []
 
-    if not source_ids:
+    # Resolve the authoritative source list for this target at execution time
+    # from UpstreamSource. Search-query sources live only there and are absent
+    # from schedule.source_playlist_ids, so a schedule with an empty list can
+    # still have real work to do (SR-001). Scoping to the target prevents other
+    # playlists' sources from leaking in (SR-002); loading fresh avoids acting
+    # on a stale denormalized list (SR-006).
+    sources = _load_sources(
+        source_ids, schedule.user_id, target_id
+    )
+
+    if not sources:
         logger.info(
-            "Schedule %s: no source playlists "
-            "configured, skipping raid",
+            "Schedule %s: no sources configured, "
+            "skipping raid",
             schedule.id,
         )
         target_tracks = api.get_playlist_tracks(target_id)
@@ -86,7 +96,7 @@ def execute_raid(
 
     # --- Source resolution (graceful — returns 0 on failure) ---
     new_uris = _fetch_raid_sources_with_limits(
-        api, source_ids, exclusion_set,
+        api, sources, exclusion_set,
         user_id=schedule.user_id,
     )
 
@@ -221,20 +231,19 @@ def _add_to_raid_playlist(
 
 def _fetch_raid_sources_with_limits(
     api: SpotifyAPI,
-    source_ids: list,
+    sources: list,
     exclusion_set: set,
     user_id: Optional[int] = None,
 ) -> List[str]:
     """
-    Fetch new tracks from sources with per-source
-    raid_count limits and chain-wide deduplication.
+    Resolve the given UpstreamSource records and apply per-source
+    raid_count limits with chain-wide deduplication.
+
+    ``sources`` is the already-loaded list of UpstreamSource records for the
+    target (see ``_load_sources``). The caller owns loading so the skip
+    decision and the resolution operate on the same authoritative set.
     """
     resolver = SourceResolver()
-
-    # Load UpstreamSource records for raid_count
-    sources = _load_sources(
-        source_ids, user_id
-    )
 
     results = resolver.resolve_all(
         sources, api, exclude_uris=exclusion_set
@@ -301,24 +310,25 @@ def _fetch_raid_sources_with_limits(
     return deduped
 
 
-def _load_sources(source_ids, user_id):
-    """Load UpstreamSource records from DB or create
-    ephemeral ones."""
+def _load_sources(source_ids, user_id, target_id):
+    """Load the UpstreamSource records for a raid, scoped to the target.
+
+    Returns every persisted source for (user_id, target_id) — both playlist
+    and search_query types — plus ephemeral 'external' sources for any
+    source_ids not yet persisted. Scoping by target_playlist_id keeps a
+    user's search-query sources on one playlist from leaking into another
+    target's raid (SR-002), and surfaces search sources that the schedule's
+    denormalized source_playlist_ids list omits (SR-001).
+    """
     sources = None
-    if user_id:
+    if user_id and target_id:
         try:
             sources = UpstreamSource.query.filter(
                 UpstreamSource.user_id == user_id,
-            ).filter(
-                db.or_(
-                    UpstreamSource.source_playlist_id.in_(
-                        source_ids
-                    ),
-                    UpstreamSource.source_type
-                    == "search_query",
-                )
+                UpstreamSource.target_playlist_id
+                == target_id,
             ).all()
-            # Include any source_ids not in DB
+            # Include any source_ids not already persisted for this target
             found_ids = {
                 s.source_playlist_id
                 for s in sources

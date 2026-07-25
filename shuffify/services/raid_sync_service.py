@@ -292,11 +292,20 @@ class RaidSyncService:
             sources = UpstreamSourceService.list_sources(
                 spotify_id, target_playlist_id
             )
+            # Search-query sources have no source_playlist_id; keep only real
+            # playlist ids so None placeholders don't propagate to the inline
+            # path, but count all sources for the "any source?" guard so
+            # search-only setups are raidable (SR-006).
             source_playlist_ids = [
-                s.source_playlist_id for s in sources
+                s.source_playlist_id
+                for s in sources
+                if s.source_playlist_id
             ]
+            has_any_source = len(sources) > 0
+        else:
+            has_any_source = len(source_playlist_ids) > 0
 
-        if not source_playlist_ids:
+        if not has_any_source:
             raise RaidSyncError(
                 "No sources configured. "
                 "Watch a playlist first."
@@ -372,6 +381,7 @@ class RaidSyncService:
         )
         from shuffify.services.executors.raid_executor import (
             _fetch_raid_sources_with_limits,
+            _load_sources,
             _build_track_dicts,
             _add_to_raid_playlist,
         )
@@ -397,8 +407,12 @@ class RaidSyncService:
                 len(exclusion_set),
             )
 
+            sources = _load_sources(
+                source_playlist_ids, user.id,
+                target_playlist_id,
+            )
             new_uris = _fetch_raid_sources_with_limits(
-                api, source_playlist_ids,
+                api, sources,
                 exclusion_set,
                 user_id=user.id,
             )
@@ -505,8 +519,22 @@ class RaidSyncService:
                         target_playlist_name
                     ),
                     source_playlist_ids=[],
-                    is_enabled=True,
                 )
+                # Register with APScheduler so the schedule fires without
+                # waiting for an app restart (SR-001). watch_playlist does
+                # the same; watch_search_query previously omitted it (and
+                # passed an invalid is_enabled kwarg that raised before the
+                # schedule was ever created).
+                try:
+                    from shuffify.scheduler import (
+                        add_job_for_schedule,
+                    )
+                    add_job_for_schedule(schedule)
+                except Exception as e:
+                    logger.warning(
+                        "Could not register schedule with "
+                        "APScheduler: %s", e
+                    )
 
         return {
             "source": source,
