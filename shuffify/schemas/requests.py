@@ -206,6 +206,13 @@ def parse_shuffle_request(form_data: Dict[str, Any]) -> ShuffleRequest:
         if key in form_data:
             parsed[key] = str(form_data[key])
 
+    # Track locks: {position: track_uri}. Forwarded as-is so locked tracks
+    # survive a preview shuffle; Pydantic validates the dict shape. Omitting
+    # this left locked_positions always None, silently ignoring track locks
+    # on preview (SR-012).
+    if "locked_positions" in form_data:
+        parsed["locked_positions"] = form_data["locked_positions"]
+
     return ShuffleRequest(**parsed)
 
 
