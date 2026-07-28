@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
+- **Logout is now POST-only and CSRF-protected** - `GET /logout` was a plain link that cleared the session and revoked the Spotify token — state-changing operations that `CSRFProtect` does not cover for GET requests, so any third-party page could force-logout every signed-in user with `<img src="…/logout">`. Logout is now `POST /logout` (GET returns 405), guarded by the app-wide CSRF token; the settings-sidebar link became a small CSRF-tokened form. Closes #453 (SR-015).
 - **Container runs as non-root** - Added `USER nobody` to the Dockerfile so gunicorn no longer runs as root in the production container (`.flask_session` is already chowned to `nobody:nogroup`, and gunicorn binds a non-privileged port). Closes #395
 - **HSTS `preload` directive** - Added `preload` to the production `Strict-Transport-Security` header (now `max-age=31536000; includeSubDomains; preload`). Closes #401
 - **Workshop track-URI XSS** - `track.uri` is now JS-escaped via Jinja `| tojson` in the lock/delete `onclick` handlers (single-quoted attribute), and the dynamically-rendered track rows wire their handlers through `addEventListener` + the element reference instead of interpolating the URI into an inline `onclick` string. Prevents stored XSS from track URIs originating in external/scraped playlist sources. Closes #267
