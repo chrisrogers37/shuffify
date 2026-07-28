@@ -489,14 +489,31 @@ class TestAdvisoryLock:
         assert result is False
         mock_conn.close.assert_called_once()
 
-    def test_fail_open_on_exception(self):
-        """Should return True (fail-open) on database errors."""
+    def test_fails_closed_on_exception_by_default(self):
+        """On a lock-check error, the default (production) behavior is to fail
+        CLOSED -- return False so the scheduler does not start, avoiding
+        duplicate schedulers (and duplicate job runs) across workers when a
+        transient DB blip prevents verifying the lock (SR-011)."""
         with patch(
             "sqlalchemy.create_engine",
             side_effect=Exception("connection refused"),
         ):
             result = _try_acquire_scheduler_lock(
                 "postgresql://localhost/shuffify"
+            )
+
+        assert result is False
+
+    def test_fails_open_on_exception_when_fail_open_true(self):
+        """In development (fail_open=True), a lock-check error falls back to
+        starting the scheduler so local dev is not blocked (SR-011)."""
+        with patch(
+            "sqlalchemy.create_engine",
+            side_effect=Exception("connection refused"),
+        ):
+            result = _try_acquire_scheduler_lock(
+                "postgresql://localhost/shuffify",
+                fail_open=True,
             )
 
         assert result is True
