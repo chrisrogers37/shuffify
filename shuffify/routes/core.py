@@ -337,9 +337,14 @@ def callback():
         return redirect(url_for("main.index"))
 
 
-@main.route("/logout")
+@main.route("/logout", methods=["POST"])
 def logout():
-    """Clear session and log out."""
+    """Clear session and log out.
+
+    POST-only and CSRF-protected (via the app-wide CSRFProtect): logout is a
+    state-changing operation, so a GET link or cross-site `<img src>` must not
+    be able to force-logout users (SR-015).
+    """
     # Best-effort token revocation (fire-and-forget)
     try:
         token_data = session.get("spotify_token")

@@ -325,24 +325,24 @@ class TestCallbackRoute:
 
 
 class TestLogoutRoute:
-    """Tests for GET /logout."""
+    """Tests for POST /logout (CSRF-guarded; GET rejected)."""
 
     def test_logout_clears_session_and_redirects(self, auth_client):
         """Logout should clear session and redirect to index."""
-        resp = auth_client.get("/logout")
+        resp = auth_client.post("/logout")
         assert resp.status_code == 302
         assert resp.headers["Location"].endswith("/")
 
     def test_logout_when_not_logged_in(self, db_app):
         """Logout without session should still work."""
         with db_app.test_client() as client:
-            resp = client.get("/logout")
+            resp = client.post("/logout")
             assert resp.status_code == 302
 
     @patch("shuffify.routes.core.AuthService")
     def test_logout_attempts_token_revocation(self, mock_auth_svc, auth_client):
         """Logout should call revoke_access_token with the session token."""
-        resp = auth_client.get("/logout")
+        resp = auth_client.post("/logout")
         assert resp.status_code == 302
         mock_auth_svc.revoke_access_token.assert_called_once_with("test_token")
 
@@ -354,9 +354,17 @@ class TestLogoutRoute:
     ):
         """Revocation failure must not block logout."""
         mock_auth_svc.revoke_access_token.side_effect = Exception("boom")
-        resp = auth_client.get("/logout")
+        resp = auth_client.post("/logout")
         assert resp.status_code == 302
         assert resp.headers["Location"].endswith("/")
+
+    def test_logout_get_is_rejected(self, auth_client):
+        """GET /logout must be rejected (405). Logout is a state-changing
+        operation, so it is POST-only and CSRF-guarded — a cross-site
+        `<img src=".../logout">` or link can no longer force-logout users
+        (SR-015)."""
+        resp = auth_client.get("/logout")
+        assert resp.status_code == 405
 
 
 class TestTermsRoute:
