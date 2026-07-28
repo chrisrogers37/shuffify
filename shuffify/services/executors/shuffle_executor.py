@@ -159,12 +159,14 @@ def execute_shuffle(
             target_id, shuffled_uris
         )
 
-        # Catches silent multi-batch truncation:
-        # update_playlist_tracks returns True even if a
-        # POST batch after the initial PUT fails.
+        # Catches silent multi-batch truncation (update_playlist_tracks
+        # returns True even if a POST batch after the initial PUT fails)
+        # and, via ordered=True, a write that kept the original order —
+        # a shuffle that silently didn't reorder (SR-007).
         verify_playlist_state(
             api, target_id, shuffled_uris,
             schedule.id, "shuffle",
+            ordered=True,
         )
 
         # Reconcile lock positions after reorder

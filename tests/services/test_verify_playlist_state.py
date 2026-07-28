@@ -184,6 +184,51 @@ class TestVerifyPlaylistStateDivergence:
         assert "swap" in msg
 
 
+class TestVerifyPlaylistStateOrdered:
+    """Order-sensitive verification (ordered=True) for shuffle and drip
+    target checks. A shuffle that didn't reorder, or a drip that appended
+    instead of prepended, has the right multiset but the wrong sequence and
+    must be caught (SR-007)."""
+
+    def test_ordered_rejects_reordering_with_same_multiset(self):
+        api = MagicMock()
+        api.get_playlist_tracks.return_value = _tracks(
+            ["u1", "u2", "u3"]
+        )
+
+        with pytest.raises(PlaylistVerificationError):
+            verify_playlist_state(
+                api, "p1", ["u3", "u2", "u1"], 42, "shuffle",
+                ordered=True,
+            )
+
+    def test_ordered_passes_on_exact_sequence(self):
+        api = MagicMock()
+        api.get_playlist_tracks.return_value = _tracks(
+            ["u1", "u2", "u3"]
+        )
+
+        result = verify_playlist_state(
+            api, "p1", ["u1", "u2", "u3"], 42, "shuffle",
+            ordered=True,
+        )
+
+        assert result == ["u1", "u2", "u3"]
+
+    def test_default_mode_still_ignores_order(self):
+        """Default (ordered=False) keeps multiset semantics so raid/rotate
+        verification paths are unaffected."""
+        api = MagicMock()
+        api.get_playlist_tracks.return_value = _tracks(
+            ["u3", "u1", "u2"]
+        )
+
+        # No raise — multiset matches.
+        verify_playlist_state(
+            api, "p1", ["u1", "u2", "u3"], 42, "raid",
+        )
+
+
 class TestVerifyPlaylistStateAPIResilience:
     def test_handles_none_returned_from_api(self):
         """Some Spotify cache miss paths can yield None;

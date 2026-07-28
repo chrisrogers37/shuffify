@@ -235,6 +235,25 @@ class TestParseShuffleRequest:
         with pytest.raises(ValidationError):
             parse_shuffle_request(form_data)
 
+    def test_parse_forwards_locked_positions(self):
+        """locked_positions must survive parsing so track locks are honored
+        on a preview shuffle (SR-012). The workshop sends them in the JSON
+        body, but parse_shuffle_request previously dropped them, leaving
+        locked_positions always None."""
+        form_data = {
+            "algorithm": "BasicShuffle",
+            "locked_positions": {
+                "0": "spotify:track:abc",
+                "3": "spotify:track:xyz",
+            },
+        }
+
+        request = parse_shuffle_request(form_data)
+        assert request.locked_positions == {
+            "0": "spotify:track:abc",
+            "3": "spotify:track:xyz",
+        }
+
 
 class TestPlaylistQueryParams:
     """Tests for PlaylistQueryParams schema."""
