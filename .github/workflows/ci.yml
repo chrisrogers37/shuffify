@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend lint & tests
+    runs-on: ubuntu-latest
+    env:
+      # Config is read at import time, so provide test credentials up front.
+      # Fixtures override these; production values are never used in CI.
+      APP_CONFIG: testing
+      SPOTIFY_CLIENT_ID: test_client_id
+      SPOTIFY_CLIENT_SECRET: test_client_secret
+      SPOTIFY_REDIRECT_URI: http://localhost:8000/callback
+      SECRET_KEY: ci-test-secret-key
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements/dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/dev.txt
+
+      - name: Lint (flake8)
+        run: flake8 shuffify/
+
+      - name: Format check (black)
+        # Non-blocking until the ruff consolidation (SR-037) reformats the
+        # tree; surfaces drift without blocking merges in the meantime.
+        run: black --check shuffify/
+        continue-on-error: true
+
+      - name: Tests + coverage
+        run: |
+          pytest tests/ -m "not integration" \
+            --cov=shuffify --cov-report=term-missing \
+            --cov-fail-under=${COV_MIN}
+        env:
+          # Baseline is ~84.6%; floor sits a few points under for headroom.
+          # Ratchet up as coverage improves.
+          COV_MIN: '80'

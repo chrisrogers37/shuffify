@@ -63,15 +63,19 @@ black --check shuffify/
 
 ### CI/CD Pipeline
 
-The following checks run automatically on push to `main`:
+GitHub Actions (`.github/workflows/ci.yml`) runs on every pull request and on
+pushes to `main`, on Python 3.12:
 
 | Check | Command | Must Pass |
 |-------|---------|-----------|
 | **Backend Lint** | `flake8 shuffify/` | ✅ Yes |
-| **Backend Tests** | `pytest tests/ -v` | ✅ Yes |
-| **Frontend Lint** | (Tailwind/JS checks) | ✅ Yes |
-| **Frontend E2E Tests** | (Template rendering) | ✅ Yes |
-| **Security Checks** | GitGuardian | ✅ Yes |
+| **Backend Tests** | `pytest tests/ -m "not integration"` | ✅ Yes |
+| **Coverage gate** | `pytest --cov=shuffify --cov-fail-under=N` | ✅ Yes |
+| **Format check** | `black --check shuffify/` | ⚠️ Non-blocking (until the ruff consolidation, SR-037) |
+
+Live-scraper integration tests (`pytest -m integration`) run nightly and
+on-demand via `.github/workflows/nightly-integration.yml` and are non-blocking
+(a flaky external page must never gate a merge).
 
 ### Quick Pre-Push Command
 
