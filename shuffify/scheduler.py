@@ -78,7 +78,7 @@ def _on_job_missed(event):
     logger.warning(f"Job {event.job_id} missed its scheduled run time")
 
 
-def _try_acquire_scheduler_lock(db_url: str) -> bool:
+def _try_acquire_scheduler_lock(db_url: str, fail_open: bool = False) -> bool:
     """
     Attempt to acquire a PostgreSQL advisory lock to guarantee
     only one scheduler instance runs across all processes.
@@ -87,8 +87,16 @@ def _try_acquire_scheduler_lock(db_url: str) -> bool:
     held for the lifetime of the connection and released
     automatically when the connection closes.
 
-    Returns True if lock acquired (or non-PostgreSQL DB).
-    Returns True on any error (fail-open for safety).
+    Args:
+        db_url: The database URL.
+        fail_open: When True (development), start the scheduler anyway if the
+            lock cannot be verified. When False (production, the default), fail
+            CLOSED — skip scheduler init on any lock-check error so a transient
+            DB blip at boot can't spawn duplicate schedulers that run every
+            job N times (SR-011).
+
+    Returns True if the lock was acquired (or on a non-PostgreSQL DB).
+    On a lock-check error, returns ``fail_open``.
     """
     global _lock_connection
 
@@ -121,13 +129,20 @@ def _try_acquire_scheduler_lock(db_url: str) -> bool:
             return False
 
     except Exception as e:
-        # Fail-open: if we can't check the lock, start anyway
-        logger.warning(
-            "Could not acquire advisory lock (%s), "
-            "starting scheduler anyway (fail-open)",
+        if fail_open:
+            logger.warning(
+                "Could not acquire advisory lock (%s); starting scheduler "
+                "anyway (fail-open, development)",
+                e,
+            )
+            return True
+        logger.error(
+            "Could not acquire scheduler advisory lock (%s); skipping "
+            "scheduler init to avoid duplicate schedulers running every job "
+            "N times (fail-closed). Runs in development fail open.",
             e,
         )
-        return True
+        return False
 
 
 def init_scheduler(app) -> Optional[BackgroundScheduler]:
@@ -162,8 +177,10 @@ def init_scheduler(app) -> Optional[BackgroundScheduler]:
     try:
         db_url = app.config.get("SQLALCHEMY_DATABASE_URI", "sqlite:///shuffify.db")
 
-        # Advisory lock: prevent duplicate schedulers
-        if not _try_acquire_scheduler_lock(db_url):
+        # Advisory lock: prevent duplicate schedulers. Fail closed in
+        # production (app.debug is False) so a transient DB blip skips init
+        # rather than spawning duplicate schedulers; fail open in dev.
+        if not _try_acquire_scheduler_lock(db_url, fail_open=app.debug):
             return None
 
         # Separate jobstore engine with small pool
