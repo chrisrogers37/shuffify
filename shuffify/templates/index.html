@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="relative min-h-screen bg-dark-base">
-    <div class="absolute inset-0" style="background-image: url('/static/images/hero-pattern.svg'); opacity: 0.3; pointer-events: none;"></div>
+    <div class="absolute inset-0 pointer-events-none opacity-30 bg-[url('/static/images/hero-pattern.svg')]"></div>
     
     <!-- Hero Section — Two-Column Layout -->
     <div class="relative pt-20 pb-16 px-6">
@@ -754,7 +754,7 @@
 
             el.innerHTML =
                 '<div class="shuffle-track-art" style="background: ' + track.gradient + ';"></div>' +
-                '<div style="min-width: 0; flex: 1;">' +
+                '<div class="min-w-0 flex-1">' +
                     '<div class="shuffle-track-name">' + track.name + '</div>' +
                     '<div class="shuffle-track-artist">' + track.artist + '</div>' +
                 '</div>' +

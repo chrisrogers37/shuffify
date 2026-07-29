@@ -397,7 +397,14 @@ def _apply_security_headers(app):
             "object-src 'none'; "
             "frame-ancestors 'none'; "
             "base-uri 'self'; "
-            "form-action 'self'"
+            # The login form GETs /login, which 302s to Spotify's authorize
+            # endpoint. form-action is enforced against every hop of a
+            # submission chain, so the same-origin action passes and the
+            # cross-origin redirect is blocked unless the OAuth host is listed
+            # here. Scoped to the authorize host only; this is a targeted
+            # allowance for a known destination, not a relaxation of the
+            # injection protections in style-src/script-src.
+            "form-action 'self' https://accounts.spotify.com"
         )
 
         # HSTS: only in production (development uses HTTP)
