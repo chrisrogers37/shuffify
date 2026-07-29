@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
+- **Ignore Claude fleet bot telemetry paths** - Narrow any-depth `.gitignore` rules for `data/events/fleet-*.jsonl`, `data/.last-tool-call`, `data/.idle`: the files Claudlobby supervision hooks can write relative to the session cwd when the bot environment is absent (Claudfather/Claudlobby#874). Prevents a broad `git add` in an agent checkout from staging fleet telemetry into this public repo; product `data/` paths are unaffected.
 - **Logout is now POST-only and CSRF-protected** - `GET /logout` was a plain link that cleared the session and revoked the Spotify token — state-changing operations that `CSRFProtect` does not cover for GET requests, so any third-party page could force-logout every signed-in user with `<img src="…/logout">`. Logout is now `POST /logout` (GET returns 405), guarded by the app-wide CSRF token; the settings-sidebar link became a small CSRF-tokened form. Closes #453 (SR-015).
 - **Container runs as non-root** - Added `USER nobody` to the Dockerfile so gunicorn no longer runs as root in the production container (`.flask_session` is already chowned to `nobody:nogroup`, and gunicorn binds a non-privileged port). Closes #395
 - **HSTS `preload` directive** - Added `preload` to the production `Strict-Transport-Security` header (now `max-age=31536000; includeSubDomains; preload`). Closes #401
