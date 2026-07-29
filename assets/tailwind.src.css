@@ -1,0 +1,6 @@
+/* Tailwind entrypoint. Compiled to shuffify/static/css/tailwind.css by
+   scripts/build-css.sh. Edit this file, never the compiled output.
+   Kept outside shuffify/static/ so the directives are not themselves served. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

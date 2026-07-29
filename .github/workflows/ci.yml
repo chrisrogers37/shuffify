@@ -10,6 +10,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  css:
+    name: Tailwind stylesheet up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The compiled stylesheet is committed, so DigitalOcean's deploy-on-push
+      # never depends on a build-time download. The cost of that choice is drift:
+      # a template edit without a rebuild ships stale CSS silently. This closes it.
+      - name: Verify committed CSS matches templates
+        run: ./scripts/build-css.sh --check
+
   backend:
     name: Backend lint & tests
     runs-on: ubuntu-latest

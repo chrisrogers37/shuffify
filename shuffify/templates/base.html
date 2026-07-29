@@ -7,42 +7,11 @@
     <title>{% block title %}Shuffify{% endblock %}</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}">
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='images/favicon.ico') }}">
-    <!-- Tailwind CSS via CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script nonce="{{ csp_nonce }}">
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        'spotify-green': '#1DB954',
-                        'spotify-dark': '#191414',
-                        'dark-base': '#0a0a0f',
-                        'dark-surface': '#0f0f17',
-                        'dark-card': '#141420',
-                    },
-                    animation: {
-                        'fade-in': 'fadeIn 0.6s ease-out',
-                        'slide-up': 'slideUp 0.6s ease-out',
-                        'scale-in': 'scaleIn 0.4s ease-out',
-                    },
-                    keyframes: {
-                        fadeIn: {
-                            '0%': { opacity: '0', transform: 'translateY(20px)' },
-                            '100%': { opacity: '1', transform: 'translateY(0)' }
-                        },
-                        slideUp: {
-                            '0%': { opacity: '0', transform: 'translateY(40px)' },
-                            '100%': { opacity: '1', transform: 'translateY(0)' }
-                        },
-                        scaleIn: {
-                            '0%': { opacity: '0', transform: 'scale(0.9)' },
-                            '100%': { opacity: '1', transform: 'scale(1)' }
-                        }
-                    }
-                }
-            }
-        }
-    </script>
+    <!-- Tailwind CSS, compiled at build time by scripts/build-css.sh.
+         Served same-origin, so it satisfies the existing style-src 'self'
+         without needing a nonce or an 'unsafe-inline' exception. The Play CDN
+         it replaces injected an un-nonced <style> tag that CSP blocked (#482). -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
     <style nonce="{{ csp_nonce }}">
         body {
             margin: 0;
