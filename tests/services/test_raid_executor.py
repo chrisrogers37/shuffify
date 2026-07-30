@@ -74,7 +74,7 @@ class TestFetchRaidSourcesWithLimits:
         )
 
         with db_app.app_context():
-            result = _fetch_raid_sources_with_limits(
+            result, _ = _fetch_raid_sources_with_limits(
                 api=MagicMock(),
                 sources=[source],
                 exclusion_set=excluded,
@@ -103,7 +103,7 @@ class TestFetchRaidSourcesWithLimits:
         )
 
         with db_app.app_context():
-            result = _fetch_raid_sources_with_limits(
+            result, _ = _fetch_raid_sources_with_limits(
                 api=MagicMock(),
                 sources=[source],
                 exclusion_set=excluded,
@@ -130,7 +130,7 @@ class TestFetchRaidSourcesWithLimits:
         )
 
         with db_app.app_context():
-            result = _fetch_raid_sources_with_limits(
+            result, _ = _fetch_raid_sources_with_limits(
                 api=MagicMock(),
                 sources=[source],
                 exclusion_set=excluded,
@@ -158,7 +158,7 @@ class TestFetchRaidSourcesWithLimits:
         )
 
         with db_app.app_context():
-            result = _fetch_raid_sources_with_limits(
+            result, _ = _fetch_raid_sources_with_limits(
                 api=MagicMock(),
                 sources=[source],
                 exclusion_set=excluded,
@@ -290,3 +290,39 @@ class TestAddToRaidPlaylistSnapshot:
         assert kwargs["track_uris"] == [
             "spotify:track:existing"
         ]
+
+
+class TestFetchProvenance:
+    """_fetch returns which source each fresh URI came from, so staged tracks
+    record correct provenance (the source, not the target) (SR-036)."""
+
+    def test_returns_source_provenance(
+        self, db_app, patched_resolver_and_tracking
+    ):
+        source = UpstreamSource(
+            source_playlist_id="src1",
+            source_name="Cool Source",
+            source_type="external",
+            raid_count=10,
+        )
+        source_uris = ["spotify:track:a", "spotify:track:b"]
+        resolver_cls = patched_resolver_and_tracking
+        resolver_cls.return_value.resolve_all.return_value = (
+            _make_resolve_all(source, source_uris)
+        )
+
+        with db_app.app_context():
+            deduped, provenance = _fetch_raid_sources_with_limits(
+                api=MagicMock(),
+                sources=[source],
+                exclusion_set=set(),
+                user_id=None,
+            )
+
+        assert set(deduped) == set(source_uris)
+        assert provenance["spotify:track:a"] == (
+            "Cool Source", "src1",
+        )
+        assert provenance["spotify:track:b"] == (
+            "Cool Source", "src1",
+        )
