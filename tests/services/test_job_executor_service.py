@@ -454,6 +454,67 @@ class TestExecuteRaidForUser:
         assert Schedule.query.count() == 0
 
 
+class TestRevertJobRaidStaging:
+    """A composite job whose later step fails must not leave the raid's
+    pending tracks staged after rollback (SR-008)."""
+
+    def test_reverts_only_job_pending_tracks_for_target(self):
+        from datetime import datetime, timezone, timedelta
+
+        from shuffify.services.executors.base_executor import (
+            _revert_job_raid_staging,
+        )
+        from shuffify.models.db import (
+            db,
+            User,
+            PendingRaidTrack,
+        )
+        from shuffify.enums import PendingRaidStatus
+
+        user = User(spotify_id="sr008_user", display_name="U")
+        db.session.add(user)
+        db.session.commit()
+
+        since = datetime.now(timezone.utc)
+        before = since - timedelta(minutes=5)
+        after = since + timedelta(minutes=1)
+
+        def _pt(uri, target, status, created):
+            return PendingRaidTrack(
+                user_id=user.id,
+                target_playlist_id=target,
+                track_uri=uri,
+                track_name=uri,
+                status=status,
+                created_at=created,
+            )
+
+        db.session.add_all([
+            _pt("keep:before", "tgt", PendingRaidStatus.PENDING, before),
+            _pt("delete:me", "tgt", PendingRaidStatus.PENDING, after),
+            _pt("keep:promoted", "tgt", PendingRaidStatus.PROMOTED, after),
+            _pt("keep:other", "other", PendingRaidStatus.PENDING, after),
+        ])
+        db.session.commit()
+
+        execution = Mock(started_at=since)
+        schedule = Mock(
+            user_id=user.id, target_playlist_id="tgt", id=1
+        )
+
+        deleted = _revert_job_raid_staging(execution, schedule)
+
+        assert deleted == 1
+        remaining = {
+            r.track_uri for r in PendingRaidTrack.query.all()
+        }
+        assert remaining == {
+            "keep:before",
+            "keep:promoted",
+            "keep:other",
+        }
+
+
 class TestExecuteShuffle:
     """Tests for the shuffle execution logic."""
 

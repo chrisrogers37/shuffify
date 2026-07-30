@@ -280,6 +280,51 @@ def _restore_job_snapshots(execution, schedule, api, schedule_id):
         return None
 
 
+def _revert_job_raid_staging(execution, schedule):
+    """Delete raid tracks staged during this job that are still pending.
+
+    A composite job (RAID_AND_SHUFFLE / RAID_AND_DRIP) whose later step fails
+    would otherwise leave the raid step's pending tracks staged even after the
+    playlists are rolled back — a non-atomic side effect (SR-008). Scoped to
+    the schedule's target and the job window (``created_at >= started_at``).
+
+    Returns the number of rows deleted. Best-effort — a failure here must not
+    mask the rollback already under way.
+    """
+    from shuffify.models.db import PendingRaidTrack
+    from shuffify.enums import PendingRaidStatus
+
+    try:
+        user_id = schedule.user_id if schedule else None
+        target_id = schedule.target_playlist_id if schedule else None
+        since = execution.started_at if execution else None
+        if not user_id or not target_id or not since:
+            return 0
+
+        deleted = PendingRaidTrack.query.filter(
+            PendingRaidTrack.user_id == user_id,
+            PendingRaidTrack.target_playlist_id == target_id,
+            PendingRaidTrack.created_at >= since,
+            PendingRaidTrack.status == PendingRaidStatus.PENDING,
+        ).delete(synchronize_session=False)
+        db.session.commit()
+
+        if deleted:
+            logger.info(
+                "Schedule %s: reverted %d raid tracks staged during a "
+                "rolled-back job (SR-008)",
+                getattr(schedule, "id", "?"),
+                deleted,
+            )
+        return deleted
+    except Exception as e:
+        logger.warning(
+            "Failed to revert raid staging on rollback: %s", e
+        )
+        db.session.rollback()
+        return 0
+
+
 def _persist_rollback_status(execution, schedule, ve, schedule_id):
     """Write failed_rolled_back status to db."""
     try:
@@ -604,6 +649,11 @@ class JobExecutorService:
                 schedule_id,
             )
             return
+
+        # Composite atomicity: a raid step may have staged pending tracks
+        # before a later step failed. Now that the playlists are restored,
+        # revert that staging so the whole job is undone (SR-008).
+        _revert_job_raid_staging(execution, schedule)
 
         _persist_rollback_status(
             execution,
