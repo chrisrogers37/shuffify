@@ -142,9 +142,14 @@ class AuthService:
             AuthenticationError: If client creation fails.
         """
         try:
+            # Inject the Redis cache so responses are actually cached in
+            # production (returns None when Redis is unavailable) (SR-005).
+            from shuffify import get_spotify_cache
+
             return SpotifyClient(
                 token=token,
                 on_token_refresh=AuthService._persist_token_to_session,
+                cache=get_spotify_cache(),
             )
         except Exception as e:
             logger.error(f"Failed to create authenticated client: {e}", exc_info=True)

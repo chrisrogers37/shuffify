@@ -694,6 +694,44 @@ class TestGetSpotifyApi:
         )
         assert result == mock_api_instance
 
+    @patch("shuffify.get_spotify_cache")
+    @patch(
+        "shuffify.services.executors.base_executor.TokenService"
+    )
+    @patch(
+        "shuffify.services.executors.base_executor.SpotifyAPI"
+    )
+    @patch(
+        "shuffify.services.executors.base_executor"
+        ".SpotifyAuthManager"
+    )
+    @patch(
+        "shuffify.services.executors.base_executor"
+        ".SpotifyCredentials"
+    )
+    def test_injects_spotify_cache(
+        self,
+        mock_creds,
+        mock_auth,
+        mock_api_class,
+        mock_token_svc,
+        mock_get_cache,
+        mock_user,
+        app_context,
+    ):
+        """The Redis cache is injected into the executor's SpotifyAPI so
+        background jobs share cached playlist/user data (SR-005)."""
+        mock_token_svc.decrypt_token.return_value = "decrypted_refresh"
+        mock_api_instance = Mock()
+        mock_api_instance.token_info.refresh_token = "decrypted_refresh"
+        mock_api_class.return_value = mock_api_instance
+        sentinel = object()
+        mock_get_cache.return_value = sentinel
+
+        JobExecutorService._get_spotify_api(mock_user)
+
+        assert mock_api_class.call_args.kwargs["cache"] is sentinel
+
     def test_no_refresh_token_raises(self, mock_user):
         """Should raise when user has no stored token."""
         mock_user.encrypted_refresh_token = None
