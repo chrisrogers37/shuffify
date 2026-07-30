@@ -6,6 +6,7 @@ to capture point-in-time snapshots of playlist track orderings and
 restore them later.
 """
 
+import contextvars
 import logging
 from typing import List, Optional
 
@@ -14,6 +15,28 @@ from shuffify.enums import SnapshotType  # noqa: F401
 from shuffify.services.base import safe_commit, get_owned_entity
 
 logger = logging.getLogger(__name__)
+
+# The JobExecution that auto-snapshots created in the current execution context
+# should be tagged with, so rollback restores only that job's snapshots rather
+# than every snapshot in a time window (SR-019). Set by
+# JobExecutorService._run_job for the duration of a job.
+_current_job_execution_id = contextvars.ContextVar(
+    "shuffify_current_job_execution_id", default=None
+)
+
+
+def set_current_job_execution(execution_id):
+    """Tag auto-snapshots created in this context with ``execution_id``.
+
+    Returns a token to pass to :func:`reset_current_job_execution`.
+    """
+    return _current_job_execution_id.set(execution_id)
+
+
+def reset_current_job_execution(token):
+    """Clear the current-job-execution tag (see set_current_job_execution)."""
+    _current_job_execution_id.reset(token)
+
 
 # Default max snapshots if UserSettings is unavailable
 DEFAULT_MAX_SNAPSHOTS_PER_PLAYLIST = 50
@@ -42,6 +65,7 @@ class PlaylistSnapshotService:
         track_uris: List[str],
         snapshot_type: str,
         trigger_description: Optional[str] = None,
+        job_execution_id: Optional[int] = None,
     ) -> PlaylistSnapshot:
         """
         Create a new playlist snapshot.
@@ -65,6 +89,11 @@ class PlaylistSnapshotService:
         Raises:
             PlaylistSnapshotError: If creation fails.
         """
+        # Tag with the current job's execution id (if any) so rollback can
+        # scope to just this job's snapshots (SR-019).
+        if job_execution_id is None:
+            job_execution_id = _current_job_execution_id.get()
+
         snapshot = PlaylistSnapshot(
             user_id=user_id,
             playlist_id=playlist_id,
@@ -72,6 +101,7 @@ class PlaylistSnapshotService:
             track_count=len(track_uris),
             snapshot_type=snapshot_type,
             trigger_description=trigger_description,
+            job_execution_id=job_execution_id,
         )
         snapshot.track_uris = track_uris
 
