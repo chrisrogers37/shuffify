@@ -237,20 +237,7 @@ def create_schedule(client=None, user=None):
         algorithm_params=create_request.algorithm_params,
     )
 
-    try:
-        from shuffify.scheduler import (
-            add_job_for_schedule,
-        )
-
-        add_job_for_schedule(schedule)
-    except Exception as e:
-        logger.warning(
-            "Could not register schedule %d with "
-            "APScheduler: %s [type=%s]",
-            schedule.id,
-            e,
-            type(e).__name__,
-        )
+    # APScheduler registration is handled inside create_schedule (SR-013).
 
     logger.info(
         f"User {user.spotify_id} created schedule "
@@ -306,24 +293,7 @@ def update_schedule(
         **update_fields,
     )
 
-    try:
-        from shuffify.scheduler import (
-            add_job_for_schedule,
-            remove_job_for_schedule,
-        )
-
-        if schedule.is_enabled:
-            add_job_for_schedule(schedule)
-        else:
-            remove_job_for_schedule(schedule_id)
-    except Exception as e:
-        logger.warning(
-            "Could not update APScheduler job for "
-            "schedule %d: %s [type=%s]",
-            schedule_id,
-            e,
-            type(e).__name__,
-        )
+    # APScheduler sync is handled inside update_schedule (SR-013).
 
     logger.info(f"Updated schedule {schedule_id}")
 
@@ -357,10 +327,8 @@ def delete_schedule(
     schedule_id, client=None, user=None
 ):
     """Delete a schedule."""
-    from shuffify.scheduler import remove_job_for_schedule
-
-    remove_job_for_schedule(schedule_id)
-
+    # delete_schedule removes the APScheduler job after the DB delete commits,
+    # so a failed delete can't orphan a live job (SR-013).
     SchedulerService.delete_schedule(
         schedule_id, user.id
     )
@@ -392,24 +360,7 @@ def toggle_schedule(
         schedule_id, user.id
     )
 
-    try:
-        from shuffify.scheduler import (
-            add_job_for_schedule,
-            remove_job_for_schedule,
-        )
-
-        if schedule.is_enabled:
-            add_job_for_schedule(schedule)
-        else:
-            remove_job_for_schedule(schedule_id)
-    except Exception as e:
-        logger.warning(
-            "Could not update APScheduler job for "
-            "schedule %d: %s [type=%s]",
-            schedule_id,
-            e,
-            type(e).__name__,
-        )
+    # APScheduler sync is handled inside toggle_schedule (SR-013).
 
     status_text = (
         "enabled" if schedule.is_enabled else "disabled"

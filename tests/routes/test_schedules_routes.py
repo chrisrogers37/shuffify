@@ -445,7 +445,11 @@ class TestAPSchedulerErrorHandling:
         mock_sched_svc,
         auth_client,
     ):
-        """APScheduler failure should log a warning."""
+        """Create still succeeds when scheduler registration fails.
+
+        Registration now lives in SchedulerService, which swallows and logs
+        the failure; the route no longer owns it (SR-013).
+        """
         mock_auth.return_value = MagicMock()
 
         user = UserService.get_by_spotify_id("user123")
@@ -459,10 +463,8 @@ class TestAPSchedulerErrorHandling:
         with patch(
             "shuffify.scheduler.add_job_for_schedule",
             side_effect=KeyError("ConflictingId"),
-        ), patch(
-            "shuffify.routes.schedules.logger"
-        ) as mock_logger:
-            auth_client.post(
+        ):
+            resp = auth_client.post(
                 "/schedules/create",
                 json={
                     "job_type": "shuffle",
@@ -471,7 +473,7 @@ class TestAPSchedulerErrorHandling:
                     "algorithm_name": "BasicShuffle",
                 },
             )
-            mock_logger.warning.assert_called()
+            assert resp.status_code == 200
 
 
 class TestUpdateSchedule:

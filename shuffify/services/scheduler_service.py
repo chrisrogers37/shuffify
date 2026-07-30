@@ -84,9 +84,16 @@ class SchedulerService:
         source_playlist_ids: Optional[List[str]] = None,
         algorithm_name: Optional[str] = None,
         algorithm_params: Optional[Dict[str, Any]] = None,
+        register: bool = True,
     ) -> Schedule:
         """
-        Create a new scheduled job.
+        Create a new scheduled job and register it with APScheduler.
+
+        Args:
+            register: Register the job with APScheduler after creation (the
+                default). Pass ``False`` for bulk/startup paths that register
+                jobs separately, so an enabled schedule is never left without a
+                running job (SR-013).
 
         Raises:
             ScheduleError: If creation fails.
@@ -110,6 +117,8 @@ class SchedulerService:
             f"{job_type} on {target_playlist_name}",
             ScheduleError,
         )
+        if register:
+            SchedulerService._sync_apscheduler_job(schedule)
         return schedule
 
     @staticmethod
@@ -152,6 +161,7 @@ class SchedulerService:
             f"update schedule {schedule_id}",
             ScheduleError,
         )
+        SchedulerService._sync_apscheduler_job(schedule)
         return schedule
 
     @staticmethod
@@ -178,6 +188,9 @@ class SchedulerService:
             f"delete schedule {schedule_id}",
             ScheduleError,
         )
+        # Remove the APScheduler job only after the DB delete commits, so a
+        # failed delete never orphans a schedule row with no running job.
+        SchedulerService._remove_apscheduler_job(schedule_id)
 
     @staticmethod
     def toggle_schedule(
@@ -198,6 +211,7 @@ class SchedulerService:
             f"{'enabled' if schedule.is_enabled else 'disabled'}",
             ScheduleError,
         )
+        SchedulerService._sync_apscheduler_job(schedule)
         return schedule
 
     @staticmethod
@@ -218,3 +232,43 @@ class SchedulerService:
         )
 
         return [ex.to_dict() for ex in executions]
+
+    @staticmethod
+    def _sync_apscheduler_job(schedule) -> None:
+        """Register (enabled) or unregister (disabled) the schedule's
+        APScheduler job so the running jobs always match the DB state.
+
+        Best-effort: a scheduler error is logged, not raised — the database is
+        the source of truth and enabled jobs re-register on next startup.
+        Imported lazily to avoid a circular import with ``shuffify.scheduler``.
+        """
+        try:
+            from shuffify.scheduler import (
+                add_job_for_schedule,
+                remove_job_for_schedule,
+            )
+
+            if schedule.is_enabled:
+                add_job_for_schedule(schedule)
+            else:
+                remove_job_for_schedule(schedule.id)
+        except Exception as e:
+            logger.warning(
+                "APScheduler sync failed for schedule %s: %s",
+                getattr(schedule, "id", "?"),
+                e,
+            )
+
+    @staticmethod
+    def _remove_apscheduler_job(schedule_id: int) -> None:
+        """Remove a schedule's APScheduler job (best-effort)."""
+        try:
+            from shuffify.scheduler import remove_job_for_schedule
+
+            remove_job_for_schedule(schedule_id)
+        except Exception as e:
+            logger.warning(
+                "APScheduler job removal failed for schedule %s: %s",
+                schedule_id,
+                e,
+            )
