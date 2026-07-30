@@ -454,6 +454,44 @@ class TestExecuteRaidForUser:
         assert Schedule.query.count() == 0
 
 
+class TestExecuteDripForUser:
+    """Inline (schedule-less) drips run through the executor rails instead of
+    a mock Schedule(id=0) (#332, the SR-010 drip twin)."""
+
+    def test_records_schedule_less_drip_execution(self):
+        from shuffify.models.db import db, User, JobExecution, Schedule
+        from shuffify.enums import JobType
+
+        user = User(spotify_id="inline_dripper", display_name="D")
+        db.session.add(user)
+        db.session.commit()
+
+        with patch(
+            "shuffify.services.executors.base_executor."
+            "JobExecutorService._get_spotify_api",
+            return_value=Mock(),
+        ), patch(
+            "shuffify.services.executors.base_executor."
+            "JobExecutorService._execute_job_type",
+            return_value={"tracks_added": 2, "tracks_total": 8},
+        ) as mock_dispatch:
+            result = JobExecutorService.execute_drip_for_user(
+                user_id=user.id,
+                target_playlist_id="tgt_drip",
+                drip_count=3,
+            )
+
+        assert result["status"] == "success"
+        assert result["tracks_added"] == 2
+        # Dispatched a transient DRIP schedule (no id, no persistence).
+        dispatched = mock_dispatch.call_args.args[0]
+        assert dispatched.job_type == JobType.DRIP
+        assert Schedule.query.count() == 0
+        assert JobExecution.query.filter_by(
+            schedule_id=None, status="success"
+        ).first() is not None
+
+
 class TestRevertJobRaidStaging:
     """A composite job whose later step fails must not leave the raid's
     pending tracks staged after rollback (SR-008)."""

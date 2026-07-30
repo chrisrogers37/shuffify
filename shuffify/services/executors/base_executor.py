@@ -489,6 +489,34 @@ class JobExecutorService:
         return JobExecutorService._run_job(schedule, None)
 
     @staticmethod
+    def execute_drip_for_user(
+        user_id: int,
+        target_playlist_id: str,
+        target_playlist_name: str = None,
+        drip_count: int = None,
+    ) -> dict:
+        """Run an inline (schedule-less) drip through the full executor safety
+        rails, so a manual "Drip Now" behaves like a scheduled drip instead of
+        a hand-rolled ``Schedule(id=0)`` that bypassed the lock / execution
+        record / rollback (#332, the SR-010 twin).
+
+        Uses a *transient* Schedule (never persisted); the JobExecution is
+        recorded with a null ``schedule_id``. The caller must ensure drip is
+        enabled on the raid link.
+        """
+        schedule = Schedule(
+            user_id=user_id,
+            job_type=JobType.DRIP,
+            target_playlist_id=target_playlist_id,
+            target_playlist_name=(target_playlist_name or target_playlist_id),
+            algorithm_params=(
+                {"drip_count": drip_count} if drip_count else {}
+            ),
+            is_enabled=True,
+        )
+        return JobExecutorService._run_job(schedule, None)
+
+    @staticmethod
     def _create_execution_record(
         schedule_id: int,
     ) -> JobExecution:
