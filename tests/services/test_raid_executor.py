@@ -245,3 +245,48 @@ class TestLoadSourcesTargetScoping:
                 and s.search_query == "ambient"
                 for s in loaded
             )
+
+
+class TestAddToRaidPlaylistSnapshot:
+    """The raid playlist is snapshotted before writing to it, so a post-write
+    verification failure can be rolled back (SR-009)."""
+
+    def test_snapshots_raid_playlist_before_write(self, db_app):
+        from shuffify.services.executors.raid_executor import (
+            _add_to_raid_playlist,
+        )
+
+        api = MagicMock()
+        api.get_playlist_tracks.return_value = [
+            {"uri": "spotify:track:existing"}
+        ]
+        link = MagicMock()
+        link.raid_playlist_id = "raid_pl"
+
+        with db_app.app_context():
+            with patch(
+                "shuffify.services.raid_link_service."
+                "RaidLinkService.get_link_for_playlist",
+                return_value=link,
+            ), patch(
+                "shuffify.services.executors.raid_executor."
+                "PlaylistSnapshotService"
+            ) as mock_snap, patch(
+                "shuffify.services.executors.raid_executor."
+                "verify_playlist_state"
+            ):
+                mock_snap.is_auto_snapshot_enabled.return_value = True
+                _add_to_raid_playlist(
+                    api,
+                    user_id=1,
+                    target_id="tgt",
+                    uris=["spotify:track:new"],
+                    schedule_id=1,
+                )
+
+        mock_snap.create_snapshot.assert_called_once()
+        kwargs = mock_snap.create_snapshot.call_args.kwargs
+        assert kwargs["playlist_id"] == "raid_pl"
+        assert kwargs["track_uris"] == [
+            "spotify:track:existing"
+        ]
