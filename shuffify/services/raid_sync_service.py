@@ -309,15 +309,32 @@ class RaidSyncService:
             )
         else:
             logger.info(
-                "Raid via inline path for "
+                "Raid via inline path (through the executor) for "
                 "playlist %s (%d sources)",
                 target_playlist_id,
                 len(source_playlist_ids),
             )
-            return RaidSyncService._execute_raid_inline(
-                user, target_playlist_id,
-                source_playlist_ids,
+            from shuffify.services.executors import (
+                JobExecutorService,
             )
+
+            result = JobExecutorService.execute_raid_for_user(
+                user_id=user.id,
+                target_playlist_id=target_playlist_id,
+                source_playlist_ids=source_playlist_ids,
+            )
+            if result.get("status") in (
+                "failed",
+                "failed_rolled_back",
+            ):
+                raise RaidSyncError(
+                    result.get("error", "Raid execution failed.")
+                )
+            return {
+                "tracks_added": result.get("tracks_added", 0),
+                "tracks_total": result.get("tracks_total", 0),
+                "status": result.get("status", "success"),
+            }
 
     @staticmethod
     def _execute_raid_via_scheduler(schedule, user):
@@ -347,99 +364,6 @@ class RaidSyncService:
             }
         except JobExecutionError as e:
             raise RaidSyncError(str(e))
-
-    @staticmethod
-    def _execute_raid_inline(
-        user, target_playlist_id, source_playlist_ids
-    ):
-        """Execute raid without a schedule (inline).
-
-        Stages tracks for review and adds to raid playlist.
-        Uses chain-wide deduplication.
-        """
-        from shuffify.services.executors import (
-            JobExecutorService,
-        )
-        from shuffify.services.executors.raid_executor import (
-            _fetch_raid_sources_with_limits,
-            _load_sources,
-            _build_track_dicts,
-            _add_to_raid_playlist,
-        )
-        from shuffify.services.pending_raid_service import (
-            PendingRaidService,
-        )
-        from shuffify.services.raid_dedupe import (
-            build_full_exclusion_set,
-        )
-
-        try:
-            api = JobExecutorService._get_spotify_api(user)
-
-            exclusion_set, target_count = (
-                build_full_exclusion_set(
-                    api, target_playlist_id, user.id
-                )
-            )
-
-            logger.info(
-                "Inline raid: exclusion set has "
-                "%d URIs",
-                len(exclusion_set),
-            )
-
-            sources = _load_sources(
-                source_playlist_ids, user.id,
-                target_playlist_id,
-            )
-            new_uris = _fetch_raid_sources_with_limits(
-                api, sources,
-                exclusion_set,
-                user_id=user.id,
-            )
-
-            logger.info(
-                "Inline raid: %d new URIs found",
-                len(new_uris),
-            )
-
-            staged = 0
-            if new_uris:
-                track_dicts = _build_track_dicts(
-                    api, new_uris
-                )
-
-                _add_to_raid_playlist(
-                    api, user.id,
-                    target_playlist_id, new_uris,
-                )
-
-                staged = PendingRaidService.stage_tracks(
-                    user_id=user.id,
-                    target_playlist_id=(
-                        target_playlist_id
-                    ),
-                    tracks=track_dicts,
-                )
-
-            logger.info(
-                "Inline raid complete: "
-                "staged=%d, total=%d",
-                staged,
-                target_count,
-            )
-
-            return {
-                "tracks_added": staged,
-                "tracks_total": target_count,
-                "status": "success",
-            }
-        except RaidSyncError:
-            raise
-        except Exception as e:
-            raise RaidSyncError(
-                "Raid execution failed: {}".format(e)
-            )
 
     @staticmethod
     def watch_search_query(

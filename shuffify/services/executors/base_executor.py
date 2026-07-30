@@ -320,22 +320,39 @@ class JobExecutorService:
         other's verification (e.g. a shuffle + a rotate that both
         fire at ``0 9 * * *`` on the same target).
         """
+        schedule = db.session.get(Schedule, schedule_id)
+        if not schedule:
+            logger.error(f"Schedule {schedule_id} not found, skipping")
+            return
+
+        if not schedule.is_enabled:
+            logger.info(f"Schedule {schedule_id} is disabled, skipping")
+            return
+
+        _tag_sentry_scope(schedule, schedule_id)
+        JobExecutorService._run_job(schedule, schedule_id)
+
+    @staticmethod
+    def _run_job(schedule, schedule_id) -> dict:
+        """Run one job through the full safety rails and record it.
+
+        Shared by scheduled runs (:meth:`execute`) and inline raids
+        (:meth:`execute_raid_for_user`). ``schedule`` may be a persisted
+        Schedule or a *transient* (unsaved) one for a schedule-less raid, in
+        which case ``schedule_id`` is ``None``: a transient object is never in
+        the session, so the ``_record_*`` helpers set attributes on a throwaway
+        and ``commit()`` only persists the JobExecution (recorded with a null
+        ``schedule_id``).
+
+        Provides the per-playlist :func:`playlist_lock`, a JobExecution record,
+        snapshot-based rollback on verification/partial-write failure, and
+        activity logging. Records the outcome and returns a result dict; never
+        raises (mirrors the fire-and-forget scheduler contract).
+        """
         execution = None
-        schedule = None
         api = None
 
         try:
-            schedule = db.session.get(Schedule, schedule_id)
-            if not schedule:
-                logger.error(f"Schedule {schedule_id} not found, skipping")
-                return
-
-            if not schedule.is_enabled:
-                logger.info(f"Schedule {schedule_id} is disabled, skipping")
-                return
-
-            _tag_sentry_scope(schedule, schedule_id)
-
             with playlist_lock(schedule.target_playlist_id) as acquired:
                 if not acquired:
                     logger.warning(
@@ -346,9 +363,15 @@ class JobExecutorService:
                         schedule_id,
                         schedule.target_playlist_id,
                     )
-                    return
+                    return {
+                        "status": "skipped",
+                        "tracks_added": 0,
+                        "tracks_total": 0,
+                    }
 
-                execution = JobExecutorService._create_execution_record(schedule_id)
+                execution = JobExecutorService._create_execution_record(
+                    schedule_id
+                )
 
                 user = db.session.get(User, schedule.user_id)
                 if not user:
@@ -359,6 +382,11 @@ class JobExecutorService:
                 result = JobExecutorService._execute_job_type(schedule, api)
 
                 JobExecutorService._record_success(execution, schedule, result)
+                return {
+                    "status": "success",
+                    "tracks_added": result.get("tracks_added", 0),
+                    "tracks_total": result.get("tracks_total", 0),
+                }
 
         except (
             PlaylistVerificationError,
@@ -371,8 +399,49 @@ class JobExecutorService:
                 ve,
                 schedule_id,
             )
+            return {
+                "status": "failed_rolled_back",
+                "tracks_added": 0,
+                "tracks_total": 0,
+                "error": str(ve),
+            }
         except Exception as e:
             JobExecutorService._record_failure(execution, schedule, e, schedule_id)
+            return {
+                "status": "failed",
+                "tracks_added": 0,
+                "tracks_total": 0,
+                "error": str(e),
+            }
+
+    @staticmethod
+    def execute_raid_for_user(
+        user_id: int,
+        target_playlist_id: str,
+        source_playlist_ids=None,
+        target_playlist_name: str = None,
+    ) -> dict:
+        """Run an inline (schedule-less) raid through the full executor safety
+        rails, so a manual "Raid Now" behaves identically to a scheduled raid:
+        per-playlist lock, JobExecution record, auto-snapshots, rollback, and
+        activity logging (SR-010).
+
+        Uses a *transient* Schedule (never added to the session), so no
+        schedule row is created and the JobExecution is recorded with a null
+        ``schedule_id``.
+
+        Returns a result dict with ``status`` / ``tracks_added`` /
+        ``tracks_total`` (and ``error`` on failure).
+        """
+        schedule = Schedule(
+            user_id=user_id,
+            job_type=JobType.RAID,
+            target_playlist_id=target_playlist_id,
+            target_playlist_name=(target_playlist_name or target_playlist_id),
+            source_playlist_ids=source_playlist_ids or [],
+            is_enabled=True,
+        )
+        return JobExecutorService._run_job(schedule, None)
 
     @staticmethod
     def _create_execution_record(

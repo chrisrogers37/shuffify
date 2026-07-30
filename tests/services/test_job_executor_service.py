@@ -410,6 +410,50 @@ class TestRaidSourceFailureLogging:
         mock_activity_helper.assert_not_called()
 
 
+class TestExecuteRaidForUser:
+    """Inline (schedule-less) raids run through the executor safety rails
+    and are recorded, just like scheduled raids (SR-010)."""
+
+    def test_records_schedule_less_execution(self):
+        from shuffify.models.db import db, User, JobExecution
+
+        user = User(
+            spotify_id="inline_raider", display_name="R"
+        )
+        db.session.add(user)
+        db.session.commit()
+
+        with patch(
+            "shuffify.services.executors.base_executor."
+            "JobExecutorService._get_spotify_api",
+            return_value=Mock(),
+        ), patch(
+            "shuffify.services.executors.base_executor."
+            "JobExecutorService._execute_job_type",
+            return_value={"tracks_added": 3, "tracks_total": 10},
+        ):
+            result = JobExecutorService.execute_raid_for_user(
+                user_id=user.id,
+                target_playlist_id="tgt_inline_exec",
+                source_playlist_ids=["s1"],
+            )
+
+        assert result["status"] == "success"
+        assert result["tracks_added"] == 3
+
+        # Recorded in execution history with no owning schedule.
+        exec_row = JobExecution.query.filter_by(
+            schedule_id=None, status="success"
+        ).first()
+        assert exec_row is not None
+        assert exec_row.tracks_added == 3
+
+        # No transient Schedule row was persisted.
+        from shuffify.models.db import Schedule
+
+        assert Schedule.query.count() == 0
+
+
 class TestExecuteShuffle:
     """Tests for the shuffle execution logic."""
 

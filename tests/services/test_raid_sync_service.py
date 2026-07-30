@@ -6,9 +6,8 @@ schedule management, and the _find_raid_schedule helper.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-from shuffify.models.db import db, Schedule
 from shuffify.services.user_service import UserService
 from shuffify.services.upstream_source_service import (
     UpstreamSourceService,
@@ -379,8 +378,9 @@ class TestRaidNow:
         self, user
     ):
         """A search-only target (no playlist sources, no schedule) must be
-        raidable via the inline path without passing None placeholders as
-        source ids (SR-006)."""
+        raidable through the executor without passing None placeholders as
+        source ids (SR-006). The no-schedule path now runs through
+        JobExecutorService.execute_raid_for_user (SR-010)."""
         UpstreamSourceService.add_search_source(
             spotify_id="user123",
             target_playlist_id="tgt_inline",
@@ -388,19 +388,19 @@ class TestRaidNow:
             source_name="Chillhop",
         )
 
-        with patch.object(
-            RaidSyncService,
-            "_execute_raid_inline",
+        with patch(
+            "shuffify.services.executors."
+            "JobExecutorService.execute_raid_for_user",
             return_value={
                 "tracks_added": 0,
                 "tracks_total": 0,
                 "status": "success",
             },
-        ) as mock_inline:
+        ) as mock_exec:
             RaidSyncService.raid_now("user123", "tgt_inline")
 
-        mock_inline.assert_called_once()
-        passed_ids = mock_inline.call_args.args[2]
+        mock_exec.assert_called_once()
+        passed_ids = mock_exec.call_args.kwargs["source_playlist_ids"]
         assert None not in passed_ids
 
 
