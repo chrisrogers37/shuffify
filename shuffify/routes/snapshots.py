@@ -16,6 +16,7 @@ from shuffify.routes import (
 )
 from shuffify.services import (
     PlaylistService,
+    PlaylistAccessError,
     PlaylistSnapshotService,
     PlaylistSnapshotError,
     PlaylistSnapshotNotFoundError,
@@ -117,6 +118,11 @@ def restore_snapshot(
         restore_uris = snapshot.track_uris
         playlist_id = snapshot.playlist_id
 
+        # Defense-in-depth: only editable playlists may be mutated (SR-014).
+        PlaylistService(client).validate_user_can_edit(
+            playlist_id, user.spotify_id
+        )
+
         if not restore_uris:
             return json_error(
                 "Snapshot contains no tracks.", 400
@@ -182,6 +188,9 @@ def restore_snapshot(
 
     except PlaylistSnapshotNotFoundError:
         return json_error("Snapshot not found.", 404)
+    except PlaylistAccessError:
+        # Let the global handler return a 403 rather than a generic 500.
+        raise
     except Exception as e:
         logger.error(
             f"Failed to restore snapshot "

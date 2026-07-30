@@ -12,8 +12,59 @@ from shuffify.services import (
     PlaylistError,
     PlaylistNotFoundError,
     PlaylistUpdateError,
+    PlaylistAccessError,
 )
 from shuffify.models.playlist import Playlist
+
+
+class TestPlaylistServiceAssertUserCanEdit:
+    """Tests for validate_user_can_edit (SR-014 defense-in-depth guard)."""
+
+    def test_allows_owner(self, mock_spotify_client):
+        """The playlist's owner may edit it."""
+        mock_spotify_client.get_playlist.return_value = {
+            "id": "p1",
+            "owner": {"id": "alice"},
+            "collaborative": False,
+        }
+        PlaylistService(mock_spotify_client).validate_user_can_edit(
+            "p1", "alice"
+        )
+
+    def test_allows_collaborative_non_owner(self, mock_spotify_client):
+        """A collaborative playlist is editable even by a non-owner."""
+        mock_spotify_client.get_playlist.return_value = {
+            "id": "p1",
+            "owner": {"id": "bob"},
+            "collaborative": True,
+        }
+        PlaylistService(mock_spotify_client).validate_user_can_edit(
+            "p1", "alice"
+        )
+
+    def test_rejects_non_owner_non_collaborative(self, mock_spotify_client):
+        """A non-owner, non-collaborative playlist must be rejected."""
+        mock_spotify_client.get_playlist.return_value = {
+            "id": "p1",
+            "owner": {"id": "bob"},
+            "collaborative": False,
+        }
+        with pytest.raises(PlaylistAccessError):
+            PlaylistService(mock_spotify_client).validate_user_can_edit(
+                "p1", "alice"
+            )
+
+    def test_rejects_when_playlist_not_accessible(self, mock_spotify_client):
+        """A playlist the user can't even fetch (404/private) is rejected."""
+        from shuffify.spotify.exceptions import SpotifyNotFoundError
+
+        mock_spotify_client.get_playlist.side_effect = SpotifyNotFoundError(
+            "not found"
+        )
+        with pytest.raises(PlaylistAccessError):
+            PlaylistService(mock_spotify_client).validate_user_can_edit(
+                "p1", "alice"
+            )
 
 
 class TestPlaylistServiceInit:

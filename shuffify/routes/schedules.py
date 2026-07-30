@@ -171,6 +171,13 @@ def create_schedule(client=None, user=None):
     if err:
         return err
 
+    # Defense-in-depth: the user must be able to edit the target playlist
+    # (owner or collaborative). Otherwise a schedule can be created against an
+    # arbitrary playlist ID that fails forever at execution time (SR-014).
+    PlaylistService(client).validate_user_can_edit(
+        create_request.target_playlist_id, user.spotify_id
+    )
+
     # Defense-in-depth: validate raid sources exist in Workshop
     if create_request.job_type in ("raid", "raid_and_shuffle"):
         if create_request.source_playlist_ids:

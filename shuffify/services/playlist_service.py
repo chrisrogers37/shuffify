@@ -169,6 +169,12 @@ class PlaylistUpdateError(PlaylistError):
     pass
 
 
+class PlaylistAccessError(PlaylistError):
+    """Raised when a user attempts to modify a playlist they cannot edit."""
+
+    pass
+
+
 class PlaylistService:
     """Service for managing Spotify playlist operations."""
 
@@ -180,6 +186,45 @@ class PlaylistService:
             spotify_client: An authenticated SpotifyClient instance.
         """
         self._client = spotify_client
+
+    def validate_user_can_edit(
+        self, playlist_id: str, user_spotify_id: str
+    ) -> None:
+        """
+        Defense-in-depth guard: raise unless the user can edit the playlist.
+
+        A user may edit a playlist if they own it or it is collaborative.
+        Spotify also rejects unauthorized writes server-side, but this fails
+        fast with a clear 403 and — crucially — blocks schedule creation
+        against playlists the user cannot edit, which would otherwise fail
+        forever at execution time (SR-014).
+
+        Args:
+            playlist_id: The Spotify playlist ID to check.
+            user_spotify_id: The authenticated user's Spotify ID.
+
+        Raises:
+            PlaylistAccessError: If the playlist cannot be edited or accessed.
+        """
+        try:
+            raw = self._client.get_playlist(playlist_id)
+        except SpotifyNotFoundError as e:
+            raise PlaylistAccessError(
+                "Playlist not found or not accessible."
+            ) from e
+
+        owner = raw.get("owner") if isinstance(raw, dict) else None
+        owner_id = owner.get("id") if isinstance(owner, dict) else None
+        collaborative = (
+            bool(raw.get("collaborative")) if isinstance(raw, dict) else False
+        )
+
+        if owner_id == user_spotify_id or collaborative:
+            return
+
+        raise PlaylistAccessError(
+            "You do not have permission to modify this playlist."
+        )
 
     def get_user_playlists(
         self, skip_cache: bool = False
