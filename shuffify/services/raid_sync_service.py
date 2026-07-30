@@ -448,9 +448,6 @@ class RaidSyncService:
             JobExecutorService,
             JobExecutionError,
         )
-        from shuffify.services.executors.drip_executor import (
-            execute_drip,
-        )
         from shuffify.services.raid_link_service import (
             RaidLinkService,
         )
@@ -493,41 +490,30 @@ class RaidSyncService:
             except JobExecutionError as e:
                 raise RaidSyncError(str(e))
 
-        # Inline drip (no schedule)
-        try:
-            api = JobExecutorService._get_spotify_api(user)
-            # Create a mock schedule for drip executor
-            mock_schedule = Schedule(
-                id=0,
-                user_id=user.id,
-                job_type=JobType.DRIP,
-                target_playlist_id=target_playlist_id,
-                target_playlist_name=(
-                    link.target_playlist_name
-                ),
-                algorithm_params={
-                    "drip_count": link.drip_count,
-                },
-                is_enabled=True,
-            )
-            # Temporarily enable drip for inline exec
-            link.drip_enabled = True
-            result = execute_drip(mock_schedule, api)
-            return {
-                "tracks_added": result.get(
-                    "tracks_added", 0
-                ),
-                "tracks_total": result.get(
-                    "tracks_total", 0
-                ),
-                "status": "success",
-            }
-        except RaidSyncError:
-            raise
-        except Exception as e:
+        # Inline drip (no schedule) — run through the executor safety rails
+        # instead of a hand-rolled Schedule(id=0) that bypassed them (#332).
+        # A manual "Drip Now" forces the drip regardless of the schedule's
+        # drip_enabled flag; execute_drip re-reads the link, so enable it
+        # within this transaction before dispatching.
+        link.drip_enabled = True
+        result = JobExecutorService.execute_drip_for_user(
+            user_id=user.id,
+            target_playlist_id=target_playlist_id,
+            target_playlist_name=link.target_playlist_name,
+            drip_count=link.drip_count,
+        )
+        if result.get("status") in (
+            "failed",
+            "failed_rolled_back",
+        ):
             raise RaidSyncError(
-                "Drip execution failed: {}".format(e)
+                result.get("error", "Drip execution failed.")
             )
+        return {
+            "tracks_added": result.get("tracks_added", 0),
+            "tracks_total": result.get("tracks_total", 0),
+            "status": result.get("status", "success"),
+        }
 
     @staticmethod
     def _find_raid_schedule(user_id, target_playlist_id):
