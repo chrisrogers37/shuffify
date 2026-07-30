@@ -804,3 +804,43 @@ class TestExecuteLocking:
             create_record.assert_called_once_with(mock_schedule.id)
             get_api.assert_called_once_with(mock_user)
             record_success.assert_called_once()
+
+    def test_lock_timeout_records_skipped_execution(self):
+        """A run skipped because the playlist lock didn't release is recorded
+        as a JobExecution + schedule.last_status, so contention is visible in
+        history instead of only a WARNING log (SR-035)."""
+        from shuffify.models.db import (
+            db,
+            User,
+            Schedule,
+            JobExecution,
+        )
+
+        user = User(spotify_id="lock_user", display_name="L")
+        db.session.add(user)
+        db.session.commit()
+        schedule = Schedule(
+            user_id=user.id,
+            job_type="shuffle",
+            target_playlist_id="tgt_lock",
+            target_playlist_name="P",
+            schedule_type="interval",
+            schedule_value="daily",
+            is_enabled=True,
+        )
+        db.session.add(schedule)
+        db.session.commit()
+
+        with patch(
+            "shuffify.services.executors.base_executor.playlist_lock",
+            self._fake_lock(False),
+        ):
+            JobExecutorService.execute(schedule.id)
+
+        ex = JobExecution.query.filter_by(
+            schedule_id=schedule.id, status="skipped"
+        ).first()
+        assert ex is not None
+
+        db.session.refresh(schedule)
+        assert schedule.last_status == "skipped"
