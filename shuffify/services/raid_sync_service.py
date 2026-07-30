@@ -101,17 +101,7 @@ class RaidSyncService:
                     schedule_value=sched_val,
                     source_playlist_ids=[source_playlist_id],
                 )
-                # Register with APScheduler
-                try:
-                    from shuffify.scheduler import (
-                        add_job_for_schedule,
-                    )
-                    add_job_for_schedule(schedule)
-                except Exception as e:
-                    logger.warning(
-                        "Could not register schedule with "
-                        "APScheduler: %s", e
-                    )
+                # APScheduler registration handled in create_schedule (SR-013)
 
         return {
             "source": source.to_dict(),
@@ -164,17 +154,8 @@ class RaidSyncService:
                 if sid != source_playlist_id
             ]
             if not remaining:
-                # Delete schedule and remove from APScheduler
-                try:
-                    from shuffify.scheduler import (
-                        remove_job_for_schedule,
-                    )
-                    remove_job_for_schedule(schedule.id)
-                except Exception as e:
-                    logger.warning(
-                        "Could not remove job from APScheduler: "
-                        "%s", e
-                    )
+                # delete_schedule removes the APScheduler job after the DB
+                # delete commits (SR-013).
                 SchedulerService.delete_schedule(
                     schedule.id, user.id
                 )
@@ -520,21 +501,8 @@ class RaidSyncService:
                     ),
                     source_playlist_ids=[],
                 )
-                # Register with APScheduler so the schedule fires without
-                # waiting for an app restart (SR-001). watch_playlist does
-                # the same; watch_search_query previously omitted it (and
-                # passed an invalid is_enabled kwarg that raised before the
-                # schedule was ever created).
-                try:
-                    from shuffify.scheduler import (
-                        add_job_for_schedule,
-                    )
-                    add_job_for_schedule(schedule)
-                except Exception as e:
-                    logger.warning(
-                        "Could not register schedule with "
-                        "APScheduler: %s", e
-                    )
+                # APScheduler registration handled in create_schedule; the
+                # schedule now fires without an app restart (SR-001, SR-013).
 
         return {
             "source": source,
@@ -751,19 +719,6 @@ class RaidSyncService:
             schedule.id, user.id, **update_fields
         )
 
-        # Re-register with APScheduler
-        try:
-            from shuffify.scheduler import (
-                add_job_for_schedule,
-                remove_job_for_schedule,
-            )
-            if updated.is_enabled:
-                add_job_for_schedule(updated)
-            else:
-                remove_job_for_schedule(updated.id)
-        except Exception as e:
-            logger.warning(
-                "Could not update APScheduler: %s", e
-            )
+        # APScheduler sync is handled inside update_schedule (SR-013).
 
         return updated

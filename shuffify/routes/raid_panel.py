@@ -747,21 +747,7 @@ def _toggle_schedule(schedule, user_id, playlist_id, label):
             schedule.id, user_id
         )
 
-        try:
-            if schedule.is_enabled:
-                from shuffify.scheduler import (
-                    add_job_for_schedule,
-                )
-                add_job_for_schedule(schedule)
-            else:
-                from shuffify.scheduler import (
-                    remove_job_for_schedule,
-                )
-                remove_job_for_schedule(schedule.id)
-        except Exception as e:
-            logger.warning(
-                "APScheduler toggle failed: %s", e
-            )
+        # APScheduler sync is handled inside toggle_schedule (SR-013).
 
         state = (
             "enabled"
@@ -888,17 +874,7 @@ def raid_schedule_create(
             ),
         )
 
-        # Register with APScheduler
-        try:
-            from shuffify.scheduler import (
-                add_job_for_schedule,
-            )
-            add_job_for_schedule(schedule)
-        except Exception as e:
-            logger.warning(
-                "Could not register schedule with "
-                "APScheduler: %s", e
-            )
+        # APScheduler registration handled in create_schedule (SR-013).
 
         log_activity(
             user_id=user.id,

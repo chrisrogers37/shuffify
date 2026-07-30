@@ -5,6 +5,7 @@ These tests require a Flask app context with SQLAlchemy configured.
 """
 
 import pytest
+from unittest.mock import patch
 
 from shuffify.services.scheduler_service import (
     SchedulerService,
@@ -230,3 +231,110 @@ class TestSchedulerServiceToggle:
             sample_schedule.id, db_user.id
         )
         assert toggled.is_enabled is True
+
+
+class TestSchedulerServiceRegistration:
+    """CRUD keeps the APScheduler job in sync so an enabled schedule always
+    has a running job and a disabled/deleted one never does (SR-013)."""
+
+    def test_create_registers_job(self, db_user, app_context):
+        with patch(
+            "shuffify.scheduler.add_job_for_schedule"
+        ) as mock_add:
+            schedule = SchedulerService.create_schedule(
+                user_id=db_user.id,
+                job_type="shuffle",
+                target_playlist_id="pl_reg",
+                target_playlist_name="P",
+                schedule_type="interval",
+                schedule_value="daily",
+                algorithm_name="BasicShuffle",
+            )
+        mock_add.assert_called_once_with(schedule)
+
+    def test_create_with_register_false_skips(
+        self, db_user, app_context
+    ):
+        with patch(
+            "shuffify.scheduler.add_job_for_schedule"
+        ) as mock_add:
+            SchedulerService.create_schedule(
+                user_id=db_user.id,
+                job_type="shuffle",
+                target_playlist_id="pl_noreg",
+                target_playlist_name="P",
+                schedule_type="interval",
+                schedule_value="daily",
+                algorithm_name="BasicShuffle",
+                register=False,
+            )
+        mock_add.assert_not_called()
+
+    def test_delete_removes_job_after_db_delete(
+        self, sample_schedule, app_context
+    ):
+        from shuffify.models.db import Schedule
+
+        sid = sample_schedule.id
+        with patch(
+            "shuffify.scheduler.remove_job_for_schedule"
+        ) as mock_remove:
+            SchedulerService.delete_schedule(
+                sid, sample_schedule.user_id
+            )
+        mock_remove.assert_called_once_with(sid)
+        assert Schedule.query.get(sid) is None
+
+    def test_toggle_to_disabled_removes_job(
+        self, sample_schedule, app_context
+    ):
+        with patch(
+            "shuffify.scheduler.remove_job_for_schedule"
+        ) as mock_remove, patch(
+            "shuffify.scheduler.add_job_for_schedule"
+        ) as mock_add:
+            result = SchedulerService.toggle_schedule(
+                sample_schedule.id, sample_schedule.user_id
+            )
+        assert result.is_enabled is False
+        mock_remove.assert_called_once_with(sample_schedule.id)
+        mock_add.assert_not_called()
+
+    def test_toggle_to_enabled_adds_job(
+        self, sample_schedule, app_context
+    ):
+        # Disable first (real call, no scheduler running -> best-effort no-op)
+        SchedulerService.toggle_schedule(
+            sample_schedule.id, sample_schedule.user_id
+        )
+        with patch(
+            "shuffify.scheduler.remove_job_for_schedule"
+        ) as mock_remove, patch(
+            "shuffify.scheduler.add_job_for_schedule"
+        ) as mock_add:
+            result = SchedulerService.toggle_schedule(
+                sample_schedule.id, sample_schedule.user_id
+            )
+        assert result.is_enabled is True
+        mock_add.assert_called_once_with(result)
+        mock_remove.assert_not_called()
+
+    def test_create_survives_registration_failure(
+        self, db_user, app_context
+    ):
+        """A scheduler-registration failure is swallowed and logged, so the
+        create still succeeds -- the DB is the source of truth (SR-013)."""
+        with patch(
+            "shuffify.scheduler.add_job_for_schedule",
+            side_effect=KeyError("ConflictingId"),
+        ):
+            schedule = SchedulerService.create_schedule(
+                user_id=db_user.id,
+                job_type="shuffle",
+                target_playlist_id="pl_fail",
+                target_playlist_name="P",
+                schedule_type="interval",
+                schedule_value="daily",
+                algorithm_name="BasicShuffle",
+            )
+        assert schedule.id is not None
