@@ -408,6 +408,11 @@ class JobExecutorService:
                         schedule_id,
                         schedule.target_playlist_id,
                     )
+                    # Record the skip so contention is visible in execution
+                    # history instead of only a WARNING log (SR-035).
+                    JobExecutorService._record_lock_timeout(
+                        schedule, schedule_id
+                    )
                     return {
                         "status": "skipped",
                         "tracks_added": 0,
@@ -532,6 +537,42 @@ class JobExecutorService:
             JobExecutionError,
         )
         return execution
+
+    @staticmethod
+    def _record_lock_timeout(schedule, schedule_id) -> None:
+        """Record a JobExecution for a run skipped because the per-playlist
+        lock did not release within the timeout (SR-035).
+
+        Best-effort — a failure here must not turn a benign skip into a crash.
+        Works for a persisted or a transient schedule (schedule_id may be
+        None); a transient schedule is never in the session, so its
+        ``last_status`` change is discarded.
+        """
+        try:
+            now = datetime.now(timezone.utc)
+            execution = JobExecution(
+                schedule_id=schedule_id,
+                started_at=now,
+                completed_at=now,
+                status="skipped",
+                error_message=(
+                    "Skipped: another job held the playlist lock past the "
+                    "timeout; the next scheduled fire will retry."
+                ),
+            )
+            db.session.add(execution)
+            if schedule is not None:
+                schedule.last_run_at = now
+                schedule.last_status = "skipped"
+            db.session.commit()
+        except Exception as e:
+            logger.warning(
+                "Failed to record lock-timeout execution for schedule "
+                "%s: %s",
+                schedule_id,
+                e,
+            )
+            db.session.rollback()
 
     @staticmethod
     def _record_success(
