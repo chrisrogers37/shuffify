@@ -810,10 +810,15 @@ class JobExecutorService:
                 refresh_token=refresh_token,
             )
 
+            # Inject the Redis cache (None when Redis is unavailable) so
+            # background jobs share the cached playlist/user data (SR-005).
+            from shuffify import get_spotify_cache
+
             api = SpotifyAPI(
                 token_info,
                 auth_manager,
                 auto_refresh=True,
+                cache=get_spotify_cache(),
             )
 
             # Update stored refresh token if it was rotated

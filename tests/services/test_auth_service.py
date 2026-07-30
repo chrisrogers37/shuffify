@@ -5,7 +5,7 @@ Tests cover OAuth flow, token validation, and client creation.
 """
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, ANY
 
 from shuffify.services import (
     AuthService,
@@ -160,7 +160,22 @@ class TestAuthServiceGetAuthenticatedClient:
         mock_client_class.assert_called_once_with(
             token=sample_token,
             on_token_refresh=AuthService._persist_token_to_session,
+            cache=ANY,
         )
+
+    @patch("shuffify.get_spotify_cache")
+    @patch("shuffify.services.auth_service.SpotifyClient")
+    def test_get_authenticated_client_injects_cache(
+        self, mock_client_class, mock_get_cache, sample_token
+    ):
+        """The Redis cache is injected into the client so caching is actually
+        used in production instead of every request re-fetching (SR-005)."""
+        sentinel = object()
+        mock_get_cache.return_value = sentinel
+
+        AuthService.get_authenticated_client(sample_token)
+
+        assert mock_client_class.call_args.kwargs["cache"] is sentinel
 
     @patch("shuffify.services.auth_service.SpotifyClient")
     def test_get_authenticated_client_failure(self, mock_client_class, sample_token):
@@ -210,6 +225,7 @@ class TestAuthServiceAuthenticateAndGetUser:
         mock_client_class.assert_called_once_with(
             token=sample_token,
             on_token_refresh=AuthService._persist_token_to_session,
+            cache=ANY,
         )
 
     @patch("shuffify.services.auth_service.SpotifyClient")
