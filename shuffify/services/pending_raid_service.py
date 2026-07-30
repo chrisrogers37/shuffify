@@ -79,8 +79,10 @@ class PendingRaidService:
                 track_duration_ms=track.get(
                     "duration_ms"
                 ),
-                source_playlist_id=source_playlist_id,
-                source_name=source_name,
+                source_playlist_id=track.get(
+                    "source_playlist_id", source_playlist_id
+                ),
+                source_name=track.get("source_name", source_name),
                 status=PendingRaidStatus.PENDING,
             )
             db.session.add(pending)

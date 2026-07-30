@@ -95,7 +95,7 @@ def execute_raid(
         )
 
     # --- Source resolution (graceful — returns 0 on failure) ---
-    new_uris = _fetch_raid_sources_with_limits(
+    new_uris, provenance = _fetch_raid_sources_with_limits(
         api, sources, exclusion_set,
         user_id=schedule.user_id,
     )
@@ -114,6 +114,13 @@ def execute_raid(
     try:
         track_dicts = _build_track_dicts(api, new_uris)
 
+        # Attach per-track provenance so the pending-track inbox records the
+        # actual upstream source, not the target playlist (SR-036).
+        for td in track_dicts:
+            src = provenance.get(td.get("uri"))
+            if src:
+                td["source_name"], td["source_playlist_id"] = src
+
         _add_to_raid_playlist(
             api, schedule.user_id, target_id, new_uris,
             schedule.id,
@@ -123,7 +130,6 @@ def execute_raid(
             user_id=schedule.user_id,
             target_playlist_id=target_id,
             tracks=track_dicts,
-            source_name=schedule.target_playlist_name,
         )
 
         logger.info(
@@ -292,6 +298,10 @@ def _fetch_raid_sources_with_limits(
 
     # Apply per-source raid_count limits
     all_new_uris = []
+    # Map each fresh URI to the source it came from (first source wins), so
+    # staged tracks record correct provenance -- the source, not the target
+    # (SR-036).
+    provenance = {}
 
     for source, result in results.source_results:
         if result and not result.success:
@@ -336,6 +346,14 @@ def _fetch_raid_sources_with_limits(
             fresh_uris = random.sample(fresh_uris, raid_count)
 
         all_new_uris.extend(fresh_uris)
+        for uri in fresh_uris:
+            provenance.setdefault(
+                uri,
+                (
+                    getattr(source, "source_name", None),
+                    getattr(source, "source_playlist_id", None),
+                ),
+            )
 
     # Update tracking fields on resolved sources
     _update_source_tracking(results)
@@ -348,7 +366,7 @@ def _fetch_raid_sources_with_limits(
             seen.add(uri)
             deduped.append(uri)
 
-    return deduped
+    return deduped, provenance
 
 
 def _load_sources(source_ids, user_id, target_id):
