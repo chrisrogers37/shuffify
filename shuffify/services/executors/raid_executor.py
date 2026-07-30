@@ -188,6 +188,39 @@ def _auto_snapshot_before_raid(
         )
 
 
+def _auto_snapshot_raid_playlist(user_id, raid_playlist_id, uris):
+    """Snapshot the raid playlist before writing to it, so rollback can
+    restore it if post-write verification fails (SR-009).
+
+    Best-effort and guarded on the user's auto-snapshot setting, mirroring
+    _auto_snapshot_before_raid and the drip executor. Skips an empty raid
+    playlist (nothing to restore), matching the drip pattern.
+    """
+    try:
+        if not PlaylistSnapshotService.is_auto_snapshot_enabled(
+            user_id
+        ):
+            return
+        if not uris:
+            return
+        PlaylistSnapshotService.create_snapshot(
+            user_id=user_id,
+            playlist_id=raid_playlist_id,
+            playlist_name="Raid playlist",
+            track_uris=uris,
+            snapshot_type=SnapshotType.AUTO_PRE_RAID,
+            trigger_description=(
+                "Before scheduled raid (raid playlist)"
+            ),
+        )
+    except Exception as snap_err:
+        logger.warning(
+            "Auto-snapshot of raid playlist before raid "
+            "failed: %s",
+            snap_err,
+        )
+
+
 def _add_to_raid_playlist(
     api, user_id, target_id, uris, schedule_id,
 ):
@@ -213,6 +246,14 @@ def _add_to_raid_playlist(
         link.raid_playlist_id
     )
     prev_raid_uris = extract_uris(prev_raid_tracks or [])
+
+    # Snapshot the raid playlist before writing, so a post-write verification
+    # failure can be rolled back — the raid playlist is distinct from the
+    # target and was otherwise never captured, leaving it mutated with no
+    # restore path (SR-009). Mirrors the drip executor, which snapshots both.
+    _auto_snapshot_raid_playlist(
+        user_id, link.raid_playlist_id, prev_raid_uris
+    )
 
     api.playlist_add_items(
         link.raid_playlist_id, uris
