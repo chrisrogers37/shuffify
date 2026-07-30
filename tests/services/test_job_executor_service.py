@@ -844,3 +844,76 @@ class TestExecuteLocking:
 
         db.session.refresh(schedule)
         assert schedule.last_status == "skipped"
+
+
+class TestJobScopedRollback:
+    """Rollback restores only snapshots tagged with this job's execution id,
+    not a concurrent or manual snapshot in the same time window (SR-019)."""
+
+    def test_restore_scopes_to_job_execution_id(self):
+        from datetime import datetime, timezone, timedelta
+        from shuffify.services.executors.base_executor import (
+            _restore_job_snapshots,
+        )
+        from shuffify.models.db import (
+            db,
+            User,
+            JobExecution,
+            PlaylistSnapshot,
+        )
+        from shuffify.enums import SnapshotType
+
+        user = User(spotify_id="sr019_user", display_name="U")
+        db.session.add(user)
+        db.session.commit()
+
+        started = datetime.now(timezone.utc)
+        execution = JobExecution(
+            schedule_id=None,
+            started_at=started,
+            status="running",
+        )
+        db.session.add(execution)
+        db.session.commit()
+
+        def _snap(playlist, exec_id, created):
+            s = PlaylistSnapshot(
+                user_id=user.id,
+                playlist_id=playlist,
+                playlist_name=playlist,
+                track_count=1,
+                snapshot_type=SnapshotType.AUTO_PRE_RAID,
+                job_execution_id=exec_id,
+                created_at=created,
+            )
+            s.track_uris = ["spotify:track:x"]
+            return s
+
+        db.session.add_all([
+            _snap(
+                "mine_pl", execution.id,
+                started + timedelta(seconds=1),
+            ),
+            # Concurrent, untagged, same time window — must NOT be swept in.
+            _snap(
+                "other_pl", None,
+                started + timedelta(seconds=2),
+            ),
+        ])
+        db.session.commit()
+
+        schedule = Mock(user_id=user.id)
+
+        with patch(
+            "shuffify.services.playlist_snapshot_service."
+            "PlaylistSnapshotService.restore_to_playlist",
+            return_value=Mock(track_count=1),
+        ):
+            restored = _restore_job_snapshots(
+                execution, schedule, Mock(), 1,
+            )
+
+        restored_playlists = {
+            r["playlist_id"] for r in restored
+        }
+        assert restored_playlists == {"mine_pl"}

@@ -635,6 +635,15 @@ class PlaylistSnapshot(db.Model):
         default=SnapshotType.MANUAL,
     )
     trigger_description = db.Column(db.String(500), nullable=True)
+    # Links an auto-snapshot to the JobExecution that created it, so rollback
+    # restores only that job's snapshots rather than a time window (SR-019).
+    # Null for manual snapshots and pre-migration rows.
+    job_execution_id = db.Column(
+        db.Integer,
+        db.ForeignKey("job_executions.id"),
+        nullable=True,
+        index=True,
+    )
     created_at = db.Column(
         db.DateTime,
         nullable=False,

@@ -228,19 +228,38 @@ def _restore_job_snapshots(execution, schedule, api, schedule_id):
     try:
         user_id = schedule.user_id if schedule else None
         since = execution.started_at if execution else None
+        execution_id = execution.id if execution else None
         if not user_id or not since:
             raise PlaylistSnapshotError(
                 "Missing user_id or job start time; cannot scope snapshots."
             )
 
-        pre_snapshots = (
-            PlaylistSnapshot.query.filter(
-                PlaylistSnapshot.user_id == user_id,
-                PlaylistSnapshot.created_at >= since,
+        # Prefer snapshots tagged with this job's execution id, so a manual
+        # snapshot or a concurrent schedule taken during a long job can't be
+        # swept into this rollback (SR-019).
+        pre_snapshots = []
+        if execution_id is not None:
+            pre_snapshots = (
+                PlaylistSnapshot.query.filter(
+                    PlaylistSnapshot.user_id == user_id,
+                    PlaylistSnapshot.job_execution_id == execution_id,
+                )
+                .order_by(PlaylistSnapshot.created_at.asc())
+                .all()
             )
-            .order_by(PlaylistSnapshot.created_at.asc())
-            .all()
-        )
+
+        if not pre_snapshots:
+            # Fallback for untagged snapshots (pre-migration rows, or an
+            # execution with no tagged snapshots): scope by the job's time
+            # window as before, so rollback never silently restores nothing.
+            pre_snapshots = (
+                PlaylistSnapshot.query.filter(
+                    PlaylistSnapshot.user_id == user_id,
+                    PlaylistSnapshot.created_at >= since,
+                )
+                .order_by(PlaylistSnapshot.created_at.asc())
+                .all()
+            )
 
         if not pre_snapshots:
             raise PlaylistSnapshotError(
@@ -396,6 +415,7 @@ class JobExecutorService:
         """
         execution = None
         api = None
+        snapshot_token = None
 
         try:
             with playlist_lock(schedule.target_playlist_id) as acquired:
@@ -422,6 +442,13 @@ class JobExecutorService:
                 execution = JobExecutorService._create_execution_record(
                     schedule_id
                 )
+                # Tag snapshots created during this job so rollback restores
+                # only this execution's snapshots (SR-019).
+                from shuffify.services.playlist_snapshot_service import (
+                    set_current_job_execution,
+                )
+
+                snapshot_token = set_current_job_execution(execution.id)
 
                 user = db.session.get(User, schedule.user_id)
                 if not user:
@@ -463,6 +490,13 @@ class JobExecutorService:
                 "tracks_total": 0,
                 "error": str(e),
             }
+        finally:
+            if snapshot_token is not None:
+                from shuffify.services.playlist_snapshot_service import (
+                    reset_current_job_execution,
+                )
+
+                reset_current_job_execution(snapshot_token)
 
     @staticmethod
     def execute_raid_for_user(
