@@ -27,6 +27,30 @@ class TestShuffleAuth:
             assert resp.status_code == 401
 
 
+class TestShuffleOwnershipGuard:
+    """SR-014: mutating a playlist the user cannot edit is rejected (403)."""
+
+    @patch("shuffify.routes.require_auth")
+    def test_shuffle_rejects_non_editable_playlist(
+        self, mock_auth, auth_client
+    ):
+        # Real PlaylistService runs the guard against this client; the
+        # playlist is owned by someone else and not collaborative.
+        client = MagicMock()
+        client.get_playlist.return_value = {
+            "owner": {"id": "someone_else"},
+            "collaborative": False,
+        }
+        mock_auth.return_value = client
+
+        resp = auth_client.post(
+            "/shuffle/not_my_playlist",
+            data={"algorithm": "BasicShuffle"},
+        )
+
+        assert resp.status_code == 403
+
+
 class TestShuffleEndpoint:
     """Tests for POST /shuffle/<playlist_id>."""
 

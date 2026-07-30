@@ -5,11 +5,27 @@ Tests cover the 8 schedule endpoints including CRUD,
 toggle, manual run, execution history, and rotation status.
 """
 
+import pytest
 from unittest.mock import patch, MagicMock
 
 from shuffify.models.db import db
 from shuffify.services.user_service import UserService
 
+
+@pytest.fixture(autouse=True)
+def _allow_playlist_edits():
+    """No-op the SR-014 ownership guard for these route tests.
+
+    ``create_schedule`` calls ``PlaylistService.validate_user_can_edit``, which
+    fetches the playlist to verify editability. These tests use bare-mock
+    clients and aren't exercising the guard (it's covered directly in
+    ``tests/services/test_playlist_service.py``), so patch it to a no-op.
+    """
+    with patch(
+        "shuffify.services.playlist_service."
+        "PlaylistService.validate_user_can_edit"
+    ):
+        yield
 
 
 # Note: Schedule routes use two auth patterns:

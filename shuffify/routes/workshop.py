@@ -286,6 +286,7 @@ def workshop_commit(
         return err
 
     playlist_service = PlaylistService(client)
+    playlist_service.validate_user_can_edit(playlist_id, user.spotify_id)
     playlist = playlist_service.get_playlist(
         playlist_id, include_features=False
     )

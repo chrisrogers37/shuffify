@@ -35,6 +35,7 @@ from shuffify.services.playlist_service import (
     PlaylistError,
     PlaylistNotFoundError,
     PlaylistUpdateError,
+    PlaylistAccessError,
 )
 
 # Shuffle Service
@@ -170,6 +171,7 @@ __all__ = [
     "PlaylistError",
     "PlaylistNotFoundError",
     "PlaylistUpdateError",
+    "PlaylistAccessError",
     # Shuffle Exceptions
     "ShuffleError",
     "InvalidAlgorithmError",

@@ -152,6 +152,11 @@ def toggle_visibility(
             "Missing 'public' field", 400
         )
 
+    # Defense-in-depth: only editable playlists may be mutated (SR-014).
+    PlaylistService(client).validate_user_can_edit(
+        playlist_id, user.spotify_id
+    )
+
     try:
         client.api.update_playlist_details(
             playlist_id, public=bool(public)

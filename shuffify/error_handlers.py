@@ -15,6 +15,7 @@ from shuffify.services import (
     PlaylistError,
     PlaylistNotFoundError,
     PlaylistUpdateError,
+    PlaylistAccessError,
     ShuffleError,
     InvalidAlgorithmError,
     ParameterValidationError,
@@ -156,6 +157,12 @@ def handle_playlist_update_error(error: PlaylistUpdateError):
     """Handle playlist update failures."""
     logger.error(f"Playlist update error: {error}")
     return json_error_response("Failed to update playlist on Spotify.", 500)
+
+
+def handle_playlist_access_error(error: PlaylistAccessError):
+    """Handle attempts to modify a playlist the user cannot edit (SR-014)."""
+    logger.warning(f"Playlist access denied: {error}")
+    return json_error_response(str(error), 403)
 
 
 def handle_shuffle_execution_error(error: ShuffleExecutionError):
@@ -431,6 +438,7 @@ def register_error_handlers(app):
         (AlreadyAtOriginalError, handle_already_at_original),
         (PlaylistError, handle_playlist_error),
         (PlaylistUpdateError, handle_playlist_update_error),
+        (PlaylistAccessError, handle_playlist_access_error),
         (ShuffleExecutionError, handle_shuffle_execution_error),
         (ShuffleError, handle_shuffle_error),
         (StateError, handle_state_error),
