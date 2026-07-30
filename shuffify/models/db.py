@@ -496,7 +496,7 @@ class JobExecution(db.Model):
     schedule_id = db.Column(
         db.Integer,
         db.ForeignKey("schedules.id"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     started_at = db.Column(
