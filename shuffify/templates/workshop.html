@@ -3660,7 +3660,7 @@ function createRotationSchedule() {
     var protectCount = parseInt(protectInput.value, 10) || 0;
 
     if (!targetSize || targetSize < 1) {
-        showToast('Please enter a playlist size cap', 'error');
+        showNotification('Please enter a playlist size cap', 'error');
         return;
     }
 
@@ -4326,12 +4326,12 @@ var raidPanel = {
                 raidPanel._savedScheduleValue = freq;
                 raidPanel._savedScheduleTime = (timeCapable.indexOf(freq) >= 0) ? time : null;
                 document.getElementById('raid-schedule-save').classList.add('hidden');
-                showToast('Schedule updated', 'success');
+                showNotification('Schedule updated', 'success');
             } else {
-                showToast(data.error || 'Failed to update schedule', 'error');
+                showNotification(data.error || 'Failed to update schedule', 'error');
             }
         })
-        .catch(function() { showToast('Failed to update schedule', 'error'); });
+        .catch(function() { showNotification('Failed to update schedule', 'error'); });
     },
 
     toggleHistory: function() {
