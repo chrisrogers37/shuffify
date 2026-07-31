@@ -583,12 +583,45 @@ PORT=8000
 The app uses SQLAlchemy with Alembic (via Flask-Migrate) for schema management:
 
 ```bash
-# Migrations run automatically on app startup. For manual operations:
 flask db current         # Show current migration version
 flask db upgrade         # Apply pending migrations
 flask db migrate -m "description"  # Generate new migration after model changes
 flask db history         # Show migration history
 ```
+
+**Where migrations run depends on the environment:**
+
+Two config attributes decide it — `TESTING` and `MIGRATE_ON_STARTUP`:
+
+| Environment | `TESTING` | `MIGRATE_ON_STARTUP` | Behavior |
+|-------------|-----------|----------------------|----------|
+| Tests | `True` | — | Tables built directly from the models via `db.create_all()`; no migration chain |
+| Development | `True` | `True` | Also `db.create_all()` today — `TESTING=True` short-circuits before the migration branch is reached (#325) |
+| Production | `False` | `False` | `scripts/docker-entrypoint.sh` runs `flask db upgrade` **before** Gunicorn starts; the app factory then only *verifies* the schema is at head and refuses to start if it is not |
+
+Development does **not** currently exercise the Alembic chain: `DevConfig`
+sets `TESTING = True`, which routes it to `db.create_all()`. That is the bug
+tracked in #325 — schema drift between what Alembic produces and what
+`create_all()` produces goes uncaught locally. Setting `MIGRATE_ON_STARTUP`
+is what a non-production environment uses to opt into in-process migration
+once `TESTING` is corrected.
+
+Migrations do not run inside the production web process. Applying them once in
+the entrypoint — before Gunicorn forks — is what keeps concurrent workers from
+racing on the same upgrade, and it means a stale schema is caught at boot
+rather than surfacing as data corruption under traffic.
+
+**`SHUFFIFY_ALLOW_SCHEMA_DRIFT`** is the break-glass override. Set it to `true`
+and the entrypoint tolerates a failed upgrade while the app factory downgrades
+the schema check to an ERROR log, so a misfiring guard can be cleared from the
+platform console in one restart instead of blocking every deploy until a fix
+ships. It is a recovery lever, not a setting — a deploy running with it set is
+serving against a schema the code does not expect.
+
+**`SHUFFIFY_MIGRATION_STEP`** is set by the entrypoint only, and exempts that
+one process from the schema check. `flask db upgrade` builds the whole app, so
+without it the check would refuse to construct the app for the very schema
+state the command exists to fix. Never set it on a process that serves traffic.
 
 **Local development**: If `DATABASE_URL` is not set, the app falls back to SQLite (`sqlite:///shuffify.db`). No migration setup needed for SQLite — `db.create_all()` handles it.
 

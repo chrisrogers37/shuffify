@@ -45,5 +45,10 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 # session fallback stays writable; gunicorn binds :8000 (>1024, no root needed).
 USER nobody
 
+# Apply migrations before the server starts. ENTRYPOINT rather than a longer
+# CMD so the migration step survives a platform-level run-command override --
+# those replace CMD, leaving ENTRYPOINT to wrap whatever they substitute.
+ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
+
 # Run the application
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--preload", "run:app"]
