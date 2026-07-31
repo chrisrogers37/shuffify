@@ -151,6 +151,23 @@ class TestCreateApp:
                 response = client.get("/health")
                 assert "no-cache" in response.headers.get("Cache-Control", "")
 
+    def test_create_app_fails_fast_on_malformed_token_key(self, monkeypatch):
+        """An explicitly configured but unusable TOKEN_ENCRYPTION_KEY
+        must fail the boot, not warn and run with token encryption
+        silently disabled (scheduled jobs would die quietly)."""
+        from config import TestConfig
+        from shuffify.services.token_service import (
+            TokenService,
+            TokenEncryptionError,
+        )
+
+        monkeypatch.setattr(TestConfig, "TOKEN_ENCRYPTION_KEY", "not-a-key")
+        from shuffify import create_app
+
+        with pytest.raises(TokenEncryptionError, match="Fernet"):
+            create_app("testing")
+        TokenService.reset()
+
 
 class TestGetRedisClient:
     """Tests for get_redis_client function."""
