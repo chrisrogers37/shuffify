@@ -195,9 +195,18 @@ def _init_token_encryption(app):
     from shuffify.services.token_service import TokenService
 
     try:
-        TokenService.initialize(app.config["SECRET_KEY"])
+        TokenService.initialize(
+            app.config["SECRET_KEY"],
+            token_encryption_key=app.config.get("TOKEN_ENCRYPTION_KEY"),
+            fallback_keys=app.config.get("TOKEN_ENCRYPTION_KEY_FALLBACKS") or (),
+        )
         logger.info("Token encryption service initialized")
     except Exception as e:
+        if app.config.get("TOKEN_ENCRYPTION_KEY"):
+            # An explicitly configured key that cannot be used is an
+            # operator error — fail the boot rather than run with
+            # token encryption silently disabled.
+            raise
         logger.warning(
             "Token encryption init failed: %s. "
             "Scheduled operations will be unavailable.",
@@ -521,6 +530,11 @@ def create_app(config_name=None):
     from shuffify.error_handlers import register_error_handlers
 
     register_error_handlers(app)
+
+    # Register operational CLI commands
+    from shuffify.cli import register_cli
+
+    register_cli(app)
 
     # Initialize APScheduler (after all extensions)
     if app.config.get("SCHEDULER_ENABLED", True):

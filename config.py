@@ -31,6 +31,11 @@ def _resolve_database_url(fallback: str) -> str:
     return url
 
 
+def _split_csv(raw: str) -> list:
+    """Split a comma-separated env value into a clean list."""
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
 def validate_required_env_vars(config_name=None):
     """Validate that all required environment variables are present.
 
@@ -50,6 +55,18 @@ class Config:
     """Base configuration."""
 
     SECRET_KEY = os.environ.get("SECRET_KEY")
+
+    # Dedicated Fernet key for refresh-token encryption. When unset,
+    # the key is derived from SECRET_KEY (legacy scheme — rotating
+    # SECRET_KEY then invalidates all stored tokens). FALLBACKS is a
+    # comma-separated list of retired keys accepted for decryption
+    # during a key-rotation window. See
+    # documentation/guides/credential-rotation.md.
+    TOKEN_ENCRYPTION_KEY = os.environ.get("TOKEN_ENCRYPTION_KEY")
+    TOKEN_ENCRYPTION_KEY_FALLBACKS = _split_csv(
+        os.environ.get("TOKEN_ENCRYPTION_KEY_FALLBACKS", "")
+    )
+
     SESSION_COOKIE_NAME = os.getenv("SESSION_COOKIE_NAME", "shuffify_session")
     SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
     SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
@@ -172,6 +189,9 @@ class TestConfig(Config):
 
     CONFIG_NAME = "testing"
     SECRET_KEY = "test-secret-key"
+    # Pinned so tests are hermetic regardless of developer env
+    TOKEN_ENCRYPTION_KEY = None
+    TOKEN_ENCRYPTION_KEY_FALLBACKS = []
     TESTING = True
     WTF_CSRF_ENABLED = False
     SESSION_COOKIE_SECURE = False

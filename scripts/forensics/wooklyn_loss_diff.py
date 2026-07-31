@@ -65,7 +65,10 @@ def _build_api(user: User, app_config) -> SpotifyAPI:
             f"User {user.id} has no encrypted_refresh_token; can't "
             f"call Spotify."
         )
-    TokenService.initialize(app_config["SECRET_KEY"])
+    # TokenService is initialized by create_app() with the full key
+    # chain (TOKEN_ENCRYPTION_KEY + fallbacks + legacy); re-initializing
+    # here with only SECRET_KEY would downgrade a migrated deployment
+    # to the legacy key and break decryption.
     refresh_token = TokenService.decrypt_token(
         user.encrypted_refresh_token
     )
