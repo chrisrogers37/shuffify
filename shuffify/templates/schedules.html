@@ -608,8 +608,7 @@ document.getElementById('create-schedule-form').addEventListener('submit', funct
     if (jobType === 'rotate') {
         var rotTargetSize = document.getElementById('modal-rotation-target-size').value;
         if (!rotTargetSize || parseInt(rotTargetSize, 10) < 1) {
-            showToast('Please enter a playlist size cap', 'error');
-            setSubmitState(false);
+            showNotification('Please enter a playlist size cap', 'error');
             return;
         }
         body.algorithm_params = {
