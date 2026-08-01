@@ -284,8 +284,8 @@ class TestAddToRaidPlaylistSnapshot:
                     schedule_id=1,
                 )
 
-        mock_snap.create_snapshot.assert_called_once()
-        kwargs = mock_snap.create_snapshot.call_args.kwargs
+        mock_snap.auto_snapshot_if_enabled.assert_called_once()
+        kwargs = mock_snap.auto_snapshot_if_enabled.call_args.kwargs
         assert kwargs["playlist_id"] == "raid_pl"
         assert kwargs["track_uris"] == [
             "spotify:track:existing"

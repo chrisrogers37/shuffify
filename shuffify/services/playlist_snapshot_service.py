@@ -58,6 +58,47 @@ class PlaylistSnapshotService:
     """Service for managing playlist snapshots."""
 
     @staticmethod
+    def auto_snapshot_if_enabled(
+        user_id: int,
+        playlist_id: str,
+        playlist_name: str,
+        track_uris: List[str],
+        snapshot_type: str,
+        trigger_description: Optional[str] = None,
+    ) -> Optional[PlaylistSnapshot]:
+        """Snapshot a playlist before an automated write, if the user wants it.
+
+        Every executor needs the same three guards around create_snapshot:
+        the user's auto-snapshot setting, a non-empty track list (an empty
+        snapshot restores nothing), and never letting a snapshot failure take
+        down the operation it was protecting. Having each executor spell that
+        out separately is what let the four drift apart.
+
+        Returns the snapshot, or None if it was skipped or failed.
+        """
+        try:
+            if not PlaylistSnapshotService.is_auto_snapshot_enabled(user_id):
+                return None
+            if not track_uris:
+                return None
+            return PlaylistSnapshotService.create_snapshot(
+                user_id=user_id,
+                playlist_id=playlist_id,
+                playlist_name=playlist_name,
+                track_uris=track_uris,
+                snapshot_type=snapshot_type,
+                trigger_description=trigger_description,
+            )
+        except Exception as snap_err:
+            logger.warning(
+                "Auto-snapshot for %s before %s failed: %s",
+                playlist_id,
+                snapshot_type,
+                snap_err,
+            )
+            return None
+
+    @staticmethod
     def create_snapshot(
         user_id: int,
         playlist_id: str,

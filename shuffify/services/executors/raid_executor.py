@@ -164,67 +164,38 @@ def _auto_snapshot_before_raid(
 ) -> None:
     """Create auto-snapshots before a scheduled raid."""
     try:
-        if not PlaylistSnapshotService.is_auto_snapshot_enabled(
-            schedule.user_id
-        ):
-            return
-
         target_tracks = api.get_playlist_tracks(target_id)
-        pre_raid_uris = extract_uris(target_tracks or [])
-        if pre_raid_uris:
-            PlaylistSnapshotService.create_snapshot(
-                user_id=schedule.user_id,
-                playlist_id=target_id,
-                playlist_name=(
-                    schedule.target_playlist_name
-                    or target_id
-                ),
-                track_uris=pre_raid_uris,
-                snapshot_type=(
-                    SnapshotType.AUTO_PRE_RAID
-                ),
-                trigger_description=(
-                    "Before scheduled raid"
-                ),
-            )
     except Exception as snap_err:
         logger.warning(
             "Auto-snapshot before scheduled "
             "raid failed: %s", snap_err
         )
+        return
+
+    PlaylistSnapshotService.auto_snapshot_if_enabled(
+        user_id=schedule.user_id,
+        playlist_id=target_id,
+        playlist_name=(
+            schedule.target_playlist_name or target_id
+        ),
+        track_uris=extract_uris(target_tracks or []),
+        snapshot_type=SnapshotType.AUTO_PRE_RAID,
+        trigger_description="Before scheduled raid",
+    )
 
 
 def _auto_snapshot_raid_playlist(user_id, raid_playlist_id, uris):
     """Snapshot the raid playlist before writing to it, so rollback can
     restore it if post-write verification fails (SR-009).
-
-    Best-effort and guarded on the user's auto-snapshot setting, mirroring
-    _auto_snapshot_before_raid and the drip executor. Skips an empty raid
-    playlist (nothing to restore), matching the drip pattern.
     """
-    try:
-        if not PlaylistSnapshotService.is_auto_snapshot_enabled(
-            user_id
-        ):
-            return
-        if not uris:
-            return
-        PlaylistSnapshotService.create_snapshot(
-            user_id=user_id,
-            playlist_id=raid_playlist_id,
-            playlist_name="Raid playlist",
-            track_uris=uris,
-            snapshot_type=SnapshotType.AUTO_PRE_RAID,
-            trigger_description=(
-                "Before scheduled raid (raid playlist)"
-            ),
-        )
-    except Exception as snap_err:
-        logger.warning(
-            "Auto-snapshot of raid playlist before raid "
-            "failed: %s",
-            snap_err,
-        )
+    PlaylistSnapshotService.auto_snapshot_if_enabled(
+        user_id=user_id,
+        playlist_id=raid_playlist_id,
+        playlist_name="Raid playlist",
+        track_uris=uris,
+        snapshot_type=SnapshotType.AUTO_PRE_RAID,
+        trigger_description="Before scheduled raid (raid playlist)",
+    )
 
 
 def _add_to_raid_playlist(
