@@ -7,7 +7,6 @@ from typing import List, Optional
 
 from pydantic import BaseModel, field_validator, model_validator
 
-
 TRACK_URI_PATTERN = re.compile(r"^spotify:track:[a-zA-Z0-9]{22}$")
 
 

@@ -9,9 +9,9 @@ Supports optional Redis caching for improved performance.
 """
 
 import logging
-from typing import Callable, Dict, List, Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
-from .auth import TokenInfo, SpotifyAuthManager
+from .auth import SpotifyAuthManager, TokenInfo
 from .error_handling import api_error_handler
 from .exceptions import (
     SpotifyAPIError,

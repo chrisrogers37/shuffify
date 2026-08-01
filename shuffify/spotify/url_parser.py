@@ -5,8 +5,8 @@ Extracts resource IDs from various Spotify URL and URI formats.
 Supports web URLs, app URIs, and bare IDs.
 """
 
-import re
 import logging
+import re
 from typing import Optional
 
 logger = logging.getLogger(__name__)

@@ -5,47 +5,46 @@ search, external playlist loading, and session persistence.
 
 import logging
 
-from flask import session, redirect, url_for, request, jsonify
+from flask import jsonify, redirect, render_template, request, session, url_for
 
+from shuffify.enums import ActivityType, SnapshotType
 from shuffify.routes import (
-    main,
-    is_authenticated,
-    require_auth_and_db,
     clear_session_and_show_login,
+    get_db_user,
+    is_authenticated,
     json_error,
     json_success,
-    get_db_user,
-    log_activity,
-    validate_json,
     load_schedule_context,
+    log_activity,
+    main,
+    require_auth_and_db,
+    validate_json,
+)
+from shuffify.schemas import (
+    ExternalPlaylistRequest,
+    WorkshopCommitRequest,
+    WorkshopSearchRequest,
+    parse_shuffle_request,
 )
 from shuffify.services import (
+    AuthenticationError,
     AuthService,
+    PlaylistError,
     PlaylistService,
+    PlaylistSnapshotService,
     ShuffleService,
     StateService,
-    WorkshopSessionService,
     WorkshopSessionError,
-    WorkshopSessionNotFoundError,
     WorkshopSessionLimitError,
-    AuthenticationError,
-    PlaylistError,
-    PlaylistSnapshotService,
+    WorkshopSessionNotFoundError,
+    WorkshopSessionService,
 )
 from shuffify.services.playlist_preference_service import (
     PlaylistPreferenceService,
 )
-from shuffify.enums import SnapshotType, ActivityType
-from shuffify.schemas import (
-    parse_shuffle_request,
-    WorkshopCommitRequest,
-    WorkshopSearchRequest,
-    ExternalPlaylistRequest,
-)
 from shuffify.spotify.url_parser import (
     parse_spotify_playlist_url,
 )
-from flask import render_template
 
 logger = logging.getLogger(__name__)
 

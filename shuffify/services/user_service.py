@@ -7,9 +7,9 @@ Handles user creation, retrieval, and the upsert-on-login pattern.
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 
-from shuffify.models.db import db, User
+from shuffify.models.db import User, db
 from shuffify.services.base import safe_commit
 
 logger = logging.getLogger(__name__)
@@ -274,8 +274,8 @@ class UserService:
                 without writing anything.
         """
         from shuffify.services.token_service import (
-            TokenService,
             TokenEncryptionError,
+            TokenService,
         )
 
         users = User.query.filter(

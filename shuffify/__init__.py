@@ -1,15 +1,17 @@
-import os
 import atexit
 import logging
+import os
 import secrets
 from typing import Optional
-from flask import Flask, g
-from flask_session import Session
+
 import redis
+from flask import Flask, g
 from flask_limiter import Limiter
 from flask_migrate import Migrate
+from flask_session import Session
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
+
 from config import config, validate_required_env_vars
 
 logger = logging.getLogger(__name__)
@@ -73,8 +75,9 @@ def get_spotify_cache():
     if _redis_client is None:
         return None
 
-    from shuffify.spotify.cache import SpotifyCache
     from flask import current_app
+
+    from shuffify.spotify.cache import SpotifyCache
 
     # Get TTL settings from config if available
     try:
@@ -100,8 +103,9 @@ def is_db_available() -> bool:
         True if database is available, False otherwise.
     """
     try:
-        from shuffify.models.db import db
         from flask import current_app
+
+        from shuffify.models.db import db
 
         # Verify we're in app context and db is initialized
         if not current_app:
@@ -256,6 +260,7 @@ def _schema_revision_state(migrations_dir):
     """
     from alembic.runtime.migration import MigrationContext
     from alembic.script import ScriptDirectory
+
     from shuffify.models.db import db
 
     heads = set(ScriptDirectory(migrations_dir).get_heads())
@@ -456,10 +461,10 @@ def _init_sentry(config_class):
     try:
         import sentry_sdk
         from sentry_sdk.integrations.flask import FlaskIntegration
+        from sentry_sdk.integrations.logging import LoggingIntegration
         from sentry_sdk.integrations.sqlalchemy import (
             SqlalchemyIntegration,
         )
-        from sentry_sdk.integrations.logging import LoggingIntegration
     except ImportError as e:
         logger.warning("sentry-sdk not installed: %s. Skipping Sentry init.", e)
         return False

@@ -7,8 +7,8 @@ JobExecutorService into unified raid management operations.
 
 import logging
 
-from shuffify.models.db import db, Schedule, User
 from shuffify.enums import JobType, ScheduleType
+from shuffify.models.db import Schedule, User, db
 
 logger = logging.getLogger(__name__)
 
@@ -41,11 +41,11 @@ class RaidSyncService:
 
         Returns dict with 'source' and 'schedule' keys.
         """
-        from shuffify.services.upstream_source_service import (
-            UpstreamSourceService,
-        )
         from shuffify.services.scheduler_service import (
             SchedulerService,
+        )
+        from shuffify.services.upstream_source_service import (
+            UpstreamSourceService,
         )
 
         if user is None:
@@ -118,11 +118,11 @@ class RaidSyncService:
         """
         Remove a source and update/delete the raid schedule.
         """
-        from shuffify.services.upstream_source_service import (
-            UpstreamSourceService,
-        )
         from shuffify.services.scheduler_service import (
             SchedulerService,
+        )
+        from shuffify.services.upstream_source_service import (
+            UpstreamSourceService,
         )
 
         # Get source before deleting (need playlist_id)
@@ -175,11 +175,11 @@ class RaidSyncService:
         """
         Get raid panel summary for a target playlist.
         """
-        from shuffify.services.upstream_source_service import (
-            UpstreamSourceService,
-        )
         from shuffify.services.raid_link_service import (
             RaidLinkService,
+        )
+        from shuffify.services.upstream_source_service import (
+            UpstreamSourceService,
         )
 
         max_sources = (
@@ -341,8 +341,8 @@ class RaidSyncService:
         """Execute raid through existing schedule's job
         executor."""
         from shuffify.services.executors import (
-            JobExecutorService,
             JobExecutionError,
+            JobExecutorService,
         )
 
         try:
@@ -382,11 +382,11 @@ class RaidSyncService:
 
         Returns dict with 'source' and 'schedule' keys.
         """
-        from shuffify.services.upstream_source_service import (
-            UpstreamSourceService,
-        )
         from shuffify.services.scheduler_service import (
             SchedulerService,
+        )
+        from shuffify.services.upstream_source_service import (
+            UpstreamSourceService,
         )
 
         if user is None:
@@ -445,8 +445,8 @@ class RaidSyncService:
         """Trigger an immediate drip from raid playlist
         to target."""
         from shuffify.services.executors import (
-            JobExecutorService,
             JobExecutionError,
+            JobExecutorService,
         )
         from shuffify.services.raid_link_service import (
             RaidLinkService,
@@ -546,8 +546,8 @@ class RaidSyncService:
         Returns (schedule_type, schedule_value) tuple.
         """
         from shuffify.services.schedule_utils import (
-            build_cron,
             TIME_CAPABLE_FREQUENCIES,
+            build_cron,
         )
 
         if (
