@@ -464,6 +464,9 @@ class Schedule(db.Model):
             "target_playlist_id",
             "job_type",
         ),
+        # Scheduler startup and every reload filter the whole table on this,
+        # and enabled rows are the minority once schedules accumulate.
+        db.Index("ix_schedules_is_enabled", "is_enabled"),
         db.CheckConstraint(
             "job_type IN ('raid', 'shuffle', "
             "'raid_and_shuffle', 'raid_and_drip', "
@@ -580,6 +583,9 @@ class LoginHistory(db.Model):
             "login_type IN ('oauth_initial', 'oauth_refresh', 'session_resume')",
             name="ck_login_history_type",
         ),
+        # User.login_history is ordered by this column, so every load of a
+        # user's sign-in history sorts on it.
+        db.Index("ix_login_history_logged_in_at", "logged_in_at"),
     )
 
     def to_dict(self) -> Dict[str, Any]:

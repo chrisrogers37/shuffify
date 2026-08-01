@@ -515,8 +515,10 @@ def _apply_security_headers(app):
         # Content Security Policy — nonce-based, no unsafe-inline
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            f"script-src 'self' https://cdn.tailwindcss.com "
-            f"https://cdn.jsdelivr.net 'nonce-{nonce}'; "
+            # cdn.jsdelivr.net serves SortableJS only, pinned by SRI at the
+            # script tag. Tailwind is compiled into static/css at build time
+            # and is no longer fetched from a CDN, so its host is not listed.
+            f"script-src 'self' https://cdn.jsdelivr.net 'nonce-{nonce}'; "
             f"style-src 'self' 'nonce-{nonce}'; "
             "img-src 'self' https://i.scdn.co https://*.spotifycdn.com data:; "
             "connect-src 'self'; "

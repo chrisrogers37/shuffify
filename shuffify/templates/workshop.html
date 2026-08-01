@@ -1174,8 +1174,14 @@
 {% endif %}
 
 {% if playlist %}
-<!-- SortableJS via CDN -->
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+<!-- SortableJS via CDN, pinned by subresource integrity. The hash covers the
+     exact published bytes of sortablejs@1.15.6, so a tampered or swapped CDN
+     response is rejected by the browser instead of executed on an
+     authenticated page. Bump the version and the hash together, never alone. -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"
+        integrity="sha384-HZZ/fukV+9G8gwTNjN7zQDG0Sp7MsZy5DDN6VfY3Be7V9dvQpEpR2jF2HlyFUUjU"
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer"></script>
 <script src="/static/js/schedule-edit.js"></script>
 
 <script nonce="{{ csp_nonce }}">
@@ -3024,8 +3030,7 @@ function humanizeDescription(desc) {
         .replace(/PercentageShuffle/g, 'Percentage shuffle')
         .replace(/StratifiedShuffle/g, 'Stratified shuffle')
         .replace(/ArtistSpacingShuffle/g, 'Artist Spacing shuffle')
-        .replace(/AlbumSequenceShuffle/g, 'Album Sequence shuffle')
-        .replace(/TempoGradientShuffle/g, 'Tempo Gradient shuffle');
+        .replace(/AlbumSequenceShuffle/g, 'Album Sequence shuffle');
 }
 
 function getDateGroup(dateStr) {

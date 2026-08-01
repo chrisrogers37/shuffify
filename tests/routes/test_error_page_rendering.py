@@ -23,6 +23,89 @@ def error_app(db_app):
     return db_app
 
 
+class TestErrorContentNegotiation:
+    """SR-040: every HTTP error handler negotiates on the same predicate.
+
+    Before this, `handle_csrf_error` / 400 / 401 always answered JSON, so a
+    browser whose form POST failed CSRF validation was shown a raw JSON
+    body, and there was no 404 template at all so browser 404s fell through
+    to the Werkzeug default page.
+    """
+
+    def test_404_browser_navigation_returns_html_page(self, error_app):
+        with error_app.test_client() as client:
+            resp = client.get(
+                "/no-such-page",
+                headers={"Accept": "text/html"},
+            )
+            assert resp.status_code == 404
+            assert resp.content_type.startswith("text/html")
+            assert b"Page not found" in resp.data
+
+    def test_404_unopinionated_client_still_gets_a_page(self, error_app):
+        # `*/*` expresses no preference. Answering it with a page is the
+        # behaviour the 404/500 handlers already had; only a positive JSON
+        # signal switches to the envelope.
+        with error_app.test_client() as client:
+            resp = client.get("/no-such-page")
+            assert resp.status_code == 404
+            assert resp.get_json(silent=True) is None
+
+    def test_404_explicit_json_accept_returns_json(self, error_app):
+        with error_app.test_client() as client:
+            resp = client.get(
+                "/no-such-page",
+                headers={"Accept": "application/json"},
+            )
+            assert resp.status_code == 404
+            assert resp.get_json()["success"] is False
+
+    def test_404_api_route_returns_json(self, error_app):
+        with error_app.test_client() as client:
+            resp = client.get("/api/no-such-thing")
+            assert resp.status_code == 404
+            assert resp.get_json()["success"] is False
+
+    def test_csrf_failure_on_form_post_returns_html_page(
+        self, error_app
+    ):
+        """The headline SR-040 case: a browser form POST, not a fetch()."""
+        from flask_wtf.csrf import CSRFError
+
+        @error_app.route("/test-csrf", methods=["POST"])
+        def trigger_csrf():
+            raise CSRFError("The CSRF token is missing.")
+
+        with error_app.test_client() as client:
+            resp = client.post(
+                "/test-csrf",
+                headers={"Accept": "text/html"},
+            )
+            assert resp.status_code == 400
+            assert resp.content_type.startswith("text/html")
+            assert b"could not be verified" in resp.data
+
+    def test_csrf_failure_on_ajax_still_returns_json(
+        self, error_app
+    ):
+        """The JSON callers must keep the envelope they parse."""
+        from flask_wtf.csrf import CSRFError
+
+        @error_app.route("/test-csrf-ajax", methods=["POST"])
+        def trigger_csrf_ajax():
+            raise CSRFError("The CSRF token is missing.")
+
+        with error_app.test_client() as client:
+            resp = client.post(
+                "/test-csrf-ajax",
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
+            assert resp.status_code == 400
+            data = resp.get_json()
+            assert data["success"] is False
+            assert "could not be verified" in data["message"]
+
+
 class TestGlobal500Handler:
     """Tests for the global 500 error handler HTML vs JSON."""
 

@@ -24,6 +24,9 @@ from shuffify.routes import (
     json_error,
     json_success,
 )
+from shuffify.error_handlers import (
+    format_validation_error,
+)
 from shuffify.services import (
     AuthService,
     ShuffleService,
@@ -180,12 +183,10 @@ def update_settings(client=None, user=None):
     try:
         update_request = UserSettingsUpdateRequest(**data)
     except ValidationError as e:
-        first_error = (
-            e.errors()[0] if e.errors() else {}
-        )
-        msg = first_error.get("msg", "Invalid input")
         return json_error(
-            f"Validation error: {msg}", 400
+            f"Validation error: "
+            f"{format_validation_error(e)}",
+            400,
         )
 
     # Build kwargs from non-None fields only

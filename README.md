@@ -74,7 +74,7 @@ shuffify/
 │   ├── shuffle_algorithms/   # 8 shuffle algorithms with registry (7 visible)
 │   ├── templates/            # Jinja2 templates (7 pages)
 │   └── static/               # Static assets (images, public pages)
-├── tests/                    # 1714 tests
+├── tests/                    # Test suite
 ├── Dockerfile                # Defines the application container
 └── docker-compose.yml        # Orchestrates the local Docker environment
 ```
@@ -83,13 +83,13 @@ shuffify/
 
 - **User Persistence Enhancement Suite** (7 phases) — PostgreSQL, user dimension, login tracking, settings, snapshots, activity log, personalized dashboard
 - **Playlist Workshop Enhancement Suite** (6 phases) — Track management, playlist merging, external raiding, user database, scheduled operations
-- **7 Shuffle Algorithms** — Added ArtistSpacing, AlbumSequence, TempoGradient (hidden)
+- **7 Shuffle Algorithms** — Basic, Balanced, Percentage, Stratified, ArtistSpacing, AlbumSequence, NewestFirst
 - **SQLAlchemy Database** — 14 models (User, UserSettings, WorkshopSession, UpstreamSource, Schedule, JobExecution, LoginHistory, PlaylistSnapshot, ActivityLog, PlaylistPair, RaidPlaylistLink, PlaylistPreference, PendingRaidTrack, ScrapedPlaylistCache)
 - **PostgreSQL Production** — Neon PostgreSQL with Alembic migrations
 - **APScheduler Integration** — Background job execution for automated shuffle/raid
 - **Fernet Token Encryption** — Secure storage of Spotify refresh tokens
 - **20 Service Layer Modules** — Full separation of concerns
-- **1714 Tests** — Comprehensive coverage across all modules
+- **Comprehensive test suite** — algorithms, services, schemas, models, routes, and Spotify integration
 
 ## License
 

@@ -70,7 +70,7 @@ These documents have been moved to [`documentation/archive/`](../archive/):
 - Fernet symmetric encryption for stored refresh tokens
 - Pydantic v2 request validation schemas (9 modules)
 - Retry logic with exponential backoff in Spotify API calls
-- 1714 tests across algorithms, services, schemas, models, and Spotify modules
+- Broad test coverage across algorithms, services, schemas, models, and Spotify modules
 
 **Spotify Module:** Modular architecture with dependency injection:
 - `SpotifyCredentials` — DI for OAuth credentials

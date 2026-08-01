@@ -454,6 +454,23 @@ def _execute_swap(
 ):
     """Phase 2: swap tracks between production and archive.
 
+    Swap-in is FIFO and swap-out is random, and the asymmetry is deliberate.
+
+    The archive is a queue: this function takes from the head
+    (`archive_uris[:n]`), removes exactly those from the archive, and appends
+    the swapped-out tracks to the tail (`playlist_add_items` with no
+    `position` appends). So every archived track advances one place toward
+    the head on each rotation that does not re-archive it, and comes back in
+    a bounded number of cycles -- oldest first, longest-waiting first.
+
+    Randomising swap-in would replace that bound with an unbounded wait: a
+    track could be passed over indefinitely. FIFO is the fairer choice here
+    precisely because it is not random.
+
+    Swap-out is random because production has no comparable ordering to
+    exploit -- there is no "longest serving" track to evict, so a uniform
+    sample is the neutral pick.
+
     Returns (swapped_count, actual_total).
     """
     swap_in_uris = archive_uris[:rotation_count]
