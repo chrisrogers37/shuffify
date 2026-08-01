@@ -21,9 +21,25 @@ wheels/
 *.egg
 
 # Virtual Environment
+#
+# Match any naming convention, not just `venv/`. A bare `venv/` did not match
+# `.venv-mason/`, which is how a local virtualenv reached this public repo --
+# its console-script shebangs and activate scripts each embed the absolute
+# path of the machine that built it. Whoever creates the next one will not
+# name it `venv` either, so these patterns cover the dot-prefixed, suffixed
+# and per-user variants rather than one blessed spelling.
 venv/
+venv-*/
+.venv/
+.venv-*/
 ENV/
 env/
+env-*/
+.env-*/
+virtualenv/
+# The marker file at the root of every venv, as a backstop for a name none of
+# the patterns above anticipated.
+pyvenv.cfg
 
 # IDE
 .idea/
