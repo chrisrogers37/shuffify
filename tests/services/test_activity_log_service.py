@@ -111,17 +111,13 @@ class TestActivityLogServiceLog:
     def test_log_sets_created_at(self, app_ctx):
         """Should auto-set created_at to UTC now."""
         user = app_ctx
-        before = datetime.now(timezone.utc).replace(
-            tzinfo=None
-        )
+        before = datetime.now(timezone.utc)
         result = ActivityLogService.log(
             user_id=user.id,
             activity_type=ActivityType.LOGIN,
             description="Logged in",
         )
-        after = datetime.now(timezone.utc).replace(
-            tzinfo=None
-        )
+        after = datetime.now(timezone.utc)
 
         assert result is not None
         assert result.created_at >= before

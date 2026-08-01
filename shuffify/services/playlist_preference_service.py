@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from shuffify.models.db import db, PlaylistPreference
+from shuffify.models.db import PlaylistPreference, db
 from shuffify.services.base import safe_commit
 
 logger = logging.getLogger(__name__)

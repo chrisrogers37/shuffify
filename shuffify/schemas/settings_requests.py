@@ -5,6 +5,7 @@ Validates settings update payloads from the settings form.
 """
 
 from typing import Optional
+
 from pydantic import BaseModel, Field, field_validator
 
 from shuffify.shuffle_algorithms.registry import (

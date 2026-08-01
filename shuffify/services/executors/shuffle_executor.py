@@ -4,21 +4,21 @@ Shuffle executor: run shuffle algorithms on target playlists.
 
 import logging
 
-from shuffify.models.db import Schedule
-from shuffify.spotify.api import SpotifyAPI
-from shuffify.spotify.exceptions import (
-    SpotifyAPIError,
-    SpotifyNotFoundError,
-)
 from shuffify.enums import SnapshotType
-from shuffify.shuffle_algorithms.registry import ShuffleRegistry
-from shuffify.shuffle_algorithms.utils import extract_uris
+from shuffify.models.db import Schedule
 from shuffify.services.executors.base_executor import (
     JobExecutionError,
     verify_playlist_state,
 )
 from shuffify.services.playlist_snapshot_service import (
     PlaylistSnapshotService,
+)
+from shuffify.shuffle_algorithms.registry import ShuffleRegistry
+from shuffify.shuffle_algorithms.utils import extract_uris
+from shuffify.spotify.api import SpotifyAPI
+from shuffify.spotify.exceptions import (
+    SpotifyAPIError,
+    SpotifyNotFoundError,
 )
 
 logger = logging.getLogger(__name__)
@@ -104,8 +104,8 @@ def execute_shuffle(
 
         if locked_positions:
             from shuffify.shuffle_algorithms.utils import (
-                split_locked_tracks,
                 reassemble_with_locks,
+                split_locked_tracks,
             )
 
             validated_locks, unlocked_tracks = (

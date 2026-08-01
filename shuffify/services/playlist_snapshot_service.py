@@ -10,9 +10,9 @@ import contextvars
 import logging
 from typing import List, Optional
 
-from shuffify.models.db import db, PlaylistSnapshot
 from shuffify.enums import SnapshotType  # noqa: F401
-from shuffify.services.base import safe_commit, get_owned_entity
+from shuffify.models.db import PlaylistSnapshot, db
+from shuffify.services.base import get_owned_entity, safe_commit
 
 logger = logging.getLogger(__name__)
 

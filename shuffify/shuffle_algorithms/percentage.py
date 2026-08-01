@@ -1,5 +1,6 @@
 import random
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from . import ShuffleAlgorithm
 from .utils import extract_uris
 

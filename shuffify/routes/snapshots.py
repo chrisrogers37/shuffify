@@ -5,25 +5,25 @@ playlist snapshots.
 
 import logging
 
-from flask import session, request, jsonify
+from flask import jsonify, request, session
 
+from shuffify.enums import SnapshotType
 from shuffify.routes import (
-    main,
-    require_auth_and_db,
     json_error,
     json_success,
+    main,
+    require_auth_and_db,
     validate_json,
 )
+from shuffify.schemas import ManualSnapshotRequest
 from shuffify.services import (
-    PlaylistService,
     PlaylistAccessError,
-    PlaylistSnapshotService,
+    PlaylistService,
     PlaylistSnapshotError,
     PlaylistSnapshotNotFoundError,
+    PlaylistSnapshotService,
     StateService,
 )
-from shuffify.schemas import ManualSnapshotRequest
-from shuffify.enums import SnapshotType
 
 logger = logging.getLogger(__name__)
 

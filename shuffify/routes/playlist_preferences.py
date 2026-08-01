@@ -8,18 +8,18 @@ and pinning.
 import logging
 
 from shuffify.routes import (
-    main,
-    require_auth_and_db,
     json_error,
     json_success,
+    main,
+    require_auth_and_db,
     validate_json,
-)
-from shuffify.services.playlist_preference_service import (
-    PlaylistPreferenceService,
-    PlaylistPreferenceError,
 )
 from shuffify.schemas.playlist_preference_requests import (
     SaveOrderRequest,
+)
+from shuffify.services.playlist_preference_service import (
+    PlaylistPreferenceError,
+    PlaylistPreferenceService,
 )
 
 logger = logging.getLogger(__name__)

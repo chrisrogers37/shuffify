@@ -5,33 +5,33 @@ Settings routes: view and update user preferences.
 import logging
 
 from flask import (
-    jsonify,
-    session,
-    redirect,
-    url_for,
-    request,
     flash,
+    jsonify,
+    redirect,
     render_template,
+    request,
+    session,
+    url_for,
 )
 from pydantic import ValidationError
 
 from shuffify.routes import (
-    main,
-    is_authenticated,
-    require_auth_and_db,
-    get_db_user,
     clear_session_and_show_login,
+    get_db_user,
+    is_authenticated,
     json_error,
     json_success,
-)
-from shuffify.services import (
-    AuthService,
-    ShuffleService,
-    AuthenticationError,
-    UserSettingsService,
-    UserSettingsError,
+    main,
+    require_auth_and_db,
 )
 from shuffify.schemas import UserSettingsUpdateRequest
+from shuffify.services import (
+    AuthenticationError,
+    AuthService,
+    ShuffleService,
+    UserSettingsError,
+    UserSettingsService,
+)
 
 logger = logging.getLogger(__name__)
 

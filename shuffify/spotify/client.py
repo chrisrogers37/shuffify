@@ -10,10 +10,10 @@ for better separation of concerns.
 """
 
 import logging
-from typing import Callable, Dict, List, Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
-from .auth import SpotifyAuthManager, TokenInfo
 from .api import SpotifyAPI
+from .auth import SpotifyAuthManager, TokenInfo
 from .credentials import SpotifyCredentials
 from .exceptions import SpotifyTokenError
 

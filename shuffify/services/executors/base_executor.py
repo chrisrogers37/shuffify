@@ -13,22 +13,22 @@ from collections import Counter
 from datetime import datetime, timezone
 from typing import List
 
-from shuffify.models.db import db, Schedule, JobExecution, User
+from shuffify.enums import ActivityType, JobType
+from shuffify.models.db import JobExecution, Schedule, User, db
 from shuffify.services.base import safe_commit
 from shuffify.services.playlist_lock import playlist_lock
 from shuffify.services.token_service import (
-    TokenService,
     TokenEncryptionError,
+    TokenService,
 )
-from shuffify.spotify.auth import SpotifyAuthManager, TokenInfo
+from shuffify.shuffle_algorithms.utils import extract_uris
 from shuffify.spotify.api import SpotifyAPI
+from shuffify.spotify.auth import SpotifyAuthManager, TokenInfo
 from shuffify.spotify.credentials import SpotifyCredentials
 from shuffify.spotify.exceptions import (
     SpotifyPartialBatchError,
     SpotifyTokenError,
 )
-from shuffify.shuffle_algorithms.utils import extract_uris
-from shuffify.enums import JobType, ActivityType
 
 # Sentinel token used when constructing a SpotifyAPI with only a
 # refresh token. The access_token is intentionally invalid so the
@@ -219,11 +219,11 @@ def _restore_job_snapshots(execution, schedule, api, schedule_id):
     Returns a list of restoration dicts on success, or None if
     restoration fails (caller should fall back to plain failure).
     """
-    from shuffify.services.playlist_snapshot_service import (  # noqa: E501
-        PlaylistSnapshotService,
-        PlaylistSnapshotError,
-    )
     from shuffify.models.db import PlaylistSnapshot
+    from shuffify.services.playlist_snapshot_service import (  # noqa: E501
+        PlaylistSnapshotError,
+        PlaylistSnapshotService,
+    )
 
     try:
         user_id = schedule.user_id if schedule else None
@@ -310,8 +310,8 @@ def _revert_job_raid_staging(execution, schedule):
     Returns the number of rows deleted. Best-effort — a failure here must not
     mask the rollback already under way.
     """
-    from shuffify.models.db import PendingRaidTrack
     from shuffify.enums import PendingRaidStatus
+    from shuffify.models.db import PendingRaidTrack
 
     try:
         user_id = schedule.user_id if schedule else None
@@ -807,8 +807,8 @@ class JobExecutorService:
             JobExecutionError: If execution fails.
         """
         from shuffify.services.scheduler_service import (
-            SchedulerService,
             ScheduleNotFoundError,
+            SchedulerService,
         )
 
         try:
@@ -921,17 +921,17 @@ class JobExecutorService:
     @staticmethod
     def _execute_job_type(schedule: Schedule, api: SpotifyAPI) -> dict:
         """Execute the appropriate operation based on job type."""
+        from shuffify.services.executors.drip_executor import (  # noqa: E501
+            execute_drip,
+        )
         from shuffify.services.executors.raid_executor import (
             execute_raid,
-        )
-        from shuffify.services.executors.shuffle_executor import (  # noqa: E501
-            execute_shuffle,
         )
         from shuffify.services.executors.rotate_executor import (  # noqa: E501
             execute_rotate,
         )
-        from shuffify.services.executors.drip_executor import (  # noqa: E501
-            execute_drip,
+        from shuffify.services.executors.shuffle_executor import (  # noqa: E501
+            execute_shuffle,
         )
 
         if schedule.job_type == JobType.RAID:

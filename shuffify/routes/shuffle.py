@@ -4,24 +4,23 @@ Shuffle routes: execute shuffle and undo operations.
 
 import logging
 
-from flask import session, jsonify
+from flask import jsonify, request, session
 
+from shuffify.enums import ActivityType, SnapshotType
 from shuffify.routes import (
-    main,
-    require_auth_and_db,
     json_success,
     log_activity,
+    main,
+    require_auth_and_db,
 )
+from shuffify.schemas import parse_shuffle_request
 from shuffify.services import (
     PlaylistService,
+    PlaylistSnapshotService,
+    PlaylistUpdateError,
     ShuffleService,
     StateService,
-    PlaylistUpdateError,
-    PlaylistSnapshotService,
 )
-from shuffify.enums import SnapshotType, ActivityType
-from shuffify.schemas import parse_shuffle_request
-from flask import request
 
 logger = logging.getLogger(__name__)
 
