@@ -6,10 +6,13 @@ rate limit handling, and pagination support.
 """
 
 import logging
+import os
+import threading
 import time
 from typing import Any, Callable, Dict, List, Optional
 
 import requests
+from requests.adapters import HTTPAdapter
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
 from .exceptions import (
@@ -26,10 +29,48 @@ MAX_RETRIES = 4
 BASE_DELAY = 2  # seconds
 MAX_DELAY = 16  # seconds
 
+# Connection-pool sizing for the process-wide adapter. One pool is enough --
+# every request targets the single api.spotify.com host -- but it has to hold
+# enough sockets for all concurrent workers in the process.
+POOL_CONNECTIONS = 10
+POOL_MAXSIZE = 20
+
+_adapter_lock = threading.Lock()
+_shared_adapter: Optional[HTTPAdapter] = None
+_shared_adapter_pid: Optional[int] = None
+
 
 def _calculate_backoff_delay(attempt: int) -> float:
     """Calculate exponential backoff delay, capped at MAX_DELAY."""
     return min(BASE_DELAY * (2**attempt), MAX_DELAY)
+
+
+def get_shared_adapter() -> HTTPAdapter:
+    """Return this process's shared connection-pool adapter.
+
+    The bearer token lives on the ``Session``, so sessions cannot be shared
+    between users without serving one user's token on another's request. The
+    connection pool underneath is user-agnostic, so that is what gets shared:
+    every client keeps its own ``Session`` (and therefore its own auth), and
+    they all draw sockets from one pool.
+
+    The pool is rebuilt whenever the owning PID changes. Sockets do not
+    survive ``fork()`` safely -- two processes drawing from one inherited pool
+    can interleave writes on the same connection -- and the app is deployed
+    under a preloading Gunicorn, so the parent's pool is precisely what a
+    worker must not keep.
+    """
+    global _shared_adapter, _shared_adapter_pid
+
+    pid = os.getpid()
+    with _adapter_lock:
+        if _shared_adapter is None or _shared_adapter_pid != pid:
+            _shared_adapter = HTTPAdapter(
+                pool_connections=POOL_CONNECTIONS,
+                pool_maxsize=POOL_MAXSIZE,
+            )
+            _shared_adapter_pid = pid
+        return _shared_adapter
 
 
 class SpotifyHTTPClient:
@@ -62,6 +103,9 @@ class SpotifyHTTPClient:
                 "Content-Type": "application/json",
             }
         )
+        adapter = get_shared_adapter()
+        self._session.mount("https://", adapter)
+        self._session.mount("http://", adapter)
 
     def update_token(self, access_token: str) -> None:
         """Update the bearer token for future requests."""
@@ -69,7 +113,14 @@ class SpotifyHTTPClient:
         self._session.headers["Authorization"] = f"Bearer {access_token}"
 
     def close(self) -> None:
-        """Close the underlying HTTP session."""
+        """Release this client's session, leaving the shared pool intact.
+
+        ``Session.close()`` closes every adapter mounted on it, so the shared
+        adapter is detached first -- otherwise one client going away would
+        drop the connection pool out from under every other client in the
+        process.
+        """
+        self._session.adapters.clear()
         self._session.close()
 
     # -----------------------------------------------------------------
