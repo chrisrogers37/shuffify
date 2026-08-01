@@ -133,7 +133,7 @@ def workshop(playlist_id, api=None, user=None, spotify_profile=None):
             )
 
         logger.info(
-            f"User {user.get('display_name', 'Unknown')} "
+            f"User {(spotify_profile or {}).get('display_name', 'Unknown')} "
             f"opened workshop for playlist "
             f"'{playlist.name}' ({len(playlist)} tracks)"
         )
@@ -141,7 +141,7 @@ def workshop(playlist_id, api=None, user=None, spotify_profile=None):
         return render_template(
             "workshop.html",
             playlist=playlist.to_dict(),
-            user=user,
+            user=spotify_profile,
             algorithms=algorithms,
             upstream_sources_json=upstream_sources_json,
             prev_playlist_id=prev_playlist_id,

@@ -63,7 +63,7 @@ def settings(api=None, user=None, spotify_profile=None):
 
         return render_template(
             "settings.html",
-            user=user,
+            user=spotify_profile,
             settings=user_settings.to_dict(),
             algorithms=algorithms,
             algorithm_options=algorithm_options,

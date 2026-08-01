@@ -90,7 +90,7 @@ def schedules(api=None, user=None, spotify_profile=None):
 
         return render_template(
             "schedules.html",
-            user=user,
+            user=spotify_profile,
             schedules=[
                 s.to_dict() for s in user_schedules
             ],
