@@ -123,6 +123,10 @@
             }
         }
     </style>
+    <!-- Delegated event dispatch. Must load before any page script that calls
+         registerActions(), so it sits in <head> rather than beside the other
+         static JS at the end of <body>. -->
+    <script src="{{ url_for('static', filename='js/actions.js') }}"></script>
 </head>
 <body class="{{ 'bg-[#1DB954]' if session.get('spotify_token') else '' }}">
     <!-- Skip to main content link for screen readers -->

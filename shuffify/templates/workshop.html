@@ -18,7 +18,7 @@
                     <a href="{{ url_for('main.workshop', playlist_id=prev_playlist_id) }}"
                        class="mr-2 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition duration-150 border border-white/20 flex-shrink-0"
                        title="Previous playlist"
-                       onclick="return confirmNavigation(this)">
+                       data-action-click="wk-001">
                         <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                         </svg>
@@ -34,7 +34,7 @@
                     <div class="min-w-0 relative">
                         <div class="flex items-center gap-2">
                             <button id="playlist-dropdown-toggle"
-                                    onclick="togglePlaylistDropdown()"
+                                    data-action-click="wk-002"
                                     class="flex items-center gap-1 group cursor-pointer min-w-0"
                                     title="Click to switch playlist">
                                 <h1 class="text-2xl font-bold text-white truncate group-hover:text-white/80 transition duration-150">{{ playlist.name }}</h1>
@@ -43,7 +43,7 @@
                                 </svg>
                             </button>
                             <button id="workshop-visibility-btn"
-                                    onclick="toggleWorkshopVisibility()"
+                                    data-action-click="wk-003"
                                     data-public="{{ 'true' if playlist.public else 'false' }}"
                                     class="flex-shrink-0 w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition duration-150"
                                     title="{{ 'Public - click to make private' if playlist.public else 'Private - click to make public' }}">
@@ -89,7 +89,7 @@
                     <a href="{{ url_for('main.workshop', playlist_id=next_playlist_id) }}"
                        class="ml-2 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition duration-150 border border-white/20 flex-shrink-0"
                        title="Next playlist"
-                       onclick="return confirmNavigation(this)">
+                       data-action-click="wk-004">
                         <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
                         </svg>
@@ -105,7 +105,7 @@
                 </div>
                 <div class="flex items-center space-x-2 flex-shrink-0">
                     <button id="unlock-all-btn"
-                            onclick="unlockAllTracks()"
+                            data-action-click="wk-005"
                             class="hidden inline-flex items-center px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 font-medium text-sm transition duration-150 border border-white/20"
                             title="Remove all track locks">
                         <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -114,7 +114,7 @@
                         Unlock All
                     </button>
                     <button id="undo-preview-btn"
-                            onclick="undoPreview()"
+                            data-action-click="wk-006"
                             class="hidden inline-flex items-center px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition duration-150 border border-white/20"
                             title="Revert to last saved order">
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -123,7 +123,7 @@
                         Undo Changes
                     </button>
                     <button id="save-btn"
-                            onclick="commitToSpotify()"
+                            data-action-click="wk-007"
                             disabled
                             class="inline-flex items-center px-6 py-2 rounded-lg bg-white text-spotify-dark font-bold transition duration-150 hover:bg-green-100 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg"
                             title="Save current order to Spotify">
@@ -150,27 +150,27 @@
     <div class="relative max-w-5xl mx-auto px-4 pt-4">
         <div class="flex border-b border-white/20 overflow-x-auto whitespace-nowrap" role="tablist" aria-label="Workshop sections">
             <button id="htab-btn-playlist" class="htab-btn px-5 py-2.5 text-sm font-semibold transition duration-150 border-b-2 border-spotify-green text-white flex-shrink-0"
-                    onclick="workshopTabs.switchTab('playlist')" role="tab" aria-selected="true" aria-controls="htab-content-playlist">
+                    data-action-click="wk-008" role="tab" aria-selected="true" aria-controls="htab-content-playlist">
                 <svg class="w-4 h-4 inline mr-1.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path></svg>
                 Playlist
             </button>
             <button id="htab-btn-raids" class="htab-btn px-5 py-2.5 text-sm font-semibold transition duration-150 border-b-2 border-transparent text-white/60 hover:text-white flex-shrink-0"
-                    onclick="workshopTabs.switchTab('raids')" role="tab" aria-selected="false" aria-controls="htab-content-raids">
+                    data-action-click="wk-009" role="tab" aria-selected="false" aria-controls="htab-content-raids">
                 <svg class="w-4 h-4 inline mr-1.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                 Raids
             </button>
             <button id="htab-btn-rotation" class="htab-btn px-5 py-2.5 text-sm font-semibold transition duration-150 border-b-2 border-transparent text-white/60 hover:text-white flex-shrink-0"
-                    onclick="workshopTabs.switchTab('rotation')" role="tab" aria-selected="false" aria-controls="htab-content-rotation">
+                    data-action-click="wk-010" role="tab" aria-selected="false" aria-controls="htab-content-rotation">
                 <svg class="w-4 h-4 inline mr-1.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
                 Rotation
             </button>
             <button id="htab-btn-schedules" class="htab-btn px-5 py-2.5 text-sm font-semibold transition duration-150 border-b-2 border-transparent text-white/60 hover:text-white flex-shrink-0"
-                    onclick="workshopTabs.switchTab('schedules')" role="tab" aria-selected="false" aria-controls="htab-content-schedules">
+                    data-action-click="wk-011" role="tab" aria-selected="false" aria-controls="htab-content-schedules">
                 <svg class="w-4 h-4 inline mr-1.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                 Schedules
             </button>
             <button id="htab-btn-snapshots" class="htab-btn px-5 py-2.5 text-sm font-semibold transition duration-150 border-b-2 border-transparent text-white/60 hover:text-white flex-shrink-0"
-                    onclick="workshopTabs.switchTab('snapshots')" role="tab" aria-selected="false" aria-controls="htab-content-snapshots">
+                    data-action-click="wk-012" role="tab" aria-selected="false" aria-controls="htab-content-snapshots">
                 <svg class="w-4 h-4 inline mr-1.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path></svg>
                 Snapshots
             </button>
@@ -207,7 +207,7 @@
                 <!-- Gear Icon for Params (shown when algorithm has params) -->
                 <div class="relative">
                     <button id="algo-params-gear"
-                            onclick="toggleAlgoParamsPopover()"
+                            data-action-click="wk-013"
                             class="hidden p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/60 hover:text-white transition duration-150"
                             title="Algorithm settings"
                             aria-expanded="false"
@@ -223,7 +223,7 @@
                          class="hidden absolute right-0 top-full mt-2 w-72 rounded-xl shadow-2xl backdrop-blur-xl bg-gray-900/95 border border-white/20 p-4 z-40">
                         <div class="flex items-center justify-between mb-3">
                             <h3 class="text-white font-semibold text-sm">Algorithm Settings</h3>
-                            <button onclick="toggleAlgoParamsPopover()"
+                            <button data-action-click="wk-014"
                                     class="text-white/40 hover:text-white transition duration-150">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -233,7 +233,7 @@
                         <div id="workshop-algorithm-params" class="space-y-3">
                             <!-- Parameters dynamically inserted here -->
                         </div>
-                        <button onclick="toggleAlgoParamsPopover(); previewShuffle();"
+                        <button data-action-click="wk-015"
                                 class="w-full mt-3 px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
                             Shuffle with Settings
                         </button>
@@ -242,7 +242,7 @@
 
                 <!-- Preview Shuffle Button -->
                 <button id="preview-shuffle-btn"
-                        onclick="previewShuffle()"
+                        data-action-click="wk-016"
                         class="px-4 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white font-semibold text-sm transition duration-150 whitespace-nowrap flex-shrink-0"
                         {% if not playlist.tracks %}disabled{% endif %}>
                     Preview Shuffle
@@ -306,7 +306,7 @@
 
                             <!-- Lock Button -->
                             <button class="lock-btn w-8 text-center text-white/20 hover:text-amber-400 transition duration-150 ml-1 flex-shrink-0"
-                                    onclick='toggleTrackLock({{ track.uri | tojson }}, {{ loop.index0 }}, this)'
+                                    data-action-click="wk-track-lock" data-track-uri="{{ track.uri }}" data-track-index="{{ loop.index0 }}"
                                     title="Lock track in position">
                                 <svg class="lock-icon-open w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"></path>
@@ -321,7 +321,7 @@
 
                             <!-- Delete Button -->
                             <button class="delete-track-btn w-8 text-center text-white/20 hover:text-red-400 transition duration-150 ml-1 flex-shrink-0"
-                                    onclick='deleteTrack({{ track.uri | tojson }}, this)'
+                                    data-action-click="wk-track-delete" data-track-uri="{{ track.uri }}"
                                     title="Remove from playlist">
                                 <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -344,7 +344,7 @@
             <!-- Search & Add Tracks (collapsible) -->
             <div class="mt-4">
                 <button id="search-toggle-btn"
-                        onclick="toggleSearchSection()"
+                        data-action-click="wk-017"
                         class="w-full flex items-center justify-between px-5 py-3 rounded-2xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 text-white font-bold text-sm hover:bg-white/15 transition duration-150"
                         aria-expanded="false"
                         aria-controls="search-body">
@@ -367,11 +367,11 @@
                                    type="text"
                                    placeholder="Search tracks, artists..."
                                    class="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:ring-2 focus:ring-white/30 focus:border-transparent text-sm"
-                                   onkeydown="if(event.key==='Enter'){event.preventDefault(); searchSpotify();}"
+                                   data-action-keydown="wk-018"
                                    maxlength="200"
                                    autocomplete="off">
                             <button id="search-btn"
-                                    onclick="searchSpotify()"
+                                    data-action-click="wk-019"
                                     class="px-3 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white transition duration-150 flex-shrink-0"
                                     title="Search">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -385,7 +385,7 @@
                             </p>
                         </div>
                         <button id="search-load-more"
-                                onclick="searchSpotifyMore()"
+                                data-action-click="wk-020"
                                 class="hidden w-full mt-2 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-sm transition duration-150">
                             Load more results
                         </button>
@@ -399,8 +399,8 @@
                                    type="text"
                                    placeholder="Paste URL or search..."
                                    class="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm placeholder-white/40 focus:ring-2 focus:ring-white/30 focus:border-transparent"
-                                   onkeydown="if(event.key==='Enter') loadExternalPlaylist()">
-                            <button onclick="loadExternalPlaylist()"
+                                   data-action-keydown="wk-021">
+                            <button data-action-click="wk-022"
                                     class="px-3 py-2 rounded-lg bg-white/20 hover:bg-white/30 text-white text-sm font-semibold transition duration-150 flex-shrink-0">
                                 Load
                             </button>
@@ -412,7 +412,7 @@
                             <p class="text-white/50 text-xs uppercase tracking-wide font-semibold mb-2">Recently Loaded</p>
                             <div id="external-recent-list" class="space-y-1 max-h-32 overflow-y-auto workshop-scrollbar">
                                 {% for entry in session.get('external_playlist_history', [])[:5] %}
-                                <button onclick="loadExternalById('{{ entry.id }}')"
+                                <button data-action-click="wk-external-recent" data-entry-id="{{ entry.id }}"
                                         class="w-full text-left px-2 py-1.5 rounded-lg hover:bg-white/10 transition duration-150 text-sm text-white/80 truncate">
                                     {{ entry.name }} <span class="text-white/40">({{ entry.track_count }} tracks)</span>
                                 </button>
@@ -448,7 +448,7 @@
             <!-- Error state -->
             <div id="raid-error" class="hidden rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-center">
                 <p class="text-red-300 text-sm">Failed to load raid status</p>
-                <button onclick="raidPanel.loadStatus()"
+                <button data-action-click="wk-023"
                         class="text-red-300/60 hover:text-red-300 text-xs mt-2 underline transition duration-150">
                     Retry
                 </button>
@@ -462,7 +462,7 @@
                     <div class="space-y-4">
                         <div class="flex items-center justify-between mb-1">
                             <h3 class="text-white font-bold text-lg">Raid Config</h3>
-                            <button onclick="raidPanel.loadStatus()"
+                            <button data-action-click="wk-024"
                                     class="text-white/40 hover:text-white/60 transition duration-150" title="Refresh">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
@@ -482,7 +482,7 @@
                                     </svg>
                                     <p class="text-white/60 text-sm mb-1">No raid playlist linked</p>
                                     <p class="text-white/30 text-xs mb-3">Link a staging playlist so raided tracks are collected before dripping into your playlist.</p>
-                                    <button onclick="raidPanel.createRaidLink()"
+                                    <button data-action-click="wk-025"
                                             class="w-full px-4 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 mb-2">
                                         Create New Raid Playlist
                                     </button>
@@ -491,12 +491,12 @@
                                         <div class="relative flex justify-center"><span class="bg-[#1a1a2e] px-2 text-white/30 text-xs">or</span></div>
                                     </div>
                                     <select id="raid-link-select"
-                                            onfocus="raidPanel.populateRaidLinkSelect()"
-                                            onchange="document.getElementById('raid-link-btn').disabled = !this.value"
+                                            data-action-focus="wk-026"
+                                            data-action-change="wk-027"
                                             class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 mb-2">
                                         <option value="">Link existing playlist...</option>
                                     </select>
-                                    <button id="raid-link-btn" onclick="raidPanel.linkExistingRaid()"
+                                    <button id="raid-link-btn" data-action-click="wk-028"
                                             class="w-full px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
                                             disabled>
                                         Link as Raid Playlist
@@ -508,7 +508,7 @@
                                 <div class="rounded-xl bg-white/10 border border-white/20 p-4">
                                     <div class="flex items-center justify-between mb-2">
                                         <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Raid Playlist</span>
-                                        <button onclick="raidPanel.unlinkRaidPlaylist()"
+                                        <button data-action-click="wk-029"
                                                 class="text-red-400/60 hover:text-red-400 text-xs transition duration-150"
                                                 title="Remove raid link">
                                             Unlink
@@ -530,8 +530,8 @@
                                     <input id="raid-url-input" type="text"
                                            placeholder="Paste Spotify playlist URL..."
                                            class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 placeholder-white/30"
-                                           onkeydown="if(event.key==='Enter'){raidPanel.addExternalUrl();}">
-                                    <button id="raid-add-url-btn" onclick="raidPanel.addExternalUrl()"
+                                           data-action-keydown="wk-030">
+                                    <button id="raid-add-url-btn" data-action-click="wk-031"
                                             class="px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
                                         +
                                     </button>
@@ -568,7 +568,7 @@
                                 <div class="flex items-center justify-between">
                                     <div class="flex items-center gap-2">
                                         <span class="text-white/60 text-xs">Enabled</span>
-                                        <button id="raid-drip-toggle" onclick="raidPanel.toggleDripEnabled()"
+                                        <button id="raid-drip-toggle" data-action-click="wk-032"
                                                 class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200">
                                             <span class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200"></span>
                                         </button>
@@ -576,10 +576,10 @@
                                     <div id="raid-drip-count-row" class="hidden flex items-center gap-1">
                                         <span class="text-white/40 text-xs">Add</span>
                                         <input id="raid-drip-count" type="number" min="1" max="50" value="3"
-                                               oninput="raidPanel.onDripCountChange()"
+                                               data-action-input="wk-033"
                                                class="w-14 bg-white/10 border border-white/20 rounded px-2 py-0.5 text-white text-xs text-center focus:outline-none focus:border-spotify-green/50">
                                         <span class="text-white/40 text-xs">tracks per run</span>
-                                        <button id="raid-drip-count-save" onclick="raidPanel.saveDripCount()"
+                                        <button id="raid-drip-count-save" data-action-click="wk-034"
                                                 class="hidden ml-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-300 border border-green-400/30 hover:bg-green-500/30 transition">
                                             Save
                                         </button>
@@ -607,7 +607,7 @@
                                     </div>
                                     <div class="flex gap-2">
                                         <select id="raid-schedule-create-freq"
-                                                onchange="raidPanel.onCreateFreqChange()"
+                                                data-action-change="wk-035"
                                                 class="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
                                             <option value="every_6h">Every 6 hours</option>
                                             <option value="every_12h">Every 12 hours</option>
@@ -621,7 +621,7 @@
                                         <input id="raid-schedule-create-time" type="time" value="09:00"
                                                class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50">
                                     </div>
-                                    <button id="raid-schedule-create-btn" onclick="raidPanel.createSchedule()"
+                                    <button id="raid-schedule-create-btn" data-action-click="wk-036"
                                             class="w-full px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed">
                                         Enable Schedule
                                     </button>
@@ -631,7 +631,7 @@
                                 <div class="flex items-center justify-between">
                                     <div class="flex items-center gap-2">
                                         <span id="raid-schedule-type-badge" class="px-1.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-300"></span>
-                                        <select id="raid-schedule-frequency" onchange="raidPanel.onScheduleChange()"
+                                        <select id="raid-schedule-frequency" data-action-change="wk-037"
                                                 class="bg-white/10 text-white text-xs rounded-lg border border-white/20 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-400">
                                             <option value="every_6h">Every 6h</option>
                                             <option value="every_12h">Every 12h</option>
@@ -645,9 +645,9 @@
                                 <div id="raid-schedule-time-row" class="hidden flex items-center gap-2">
                                     <label class="text-white/50 text-xs">at</label>
                                     <input type="time" id="raid-schedule-time" value="09:00"
-                                           onchange="raidPanel.onScheduleChange()"
+                                           data-action-change="wk-038"
                                            class="bg-white/10 text-white text-xs rounded-lg border border-white/20 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-400">
-                                    <button onclick="raidPanel.saveSchedule()" id="raid-schedule-save"
+                                    <button data-action-click="wk-039" id="raid-schedule-save"
                                             class="hidden px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-300 border border-green-400/30 hover:bg-green-500/30 transition">
                                         Save
                                     </button>
@@ -657,21 +657,21 @@
                                     <span id="raid-schedule-status-badge" class="px-1.5 py-0.5 rounded-full text-xs font-semibold"></span>
                                 </div>
                                 <div class="flex gap-2 mt-2">
-                                    <button onclick="raidPanel.runScheduleNow()"
+                                    <button data-action-click="wk-040"
                                             id="raid-schedule-run-btn" title="Run now"
                                             class="px-3 py-1.5 rounded-lg bg-spotify-green/20 hover:bg-spotify-green/40 text-spotify-green text-xs font-semibold transition duration-150 border border-spotify-green/30">
                                         <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                                     </button>
-                                    <button onclick="raidPanel.toggleSchedule()" id="raid-schedule-toggle"
+                                    <button data-action-click="wk-041" id="raid-schedule-toggle"
                                             class="flex-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition duration-150 border border-white/20">
                                     </button>
-                                    <button onclick="raidPanel.deleteSchedule()"
+                                    <button data-action-click="wk-042"
                                             class="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-semibold transition duration-150 border border-red-500/20">
                                         Delete
                                     </button>
                                 </div>
                                 <div id="raid-history-section">
-                                    <button onclick="raidPanel.toggleHistory()" class="text-white/40 text-xs hover:text-white/60 transition underline">
+                                    <button data-action-click="wk-043" class="text-white/40 text-xs hover:text-white/60 transition underline">
                                         Show history
                                     </button>
                                     <div id="raid-history-list" class="hidden mt-2 space-y-1 max-h-40 overflow-y-auto"></div>
@@ -685,7 +685,7 @@
                                 <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Actions</span>
                             </div>
                             <div class="space-y-2">
-                                <button id="raid-and-drip-btn" onclick="raidPanel.raidAndDrip()"
+                                <button id="raid-and-drip-btn" data-action-click="wk-044"
                                         class="hidden w-full inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white font-semibold text-sm transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed">
                                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
@@ -693,14 +693,14 @@
                                     Raid &amp; Drip
                                 </button>
                                 <div class="flex gap-2">
-                                    <button id="raid-now-btn" onclick="raidPanel.raidNow()"
+                                    <button id="raid-now-btn" data-action-click="wk-045"
                                             class="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed">
                                         <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                                         </svg>
                                         Raid Only
                                     </button>
-                                    <button id="drip-now-btn" onclick="raidPanel.dripNow()"
+                                    <button id="drip-now-btn" data-action-click="wk-046"
                                             class="hidden flex-1 inline-flex items-center justify-center px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed">
                                         <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
@@ -736,11 +736,11 @@
                             <!-- Populated by loadPendingRaids() -->
                         </div>
                         <div id="inbox-raids-actions" class="hidden flex gap-2 mt-3 pt-3 border-t border-white/10">
-                            <button onclick="promoteAllPendingRaids()"
+                            <button data-action-click="wk-047"
                                     class="flex-1 px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
                                 Add All to Playlist
                             </button>
-                            <button onclick="dismissAllPendingRaids()"
+                            <button data-action-click="wk-048"
                                     class="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/60 text-sm font-semibold transition duration-150 border border-white/20">
                                 Dismiss All
                             </button>
@@ -769,7 +769,7 @@
             <!-- Error state -->
             <div id="archive-error" class="hidden rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-center">
                 <p class="text-red-300 text-sm">Failed to load archive info</p>
-                <button onclick="loadArchivePairInfo()"
+                <button data-action-click="wk-049"
                         class="text-red-300/60 hover:text-red-300 text-xs mt-2 underline transition duration-150">
                     Retry
                 </button>
@@ -792,7 +792,7 @@
                             </svg>
                             <p class="text-white/60 text-sm mb-1">No archive linked</p>
                             <p class="text-white/30 text-xs mb-4">Link an archive playlist so removed tracks are automatically preserved.</p>
-                            <button onclick="createArchivePair()"
+                            <button data-action-click="wk-050"
                                     class="w-full px-4 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150 mb-2">
                                 Create New Archive
                             </button>
@@ -804,7 +804,7 @@
                                     class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-spotify-green/50 mb-2">
                                 <option value="">Link existing playlist...</option>
                             </select>
-                            <button id="archive-link-btn" onclick="linkExistingArchive()"
+                            <button id="archive-link-btn" data-action-click="wk-051"
                                     class="w-full px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold transition duration-150 border border-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
                                     disabled>
                                 Link as Archive
@@ -817,7 +817,7 @@
                         <div class="rounded-xl bg-white/10 border border-white/20 p-4 mb-4">
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-white/60 text-xs uppercase tracking-wide font-semibold">Archive Playlist</span>
-                                <button onclick="deleteArchivePair()"
+                                <button data-action-click="wk-052"
                                         class="text-red-400/60 hover:text-red-400 text-xs transition duration-150"
                                         title="Remove archive pairing">
                                     Unlink
@@ -827,7 +827,7 @@
                             <p id="archive-pair-track-count" class="text-white/40 text-xs mt-1"></p>
                             <div class="flex items-center justify-between mt-3 pt-3 border-t border-white/10">
                                 <span class="text-white/60 text-xs">Auto-archive on remove</span>
-                                <button id="auto-archive-toggle" onclick="toggleAutoArchive()"
+                                <button id="auto-archive-toggle" data-action-click="wk-053"
                                         class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200">
                                     <span class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200"></span>
                                 </button>
@@ -869,7 +869,7 @@
                                            class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-spotify-green/50"
                                            placeholder="0">
                                 </div>
-                                <button id="rotation-enable-btn" onclick="createRotationSchedule()"
+                                <button id="rotation-enable-btn" data-action-click="wk-054"
                                         class="w-full px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
                                     Enable Rotation
                                 </button>
@@ -884,16 +884,16 @@
                                 <span id="rotation-schedule-detail" class="text-white/40 text-xs block mt-0.5"></span>
                             </div>
                             <div class="flex gap-2 mt-3">
-                                <button onclick="runRotationNow()"
+                                <button data-action-click="wk-055"
                                         id="rotation-run-btn" title="Run rotation now"
                                         class="px-3 py-1.5 rounded-lg bg-spotify-green/20 hover:bg-spotify-green/40 text-spotify-green text-xs font-semibold transition duration-150 border border-spotify-green/30">
                                     <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                                 </button>
-                                <button onclick="toggleRotationSchedule()"
+                                <button data-action-click="wk-056"
                                         id="rotation-toggle-btn"
                                         class="flex-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition duration-150 border border-white/20">
                                 </button>
-                                <button onclick="deleteRotationSchedule()"
+                                <button data-action-click="wk-057"
                                         class="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-semibold transition duration-150 border border-red-500/20">
                                     Delete
                                 </button>
@@ -926,7 +926,7 @@
                         <!-- Populated by renderInboxArchiveTracks() -->
                     </div>
                     <div id="inbox-archive-actions" class="hidden flex gap-2 mt-3 pt-3 border-t border-white/10">
-                        <button onclick="restoreAllArchiveTracks()"
+                        <button data-action-click="wk-058"
                                 class="flex-1 px-3 py-2 rounded-lg bg-spotify-green/80 hover:bg-spotify-green text-white text-sm font-semibold transition duration-150">
                             Restore All to Playlist
                         </button>
@@ -945,7 +945,7 @@
             <div>
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-white font-bold text-lg">Schedules for This Playlist</h3>
-                    <button onclick="playlistSchedules.loadSchedules()"
+                    <button data-action-click="wk-059"
                             class="text-white/40 hover:text-white/60 transition duration-150" title="Refresh">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
@@ -962,7 +962,7 @@
 
                 <div id="schedules-error" class="hidden rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-center">
                     <p class="text-red-300 text-sm">Failed to load schedules</p>
-                    <button onclick="playlistSchedules.loadSchedules()"
+                    <button data-action-click="wk-060"
                             class="text-red-300/60 hover:text-red-300 text-xs mt-2 underline transition duration-150">
                         Retry
                     </button>
@@ -1004,7 +1004,7 @@
                         <span id="snapshot-count-badge" class="hidden text-white/30 text-sm font-normal"></span>
                     </h3>
                     <button id="snapshot-take-btn"
-                            onclick="openManualSnapshotDialog()"
+                            data-action-click="wk-061"
                             class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-sm font-semibold transition duration-150 flex items-center gap-2"
                             title="Take a snapshot of the current playlist state">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1025,11 +1025,11 @@
                                placeholder="e.g. Before major cleanup"
                                class="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-white/30 focus:ring-1 focus:ring-white/20 transition">
                         <div class="flex gap-2 mt-3">
-                            <button onclick="confirmManualSnapshot()"
+                            <button data-action-click="wk-062"
                                     class="flex-1 px-3 py-1.5 rounded-lg bg-green-600/80 hover:bg-green-600 text-white text-xs font-semibold transition duration-150">
                                 Save Snapshot
                             </button>
-                            <button onclick="cancelManualSnapshot()"
+                            <button data-action-click="wk-063"
                                     class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-xs font-semibold transition duration-150">
                                 Cancel
                             </button>
@@ -1052,7 +1052,7 @@
                 <div id="snapshot-error" class="hidden">
                     <div class="rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-center">
                         <p id="snapshot-error-message" class="text-red-400/80 text-sm mb-2">Failed to load snapshots</p>
-                        <button onclick="loadSnapshots()"
+                        <button data-action-click="wk-064"
                                 class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/60 text-xs font-semibold transition duration-150">
                             Try Again
                         </button>
@@ -1084,18 +1084,18 @@
 
 <!-- Snapshot Restore Confirmation Modal -->
 <div id="snapshot-restore-modal" class="fixed inset-0 z-50 hidden">
-    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="hideRestoreModal()"></div>
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" data-action-click="wk-065"></div>
     <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm">
         <div class="bg-gray-900 border border-white/10 rounded-2xl p-6 shadow-2xl">
             <h3 class="text-white font-bold text-lg mb-2">Restore Snapshot</h3>
             <p id="restore-modal-message" class="text-white/60 text-sm mb-1">This will replace the current playlist track order on Spotify.</p>
             <p id="restore-modal-detail" class="text-white/40 text-xs mb-4"></p>
             <div class="flex gap-3">
-                <button onclick="executeRestore()"
+                <button data-action-click="wk-066"
                         class="flex-1 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition duration-150">
                     Restore
                 </button>
-                <button onclick="hideRestoreModal()"
+                <button data-action-click="wk-067"
                         class="flex-1 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-sm font-semibold transition duration-150">
                     Cancel
                 </button>
@@ -1106,17 +1106,17 @@
 
 <!-- Snapshot Delete Confirmation Modal -->
 <div id="snapshot-delete-modal" class="fixed inset-0 z-50 hidden">
-    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="hideDeleteModal()"></div>
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" data-action-click="wk-068"></div>
     <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm">
         <div class="bg-gray-900 border border-white/10 rounded-2xl p-6 shadow-2xl">
             <h3 class="text-white font-bold text-lg mb-2">Delete Snapshot</h3>
             <p id="delete-modal-message" class="text-white/60 text-sm mb-4">This snapshot will be permanently deleted. This cannot be undone.</p>
             <div class="flex gap-3">
-                <button onclick="executeDelete()"
+                <button data-action-click="wk-069"
                         class="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition duration-150">
                     Delete
                 </button>
-                <button onclick="hideDeleteModal()"
+                <button data-action-click="wk-070"
                         class="flex-1 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-sm font-semibold transition duration-150">
                     Cancel
                 </button>
@@ -1136,7 +1136,7 @@
             <p class="text-white/60 mb-6">Choose a playlist to start shuffling, reordering, and managing tracks.</p>
             <div class="relative inline-block">
                 <button id="hub-playlist-dropdown-toggle"
-                        onclick="toggleHubDropdown()"
+                        data-action-click="wk-071"
                         class="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-white text-spotify-dark font-bold transition duration-150 hover:bg-green-100 shadow-lg">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
@@ -2591,7 +2591,7 @@ function displayRestrictedPlaylist(playlistInfo, message, suggestedSearch) {
             '<h3 class="text-lg font-semibold text-white mb-1">' + escapeHtml(playlistInfo.name) + '</h3>' +
             '<p class="text-sm text-white/50 mb-3">' + (playlistInfo.track_count || 0) + ' tracks</p>' +
             '<p class="text-sm text-white/70 mb-4">' + escapeHtml(message) + '</p>' +
-            '<button onclick="suggestSearch(\'' + escapeHtml(suggestedSearch).replace(/'/g, "\\'") + '\')" ' +
+            '<button data-action-click="wk-suggest-search" data-query="' + escapeAttr(suggestedSearch) + '" ' +
                 'class="px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/40 rounded-lg text-yellow-300 text-sm transition-colors">' +
                 'Search for &ldquo;' + escapeHtml(suggestedSearch) + '&rdquo; tracks' +
             '</button>' +
@@ -3088,10 +3088,10 @@ function renderSnapshotTimeline() {
             + descHtml
             + '</div>'
             + '<div class="flex items-center gap-1 flex-shrink-0">'
-            + '<button onclick="showRestoreModal(' + snap.id + ', ' + snap.track_count + ')" class="p-1.5 rounded-md text-white/30 hover:text-blue-400 hover:bg-blue-500/10 transition duration-150" title="Restore this snapshot">'
+            + '<button data-action-click="wk-snapshot-restore" data-snap-id="' + snap.id + '" data-track-count="' + snap.track_count + '" class="p-1.5 rounded-md text-white/30 hover:text-blue-400 hover:bg-blue-500/10 transition duration-150" title="Restore this snapshot">'
             + '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>'
             + '</button>'
-            + '<button onclick="showDeleteModal(' + snap.id + ')" class="p-1.5 rounded-md text-white/30 hover:text-red-400 hover:bg-red-500/10 transition duration-150" title="Delete this snapshot">'
+            + '<button data-action-click="wk-snapshot-delete" data-snap-id="' + snap.id + '" class="p-1.5 rounded-md text-white/30 hover:text-red-400 hover:bg-red-500/10 transition duration-150" title="Delete this snapshot">'
             + '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>'
             + '</button>'
             + '</div>'
@@ -4172,7 +4172,7 @@ var raidPanel = {
                 + '<span class="text-white/30 text-xs">Raid</span>'
                 + '<input type="number" min="1" max="100" value="' + raidCount + '" '
                 + 'data-source-id="' + src.id + '" data-original="' + raidCount + '" '
-                + 'onchange="raidPanel.updateSourceRaidCount(this, ' + src.id + ')" '
+                + 'data-action-change="wk-source-raid-count" '
                 + 'class="w-14 bg-white/10 border border-white/20 rounded px-1.5 py-0.5 text-white text-xs text-center focus:outline-none focus:border-spotify-green/50">'
                 + '<span class="text-white/30 text-xs">tracks per run</span>'
                 + '</div>';
@@ -4183,7 +4183,7 @@ var raidPanel = {
                 + '<div class="flex items-center gap-1 mt-0.5">' + typeBadge + trackInfo + '</div>'
                 + raidCountHtml
                 + '</div>'
-                + '<button onclick="raidPanel.unwatchSource(' + src.id + ')" '
+                + '<button data-action-click="wk-source-unwatch" data-source-id="' + src.id + '" '
                 + 'class="ml-2 p-1.5 rounded-lg text-white/20 hover:text-red-400 hover:bg-white/10 opacity-0 group-hover:opacity-100 transition duration-150 flex-shrink-0" '
                 + 'title="Remove source">'
                 + '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">'
@@ -5390,6 +5390,8 @@ document.addEventListener('click', function(e) {
         toggleHubDropdown();
     }
 });
+
+
 </script>
 {% endif %}
 
@@ -5419,4 +5421,176 @@ document.addEventListener('click', function(e) {
 
 /* Sidebar CSS removed — content moved to horizontal tabs */
 </style>
+<script nonce="{{ csp_nonce }}">
+// ---------------------------------------------------------------------------
+// Event wiring: inline on* attributes cannot run under the CSP (a nonce
+// authorises an element, not an attribute), so each one is registered here
+// and dispatched by static/js/actions.js.
+// ---------------------------------------------------------------------------
+registerActions({
+    // Parameterised handlers: the argument travels on a data-* attribute rather
+    // than being baked into an attribute string, which also retires the
+    // quote-escaping the old inline form needed.
+    'wk-track-lock': function (el) {
+        toggleTrackLock(el.dataset.trackUri, Number(el.dataset.trackIndex), el);
+    },
+    'wk-track-delete': function (el) { deleteTrack(el.dataset.trackUri, el); },
+    'wk-external-recent': function (el) { loadExternalById(el.dataset.entryId); },
+    'wk-suggest-search': function (el) { suggestSearch(el.dataset.query); },
+    'wk-snapshot-restore': function (el) {
+        showRestoreModal(Number(el.dataset.snapId), Number(el.dataset.trackCount));
+    },
+    'wk-snapshot-delete': function (el) { showDeleteModal(Number(el.dataset.snapId)); },
+    'wk-source-raid-count': function (el) {
+        raidPanel.updateSourceRaidCount(el, Number(el.dataset.sourceId));
+    },
+    'wk-source-unwatch': function (el) { raidPanel.unwatchSource(Number(el.dataset.sourceId)); },
+});
+
+registerActions({
+    // was onclick="return confirmNavigation(this)"
+    'wk-001': function (el, event) { return confirmNavigation(this); },
+    // was onclick="togglePlaylistDropdown()"
+    'wk-002': function (el, event) { togglePlaylistDropdown(); },
+    // was onclick="toggleWorkshopVisibility()"
+    'wk-003': function (el, event) { toggleWorkshopVisibility(); },
+    // was onclick="return confirmNavigation(this)"
+    'wk-004': function (el, event) { return confirmNavigation(this); },
+    // was onclick="unlockAllTracks()"
+    'wk-005': function (el, event) { unlockAllTracks(); },
+    // was onclick="undoPreview()"
+    'wk-006': function (el, event) { undoPreview(); },
+    // was onclick="commitToSpotify()"
+    'wk-007': function (el, event) { commitToSpotify(); },
+    // was onclick="workshopTabs.switchTab('playlist')"
+    'wk-008': function (el, event) { workshopTabs.switchTab('playlist'); },
+    // was onclick="workshopTabs.switchTab('raids')"
+    'wk-009': function (el, event) { workshopTabs.switchTab('raids'); },
+    // was onclick="workshopTabs.switchTab('rotation')"
+    'wk-010': function (el, event) { workshopTabs.switchTab('rotation'); },
+    // was onclick="workshopTabs.switchTab('schedules')"
+    'wk-011': function (el, event) { workshopTabs.switchTab('schedules'); },
+    // was onclick="workshopTabs.switchTab('snapshots')"
+    'wk-012': function (el, event) { workshopTabs.switchTab('snapshots'); },
+    // was onclick="toggleAlgoParamsPopover()"
+    'wk-013': function (el, event) { toggleAlgoParamsPopover(); },
+    // was onclick="toggleAlgoParamsPopover()"
+    'wk-014': function (el, event) { toggleAlgoParamsPopover(); },
+    // was onclick="toggleAlgoParamsPopover(); previewShuffle();"
+    'wk-015': function (el, event) { toggleAlgoParamsPopover(); previewShuffle(); },
+    // was onclick="previewShuffle()"
+    'wk-016': function (el, event) { previewShuffle(); },
+    // was onclick="toggleSearchSection()"
+    'wk-017': function (el, event) { toggleSearchSection(); },
+    // was onkeydown="if(event.key==='Enter'){event.preventDefault(); searchSpotify();}"
+    'wk-018': function (el, event) { if(event.key==='Enter'){event.preventDefault(); searchSpotify();} },
+    // was onclick="searchSpotify()"
+    'wk-019': function (el, event) { searchSpotify(); },
+    // was onclick="searchSpotifyMore()"
+    'wk-020': function (el, event) { searchSpotifyMore(); },
+    // was onkeydown="if(event.key==='Enter') loadExternalPlaylist()"
+    'wk-021': function (el, event) { if(event.key==='Enter') loadExternalPlaylist(); },
+    // was onclick="loadExternalPlaylist()"
+    'wk-022': function (el, event) { loadExternalPlaylist(); },
+    // was onclick="raidPanel.loadStatus()"
+    'wk-023': function (el, event) { raidPanel.loadStatus(); },
+    // was onclick="raidPanel.loadStatus()"
+    'wk-024': function (el, event) { raidPanel.loadStatus(); },
+    // was onclick="raidPanel.createRaidLink()"
+    'wk-025': function (el, event) { raidPanel.createRaidLink(); },
+    // was onfocus="raidPanel.populateRaidLinkSelect()"
+    'wk-026': function (el, event) { raidPanel.populateRaidLinkSelect(); },
+    // was onchange="document.getElementById('raid-link-btn').disabled = !this.value"
+    'wk-027': function (el, event) { document.getElementById('raid-link-btn').disabled = !this.value; },
+    // was onclick="raidPanel.linkExistingRaid()"
+    'wk-028': function (el, event) { raidPanel.linkExistingRaid(); },
+    // was onclick="raidPanel.unlinkRaidPlaylist()"
+    'wk-029': function (el, event) { raidPanel.unlinkRaidPlaylist(); },
+    // was onkeydown="if(event.key==='Enter'){raidPanel.addExternalUrl();}"
+    'wk-030': function (el, event) { if(event.key==='Enter'){raidPanel.addExternalUrl();} },
+    // was onclick="raidPanel.addExternalUrl()"
+    'wk-031': function (el, event) { raidPanel.addExternalUrl(); },
+    // was onclick="raidPanel.toggleDripEnabled()"
+    'wk-032': function (el, event) { raidPanel.toggleDripEnabled(); },
+    // was oninput="raidPanel.onDripCountChange()"
+    'wk-033': function (el, event) { raidPanel.onDripCountChange(); },
+    // was onclick="raidPanel.saveDripCount()"
+    'wk-034': function (el, event) { raidPanel.saveDripCount(); },
+    // was onchange="raidPanel.onCreateFreqChange()"
+    'wk-035': function (el, event) { raidPanel.onCreateFreqChange(); },
+    // was onclick="raidPanel.createSchedule()"
+    'wk-036': function (el, event) { raidPanel.createSchedule(); },
+    // was onchange="raidPanel.onScheduleChange()"
+    'wk-037': function (el, event) { raidPanel.onScheduleChange(); },
+    // was onchange="raidPanel.onScheduleChange()"
+    'wk-038': function (el, event) { raidPanel.onScheduleChange(); },
+    // was onclick="raidPanel.saveSchedule()"
+    'wk-039': function (el, event) { raidPanel.saveSchedule(); },
+    // was onclick="raidPanel.runScheduleNow()"
+    'wk-040': function (el, event) { raidPanel.runScheduleNow(); },
+    // was onclick="raidPanel.toggleSchedule()"
+    'wk-041': function (el, event) { raidPanel.toggleSchedule(); },
+    // was onclick="raidPanel.deleteSchedule()"
+    'wk-042': function (el, event) { raidPanel.deleteSchedule(); },
+    // was onclick="raidPanel.toggleHistory()"
+    'wk-043': function (el, event) { raidPanel.toggleHistory(); },
+    // was onclick="raidPanel.raidAndDrip()"
+    'wk-044': function (el, event) { raidPanel.raidAndDrip(); },
+    // was onclick="raidPanel.raidNow()"
+    'wk-045': function (el, event) { raidPanel.raidNow(); },
+    // was onclick="raidPanel.dripNow()"
+    'wk-046': function (el, event) { raidPanel.dripNow(); },
+    // was onclick="promoteAllPendingRaids()"
+    'wk-047': function (el, event) { promoteAllPendingRaids(); },
+    // was onclick="dismissAllPendingRaids()"
+    'wk-048': function (el, event) { dismissAllPendingRaids(); },
+    // was onclick="loadArchivePairInfo()"
+    'wk-049': function (el, event) { loadArchivePairInfo(); },
+    // was onclick="createArchivePair()"
+    'wk-050': function (el, event) { createArchivePair(); },
+    // was onclick="linkExistingArchive()"
+    'wk-051': function (el, event) { linkExistingArchive(); },
+    // was onclick="deleteArchivePair()"
+    'wk-052': function (el, event) { deleteArchivePair(); },
+    // was onclick="toggleAutoArchive()"
+    'wk-053': function (el, event) { toggleAutoArchive(); },
+    // was onclick="createRotationSchedule()"
+    'wk-054': function (el, event) { createRotationSchedule(); },
+    // was onclick="runRotationNow()"
+    'wk-055': function (el, event) { runRotationNow(); },
+    // was onclick="toggleRotationSchedule()"
+    'wk-056': function (el, event) { toggleRotationSchedule(); },
+    // was onclick="deleteRotationSchedule()"
+    'wk-057': function (el, event) { deleteRotationSchedule(); },
+    // was onclick="restoreAllArchiveTracks()"
+    'wk-058': function (el, event) { restoreAllArchiveTracks(); },
+    // was onclick="playlistSchedules.loadSchedules()"
+    'wk-059': function (el, event) { playlistSchedules.loadSchedules(); },
+    // was onclick="playlistSchedules.loadSchedules()"
+    'wk-060': function (el, event) { playlistSchedules.loadSchedules(); },
+    // was onclick="openManualSnapshotDialog()"
+    'wk-061': function (el, event) { openManualSnapshotDialog(); },
+    // was onclick="confirmManualSnapshot()"
+    'wk-062': function (el, event) { confirmManualSnapshot(); },
+    // was onclick="cancelManualSnapshot()"
+    'wk-063': function (el, event) { cancelManualSnapshot(); },
+    // was onclick="loadSnapshots()"
+    'wk-064': function (el, event) { loadSnapshots(); },
+    // was onclick="hideRestoreModal()"
+    'wk-065': function (el, event) { hideRestoreModal(); },
+    // was onclick="executeRestore()"
+    'wk-066': function (el, event) { executeRestore(); },
+    // was onclick="hideRestoreModal()"
+    'wk-067': function (el, event) { hideRestoreModal(); },
+    // was onclick="hideDeleteModal()"
+    'wk-068': function (el, event) { hideDeleteModal(); },
+    // was onclick="executeDelete()"
+    'wk-069': function (el, event) { executeDelete(); },
+    // was onclick="hideDeleteModal()"
+    'wk-070': function (el, event) { hideDeleteModal(); },
+    // was onclick="toggleHubDropdown()"
+    'wk-071': function (el, event) { toggleHubDropdown(); },
+});
+</script>
+
 {% endblock %}
