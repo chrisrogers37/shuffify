@@ -15,8 +15,8 @@ from typing import Callable
 
 from .exceptions import (
     SpotifyAPIError,
-    SpotifyRateLimitError,
     SpotifyNotFoundError,
+    SpotifyRateLimitError,
     SpotifyTokenExpiredError,
 )
 

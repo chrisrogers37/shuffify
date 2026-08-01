@@ -8,18 +8,18 @@ and pinning.
 import logging
 
 from shuffify.routes import (
-    main,
-    require_auth_and_db,
     json_error,
     json_success,
+    main,
+    require_auth_and_db,
     validate_json,
-)
-from shuffify.services.playlist_preference_service import (
-    PlaylistPreferenceService,
-    PlaylistPreferenceError,
 )
 from shuffify.schemas.playlist_preference_requests import (
     SaveOrderRequest,
+)
+from shuffify.services.playlist_preference_service import (
+    PlaylistPreferenceError,
+    PlaylistPreferenceService,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
     methods=["POST"],
 )
 @require_auth_and_db
-def save_playlist_order(client=None, user=None):
+def save_playlist_order(api=None, user=None):
     """Save reordered playlist IDs."""
     req, err = validate_json(SaveOrderRequest)
     if err:
@@ -58,7 +58,7 @@ def save_playlist_order(client=None, user=None):
 )
 @require_auth_and_db
 def toggle_playlist_hidden(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Toggle hidden state for a playlist."""
     try:
@@ -88,7 +88,7 @@ def toggle_playlist_hidden(
 )
 @require_auth_and_db
 def toggle_playlist_pinned(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Toggle pinned state for a playlist."""
     try:
@@ -122,7 +122,7 @@ def toggle_playlist_pinned(
 )
 @require_auth_and_db
 def reset_playlist_preferences(
-    client=None, user=None
+    api=None, user=None
 ):
     """Reset all playlist preferences."""
     try:

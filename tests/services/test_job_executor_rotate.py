@@ -8,6 +8,11 @@ parameter validation, edge cases, and dispatch.
 import pytest
 from unittest.mock import patch, MagicMock
 
+from shuffify.enums import SnapshotType
+from shuffify.services.playlist_snapshot_service import (
+    PlaylistSnapshotService,
+)
+
 from shuffify.services.executors import (
     JobExecutorService,
     JobExecutionError,
@@ -304,16 +309,25 @@ class TestExecuteRotateSwap:
 
         execute_rotate(schedule, api)
 
-        mock_snap.create_snapshot.assert_called_once()
+        mock_snap.auto_snapshot_if_enabled.assert_called_once()
+        kwargs = mock_snap.auto_snapshot_if_enabled.call_args.kwargs
+        assert kwargs["snapshot_type"] == SnapshotType.AUTO_PRE_ROTATE
+        assert kwargs["track_uris"] == ["u1", "u2", "u3"]
 
-    @patch("shuffify.services.executors.rotate_executor.PlaylistSnapshotService")
+    @patch.object(PlaylistSnapshotService, "create_snapshot")
+    @patch.object(
+        PlaylistSnapshotService, "is_auto_snapshot_enabled", return_value=False
+    )
     @patch(
         "shuffify.services.playlist_pair_service"
         ".PlaylistPairService.get_pair_for_playlist"
     )
-    def test_snapshot_skipped_when_disabled(self, mock_pair, mock_snap):
+    def test_snapshot_skipped_when_disabled(
+        self, mock_pair, _enabled, mock_create
+    ):
+        """Runs the real auto_snapshot_if_enabled, so the guard is exercised
+        rather than replaced by a mock that cannot decline."""
         mock_pair.return_value = _make_pair()
-        mock_snap.is_auto_snapshot_enabled.return_value = False
 
         prod = _make_tracks(["u1", "u2", "u3"])
         api = _make_api(
@@ -327,7 +341,7 @@ class TestExecuteRotateSwap:
 
         execute_rotate(schedule, api)
 
-        mock_snap.create_snapshot.assert_not_called()
+        mock_create.assert_not_called()
 
     @patch(
         "shuffify.services.playlist_pair_service"
@@ -845,15 +859,27 @@ class TestExecuteRotateValidation:
         ):
             JobExecutorService._execute_job_type(schedule, api)
 
-    @patch("shuffify.services.executors.rotate_executor.PlaylistSnapshotService")
+    @patch.object(
+        PlaylistSnapshotService,
+        "create_snapshot",
+        side_effect=Exception("snap fail"),
+    )
+    @patch.object(
+        PlaylistSnapshotService, "is_auto_snapshot_enabled", return_value=True
+    )
     @patch(
         "shuffify.services.playlist_pair_service"
         ".PlaylistPairService.get_pair_for_playlist"
     )
-    def test_snapshot_failure_non_blocking(self, mock_pair, mock_snap):
+    def test_snapshot_failure_non_blocking(
+        self, mock_pair, _enabled, _create
+    ):
+        """A failing snapshot must not fail the rotation.
+
+        Fails the real create_snapshot through the real helper, so this covers
+        the production path rather than a synthetic one.
+        """
         mock_pair.return_value = _make_pair()
-        mock_snap.is_auto_snapshot_enabled.return_value = True
-        mock_snap.create_snapshot.side_effect = Exception("snap fail")
 
         prod = _make_tracks(["u1", "u2"])
         post_prod = _make_tracks(["u1", "u2"])

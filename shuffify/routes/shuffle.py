@@ -4,31 +4,30 @@ Shuffle routes: execute shuffle and undo operations.
 
 import logging
 
-from flask import session, jsonify
+from flask import jsonify, request, session
 
+from shuffify.enums import ActivityType, SnapshotType
 from shuffify.routes import (
-    main,
-    require_auth_and_db,
     json_success,
     log_activity,
+    main,
+    require_auth_and_db,
 )
+from shuffify.schemas import parse_shuffle_request
 from shuffify.services import (
     PlaylistService,
+    PlaylistSnapshotService,
+    PlaylistUpdateError,
     ShuffleService,
     StateService,
-    PlaylistUpdateError,
-    PlaylistSnapshotService,
 )
-from shuffify.enums import SnapshotType, ActivityType
-from shuffify.schemas import parse_shuffle_request
-from flask import request
 
 logger = logging.getLogger(__name__)
 
 
 @main.route("/shuffle/<playlist_id>", methods=["POST"])
 @require_auth_and_db
-def shuffle(playlist_id, client=None, user=None):
+def shuffle(playlist_id, api=None, user=None):
     """Shuffle a playlist using the selected algorithm."""
     shuffle_request = parse_shuffle_request(
         request.form.to_dict()
@@ -39,7 +38,7 @@ def shuffle(playlist_id, client=None, user=None):
     )
     params = shuffle_request.get_algorithm_params()
 
-    playlist_service = PlaylistService(client)
+    playlist_service = PlaylistService(api)
     playlist_service.validate_user_can_edit(playlist_id, user.spotify_id)
     playlist = playlist_service.get_playlist(
         playlist_id, include_features=False
@@ -93,7 +92,7 @@ def shuffle(playlist_id, client=None, user=None):
         shuffle_request.algorithm,
         tracks_to_shuffle,
         params,
-        spotify_client=client,
+        api=api,
     )
 
     if not ShuffleService.shuffle_changed_order(
@@ -151,7 +150,7 @@ def shuffle(playlist_id, client=None, user=None):
 
 @main.route("/undo/<playlist_id>", methods=["POST"])
 @require_auth_and_db
-def undo(playlist_id, client=None, user=None):
+def undo(playlist_id, api=None, user=None):
     """Undo the last shuffle for a playlist."""
     restore_uris = StateService.undo(session, playlist_id)
 
@@ -160,7 +159,7 @@ def undo(playlist_id, client=None, user=None):
         f"{len(restore_uris)} tracks"
     )
 
-    playlist_service = PlaylistService(client)
+    playlist_service = PlaylistService(api)
     playlist_service.validate_user_can_edit(playlist_id, user.spotify_id)
     try:
         playlist_service.update_playlist_tracks(

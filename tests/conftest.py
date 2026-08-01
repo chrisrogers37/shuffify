@@ -160,14 +160,14 @@ def sample_audio_features():
 
 
 @pytest.fixture
-def mock_spotify_client(
+def mock_spotify_api(
     sample_user,
     sample_playlists,
     sample_playlist_data,
     sample_tracks,
     sample_audio_features,
 ):
-    """A mock SpotifyClient with pre-configured responses."""
+    """A mock SpotifyAPI with pre-configured responses."""
     mock = Mock()
 
     # Configure method responses
@@ -175,16 +175,8 @@ def mock_spotify_client(
     mock.get_user_playlists.return_value = sample_playlists
     mock.get_playlist.return_value = sample_playlist_data
     mock.get_playlist_tracks.return_value = sample_tracks
-    mock.get_track_audio_features.return_value = sample_audio_features
+    mock.get_audio_features.return_value = sample_audio_features
     mock.update_playlist_tracks.return_value = True
-    mock.get_auth_url.return_value = "https://accounts.spotify.com/authorize?..."
-    mock.get_token.return_value = {
-        "access_token": "new_token",
-        "token_type": "Bearer",
-        "expires_at": time.time() + 3600,
-        "refresh_token": "new_refresh",
-    }
-
     return mock
 
 

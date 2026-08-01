@@ -7,10 +7,10 @@ Spotify) or dismisses them from the workshop Track Inbox.
 
 import logging
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
-from shuffify.models.db import db, PendingRaidTrack
 from shuffify.enums import PendingRaidStatus
+from shuffify.models.db import PendingRaidTrack, db
 from shuffify.services.base import safe_commit
 
 logger = logging.getLogger(__name__)

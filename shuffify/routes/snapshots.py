@@ -5,25 +5,25 @@ playlist snapshots.
 
 import logging
 
-from flask import session, request, jsonify
+from flask import jsonify, request, session
 
+from shuffify.enums import SnapshotType
 from shuffify.routes import (
-    main,
-    require_auth_and_db,
     json_error,
     json_success,
+    main,
+    require_auth_and_db,
     validate_json,
 )
+from shuffify.schemas import ManualSnapshotRequest
 from shuffify.services import (
-    PlaylistService,
     PlaylistAccessError,
-    PlaylistSnapshotService,
+    PlaylistService,
     PlaylistSnapshotError,
     PlaylistSnapshotNotFoundError,
+    PlaylistSnapshotService,
     StateService,
 )
-from shuffify.schemas import ManualSnapshotRequest
-from shuffify.enums import SnapshotType
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
     "/playlist/<playlist_id>/snapshots", methods=["GET"]
 )
 @require_auth_and_db
-def list_snapshots(playlist_id, client=None, user=None):
+def list_snapshots(playlist_id, api=None, user=None):
     """List all snapshots for a playlist."""
     limit = request.args.get("limit", 20, type=int)
     limit = max(1, min(limit, 100))
@@ -51,7 +51,7 @@ def list_snapshots(playlist_id, client=None, user=None):
 )
 @require_auth_and_db
 def create_manual_snapshot(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Create a manual snapshot of a playlist."""
     snap_request, err = validate_json(
@@ -87,7 +87,7 @@ def create_manual_snapshot(
     "/snapshots/<int:snapshot_id>", methods=["GET"]
 )
 @require_auth_and_db
-def view_snapshot(snapshot_id, client=None, user=None):
+def view_snapshot(snapshot_id, api=None, user=None):
     """View a snapshot's details."""
     try:
         snapshot = PlaylistSnapshotService.get_snapshot(
@@ -107,7 +107,7 @@ def view_snapshot(snapshot_id, client=None, user=None):
 )
 @require_auth_and_db
 def restore_snapshot(
-    snapshot_id, client=None, user=None
+    snapshot_id, api=None, user=None
 ):
     """Restore a playlist from a snapshot."""
     try:
@@ -119,7 +119,7 @@ def restore_snapshot(
         playlist_id = snapshot.playlist_id
 
         # Defense-in-depth: only editable playlists may be mutated (SR-014).
-        PlaylistService(client).validate_user_can_edit(
+        PlaylistService(api).validate_user_can_edit(
             playlist_id, user.spotify_id
         )
 
@@ -134,7 +134,7 @@ def restore_snapshot(
             user.id
         ):
             try:
-                playlist_service = PlaylistService(client)
+                playlist_service = PlaylistService(api)
                 playlist = playlist_service.get_playlist(
                     playlist_id, include_features=False
                 )
@@ -161,7 +161,7 @@ def restore_snapshot(
                 )
 
         # Apply restoration to Spotify
-        playlist_service = PlaylistService(client)
+        playlist_service = PlaylistService(api)
         playlist_service.update_playlist_tracks(
             playlist_id, restore_uris
         )
@@ -209,7 +209,7 @@ def restore_snapshot(
 )
 @require_auth_and_db
 def delete_snapshot(
-    snapshot_id, client=None, user=None
+    snapshot_id, api=None, user=None
 ):
     """Delete a snapshot."""
     try:

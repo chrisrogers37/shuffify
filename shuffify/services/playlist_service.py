@@ -7,16 +7,16 @@ Handles playlist retrieval, track management, and playlist updates.
 import json
 import logging
 import re
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional
 
 import requests
 
-from shuffify.spotify.client import SpotifyClient
-from shuffify.spotify.exceptions import SpotifyNotFoundError
 from shuffify.models.playlist import Playlist
 from shuffify.services.source_resolver.base import (
     find_nested_key,
 )
+from shuffify.spotify.api import SpotifyAPI
+from shuffify.spotify.exceptions import SpotifyNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -178,14 +178,14 @@ class PlaylistAccessError(PlaylistError):
 class PlaylistService:
     """Service for managing Spotify playlist operations."""
 
-    def __init__(self, spotify_client: SpotifyClient):
+    def __init__(self, api: SpotifyAPI):
         """
         Initialize the playlist service.
 
         Args:
-            spotify_client: An authenticated SpotifyClient instance.
+            api: An authenticated SpotifyAPI instance.
         """
-        self._client = spotify_client
+        self._api = api
 
     def validate_user_can_edit(
         self, playlist_id: str, user_spotify_id: str
@@ -207,7 +207,7 @@ class PlaylistService:
             PlaylistAccessError: If the playlist cannot be edited or accessed.
         """
         try:
-            raw = self._client.get_playlist(playlist_id)
+            raw = self._api.get_playlist(playlist_id)
         except SpotifyNotFoundError as e:
             raise PlaylistAccessError(
                 "Playlist not found or not accessible."
@@ -242,7 +242,7 @@ class PlaylistService:
             PlaylistError: If fetching playlists fails.
         """
         try:
-            playlists = self._client.get_user_playlists(skip_cache=skip_cache)
+            playlists = self._api.get_user_playlists(skip_cache=skip_cache)
             logger.debug(f"Retrieved {len(playlists)} user playlists")
             return playlists
         except Exception as e:
@@ -271,7 +271,7 @@ class PlaylistService:
 
         try:
             playlist = Playlist.from_spotify(
-                self._client, playlist_id, include_features=include_features
+                self._api, playlist_id, include_features=include_features
             )
             logger.debug(
                 f"Retrieved playlist '{playlist.name}' with {len(playlist)} tracks"
@@ -313,7 +313,7 @@ class PlaylistService:
             raise PlaylistNotFoundError("Playlist ID is required")
 
         try:
-            data = self._client.get_playlist(playlist_id)
+            data = self._api.get_playlist(playlist_id)
             total_tracks_meta = data.get(
                 "tracks", data.get("items", {})
             )
@@ -399,7 +399,7 @@ class PlaylistService:
             )
 
         try:
-            success = self._client.update_playlist_tracks(playlist_id, track_uris)
+            success = self._api.update_playlist_tracks(playlist_id, track_uris)
             if success:
                 logger.info(
                     f"Updated playlist {playlist_id} with {len(track_uris)} tracks"

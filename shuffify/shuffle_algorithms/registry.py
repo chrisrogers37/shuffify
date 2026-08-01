@@ -1,12 +1,13 @@
-from typing import Dict, Type, List
+from typing import Dict, List, Type
+
 from . import ShuffleAlgorithm
-from .basic import BasicShuffle
+from .album_sequence import AlbumSequenceShuffle
+from .artist_spacing import ArtistSpacingShuffle
 from .balanced import BalancedShuffle
+from .basic import BasicShuffle
+from .newest_first import NewestFirstShuffle
 from .percentage import PercentageShuffle
 from .stratified import StratifiedShuffle
-from .artist_spacing import ArtistSpacingShuffle
-from .album_sequence import AlbumSequenceShuffle
-from .newest_first import NewestFirstShuffle
 
 
 class ShuffleRegistry:
