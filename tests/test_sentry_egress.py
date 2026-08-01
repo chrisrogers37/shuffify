@@ -11,6 +11,7 @@ SDK actually POSTed.
 import gzip
 import json
 import threading
+import time
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import patch
@@ -125,7 +126,13 @@ def _trigger_token_exchange_error():
 def _flush_and_read(server):
     import sentry_sdk
 
-    sentry_sdk.flush(timeout=10)
+    # flush() can return without delivering when the transport worker is
+    # starved — on a loaded machine that turns "no secrets on the wire" into
+    # a race that passes for the wrong reason. Wait for the envelope itself.
+    sentry_sdk.flush(timeout=30)
+    deadline = time.monotonic() + 30
+    while not server.captured and time.monotonic() < deadline:
+        time.sleep(0.05)
     return b"\n".join(server.captured).decode("utf-8", errors="replace")
 
 
