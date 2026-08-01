@@ -5,22 +5,20 @@ search, external playlist loading, and session persistence.
 
 import logging
 
-from flask import session, redirect, url_for, request, jsonify
+from flask import session, request, jsonify
 
 from shuffify.routes import (
     main,
-    is_authenticated,
     require_auth_and_db,
+    require_auth_page,
     clear_session_and_show_login,
     json_error,
     json_success,
-    get_db_user,
     log_activity,
     validate_json,
     load_schedule_context,
 )
 from shuffify.services import (
-    AuthService,
     PlaylistService,
     ShuffleService,
     StateService,
@@ -51,8 +49,8 @@ logger = logging.getLogger(__name__)
 
 
 @main.route("/workshop")
-@require_auth_and_db
-def workshop_hub(client=None, user=None):
+@require_auth_page
+def workshop_hub(client=None, user=None, spotify_profile=None):
     """Render the Workshop hub with no playlist selected."""
     algorithms = ShuffleService.list_algorithms()
     return render_template(
@@ -66,17 +64,10 @@ def workshop_hub(client=None, user=None):
 
 
 @main.route("/workshop/<playlist_id>")
-def workshop(playlist_id):
+@require_auth_page
+def workshop(playlist_id, client=None, user=None, spotify_profile=None):
     """Render the Playlist Workshop page."""
-    if not is_authenticated():
-        return redirect(url_for("main.index"))
-
     try:
-        client = AuthService.get_authenticated_client(
-            session["spotify_token"]
-        )
-        user = AuthService.get_user_data(client)
-
         playlist_service = PlaylistService(client)
         playlist = playlist_service.get_playlist(
             playlist_id, include_features=False
@@ -84,12 +75,7 @@ def workshop(playlist_id):
 
         algorithms = ShuffleService.list_algorithms()
 
-        upstream_sources_json = {}
-        db_user = get_db_user()
-        if db_user:
-            upstream_sources_json, _ = (
-                load_schedule_context(db_user)
-            )
+        upstream_sources_json, _ = load_schedule_context(user)
 
         prev_playlist_id = None
         next_playlist_id = None
@@ -100,29 +86,27 @@ def workshop(playlist_id):
             ordered_ids = [
                 p["id"] for p in all_playlists
             ]
-            if db_user:
-                try:
-                    preferences = (
+            try:
+                preferences = (
+                    PlaylistPreferenceService
+                    .get_user_preferences(user.id)
+                )
+                if preferences:
+                    favs, visible, _hidden = (
                         PlaylistPreferenceService
-                        .get_user_preferences(db_user.id)
-                    )
-                    if preferences:
-                        favs, visible, _hidden = (
-                            PlaylistPreferenceService
-                            .apply_preferences(
-                                all_playlists, preferences
-                            )
+                        .apply_preferences(
+                            all_playlists, preferences
                         )
-                        ordered_ids = [
-                            p["id"]
-                            for p in favs + visible
-                        ]
-                except Exception as e:
-                    logger.debug(
-                        "Could not apply playlist "
-                        "preferences for navigation: %s",
-                        e,
                     )
+                    ordered_ids = [
+                        p["id"] for p in favs + visible
+                    ]
+            except Exception as e:
+                logger.debug(
+                    "Could not apply playlist "
+                    "preferences for navigation: %s",
+                    e,
+                )
 
             if playlist_id in ordered_ids:
                 idx = ordered_ids.index(playlist_id)

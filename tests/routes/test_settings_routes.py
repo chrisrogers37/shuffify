@@ -53,7 +53,7 @@ class TestSettingsGetRoute:
             response = client.get("/settings")
             assert response.status_code == 302
 
-    @patch("shuffify.routes.settings.AuthService")
+    @patch("shuffify.routes.AuthService")
     def test_renders_settings_page(
         self, mock_auth, auth_client, test_user
     ):
@@ -76,7 +76,7 @@ class TestSettingsGetRoute:
         assert b"Settings" in response.data
 
 
-    @patch("shuffify.routes.settings.AuthService")
+    @patch("shuffify.routes.AuthService")
     def test_returns_json_for_ajax_request(
         self, mock_auth, auth_client, test_user
     ):

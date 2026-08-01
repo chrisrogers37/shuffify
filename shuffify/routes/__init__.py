@@ -16,6 +16,8 @@ from flask import (
     session,
     jsonify,
     flash,
+    redirect,
+    url_for,
 )
 import functools
 import logging
@@ -28,6 +30,7 @@ from shuffify.services import (
     UserService,
     AuthenticationError,
 )
+from shuffify.spotify.exceptions import SpotifyError
 
 logger = logging.getLogger(__name__)
 main = Blueprint("main", __name__)
@@ -172,6 +175,71 @@ def require_auth_and_db(f):
 
         kwargs["client"] = client
         kwargs["user"] = user
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
+def require_auth_page(f):
+    """
+    Decorator that enforces authentication for HTML **page** routes.
+
+    The page counterpart to :func:`require_auth_and_db`. Both guard the same
+    three conditions; they differ only in how they answer a failure, which is
+    the whole point: a browser navigating to a page must be redirected to the
+    login page, whereas the JSON decorator answers with a 401 body that a
+    browser renders as raw JSON.
+
+    Injects three keyword arguments:
+
+    ``client``
+        Authenticated ``SpotifyClient``.
+    ``user``
+        The database ``User`` row -- same meaning as in
+        :func:`require_auth_and_db`, so routes can move between the two
+        decorators without their bodies changing.
+    ``spotify_profile``
+        The Spotify profile ``dict`` (``id``, ``display_name``, ``images``).
+        Page templates render this; the database row does not carry it.
+
+    Usage::
+
+        @main.route("/page")
+        @require_auth_page
+        def my_page(client=None, user=None, spotify_profile=None):
+            return render_template("page.html", user=spotify_profile)
+    """
+    @functools.wraps(f)
+    def decorated_function(*args, **kwargs):
+        client = require_auth()
+        if not client:
+            return redirect(url_for("main.index"))
+
+        from shuffify import is_db_available
+        if not is_db_available():
+            flash(
+                "The database is temporarily unavailable. "
+                "Please try again shortly.",
+                "error",
+            )
+            return redirect(url_for("main.index"))
+
+        user = get_db_user()
+        if not user:
+            flash("Please log in again to continue.", "error")
+            return redirect(url_for("main.index"))
+
+        try:
+            spotify_profile = AuthService.get_user_data(client)
+        except SpotifyError:
+            # The profile is presentation data, not an authorization signal --
+            # a Spotify hiccup here should not bounce an authenticated user
+            # back to the login page.
+            spotify_profile = None
+
+        kwargs["client"] = client
+        kwargs["user"] = user
+        kwargs["spotify_profile"] = spotify_profile
         return f(*args, **kwargs)
 
     return decorated_function

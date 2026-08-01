@@ -5,7 +5,6 @@ Schedule routes: CRUD and execution for scheduled operations.
 import logging
 
 from flask import (
-    session,
     redirect,
     url_for,
     flash,
@@ -15,18 +14,16 @@ from flask import (
 
 from shuffify.routes import (
     main,
-    is_authenticated,
     require_auth_and_db,
+    require_auth_page,
     clear_session_and_show_login,
     json_error,
     json_success,
-    get_db_user,
     log_activity,
     validate_json,
     load_schedule_context,
 )
 from shuffify.services import (
-    AuthService,
     PlaylistService,
     ShuffleService,
     UpstreamSourceService,
@@ -72,24 +69,11 @@ def playlist_schedules(
 
 
 @main.route("/schedules")
-def schedules():
+@require_auth_page
+def schedules(client=None, user=None, spotify_profile=None):
     """Render the Schedules management page."""
-    if not is_authenticated():
-        return redirect(url_for("main.index"))
-
     try:
-        client = AuthService.get_authenticated_client(
-            session["spotify_token"]
-        )
-        user = AuthService.get_user_data(client)
-
-        db_user = get_db_user()
-        if not db_user:
-            flash(
-                "Please log in again to access schedules.",
-                "error",
-            )
-            return redirect(url_for("main.index"))
+        db_user = user
 
         user_schedules = (
             SchedulerService.get_user_schedules(db_user.id)
@@ -106,7 +90,7 @@ def schedules():
 
         return render_template(
             "schedules.html",
-            user=user,
+            user=spotify_profile,
             schedules=[
                 s.to_dict() for s in user_schedules
             ],

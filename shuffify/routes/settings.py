@@ -6,7 +6,6 @@ import logging
 
 from flask import (
     jsonify,
-    session,
     redirect,
     url_for,
     request,
@@ -17,15 +16,13 @@ from pydantic import ValidationError
 
 from shuffify.routes import (
     main,
-    is_authenticated,
     require_auth_and_db,
-    get_db_user,
+    require_auth_page,
     clear_session_and_show_login,
     json_error,
     json_success,
 )
 from shuffify.services import (
-    AuthService,
     ShuffleService,
     AuthenticationError,
     UserSettingsService,
@@ -37,27 +34,12 @@ logger = logging.getLogger(__name__)
 
 
 @main.route("/settings")
-def settings():
+@require_auth_page
+def settings(client=None, user=None, spotify_profile=None):
     """Render the user settings page."""
-    if not is_authenticated():
-        return redirect(url_for("main.index"))
-
     try:
-        client = AuthService.get_authenticated_client(
-            session["spotify_token"]
-        )
-        user = AuthService.get_user_data(client)
-
-        db_user = get_db_user()
-        if not db_user:
-            flash(
-                "Please log in again to access settings.",
-                "error",
-            )
-            return redirect(url_for("main.index"))
-
         user_settings = UserSettingsService.get_or_create(
-            db_user.id
+            user.id
         )
         algorithms = ShuffleService.list_algorithms()
         algorithm_options = [
@@ -80,7 +62,7 @@ def settings():
 
         return render_template(
             "settings.html",
-            user=user,
+            user=spotify_profile,
             settings=user_settings.to_dict(),
             algorithms=algorithms,
             algorithm_options=algorithm_options,
