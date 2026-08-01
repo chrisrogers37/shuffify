@@ -540,17 +540,23 @@ class JobExecutorService:
         record / rollback (#332, the SR-010 twin).
 
         Uses a *transient* Schedule (never persisted); the JobExecution is
-        recorded with a null ``schedule_id``. The caller must ensure drip is
-        enabled on the raid link.
+        recorded with a null ``schedule_id``.
+
+        A manual drip is forced: it runs regardless of the raid link's
+        ``drip_enabled`` setting. That intent travels in ``algorithm_params``
+        alongside ``drip_count`` rather than by pre-setting the flag on the
+        link, which would leave a pending ORM mutation that the next commit on
+        the session persists -- turning a one-off action into a stored setting.
         """
+        params = {"force": True}
+        if drip_count:
+            params["drip_count"] = drip_count
         schedule = Schedule(
             user_id=user_id,
             job_type=JobType.DRIP,
             target_playlist_id=target_playlist_id,
             target_playlist_name=(target_playlist_name or target_playlist_id),
-            algorithm_params=(
-                {"drip_count": drip_count} if drip_count else {}
-            ),
+            algorithm_params=params,
             is_enabled=True,
         )
         return JobExecutorService._run_job(schedule, None)
