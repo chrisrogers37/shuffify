@@ -116,7 +116,7 @@ var ScheduleEdit = {
                     var checked = selectedIds.indexOf(src.source_playlist_id) !== -1 ? ' checked' : '';
                     var srcName = src.source_name || src.source_playlist_id;
                     html += '<label class="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-white/5 cursor-pointer">' +
-                        '<input type="checkbox" class="sched-edit-source rounded border-white/30 bg-white/10 text-spotify-green focus:ring-spotify-green" value="' + escapeHtml(src.source_playlist_id) + '"' + checked + '>' +
+                        '<input type="checkbox" class="sched-edit-source rounded border-white/30 bg-white/10 text-spotify-green focus:ring-spotify-green" value="' + escapeAttr(src.source_playlist_id) + '"' + checked + '>' +
                         '<span class="text-white/70 text-xs truncate">' + escapeHtml(srcName) + '</span>' +
                     '</label>';
                 });
@@ -132,7 +132,7 @@ var ScheduleEdit = {
                 '<select class="sched-edit-algo w-full px-2 py-1.5 bg-white/10 border border-white/20 rounded-lg text-white text-xs">';
             algos.forEach(function(algo) {
                 var selected = (algo.class_name === sched.algorithm_name) ? ' selected' : '';
-                html += '<option value="' + escapeHtml(algo.class_name) + '"' + selected + '>' + escapeHtml(algo.name) + '</option>';
+                html += '<option value="' + escapeAttr(algo.class_name) + '"' + selected + '>' + escapeHtml(algo.name) + '</option>';
             });
             html += '</select></div>';
 
