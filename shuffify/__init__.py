@@ -401,31 +401,62 @@ _SENTRY_PII_DENYLIST = (
     "client_secret",
     "email",
     "session",
+    "token_data",
+    "token_info",
 )
+
+# Keys redacted on an exact match rather than a substring match. An OAuth
+# authorization code lives under the bare key "code"; matching that as a
+# substring would also redact status_code, error_code, and similar
+# diagnostic values that Sentry exists to show.
+_SENTRY_PII_EXACT_KEYS = (
+    "code",
+    "password",
+    "token",
+    "secret",
+)
+
+
+def _sentry_key_is_sensitive(key):
+    """True when a payload key must have its value redacted."""
+    lowered = str(key).lower()
+    if lowered in _SENTRY_PII_EXACT_KEYS:
+        return True
+    return any(token in lowered for token in _SENTRY_PII_DENYLIST)
 
 
 def _strip_pii(event, hint):
     """Sentry before_send hook: redact known-sensitive keys.
 
-    Walks request headers, request data, extras, and breadcrumbs;
-    replaces any value whose key contains a denylisted substring
-    with a fixed redaction sentinel. Cookies and Authorization are
+    Walks request headers, request data, extras, contexts, breadcrumbs, and
+    exception stack-trace frame variables; replaces any value whose key is
+    sensitive with a fixed redaction sentinel. Cookies and Authorization are
     stripped wholesale.
+
+    Frame variables are the last line of defense, not the first: capture is
+    disabled at the SDK level in _init_sentry. This walk keeps secrets out of
+    the payload even if a stack trace arrives carrying them anyway.
     """
 
     def _redact(obj):
         if isinstance(obj, dict):
             return {
-                k: (
-                    "[Filtered]"
-                    if any(token in str(k).lower() for token in _SENTRY_PII_DENYLIST)
-                    else _redact(v)
-                )
+                k: ("[Filtered]" if _sentry_key_is_sensitive(k) else _redact(v))
                 for k, v in obj.items()
             }
         if isinstance(obj, list):
             return [_redact(item) for item in obj]
         return obj
+
+    def _redact_stacktrace(stacktrace):
+        if not isinstance(stacktrace, dict):
+            return
+        frames = stacktrace.get("frames")
+        if not isinstance(frames, list):
+            return
+        for frame in frames:
+            if isinstance(frame, dict) and "vars" in frame:
+                frame["vars"] = _redact(frame["vars"])
 
     if not isinstance(event, dict):
         return event
@@ -438,6 +469,20 @@ def _strip_pii(event, hint):
         event["contexts"] = _redact(event["contexts"])
     if "breadcrumbs" in event:
         event["breadcrumbs"] = _redact(event["breadcrumbs"])
+
+    exception = event.get("exception")
+    if isinstance(exception, dict):
+        for value in exception.get("values") or []:
+            if isinstance(value, dict):
+                _redact_stacktrace(value.get("stacktrace"))
+    _redact_stacktrace(event.get("stacktrace"))
+
+    threads = event.get("threads")
+    if isinstance(threads, dict):
+        for value in threads.get("values") or []:
+            if isinstance(value, dict):
+                _redact_stacktrace(value.get("stacktrace"))
+
     return event
 
 
@@ -472,6 +517,10 @@ def _init_sentry(config_class):
         traces_sample_rate=getattr(config_class, "SENTRY_TRACES_SAMPLE_RATE", 0.0),
         profiles_sample_rate=getattr(config_class, "SENTRY_PROFILES_SAMPLE_RATE", 0.0),
         send_default_pii=False,
+        # OAuth codes, token dicts, and credentials live in the frame locals
+        # of the token-exchange and refresh paths, which log at ERROR with
+        # exc_info. Capturing locals would ship them to a third-party store.
+        include_local_variables=False,
         release=release,
         integrations=[
             FlaskIntegration(),
