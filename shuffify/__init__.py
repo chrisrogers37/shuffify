@@ -418,7 +418,11 @@ _SENTRY_PII_EXACT_KEYS = (
 
 
 def _sentry_key_is_sensitive(key):
-    """True when a payload key must have its value redacted."""
+    """True when a payload key must have its value redacted.
+
+    Keys only -- the value itself is never examined. See _strip_pii for what
+    that leaves uncovered (#514).
+    """
     lowered = str(key).lower()
     if lowered in _SENTRY_PII_EXACT_KEYS:
         return True
@@ -436,6 +440,17 @@ def _strip_pii(event, hint):
     Frame variables are the last line of defense, not the first: capture is
     disabled at the SDK level in _init_sentry. This walk keeps secrets out of
     the payload even if a stack trace arrives carrying them anyway.
+
+    Boundary -- redaction is **key-based only**. A value is filtered because
+    the key naming it is sensitive; the scrubber never inspects free text.
+    Anything interpolated into a string rather than stored under a key passes
+    through untouched: log message text (``logentry.message``), exception
+    strings (``exception.values[].value``), and breadcrumb messages. So
+    ``logger.error("failed for %s", token)`` egresses the token even though
+    ``logger.error("failed", extra={"token": token})`` would not. Do not
+    interpolate credentials into messages or exception text on the assumption
+    that this hook covers them. Value/pattern-based scrubbing is tracked in
+    issue #514.
     """
 
     def _redact(obj):
