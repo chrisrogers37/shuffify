@@ -6,27 +6,27 @@ playlist, adding to target, removing from raid, and updating
 PendingRaidTrack status.
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
 
-from shuffify.models.db import (
-    db, Schedule, RaidPlaylistLink, PendingRaidTrack,
+import pytest
+
+from shuffify.enums import (
+    IntervalValue,
+    JobType,
+    ScheduleType,
 )
-from shuffify.services.user_service import UserService
+from shuffify.models.db import (
+    Schedule,
+    db,
+)
+from shuffify.services.executors.drip_executor import (
+    _select_drip_tracks,
+    execute_drip,
+)
 from shuffify.services.raid_link_service import (
     RaidLinkService,
 )
-from shuffify.services.pending_raid_service import (
-    PendingRaidService,
-)
-from shuffify.enums import (
-    JobType, ScheduleType, IntervalValue,
-    PendingRaidStatus,
-)
-from shuffify.services.executors.drip_executor import (
-    execute_drip,
-    _select_drip_tracks,
-)
+from shuffify.services.user_service import UserService
 
 
 @pytest.fixture

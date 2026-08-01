@@ -6,10 +6,10 @@ Tests cover get-or-create, update, validation, and convenience methods.
 
 import pytest
 
-from shuffify.models.db import db, User, UserSettings
+from shuffify.models.db import User, UserSettings, db
 from shuffify.services.user_settings_service import (
-    UserSettingsService,
     UserSettingsError,
+    UserSettingsService,
 )
 
 

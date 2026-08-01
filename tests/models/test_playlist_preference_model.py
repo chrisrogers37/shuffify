@@ -8,7 +8,7 @@ and repr.
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from shuffify.models.db import db, User, PlaylistPreference
+from shuffify.models.db import PlaylistPreference, User, db
 
 
 @pytest.fixture

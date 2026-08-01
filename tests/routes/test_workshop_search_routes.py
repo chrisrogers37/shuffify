@@ -6,14 +6,13 @@ and the SpotifyCache search result caching methods.
 """
 
 import json
-from unittest.mock import patch, Mock, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 import redis
 
-from shuffify.spotify.cache import SpotifyCache
 from shuffify.schemas.requests import WorkshopSearchRequest
-
+from shuffify.spotify.cache import SpotifyCache
 
 # =============================================================================
 # Schema Validation Tests

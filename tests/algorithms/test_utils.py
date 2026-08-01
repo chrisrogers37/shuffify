@@ -7,14 +7,14 @@ pure functions used across multiple shuffle algorithms.
 
 from shuffify.shuffle_algorithms.utils import (
     extract_uris,
-    split_keep_first,
     split_into_sections,
+    split_keep_first,
 )
-
 
 # =============================================================================
 # extract_uris
 # =============================================================================
+
 
 class TestExtractUris:
     """Tests for extract_uris()."""

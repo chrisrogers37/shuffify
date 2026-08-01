@@ -1,7 +1,8 @@
 """Tests for SourceResolver."""
 
-import pytest
 from unittest.mock import Mock
+
+import pytest
 
 from shuffify.services.source_resolver.base import (
     ResolveResult,

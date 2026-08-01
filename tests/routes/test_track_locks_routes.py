@@ -5,8 +5,7 @@ Covers authentication, validation, and happy paths for
 GET /workshop/<id>/locks, POST .../toggle, POST .../unlock-all.
 """
 
-from unittest.mock import patch, MagicMock
-
+from unittest.mock import MagicMock, patch
 
 # =============================================================
 # Authentication Tests

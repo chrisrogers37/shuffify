@@ -107,7 +107,6 @@ class TestErrorContentNegotiation:
             assert data["success"] is False
             assert "could not be verified" in data["message"]
 
-
     # handle_bad_request and handle_unauthorized were the two siblings found
     # while fixing SR-040 -- neither was named in the issue, and neither had
     # a test. Reverting either one to its old always-JSON form left the whole

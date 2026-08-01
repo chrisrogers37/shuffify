@@ -2,20 +2,21 @@
 Tests for chain-wide raid deduplication.
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from shuffify.enums import PendingRaidStatus
 from shuffify.models.db import (
-    db,
+    PendingRaidTrack,
     PlaylistPair,
     RaidPlaylistLink,
-    PendingRaidTrack,
+    db,
 )
-from shuffify.services.user_service import UserService
 from shuffify.services.raid_dedupe import (
     build_full_exclusion_set,
 )
-from shuffify.enums import PendingRaidStatus
+from shuffify.services.user_service import UserService
 
 
 @pytest.fixture

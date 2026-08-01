@@ -1,7 +1,8 @@
 """Tests for DirectAPIPathway."""
 
-import pytest
 from unittest.mock import Mock
+
+import pytest
 
 from shuffify.services.source_resolver.direct_api_pathway import (
     DirectAPIPathway,

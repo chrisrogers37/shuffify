@@ -5,8 +5,9 @@ Tests cover the 8 schedule endpoints including CRUD,
 toggle, manual run, execution history, and rotation status.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from shuffify.models.db import db
 from shuffify.services.user_service import UserService

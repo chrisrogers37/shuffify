@@ -7,7 +7,7 @@ Health endpoint (/health) is tested in tests/test_health_db.py.
 
 import logging
 import time
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 
 class TestIndexRoute:

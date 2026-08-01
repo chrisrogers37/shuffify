@@ -1,5 +1,6 @@
-from shuffify import create_app
 import os
+
+from shuffify import create_app
 
 # This file exists solely for gunicorn to have a WSGI entry point
 # Defaults to development so `python run.py` is a working local server.

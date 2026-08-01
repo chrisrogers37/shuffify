@@ -8,7 +8,7 @@ Covers UserService.reencrypt_all_refresh_tokens and the
 import pytest
 from cryptography.fernet import Fernet
 
-from shuffify.models.db import db, User
+from shuffify.models.db import User, db
 from shuffify.services.token_service import TokenService
 from shuffify.services.user_service import UserService
 

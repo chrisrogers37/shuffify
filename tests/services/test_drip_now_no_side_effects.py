@@ -56,9 +56,8 @@ class TestDripNowLeavesTheLinkAlone:
         self, db_app, seeded
     ):
         """The regression: a one-off action must not persist a setting."""
-        from shuffify.services.raid_sync_service import RaidSyncService
-
         from shuffify.services.base import safe_commit
+        from shuffify.services.raid_sync_service import RaidSyncService
 
         def _executor_that_commits(**_kwargs):
             # The real drip path commits the shared session for its own

@@ -4,8 +4,8 @@ Tests for ArtistSpacingShuffle algorithm.
 Tests cover artist spacing enforcement, edge cases, and fallback behavior.
 """
 
+
 import pytest
-import random
 
 from shuffify.shuffle_algorithms.artist_spacing import ArtistSpacingShuffle
 

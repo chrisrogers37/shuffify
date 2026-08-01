@@ -4,9 +4,10 @@ Tests for SpotifyCredentials.
 Tests cover credential creation, validation, and factory methods.
 """
 
-import pytest
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
+
+import pytest
 
 from shuffify.spotify.credentials import SpotifyCredentials
 

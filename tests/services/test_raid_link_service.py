@@ -5,16 +5,16 @@ Tests cover CRUD operations for raid playlist links,
 raid playlist creation, and to_dict serialization.
 """
 
-import pytest
 from unittest.mock import MagicMock
 
-from shuffify.models.db import db, RaidPlaylistLink
-from shuffify.services.user_service import UserService
+import pytest
+
 from shuffify.services.raid_link_service import (
-    RaidLinkService,
     RaidLinkExistsError,
     RaidLinkNotFoundError,
+    RaidLinkService,
 )
+from shuffify.services.user_service import UserService
 
 
 @pytest.fixture

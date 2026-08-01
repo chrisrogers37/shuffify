@@ -5,33 +5,32 @@ Tests _parse_schedule, init_scheduler, add/remove job functions,
 _execute_scheduled_job, and event listeners.
 """
 
-import logging
 from datetime import datetime, timezone
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
 import shuffify.scheduler as scheduler_module
 from shuffify.scheduler import (
-    _parse_schedule,
-    _on_job_executed,
-    _on_job_error,
-    _on_job_missed,
-    init_scheduler,
-    add_job_for_schedule,
-    remove_job_for_schedule,
+    _cleanup_stale_executions,
     _execute_scheduled_job,
-    shutdown_scheduler,
+    _on_job_error,
+    _on_job_executed,
+    _on_job_missed,
+    _parse_schedule,
+    _try_acquire_scheduler_lock,
+    add_job_for_schedule,
     get_scheduler,
     get_scheduler_metrics,
-    _try_acquire_scheduler_lock,
-    _cleanup_stale_executions,
+    init_scheduler,
+    remove_job_for_schedule,
+    shutdown_scheduler,
 )
-
 
 # =============================================================================
 # Fixtures
 # =============================================================================
+
 
 @pytest.fixture(autouse=True)
 def reset_scheduler():
@@ -595,13 +594,14 @@ class TestStaleCleanup:
 
     def test_cleans_old_running_records(self, db_app):
         """Stale running records should be marked failed."""
+        from datetime import timedelta
+
         from shuffify.models.db import (
-            db,
             JobExecution,
             Schedule,
             User,
+            db,
         )
-        from datetime import timedelta
 
         user = User(
             spotify_id="test_user",
@@ -641,13 +641,14 @@ class TestStaleCleanup:
 
     def test_leaves_recent_running_records(self, db_app):
         """Recent running records should not be cleaned."""
+        from datetime import timedelta
+
         from shuffify.models.db import (
-            db,
             JobExecution,
             Schedule,
             User,
+            db,
         )
-        from datetime import timedelta
 
         user = User(
             spotify_id="test_user2",

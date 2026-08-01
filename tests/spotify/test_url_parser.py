@@ -4,7 +4,6 @@ Tests for the Spotify URL parser utility.
 Covers all supported URL formats, edge cases, and invalid inputs.
 """
 
-import pytest
 
 from shuffify.spotify.url_parser import parse_spotify_playlist_url
 

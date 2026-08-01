@@ -4,15 +4,13 @@ Tests for ShuffleService.
 Tests cover algorithm listing, parameter parsing, and shuffle execution.
 """
 
-import pytest
 from unittest.mock import Mock, patch
 
+import pytest
+
 from shuffify.services import (
-    ShuffleService,
-    ShuffleError,
     InvalidAlgorithmError,
-    ParameterValidationError,
-    ShuffleExecutionError,
+    ShuffleService,
 )
 
 

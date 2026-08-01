@@ -5,10 +5,9 @@ Covers URL loading, playlist search, session history, and error handling.
 """
 
 import json
-from unittest.mock import patch, Mock, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
 from shuffify.models.playlist import Playlist
-
 
 # =============================================================================
 # Helpers

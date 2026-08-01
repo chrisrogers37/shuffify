@@ -7,14 +7,14 @@ Tests cover safe_commit, get_user_or_raise, and get_owned_entity.
 import pytest
 
 from shuffify.models.db import (
-    db,
     User,
     WorkshopSession,
+    db,
 )
 from shuffify.services.base import (
-    safe_commit,
-    get_user_or_raise,
     get_owned_entity,
+    get_user_or_raise,
+    safe_commit,
 )
 
 

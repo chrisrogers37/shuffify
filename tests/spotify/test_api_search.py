@@ -14,7 +14,6 @@ from shuffify.spotify.auth import SpotifyAuthManager, TokenInfo
 from shuffify.spotify.cache import SpotifyCache
 from shuffify.spotify.credentials import SpotifyCredentials
 
-
 # =============================================================================
 # Fixtures
 # =============================================================================

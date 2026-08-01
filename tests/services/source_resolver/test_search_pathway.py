@@ -1,12 +1,13 @@
 """Tests for SearchPathway."""
 
-import pytest
 from unittest.mock import Mock
 
+import pytest
+
 from shuffify.services.source_resolver.search_pathway import (
-    SearchPathway,
     MAX_PAGES,
     PAGE_SIZE,
+    SearchPathway,
 )
 
 

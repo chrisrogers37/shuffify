@@ -4,20 +4,20 @@ Tests for SchedulerService CRUD operations.
 These tests require a Flask app context with SQLAlchemy configured.
 """
 
-import pytest
 from unittest.mock import patch
 
+import pytest
+
 from shuffify.services.scheduler_service import (
-    SchedulerService,
     ScheduleNotFoundError,
+    SchedulerService,
 )
 
 
 @pytest.fixture
 def db_user(app_context):
     """Create a test user in the database."""
-    from shuffify.models.db import db, User, Schedule
-    from shuffify.models.db import JobExecution
+    from shuffify.models.db import JobExecution, Schedule, User, db
 
     # Clean up any leftover data from previous tests
     JobExecution.query.delete()

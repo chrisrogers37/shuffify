@@ -4,8 +4,9 @@ Tests for StratifiedShuffle algorithm.
 Tests cover section-based shuffling while maintaining section order.
 """
 
-import pytest
 import random
+
+import pytest
 
 from shuffify.shuffle_algorithms.stratified import StratifiedShuffle
 
@@ -315,7 +316,9 @@ class TestStratifiedVsBalancedComparison:
         original_first_4 = set(f't{i}' for i in range(4))
         assert strat_first_4 == original_first_4
 
-        # Balanced: first 4 are interleaved (may have tracks from both sections)
+        # Balanced: first 4 are interleaved, so unlike stratified they are
+        # NOT simply the first section. This is the actual difference between
+        # the two algorithms, and it is assertable -- the seed above makes it
+        # deterministic.
         bal_first_4 = set(bal_result[:4])
-        # Balanced interleaves, so first 4 should have mix
-        # (can't assert exact behavior, but it's different from stratified)
+        assert bal_first_4 != original_first_4

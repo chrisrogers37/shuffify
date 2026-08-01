@@ -19,8 +19,8 @@ on any server not set to UTC.
 `ALTER COLUMN`, and a bare one aborts the whole chain (#504).
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "d5e6f7a8b9c0"
