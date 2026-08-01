@@ -16,8 +16,15 @@
 
 set -eu
 
+# Surrounding whitespace is trimmed before matching, so this predicate agrees
+# with the app factory's `_env_is_true` (`.strip().lower()`) on every input.
+# The two are separate implementations of one operator-facing switch: a value
+# pasted into a platform console field can carry a stray space, and a variable
+# documented as clearing both gates has to clear both or neither.
 is_true() {
-    case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+    _value=$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]' |
+        sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+    case "$_value" in
         1 | true | yes | on) return 0 ;;
         *) return 1 ;;
     esac

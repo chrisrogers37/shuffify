@@ -16,6 +16,7 @@ from shuffify import (
     MIGRATION_STEP_VAR,
     SCHEMA_DRIFT_OVERRIDE_VAR,
     SchemaOutOfDateError,
+    _env_is_true,
     _init_database,
     _schema_revision_state,
     _verify_schema_at_head,
@@ -359,3 +360,54 @@ class TestMigrationStepIsExempt:
         """The exemption is only safe because the entrypoint is what sets it."""
         result = run_entrypoint(tmp_path, f'echo "MARKER=${MIGRATION_STEP_VAR}"')
         assert "MARKER=1" in result.stdout
+
+
+OVERRIDE_VALUES = [
+    ("true", True),
+    ("TRUE", True),
+    ("1", True),
+    ("yes", True),
+    ("on", True),
+    (" true", True),
+    ("true ", True),
+    ("  TRUE  ", True),
+    ("\ttrue", True),
+    ("", False),
+    ("   ", False),
+    ("false", False),
+    ("no", False),
+    ("0", False),
+    ("maybe", False),
+    ("truthy", False),
+]
+
+
+class TestOverrideTruthinessParity:
+    """One variable, two gates, one answer.
+
+    SHUFFIFY_ALLOW_SCHEMA_DRIFT is read twice by separate implementations --
+    the entrypoint's shell `is_true` and the app factory's `_env_is_true` --
+    and the recovery path is only usable if they agree. Whichever gate is
+    stricter decides, and the shell runs first, so a value the shell rejects
+    never reaches the Python side to be honoured. Surrounding whitespace is
+    the realistic divergence: an operator pastes the override into a console
+    field mid-incident and picks up a space.
+
+    Both sides are parametrized over one table, so an edit to either
+    implementation alone turns this class red.
+    """
+
+    @pytest.mark.parametrize("value,expected", OVERRIDE_VALUES)
+    def test_app_factory_reading(self, monkeypatch, value, expected):
+        monkeypatch.setenv(SCHEMA_DRIFT_OVERRIDE_VAR, value)
+        assert _env_is_true(SCHEMA_DRIFT_OVERRIDE_VAR) is expected
+
+    @pytest.mark.parametrize("value,expected", OVERRIDE_VALUES)
+    def test_entrypoint_reading(self, tmp_path, value, expected):
+        """Observed through the shipped script: does a failed upgrade proceed?"""
+        result = run_entrypoint(
+            tmp_path, "exit 1", env={SCHEMA_DRIFT_OVERRIDE_VAR: value}
+        )
+        started = result.returncode == 0
+        assert started is expected
+        assert ("SERVER-STARTED" in result.stdout) is expected
