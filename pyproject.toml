@@ -14,6 +14,13 @@ exclude = [
 ]
 
 [tool.ruff.lint]
+# 28 pycodestyle E-codes are preview-gated in ruff and are silently skipped
+# without this -- including E225, E231 and the whole E301-E306 blank-line
+# family, all of which flake8 enforced. A disabled rule and a clean tree both
+# report zero findings, so this is not visible by comparing the two linters on
+# the real tree; it shows up only by running known violations through the
+# config. See tests/test_lint_config_parity.py.
+preview = true
 # E/W/F reproduce what flake8 enforced. I replaces the isort dev dependency,
 # which was installed but wired into neither CI nor any documented command.
 select = ["E", "W", "F", "I"]
