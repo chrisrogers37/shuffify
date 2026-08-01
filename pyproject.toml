@@ -1,0 +1,32 @@
+[tool.ruff]
+# The line length the project has always linted at, carried over from .flake8.
+line-length = 120
+target-version = "py312"
+exclude = [
+    ".git",
+    "__pycache__",
+    "venv",
+    ".venv",
+    "build",
+    "dist",
+    "*.egg-info",
+    ".flask_session",
+]
+
+[tool.ruff.lint]
+# E/W/F reproduce what flake8 enforced. I replaces the isort dev dependency,
+# which was installed but wired into neither CI nor any documented command.
+select = ["E", "W", "F", "I"]
+# E203 (whitespace before ':') conflicts with black's slice formatting, and was
+# already ignored under flake8. flake8 also ignored W503; ruff has no W503 --
+# it implements the modern line-break convention directly, so there is nothing
+# to disable in its place.
+ignore = ["E203"]
+
+[tool.ruff.lint.per-file-ignores]
+# The blueprint's route modules are imported at the bottom of the package to
+# break a circular import, and are re-exported rather than used locally.
+"shuffify/routes/__init__.py" = ["E402", "F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["shuffify"]
