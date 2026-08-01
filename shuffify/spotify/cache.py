@@ -7,7 +7,7 @@ Cache keys are prefixed and organized by data type with appropriate TTLs.
 
 import json
 import logging
-from typing import Dict, List, Any, Optional, TypeVar
+from typing import Any, Dict, List, Optional, TypeVar
 
 import redis
 

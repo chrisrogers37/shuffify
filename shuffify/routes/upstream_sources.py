@@ -4,21 +4,21 @@ Upstream source routes: manage playlist upstream source configs.
 
 import logging
 
-from flask import request, jsonify
+from flask import jsonify, request
 
+from shuffify.enums import ActivityType
 from shuffify.routes import (
-    main,
-    require_auth_and_db,
     json_error,
     json_success,
     log_activity,
+    main,
+    require_auth_and_db,
 )
 from shuffify.services import (
-    UpstreamSourceService,
     UpstreamSourceError,
     UpstreamSourceNotFoundError,
+    UpstreamSourceService,
 )
-from shuffify.enums import ActivityType
 
 logger = logging.getLogger(__name__)
 

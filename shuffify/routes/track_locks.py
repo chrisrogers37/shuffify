@@ -10,22 +10,22 @@ import logging
 
 from flask import jsonify
 
+from shuffify.enums import ActivityType
 from shuffify.routes import (
-    main,
-    require_auth_and_db,
     json_error,
     json_success,
-    validate_json,
     log_activity,
-)
-from shuffify.enums import ActivityType
-from shuffify.services.track_lock_service import (
-    TrackLockService,
-    TrackLockError,
+    main,
+    require_auth_and_db,
+    validate_json,
 )
 from shuffify.schemas.track_lock_requests import (
-    TrackLockToggleRequest,
     TrackLockBulkUnlockRequest,
+    TrackLockToggleRequest,
+)
+from shuffify.services.track_lock_service import (
+    TrackLockError,
+    TrackLockService,
 )
 
 logger = logging.getLogger(__name__)

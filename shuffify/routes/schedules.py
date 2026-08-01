@@ -5,48 +5,48 @@ Schedule routes: CRUD and execution for scheduled operations.
 import logging
 
 from flask import (
-    session,
-    redirect,
-    url_for,
     flash,
     jsonify,
+    redirect,
     render_template,
+    session,
+    url_for,
 )
 
+from shuffify.enums import ActivityType, JobType
+from shuffify.models.db import Schedule
 from shuffify.routes import (
-    main,
-    is_authenticated,
-    require_auth_and_db,
     clear_session_and_show_login,
+    get_db_user,
+    is_authenticated,
     json_error,
     json_success,
-    get_db_user,
-    log_activity,
-    validate_json,
     load_schedule_context,
-)
-from shuffify.services import (
-    AuthService,
-    PlaylistService,
-    ShuffleService,
-    UpstreamSourceService,
-    PlaylistPairService,
-    AuthenticationError,
-    PlaylistError,
-    ScheduleError,
+    log_activity,
+    main,
+    require_auth_and_db,
+    validate_json,
 )
 from shuffify.schemas import (
     ScheduleCreateRequest,
     ScheduleUpdateRequest,
 )
-from shuffify.services.scheduler_service import (
-    SchedulerService,
+from shuffify.services import (
+    AuthenticationError,
+    AuthService,
+    PlaylistError,
+    PlaylistPairService,
+    PlaylistService,
+    ScheduleError,
+    ShuffleService,
+    UpstreamSourceService,
 )
 from shuffify.services.executors import (
     JobExecutorService,
 )
-from shuffify.models.db import Schedule
-from shuffify.enums import ActivityType, JobType
+from shuffify.services.scheduler_service import (
+    SchedulerService,
+)
 
 logger = logging.getLogger(__name__)
 

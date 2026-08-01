@@ -6,20 +6,20 @@ production/archive playlist management.
 import logging
 import random
 
+from shuffify.enums import RotationMode, SnapshotType
 from shuffify.models.db import Schedule
-from shuffify.spotify.api import SpotifyAPI
-from shuffify.spotify.exceptions import (
-    SpotifyAPIError,
-    SpotifyNotFoundError,
-)
-from shuffify.enums import SnapshotType, RotationMode
-from shuffify.shuffle_algorithms.utils import extract_uris
 from shuffify.services.executors.base_executor import (
     JobExecutionError,
     verify_playlist_state,
 )
 from shuffify.services.playlist_snapshot_service import (
     PlaylistSnapshotService,
+)
+from shuffify.shuffle_algorithms.utils import extract_uris
+from shuffify.spotify.api import SpotifyAPI
+from shuffify.spotify.exceptions import (
+    SpotifyAPIError,
+    SpotifyNotFoundError,
 )
 
 logger = logging.getLogger(__name__)

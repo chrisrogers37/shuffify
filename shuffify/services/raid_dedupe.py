@@ -7,13 +7,13 @@ target + raid playlist + archive + dismissed tracks.
 
 import logging
 
+from shuffify.enums import PendingRaidStatus
 from shuffify.models.db import (
-    db,
+    PendingRaidTrack,
     PlaylistPair,
     RaidPlaylistLink,
-    PendingRaidTrack,
+    db,
 )
-from shuffify.enums import PendingRaidStatus
 
 logger = logging.getLogger(__name__)
 

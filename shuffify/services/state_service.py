@@ -6,8 +6,8 @@ in the session. Each playlist has its own independent state history.
 """
 
 import logging
-from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

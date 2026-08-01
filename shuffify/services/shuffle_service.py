@@ -6,7 +6,7 @@ Uses Pydantic schemas for type-safe parameter validation.
 """
 
 import logging
-from typing import Dict, List, Any, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 from shuffify.spotify.api import SpotifyAPI
@@ -106,8 +106,8 @@ class ShuffleService:
             ShuffleExecutionError: If shuffle execution fails.
         """
         from shuffify.shuffle_algorithms.utils import (
-            split_locked_tracks,
             reassemble_with_locks,
+            split_locked_tracks,
         )
 
         params = params or {}

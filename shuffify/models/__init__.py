@@ -10,21 +10,21 @@ Usage:
 """
 
 from shuffify.models.db import (
-    db,
+    ActivityLog,
+    JobExecution,
+    LoginHistory,
+    PendingRaidTrack,
+    PlaylistPair,
+    PlaylistPreference,
+    PlaylistSnapshot,
+    RaidPlaylistLink,
+    Schedule,
+    ScrapedPlaylistCache,
+    UpstreamSource,
     User,
     UserSettings,
     WorkshopSession,
-    UpstreamSource,
-    Schedule,
-    JobExecution,
-    LoginHistory,
-    PlaylistSnapshot,
-    ActivityLog,
-    PlaylistPair,
-    RaidPlaylistLink,
-    PlaylistPreference,
-    PendingRaidTrack,
-    ScrapedPlaylistCache,
+    db,
 )
 from shuffify.models.playlist import Playlist
 

@@ -49,7 +49,7 @@ flask routes
 
 ```bash
 # 1. Backend Lint (REQUIRED - CI will fail without this)
-flake8 shuffify/
+ruff check shuffify/
 # Must have 0 errors. Fix any issues before pushing.
 
 # 2. Backend Tests (REQUIRED)
@@ -68,10 +68,10 @@ pushes to `main`, on Python 3.12:
 
 | Check | Command | Must Pass |
 |-------|---------|-----------|
-| **Backend Lint** | `flake8 shuffify/` | ✅ Yes |
+| **Backend Lint** | `ruff check shuffify/` | ✅ Yes |
 | **Backend Tests** | `pytest tests/ -m "not integration"` | ✅ Yes |
 | **Coverage gate** | `pytest --cov=shuffify --cov-fail-under=N` | ✅ Yes |
-| **Format check** | `black --check shuffify/` | ⚠️ Non-blocking (until the ruff consolidation, SR-037) |
+| **Format check** | `black --check shuffify/` | ⚠️ Non-blocking (pre-existing drift; SR-037 consolidated linting, not formatting) |
 
 Live-scraper integration tests (`pytest -m integration`) run nightly and
 on-demand via `.github/workflows/nightly-integration.yml` and are non-blocking
@@ -81,7 +81,7 @@ on-demand via `.github/workflows/nightly-integration.yml` and are non-blocking
 
 Run this before every push:
 ```bash
-flake8 shuffify/ && pytest tests/ -v && echo "✅ Ready to push!"
+ruff check shuffify/ && pytest tests/ -v && echo "✅ Ready to push!"
 ```
 
 ### Common Lint Fixes
@@ -90,11 +90,10 @@ flake8 shuffify/ && pytest tests/ -v && echo "✅ Ready to push!"
 # Auto-fix formatting
 black shuffify/
 
-# Remove unused imports (manual review needed)
-# Look for F401 errors in flake8 output
+# Remove unused imports and sort them
+ruff check --fix shuffify/
 
-# Fix line length (E501) - break long lines or use:
-# flake8 --max-line-length=100 shuffify/  (if project allows)
+# Line length is set once, in pyproject.toml ([tool.ruff] line-length).
 ```
 
 ---
@@ -916,7 +915,7 @@ if session.get('undo_stack'):
 - Don't create templates without extending `base.html`
 - Don't deploy to production without explicit approval
 - Don't modify `CHANGELOG.md` version numbers (only add to Unreleased)
-- **Don't push to `main` without running `flake8 shuffify/` and `pytest tests/ -v` first**
+- **Don't push to `main` without running `ruff check shuffify/` and `pytest tests/ -v` first**
 
 ---
 

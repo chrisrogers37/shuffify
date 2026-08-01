@@ -7,7 +7,6 @@ both raid and rotation scheduling.
 
 import re
 
-
 # Frequencies that support a time-of-day picker
 TIME_CAPABLE_FREQUENCIES = {"daily", "every_3d", "weekly"}
 

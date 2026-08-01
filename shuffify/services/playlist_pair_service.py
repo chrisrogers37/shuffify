@@ -4,10 +4,10 @@ Service for managing playlist pairs (production + archive).
 
 import logging
 
-from shuffify.models.db import db, PlaylistPair
+from shuffify.models.db import PlaylistPair, db
 from shuffify.services.base import (
-    safe_commit,
     create_private_playlist,
+    safe_commit,
 )
 
 logger = logging.getLogger(__name__)

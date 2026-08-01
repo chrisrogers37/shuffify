@@ -7,10 +7,10 @@ JobExecutorService.
 """
 
 import logging
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
-from shuffify.models.db import db, Schedule, JobExecution
-from shuffify.services.base import safe_commit, get_owned_entity
+from shuffify.models.db import JobExecution, Schedule, db
+from shuffify.services.base import get_owned_entity, safe_commit
 
 logger = logging.getLogger(__name__)
 
