@@ -150,24 +150,18 @@ def _auto_snapshot_before_rotate(
 ) -> None:
     """Create an auto-snapshot before rotation if
     enabled."""
-    try:
-        if prod_uris and PlaylistSnapshotService.is_auto_snapshot_enabled(
-            schedule.user_id
-        ):
-            PlaylistSnapshotService.create_snapshot(
-                user_id=schedule.user_id,
-                playlist_id=(schedule.target_playlist_id),
-                playlist_name=(
-                    schedule.target_playlist_name or schedule.target_playlist_id
-                ),
-                track_uris=prod_uris,
-                snapshot_type=(SnapshotType.AUTO_PRE_ROTATE),
-                trigger_description=(
-                    "Before scheduled {} rotation".format(rotation_mode)
-                ),
-            )
-    except Exception as snap_err:
-        logger.warning("Auto-snapshot before rotation failed: %s", snap_err)
+    PlaylistSnapshotService.auto_snapshot_if_enabled(
+        user_id=schedule.user_id,
+        playlist_id=schedule.target_playlist_id,
+        playlist_name=(
+            schedule.target_playlist_name or schedule.target_playlist_id
+        ),
+        track_uris=prod_uris,
+        snapshot_type=SnapshotType.AUTO_PRE_ROTATE,
+        trigger_description=(
+            "Before scheduled {} rotation".format(rotation_mode)
+        ),
+    )
 
 
 def _sample_at_most(pool, count):
