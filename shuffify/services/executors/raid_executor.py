@@ -198,7 +198,6 @@ def _auto_snapshot_raid_playlist(user_id, raid_playlist_id, uris):
     )
 
 
-
 def _add_to_raid_playlist(
     api, user_id, target_id, uris, schedule_id,
 ):
