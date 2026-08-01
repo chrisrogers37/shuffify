@@ -19,7 +19,10 @@ Kept as source assertions rather than DOM tests because the project has no JS
 test harness; these are the cheapest gate that fails when the convention slips.
 """
 
+import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -55,9 +58,7 @@ def _escape_calls_in_attribute_context(text: str):
 @pytest.mark.parametrize("path", SCANNED, ids=lambda p: p.name)
 def test_no_text_escape_inside_quoted_attribute(path):
     """escapeHtml() inside quotes cannot neutralise a quote -- use escapeAttr()."""
-    offenders = list(
-        _escape_calls_in_attribute_context(path.read_text(encoding="utf-8"))
-    )
+    offenders = list(_escape_calls_in_attribute_context(path.read_text(encoding="utf-8")))
     assert not offenders, (
         f"{path.name}: escapeHtml() used inside a quoted attribute at "
         + ", ".join(f"line {n} ({expr})" for n, expr in offenders)
@@ -87,3 +88,70 @@ def test_spotify_supplied_field_is_escaped(rel_path, expr):
         "This value originates from a Spotify playlist title, which any "
         "Spotify account holder can set."
     )
+
+
+# Fields interpolated at the START of a src/href attribute. escapeAttr() escapes
+# quotes but leaves a hostile scheme intact -- ``javascript:``/``data:`` survive
+# attribute-escaping perfectly -- so each must additionally pass through safeUrl()
+# (a scheme allowlist) before it reaches the URL sink. All live in workshop.html.
+WORKSHOP = REPO_ROOT / "shuffify/templates/workshop.html"
+URL_CONTEXT_FIELDS = [
+    "p.image_url",
+    "track.album_image_url",
+    "pl.image_url",
+    "track.track_image_url",
+]
+
+
+@pytest.mark.parametrize("field", URL_CONTEXT_FIELDS)
+def test_url_field_passes_through_scheme_allowlist(field):
+    """A URL-context value reaches a src/href attribute only via safeUrl()."""
+    text = WORKSHOP.read_text(encoding="utf-8")
+    assert f"safeUrl({field}" in text, (
+        f"'{field}' feeds a URL attribute but is not wrapped in safeUrl(); "
+        "escapeAttr() alone does not stop a javascript:/data: scheme."
+    )
+    assert f"escapeAttr({field})" not in text, (
+        f"'{field}' is escaped for a URL sink without safeUrl() at some site -- "
+        "every URL site must go through the scheme allowlist."
+    )
+
+
+def test_safeurl_helper_is_defined():
+    """The scheme-allowlist helper the URL sites depend on must exist."""
+    assert "function safeUrl(" in WORKSHOP.read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_safeurl_blocks_dangerous_schemes():
+    """Run the shipped safeUrl() in node against hostile and benign URLs.
+
+    Escaping stops attribute breakout; only the scheme allowlist stops a
+    ``javascript:`` value that never breaks out. The tab/newline cases guard the
+    classic bypass: browsers strip control characters before parsing the scheme,
+    so ``java<TAB>script:`` must be rejected outright rather than by prefix.
+    """
+    html = WORKSHOP.read_text(encoding="utf-8")
+    # safeUrl() is top-level, so its body closes on a column-0 '}'. Extract the
+    # shipped source rather than a copy, so the behaviour under test cannot drift.
+    fn = re.search(r"^function safeUrl\(.*?^\}", html, re.S | re.M).group(0)
+    tab, lf = chr(9), chr(10)
+    cases = [
+        ("https://i.scdn.co/x", "https://i.scdn.co/x"),
+        ("http://example.com/x.png", "http://example.com/x.png"),
+        ("/static/images/placeholder.svg", "/static/images/placeholder.svg"),
+        ("images/x.png", "images/x.png"),
+        ("#frag", "#frag"),
+        ("", ""),
+        ("javascript:alert(1)", ""),
+        ("JavaScript:alert(1)", ""),
+        ("  javascript:alert(1)", ""),
+        ("java" + tab + "script:alert(1)", ""),
+        ("java" + lf + "script:alert(1)", ""),
+        ("javascript" + tab + ":alert(1)", ""),
+        ("data:text/html,x", ""),
+        ("vbscript:msgbox(1)", ""),
+    ]
+    harness = fn + "\nconsole.log(JSON.stringify(%s.map((c) => safeUrl(c[0]))));" % json.dumps(cases)
+    result = subprocess.run(["node", "-e", harness], capture_output=True, text=True, check=True)
+    assert json.loads(result.stdout) == [want for _, want in cases]

@@ -1408,7 +1408,7 @@ function renderPlaylistDropdown(playlists, filter = '') {
         const isCurrent = p.id === currentPlaylistId;
         const safeName = escapeHtml(p.name);
         const imgHtml = p.image_url
-            ? `<img src="${escapeAttr(p.image_url)}" alt="" class="w-10 h-10 rounded-lg object-cover flex-shrink-0">`
+            ? `<img src="${escapeAttr(safeUrl(p.image_url))}" alt="" class="w-10 h-10 rounded-lg object-cover flex-shrink-0">`
             : `<div class="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
                  <svg class="w-5 h-5 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
@@ -2298,7 +2298,7 @@ function createSearchResultElement(track) {
     const alreadyAdded = workshopState.workingUris.includes(track.uri);
 
     const albumImg = track.album_image_url
-        ? '<img src="' + escapeAttr(track.album_image_url) + '" alt="" class="w-8 h-8 rounded object-cover" loading="lazy">'
+        ? '<img src="' + escapeAttr(safeUrl(track.album_image_url)) + '" alt="" class="w-8 h-8 rounded object-cover" loading="lazy">'
         : '<div class="w-8 h-8 rounded bg-black/20 flex items-center justify-center text-white/30"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
 
     const artists = Array.isArray(track.artists) ? track.artists.join(', ') : '';
@@ -2348,6 +2348,27 @@ function escapeAttr(str) {
     return escapeHtml(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+function safeUrl(url) {
+    // Scheme allowlist for a value interpolated into a src/href attribute.
+    // escapeAttr() stops a value breaking OUT of the attribute; it does nothing
+    // about a hostile scheme sitting INSIDE it, so `javascript:`/`data:` survive
+    // escaping perfectly intact. Only http(s) and scheme-less references (paths,
+    // queries, fragments) may reach a URL sink; anything else collapses to ''.
+    // An empty return just yields an empty src (a broken image, not an XSS); a
+    // caller that wants a visible fallback supplies one, as the hub dropdown does
+    // with the placeholder. Compose as escapeAttr(safeUrl(value)): allowlist the
+    // scheme, then escape for quotes.
+    if (typeof url !== 'string') return '';
+    const v = url.trim();
+    // Browsers strip TAB/CR/LF (and other C0 controls) from a URL before parsing
+    // its scheme, so "java\tscript:" would slip a blocked scheme past a prefix
+    // check. Reject any control character outright rather than try to match the
+    // browser's stripping.
+    if (/[\u0000-\u001F]/.test(v)) return '';
+    const scheme = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(v);
+    if (scheme && !/^https?$/i.test(scheme[1])) return '';
+    return url;
+}
 
 // =============================================================================
 // Add Track from Search Results
@@ -2404,7 +2425,7 @@ function createTrackElement(track, position) {
     const durationStr = durationMin + ':' + String(durationSec).padStart(2, '0');
 
     const albumImg = track.album_image_url
-        ? '<img src="' + escapeAttr(track.album_image_url) + '" alt="" class="w-full h-full object-cover" loading="lazy">'
+        ? '<img src="' + escapeAttr(safeUrl(track.album_image_url)) + '" alt="" class="w-full h-full object-cover" loading="lazy">'
         : '<div class="w-full h-full flex items-center justify-center text-white/30"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
 
     el.innerHTML =
@@ -2549,7 +2570,7 @@ function displayExternalSearchResults(playlists) {
         });
 
         const imgHtml = pl.image_url
-            ? '<img src="' + escapeAttr(pl.image_url) + '" alt="" class="w-8 h-8 rounded flex-shrink-0 object-cover">'
+            ? '<img src="' + escapeAttr(safeUrl(pl.image_url)) + '" alt="" class="w-8 h-8 rounded flex-shrink-0 object-cover">'
             : '<div class="w-8 h-8 rounded flex-shrink-0 bg-white/10 flex items-center justify-center text-white/30">' +
                   '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>' +
               '</div>';
@@ -2735,7 +2756,7 @@ function renderPendingRaids() {
         el.dataset.trackId = String(track.id);
 
         var imgHtml = track.track_image_url
-            ? '<img src="' + escapeAttr(track.track_image_url) + '" alt="" class="w-8 h-8 rounded object-cover flex-shrink-0" loading="lazy">'
+            ? '<img src="' + escapeAttr(safeUrl(track.track_image_url)) + '" alt="" class="w-8 h-8 rounded object-cover flex-shrink-0" loading="lazy">'
             : '<div class="w-8 h-8 rounded bg-black/20 flex items-center justify-center text-white/30 flex-shrink-0"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
 
         el.innerHTML = imgHtml +
@@ -3911,7 +3932,7 @@ function renderInboxArchiveTracks() {
         el.dataset.uri = track.uri;
 
         var imgHtml = track.album_image_url
-            ? '<img src="' + escapeAttr(track.album_image_url) + '" alt="" class="w-8 h-8 rounded object-cover flex-shrink-0" loading="lazy">'
+            ? '<img src="' + escapeAttr(safeUrl(track.album_image_url)) + '" alt="" class="w-8 h-8 rounded object-cover flex-shrink-0" loading="lazy">'
             : '<div class="w-8 h-8 rounded bg-black/20 flex items-center justify-center text-white/30 flex-shrink-0"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg></div>';
 
         var artists = (track.artists || []).join(', ');
@@ -5367,7 +5388,7 @@ function renderHubDropdown(playlists, filter) {
     list.innerHTML = filtered.map(p => `
         <a href="/workshop/${escapeAttr(p.id)}"
            class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/10 transition duration-150 cursor-pointer group">
-            <img src="${escapeAttr(p.image_url || '/static/images/placeholder.svg')}"
+            <img src="${escapeAttr(safeUrl(p.image_url) || '/static/images/placeholder.svg')}"
                  alt="" class="w-10 h-10 rounded object-cover flex-shrink-0 bg-white/5">
             <div class="min-w-0">
                 <div class="text-white text-sm font-medium truncate group-hover:text-white/90">${escapeHtml(p.name)}</div>
