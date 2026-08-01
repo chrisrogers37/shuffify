@@ -10,6 +10,7 @@ SDK actually POSTed.
 
 import gzip
 import json
+import logging
 import threading
 import time
 import zlib
@@ -91,6 +92,21 @@ def _sink_config(server):
     return SinkConfig
 
 
+def _reenable_shuffify_loggers():
+    """Undo logger disabling so the ERROR actually reaches the integration.
+
+    Alembic's migrations/env.py runs logging.config.fileConfig, whose default
+    disable_existing_loggers=True switches off every shuffify.* logger created
+    at import time. Any test that has built the app through a migration run
+    leaves them disabled, and logger.error becomes a silent no-op — which
+    would make these tests pass while proving nothing. Restore the state the
+    production code assumes so the assertions stay meaningful.
+    """
+    for name in list(logging.root.manager.loggerDict):
+        if name == "shuffify" or name.startswith("shuffify."):
+            logging.getLogger(name).disabled = False
+
+
 def _trigger_token_exchange_error():
     """Drive the real exchange_code failure path from issue #436.
 
@@ -98,6 +114,7 @@ def _trigger_token_exchange_error():
     the generic handler that logs at ERROR with exc_info=True. At that
     moment code, token_data, and the credentials object are live locals.
     """
+    _reenable_shuffify_loggers()
     credentials = SpotifyCredentials(
         client_id="test-client-id",
         client_secret=CLIENT_SECRET,
