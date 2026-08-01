@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Set
 
 from shuffify.enums import LockTier
-from shuffify.models.db import db, TrackLock
+from shuffify.models.db import TrackLock, db
 from shuffify.services.base import safe_commit
 
 logger = logging.getLogger(__name__)

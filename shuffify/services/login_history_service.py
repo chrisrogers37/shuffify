@@ -11,7 +11,7 @@ from typing import Optional
 
 from flask import Request
 
-from shuffify.models.db import db, LoginHistory
+from shuffify.models.db import LoginHistory, db
 from shuffify.services.base import safe_commit
 
 logger = logging.getLogger(__name__)

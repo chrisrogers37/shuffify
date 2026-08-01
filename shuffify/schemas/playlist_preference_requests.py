@@ -7,7 +7,6 @@ from typing import List
 
 from pydantic import BaseModel, field_validator
 
-
 SPOTIFY_ID_PATTERN = re.compile(r"^[a-zA-Z0-9]{1,255}$")
 
 

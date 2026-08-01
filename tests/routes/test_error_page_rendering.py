@@ -6,9 +6,10 @@ and the broadened exception handling in schedules, settings,
 and refresh routes.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 from flask import abort
-from unittest.mock import patch, MagicMock
 
 from shuffify.services import (
     ScheduleError,

@@ -9,28 +9,28 @@ navigability. All modules import `main` from this package and
 register routes on it.
 """
 
-from flask import (
-    Blueprint,
-    render_template,
-    request,
-    session,
-    jsonify,
-    flash,
-)
 import functools
 import logging
 from datetime import datetime, timezone
 
+from flask import (
+    Blueprint,
+    flash,
+    jsonify,
+    render_template,
+    request,
+    session,
+)
 from pydantic import ValidationError
 
-from shuffify.services import (
-    AuthService,
-    UserService,
-    AuthenticationError,
-)
 from shuffify.error_handlers import (
     format_validation_error,
     json_error_response,
+)
+from shuffify.services import (
+    AuthenticationError,
+    AuthService,
+    UserService,
 )
 
 logger = logging.getLogger(__name__)
@@ -252,8 +252,8 @@ def load_schedule_context(db_user):
     fallback to empty dicts if DB queries fail.
     """
     from shuffify.services import (
-        UpstreamSourceService,
         PlaylistPairService,
+        UpstreamSourceService,
     )
 
     upstream_sources_map = {}
@@ -301,16 +301,16 @@ def load_schedule_context(db_user):
 # =============================================================================
 
 from shuffify.routes import (  # noqa: E402, F401
+    activity,
     core,
+    playlist_pairs,
+    playlist_preferences,
     playlists,
-    shuffle,
-    workshop,
+    raid_panel,
     schedules,
     settings,
+    shuffle,
     snapshots,
-    playlist_pairs,
-    raid_panel,
-    playlist_preferences,
     track_locks,
-    activity,
+    workshop,
 )

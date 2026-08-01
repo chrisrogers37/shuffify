@@ -6,41 +6,42 @@ service-layer exceptions and Pydantic validation errors.
 """
 
 import logging
+
 from flask import Blueprint, jsonify, render_template, request
 from pydantic import ValidationError
 
 from shuffify.services import (
+    AlreadyAtOriginalError,
     AuthenticationError,
-    TokenValidationError,
+    InvalidAlgorithmError,
+    JobExecutionError,
+    NoHistoryError,
+    ParameterValidationError,
+    PlaylistAccessError,
     PlaylistError,
     PlaylistNotFoundError,
     PlaylistUpdateError,
-    PlaylistAccessError,
-    ShuffleError,
-    InvalidAlgorithmError,
-    ParameterValidationError,
-    ShuffleExecutionError,
-    StateError,
-    NoHistoryError,
-    AlreadyAtOriginalError,
-    UserServiceError,
-    UserNotFoundError,
-    WorkshopSessionError,
-    WorkshopSessionNotFoundError,
-    WorkshopSessionLimitError,
-    UpstreamSourceError,
-    UpstreamSourceNotFoundError,
     ScheduleError,
     ScheduleNotFoundError,
-    JobExecutionError,
+    ShuffleError,
+    ShuffleExecutionError,
+    StateError,
+    TokenValidationError,
+    UpstreamSourceError,
+    UpstreamSourceNotFoundError,
+    UserNotFoundError,
+    UserServiceError,
+    WorkshopSessionError,
+    WorkshopSessionLimitError,
+    WorkshopSessionNotFoundError,
 )
 from shuffify.spotify.exceptions import (
-    SpotifyError,
     SpotifyAPIError,
     SpotifyAuthError,
-    SpotifyTokenExpiredError,
-    SpotifyRateLimitError,
+    SpotifyError,
     SpotifyNotFoundError,
+    SpotifyRateLimitError,
+    SpotifyTokenExpiredError,
 )
 
 logger = logging.getLogger(__name__)

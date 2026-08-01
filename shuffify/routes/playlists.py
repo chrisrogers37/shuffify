@@ -4,19 +4,19 @@ Playlist API routes: fetch, refresh, and query playlists.
 
 import logging
 
-from flask import request, jsonify
+from flask import jsonify, request
 
 from shuffify.routes import (
-    main,
-    require_auth_and_db,
     json_error,
     json_success,
+    main,
+    require_auth_and_db,
 )
-from shuffify.services import PlaylistService, PlaylistError
+from shuffify.schemas import PlaylistQueryParams
+from shuffify.services import PlaylistError, PlaylistService
 from shuffify.services.playlist_preference_service import (
     PlaylistPreferenceService,
 )
-from shuffify.schemas import PlaylistQueryParams
 
 logger = logging.getLogger(__name__)
 

@@ -8,26 +8,26 @@ import logging
 
 from flask import jsonify
 
+from shuffify.enums import ActivityType
 from shuffify.routes import (
-    main,
-    require_auth_and_db,
     json_error,
     json_success,
     log_activity,
+    main,
+    require_auth_and_db,
     validate_json,
 )
+from shuffify.schemas.playlist_pair_requests import (
+    ArchiveTracksRequest,
+    CreatePairRequest,
+    FinalizeRestoreRequest,
+    UnarchiveTracksRequest,
+    UpdatePairRequest,
+)
 from shuffify.services.playlist_pair_service import (
-    PlaylistPairService,
     PlaylistPairExistsError,
     PlaylistPairNotFoundError,
-)
-from shuffify.enums import ActivityType
-from shuffify.schemas.playlist_pair_requests import (
-    CreatePairRequest,
-    UpdatePairRequest,
-    ArchiveTracksRequest,
-    UnarchiveTracksRequest,
-    FinalizeRestoreRequest,
+    PlaylistPairService,
 )
 
 logger = logging.getLogger(__name__)

@@ -12,7 +12,8 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
-from shuffify.models.db import db, Schedule, JobExecution
+
+from shuffify.models.db import JobExecution, Schedule, db
 
 logger = logging.getLogger(__name__)
 
