@@ -7,6 +7,7 @@ and refresh routes.
 """
 
 import pytest
+from flask import abort
 from unittest.mock import patch, MagicMock
 
 from shuffify.services import (
@@ -104,6 +105,76 @@ class TestErrorContentNegotiation:
             data = resp.get_json()
             assert data["success"] is False
             assert "could not be verified" in data["message"]
+
+
+    # handle_bad_request and handle_unauthorized were the two siblings found
+    # while fixing SR-040 -- neither was named in the issue, and neither had
+    # a test. Reverting either one to its old always-JSON form left the whole
+    # 73-test error-handling suite green, so nothing guarded them.
+    #
+    # These assert on text that appears ONLY on the rendered page. The JSON
+    # body for a 400 contains the string "Bad request" too, so asserting that
+    # would pass against a reverted handler and guard nothing.
+
+    def test_400_browser_navigation_returns_html_page(self, error_app):
+        @error_app.route("/test-400-page")
+        def trigger_400_page():
+            abort(400)
+
+        with error_app.test_client() as client:
+            resp = client.get(
+                "/test-400-page",
+                headers={"Accept": "text/html"},
+            )
+            assert resp.status_code == 400
+            assert resp.content_type.startswith("text/html")
+            assert resp.get_json(silent=True) is None
+            assert b"could not make sense of that request" in resp.data
+
+    def test_400_json_client_still_returns_envelope(self, error_app):
+        @error_app.route("/test-400-json")
+        def trigger_400_json():
+            abort(400)
+
+        with error_app.test_client() as client:
+            resp = client.get(
+                "/test-400-json",
+                headers={"Accept": "application/json"},
+            )
+            assert resp.status_code == 400
+            data = resp.get_json()
+            assert data["success"] is False
+            assert data["message"] == "Bad request."
+
+    def test_401_browser_navigation_returns_html_page(self, error_app):
+        @error_app.route("/test-401-page")
+        def trigger_401_page():
+            abort(401)
+
+        with error_app.test_client() as client:
+            resp = client.get(
+                "/test-401-page",
+                headers={"Accept": "text/html"},
+            )
+            assert resp.status_code == 401
+            assert resp.content_type.startswith("text/html")
+            assert resp.get_json(silent=True) is None
+            assert b"need to be signed in" in resp.data
+
+    def test_401_json_client_still_returns_envelope(self, error_app):
+        @error_app.route("/test-401-json")
+        def trigger_401_json():
+            abort(401)
+
+        with error_app.test_client() as client:
+            resp = client.get(
+                "/test-401-json",
+                headers={"Accept": "application/json"},
+            )
+            assert resp.status_code == 401
+            data = resp.get_json()
+            assert data["success"] is False
+            assert data["message"] == "Please log in first."
 
 
 class TestGlobal500Handler:
