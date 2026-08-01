@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import types
 
 from shuffify.enums import (
     IntervalValue,
@@ -26,6 +27,49 @@ logger = logging.getLogger(__name__)
 
 # The SQLAlchemy instance. Initialized with the Flask app in create_app().
 db = SQLAlchemy()
+
+
+class UTCDateTime(types.TypeDecorator):
+    """A timestamp column that is always an aware instant in UTC.
+
+    Every timestamp in this schema is an instant in UTC, and every default is
+    ``datetime.now(timezone.utc)``. A plain ``DateTime`` column does not keep
+    that true across a round trip: it accepts an aware value and hands back a
+    naive one, so what comes out cannot be compared against an aware
+    ``datetime.now(timezone.utc)`` without being re-tagged at the call site --
+    a step every call site has to remember, and most did not.
+
+    ``DateTime(timezone=True)`` alone is not enough either. PostgreSQL honours
+    it and stores ``timestamptz``, but SQLite has no timezone-aware type and
+    drops the offset regardless, so the naive/aware split would simply move to
+    a dev-versus-prod split -- comparisons behaving one way against SQLite and
+    another against PostgreSQL, which is the harder bug to see.
+
+    Normalizing in both directions is what makes the two backends agree:
+    values are converted to UTC on the way in, and re-tagged as UTC on the way
+    out when the driver returns them naive. A naive value on the way in is
+    interpreted as UTC, which is what it always was.
+
+    Use this for every timestamp column rather than ``db.DateTime``, so the
+    guarantee holds for columns added later.
+    """
+
+    impl = types.DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
 
 class User(db.Model):
@@ -52,7 +96,7 @@ class User(db.Model):
     encrypted_refresh_token = db.Column(db.Text, nullable=True)
 
     # Login tracking
-    last_login_at = db.Column(db.DateTime, nullable=True)
+    last_login_at = db.Column(UTCDateTime, nullable=True)
     login_count = db.Column(db.Integer, nullable=False, default=0)
 
     # Account status
@@ -64,12 +108,12 @@ class User(db.Model):
     spotify_uri = db.Column(db.String(255), nullable=True)
 
     created_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
     updated_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
@@ -172,12 +216,12 @@ class UserSettings(db.Model):
 
     # Timestamps
     created_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
     updated_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
@@ -242,12 +286,12 @@ class WorkshopSession(db.Model):
     session_name = db.Column(db.String(255), nullable=False)
     track_uris_json = db.Column(db.Text, nullable=False)
     created_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
     updated_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
@@ -319,7 +363,7 @@ class UpstreamSource(db.Model):
     source_type = db.Column(db.String(20), nullable=False, default="external")
     source_name = db.Column(db.String(255), nullable=True)
     search_query = db.Column(db.String(500), nullable=True)
-    last_resolved_at = db.Column(db.DateTime, nullable=True)
+    last_resolved_at = db.Column(UTCDateTime, nullable=True)
     last_resolve_pathway = db.Column(db.String(30), nullable=True)
     last_resolve_status = db.Column(
         db.String(20), nullable=True
@@ -327,7 +371,7 @@ class UpstreamSource(db.Model):
     last_track_count = db.Column(db.Integer, nullable=True)
     raid_count = db.Column(db.Integer, nullable=False, default=5)
     created_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
@@ -416,16 +460,16 @@ class Schedule(db.Model):
         default=IntervalValue.DAILY,
     )
     is_enabled = db.Column(db.Boolean, nullable=False, default=True)
-    last_run_at = db.Column(db.DateTime, nullable=True)
+    last_run_at = db.Column(UTCDateTime, nullable=True)
     last_status = db.Column(db.String(20), nullable=True)
     last_error = db.Column(db.Text, nullable=True)
     created_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
     updated_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
@@ -504,11 +548,11 @@ class JobExecution(db.Model):
         index=True,
     )
     started_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
-    completed_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(UTCDateTime, nullable=True)
     status = db.Column(db.String(20), nullable=False, default="running")
     tracks_added = db.Column(db.Integer, nullable=True, default=0)
     tracks_total = db.Column(db.Integer, nullable=True)
@@ -566,11 +610,11 @@ class LoginHistory(db.Model):
         index=True,
     )
     logged_in_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
-    logged_out_at = db.Column(db.DateTime, nullable=True)
+    logged_out_at = db.Column(UTCDateTime, nullable=True)
     ip_address = db.Column(db.String(45), nullable=True)
     user_agent = db.Column(db.String(512), nullable=True)
     session_id = db.Column(db.String(255), nullable=True)
@@ -652,7 +696,7 @@ class PlaylistSnapshot(db.Model):
         index=True,
     )
     created_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
@@ -746,7 +790,7 @@ class ActivityLog(db.Model):
     playlist_name = db.Column(db.String(255), nullable=True)
     metadata_json = db.Column(db.JSON, nullable=True)
     created_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
         index=True,
@@ -811,12 +855,12 @@ class PlaylistPair(db.Model):
     archive_playlist_name = db.Column(db.String(255), nullable=True)
     auto_archive_on_remove = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
     updated_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
@@ -881,12 +925,12 @@ class RaidPlaylistLink(db.Model):
     drip_count = db.Column(db.Integer, nullable=False, default=3)
     drip_enabled = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
     updated_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
@@ -953,12 +997,12 @@ class PlaylistPreference(db.Model):
     is_hidden = db.Column(db.Boolean, nullable=False, default=False)
     is_pinned = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
     updated_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
@@ -1041,11 +1085,11 @@ class TrackLock(db.Model):
         default=LockTier.STANDARD,
     )
     created_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
-    expires_at = db.Column(db.DateTime, nullable=True)
+    expires_at = db.Column(UTCDateTime, nullable=True)
 
     user = db.relationship(
         "User",
@@ -1075,12 +1119,7 @@ class TrackLock(db.Model):
         """Check if this lock has expired."""
         if self.expires_at is None:
             return False
-        now = datetime.now(timezone.utc)
-        expires = self.expires_at
-        # Handle naive datetimes from SQLite
-        if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=timezone.utc)
-        return now > expires
+        return datetime.now(timezone.utc) > self.expires_at
 
     @property
     def is_active(self) -> bool:
@@ -1143,11 +1182,11 @@ class PendingRaidTrack(db.Model):
         default=PendingRaidStatus.PENDING,
     )
     created_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
-    resolved_at = db.Column(db.DateTime, nullable=True)
+    resolved_at = db.Column(UTCDateTime, nullable=True)
 
     # Relationships
     user = db.relationship(
@@ -1222,12 +1261,12 @@ class ScrapedPlaylistCache(db.Model):
     playlist_id = db.Column(db.String(255), nullable=False, index=True)
     track_uris_json = db.Column(db.Text, nullable=False)
     scraped_at = db.Column(
-        db.DateTime,
+        UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
     scrape_pathway = db.Column(db.String(50), nullable=True)
-    expires_at = db.Column(db.DateTime, nullable=False)
+    expires_at = db.Column(UTCDateTime, nullable=False)
 
     __table_args__ = (
         db.Index(

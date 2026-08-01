@@ -1,8 +1,8 @@
 """Index Schedule.is_enabled and LoginHistory.logged_in_at (SR-043)
 
-Revision ID: d5e6f7a8b9c0
-Revises: c4d5e6f7a8b9
-Create Date: 2026-08-01 00:00:01.000000
+Revision ID: e6f7a8b9c0d1
+Revises: d5e6f7a8b9c0
+Create Date: 2026-08-01 00:00:02.000000
 
 """
 
@@ -10,8 +10,8 @@ from alembic import op
 
 
 # revision identifiers, used by Alembic.
-revision = "d5e6f7a8b9c0"
-down_revision = "c4d5e6f7a8b9"
+revision = "e6f7a8b9c0d1"
+down_revision = "d5e6f7a8b9c0"
 branch_labels = None
 depends_on = None
 
