@@ -214,8 +214,135 @@ def _init_token_encryption(app):
         )
 
 
+# Break-glass override for the production schema guard. When set, the
+# entrypoint tolerates a failed upgrade and the app factory downgrades the
+# schema-drift check from a startup failure to an ERROR log. It exists so a
+# misfiring guard can be cleared from the platform console in one restart,
+# rather than blocking every deploy until a code change ships.
+SCHEMA_DRIFT_OVERRIDE_VAR = "SHUFFIFY_ALLOW_SCHEMA_DRIFT"
+
+# Internal handshake, set by the entrypoint while it applies migrations --
+# not an operator knob. `flask db upgrade` imports run.py and builds the whole
+# application, so without this the schema check would fire inside the
+# migration step and refuse to let it run: the check would be asserting the
+# very invariant that step exists to establish.
+MIGRATION_STEP_VAR = "SHUFFIFY_MIGRATION_STEP"
+
+_TRUTHY = ("1", "true", "yes", "on")
+
+
+def _env_is_true(name):
+    return os.getenv(name, "").strip().lower() in _TRUTHY
+
+
+class SchemaOutOfDateError(RuntimeError):
+    """The database schema is behind the Alembic migration chain.
+
+    Raised during app construction in production. It propagates out of
+    ``create_app()`` deliberately: serving requests against a schema the
+    code does not expect corrupts data and returns errors that look like
+    application bugs, which is strictly worse than refusing to start.
+    """
+
+
+def _schema_revision_state(migrations_dir):
+    """Return ``(current_revision, head_revisions)`` for the database schema.
+
+    ``current_revision`` is the revision stamped in ``alembic_version``, or
+    None when that table does not exist (a database that has never been
+    migrated). ``head_revisions`` is the set of tip revisions in
+    ``migrations/versions`` -- a set rather than a single value so a branched
+    chain reports honestly instead of raising.
+    """
+    from alembic.runtime.migration import MigrationContext
+    from alembic.script import ScriptDirectory
+    from shuffify.models.db import db
+
+    heads = set(ScriptDirectory(migrations_dir).get_heads())
+    with db.engine.connect() as connection:
+        current = MigrationContext.configure(connection).get_current_revision()
+    return current, heads
+
+
+def _verify_schema_at_head(migrations_dir):
+    """Fail fast when the production schema is not at the migration head.
+
+    Production applies migrations in the container entrypoint, before Gunicorn
+    starts, so by the time the app factory runs "schema is at head" is an
+    invariant to check rather than work to do. The check is satisfied entirely
+    from the image -- the migration chain ships with the code -- so it cannot
+    block a boot on infrastructure that has not been provisioned.
+
+    The migration step itself is exempt: it builds the app in order to apply
+    the migrations, and would otherwise be refused for the schema state it is
+    about to correct.
+
+    Raises:
+        SchemaOutOfDateError: If the schema is behind head and the override
+            is not set.
+    """
+    if _env_is_true(MIGRATION_STEP_VAR):
+        logger.info("Schema check skipped -- this process is the migration step")
+        return
+
+    current, heads = _schema_revision_state(migrations_dir)
+
+    if current is not None and current in heads:
+        logger.info("Database schema verified at Alembic head (%s)", current)
+        return
+
+    message = (
+        "Database schema is not at Alembic head: current=%s, head=%s. "
+        "Migrations are applied by the container entrypoint before Gunicorn "
+        "starts, so this means the entrypoint was bypassed or its upgrade "
+        "failed. Apply them with 'flask db upgrade', or set %s=true to start "
+        "anyway and serve against the current schema."
+        % (
+            current or "none (database never migrated)",
+            ",".join(sorted(heads)) or "none",
+            SCHEMA_DRIFT_OVERRIDE_VAR,
+        )
+    )
+
+    if _env_is_true(SCHEMA_DRIFT_OVERRIDE_VAR):
+        logger.error(
+            "%s [%s is set -- starting anyway]", message, SCHEMA_DRIFT_OVERRIDE_VAR
+        )
+        return
+
+    raise SchemaOutOfDateError(message)
+
+
+def _upgrade_schema():
+    """Apply pending Alembic migrations in-process.
+
+    The development path. Production migrates in the container entrypoint;
+    running the upgrade from the app factory there would put schema mutation
+    inside every process that serves requests.
+    """
+    from flask_migrate import upgrade
+
+    upgrade()
+    logger.info("Alembic migrations applied")
+
+
 def _init_database(app):
-    """Initialize SQLAlchemy database and run Alembic migrations."""
+    """Initialize SQLAlchemy and reconcile the database schema.
+
+    Schema handling is declared per environment by two config attributes:
+
+    - ``TESTING`` builds tables straight from the models; there is no
+      migration chain to apply against in-memory SQLite.
+    - ``MIGRATE_ON_STARTUP=False`` (production) means something outside the
+      app already ran ``flask db upgrade`` -- the container entrypoint -- so
+      the factory only verifies the result and refuses to serve a stale one.
+    - ``MIGRATE_ON_STARTUP=True`` applies migrations in-process.
+
+    Note that ``DevConfig`` currently sets ``TESTING=True``, so development
+    takes the ``create_all()`` branch and never reaches the migration chain
+    (#325). Flipping that flag is what routes development through
+    ``_upgrade_schema``.
+    """
     global _migrate
     try:
         from shuffify.models.db import db
@@ -228,27 +355,10 @@ def _init_database(app):
                 # Tests use in-memory SQLite -- create tables directly
                 db.create_all()
             else:
-                # Development and production: use Alembic migrations.
-                # In development without migrations dir, fall back to
-                # db.create_all() for convenience.
                 migrations_dir = os.path.join(
                     os.path.dirname(os.path.dirname(__file__)), "migrations"
                 )
-                if os.path.isdir(migrations_dir):
-                    from flask_migrate import upgrade
-
-                    try:
-                        upgrade()
-                    except Exception as mig_err:
-                        logger.error(
-                            "Alembic migration failed: %s "
-                            "[type=%s]. Database schema may "
-                            "be out of date.",
-                            mig_err,
-                            type(mig_err).__name__,
-                            exc_info=True,
-                        )
-                else:
+                if not os.path.isdir(migrations_dir):
                     logger.warning(
                         "No migrations/ directory found. "
                         "Using db.create_all() as fallback. "
@@ -256,11 +366,19 @@ def _init_database(app):
                         "to set up Alembic migrations."
                     )
                     db.create_all()
+                elif app.config.get("MIGRATE_ON_STARTUP", True):
+                    _upgrade_schema()
+                else:
+                    _verify_schema_at_head(migrations_dir)
 
         logger.info(
             "SQLAlchemy database initialized: %s",
             app.config.get("SQLALCHEMY_DATABASE_URI", "not set"),
         )
+    except SchemaOutOfDateError:
+        # Never absorbed into the generic handler below -- a stale schema is
+        # the one database condition the app must not serve through.
+        raise
     except Exception as e:
         logger.error(
             "Database initialization failed: %s "

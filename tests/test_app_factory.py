@@ -9,6 +9,19 @@ from unittest.mock import Mock, patch, MagicMock
 import redis
 
 
+@pytest.fixture
+def no_schema_check(monkeypatch):
+    """Neutralize the production schema guard for this test.
+
+    create_app("production") verifies the database is at Alembic head and
+    refuses to build otherwise (SR-018). Tests that construct a
+    production-configured app only to inspect session backends or response
+    headers are not exercising a production boot, and must not depend on
+    whatever migration state the local SQLite file happens to be in.
+    """
+    monkeypatch.setattr("shuffify._verify_schema_at_head", lambda _dir: None)
+
+
 class TestCreateApp:
     """Tests for create_app function."""
 
@@ -390,7 +403,7 @@ class TestRedisProductionRequirement:
     "Production Infrastructure" for the tradeoff.
     """
 
-    def test_production_falls_back_when_redis_url_unset(self):
+    def test_production_falls_back_when_redis_url_unset(self, no_schema_check):
         """Production should warn + fall back to filesystem when REDIS_URL is unset."""
         with patch.dict(
             "os.environ",
@@ -406,7 +419,9 @@ class TestRedisProductionRequirement:
             app = create_app("production")
             assert app.config["SESSION_TYPE"] == "filesystem"
 
-    def test_production_falls_back_on_redis_connection_failure(self, monkeypatch):
+    def test_production_falls_back_on_redis_connection_failure(
+        self, monkeypatch, no_schema_check
+    ):
         """Production should warn + fall back to filesystem when Redis is unreachable."""
         from config import ProdConfig
 
@@ -499,7 +514,7 @@ class TestSecurityHeaders:
                 response = debug_client.get("/health")
                 assert "Strict-Transport-Security" not in response.headers
 
-    def test_hsts_present_in_production_mode(self, monkeypatch):
+    def test_hsts_present_in_production_mode(self, monkeypatch, no_schema_check):
         """HSTS should be sent when debug is False (production)."""
         import os
         from unittest.mock import patch

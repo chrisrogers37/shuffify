@@ -106,6 +106,12 @@ class Config:
     SQLALCHEMY_DATABASE_URI = _resolve_database_url("sqlite:///shuffify.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    # Schema management: whether the app applies Alembic migrations itself
+    # during startup. False means something outside the app has already run
+    # them -- the container entrypoint -- and the app factory only verifies
+    # the schema is at head, refusing to serve if it is not.
+    MIGRATE_ON_STARTUP = True
+
     # Scheduler configuration
     SCHEDULER_ENABLED = True
     SCHEDULER_THREAD_POOL_SIZE = int(os.getenv("SCHEDULER_THREAD_POOL_SIZE", "10"))
@@ -138,6 +144,9 @@ class ProdConfig(Config):
     SECRET_KEY = os.environ.get("SECRET_KEY")  # No fallback — validated on startup
     DEBUG = False
     TESTING = False
+
+    # Migrations run in the container entrypoint, before Gunicorn starts.
+    MIGRATE_ON_STARTUP = False
     SCHEDULER_ENABLED = os.getenv("SCHEDULER_ENABLED", "true").lower() == "true"
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True
