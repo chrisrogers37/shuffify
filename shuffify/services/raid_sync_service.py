@@ -492,10 +492,8 @@ class RaidSyncService:
 
         # Inline drip (no schedule) — run through the executor safety rails
         # instead of a hand-rolled Schedule(id=0) that bypassed them (#332).
-        # A manual "Drip Now" forces the drip regardless of the schedule's
-        # drip_enabled flag; execute_drip re-reads the link, so enable it
-        # within this transaction before dispatching.
-        link.drip_enabled = True
+        # The forced-run intent is passed to the executor explicitly; it is not
+        # signalled by mutating the link.
         result = JobExecutorService.execute_drip_for_user(
             user_id=user.id,
             target_playlist_id=target_playlist_id,
