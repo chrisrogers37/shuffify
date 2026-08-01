@@ -10,10 +10,9 @@ Architecture:
     - api.py: SpotifyAPI for data operations
     - error_handling.py: Retry logic, backoff, error classification
     - cache.py: SpotifyCache for Redis-based response caching
-    - client.py: SpotifyClient facade (combines auth + api)
     - exceptions.py: Exception hierarchy
 
-Usage (preferred - explicit dependencies):
+Usage:
     from shuffify.spotify import (
         SpotifyCredentials,
         SpotifyAuthManager,
@@ -40,46 +39,38 @@ Usage (preferred - explicit dependencies):
     cache = SpotifyCache(redis_client)
     api = SpotifyAPI(token_info, auth_manager, cache=cache)
     playlists = api.get_user_playlists()
-
-Usage (legacy - backward compatible):
-    from shuffify.spotify import SpotifyClient
-
-    client = SpotifyClient(token=session['spotify_token'])
-    playlists = client.get_user_playlists()
 """
 
 # Credentials (for dependency injection)
-from .credentials import SpotifyCredentials
-
-# Auth (token management)
-from .auth import (
-    SpotifyAuthManager,
-    TokenInfo,
-    DEFAULT_SCOPES,
-)
-
 # API (data operations)
 from .api import SpotifyAPI
 
-# URL parser utility
-from .url_parser import parse_spotify_playlist_url
+# Auth (token management)
+from .auth import (
+    DEFAULT_SCOPES,
+    SpotifyAuthManager,
+    TokenInfo,
+)
 
 # Cache (Redis-based caching)
 from .cache import SpotifyCache
 
 # Client (facade for backward compatibility)
-from .client import SpotifyClient
+from .credentials import SpotifyCredentials
 
 # Exceptions
 from .exceptions import (
-    SpotifyError,
+    SpotifyAPIError,
     SpotifyAuthError,
+    SpotifyError,
+    SpotifyNotFoundError,
+    SpotifyRateLimitError,
     SpotifyTokenError,
     SpotifyTokenExpiredError,
-    SpotifyAPIError,
-    SpotifyRateLimitError,
-    SpotifyNotFoundError,
 )
+
+# URL parser utility
+from .url_parser import parse_spotify_playlist_url
 
 __all__ = [
     # Credentials
@@ -95,7 +86,6 @@ __all__ = [
     # Cache
     "SpotifyCache",
     # Client (facade)
-    "SpotifyClient",
     # Exceptions
     "SpotifyError",
     "SpotifyAuthError",

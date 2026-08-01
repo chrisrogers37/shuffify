@@ -5,12 +5,12 @@ Handles OAuth URL generation, token exchange, validation, and session management
 """
 
 import logging
-from typing import Dict, Any, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Dict, Optional, Tuple
 
-from shuffify.spotify.client import SpotifyClient
-
-if TYPE_CHECKING:
-    from shuffify.spotify.auth import TokenInfo
+from shuffify.spotify.api import SpotifyAPI
+from shuffify.spotify.auth import SpotifyAuthManager, TokenInfo
+from shuffify.spotify.credentials import SpotifyCredentials
+from shuffify.spotify.exceptions import SpotifyTokenError
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,25 @@ class AuthService:
     """Service for managing Spotify OAuth authentication."""
 
     @staticmethod
+    def _credentials() -> SpotifyCredentials:
+        """Resolve OAuth credentials from Flask config, else the environment.
+
+        Background jobs run outside a request and outside an app context, so
+        the Flask lookup raises there and the environment is the fallback.
+        """
+        try:
+            from flask import current_app
+
+            return SpotifyCredentials.from_flask_config(current_app.config)
+        except RuntimeError:
+            return SpotifyCredentials.from_env()
+
+    @staticmethod
+    def _auth_manager() -> SpotifyAuthManager:
+        """Build an auth manager against the resolved credentials."""
+        return SpotifyAuthManager(AuthService._credentials())
+
+    @staticmethod
     def get_auth_url(state: Optional[str] = None) -> str:
         """
         Generate the Spotify authorization URL.
@@ -45,8 +64,7 @@ class AuthService:
             AuthenticationError: If URL generation fails.
         """
         try:
-            client = SpotifyClient()
-            return client.get_auth_url(state=state)
+            return AuthService._auth_manager().get_auth_url(state=state)
         except Exception as e:
             logger.error(f"Failed to generate auth URL: {e}", exc_info=True)
             raise AuthenticationError(f"Failed to generate authorization URL: {e}")
@@ -70,8 +88,7 @@ class AuthService:
             raise AuthenticationError("No authorization code provided")
 
         try:
-            client = SpotifyClient()
-            token_data = client.get_token(code)
+            token_data = AuthService._auth_manager().exchange_code(code).to_dict()
 
             # Validate token structure
             AuthService._validate_token_structure(token_data)
@@ -128,31 +145,43 @@ class AuthService:
             return False
 
     @staticmethod
-    def get_authenticated_client(token: Dict[str, Any]) -> SpotifyClient:
+    def get_authenticated_api(token: Dict[str, Any]) -> SpotifyAPI:
         """
-        Create an authenticated SpotifyClient from a token.
+        Build an authenticated SpotifyAPI from a session token.
 
         Args:
             token: Valid token data dictionary.
 
         Returns:
-            An authenticated SpotifyClient instance.
+            An authenticated SpotifyAPI instance.
 
         Raises:
-            AuthenticationError: If client creation fails.
+            AuthenticationError: If construction fails.
         """
         try:
             # Inject the Redis cache so responses are actually cached in
             # production (returns None when Redis is unavailable) (SR-005).
             from shuffify import get_spotify_cache
 
-            return SpotifyClient(
-                token=token,
-                on_token_refresh=AuthService._persist_token_to_session,
+            # Expiry is deliberately not pre-validated here. SpotifyAPI with
+            # auto_refresh=True refreshes an expired token on construction and
+            # on 401 retries; rejecting an expired token up front caused an
+            # hourly forced logout even when a valid refresh_token was present
+            # (SR-003). A structurally invalid token still fails in
+            # TokenInfo.from_dict, and an expired one with no refresh_token
+            # still fails through the refresh path.
+            return SpotifyAPI(
+                TokenInfo.from_dict(token),
+                AuthService._auth_manager(),
+                auto_refresh=True,
                 cache=get_spotify_cache(),
+                on_token_refresh=AuthService._persist_token_to_session,
             )
+        except SpotifyTokenError as e:
+            logger.error("Token initialization failed: %s", e)
+            raise AuthenticationError(f"Invalid or expired token: {e}")
         except Exception as e:
-            logger.error(f"Failed to create authenticated client: {e}", exc_info=True)
+            logger.error(f"Failed to create Spotify API client: {e}", exc_info=True)
             raise AuthenticationError(f"Failed to create Spotify client: {e}")
 
     @staticmethod
@@ -171,7 +200,7 @@ class AuthService:
         Args:
             token_info: The freshly refreshed TokenInfo.
         """
-        from flask import session, has_request_context
+        from flask import has_request_context, session
 
         if not has_request_context():
             return
@@ -184,12 +213,12 @@ class AuthService:
             logger.warning("Failed to persist refreshed token to session: %s", e)
 
     @staticmethod
-    def get_user_data(client: SpotifyClient) -> Dict[str, Any]:
+    def get_user_data(api: SpotifyAPI) -> Dict[str, Any]:
         """
         Fetch the current user's profile data.
 
         Args:
-            client: An authenticated SpotifyClient.
+            api: An authenticated SpotifyAPI.
 
         Returns:
             User profile data dictionary.
@@ -198,7 +227,7 @@ class AuthService:
             AuthenticationError: If fetching user data fails.
         """
         try:
-            return client.get_current_user()
+            return api.get_current_user()
         except Exception as e:
             logger.error(f"Failed to get user data: {e}", exc_info=True)
             raise AuthenticationError(f"Failed to fetch user profile: {e}")
@@ -218,13 +247,7 @@ class AuthService:
             True if the provider accepted the revocation.
         """
         try:
-            from shuffify.spotify.auth import SpotifyAuthManager
-            from shuffify.spotify.credentials import SpotifyCredentials
-            from flask import current_app
-
-            credentials = SpotifyCredentials.from_flask_config(current_app.config)
-            auth_manager = SpotifyAuthManager(credentials)
-            return auth_manager.revoke_token(access_token)
+            return AuthService._auth_manager().revoke_token(access_token)
         except Exception as e:
             logger.debug("Token revocation skipped: %s", e)
             return False
@@ -232,7 +255,7 @@ class AuthService:
     @staticmethod
     def authenticate_and_get_user(
         token: Dict[str, Any],
-    ) -> Tuple[SpotifyClient, Dict[str, Any]]:
+    ) -> Tuple[SpotifyAPI, Dict[str, Any]]:
         """
         Authenticate with a token and retrieve user data in one operation.
 
@@ -240,11 +263,11 @@ class AuthService:
             token: Valid token data dictionary.
 
         Returns:
-            Tuple of (SpotifyClient, user_data).
+            Tuple of (SpotifyAPI, user_data).
 
         Raises:
             AuthenticationError: If authentication or user fetch fails.
         """
-        client = AuthService.get_authenticated_client(token)
-        user_data = AuthService.get_user_data(client)
-        return client, user_data
+        api = AuthService.get_authenticated_api(token)
+        user_data = AuthService.get_user_data(api)
+        return api, user_data

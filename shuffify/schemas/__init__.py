@@ -6,17 +6,36 @@ This module provides type-safe validation for all API endpoints.
 
 from pydantic import ValidationError
 
+from .pending_raid_requests import (
+    DismissTracksRequest,
+    PromoteTracksRequest,
+)
+from .playlist_pair_requests import (
+    ArchiveTracksRequest,
+    CreatePairRequest,
+    UnarchiveTracksRequest,
+    UpdatePairRequest,
+)
+from .playlist_preference_requests import (
+    SaveOrderRequest,
+)
+from .raid_requests import (
+    AddRaidUrlRequest,
+    RaidNowRequest,
+    UnwatchPlaylistRequest,
+    WatchPlaylistRequest,
+)
 from .requests import (
-    ShuffleRequest,
-    ShuffleRequestBase,
-    BasicShuffleParams,
     BalancedShuffleParams,
-    StratifiedShuffleParams,
+    BasicShuffleParams,
+    ExternalPlaylistRequest,
     PercentageShuffleParams,
     PlaylistQueryParams,
+    ShuffleRequest,
+    ShuffleRequestBase,
+    StratifiedShuffleParams,
     WorkshopCommitRequest,
     WorkshopSearchRequest,
-    ExternalPlaylistRequest,
     parse_shuffle_request,
 )
 from .schedule_requests import (
@@ -28,25 +47,6 @@ from .settings_requests import (
 )
 from .snapshot_requests import (
     ManualSnapshotRequest,
-)
-from .playlist_pair_requests import (
-    CreatePairRequest,
-    UpdatePairRequest,
-    ArchiveTracksRequest,
-    UnarchiveTracksRequest,
-)
-from .raid_requests import (
-    WatchPlaylistRequest,
-    AddRaidUrlRequest,
-    UnwatchPlaylistRequest,
-    RaidNowRequest,
-)
-from .playlist_preference_requests import (
-    SaveOrderRequest,
-)
-from .pending_raid_requests import (
-    PromoteTracksRequest,
-    DismissTracksRequest,
 )
 
 __all__ = [

@@ -49,7 +49,7 @@ flask routes
 
 ```bash
 # 1. Backend Lint (REQUIRED - CI will fail without this)
-flake8 shuffify/
+ruff check shuffify/
 # Must have 0 errors. Fix any issues before pushing.
 
 # 2. Backend Tests (REQUIRED)
@@ -68,10 +68,10 @@ pushes to `main`, on Python 3.12:
 
 | Check | Command | Must Pass |
 |-------|---------|-----------|
-| **Backend Lint** | `flake8 shuffify/` | ✅ Yes |
+| **Backend Lint** | `ruff check shuffify/` | ✅ Yes |
 | **Backend Tests** | `pytest tests/ -m "not integration"` | ✅ Yes |
 | **Coverage gate** | `pytest --cov=shuffify --cov-fail-under=N` | ✅ Yes |
-| **Format check** | `black --check shuffify/` | ⚠️ Non-blocking (until the ruff consolidation, SR-037) |
+| **Format check** | `black --check shuffify/` | ⚠️ Non-blocking (pre-existing drift; SR-037 consolidated linting, not formatting) |
 
 Live-scraper integration tests (`pytest -m integration`) run nightly and
 on-demand via `.github/workflows/nightly-integration.yml` and are non-blocking
@@ -81,7 +81,7 @@ on-demand via `.github/workflows/nightly-integration.yml` and are non-blocking
 
 Run this before every push:
 ```bash
-flake8 shuffify/ && pytest tests/ -v && echo "✅ Ready to push!"
+ruff check shuffify/ && pytest tests/ -v && echo "✅ Ready to push!"
 ```
 
 ### Common Lint Fixes
@@ -90,11 +90,10 @@ flake8 shuffify/ && pytest tests/ -v && echo "✅ Ready to push!"
 # Auto-fix formatting
 black shuffify/
 
-# Remove unused imports (manual review needed)
-# Look for F401 errors in flake8 output
+# Remove unused imports and sort them
+ruff check --fix shuffify/
 
-# Fix line length (E501) - break long lines or use:
-# flake8 --max-line-length=100 shuffify/  (if project allows)
+# Line length is set once, in pyproject.toml ([tool.ruff] line-length).
 ```
 
 ---
@@ -183,7 +182,7 @@ Routes are split across 12 modules in `shuffify/routes/`:
 | `shuffle.py` | 2 | Shuffle execution, undo |
 | `workshop.py` | 12 | Workshop UI, preview-shuffle, commit, search, external playlists, session CRUD |
 | `settings.py` | 2 | View/update user settings |
-| `upstream_sources.py` | 3 | List/add/delete upstream raid sources |
+| `track_locks.py` | 3 | Lock/unlock tracks against reordering |
 | `schedules.py` | 9 | Schedule CRUD, toggle, manual run, execution history, rotation status |
 | `snapshots.py` | 5 | List/create/view/restore/delete playlist snapshots |
 | `playlist_pairs.py` | 8 | Archive playlist pairing CRUD, list pairs |
@@ -265,7 +264,6 @@ All algorithms implement the `ShuffleAlgorithm` protocol and are registered in `
 | **ArtistSpacingShuffle** | Ensure same artist doesn't appear back-to-back | Variety in artist sequence |
 | **AlbumSequenceShuffle** | Keep album tracks together, shuffle albums | Preserve album flow |
 | **NewestFirstShuffle** | Sort by date added (newest first) with jitter | Surface recently added tracks |
-| **TempoGradientShuffle** | Sort by BPM for DJ-style transitions | DJ-style mixing *(hidden — needs Audio Features API)* |
 
 **Location**: `shuffify/shuffle_algorithms/`
 
@@ -408,7 +406,7 @@ class MyAlgorithm(ShuffleAlgorithm):
 
 **Adding a new route**:
 
-Routes are organized in `shuffify/routes/` as feature modules (core, playlists, shuffle, workshop, upstream_sources, schedules, settings, snapshots, playlist_pairs, raid_panel, playlist_preferences, activity). Add new routes to an existing module or create a new one:
+Routes are organized in `shuffify/routes/` as feature modules (core, playlists, shuffle, workshop, track_locks, schedules, settings, snapshots, playlist_pairs, raid_panel, playlist_preferences, activity). Add new routes to an existing module or create a new one:
 
 ```python
 # shuffify/routes/my_feature.py (or add to existing module)
@@ -482,12 +480,12 @@ except Exception as e:
 **Test Structure** (mirrors `shuffify/`):
 ```
 tests/
-├── algorithms/             # Tests for all 8 shuffle algorithms
+├── algorithms/             # Tests for all 7 shuffle algorithms
 ├── spotify/                # Spotify client, API, cache tests
 ├── schemas/                # Pydantic schema validation tests
 ├── services/               # Service layer tests (20 services)
 ├── models/                 # Database model tests
-├── routes/                 # All route tests (13 files)
+├── routes/                 # All route tests
 ├── test_app_factory.py     # App initialization tests
 ├── test_error_handlers.py  # Error handler tests
 ├── test_health_db.py       # Database health check tests
@@ -497,7 +495,8 @@ tests/
 └── conftest.py             # Shared fixtures (app context, db, mocks)
 ```
 
-**1714 tests** covering all modules.
+For the current test count, run `pytest tests/ --collect-only -q | tail -1`.
+Do not hardcode the number here -- every PR that adds a test invalidates it.
 
 **Test Template**:
 
@@ -889,7 +888,7 @@ if session.get('undo_stack'):
 - ~~Caching layer for Spotify API responses~~
 - ~~Service layer extraction~~ (20 services)
 - ~~Pydantic validation layer~~ (9 schema modules)
-- ~~8 shuffle algorithms~~ (7 visible + 1 hidden)
+- ~~7 shuffle algorithms~~
 - ~~Playlist Workshop~~ (track management, merging, raiding)
 - ~~SQLAlchemy database~~ (14 models — see Models section)
 - ~~APScheduler background jobs~~ (scheduled shuffle/raid operations)
@@ -916,7 +915,7 @@ if session.get('undo_stack'):
 - Don't create templates without extending `base.html`
 - Don't deploy to production without explicit approval
 - Don't modify `CHANGELOG.md` version numbers (only add to Unreleased)
-- **Don't push to `main` without running `flake8 shuffify/` and `pytest tests/ -v` first**
+- **Don't push to `main` without running `ruff check shuffify/` and `pytest tests/ -v` first**
 
 ---
 
@@ -925,7 +924,7 @@ if session.get('undo_stack'):
 | File | Contains |
 |------|----------|
 | `shuffify/__init__.py` | Flask app factory, Redis/DB/Scheduler initialization |
-| `shuffify/routes/` | 12 feature-based route modules (core, playlists, shuffle, workshop, upstream_sources, schedules, settings, snapshots, playlist_pairs, raid_panel, playlist_preferences, activity) |
+| `shuffify/routes/` | 12 feature-based route modules (core, playlists, shuffle, workshop, track_locks, schedules, settings, snapshots, playlist_pairs, raid_panel, playlist_preferences, activity) |
 | `shuffify/services/` | 20 service modules (auth, playlist, shuffle, state, token, scheduler, user, workshop_session, upstream_source, activity_log, dashboard, login_history, playlist_snapshot, user_settings, playlist_pair, raid_sync, playlist_preference, pending_raid, raid_link, job_executor) + executors package |
 | `shuffify/services/executors/` | Job executor package (base_executor, raid_executor, shuffle_executor, rotate_executor, drip_executor) |
 | `shuffify/services/source_resolver/` | Strategy pattern for resolving external playlists — tries DirectAPI → Search → PublicScraper pathways in priority order |
@@ -935,7 +934,7 @@ if session.get('undo_stack'):
 | `shuffify/spotify/api.py` | Spotify Web API data operations with caching support |
 | `shuffify/spotify/cache.py` | Redis caching layer for Spotify API responses |
 | `shuffify/spotify/error_handling.py` | `api_error_handler` decorator for converting unexpected exceptions |
-| `shuffify/shuffle_algorithms/registry.py` | Algorithm registration system (8 algorithms) |
+| `shuffify/shuffle_algorithms/registry.py` | Algorithm registration system (7 algorithms) |
 | `shuffify/models/playlist.py` | Playlist data model |
 | `shuffify/models/db.py` | SQLAlchemy models (14 models — User, UserSettings, WorkshopSession, UpstreamSource, Schedule, JobExecution, LoginHistory, PlaylistSnapshot, ActivityLog, PlaylistPair, RaidPlaylistLink, PlaylistPreference, PendingRaidTrack, ScrapedPlaylistCache) |
 | `shuffify/enums.py` | Shared enums (ScheduleType, IntervalValue, JobType, SnapshotType, ActivityType, RotationMode, PendingRaidStatus) |
@@ -965,7 +964,7 @@ if session.get('undo_stack'):
 - View routes: `flask routes`
 - All documentation: See `documentation/` directory
 - Algorithm docs: `shuffify/shuffle_algorithms/README.md`
-- 1714 tests across all modules
+- Test count: `pytest tests/ --collect-only -q | tail -1`
 
 ---
 

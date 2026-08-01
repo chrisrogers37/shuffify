@@ -6,10 +6,10 @@ Uses Pydantic schemas for type-safe parameter validation.
 """
 
 import logging
-from typing import Dict, List, Any, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
-from shuffify.spotify.client import SpotifyClient
+from shuffify.spotify.api import SpotifyAPI
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class ShuffleService:
         algorithm_name: str,
         tracks: List[Dict[str, Any]],
         params: Optional[Dict[str, Any]] = None,
-        spotify_client: Optional[SpotifyClient] = None,
+        api: Optional[SpotifyAPI] = None,
         locked_positions: Optional[Dict[Union[int, str], str]] = None,
     ) -> List[str]:
         """
@@ -95,7 +95,7 @@ class ShuffleService:
             algorithm_name: The name of the algorithm to use.
             tracks: List of track dictionaries with at least 'uri' key.
             params: Optional algorithm parameters.
-            spotify_client: Optional SpotifyClient for algorithms that need it.
+            api: Optional SpotifyAPI for algorithms that need it.
             locked_positions: Optional {position: uri} map of locked tracks.
 
         Returns:
@@ -106,8 +106,8 @@ class ShuffleService:
             ShuffleExecutionError: If shuffle execution fails.
         """
         from shuffify.shuffle_algorithms.utils import (
-            split_locked_tracks,
             reassemble_with_locks,
+            split_locked_tracks,
         )
 
         params = params or {}
@@ -115,8 +115,8 @@ class ShuffleService:
         try:
             algorithm = ShuffleService.get_algorithm(algorithm_name)
 
-            if spotify_client:
-                params["sp"] = spotify_client
+            if api:
+                params["sp"] = api
 
             # Split locked tracks out before shuffling
             validated_locks, unlocked_tracks = (

@@ -28,7 +28,7 @@
                     </svg>
                     Back to Dashboard
                 </a>
-                <button onclick="window.location.reload()"
+                <button data-action-click="err-001"
                         class="inline-flex items-center justify-center px-6 py-3 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition duration-150 border border-white/20">
                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
@@ -39,4 +39,18 @@
         </div>
     </div>
 </div>
+<script nonce="{{ csp_nonce }}">
+// ---------------------------------------------------------------------------
+// Event wiring: inline on* attributes cannot run under the CSP (a nonce
+// authorises an element, not an attribute), so each one is registered here
+// and dispatched by static/js/actions.js. This block must stay OUTSIDE any
+// Jinja conditional -- a registry that renders conditionally orphans every key
+// on the branches where it does not render.
+// ---------------------------------------------------------------------------
+registerActions({
+    // was onclick="window.location.reload()"
+    'err-001': function (el, event) { window.location.reload(); },
+});
+</script>
+
 {% endblock %}

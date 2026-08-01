@@ -117,7 +117,7 @@ class TestUserModel:
 
     def test_create_user_with_all_fields(self, db_session):
         """Should create a user with all new fields populated."""
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.now(timezone.utc)
         user = User(
             spotify_id="full_user",
             display_name="Full User",
@@ -142,7 +142,7 @@ class TestUserModel:
 
     def test_to_dict_includes_new_fields(self, db_session):
         """Should include new fields in serialized dict."""
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.now(timezone.utc)
         user = User(
             spotify_id="dict_user",
             last_login_at=now,

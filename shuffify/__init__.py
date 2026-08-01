@@ -1,15 +1,17 @@
-import os
 import atexit
 import logging
+import os
 import secrets
 from typing import Optional
-from flask import Flask, g
-from flask_session import Session
+
 import redis
+from flask import Flask, g
 from flask_limiter import Limiter
 from flask_migrate import Migrate
+from flask_session import Session
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
+
 from config import config, validate_required_env_vars
 
 logger = logging.getLogger(__name__)
@@ -73,8 +75,9 @@ def get_spotify_cache():
     if _redis_client is None:
         return None
 
-    from shuffify.spotify.cache import SpotifyCache
     from flask import current_app
+
+    from shuffify.spotify.cache import SpotifyCache
 
     # Get TTL settings from config if available
     try:
@@ -100,8 +103,9 @@ def is_db_available() -> bool:
         True if database is available, False otherwise.
     """
     try:
-        from shuffify.models.db import db
         from flask import current_app
+
+        from shuffify.models.db import db
 
         # Verify we're in app context and db is initialized
         if not current_app:
@@ -256,6 +260,7 @@ def _schema_revision_state(migrations_dir):
     """
     from alembic.runtime.migration import MigrationContext
     from alembic.script import ScriptDirectory
+
     from shuffify.models.db import db
 
     heads = set(ScriptDirectory(migrations_dir).get_heads())
@@ -401,31 +406,77 @@ _SENTRY_PII_DENYLIST = (
     "client_secret",
     "email",
     "session",
+    "token_data",
+    "token_info",
 )
+
+# Keys redacted on an exact match rather than a substring match. An OAuth
+# authorization code lives under the bare key "code"; matching that as a
+# substring would also redact status_code, error_code, and similar
+# diagnostic values that Sentry exists to show.
+_SENTRY_PII_EXACT_KEYS = (
+    "code",
+    "password",
+    "token",
+    "secret",
+)
+
+
+def _sentry_key_is_sensitive(key):
+    """True when a payload key must have its value redacted.
+
+    Keys only -- the value itself is never examined. See _strip_pii for what
+    that leaves uncovered (#514).
+    """
+    lowered = str(key).lower()
+    if lowered in _SENTRY_PII_EXACT_KEYS:
+        return True
+    return any(token in lowered for token in _SENTRY_PII_DENYLIST)
 
 
 def _strip_pii(event, hint):
     """Sentry before_send hook: redact known-sensitive keys.
 
-    Walks request headers, request data, extras, and breadcrumbs;
-    replaces any value whose key contains a denylisted substring
-    with a fixed redaction sentinel. Cookies and Authorization are
+    Walks request headers, request data, extras, contexts, breadcrumbs, and
+    exception stack-trace frame variables; replaces any value whose key is
+    sensitive with a fixed redaction sentinel. Cookies and Authorization are
     stripped wholesale.
+
+    Frame variables are the last line of defense, not the first: capture is
+    disabled at the SDK level in _init_sentry. This walk keeps secrets out of
+    the payload even if a stack trace arrives carrying them anyway.
+
+    Boundary -- redaction is **key-based only**. A value is filtered because
+    the key naming it is sensitive; the scrubber never inspects free text.
+    Anything interpolated into a string rather than stored under a key passes
+    through untouched: log message text (``logentry.message``), exception
+    strings (``exception.values[].value``), and breadcrumb messages. So
+    ``logger.error("failed for %s", token)`` egresses the token even though
+    ``logger.error("failed", extra={"token": token})`` would not. Do not
+    interpolate credentials into messages or exception text on the assumption
+    that this hook covers them. Value/pattern-based scrubbing is tracked in
+    issue #514.
     """
 
     def _redact(obj):
         if isinstance(obj, dict):
             return {
-                k: (
-                    "[Filtered]"
-                    if any(token in str(k).lower() for token in _SENTRY_PII_DENYLIST)
-                    else _redact(v)
-                )
+                k: ("[Filtered]" if _sentry_key_is_sensitive(k) else _redact(v))
                 for k, v in obj.items()
             }
         if isinstance(obj, list):
             return [_redact(item) for item in obj]
         return obj
+
+    def _redact_stacktrace(stacktrace):
+        if not isinstance(stacktrace, dict):
+            return
+        frames = stacktrace.get("frames")
+        if not isinstance(frames, list):
+            return
+        for frame in frames:
+            if isinstance(frame, dict) and "vars" in frame:
+                frame["vars"] = _redact(frame["vars"])
 
     if not isinstance(event, dict):
         return event
@@ -438,6 +489,20 @@ def _strip_pii(event, hint):
         event["contexts"] = _redact(event["contexts"])
     if "breadcrumbs" in event:
         event["breadcrumbs"] = _redact(event["breadcrumbs"])
+
+    exception = event.get("exception")
+    if isinstance(exception, dict):
+        for value in exception.get("values") or []:
+            if isinstance(value, dict):
+                _redact_stacktrace(value.get("stacktrace"))
+    _redact_stacktrace(event.get("stacktrace"))
+
+    threads = event.get("threads")
+    if isinstance(threads, dict):
+        for value in threads.get("values") or []:
+            if isinstance(value, dict):
+                _redact_stacktrace(value.get("stacktrace"))
+
     return event
 
 
@@ -456,10 +521,10 @@ def _init_sentry(config_class):
     try:
         import sentry_sdk
         from sentry_sdk.integrations.flask import FlaskIntegration
+        from sentry_sdk.integrations.logging import LoggingIntegration
         from sentry_sdk.integrations.sqlalchemy import (
             SqlalchemyIntegration,
         )
-        from sentry_sdk.integrations.logging import LoggingIntegration
     except ImportError as e:
         logger.warning("sentry-sdk not installed: %s. Skipping Sentry init.", e)
         return False
@@ -472,6 +537,10 @@ def _init_sentry(config_class):
         traces_sample_rate=getattr(config_class, "SENTRY_TRACES_SAMPLE_RATE", 0.0),
         profiles_sample_rate=getattr(config_class, "SENTRY_PROFILES_SAMPLE_RATE", 0.0),
         send_default_pii=False,
+        # OAuth codes, token dicts, and credentials live in the frame locals
+        # of the token-exchange and refresh paths, which log at ERROR with
+        # exc_info. Capturing locals would ship them to a third-party store.
+        include_local_variables=False,
         release=release,
         integrations=[
             FlaskIntegration(),
@@ -515,8 +584,10 @@ def _apply_security_headers(app):
         # Content Security Policy — nonce-based, no unsafe-inline
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            f"script-src 'self' https://cdn.tailwindcss.com "
-            f"https://cdn.jsdelivr.net 'nonce-{nonce}'; "
+            # cdn.jsdelivr.net serves SortableJS only, pinned by SRI at the
+            # script tag. Tailwind is compiled into static/css at build time
+            # and is no longer fetched from a CDN, so its host is not listed.
+            f"script-src 'self' https://cdn.jsdelivr.net 'nonce-{nonce}'; "
             f"style-src 'self' 'nonce-{nonce}'; "
             "img-src 'self' https://i.scdn.co https://*.spotifycdn.com data:; "
             "connect-src 'self'; "

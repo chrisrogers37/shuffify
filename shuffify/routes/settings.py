@@ -5,42 +5,43 @@ Settings routes: view and update user preferences.
 import logging
 
 from flask import (
+    flash,
     jsonify,
     redirect,
-    url_for,
-    request,
-    flash,
     render_template,
+    request,
+    url_for,
 )
 from pydantic import ValidationError
 
+from shuffify.error_handlers import (
+    format_validation_error,
+)
 from shuffify.routes import (
-    main,
-    require_auth_and_db,
-    require_auth_page,
     clear_session_and_show_login,
     json_error,
     json_success,
-)
-from shuffify.services import (
-    ShuffleService,
-    AuthenticationError,
-    UserSettingsService,
-    UserSettingsError,
+    main,
+    require_auth_and_db,
+    require_auth_page,
 )
 from shuffify.schemas import UserSettingsUpdateRequest
+from shuffify.services import (
+    AuthenticationError,
+    ShuffleService,
+    UserSettingsError,
+    UserSettingsService,
+)
 
 logger = logging.getLogger(__name__)
 
 
 @main.route("/settings")
 @require_auth_page
-def settings(client=None, user=None, spotify_profile=None):
+def settings(api=None, user=None, spotify_profile=None):
     """Render the user settings page."""
     try:
-        user_settings = UserSettingsService.get_or_create(
-            user.id
-        )
+        user_settings = UserSettingsService.get_or_create(user.id)
         algorithms = ShuffleService.list_algorithms()
         algorithm_options = [
             {"value": "", "label": "No default (choose each time)"}
@@ -62,7 +63,7 @@ def settings(client=None, user=None, spotify_profile=None):
 
         return render_template(
             "settings.html",
-            user=spotify_profile,
+            user=user,
             settings=user_settings.to_dict(),
             algorithms=algorithms,
             algorithm_options=algorithm_options,
@@ -103,7 +104,7 @@ def settings(client=None, user=None, spotify_profile=None):
 
 @main.route("/settings", methods=["POST"])
 @require_auth_and_db
-def update_settings(client=None, user=None):
+def update_settings(api=None, user=None):
     """Update user settings from form submission."""
     # Handle both JSON and form-encoded data
     if request.is_json:
@@ -162,12 +163,10 @@ def update_settings(client=None, user=None):
     try:
         update_request = UserSettingsUpdateRequest(**data)
     except ValidationError as e:
-        first_error = (
-            e.errors()[0] if e.errors() else {}
-        )
-        msg = first_error.get("msg", "Invalid input")
         return json_error(
-            f"Validation error: {msg}", 400
+            f"Validation error: "
+            f"{format_validation_error(e)}",
+            400,
         )
 
     # Build kwargs from non-None fields only

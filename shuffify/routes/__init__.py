@@ -9,26 +9,30 @@ navigability. All modules import `main` from this package and
 register routes on it.
 """
 
-from flask import (
-    Blueprint,
-    render_template,
-    request,
-    session,
-    jsonify,
-    flash,
-    redirect,
-    url_for,
-)
 import functools
 import logging
 from datetime import datetime, timezone
 
+from flask import (
+    Blueprint,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from pydantic import ValidationError
 
+from shuffify.error_handlers import (
+    format_validation_error,
+    json_error_response,
+)
 from shuffify.services import (
+    AuthenticationError,
     AuthService,
     UserService,
-    AuthenticationError,
 )
 from shuffify.spotify.exceptions import SpotifyError
 
@@ -61,15 +65,15 @@ def is_authenticated() -> bool:
 
 def require_auth():
     """
-    Get authenticated client or None.
+    Get an authenticated Spotify API client, or None.
 
     Returns:
-        SpotifyClient if authenticated, None otherwise.
+        SpotifyAPI if authenticated, None otherwise.
     """
     if not is_authenticated():
         return None
     try:
-        return AuthService.get_authenticated_client(
+        return AuthService.get_authenticated_api(
             session["spotify_token"]
         )
     except AuthenticationError:
@@ -85,15 +89,14 @@ def clear_session_and_show_login(message: str = None):
 
 
 def json_error(message: str, status_code: int = 400) -> tuple:
-    """Return a JSON error response."""
-    return (
-        jsonify({
-            "success": False,
-            "message": message,
-            "category": "error",
-        }),
-        status_code,
-    )
+    """Return a JSON error response.
+
+    Delegates to `error_handlers.json_error_response` so the error envelope
+    is constructed in exactly one place. Both names survive because they
+    serve different layers -- routes default to 400, the global handlers
+    always know their status -- but the payload shape is defined once.
+    """
+    return json_error_response(message, status_code)
 
 
 def json_success(message: str, **extra) -> dict:
@@ -130,10 +133,9 @@ def validate_json(schema_class):
     try:
         return schema_class(**data), None
     except ValidationError as e:
-        first_error = e.errors()[0] if e.errors() else {}
-        msg = first_error.get("msg", "Invalid input")
         return None, json_error(
-            f"Validation error: {msg}", 400
+            f"Validation error: {format_validation_error(e)}",
+            400,
         )
 
 
@@ -146,21 +148,21 @@ def require_auth_and_db(f):
     2. is_db_available() -- returns 503 if DB is down
     3. get_db_user() -- returns 401 if user not found in DB
 
-    Injects ``client`` (SpotifyClient) and ``user`` (User model)
+    Injects ``api`` (SpotifyAPI) and ``user`` (User model)
     as keyword arguments to the wrapped function.
 
     Usage::
 
         @main.route("/endpoint")
         @require_auth_and_db
-        def my_route(client=None, user=None):
-            # client and user are guaranteed non-None here
+        def my_route(api=None, user=None):
+            # api and user are guaranteed non-None here
             ...
     """
     @functools.wraps(f)
     def decorated_function(*args, **kwargs):
-        client = require_auth()
-        if not client:
+        api = require_auth()
+        if not api:
             return json_error("Please log in first.", 401)
 
         from shuffify import is_db_available
@@ -173,7 +175,7 @@ def require_auth_and_db(f):
         if not user:
             return json_error("User not found.", 401)
 
-        kwargs["client"] = client
+        kwargs["api"] = api
         kwargs["user"] = user
         return f(*args, **kwargs)
 
@@ -192,12 +194,12 @@ def require_auth_page(f):
 
     Injects three keyword arguments:
 
-    ``client``
-        Authenticated ``SpotifyClient``.
+    ``api``
+        Authenticated ``SpotifyAPI`` -- same name and type as
+        :func:`require_auth_and_db` injects, so a route can move between the
+        two decorators without its body changing.
     ``user``
-        The database ``User`` row -- same meaning as in
-        :func:`require_auth_and_db`, so routes can move between the two
-        decorators without their bodies changing.
+        The database ``User`` row, likewise matching the JSON decorator.
     ``spotify_profile``
         The Spotify profile ``dict`` (``id``, ``display_name``, ``images``).
         Page templates render this; the database row does not carry it.
@@ -206,20 +208,21 @@ def require_auth_page(f):
 
         @main.route("/page")
         @require_auth_page
-        def my_page(client=None, user=None, spotify_profile=None):
+        def my_page(api=None, user=None, spotify_profile=None):
             return render_template("page.html", user=spotify_profile)
     """
+
     @functools.wraps(f)
     def decorated_function(*args, **kwargs):
-        client = require_auth()
-        if not client:
+        api = require_auth()
+        if not api:
             return redirect(url_for("main.index"))
 
         from shuffify import is_db_available
+
         if not is_db_available():
             flash(
-                "The database is temporarily unavailable. "
-                "Please try again shortly.",
+                "The database is temporarily unavailable. Please try again shortly.",
                 "error",
             )
             return redirect(url_for("main.index"))
@@ -230,14 +233,14 @@ def require_auth_page(f):
             return redirect(url_for("main.index"))
 
         try:
-            spotify_profile = AuthService.get_user_data(client)
+            spotify_profile = AuthService.get_user_data(api)
         except SpotifyError:
             # The profile is presentation data, not an authorization signal --
             # a Spotify hiccup here should not bounce an authenticated user
             # back to the login page.
             spotify_profile = None
 
-        kwargs["client"] = client
+        kwargs["api"] = api
         kwargs["user"] = user
         kwargs["spotify_profile"] = spotify_profile
         return f(*args, **kwargs)
@@ -318,8 +321,8 @@ def load_schedule_context(db_user):
     fallback to empty dicts if DB queries fail.
     """
     from shuffify.services import (
-        UpstreamSourceService,
         PlaylistPairService,
+        UpstreamSourceService,
     )
 
     upstream_sources_map = {}
@@ -367,17 +370,16 @@ def load_schedule_context(db_user):
 # =============================================================================
 
 from shuffify.routes import (  # noqa: E402, F401
+    activity,
     core,
+    playlist_pairs,
+    playlist_preferences,
     playlists,
-    shuffle,
-    workshop,
-    upstream_sources,
+    raid_panel,
     schedules,
     settings,
+    shuffle,
     snapshots,
-    playlist_pairs,
-    raid_panel,
-    playlist_preferences,
     track_locks,
-    activity,
+    workshop,
 )

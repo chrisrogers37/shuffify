@@ -4,29 +4,29 @@ Playlist API routes: fetch, refresh, and query playlists.
 
 import logging
 
-from flask import request, jsonify
+from flask import jsonify, request
 
 from shuffify.routes import (
-    main,
-    require_auth_and_db,
     json_error,
     json_success,
+    main,
+    require_auth_and_db,
 )
-from shuffify.services import PlaylistService, PlaylistError
+from shuffify.schemas import PlaylistQueryParams
+from shuffify.services import PlaylistError, PlaylistService
 from shuffify.services.playlist_preference_service import (
     PlaylistPreferenceService,
 )
-from shuffify.schemas import PlaylistQueryParams
 
 logger = logging.getLogger(__name__)
 
 
 @main.route("/refresh-playlists", methods=["POST"])
 @require_auth_and_db
-def refresh_playlists(client=None, user=None):
+def refresh_playlists(api=None, user=None):
     """Refresh playlists from Spotify without losing undo state."""
     try:
-        playlist_service = PlaylistService(client)
+        playlist_service = PlaylistService(api)
         playlists = playlist_service.get_user_playlists(
             skip_cache=True
         )
@@ -61,13 +61,13 @@ def refresh_playlists(client=None, user=None):
 
 @main.route("/playlist/<playlist_id>")
 @require_auth_and_db
-def get_playlist(playlist_id, client=None, user=None):
+def get_playlist(playlist_id, api=None, user=None):
     """Get playlist data with optional audio features."""
     query_params = PlaylistQueryParams(
         features=request.args.get("features", "false")
     )
 
-    playlist_service = PlaylistService(client)
+    playlist_service = PlaylistService(api)
     playlist = playlist_service.get_playlist(
         playlist_id, query_params.features
     )
@@ -77,20 +77,20 @@ def get_playlist(playlist_id, client=None, user=None):
 @main.route("/playlist/<playlist_id>/stats")
 @require_auth_and_db
 def get_playlist_stats(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Get playlist audio feature statistics."""
-    playlist_service = PlaylistService(client)
+    playlist_service = PlaylistService(api)
     stats = playlist_service.get_playlist_stats(playlist_id)
     return jsonify(stats)
 
 
 @main.route("/api/user-playlists")
 @require_auth_and_db
-def api_user_playlists(client=None, user=None):
+def api_user_playlists(api=None, user=None):
     """Return the user's editable playlists as JSON."""
     try:
-        playlist_service = PlaylistService(client)
+        playlist_service = PlaylistService(api)
         playlists = playlist_service.get_user_playlists()
 
         # Apply user preferences (favorites first, hidden excluded)
@@ -142,7 +142,7 @@ def api_user_playlists(client=None, user=None):
 )
 @require_auth_and_db
 def toggle_visibility(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Toggle a playlist's public/private visibility."""
     data = request.get_json(silent=True) or {}
@@ -153,12 +153,12 @@ def toggle_visibility(
         )
 
     # Defense-in-depth: only editable playlists may be mutated (SR-014).
-    PlaylistService(client).validate_user_can_edit(
+    PlaylistService(api).validate_user_can_edit(
         playlist_id, user.spotify_id
     )
 
     try:
-        client.api.update_playlist_details(
+        api.update_playlist_details(
             playlist_id, public=bool(public)
         )
         state = "public" if public else "private"

@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 @main.route("/activity")
 @require_auth_page
-def activity(client=None, user=None, spotify_profile=None):
+def activity(api=None, user=None, spotify_profile=None):
     """Activity Log page with full history and KPI stats."""
     stats = DashboardService.get_quick_stats(user.id)
     activities = ActivityLogService.get_recent(

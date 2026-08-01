@@ -4,21 +4,21 @@ Shuffle executor: run shuffle algorithms on target playlists.
 
 import logging
 
-from shuffify.models.db import Schedule
-from shuffify.spotify.api import SpotifyAPI
-from shuffify.spotify.exceptions import (
-    SpotifyAPIError,
-    SpotifyNotFoundError,
-)
 from shuffify.enums import SnapshotType
-from shuffify.shuffle_algorithms.registry import ShuffleRegistry
-from shuffify.shuffle_algorithms.utils import extract_uris
+from shuffify.models.db import Schedule
 from shuffify.services.executors.base_executor import (
     JobExecutionError,
     verify_playlist_state,
 )
 from shuffify.services.playlist_snapshot_service import (
     PlaylistSnapshotService,
+)
+from shuffify.shuffle_algorithms.registry import ShuffleRegistry
+from shuffify.shuffle_algorithms.utils import extract_uris
+from shuffify.spotify.api import SpotifyAPI
+from shuffify.spotify.exceptions import (
+    SpotifyAPIError,
+    SpotifyNotFoundError,
 )
 
 logger = logging.getLogger(__name__)
@@ -104,8 +104,8 @@ def execute_shuffle(
 
         if locked_positions:
             from shuffify.shuffle_algorithms.utils import (
-                split_locked_tracks,
                 reassemble_with_locks,
+                split_locked_tracks,
             )
 
             validated_locks, unlocked_tracks = (
@@ -210,34 +210,19 @@ def _auto_snapshot_before_shuffle(
 ) -> None:
     """Create an auto-snapshot before a scheduled shuffle
     if enabled."""
-    try:
-        pre_shuffle_uris = extract_uris(raw_tracks)
-        if (
-            pre_shuffle_uris
-            and PlaylistSnapshotService
-            .is_auto_snapshot_enabled(
-                schedule.user_id
-            )
-        ):
-            PlaylistSnapshotService.create_snapshot(
-                user_id=schedule.user_id,
-                playlist_id=schedule.target_playlist_id,
-                playlist_name=(
-                    schedule.target_playlist_name
-                    or schedule.target_playlist_id
-                ),
-                track_uris=pre_shuffle_uris,
-                snapshot_type=(
-                    SnapshotType
-                    .SCHEDULED_PRE_EXECUTION
-                ),
-                trigger_description=(
-                    "Before scheduled "
-                    f"{algorithm_name}"
-                ),
-            )
-    except Exception as snap_err:
-        logger.warning(
-            "Auto-snapshot before scheduled "
-            f"shuffle failed: {snap_err}"
-        )
+    # AUTO_PRE_SHUFFLE, matching the interactive shuffle route and the
+    # AUTO_PRE_* every sibling executor uses. This path used to write
+    # SCHEDULED_PRE_EXECUTION, which the snapshot list renders as
+    # "Auto-backup" rather than "Pre-Shuffle" -- the same operation labelled
+    # differently depending on whether a human or the scheduler triggered it.
+    PlaylistSnapshotService.auto_snapshot_if_enabled(
+        user_id=schedule.user_id,
+        playlist_id=schedule.target_playlist_id,
+        playlist_name=(
+            schedule.target_playlist_name
+            or schedule.target_playlist_id
+        ),
+        track_uris=extract_uris(raw_tracks),
+        snapshot_type=SnapshotType.AUTO_PRE_SHUFFLE,
+        trigger_description=f"Before scheduled {algorithm_name}",
+    )

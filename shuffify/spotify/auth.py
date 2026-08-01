@@ -9,7 +9,7 @@ separating them from data operations.
 import logging
 import time
 from dataclasses import dataclass
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 from urllib.parse import urlencode
 
 import requests

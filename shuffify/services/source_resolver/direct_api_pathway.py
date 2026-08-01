@@ -7,6 +7,7 @@ from shuffify.spotify.exceptions import (
     SpotifyNotFoundError,
     SpotifyTokenExpiredError,
 )
+
 from .base import ResolveResult
 
 logger = logging.getLogger(__name__)

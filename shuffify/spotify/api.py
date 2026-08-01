@@ -9,9 +9,9 @@ Supports optional Redis caching for improved performance.
 """
 
 import logging
-from typing import Callable, Dict, List, Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
-from .auth import TokenInfo, SpotifyAuthManager
+from .auth import SpotifyAuthManager, TokenInfo
 from .error_handling import api_error_handler
 from .exceptions import (
     SpotifyAPIError,
@@ -311,10 +311,11 @@ class SpotifyAPI:
 
         all_items = self._http.get_all_pages(f"/playlists/{playlist_id}/items")
         for item in all_items:
-            # TODO: Spotify API migrating from "track" to "item"
-            # key (announced Feb 2026). Use "track" as primary
-            # with "item" fallback until migration is complete,
-            # then swap.
+            # The playlist-items resource names the nested object "track" on
+            # the legacy shape and "item" on the current one. Both are read
+            # because a single playlist can return either -- the rename rolled
+            # out per-response, not per-account -- so neither key can be
+            # dropped on a date.
             track = item.get("track") or item.get("item")
             # Only include valid tracks (not None, not local-only)
             if track and track.get("uri"):
@@ -563,8 +564,8 @@ class SpotifyAPI:
             batch = track_uris[i : i + self.BATCH_SIZE]
             try:
                 self._http.delete(
-                    f"/playlists/{playlist_id}/tracks",
-                    json={"tracks": [{"uri": u} for u in batch]},
+                    f"/playlists/{playlist_id}/items",
+                    json={"items": [{"uri": u} for u in batch]},
                 )
             except SpotifyAPIError as e:
                 if self._cache and batch_idx > 0:
@@ -664,8 +665,11 @@ class SpotifyAPI:
         Get playlist items with optional field filtering.
 
         Uses Spotify's field filtering to reduce response size.
-        Note: Spotify is migrating from 'track(...)' to 'item(...)'
-        in field filters. Use 'track(...)' until migration completes.
+
+        Note: the nested object is named ``track(...)`` on the legacy response
+        shape and ``item(...)`` on the current one. A filter naming only one
+        strips the other out of the response, so callers that read both keys
+        must request both.
 
         Args:
             playlist_id: The Spotify playlist ID.

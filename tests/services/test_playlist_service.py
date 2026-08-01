@@ -20,49 +20,49 @@ from shuffify.models.playlist import Playlist
 class TestPlaylistServiceAssertUserCanEdit:
     """Tests for validate_user_can_edit (SR-014 defense-in-depth guard)."""
 
-    def test_allows_owner(self, mock_spotify_client):
+    def test_allows_owner(self, mock_spotify_api):
         """The playlist's owner may edit it."""
-        mock_spotify_client.get_playlist.return_value = {
+        mock_spotify_api.get_playlist.return_value = {
             "id": "p1",
             "owner": {"id": "alice"},
             "collaborative": False,
         }
-        PlaylistService(mock_spotify_client).validate_user_can_edit(
+        PlaylistService(mock_spotify_api).validate_user_can_edit(
             "p1", "alice"
         )
 
-    def test_allows_collaborative_non_owner(self, mock_spotify_client):
+    def test_allows_collaborative_non_owner(self, mock_spotify_api):
         """A collaborative playlist is editable even by a non-owner."""
-        mock_spotify_client.get_playlist.return_value = {
+        mock_spotify_api.get_playlist.return_value = {
             "id": "p1",
             "owner": {"id": "bob"},
             "collaborative": True,
         }
-        PlaylistService(mock_spotify_client).validate_user_can_edit(
+        PlaylistService(mock_spotify_api).validate_user_can_edit(
             "p1", "alice"
         )
 
-    def test_rejects_non_owner_non_collaborative(self, mock_spotify_client):
+    def test_rejects_non_owner_non_collaborative(self, mock_spotify_api):
         """A non-owner, non-collaborative playlist must be rejected."""
-        mock_spotify_client.get_playlist.return_value = {
+        mock_spotify_api.get_playlist.return_value = {
             "id": "p1",
             "owner": {"id": "bob"},
             "collaborative": False,
         }
         with pytest.raises(PlaylistAccessError):
-            PlaylistService(mock_spotify_client).validate_user_can_edit(
+            PlaylistService(mock_spotify_api).validate_user_can_edit(
                 "p1", "alice"
             )
 
-    def test_rejects_when_playlist_not_accessible(self, mock_spotify_client):
+    def test_rejects_when_playlist_not_accessible(self, mock_spotify_api):
         """A playlist the user can't even fetch (404/private) is rejected."""
         from shuffify.spotify.exceptions import SpotifyNotFoundError
 
-        mock_spotify_client.get_playlist.side_effect = SpotifyNotFoundError(
+        mock_spotify_api.get_playlist.side_effect = SpotifyNotFoundError(
             "not found"
         )
         with pytest.raises(PlaylistAccessError):
-            PlaylistService(mock_spotify_client).validate_user_can_edit(
+            PlaylistService(mock_spotify_api).validate_user_can_edit(
                 "p1", "alice"
             )
 
@@ -70,37 +70,37 @@ class TestPlaylistServiceAssertUserCanEdit:
 class TestPlaylistServiceInit:
     """Tests for PlaylistService initialization."""
 
-    def test_init_with_client(self, mock_spotify_client):
-        """Should initialize with a SpotifyClient."""
-        service = PlaylistService(mock_spotify_client)
-        assert service._client == mock_spotify_client
+    def test_init_with_api(self, mock_spotify_api):
+        """Should initialize with a SpotifyAPI."""
+        service = PlaylistService(mock_spotify_api)
+        assert service._api == mock_spotify_api
 
 
 class TestPlaylistServiceGetUserPlaylists:
     """Tests for get_user_playlists method."""
 
-    def test_get_user_playlists_success(self, mock_spotify_client, sample_playlists):
+    def test_get_user_playlists_success(self, mock_spotify_api, sample_playlists):
         """Should return list of user playlists."""
-        service = PlaylistService(mock_spotify_client)
+        service = PlaylistService(mock_spotify_api)
 
         result = service.get_user_playlists()
 
         assert result == sample_playlists
-        mock_spotify_client.get_user_playlists.assert_called_once()
+        mock_spotify_api.get_user_playlists.assert_called_once()
 
-    def test_get_user_playlists_empty(self, mock_spotify_client):
+    def test_get_user_playlists_empty(self, mock_spotify_api):
         """Should return empty list when user has no playlists."""
-        mock_spotify_client.get_user_playlists.return_value = []
-        service = PlaylistService(mock_spotify_client)
+        mock_spotify_api.get_user_playlists.return_value = []
+        service = PlaylistService(mock_spotify_api)
 
         result = service.get_user_playlists()
 
         assert result == []
 
-    def test_get_user_playlists_failure(self, mock_spotify_client):
+    def test_get_user_playlists_failure(self, mock_spotify_api):
         """Should raise PlaylistError on API failure."""
-        mock_spotify_client.get_user_playlists.side_effect = Exception("API error")
-        service = PlaylistService(mock_spotify_client)
+        mock_spotify_api.get_user_playlists.side_effect = Exception("API error")
+        service = PlaylistService(mock_spotify_api)
 
         with pytest.raises(PlaylistError) as exc_info:
             service.get_user_playlists()
@@ -110,9 +110,9 @@ class TestPlaylistServiceGetUserPlaylists:
 class TestPlaylistServiceGetPlaylist:
     """Tests for get_playlist method."""
 
-    def test_get_playlist_success(self, mock_spotify_client, sample_playlist_data, sample_tracks):
+    def test_get_playlist_success(self, mock_spotify_api, sample_playlist_data, sample_tracks):
         """Should return Playlist model instance."""
-        service = PlaylistService(mock_spotify_client)
+        service = PlaylistService(mock_spotify_api)
 
         result = service.get_playlist('playlist123', include_features=False)
 
@@ -121,44 +121,44 @@ class TestPlaylistServiceGetPlaylist:
         assert result.name == 'My Test Playlist'
         assert len(result.tracks) == len(sample_tracks)
 
-    def test_get_playlist_with_features(self, mock_spotify_client, sample_audio_features):
+    def test_get_playlist_with_features(self, mock_spotify_api, sample_audio_features):
         """Should include audio features when requested."""
-        service = PlaylistService(mock_spotify_client)
+        service = PlaylistService(mock_spotify_api)
 
         result = service.get_playlist('playlist123', include_features=True)
 
         assert result.has_features()
-        mock_spotify_client.get_track_audio_features.assert_called_once()
+        mock_spotify_api.get_audio_features.assert_called_once()
 
-    def test_get_playlist_without_features(self, mock_spotify_client):
+    def test_get_playlist_without_features(self, mock_spotify_api):
         """Should not fetch features when not requested."""
-        service = PlaylistService(mock_spotify_client)
+        service = PlaylistService(mock_spotify_api)
 
         result = service.get_playlist('playlist123', include_features=False)
 
         assert not result.has_features()
-        mock_spotify_client.get_track_audio_features.assert_not_called()
+        mock_spotify_api.get_audio_features.assert_not_called()
 
-    def test_get_playlist_empty_id(self, mock_spotify_client):
+    def test_get_playlist_empty_id(self, mock_spotify_api):
         """Should raise PlaylistNotFoundError for empty ID."""
-        service = PlaylistService(mock_spotify_client)
+        service = PlaylistService(mock_spotify_api)
 
         with pytest.raises(PlaylistNotFoundError) as exc_info:
             service.get_playlist('')
         assert "Playlist ID is required" in str(exc_info.value)
 
-    def test_get_playlist_none_id(self, mock_spotify_client):
+    def test_get_playlist_none_id(self, mock_spotify_api):
         """Should raise PlaylistNotFoundError for None ID."""
-        service = PlaylistService(mock_spotify_client)
+        service = PlaylistService(mock_spotify_api)
 
         with pytest.raises(PlaylistNotFoundError) as exc_info:
             service.get_playlist(None)
         assert "Playlist ID is required" in str(exc_info.value)
 
-    def test_get_playlist_api_failure(self, mock_spotify_client):
+    def test_get_playlist_api_failure(self, mock_spotify_api):
         """Should raise PlaylistError on API failure."""
-        mock_spotify_client.get_playlist.side_effect = Exception("API error")
-        service = PlaylistService(mock_spotify_client)
+        mock_spotify_api.get_playlist.side_effect = Exception("API error")
+        service = PlaylistService(mock_spotify_api)
 
         with pytest.raises(PlaylistError) as exc_info:
             service.get_playlist('playlist123')
@@ -168,16 +168,16 @@ class TestPlaylistServiceGetPlaylist:
 class TestPlaylistServiceGetPlaylistMetadata:
     """Tests for get_playlist_metadata method."""
 
-    def test_get_metadata_success(self, mock_spotify_client):
+    def test_get_metadata_success(self, mock_spotify_api):
         """Should return metadata dict without fetching tracks."""
-        mock_spotify_client.get_playlist.return_value = {
+        mock_spotify_api.get_playlist.return_value = {
             "id": "pl1",
             "name": "Cool Playlist",
             "owner": {"id": "owner1"},
             "description": "A playlist",
             "tracks": {"total": 42},
         }
-        service = PlaylistService(mock_spotify_client)
+        service = PlaylistService(mock_spotify_api)
         result = service.get_playlist_metadata("pl1")
 
         assert result["id"] == "pl1"
@@ -185,31 +185,31 @@ class TestPlaylistServiceGetPlaylistMetadata:
         assert result["owner_id"] == "owner1"
         assert result["total_tracks"] == 42
         # Should NOT call get_playlist_tracks
-        mock_spotify_client.get_playlist_tracks.assert_not_called()
+        mock_spotify_api.get_playlist_tracks.assert_not_called()
 
-    def test_get_metadata_empty_id(self, mock_spotify_client):
+    def test_get_metadata_empty_id(self, mock_spotify_api):
         """Should raise PlaylistNotFoundError for empty ID."""
-        service = PlaylistService(mock_spotify_client)
+        service = PlaylistService(mock_spotify_api)
         with pytest.raises(PlaylistNotFoundError):
             service.get_playlist_metadata("")
 
-    def test_get_metadata_not_found(self, mock_spotify_client):
+    def test_get_metadata_not_found(self, mock_spotify_api):
         """Should raise PlaylistNotFoundError on 404."""
         from shuffify.spotify.exceptions import SpotifyNotFoundError
 
-        mock_spotify_client.get_playlist.side_effect = (
+        mock_spotify_api.get_playlist.side_effect = (
             SpotifyNotFoundError("Not found")
         )
-        service = PlaylistService(mock_spotify_client)
+        service = PlaylistService(mock_spotify_api)
         with pytest.raises(PlaylistNotFoundError):
             service.get_playlist_metadata("pl1")
 
-    def test_get_metadata_api_failure(self, mock_spotify_client):
+    def test_get_metadata_api_failure(self, mock_spotify_api):
         """Should raise PlaylistError on generic failure."""
-        mock_spotify_client.get_playlist.side_effect = (
+        mock_spotify_api.get_playlist.side_effect = (
             Exception("API error")
         )
-        service = PlaylistService(mock_spotify_client)
+        service = PlaylistService(mock_spotify_api)
         with pytest.raises(PlaylistError):
             service.get_playlist_metadata("pl1")
 
@@ -217,9 +217,9 @@ class TestPlaylistServiceGetPlaylistMetadata:
 class TestPlaylistServiceGetPlaylistStats:
     """Tests for get_playlist_stats method."""
 
-    def test_get_playlist_stats_success(self, mock_spotify_client, sample_audio_features):
+    def test_get_playlist_stats_success(self, mock_spotify_api, sample_audio_features):
         """Should return feature statistics."""
-        service = PlaylistService(mock_spotify_client)
+        service = PlaylistService(mock_spotify_api)
 
         stats = service.get_playlist_stats('playlist123')
 
@@ -228,9 +228,9 @@ class TestPlaylistServiceGetPlaylistStats:
         assert 'valence' in stats
         assert 'danceability' in stats
 
-    def test_get_playlist_stats_includes_min_max_avg(self, mock_spotify_client):
+    def test_get_playlist_stats_includes_min_max_avg(self, mock_spotify_api):
         """Stats should include min, max, and avg for each feature."""
-        service = PlaylistService(mock_spotify_client)
+        service = PlaylistService(mock_spotify_api)
 
         stats = service.get_playlist_stats('playlist123')
 
@@ -243,47 +243,47 @@ class TestPlaylistServiceGetPlaylistStats:
 class TestPlaylistServiceUpdatePlaylistTracks:
     """Tests for update_playlist_tracks method."""
 
-    def test_update_playlist_tracks_success(self, mock_spotify_client, sample_track_uris):
+    def test_update_playlist_tracks_success(self, mock_spotify_api, sample_track_uris):
         """Should update playlist and return True."""
-        service = PlaylistService(mock_spotify_client)
+        service = PlaylistService(mock_spotify_api)
 
         result = service.update_playlist_tracks('playlist123', sample_track_uris)
 
         assert result is True
-        mock_spotify_client.update_playlist_tracks.assert_called_once_with(
+        mock_spotify_api.update_playlist_tracks.assert_called_once_with(
             'playlist123', sample_track_uris
         )
 
-    def test_update_playlist_tracks_empty_list(self, mock_spotify_client):
+    def test_update_playlist_tracks_empty_list(self, mock_spotify_api):
         """Should handle empty track list (clears playlist)."""
-        service = PlaylistService(mock_spotify_client)
+        service = PlaylistService(mock_spotify_api)
 
         result = service.update_playlist_tracks('playlist123', [])
 
         assert result is True
-        mock_spotify_client.update_playlist_tracks.assert_called_once_with('playlist123', [])
+        mock_spotify_api.update_playlist_tracks.assert_called_once_with('playlist123', [])
 
-    def test_update_playlist_tracks_empty_id(self, mock_spotify_client, sample_track_uris):
+    def test_update_playlist_tracks_empty_id(self, mock_spotify_api, sample_track_uris):
         """Should raise PlaylistUpdateError for empty ID."""
-        service = PlaylistService(mock_spotify_client)
+        service = PlaylistService(mock_spotify_api)
 
         with pytest.raises(PlaylistUpdateError) as exc_info:
             service.update_playlist_tracks('', sample_track_uris)
         assert "Playlist ID is required" in str(exc_info.value)
 
-    def test_update_playlist_tracks_api_returns_false(self, mock_spotify_client, sample_track_uris):
+    def test_update_playlist_tracks_api_returns_false(self, mock_spotify_api, sample_track_uris):
         """Should raise PlaylistUpdateError when API returns False."""
-        mock_spotify_client.update_playlist_tracks.return_value = False
-        service = PlaylistService(mock_spotify_client)
+        mock_spotify_api.update_playlist_tracks.return_value = False
+        service = PlaylistService(mock_spotify_api)
 
         with pytest.raises(PlaylistUpdateError) as exc_info:
             service.update_playlist_tracks('playlist123', sample_track_uris)
         assert "Spotify API returned failure" in str(exc_info.value)
 
-    def test_update_playlist_tracks_api_failure(self, mock_spotify_client, sample_track_uris):
+    def test_update_playlist_tracks_api_failure(self, mock_spotify_api, sample_track_uris):
         """Should raise PlaylistUpdateError on API exception."""
-        mock_spotify_client.update_playlist_tracks.side_effect = Exception("API error")
-        service = PlaylistService(mock_spotify_client)
+        mock_spotify_api.update_playlist_tracks.side_effect = Exception("API error")
+        service = PlaylistService(mock_spotify_api)
 
         with pytest.raises(PlaylistUpdateError) as exc_info:
             service.update_playlist_tracks('playlist123', sample_track_uris)
@@ -293,18 +293,18 @@ class TestPlaylistServiceUpdatePlaylistTracks:
 class TestPlaylistServiceGetTrackUris:
     """Tests for get_track_uris method."""
 
-    def test_get_track_uris_success(self, mock_spotify_client, sample_track_uris):
+    def test_get_track_uris_success(self, mock_spotify_api, sample_track_uris):
         """Should return list of track URIs."""
-        service = PlaylistService(mock_spotify_client)
+        service = PlaylistService(mock_spotify_api)
 
         result = service.get_track_uris('playlist123')
 
         assert result == sample_track_uris
 
-    def test_get_track_uris_empty_playlist(self, mock_spotify_client):
+    def test_get_track_uris_empty_playlist(self, mock_spotify_api):
         """Should return empty list for empty playlist."""
-        mock_spotify_client.get_playlist_tracks.return_value = []
-        service = PlaylistService(mock_spotify_client)
+        mock_spotify_api.get_playlist_tracks.return_value = []
+        service = PlaylistService(mock_spotify_api)
 
         result = service.get_track_uris('playlist123')
 
@@ -314,18 +314,18 @@ class TestPlaylistServiceGetTrackUris:
 class TestPlaylistServiceValidatePlaylistHasTracks:
     """Tests for validate_playlist_has_tracks method."""
 
-    def test_validate_playlist_has_tracks_success(self, mock_spotify_client):
+    def test_validate_playlist_has_tracks_success(self, mock_spotify_api):
         """Should not raise for playlist with tracks."""
-        service = PlaylistService(mock_spotify_client)
+        service = PlaylistService(mock_spotify_api)
         playlist = service.get_playlist('playlist123')
 
         # Should not raise
         service.validate_playlist_has_tracks(playlist)
 
-    def test_validate_playlist_has_tracks_empty(self, mock_spotify_client):
+    def test_validate_playlist_has_tracks_empty(self, mock_spotify_api):
         """Should raise PlaylistError for empty playlist."""
-        mock_spotify_client.get_playlist_tracks.return_value = []
-        service = PlaylistService(mock_spotify_client)
+        mock_spotify_api.get_playlist_tracks.return_value = []
+        service = PlaylistService(mock_spotify_api)
         playlist = service.get_playlist('playlist123')
 
         with pytest.raises(PlaylistError) as exc_info:

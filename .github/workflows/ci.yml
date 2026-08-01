@@ -48,12 +48,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements/dev.txt
 
-      - name: Lint (flake8)
-        run: flake8 shuffify/
+      - name: Lint (ruff)
+        run: ruff check shuffify/
 
       - name: Format check (black)
-        # Non-blocking until the ruff consolidation (SR-037) reformats the
-        # tree; surfaces drift without blocking merges in the meantime.
+        # Still non-blocking: SR-037 consolidated linting onto ruff but did
+        # not reformat the tree, so black drift remains pre-existing.
         run: black --check shuffify/
         continue-on-error: true
 

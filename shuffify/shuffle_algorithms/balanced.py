@@ -1,8 +1,9 @@
-from typing import List, Dict, Any, Optional
-import random
-from . import ShuffleAlgorithm
-from .utils import extract_uris, split_keep_first, split_into_sections
 import logging
+import random
+from typing import Any, Dict, List, Optional
+
+from . import ShuffleAlgorithm
+from .utils import extract_uris, split_into_sections, split_keep_first
 
 logger = logging.getLogger(__name__)
 

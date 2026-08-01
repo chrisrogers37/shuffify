@@ -4,7 +4,8 @@ Pydantic validation schemas for schedule API requests.
 Validates schedule creation and update payloads.
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from pydantic import (
     BaseModel,
     Field,
@@ -13,7 +14,10 @@ from pydantic import (
 )
 
 from shuffify.enums import (
-    JobType, ScheduleType, IntervalValue, RotationMode,
+    IntervalValue,
+    JobType,
+    RotationMode,
+    ScheduleType,
 )
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 

@@ -15,17 +15,18 @@ IMPORTANT:
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Optional, Tuple, Dict
+from typing import Dict, Optional, Tuple
 
-from apscheduler.schedulers.background import BackgroundScheduler
-from shuffify.enums import ScheduleType, IntervalValue
-from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
-from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.events import (
     EVENT_JOB_ERROR,
     EVENT_JOB_EXECUTED,
     EVENT_JOB_MISSED,
 )
+from apscheduler.executors.pool import ThreadPoolExecutor
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from apscheduler.schedulers.background import BackgroundScheduler
+
+from shuffify.enums import IntervalValue, ScheduleType
 
 logger = logging.getLogger(__name__)
 
