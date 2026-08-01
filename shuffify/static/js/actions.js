@@ -28,9 +28,29 @@
 
     var registry = Object.create(null);
 
-    /** Register handler functions by key. Safe to call repeatedly. */
+    /**
+     * Register handler functions by key. Safe to call repeatedly.
+     *
+     * A duplicate key is always a wiring bug, never intentional: the later
+     * registration wins and the earlier handler stops working, which is the
+     * same silent-failure shape this whole module exists to remove. Keys are
+     * spread across page templates, partials and macros, so collisions get
+     * likelier as more pages migrate -- report them loudly rather than letting
+     * one control quietly stop responding.
+     *
+     * Last-write-wins is kept (plain object-assignment semantics, so nothing
+     * changes behaviourally); the error is what makes it findable.
+     */
     window.registerActions = function (map) {
         Object.keys(map).forEach(function (key) {
+            if (key in registry && window.console && console.error) {
+                console.error(
+                    'registerActions: duplicate action key "' + key + '". The ' +
+                    "earlier handler has been replaced and will no longer run. " +
+                    "Action keys must be unique across every template, partial " +
+                    "and macro on the page."
+                );
+            }
             registry[key] = map[key];
         });
     };
