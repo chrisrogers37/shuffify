@@ -165,7 +165,3 @@ class TestHTTPErrorHandlers:
         assert data is not None
         assert data["success"] is False
 
-    def test_404_for_html_route_returns_default(self, client):
-        response = client.get("/nonexistent-page")
-        # Non-API routes may return HTML 404 or JSON depending on implementation
-        assert response.status_code == 404

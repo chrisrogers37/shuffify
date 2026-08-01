@@ -61,10 +61,10 @@ def index():
             return render_template("index.html")
 
         try:
-            client = AuthService.get_authenticated_client(session["spotify_token"])
-            user = AuthService.get_user_data(client)
+            api = AuthService.get_authenticated_api(session["spotify_token"])
+            user = AuthService.get_user_data(api)
 
-            playlist_service = PlaylistService(client)
+            playlist_service = PlaylistService(api)
             playlists = playlist_service.get_user_playlists()
 
             algorithms = ShuffleService.list_algorithms()

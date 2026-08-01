@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 )
 @require_auth_and_db
 def playlist_schedules(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Get all schedules for a specific playlist."""
     schedules = (
@@ -78,10 +78,10 @@ def schedules():
         return redirect(url_for("main.index"))
 
     try:
-        client = AuthService.get_authenticated_client(
+        api = AuthService.get_authenticated_api(
             session["spotify_token"]
         )
-        user = AuthService.get_user_data(client)
+        user = AuthService.get_user_data(api)
 
         db_user = get_db_user()
         if not db_user:
@@ -95,7 +95,7 @@ def schedules():
             SchedulerService.get_user_schedules(db_user.id)
         )
 
-        playlist_service = PlaylistService(client)
+        playlist_service = PlaylistService(api)
         playlists = playlist_service.get_user_playlists()
 
         algorithms = ShuffleService.list_algorithms()
@@ -155,7 +155,7 @@ def schedules():
 
 @main.route("/schedules/create", methods=["POST"])
 @require_auth_and_db
-def create_schedule(client=None, user=None):
+def create_schedule(api=None, user=None):
     """Create a new scheduled operation."""
     if not user.encrypted_refresh_token:
         return json_error(
@@ -174,7 +174,7 @@ def create_schedule(client=None, user=None):
     # Defense-in-depth: the user must be able to edit the target playlist
     # (owner or collaborative). Otherwise a schedule can be created against an
     # arbitrary playlist ID that fails forever at execution time (SR-014).
-    PlaylistService(client).validate_user_can_edit(
+    PlaylistService(api).validate_user_can_edit(
         create_request.target_playlist_id, user.spotify_id
     )
 
@@ -272,7 +272,7 @@ def create_schedule(client=None, user=None):
 )
 @require_auth_and_db
 def update_schedule(
-    schedule_id, client=None, user=None
+    schedule_id, api=None, user=None
 ):
     """Update an existing schedule."""
     update_request, err = validate_json(
@@ -324,7 +324,7 @@ def update_schedule(
 )
 @require_auth_and_db
 def delete_schedule(
-    schedule_id, client=None, user=None
+    schedule_id, api=None, user=None
 ):
     """Delete a schedule."""
     # delete_schedule removes the APScheduler job after the DB delete commits,
@@ -353,7 +353,7 @@ def delete_schedule(
 )
 @require_auth_and_db
 def toggle_schedule(
-    schedule_id, client=None, user=None
+    schedule_id, api=None, user=None
 ):
     """Toggle a schedule's enabled/disabled state."""
     schedule = SchedulerService.toggle_schedule(
@@ -391,7 +391,7 @@ def toggle_schedule(
 )
 @require_auth_and_db
 def run_schedule_now(
-    schedule_id, client=None, user=None
+    schedule_id, api=None, user=None
 ):
     """Manually trigger a schedule execution."""
     try:
@@ -437,7 +437,7 @@ def run_schedule_now(
 @main.route("/schedules/<int:schedule_id>/history")
 @require_auth_and_db
 def schedule_history(
-    schedule_id, client=None, user=None
+    schedule_id, api=None, user=None
 ):
     """Get execution history for a schedule."""
     history = SchedulerService.get_execution_history(
@@ -452,7 +452,7 @@ def schedule_history(
 )
 @require_auth_and_db
 def rotation_status(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Get rotation status for a playlist."""
     from shuffify.services.playlist_pair_service import (

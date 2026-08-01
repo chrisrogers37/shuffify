@@ -157,7 +157,7 @@ class TestUserServiceUpsert:
 
     def test_create_sets_last_login_at(self, app_ctx):
         """Should set last_login_at on first login."""
-        before = datetime.now(timezone.utc).replace(tzinfo=None)
+        before = datetime.now(timezone.utc)
         user_data = {
             "id": "login_time",
             "display_name": "Timed",
@@ -165,7 +165,7 @@ class TestUserServiceUpsert:
         }
 
         result = UserService.upsert_from_spotify(user_data)
-        after = datetime.now(timezone.utc).replace(tzinfo=None)
+        after = datetime.now(timezone.utc)
 
         assert result.user.last_login_at is not None
         assert before <= result.user.last_login_at <= after

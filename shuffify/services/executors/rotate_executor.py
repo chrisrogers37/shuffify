@@ -150,24 +150,18 @@ def _auto_snapshot_before_rotate(
 ) -> None:
     """Create an auto-snapshot before rotation if
     enabled."""
-    try:
-        if prod_uris and PlaylistSnapshotService.is_auto_snapshot_enabled(
-            schedule.user_id
-        ):
-            PlaylistSnapshotService.create_snapshot(
-                user_id=schedule.user_id,
-                playlist_id=(schedule.target_playlist_id),
-                playlist_name=(
-                    schedule.target_playlist_name or schedule.target_playlist_id
-                ),
-                track_uris=prod_uris,
-                snapshot_type=(SnapshotType.AUTO_PRE_ROTATE),
-                trigger_description=(
-                    "Before scheduled {} rotation".format(rotation_mode)
-                ),
-            )
-    except Exception as snap_err:
-        logger.warning("Auto-snapshot before rotation failed: %s", snap_err)
+    PlaylistSnapshotService.auto_snapshot_if_enabled(
+        user_id=schedule.user_id,
+        playlist_id=schedule.target_playlist_id,
+        playlist_name=(
+            schedule.target_playlist_name or schedule.target_playlist_id
+        ),
+        track_uris=prod_uris,
+        snapshot_type=SnapshotType.AUTO_PRE_ROTATE,
+        trigger_description=(
+            "Before scheduled {} rotation".format(rotation_mode)
+        ),
+    )
 
 
 def _sample_at_most(pool, count):
@@ -453,6 +447,23 @@ def _execute_swap(
     rotation_count,
 ):
     """Phase 2: swap tracks between production and archive.
+
+    Swap-in is FIFO and swap-out is random, and the asymmetry is deliberate.
+
+    The archive is a queue: this function takes from the head
+    (`archive_uris[:n]`), removes exactly those from the archive, and appends
+    the swapped-out tracks to the tail (`playlist_add_items` with no
+    `position` appends). So every archived track advances one place toward
+    the head on each rotation that does not re-archive it, and comes back in
+    a bounded number of cycles -- oldest first, longest-waiting first.
+
+    Randomising swap-in would replace that bound with an unbounded wait: a
+    track could be passed over indefinitely. FIFO is the fairer choice here
+    precisely because it is not random.
+
+    Swap-out is random because production has no comparable ordering to
+    exploit -- there is no "longest serving" track to evict, so a uniform
+    sample is the neutral pick.
 
     Returns (swapped_count, actual_total).
     """

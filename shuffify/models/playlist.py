@@ -2,7 +2,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from shuffify.spotify.client import SpotifyClient
+from shuffify.spotify.api import SpotifyAPI
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +28,13 @@ class Playlist:
     @classmethod
     def from_spotify(
         cls,
-        spotify_client: "SpotifyClient",
+        api: "SpotifyAPI",
         playlist_id: str,
         include_features: bool = False,
     ) -> "Playlist":
         """Load a playlist and optionally its audio features."""
-        playlist_data = spotify_client.get_playlist(playlist_id)
-        raw_tracks = spotify_client.get_playlist_tracks(playlist_id)
+        playlist_data = api.get_playlist(playlist_id)
+        raw_tracks = api.get_playlist_tracks(playlist_id)
 
         tracks = []
         for track in raw_tracks:
@@ -67,7 +67,7 @@ class Playlist:
         if include_features and tracks:
             track_ids = [track["id"] for track in tracks]
             if track_ids:
-                audio_features = spotify_client.get_track_audio_features(track_ids)
+                audio_features = api.get_audio_features(track_ids)
 
         total_tracks_meta = playlist_data.get(
             "tracks", playlist_data.get("items", {})

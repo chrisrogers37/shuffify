@@ -213,29 +213,6 @@ This directory contains various algorithms for shuffling Spotify playlists, each
   - Any playlist where date-based ordering with slight randomness is preferred
 
 
-### Tempo Gradient (Hidden)
-- **Class**: `TempoGradientShuffle`
-- **File**: `tempo_gradient.py`
-- **Visible**: **No** (hidden from UI — Spotify deprecated Audio Features API in November 2024)
-- **Requires Audio Features**: **Yes** (requires `tempo` field from Spotify audio features)
-- **Description**: Sorts tracks by tempo (BPM) for smooth DJ-style transitions. Choose ascending for a building energy flow, or descending to wind down.
-- **Parameters**:
-  - `direction` (string): Sort direction for tempo
-    - Default: 'ascending', Options: ['ascending', 'descending']
-- **How it works in detail**:
-  1. Maps each track URI to its tempo (BPM) from audio features
-  2. Falls back to 120.0 BPM for tracks without audio features data
-  3. Sorts all track URIs by tempo in the specified direction
-  4. Returns the sorted list
-- **Why Hidden**:
-  Spotify deprecated their Audio Features API endpoint in November 2024. This algorithm requires the `tempo` field from audio features to function correctly. It is registered in the `ShuffleRegistry` but excluded from `list_algorithms()` via the `_hidden_algorithms` set. It can still be accessed programmatically via `ShuffleRegistry.get_algorithm("TempoGradientShuffle")`.
-  To unhide: remove `"TempoGradientShuffle"` from `_hidden_algorithms` in `registry.py` when extended API access is granted.
-- **Use Cases** (when audio features are available):
-  - DJ-style sets with gradual tempo increase
-  - Workout playlists that build in intensity
-  - Wind-down playlists that gradually slow tempo
-
-
 ## Algorithm Comparison
 
 | Algorithm | Randomness Level | Structure Preservation | Requires Features | Visible | Best For |
@@ -272,7 +249,7 @@ class ShuffleAlgorithm(Protocol):
 
 Algorithms are registered in `registry.py` via the `ShuffleRegistry` class:
 - `_algorithms` dict maps class names to classes (pre-populated)
-- `_hidden_algorithms` set controls UI visibility
+- `list_algorithms()` ordering controls UI presentation
 - `list_algorithms()` returns visible algorithms in a defined display order
 - `get_algorithm(name)` returns any algorithm by class name (including hidden)
 - `register(cls)` adds new algorithms dynamically
@@ -354,8 +331,6 @@ To create a new shuffle algorithm:
 
 4. Add tests in `tests/algorithms/test_my_algorithm.py`
 
-5. To hide an algorithm from the UI (e.g., if it depends on a deprecated API):
-   - Add to `_hidden_algorithms` set: `_hidden_algorithms = {"MyAlgorithm"}`
 
 ## Parameter Types
 

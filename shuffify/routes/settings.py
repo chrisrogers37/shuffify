@@ -15,6 +15,9 @@ from flask import (
 )
 from pydantic import ValidationError
 
+from shuffify.error_handlers import (
+    format_validation_error,
+)
 from shuffify.routes import (
     clear_session_and_show_login,
     get_db_user,
@@ -43,10 +46,10 @@ def settings():
         return redirect(url_for("main.index"))
 
     try:
-        client = AuthService.get_authenticated_client(
+        api = AuthService.get_authenticated_api(
             session["spotify_token"]
         )
-        user = AuthService.get_user_data(client)
+        user = AuthService.get_user_data(api)
 
         db_user = get_db_user()
         if not db_user:
@@ -121,7 +124,7 @@ def settings():
 
 @main.route("/settings", methods=["POST"])
 @require_auth_and_db
-def update_settings(client=None, user=None):
+def update_settings(api=None, user=None):
     """Update user settings from form submission."""
     # Handle both JSON and form-encoded data
     if request.is_json:
@@ -180,12 +183,10 @@ def update_settings(client=None, user=None):
     try:
         update_request = UserSettingsUpdateRequest(**data)
     except ValidationError as e:
-        first_error = (
-            e.errors()[0] if e.errors() else {}
-        )
-        msg = first_error.get("msg", "Invalid input")
         return json_error(
-            f"Validation error: {msg}", 400
+            f"Validation error: "
+            f"{format_validation_error(e)}",
+            400,
         )
 
     # Build kwargs from non-None fields only

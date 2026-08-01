@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 )
 @require_auth_and_db
 def get_track_locks(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Get all active locks for a playlist."""
     try:
@@ -66,7 +66,7 @@ def get_track_locks(
 )
 @require_auth_and_db
 def toggle_track_lock(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Toggle lock tier for a track."""
     req, err = validate_json(TrackLockToggleRequest)
@@ -134,7 +134,7 @@ def toggle_track_lock(
 )
 @require_auth_and_db
 def unlock_all_tracks(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Unlock all (or specific) tracks in a playlist."""
     from flask import request as flask_request

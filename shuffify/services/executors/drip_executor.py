@@ -212,54 +212,31 @@ def _auto_snapshot_before_drip(
 ):
     """Create auto-snapshots before drip if enabled."""
     try:
-        if not PlaylistSnapshotService.is_auto_snapshot_enabled(
-            schedule.user_id
-        ):
-            return
-
-        # Snapshot target
         target_tracks = api.get_playlist_tracks(target_id)
-        target_uris = extract_uris(target_tracks or [])
-        if target_uris:
-            PlaylistSnapshotService.create_snapshot(
-                user_id=schedule.user_id,
-                playlist_id=target_id,
-                playlist_name=(
-                    schedule.target_playlist_name
-                    or target_id
-                ),
-                track_uris=target_uris,
-                snapshot_type=(
-                    SnapshotType.AUTO_PRE_DRIP
-                ),
-                trigger_description=(
-                    "Before scheduled drip "
-                    "(target)"
-                ),
-            )
-
-        # Snapshot raid playlist
         raid_tracks = api.get_playlist_tracks(raid_id)
-        raid_uris = extract_uris(raid_tracks or [])
-        if raid_uris:
-            PlaylistSnapshotService.create_snapshot(
-                user_id=schedule.user_id,
-                playlist_id=raid_id,
-                playlist_name="Raid playlist",
-                track_uris=raid_uris,
-                snapshot_type=(
-                    SnapshotType.AUTO_PRE_DRIP
-                ),
-                trigger_description=(
-                    "Before scheduled drip "
-                    "(raid)"
-                ),
-            )
     except Exception as snap_err:
         logger.warning(
             "Auto-snapshot before drip "
             "failed: %s", snap_err
         )
+        return
+
+    PlaylistSnapshotService.auto_snapshot_if_enabled(
+        user_id=schedule.user_id,
+        playlist_id=target_id,
+        playlist_name=schedule.target_playlist_name or target_id,
+        track_uris=extract_uris(target_tracks or []),
+        snapshot_type=SnapshotType.AUTO_PRE_DRIP,
+        trigger_description="Before scheduled drip (target)",
+    )
+    PlaylistSnapshotService.auto_snapshot_if_enabled(
+        user_id=schedule.user_id,
+        playlist_id=raid_id,
+        playlist_name="Raid playlist",
+        track_uris=extract_uris(raid_tracks or []),
+        snapshot_type=SnapshotType.AUTO_PRE_DRIP,
+        trigger_description="Before scheduled drip (raid)",
+    )
 
 
 def _mark_dripped_as_promoted(
