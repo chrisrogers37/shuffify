@@ -248,7 +248,9 @@ class UpstreamSourceService:
 
     @staticmethod
     def get_source(
-        source_id: int, spotify_id: str
+        source_id: int,
+        spotify_id: str,
+        target_playlist_id: str = None,
     ) -> UpstreamSource:
         """
         Get a specific upstream source by ID.
@@ -256,26 +258,42 @@ class UpstreamSourceService:
         Args:
             source_id: The upstream source database ID.
             spotify_id: The Spotify user ID (for ownership check).
+            target_playlist_id: When given, the source must also be
+                configured against this playlist. Callers reached through a
+                ``/playlist/<playlist_id>/`` route must pass it, so the
+                playlist in the URL constrains which source is addressed
+                rather than being decorative.
 
         Returns:
             UpstreamSource instance.
 
         Raises:
-            UpstreamSourceNotFoundError: If not found or not owned.
+            UpstreamSourceNotFoundError: If not found, not owned, or not
+                configured against ``target_playlist_id``.
         """
         user = get_user_or_raise(
             spotify_id, UpstreamSourceNotFoundError
         )
-        return get_owned_entity(
+        source = get_owned_entity(
             UpstreamSource,
             source_id,
             user.id,
             UpstreamSourceNotFoundError,
         )
+        if (
+            target_playlist_id is not None
+            and source.target_playlist_id != target_playlist_id
+        ):
+            raise UpstreamSourceNotFoundError(
+                f"Source {source_id} not found"
+            )
+        return source
 
     @staticmethod
     def delete_source(
-        source_id: int, spotify_id: str
+        source_id: int,
+        spotify_id: str,
+        target_playlist_id: str = None,
     ) -> bool:
         """
         Delete an upstream source configuration.
@@ -283,16 +301,19 @@ class UpstreamSourceService:
         Args:
             source_id: The upstream source database ID.
             spotify_id: The Spotify user ID (for ownership check).
+            target_playlist_id: When given, the source must also be
+                configured against this playlist.
 
         Returns:
             True if deleted successfully.
 
         Raises:
-            UpstreamSourceNotFoundError: If not found or not owned.
+            UpstreamSourceNotFoundError: If not found, not owned, or not
+                configured against ``target_playlist_id``.
             UpstreamSourceError: If deletion fails.
         """
         source = UpstreamSourceService.get_source(
-            source_id, spotify_id
+            source_id, spotify_id, target_playlist_id
         )
 
         db.session.delete(source)
@@ -305,16 +326,22 @@ class UpstreamSourceService:
     @staticmethod
     def update_raid_count(
         user_id: int,
+        target_playlist_id: str,
         source_id: int,
         raid_count: int,
     ) -> UpstreamSource:
         """Update a source's raid_count.
+
+        Scoped to the target playlist as well as the owner: a source is
+        configured against one playlist, so a request naming a different
+        playlist is not addressing this source.
 
         Raises UpstreamSourceNotFoundError if not found.
         """
         source = UpstreamSource.query.filter_by(
             id=source_id,
             user_id=user_id,
+            target_playlist_id=target_playlist_id,
         ).first()
         if not source:
             raise UpstreamSourceNotFoundError(

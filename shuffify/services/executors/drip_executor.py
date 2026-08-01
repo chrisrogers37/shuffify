@@ -53,7 +53,10 @@ def execute_drip(
             "first.".format(target_id)
         )
 
-    if not link.drip_enabled:
+    params = schedule.algorithm_params or {}
+
+    # A manual "Drip Now" runs regardless of the link's drip_enabled setting.
+    if not link.drip_enabled and not params.get("force"):
         logger.info(
             "Schedule %s: drip disabled for %s, "
             "skipping",
@@ -66,7 +69,6 @@ def execute_drip(
             "skipped_reason": "drip_disabled",
         }
 
-    params = schedule.algorithm_params or {}
     drip_count = params.get(
         "drip_count", link.drip_count
     )

@@ -125,15 +125,17 @@ class RaidSyncService:
             SchedulerService,
         )
 
-        # Get source before deleting (need playlist_id)
+        # Get source before deleting (need playlist_id). Scoped to the target
+        # playlist as well as the owner: unwatching through a different
+        # playlist's route must not reach this source.
         source = UpstreamSourceService.get_source(
-            source_id, spotify_id
+            source_id, spotify_id, target_playlist_id
         )
         source_playlist_id = source.source_playlist_id
 
         # Delete the upstream source
         UpstreamSourceService.delete_source(
-            source_id, spotify_id
+            source_id, spotify_id, target_playlist_id
         )
 
         if user is None:
@@ -492,10 +494,8 @@ class RaidSyncService:
 
         # Inline drip (no schedule) — run through the executor safety rails
         # instead of a hand-rolled Schedule(id=0) that bypassed them (#332).
-        # A manual "Drip Now" forces the drip regardless of the schedule's
-        # drip_enabled flag; execute_drip re-reads the link, so enable it
-        # within this transaction before dispatching.
-        link.drip_enabled = True
+        # The forced-run intent is passed to the executor explicitly; it is not
+        # signalled by mutating the link.
         result = JobExecutorService.execute_drip_for_user(
             user_id=user.id,
             target_playlist_id=target_playlist_id,

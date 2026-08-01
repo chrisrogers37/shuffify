@@ -19,6 +19,7 @@ class _FakeConfig:
 # _init_sentry
 # ---------------------------------------------------------------------------
 
+
 class TestInitSentry:
     def test_empty_dsn_is_no_op(self):
         """No DSN → sentry_sdk.init is never called."""
@@ -47,6 +48,9 @@ class TestInitSentry:
             assert kwargs["profiles_sample_rate"] == 0.05
             assert kwargs["release"] == "deadbeef"
             assert kwargs["send_default_pii"] is False
+            # Frame locals carry OAuth codes and token dicts on the token
+            # paths; the before_send walk is a backstop, not a substitute.
+            assert kwargs["include_local_variables"] is False
             assert kwargs["before_send"] is _strip_pii
             # Three integrations: Flask, SQLAlchemy, Logging.
             assert len(kwargs["integrations"]) == 3
@@ -64,6 +68,7 @@ class TestInitSentry:
 # ---------------------------------------------------------------------------
 # _strip_pii
 # ---------------------------------------------------------------------------
+
 
 class TestStripPii:
     def test_redacts_known_sensitive_keys(self):
@@ -134,6 +139,7 @@ class TestStripPii:
 # _tag_sentry_scope (executor-side tagging)
 # ---------------------------------------------------------------------------
 
+
 class TestTagSentryScope:
     def test_tags_schedule_context(self):
         from shuffify.services.executors.base_executor import (
@@ -154,15 +160,14 @@ class TestTagSentryScope:
 
             scope.set_tag.assert_any_call("schedule_id", 11)
             scope.set_tag.assert_any_call("job_type", "rotate")
-            scope.set_tag.assert_any_call(
-                "playlist_id", "wooklyn-id"
-            )
+            scope.set_tag.assert_any_call("playlist_id", "wooklyn-id")
             scope.set_user.assert_called_once_with({"id": "42"})
 
     def test_handles_missing_schedule(self):
         from shuffify.services.executors.base_executor import (
             _tag_sentry_scope,
         )
+
         with patch("sentry_sdk.get_current_scope") as mock_scope:
             scope = MagicMock()
             mock_scope.return_value = scope
@@ -177,6 +182,7 @@ class TestTagSentryScope:
         from shuffify.services.executors.base_executor import (
             _tag_sentry_scope,
         )
+
         schedule = MagicMock(
             job_type="rotate",
             target_playlist_id="p",
@@ -193,6 +199,7 @@ class TestTagSentryScope:
 # ---------------------------------------------------------------------------
 # Defensive: missing sentry-sdk shouldn't crash _init_sentry
 # ---------------------------------------------------------------------------
+
 
 class TestInitSentryGracefulImport:
     def test_missing_sentry_sdk_returns_false(self):
