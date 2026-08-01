@@ -13,7 +13,6 @@ from shuffify.spotify import (
     SpotifyCredentials,
     SpotifyAuthManager,
     SpotifyAPI,
-    SpotifyClient,
     TokenInfo,
 )
 from shuffify.services import (
@@ -164,16 +163,19 @@ class TestPlaylistServiceIntegration:
                 {'item': t} for t in sample_tracks
             ]
 
-            # Create SpotifyClient
-            credentials_dict = {
-                'client_id': 'test_id',
-                'client_secret': 'test_secret',
-                'redirect_uri': 'http://localhost/callback'
-            }
-            client = SpotifyClient(token=valid_token_data, credentials=credentials_dict)
+            # Build the API client the way AuthService does
+            credentials = SpotifyCredentials(
+                client_id='test_id',
+                client_secret='test_secret',
+                redirect_uri='http://localhost/callback',
+            )
+            api = SpotifyAPI(
+                TokenInfo.from_dict(valid_token_data),
+                SpotifyAuthManager(credentials),
+            )
 
             # Use PlaylistService
-            playlist_service = PlaylistService(client)
+            playlist_service = PlaylistService(api)
 
             # Get playlist
             playlist = playlist_service.get_playlist('playlist123')
@@ -351,10 +353,13 @@ class TestFullFlowIntegration:
                 'client_secret': 'test_secret',
                 'redirect_uri': 'http://localhost/callback'
             }
-            client = SpotifyClient(token=valid_token_data, credentials=credentials_dict)
+            api = SpotifyAPI(
+                TokenInfo.from_dict(valid_token_data),
+                SpotifyAuthManager(SpotifyCredentials(**credentials_dict)),
+            )
 
             # 2. Get playlist
-            playlist_service = PlaylistService(client)
+            playlist_service = PlaylistService(api)
             playlist = playlist_service.get_playlist('playlist123')
 
             assert playlist.name == 'Test Playlist'
@@ -423,20 +428,3 @@ class TestSpotifyModuleIntegration:
 
             user = api.get_current_user()
             assert user['display_name'] == 'Test User'
-
-    def test_client_facade_backward_compatibility(self, valid_token_data, sample_user):
-        """Test that SpotifyClient facade maintains backward compatibility."""
-        credentials_dict = {
-            'client_id': 'test_id',
-            'client_secret': 'test_secret',
-            'redirect_uri': 'http://localhost/callback'
-        }
-
-        with patch('shuffify.spotify.api.SpotifyHTTPClient') as MockHTTP:
-            mock_http = MockHTTP.return_value
-            mock_http.get.return_value = sample_user
-
-            client = SpotifyClient(token=valid_token_data, credentials=credentials_dict)
-
-            user = client.get_current_user()
-            assert user['id'] == 'user123'

@@ -43,10 +43,10 @@ def settings():
         return redirect(url_for("main.index"))
 
     try:
-        client = AuthService.get_authenticated_client(
+        api = AuthService.get_authenticated_api(
             session["spotify_token"]
         )
-        user = AuthService.get_user_data(client)
+        user = AuthService.get_user_data(api)
 
         db_user = get_db_user()
         if not db_user:
@@ -121,7 +121,7 @@ def settings():
 
 @main.route("/settings", methods=["POST"])
 @require_auth_and_db
-def update_settings(client=None, user=None):
+def update_settings(api=None, user=None):
     """Update user settings from form submission."""
     # Handle both JSON and form-encoded data
     if request.is_json:

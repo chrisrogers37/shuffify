@@ -10,10 +10,9 @@ Architecture:
     - api.py: SpotifyAPI for data operations
     - error_handling.py: Retry logic, backoff, error classification
     - cache.py: SpotifyCache for Redis-based response caching
-    - client.py: SpotifyClient facade (combines auth + api)
     - exceptions.py: Exception hierarchy
 
-Usage (preferred - explicit dependencies):
+Usage:
     from shuffify.spotify import (
         SpotifyCredentials,
         SpotifyAuthManager,
@@ -40,12 +39,6 @@ Usage (preferred - explicit dependencies):
     cache = SpotifyCache(redis_client)
     api = SpotifyAPI(token_info, auth_manager, cache=cache)
     playlists = api.get_user_playlists()
-
-Usage (legacy - backward compatible):
-    from shuffify.spotify import SpotifyClient
-
-    client = SpotifyClient(token=session['spotify_token'])
-    playlists = client.get_user_playlists()
 """
 
 # Credentials (for dependency injection)
@@ -68,7 +61,6 @@ from .url_parser import parse_spotify_playlist_url
 from .cache import SpotifyCache
 
 # Client (facade for backward compatibility)
-from .client import SpotifyClient
 
 # Exceptions
 from .exceptions import (
@@ -95,7 +87,6 @@ __all__ = [
     # Cache
     "SpotifyCache",
     # Client (facade)
-    "SpotifyClient",
     # Exceptions
     "SpotifyError",
     "SpotifyAuthError",

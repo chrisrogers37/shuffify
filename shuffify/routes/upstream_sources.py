@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 )
 @require_auth_and_db
 def list_upstream_sources(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """List all upstream sources for a target playlist."""
     try:
@@ -63,7 +63,7 @@ def list_upstream_sources(
 )
 @require_auth_and_db
 def add_upstream_source(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Add an upstream source to a target playlist."""
     data = request.get_json()
@@ -118,7 +118,7 @@ def add_upstream_source(
 )
 @require_auth_and_db
 def delete_upstream_source(
-    source_id, client=None, user=None
+    source_id, api=None, user=None
 ):
     """Delete an upstream source configuration."""
     try:
