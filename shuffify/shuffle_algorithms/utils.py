@@ -5,7 +5,7 @@ Provides common operations used across multiple algorithms to avoid
 code duplication and ensure consistent behavior.
 """
 
-from typing import List, Dict, Any, Tuple
+from typing import Any, Dict, List, Tuple
 
 
 def extract_uris(tracks: List[Dict[str, Any]]) -> List[str]:

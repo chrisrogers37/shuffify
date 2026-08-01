@@ -1,6 +1,7 @@
 import random
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from . import ShuffleAlgorithm
 from .utils import extract_uris
 

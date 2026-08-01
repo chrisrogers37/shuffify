@@ -1,7 +1,8 @@
-import random
 import heapq
-from typing import List, Dict, Any, Optional
+import random
 from collections import defaultdict
+from typing import Any, Dict, List, Optional
+
 from . import ShuffleAlgorithm
 from .utils import extract_uris
 

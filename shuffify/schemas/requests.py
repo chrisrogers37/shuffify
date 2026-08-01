@@ -5,7 +5,8 @@ Provides type-safe validation for all API request parameters.
 """
 
 import re
-from typing import Literal, Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
+
 from pydantic import BaseModel, Field, field_validator
 
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry

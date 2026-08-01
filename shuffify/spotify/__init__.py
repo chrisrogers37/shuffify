@@ -49,37 +49,36 @@ Usage (legacy - backward compatible):
 """
 
 # Credentials (for dependency injection)
-from .credentials import SpotifyCredentials
-
-# Auth (token management)
-from .auth import (
-    SpotifyAuthManager,
-    TokenInfo,
-    DEFAULT_SCOPES,
-)
-
 # API (data operations)
 from .api import SpotifyAPI
 
-# URL parser utility
-from .url_parser import parse_spotify_playlist_url
+# Auth (token management)
+from .auth import (
+    DEFAULT_SCOPES,
+    SpotifyAuthManager,
+    TokenInfo,
+)
 
 # Cache (Redis-based caching)
 from .cache import SpotifyCache
 
 # Client (facade for backward compatibility)
 from .client import SpotifyClient
+from .credentials import SpotifyCredentials
 
 # Exceptions
 from .exceptions import (
-    SpotifyError,
+    SpotifyAPIError,
     SpotifyAuthError,
+    SpotifyError,
+    SpotifyNotFoundError,
+    SpotifyRateLimitError,
     SpotifyTokenError,
     SpotifyTokenExpiredError,
-    SpotifyAPIError,
-    SpotifyRateLimitError,
-    SpotifyNotFoundError,
 )
+
+# URL parser utility
+from .url_parser import parse_spotify_playlist_url
 
 __all__ = [
     # Credentials

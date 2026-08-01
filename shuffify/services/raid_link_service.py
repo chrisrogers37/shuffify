@@ -6,10 +6,10 @@ Mirrors PlaylistPairService for the upstream raid direction.
 
 import logging
 
-from shuffify.models.db import db, RaidPlaylistLink
+from shuffify.models.db import RaidPlaylistLink, db
 from shuffify.services.base import (
-    safe_commit,
     create_private_playlist,
+    safe_commit,
 )
 
 logger = logging.getLogger(__name__)

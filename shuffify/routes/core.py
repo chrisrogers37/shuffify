@@ -19,27 +19,27 @@ from flask import (
     url_for,
 )
 
+from shuffify.enums import ActivityType
 from shuffify.routes import (
-    main,
-    is_authenticated,
     clear_session_and_show_login,
     get_db_user,
+    is_authenticated,
     log_activity,
+    main,
 )
 from shuffify.services import (
+    AuthenticationError,
     AuthService,
+    DashboardService,
+    LoginHistoryService,
+    PlaylistError,
     PlaylistService,
     ShuffleService,
     UserService,
-    LoginHistoryService,
-    DashboardService,
-    AuthenticationError,
-    PlaylistError,
 )
 from shuffify.services.playlist_preference_service import (
     PlaylistPreferenceService,
 )
-from shuffify.enums import ActivityType
 
 logger = logging.getLogger(__name__)
 
