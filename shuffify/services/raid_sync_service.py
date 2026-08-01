@@ -7,8 +7,8 @@ JobExecutorService into unified raid management operations.
 
 import logging
 
-from shuffify.models.db import db, Schedule, User
 from shuffify.enums import JobType, ScheduleType
+from shuffify.models.db import Schedule, User, db
 
 logger = logging.getLogger(__name__)
 
@@ -41,11 +41,11 @@ class RaidSyncService:
 
         Returns dict with 'source' and 'schedule' keys.
         """
-        from shuffify.services.upstream_source_service import (
-            UpstreamSourceService,
-        )
         from shuffify.services.scheduler_service import (
             SchedulerService,
+        )
+        from shuffify.services.upstream_source_service import (
+            UpstreamSourceService,
         )
 
         if user is None:
@@ -118,22 +118,24 @@ class RaidSyncService:
         """
         Remove a source and update/delete the raid schedule.
         """
-        from shuffify.services.upstream_source_service import (
-            UpstreamSourceService,
-        )
         from shuffify.services.scheduler_service import (
             SchedulerService,
         )
+        from shuffify.services.upstream_source_service import (
+            UpstreamSourceService,
+        )
 
-        # Get source before deleting (need playlist_id)
+        # Get source before deleting (need playlist_id). Scoped to the target
+        # playlist as well as the owner: unwatching through a different
+        # playlist's route must not reach this source.
         source = UpstreamSourceService.get_source(
-            source_id, spotify_id
+            source_id, spotify_id, target_playlist_id
         )
         source_playlist_id = source.source_playlist_id
 
         # Delete the upstream source
         UpstreamSourceService.delete_source(
-            source_id, spotify_id
+            source_id, spotify_id, target_playlist_id
         )
 
         if user is None:
@@ -175,11 +177,11 @@ class RaidSyncService:
         """
         Get raid panel summary for a target playlist.
         """
-        from shuffify.services.upstream_source_service import (
-            UpstreamSourceService,
-        )
         from shuffify.services.raid_link_service import (
             RaidLinkService,
+        )
+        from shuffify.services.upstream_source_service import (
+            UpstreamSourceService,
         )
 
         max_sources = (
@@ -341,8 +343,8 @@ class RaidSyncService:
         """Execute raid through existing schedule's job
         executor."""
         from shuffify.services.executors import (
-            JobExecutorService,
             JobExecutionError,
+            JobExecutorService,
         )
 
         try:
@@ -382,11 +384,11 @@ class RaidSyncService:
 
         Returns dict with 'source' and 'schedule' keys.
         """
-        from shuffify.services.upstream_source_service import (
-            UpstreamSourceService,
-        )
         from shuffify.services.scheduler_service import (
             SchedulerService,
+        )
+        from shuffify.services.upstream_source_service import (
+            UpstreamSourceService,
         )
 
         if user is None:
@@ -445,8 +447,8 @@ class RaidSyncService:
         """Trigger an immediate drip from raid playlist
         to target."""
         from shuffify.services.executors import (
-            JobExecutorService,
             JobExecutionError,
+            JobExecutorService,
         )
         from shuffify.services.raid_link_service import (
             RaidLinkService,
@@ -492,10 +494,8 @@ class RaidSyncService:
 
         # Inline drip (no schedule) — run through the executor safety rails
         # instead of a hand-rolled Schedule(id=0) that bypassed them (#332).
-        # A manual "Drip Now" forces the drip regardless of the schedule's
-        # drip_enabled flag; execute_drip re-reads the link, so enable it
-        # within this transaction before dispatching.
-        link.drip_enabled = True
+        # The forced-run intent is passed to the executor explicitly; it is not
+        # signalled by mutating the link.
         result = JobExecutorService.execute_drip_for_user(
             user_id=user.id,
             target_playlist_id=target_playlist_id,
@@ -548,8 +548,8 @@ class RaidSyncService:
         Returns (schedule_type, schedule_value) tuple.
         """
         from shuffify.services.schedule_utils import (
-            build_cron,
             TIME_CAPABLE_FREQUENCIES,
+            build_cron,
         )
 
         if (

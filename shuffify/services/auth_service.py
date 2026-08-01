@@ -5,7 +5,7 @@ Handles OAuth URL generation, token exchange, validation, and session management
 """
 
 import logging
-from typing import Dict, Any, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 from shuffify.spotify.client import SpotifyClient
 
@@ -171,7 +171,7 @@ class AuthService:
         Args:
             token_info: The freshly refreshed TokenInfo.
         """
-        from flask import session, has_request_context
+        from flask import has_request_context, session
 
         if not has_request_context():
             return
@@ -218,9 +218,10 @@ class AuthService:
             True if the provider accepted the revocation.
         """
         try:
+            from flask import current_app
+
             from shuffify.spotify.auth import SpotifyAuthManager
             from shuffify.spotify.credentials import SpotifyCredentials
-            from flask import current_app
 
             credentials = SpotifyCredentials.from_flask_config(current_app.config)
             auth_manager = SpotifyAuthManager(credentials)

@@ -6,9 +6,9 @@ and entity ownership verification. Used across all service modules.
 """
 
 import logging
-from typing import Type, Optional, Tuple
+from typing import Optional, Tuple, Type
 
-from shuffify.models.db import db, User
+from shuffify.models.db import User, db
 
 logger = logging.getLogger(__name__)
 

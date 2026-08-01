@@ -328,6 +328,14 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
+function escapeAttr(str) {
+    // escapeHtml() escapes for TEXT-node context only: per the HTML fragment
+    // serialization algorithm a text node encodes &, < and > but leaves quotes
+    // alone, so its output can still close a quoted attribute and add a new one.
+    // Use this wherever a value is interpolated inside quotes.
+    return escapeHtml(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // =============================================================================
 // Inline Edit Panels
 // =============================================================================
@@ -465,10 +473,10 @@ function renderRaidSources(targetId) {
 
     container.innerHTML = sources.map(src => `
         <label class="flex items-center space-x-2 px-2 py-1 rounded hover:bg-white/5 cursor-pointer">
-            <input type="checkbox" name="source_playlist" value="${src.source_playlist_id}"
+            <input type="checkbox" name="source_playlist" value="${escapeAttr(src.source_playlist_id)}"
                    class="rounded border-white/30 bg-white/10 text-spotify-green focus:ring-spotify-green"
                    onchange="updateCreateButtonState()">
-            <span class="text-white/80 text-sm truncate">${src.source_name || src.source_playlist_id}</span>
+            <span class="text-white/80 text-sm truncate">${escapeHtml(src.source_name || src.source_playlist_id)}</span>
             <span class="ml-auto px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30">external</span>
         </label>
     `).join('');
@@ -505,7 +513,7 @@ function renderPairStatus(targetId) {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                 </svg>
                 <p class="text-green-200 text-xs">
-                    Paired with <strong>${pair.archive_playlist_name || 'Archive'}</strong>
+                    Paired with <strong>${escapeHtml(pair.archive_playlist_name || 'Archive')}</strong>
                 </p>
             </div>
         </div>`;
@@ -721,7 +729,7 @@ function loadHistory(scheduleId) {
             const time = h.started_at ? new Date(h.started_at).toLocaleString() : '—';
             const tracks = h.tracks_total ? `${h.tracks_total} tracks` : '';
             const added = h.tracks_added ? ` (+${h.tracks_added} new)` : '';
-            const error = h.error_message ? `<span class="text-red-300 block mt-0.5">${h.error_message}</span>` : '';
+            const error = h.error_message ? `<span class="text-red-300 block mt-0.5">${escapeHtml(h.error_message)}</span>` : '';
             return `
                 <div class="flex items-start gap-2 px-2 py-1.5 rounded bg-white/5">
                     <span class="${statusColor} font-bold flex-shrink-0">${statusIcon}</span>

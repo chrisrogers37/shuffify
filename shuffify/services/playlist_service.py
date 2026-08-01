@@ -7,16 +7,16 @@ Handles playlist retrieval, track management, and playlist updates.
 import json
 import logging
 import re
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional
 
 import requests
 
-from shuffify.spotify.client import SpotifyClient
-from shuffify.spotify.exceptions import SpotifyNotFoundError
 from shuffify.models.playlist import Playlist
 from shuffify.services.source_resolver.base import (
     find_nested_key,
 )
+from shuffify.spotify.client import SpotifyClient
+from shuffify.spotify.exceptions import SpotifyNotFoundError
 
 logger = logging.getLogger(__name__)
 

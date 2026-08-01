@@ -10,20 +10,20 @@ import logging
 import random
 from datetime import datetime, timezone
 
+from shuffify.enums import PendingRaidStatus, SnapshotType
 from shuffify.models.db import Schedule
-from shuffify.spotify.api import SpotifyAPI
-from shuffify.spotify.exceptions import (
-    SpotifyAPIError,
-    SpotifyNotFoundError,
-)
-from shuffify.enums import SnapshotType, PendingRaidStatus
-from shuffify.shuffle_algorithms.utils import extract_uris
 from shuffify.services.executors.base_executor import (
     JobExecutionError,
     verify_playlist_state,
 )
 from shuffify.services.playlist_snapshot_service import (
     PlaylistSnapshotService,
+)
+from shuffify.shuffle_algorithms.utils import extract_uris
+from shuffify.spotify.api import SpotifyAPI
+from shuffify.spotify.exceptions import (
+    SpotifyAPIError,
+    SpotifyNotFoundError,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,10 @@ def execute_drip(
             "first.".format(target_id)
         )
 
-    if not link.drip_enabled:
+    params = schedule.algorithm_params or {}
+
+    # A manual "Drip Now" runs regardless of the link's drip_enabled setting.
+    if not link.drip_enabled and not params.get("force"):
         logger.info(
             "Schedule %s: drip disabled for %s, "
             "skipping",
@@ -66,7 +69,6 @@ def execute_drip(
             "skipped_reason": "drip_disabled",
         }
 
-    params = schedule.algorithm_params or {}
     drip_count = params.get(
         "drip_count", link.drip_count
     )

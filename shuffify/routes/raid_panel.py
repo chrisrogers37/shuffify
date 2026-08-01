@@ -9,52 +9,18 @@ import logging
 
 from flask import request
 
+from shuffify.enums import ActivityType, JobType
 from shuffify.routes import (
-    main,
-    require_auth_and_db,
     json_error,
     json_success,
     log_activity,
+    main,
+    require_auth_and_db,
     validate_json,
 )
-from shuffify.services.raid_sync_service import (
-    RaidSyncService,
-    RaidSyncError,
-)
-from shuffify.services.raid_link_service import (
-    RaidLinkService,
-    RaidLinkError,
-    RaidLinkExistsError,
-    RaidLinkNotFoundError,
-)
-from shuffify.services.upstream_source_service import (
-    UpstreamSourceService,
-    UpstreamSourceNotFoundError,
-    UpstreamSourceLimitError,
-)
-from shuffify.services.scheduler_service import (
-    SchedulerService,
-)
-from shuffify.services.playlist_service import (
-    PlaylistService,
-    PlaylistNotFoundError,
-)
-from shuffify.spotify.url_parser import (
-    parse_spotify_playlist_url,
-)
-from shuffify.enums import ActivityType, JobType
-from shuffify.schemas.raid_requests import (
-    WatchPlaylistRequest,
-    WatchSearchQueryRequest,
-    AddRaidUrlRequest,
-    UnwatchPlaylistRequest,
-    RaidNowRequest,
-    UpdateRaidScheduleRequest,
-    CreateRaidScheduleRequest,
-)
 from shuffify.schemas.pending_raid_requests import (
-    PromoteTracksRequest,
     DismissTracksRequest,
+    PromoteTracksRequest,
     UnpromoteTracksRequest,
 )
 from shuffify.schemas.raid_link_requests import (
@@ -62,8 +28,42 @@ from shuffify.schemas.raid_link_requests import (
     UpdateRaidLinkRequest,
     UpdateSourceRaidCountRequest,
 )
+from shuffify.schemas.raid_requests import (
+    AddRaidUrlRequest,
+    CreateRaidScheduleRequest,
+    RaidNowRequest,
+    UnwatchPlaylistRequest,
+    UpdateRaidScheduleRequest,
+    WatchPlaylistRequest,
+    WatchSearchQueryRequest,
+)
 from shuffify.services.pending_raid_service import (
     PendingRaidService,
+)
+from shuffify.services.playlist_service import (
+    PlaylistNotFoundError,
+    PlaylistService,
+)
+from shuffify.services.raid_link_service import (
+    RaidLinkError,
+    RaidLinkExistsError,
+    RaidLinkNotFoundError,
+    RaidLinkService,
+)
+from shuffify.services.raid_sync_service import (
+    RaidSyncError,
+    RaidSyncService,
+)
+from shuffify.services.scheduler_service import (
+    SchedulerService,
+)
+from shuffify.services.upstream_source_service import (
+    UpstreamSourceLimitError,
+    UpstreamSourceNotFoundError,
+    UpstreamSourceService,
+)
+from shuffify.spotify.url_parser import (
+    parse_spotify_playlist_url,
 )
 
 logger = logging.getLogger(__name__)
@@ -281,7 +281,10 @@ def raid_source_count_update(
 
     try:
         source = UpstreamSourceService.update_raid_count(
-            user.id, req.source_id, req.raid_count
+            user.id,
+            playlist_id,
+            req.source_id,
+            req.raid_count,
         )
         return json_success(
             "Source raid count updated.",
@@ -1075,8 +1078,8 @@ def pending_raids_dismiss(
         return err
 
     # Get tracks before dismissing for raid playlist sync
-    from shuffify.models.db import PendingRaidTrack
     from shuffify.enums import PendingRaidStatus
+    from shuffify.models.db import PendingRaidTrack
 
     tracks = PendingRaidTrack.query.filter(
         PendingRaidTrack.id.in_(req.track_ids),

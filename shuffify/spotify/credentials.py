@@ -5,7 +5,7 @@ Provides a clean dataclass for Spotify OAuth credentials,
 eliminating hidden Flask dependencies.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -34,7 +34,10 @@ class SpotifyCredentials:
     """
 
     client_id: str
-    client_secret: str
+    # repr=False keeps the secret out of every string rendering of this
+    # object — tracebacks, log lines, and error-reporter frame locals all
+    # serialize via repr, so excluding it here is what makes those safe.
+    client_secret: str = field(repr=False)
     redirect_uri: str
 
     def __post_init__(self):

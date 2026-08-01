@@ -7,10 +7,10 @@ This ensures that activity tracking never breaks primary operations.
 """
 
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from shuffify.models.db import db, ActivityLog
+from shuffify.models.db import ActivityLog, db
 from shuffify.services.base import safe_commit
 
 logger = logging.getLogger(__name__)

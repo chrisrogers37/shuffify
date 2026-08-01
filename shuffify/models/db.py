@@ -10,16 +10,17 @@ Supports PostgreSQL (production) and SQLite (development/testing).
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import types
+
 from shuffify.enums import (
-    ScheduleType,
     IntervalValue,
-    SnapshotType,
-    PendingRaidStatus,
     LockTier,
+    PendingRaidStatus,
+    ScheduleType,
+    SnapshotType,
 )
 
 logger = logging.getLogger(__name__)

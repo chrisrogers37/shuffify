@@ -9,9 +9,9 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from shuffify.models.db import db, UserSettings
-from shuffify.shuffle_algorithms.registry import ShuffleRegistry
+from shuffify.models.db import UserSettings, db
 from shuffify.services.base import safe_commit
+from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 
 logger = logging.getLogger(__name__)
 

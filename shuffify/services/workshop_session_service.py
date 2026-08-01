@@ -8,11 +8,11 @@ to save their track arrangements and resume later.
 import logging
 from typing import List, Optional
 
-from shuffify.models.db import db, WorkshopSession
+from shuffify.models.db import WorkshopSession, db
 from shuffify.services.base import (
-    safe_commit,
-    get_user_or_raise,
     get_owned_entity,
+    get_user_or_raise,
+    safe_commit,
 )
 
 logger = logging.getLogger(__name__)
