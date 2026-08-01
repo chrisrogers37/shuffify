@@ -305,16 +305,22 @@ class UpstreamSourceService:
     @staticmethod
     def update_raid_count(
         user_id: int,
+        target_playlist_id: str,
         source_id: int,
         raid_count: int,
     ) -> UpstreamSource:
         """Update a source's raid_count.
+
+        Scoped to the target playlist as well as the owner: a source is
+        configured against one playlist, so a request naming a different
+        playlist is not addressing this source.
 
         Raises UpstreamSourceNotFoundError if not found.
         """
         source = UpstreamSource.query.filter_by(
             id=source_id,
             user_id=user_id,
+            target_playlist_id=target_playlist_id,
         ).first()
         if not source:
             raise UpstreamSourceNotFoundError(

@@ -212,3 +212,110 @@ class TestRaidLinkSuccess:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["tracks_added"] == 3
+
+
+class TestRaidSourceCountPlaylistScope:
+    """A source belongs to one target playlist (SR-038).
+
+    The route took source_id from the body and the playlist from the path, but
+    only ever scoped the lookup by owner, so the playlist in the URL was
+    decorative: any of the caller's sources could be updated through any
+    playlist URL, including a playlist the caller does not own. Ownership was
+    always enforced, so this never reached another user's data -- but the
+    request was still being applied outside the scope it named.
+    """
+
+    @staticmethod
+    def _seed(db_app, spotify_id, target_playlist_id, raid_count=5):
+        from shuffify.models.db import UpstreamSource, db
+        from shuffify.services.user_service import UserService
+
+        with db_app.app_context():
+            user = UserService.upsert_from_spotify(
+                {
+                    "id": spotify_id,
+                    "display_name": spotify_id,
+                    "images": [],
+                }
+            ).user
+            source = UpstreamSource(
+                user_id=user.id,
+                target_playlist_id=target_playlist_id,
+                source_playlist_id=f"src-{target_playlist_id}",
+                source_type="external",
+                raid_count=raid_count,
+            )
+            db.session.add(source)
+            db.session.commit()
+            return source.id
+
+    @staticmethod
+    def _raid_count(db_app, source_id):
+        from shuffify.models.db import UpstreamSource
+
+        with db_app.app_context():
+            return UpstreamSource.query.get(source_id).raid_count
+
+    @patch("shuffify.routes.require_auth")
+    def test_correct_playlist_still_updates(
+        self, mock_auth, db_app, auth_client
+    ):
+        """The feature must keep working: right playlist, right source."""
+        mock_auth.return_value = MagicMock()
+        source_id = self._seed(db_app, "user123", "playlist-A")
+
+        resp = auth_client.put(
+            "/playlist/playlist-A/raid-source-count",
+            json={"source_id": source_id, "raid_count": 9},
+        )
+
+        assert resp.status_code == 200
+        assert self._raid_count(db_app, source_id) == 9
+
+    @patch("shuffify.routes.require_auth")
+    def test_other_playlist_cannot_update_the_source(
+        self, mock_auth, db_app, auth_client
+    ):
+        """Playlist B's URL must not reach a source configured on playlist A."""
+        mock_auth.return_value = MagicMock()
+        source_id = self._seed(db_app, "user123", "playlist-A")
+
+        resp = auth_client.put(
+            "/playlist/playlist-B/raid-source-count",
+            json={"source_id": source_id, "raid_count": 99},
+        )
+
+        assert resp.status_code == 404
+        assert self._raid_count(db_app, source_id) == 5
+
+    @patch("shuffify.routes.require_auth")
+    def test_unowned_playlist_in_url_cannot_update_the_source(
+        self, mock_auth, db_app, auth_client
+    ):
+        """The playlist in the path is not decorative."""
+        mock_auth.return_value = MagicMock()
+        source_id = self._seed(db_app, "user123", "playlist-A")
+
+        resp = auth_client.put(
+            "/playlist/not-my-playlist/raid-source-count",
+            json={"source_id": source_id, "raid_count": 77},
+        )
+
+        assert resp.status_code == 404
+        assert self._raid_count(db_app, source_id) == 5
+
+    @patch("shuffify.routes.require_auth")
+    def test_another_users_source_is_unreachable(
+        self, mock_auth, db_app, auth_client
+    ):
+        """Owner scoping predates this fix; pin it so it cannot regress."""
+        mock_auth.return_value = MagicMock()
+        victim_source_id = self._seed(db_app, "victim456", "playlist-A")
+
+        resp = auth_client.put(
+            "/playlist/playlist-A/raid-source-count",
+            json={"source_id": victim_source_id, "raid_count": 99},
+        )
+
+        assert resp.status_code == 404
+        assert self._raid_count(db_app, victim_source_id) == 5
