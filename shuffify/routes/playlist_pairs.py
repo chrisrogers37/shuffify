@@ -44,7 +44,7 @@ PLAYLIST_ITEM_FIELDS = f"items(track({_TRACK_SHAPE}),item({_TRACK_SHAPE}))"
     "/playlist/<playlist_id>/pair", methods=["GET"]
 )
 @require_auth_and_db
-def get_pair(playlist_id, client=None, user=None):
+def get_pair(playlist_id, api=None, user=None):
     """Get archive pair info for a playlist."""
     pair = PlaylistPairService.get_pair_for_playlist(
         user.id, playlist_id
@@ -63,7 +63,7 @@ def get_pair(playlist_id, client=None, user=None):
     "/playlist/<playlist_id>/pair", methods=["POST"]
 )
 @require_auth_and_db
-def create_pair(playlist_id, client=None, user=None):
+def create_pair(playlist_id, api=None, user=None):
     """Create an archive pair for a playlist."""
     req, err = validate_json(CreatePairRequest)
     if err:
@@ -76,7 +76,7 @@ def create_pair(playlist_id, client=None, user=None):
             )
             archive_id, archive_name = (
                 PlaylistPairService.create_archive_playlist(
-                    client.api,
+                    api,
                     user.spotify_id,
                     prod_name,
                 )
@@ -125,7 +125,7 @@ def create_pair(playlist_id, client=None, user=None):
     "/playlist/<playlist_id>/pair", methods=["PATCH"]
 )
 @require_auth_and_db
-def update_pair(playlist_id, client=None, user=None):
+def update_pair(playlist_id, api=None, user=None):
     """Update archive pair settings."""
     req, err = validate_json(UpdatePairRequest)
     if err:
@@ -156,7 +156,7 @@ def update_pair(playlist_id, client=None, user=None):
     "/playlist/<playlist_id>/pair", methods=["DELETE"]
 )
 @require_auth_and_db
-def delete_pair(playlist_id, client=None, user=None):
+def delete_pair(playlist_id, api=None, user=None):
     """Remove the archive pair for a playlist."""
     try:
         PlaylistPairService.delete_pair(
@@ -178,7 +178,7 @@ def delete_pair(playlist_id, client=None, user=None):
     methods=["POST"],
 )
 @require_auth_and_db
-def archive_tracks(playlist_id, client=None, user=None):
+def archive_tracks(playlist_id, api=None, user=None):
     """Archive tracks to the paired archive playlist."""
     pair = PlaylistPairService.get_pair_for_playlist(
         user.id, playlist_id
@@ -192,7 +192,7 @@ def archive_tracks(playlist_id, client=None, user=None):
 
     try:
         count = PlaylistPairService.archive_tracks(
-            client.api,
+            api,
             pair.archive_playlist_id,
             req.track_uris,
         )
@@ -222,7 +222,7 @@ def archive_tracks(playlist_id, client=None, user=None):
 )
 @require_auth_and_db
 def unarchive_tracks(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Unarchive tracks back to production playlist."""
     pair = PlaylistPairService.get_pair_for_playlist(
@@ -237,7 +237,7 @@ def unarchive_tracks(
 
     try:
         count = PlaylistPairService.unarchive_tracks(
-            client.api,
+            api,
             pair.production_playlist_id,
             pair.archive_playlist_id,
             req.track_uris,
@@ -270,7 +270,7 @@ def unarchive_tracks(
 )
 @require_auth_and_db
 def finalize_restore(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Finalize archive restorations after workshop commit.
 
@@ -289,7 +289,7 @@ def finalize_restore(
 
     try:
         count = PlaylistPairService.remove_from_archive(
-            client.api,
+            api,
             pair.archive_playlist_id,
             req.track_uris,
         )
@@ -322,7 +322,7 @@ def finalize_restore(
 )
 @require_auth_and_db
 def list_archive_tracks(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """List tracks in the archive playlist."""
     pair = PlaylistPairService.get_pair_for_playlist(
@@ -336,7 +336,7 @@ def list_archive_tracks(
 
         # Get total count first (cheap call, minimal items)
         # Spotify API rejects limit=0; use limit=1 instead
-        count_result = client.api.get_playlist_items_raw(
+        count_result = api.get_playlist_items_raw(
             pair.archive_playlist_id,
             fields="total",
             limit=1,
@@ -346,7 +346,7 @@ def list_archive_tracks(
         # Fetch only the last 25 (most recently archived)
         display_limit = 25
         offset = max(0, total - display_limit)
-        results = client.api.get_playlist_items_raw(
+        results = api.get_playlist_items_raw(
             pair.archive_playlist_id,
             fields=track_fields,
             limit=display_limit,

@@ -129,7 +129,7 @@ class TestShuffleServiceExecute:
 
         assert result == ['spotify:track:single']
 
-    def test_execute_passes_spotify_client(self, sample_tracks, mock_spotify_client):
+    def test_execute_passes_api(self, sample_tracks, mock_spotify_api):
         """Should pass Spotify client to algorithm as 'sp' parameter."""
         with patch.object(ShuffleService, 'get_algorithm') as mock_get:
             mock_algo = Mock()
@@ -139,13 +139,13 @@ class TestShuffleServiceExecute:
             ShuffleService.execute(
                 'BasicShuffle',
                 sample_tracks,
-                spotify_client=mock_spotify_client
+                api=mock_spotify_api
             )
 
             # Verify 'sp' was passed to shuffle
             call_kwargs = mock_algo.shuffle.call_args[1]
             assert 'sp' in call_kwargs
-            assert call_kwargs['sp'] == mock_spotify_client
+            assert call_kwargs['sp'] == mock_spotify_api
 
 
 class TestShuffleServiceShuffleChangedOrder:

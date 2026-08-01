@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 
 @main.route("/workshop")
 @require_auth_and_db
-def workshop_hub(client=None, user=None):
+def workshop_hub(api=None, user=None):
     """Render the Workshop hub with no playlist selected."""
     algorithms = ShuffleService.list_algorithms()
     return render_template(
@@ -71,12 +71,12 @@ def workshop(playlist_id):
         return redirect(url_for("main.index"))
 
     try:
-        client = AuthService.get_authenticated_client(
+        api = AuthService.get_authenticated_api(
             session["spotify_token"]
         )
-        user = AuthService.get_user_data(client)
+        user = AuthService.get_user_data(api)
 
-        playlist_service = PlaylistService(client)
+        playlist_service = PlaylistService(api)
         playlist = playlist_service.get_playlist(
             playlist_id, include_features=False
         )
@@ -169,7 +169,7 @@ def workshop(playlist_id):
 )
 @require_auth_and_db
 def workshop_preview_shuffle(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """
     Run a shuffle algorithm on client-provided tracks and
@@ -275,7 +275,7 @@ def _log_workshop_commit_activity(
 )
 @require_auth_and_db
 def workshop_commit(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Save the workshop's staged track order to Spotify."""
     commit_request, err = validate_json(
@@ -284,7 +284,7 @@ def workshop_commit(
     if err:
         return err
 
-    playlist_service = PlaylistService(client)
+    playlist_service = PlaylistService(api)
     playlist_service.validate_user_can_edit(playlist_id, user.spotify_id)
     playlist = playlist_service.get_playlist(
         playlist_id, include_features=False
@@ -341,7 +341,7 @@ def workshop_commit(
 
 @main.route("/workshop/search", methods=["POST"])
 @require_auth_and_db
-def workshop_search(client=None, user=None):
+def workshop_search(api=None, user=None):
     """Search Spotify's catalog for tracks."""
     search_request, err = validate_json(
         WorkshopSearchRequest
@@ -349,7 +349,7 @@ def workshop_search(client=None, user=None):
     if err:
         return err
 
-    raw_tracks = client.search_tracks(
+    raw_tracks = api.search_tracks(
         query=search_request.query,
         limit=search_request.limit,
         offset=search_request.offset,
@@ -402,7 +402,7 @@ def workshop_search(client=None, user=None):
 )
 @require_auth_and_db
 def workshop_search_playlists(
-    client=None, user=None
+    api=None, user=None
 ):
     """Search for public playlists by name."""
     data = request.get_json()
@@ -420,7 +420,7 @@ def workshop_search_playlists(
         )
 
     try:
-        results = client.search_playlists(query, limit=10)
+        results = api.search_playlists(query, limit=10)
 
         logger.info(
             f"Playlist search for '{query}' returned "
@@ -441,9 +441,7 @@ def workshop_search_playlists(
         )
 
 
-def _load_playlist_by_url(
-    client, ext_request, current_user_id=None
-):
+def _load_playlist_by_url(api, ext_request, current_user_id=None):
     """Load tracks from a specific playlist by URL/URI/ID."""
     playlist_id = parse_spotify_playlist_url(
         ext_request.url
@@ -457,7 +455,7 @@ def _load_playlist_by_url(
         )
 
     try:
-        playlist_service = PlaylistService(client)
+        playlist_service = PlaylistService(api)
         playlist = playlist_service.get_playlist(
             playlist_id, include_features=False
         )
@@ -553,10 +551,10 @@ def _load_playlist_by_url(
         )
 
 
-def _search_playlists_by_query(client, ext_request):
+def _search_playlists_by_query(api, ext_request):
     """Search for playlists by query string."""
     try:
-        results = client.search_playlists(
+        results = api.search_playlists(
             ext_request.query, limit=10
         )
 
@@ -587,7 +585,7 @@ def _search_playlists_by_query(client, ext_request):
 )
 @require_auth_and_db
 def workshop_load_external_playlist(
-    client=None, user=None
+    api=None, user=None
 ):
     """Load tracks from an external playlist."""
     ext_request, err = validate_json(
@@ -598,14 +596,11 @@ def workshop_load_external_playlist(
 
     if ext_request.url:
         return _load_playlist_by_url(
-            client, ext_request,
-            current_user_id=user.spotify_id,
+            api, ext_request, current_user_id=user.spotify_id
         )
 
     if ext_request.query:
-        return _search_playlists_by_query(
-            client, ext_request
-        )
+        return _search_playlists_by_query(api, ext_request)
 
     return json_error(
         "Either 'url' or 'query' must be provided.", 400
@@ -622,7 +617,7 @@ def workshop_load_external_playlist(
 )
 @require_auth_and_db
 def list_workshop_sessions(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """List all saved workshop sessions for a playlist."""
     sessions = WorkshopSessionService.list_sessions(
@@ -639,7 +634,7 @@ def list_workshop_sessions(
 )
 @require_auth_and_db
 def save_workshop_session(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Save the current workshop state as a named session."""
     data = request.get_json()
@@ -701,7 +696,7 @@ def save_workshop_session(
 )
 @require_auth_and_db
 def load_workshop_session(
-    session_id, client=None, user=None
+    session_id, api=None, user=None
 ):
     """Load a saved workshop session by ID."""
     try:
@@ -722,7 +717,7 @@ def load_workshop_session(
 )
 @require_auth_and_db
 def update_workshop_session(
-    session_id, client=None, user=None
+    session_id, api=None, user=None
 ):
     """Update an existing saved workshop session."""
     data = request.get_json()
@@ -766,7 +761,7 @@ def update_workshop_session(
 )
 @require_auth_and_db
 def delete_workshop_session(
-    session_id, client=None, user=None
+    session_id, api=None, user=None
 ):
     """Delete a saved workshop session."""
     try:

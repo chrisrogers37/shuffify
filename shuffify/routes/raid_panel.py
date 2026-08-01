@@ -79,7 +79,7 @@ logger = logging.getLogger(__name__)
     methods=["GET"],
 )
 @require_auth_and_db
-def raid_status(playlist_id, client=None, user=None):
+def raid_status(playlist_id, api=None, user=None):
     """Get raid panel status for a playlist."""
     status = RaidSyncService.get_raid_status(
         user.spotify_id, playlist_id, user=user
@@ -100,7 +100,7 @@ def raid_status(playlist_id, client=None, user=None):
 )
 @require_auth_and_db
 def raid_link_create(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Create a raid playlist link."""
     req, err = validate_json(CreateRaidLinkRequest)
@@ -127,7 +127,7 @@ def raid_link_create(
             )
             raid_id, raid_name = (
                 RaidLinkService.create_raid_playlist(
-                    client.api,
+                    api,
                     user.spotify_id,
                     target_name,
                 )
@@ -183,7 +183,7 @@ def raid_link_create(
 )
 @require_auth_and_db
 def raid_link_update(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Update a raid playlist link."""
     req, err = validate_json(UpdateRaidLinkRequest)
@@ -228,7 +228,7 @@ def raid_link_update(
 )
 @require_auth_and_db
 def raid_link_delete(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Delete a raid playlist link."""
     try:
@@ -270,7 +270,7 @@ def raid_link_delete(
 )
 @require_auth_and_db
 def raid_source_count_update(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Update a source's raid_count."""
     req, err = validate_json(
@@ -304,7 +304,7 @@ def raid_source_count_update(
     methods=["POST"],
 )
 @require_auth_and_db
-def raid_watch(playlist_id, client=None, user=None):
+def raid_watch(playlist_id, api=None, user=None):
     """Watch a playlist as a raid source."""
     req, err = validate_json(WatchPlaylistRequest)
     if err:
@@ -361,7 +361,7 @@ def raid_watch(playlist_id, client=None, user=None):
 )
 @require_auth_and_db
 def raid_watch_search(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Watch a search query as a raid source."""
     req, err = validate_json(WatchSearchQueryRequest)
@@ -415,7 +415,7 @@ def raid_watch_search(
     methods=["POST"],
 )
 @require_auth_and_db
-def raid_add_url(playlist_id, client=None, user=None):
+def raid_add_url(playlist_id, api=None, user=None):
     """Add an external playlist as a raid source by URL."""
     req, err = validate_json(AddRaidUrlRequest)
     if err:
@@ -436,7 +436,7 @@ def raid_add_url(playlist_id, client=None, user=None):
     # Service handles API-first with scraper fallback
     # for non-owned playlists restricted since Feb 2026.
     try:
-        playlist_svc = PlaylistService(client)
+        playlist_svc = PlaylistService(api)
         playlist_meta = playlist_svc.get_playlist_metadata(
             source_playlist_id
         )
@@ -534,7 +534,7 @@ def raid_add_url(playlist_id, client=None, user=None):
     methods=["POST"],
 )
 @require_auth_and_db
-def raid_unwatch(playlist_id, client=None, user=None):
+def raid_unwatch(playlist_id, api=None, user=None):
     """Unwatch a source playlist."""
     req, err = validate_json(UnwatchPlaylistRequest)
     if err:
@@ -577,7 +577,7 @@ def raid_unwatch(playlist_id, client=None, user=None):
     methods=["POST"],
 )
 @require_auth_and_db
-def raid_now(playlist_id, client=None, user=None):
+def raid_now(playlist_id, api=None, user=None):
     """Trigger an immediate raid."""
     data = request.get_json(silent=True) or {}
     req = RaidNowRequest(**data)
@@ -627,7 +627,7 @@ def raid_now(playlist_id, client=None, user=None):
     methods=["POST"],
 )
 @require_auth_and_db
-def drip_now(playlist_id, client=None, user=None):
+def drip_now(playlist_id, api=None, user=None):
     """Trigger an immediate drip from raid playlist."""
     try:
         result = RaidSyncService.drip_now(
@@ -674,7 +674,7 @@ def drip_now(playlist_id, client=None, user=None):
 )
 @require_auth_and_db
 def raid_and_drip(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Raid sources then drip into target in one step."""
     data = request.get_json(silent=True) or {}
@@ -789,7 +789,7 @@ def _toggle_schedule(schedule, user_id, playlist_id, label):
 )
 @require_auth_and_db
 def raid_schedule_toggle(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Toggle the raid schedule on/off."""
     schedule = RaidSyncService._find_raid_schedule(
@@ -808,7 +808,7 @@ def raid_schedule_toggle(
 )
 @require_auth_and_db
 def drip_schedule_toggle(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Toggle the drip schedule on/off."""
     schedule = RaidSyncService._find_drip_schedule(
@@ -827,7 +827,7 @@ def drip_schedule_toggle(
 )
 @require_auth_and_db
 def raid_schedule_create(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Create a raid/drip schedule from the raids panel."""
     if not user.encrypted_refresh_token:
@@ -907,7 +907,7 @@ def raid_schedule_create(
 )
 @require_auth_and_db
 def raid_schedule_update(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Update a raid schedule (frequency, time, enabled)."""
     req, err = validate_json(UpdateRaidScheduleRequest)
@@ -952,7 +952,7 @@ def raid_schedule_update(
 )
 @require_auth_and_db
 def raid_schedule_history(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Get execution history for a raid schedule."""
     schedule = RaidSyncService._find_raid_schedule(
@@ -989,7 +989,7 @@ def raid_schedule_history(
 )
 @require_auth_and_db
 def pending_raids_list(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """List pending raid tracks for a playlist."""
     tracks = PendingRaidService.list_pending(
@@ -1007,7 +1007,7 @@ def pending_raids_list(
 )
 @require_auth_and_db
 def pending_raids_promote(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Promote selected pending tracks.
 
@@ -1047,7 +1047,7 @@ def pending_raids_promote(
 )
 @require_auth_and_db
 def pending_raids_unpromote(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Revert promoted tracks back to pending."""
     req, err = validate_json(UnpromoteTracksRequest)
@@ -1070,7 +1070,7 @@ def pending_raids_unpromote(
 )
 @require_auth_and_db
 def pending_raids_dismiss(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Dismiss selected pending tracks."""
     req, err = validate_json(DismissTracksRequest)
@@ -1098,7 +1098,7 @@ def pending_raids_dismiss(
     # Remove from raid playlist
     if uris_to_remove:
         RaidLinkService.remove_tracks_from_raid_playlist(
-            client.api, user.id,
+            api, user.id,
             playlist_id, uris_to_remove,
         )
 
@@ -1123,7 +1123,7 @@ def pending_raids_dismiss(
 )
 @require_auth_and_db
 def pending_raids_promote_all(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Promote all pending tracks.
 
@@ -1158,7 +1158,7 @@ def pending_raids_promote_all(
 )
 @require_auth_and_db
 def pending_raids_dismiss_all(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Dismiss all pending tracks."""
     # Get URIs before dismissing for raid playlist sync
@@ -1174,7 +1174,7 @@ def pending_raids_dismiss_all(
     # Remove from raid playlist
     if uris_to_remove:
         RaidLinkService.remove_tracks_from_raid_playlist(
-            client.api, user.id,
+            api, user.id,
             playlist_id, uris_to_remove,
         )
 
@@ -1199,7 +1199,7 @@ def pending_raids_dismiss_all(
 )
 @require_auth_and_db
 def pending_raids_finalize(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Finalize selected tracks after workshop commit.
 
@@ -1217,7 +1217,7 @@ def pending_raids_finalize(
     if promoted:
         uris = [t.track_uri for t in promoted]
         RaidLinkService.remove_tracks_from_raid_playlist(
-            client.api, user.id,
+            api, user.id,
             playlist_id, uris,
         )
 
@@ -1245,7 +1245,7 @@ def pending_raids_finalize(
 )
 @require_auth_and_db
 def pending_raids_finalize_all(
-    playlist_id, client=None, user=None
+    playlist_id, api=None, user=None
 ):
     """Finalize all pending tracks after workshop commit.
 
@@ -1259,7 +1259,7 @@ def pending_raids_finalize_all(
     if promoted:
         uris = [t.track_uri for t in promoted]
         RaidLinkService.remove_tracks_from_raid_playlist(
-            client.api, user.id,
+            api, user.id,
             playlist_id, uris,
         )
 

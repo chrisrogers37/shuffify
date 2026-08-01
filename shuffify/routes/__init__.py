@@ -62,15 +62,15 @@ def is_authenticated() -> bool:
 
 def require_auth():
     """
-    Get authenticated client or None.
+    Get an authenticated Spotify API client, or None.
 
     Returns:
-        SpotifyClient if authenticated, None otherwise.
+        SpotifyAPI if authenticated, None otherwise.
     """
     if not is_authenticated():
         return None
     try:
-        return AuthService.get_authenticated_client(
+        return AuthService.get_authenticated_api(
             session["spotify_token"]
         )
     except AuthenticationError:
@@ -145,21 +145,21 @@ def require_auth_and_db(f):
     2. is_db_available() -- returns 503 if DB is down
     3. get_db_user() -- returns 401 if user not found in DB
 
-    Injects ``client`` (SpotifyClient) and ``user`` (User model)
+    Injects ``api`` (SpotifyAPI) and ``user`` (User model)
     as keyword arguments to the wrapped function.
 
     Usage::
 
         @main.route("/endpoint")
         @require_auth_and_db
-        def my_route(client=None, user=None):
-            # client and user are guaranteed non-None here
+        def my_route(api=None, user=None):
+            # api and user are guaranteed non-None here
             ...
     """
     @functools.wraps(f)
     def decorated_function(*args, **kwargs):
-        client = require_auth()
-        if not client:
+        api = require_auth()
+        if not api:
             return json_error("Please log in first.", 401)
 
         from shuffify import is_db_available
@@ -172,7 +172,7 @@ def require_auth_and_db(f):
         if not user:
             return json_error("User not found.", 401)
 
-        kwargs["client"] = client
+        kwargs["api"] = api
         kwargs["user"] = user
         return f(*args, **kwargs)
 
