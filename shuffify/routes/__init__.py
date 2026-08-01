@@ -23,6 +23,10 @@ from flask import (
 )
 from pydantic import ValidationError
 
+from shuffify.error_handlers import (
+    format_validation_error,
+    json_error_response,
+)
 from shuffify.services import (
     AuthenticationError,
     AuthService,
@@ -82,15 +86,14 @@ def clear_session_and_show_login(message: str = None):
 
 
 def json_error(message: str, status_code: int = 400) -> tuple:
-    """Return a JSON error response."""
-    return (
-        jsonify({
-            "success": False,
-            "message": message,
-            "category": "error",
-        }),
-        status_code,
-    )
+    """Return a JSON error response.
+
+    Delegates to `error_handlers.json_error_response` so the error envelope
+    is constructed in exactly one place. Both names survive because they
+    serve different layers -- routes default to 400, the global handlers
+    always know their status -- but the payload shape is defined once.
+    """
+    return json_error_response(message, status_code)
 
 
 def json_success(message: str, **extra) -> dict:
@@ -127,10 +130,9 @@ def validate_json(schema_class):
     try:
         return schema_class(**data), None
     except ValidationError as e:
-        first_error = e.errors()[0] if e.errors() else {}
-        msg = first_error.get("msg", "Invalid input")
         return None, json_error(
-            f"Validation error: {msg}", 400
+            f"Validation error: {format_validation_error(e)}",
+            400,
         )
 
 
@@ -310,6 +312,5 @@ from shuffify.routes import (  # noqa: E402, F401
     shuffle,
     snapshots,
     track_locks,
-    upstream_sources,
     workshop,
 )

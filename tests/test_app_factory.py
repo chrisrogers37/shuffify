@@ -589,11 +589,19 @@ class TestSecurityHeaders:
         assert len(nonces) == 2
         assert nonces[0] == nonces[1]
 
-    def test_csp_script_src_allows_cdns(self, client):
-        """CSP should allow Tailwind and jsdelivr CDNs for scripts."""
+    def test_csp_script_src_allows_jsdelivr(self, client):
+        """jsdelivr serves SortableJS, pinned by SRI at the script tag."""
         csp = client.get("/health").headers["Content-Security-Policy"]
-        assert "https://cdn.tailwindcss.com" in csp
         assert "https://cdn.jsdelivr.net" in csp
+
+    def test_csp_script_src_does_not_allow_tailwind_cdn(self, client):
+        """Tailwind is compiled to static/css and is never fetched (SR-042).
+
+        An allow-list entry no template uses is standing permission for a
+        host that has no reason to execute here.
+        """
+        csp = client.get("/health").headers["Content-Security-Policy"]
+        assert "cdn.tailwindcss.com" not in csp
 
     def test_csp_img_src_allows_spotify(self, client):
         """CSP should allow Spotify image CDNs."""

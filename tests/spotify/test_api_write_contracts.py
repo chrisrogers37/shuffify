@@ -12,6 +12,8 @@ reads don't return stale URIs.
 import time
 from unittest.mock import patch, MagicMock
 
+import re
+
 import pytest
 
 from shuffify.spotify.api import SpotifyAPI
@@ -326,3 +328,120 @@ class TestSpotifyPartialBatchErrorAttributes:
         assert "abc" in s
         assert "1/3" in s
         assert "update" in s
+
+
+# ---------------------------------------------------------------------------
+# Endpoint + request-body shape (SR-030)
+#
+# The tests above assert failure semantics but mock the HTTP client wholesale,
+# so nothing pinned the path or body a write actually sends. That is how
+# playlist_remove_items sat on the deprecated /tracks endpoint while every
+# other write had moved to /items -- a green suite the whole time.
+# ---------------------------------------------------------------------------
+
+
+class TestWriteEndpointPaths:
+    """Every playlist write targets the /items resource."""
+
+    def test_remove_items_targets_items_endpoint(self, token_info, auth_manager):
+        with patch("shuffify.spotify.api.SpotifyHTTPClient") as MockHTTP:
+            mock_http = MockHTTP.return_value
+            mock_http.delete.return_value = None
+
+            api = SpotifyAPI(token_info, auth_manager)
+            api.playlist_remove_items("p1", ["spotify:track:1"])
+
+            path = mock_http.delete.call_args[0][0]
+            assert path == "/playlists/p1/items"
+
+    def test_remove_items_sends_items_body_key(self, token_info, auth_manager):
+        """The body key moved with the endpoint.
+
+        `/items` reads `{"items": [...]}`; the deprecated `/tracks` read
+        `{"tracks": [...]}`. Changing the path alone sends a body the current
+        endpoint does not read, so removal silently stops removing.
+        """
+        with patch("shuffify.spotify.api.SpotifyHTTPClient") as MockHTTP:
+            mock_http = MockHTTP.return_value
+            mock_http.delete.return_value = None
+
+            api = SpotifyAPI(token_info, auth_manager)
+            api.playlist_remove_items("p1", ["spotify:track:1", "spotify:track:2"])
+
+            body = mock_http.delete.call_args[1]["json"]
+            assert set(body) == {"items"}
+            assert body["items"] == [
+                {"uri": "spotify:track:1"},
+                {"uri": "spotify:track:2"},
+            ]
+
+    def test_add_items_targets_items_endpoint(self, token_info, auth_manager):
+        with patch("shuffify.spotify.api.SpotifyHTTPClient") as MockHTTP:
+            mock_http = MockHTTP.return_value
+            mock_http.post.return_value = {"snapshot_id": "s"}
+
+            api = SpotifyAPI(token_info, auth_manager)
+            api.playlist_add_items("p1", ["spotify:track:1"])
+
+            assert mock_http.post.call_args[0][0] == "/playlists/p1/items"
+
+    def test_update_tracks_targets_items_endpoint(self, token_info, auth_manager):
+        with patch("shuffify.spotify.api.SpotifyHTTPClient") as MockHTTP:
+            mock_http = MockHTTP.return_value
+            mock_http.put.return_value = {"snapshot_id": "s"}
+            mock_http.post.return_value = {"snapshot_id": "s"}
+
+            api = SpotifyAPI(token_info, auth_manager)
+            api.update_playlist_tracks("p1", ["spotify:track:1"])
+
+            for call in mock_http.put.call_args_list + mock_http.post.call_args_list:
+                assert call[0][0] == "/playlists/p1/items"
+
+    def test_no_write_targets_the_deprecated_tracks_endpoint(
+        self, token_info, auth_manager
+    ):
+        """Sweep every write path in one place, so a new one cannot regress."""
+        with patch("shuffify.spotify.api.SpotifyHTTPClient") as MockHTTP:
+            mock_http = MockHTTP.return_value
+            mock_http.put.return_value = {"snapshot_id": "s"}
+            mock_http.post.return_value = {"snapshot_id": "s"}
+            mock_http.delete.return_value = None
+
+            api = SpotifyAPI(token_info, auth_manager)
+            api.update_playlist_tracks("p1", ["spotify:track:1"])
+            api.playlist_add_items("p1", ["spotify:track:2"])
+            api.playlist_remove_items("p1", ["spotify:track:3"])
+
+            paths = [
+                call[0][0]
+                for method in (mock_http.put, mock_http.post, mock_http.delete)
+                for call in method.call_args_list
+            ]
+            assert paths, "no write calls captured -- the sweep proves nothing"
+            assert not [p for p in paths if p.endswith("/tracks")]
+
+
+class TestPlaylistItemsFieldFilter:
+    """A field filter must name both nested-object shapes (SR-030)."""
+
+    def test_filter_requests_both_track_and_item(self):
+        from shuffify.routes.playlist_pairs import PLAYLIST_ITEM_FIELDS
+
+        assert "track(" in PLAYLIST_ITEM_FIELDS
+        assert "item(" in PLAYLIST_ITEM_FIELDS
+
+    def test_both_shapes_carry_the_same_fields(self):
+        """A filter that asks for less under one key silently degrades it."""
+        from shuffify.routes.playlist_pairs import PLAYLIST_ITEM_FIELDS
+
+        inner = re.findall(r"(?:track|item)\(([^)]*(?:\([^)]*\))?[^)]*)\)",
+                           PLAYLIST_ITEM_FIELDS)
+        assert len(inner) == 2
+        assert inner[0] == inner[1]
+
+    def test_filter_covers_every_field_the_reader_uses(self):
+        """The reader below pulls these keys; a filter must not omit one."""
+        from shuffify.routes.playlist_pairs import PLAYLIST_ITEM_FIELDS
+
+        for field in ("id", "name", "uri", "artists", "album", "duration_ms"):
+            assert field in PLAYLIST_ITEM_FIELDS

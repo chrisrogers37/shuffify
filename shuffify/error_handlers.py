@@ -63,16 +63,28 @@ def json_error_response(message: str, status_code: int, category: str = "error")
 # =============================================================================
 
 
-def handle_validation_error(error: ValidationError):
-    """Handle Pydantic validation errors."""
-    # Extract user-friendly error messages
+def format_validation_error(error: ValidationError) -> str:
+    """Render every field error in a ValidationError as one message.
+
+    All of them, not just the first: a multi-field form that reports one
+    problem per submit makes the user discover the rest one round trip at a
+    time. This is the single formatter for Pydantic failures wherever they
+    are caught -- the global handler below and the per-route `validate_json`
+    in `shuffify.routes` both come through here, so the two paths cannot
+    drift into describing the same error differently.
+    """
     errors_list = []
     for err in error.errors():
         field = ".".join(str(loc) for loc in err["loc"])
         msg = err["msg"]
         errors_list.append(f"{field}: {msg}")
 
-    message = "; ".join(errors_list) if errors_list else "Validation failed"
+    return "; ".join(errors_list) if errors_list else "Validation failed"
+
+
+def handle_validation_error(error: ValidationError):
+    """Handle Pydantic validation errors."""
+    message = format_validation_error(error)
     logger.warning(f"Validation error: {message}")
     return json_error_response(message, 400)
 
@@ -336,6 +348,45 @@ def handle_spotify_error(error: SpotifyError):
 # =============================================================================
 
 
+def wants_json() -> bool:
+    """Whether this request should be answered with JSON rather than a page.
+
+    One predicate for every HTTP handler below. Each used to decide for
+    itself and they did not agree: 500 checked three signals, 404 checked
+    two, and the 400/401/CSRF handlers checked none and always answered
+    JSON -- so a browser whose form POST failed CSRF validation was shown a
+    raw JSON body instead of a page.
+
+    Every branch needs a positive signal to choose JSON; anything else gets
+    a page. That direction matters -- a client sending `*/*` (curl, the test
+    client, most SDKs) expresses no preference, and answering it with a page
+    is what the 404 and 500 handlers already did. Only a client that ranks
+    `application/json` strictly above `text/html` is asking for JSON.
+    """
+    if request.path.startswith("/api/"):
+        return True
+    if request.is_json:
+        return True
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return True
+
+    accept = request.accept_mimetypes
+    return accept["application/json"] > accept["text/html"]
+
+
+def _html_error(title: str, message: str, status_code: int):
+    """Render the generic error page for a browser navigation."""
+    return (
+        render_template(
+            "errors/error.html",
+            error_code=status_code,
+            error_title=title,
+            error_message=message,
+        ),
+        status_code,
+    )
+
+
 def handle_csrf_error(error):
     """Handle CSRF validation failures."""
     logger.warning(
@@ -344,29 +395,44 @@ def handle_csrf_error(error):
         request.path,
         error,
     )
-    return json_error_response(
-        "Your request could not be verified. Please refresh the page and try again.",
-        400,
+    message = (
+        "Your request could not be verified. "
+        "Please refresh the page and try again."
     )
+    if wants_json():
+        return json_error_response(message, 400)
+    return _html_error("Request could not be verified", message, 400)
 
 
 def handle_bad_request(error):
     """Handle 400 Bad Request."""
-    return json_error_response("Bad request.", 400)
+    message = "Bad request."
+    if wants_json():
+        return json_error_response(message, 400)
+    return _html_error(
+        "Bad request",
+        "We could not make sense of that request.",
+        400,
+    )
 
 
 def handle_unauthorized(error):
     """Handle 401 Unauthorized."""
-    return json_error_response("Please log in first.", 401)
+    message = "Please log in first."
+    if wants_json():
+        return json_error_response(message, 401)
+    return _html_error(
+        "Please log in",
+        "You need to be signed in to see that page.",
+        401,
+    )
 
 
 def handle_not_found(error):
     """Handle 404 Not Found."""
-    # Only return JSON for API routes
-    if request.path.startswith("/api/") or request.is_json:
+    if wants_json():
         return json_error_response("Resource not found.", 404)
-    # Let Flask handle HTML 404 pages
-    return error
+    return render_template("errors/404.html"), 404
 
 
 def handle_internal_error(error):
@@ -379,12 +445,7 @@ def handle_internal_error(error):
         type(error).__name__,
         exc_info=True,
     )
-    # Return JSON for API routes and AJAX requests
-    if (
-        request.path.startswith("/api/")
-        or request.is_json
-        or request.headers.get("X-Requested-With") == "XMLHttpRequest"
-    ):
+    if wants_json():
         return json_error_response("An unexpected error occurred.", 500)
     # Render HTML error page for browser navigation
     return render_template("errors/500.html"), 500

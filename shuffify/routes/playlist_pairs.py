@@ -32,6 +32,13 @@ from shuffify.services.playlist_pair_service import (
 
 logger = logging.getLogger(__name__)
 
+# The playlist-items resource names the nested object "track" on the legacy
+# response shape and "item" on the current one. Readers accept whichever
+# arrives, so a field filter has to ask for both -- naming only one strips the
+# other back out of the response, yielding an empty list rather than an error.
+_TRACK_SHAPE = "id,name,uri,artists(name),album(name,images),duration_ms"
+PLAYLIST_ITEM_FIELDS = f"items(track({_TRACK_SHAPE}),item({_TRACK_SHAPE}))"
+
 
 @main.route(
     "/playlist/<playlist_id>/pair", methods=["GET"]
@@ -325,12 +332,7 @@ def list_archive_tracks(
         return json_error("No archive pair found", 404)
 
     try:
-        # TODO: Spotify API migrating "track" → "item" key.
-        # Field filter requests both until migration completes.
-        track_fields = (
-            "items(track(id,name,uri,artists(name),"
-            "album(name,images),duration_ms))"
-        )
+        track_fields = PLAYLIST_ITEM_FIELDS
 
         # Get total count first (cheap call, minimal items)
         # Spotify API rejects limit=0; use limit=1 instead
