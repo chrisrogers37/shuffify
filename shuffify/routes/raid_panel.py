@@ -281,7 +281,10 @@ def raid_source_count_update(
 
     try:
         source = UpstreamSourceService.update_raid_count(
-            user.id, req.source_id, req.raid_count
+            user.id,
+            playlist_id,
+            req.source_id,
+            req.raid_count,
         )
         return json_success(
             "Source raid count updated.",

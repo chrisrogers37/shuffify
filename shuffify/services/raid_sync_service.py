@@ -125,15 +125,17 @@ class RaidSyncService:
             SchedulerService,
         )
 
-        # Get source before deleting (need playlist_id)
+        # Get source before deleting (need playlist_id). Scoped to the target
+        # playlist as well as the owner: unwatching through a different
+        # playlist's route must not reach this source.
         source = UpstreamSourceService.get_source(
-            source_id, spotify_id
+            source_id, spotify_id, target_playlist_id
         )
         source_playlist_id = source.source_playlist_id
 
         # Delete the upstream source
         UpstreamSourceService.delete_source(
-            source_id, spotify_id
+            source_id, spotify_id, target_playlist_id
         )
 
         if user is None:
