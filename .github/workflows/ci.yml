@@ -58,6 +58,15 @@ jobs:
         # only became load-bearing once this stopped being scoped.
         run: ruff check .
 
+      # Two branches can hand-pick the same Alembic revision id and git merges
+      # them without a conflict, because the filenames differ (#527). The app
+      # refuses to boot unless the schema is exactly at head (#503), so an
+      # ambiguous head is a failed deploy rather than a migration warning.
+      # Pure text analysis: no database, no app import, so it runs here rather
+      # than waiting on the test step.
+      - name: Migration chain integrity
+        run: python scripts/check-migration-chain.py
+
       - name: Format check (black)
         # Still non-blocking: SR-037 consolidated linting onto ruff but did
         # not reformat the tree, so black drift remains pre-existing.
