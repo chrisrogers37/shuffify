@@ -71,11 +71,10 @@
 
                 <!-- Right Column: Animated Playlist Visualization -->
                 <div class="flex-1 lg:max-w-[45%] w-full max-w-[420px]" aria-hidden="true">
-                    <div id="shuffle-demo" class="shuffle-demo-card rounded-2xl overflow-hidden"
-                         style="background: rgba(255,255,255,0.05); border: 1px solid rgba(29,185,84,0.15); box-shadow: 0 0 40px rgba(29,185,84,0.05);">
+                    <div id="shuffle-demo" class="shuffle-demo-card rounded-2xl overflow-hidden">
 
                         <!-- Card Header -->
-                        <div class="flex items-center justify-between px-5 py-3" style="border-bottom: 1px solid rgba(255,255,255,0.08);">
+                        <div class="flex items-center justify-between px-5 py-3 shuffle-demo-header">
                             <div class="flex items-center space-x-3">
                                 <!-- Play icon -->
                                 <div class="w-8 h-8 bg-spotify-green rounded-full flex items-center justify-center">
@@ -88,13 +87,13 @@
                                     <div class="text-white/40 text-xs"><span class="hidden md:inline">8</span><span class="md:hidden">5</span> tracks</div>
                                 </div>
                             </div>
-                            <div id="shuffle-indicator" class="text-xs font-medium px-2 py-1 rounded-full text-spotify-green opacity-0 transition-opacity duration-300" style="background: rgba(29,185,84,0.1);">
+                            <div id="shuffle-indicator" class="text-xs font-medium px-2 py-1 rounded-full text-spotify-green opacity-0 transition-opacity duration-300">
                                 Shuffling...
                             </div>
                         </div>
 
                         <!-- Track List -->
-                        <div id="shuffle-track-list" class="relative" style="padding: 4px 0;">
+                        <div id="shuffle-track-list" class="relative">
                             <!-- Tracks are rendered by JavaScript -->
                         </div>
                     </div>
@@ -580,13 +579,44 @@
         background: rgba(29, 185, 84, 0.03);
     }
 
-    /* Album art gradient squares */
+    /* Album art gradient squares.
+       The eight gradients live here as classes rather than in a style
+       attribute on each element. A CSP nonce authorises an ELEMENT, never an
+       ATTRIBUTE, so `style="..."` is inert under this page's style-src and the
+       artwork rendered blank (#537). This <style> block carries the nonce, so
+       declarations placed here apply. Same root cause as the on* handlers in
+       #499, the other half of the same migration. */
     .shuffle-track-art {
         width: 40px;
         height: 40px;
         border-radius: 6px;
         flex-shrink: 0;
         margin-right: 12px;
+    }
+    .shuffle-track-art--1 { background: linear-gradient(135deg, #667eea, #764ba2); }
+    .shuffle-track-art--2 { background: linear-gradient(135deg, #f093fb, #f5576c); }
+    .shuffle-track-art--3 { background: linear-gradient(135deg, #4facfe, #00f2fe); }
+    .shuffle-track-art--4 { background: linear-gradient(135deg, #43e97b, #38f9d7); }
+    .shuffle-track-art--5 { background: linear-gradient(135deg, #fa709a, #fee140); }
+    .shuffle-track-art--6 { background: linear-gradient(135deg, #a18cd1, #fbc2eb); }
+    .shuffle-track-art--7 { background: linear-gradient(135deg, #ffecd2, #fcb69f); }
+    .shuffle-track-art--8 { background: linear-gradient(135deg, #a1c4fd, #c2e9fb); }
+
+    /* Four declarations that were style attributes on the demo card and were
+       equally inert. Same fix, same reason. */
+    .shuffle-demo-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(29, 185, 84, 0.15);
+        box-shadow: 0 0 40px rgba(29, 185, 84, 0.05);
+    }
+    .shuffle-demo-header {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    #shuffle-indicator {
+        background: rgba(29, 185, 84, 0.1);
+    }
+    #shuffle-track-list {
+        padding: 4px 0;
     }
 
     /* Track text info */
@@ -710,14 +740,14 @@
 
     // Track data — realistic names, artists, durations, album art gradients
     var TRACKS = [
-        { name: 'Midnight Drive',   artist: 'Luna Wave',      duration: '3:42', gradient: 'linear-gradient(135deg, #667eea, #764ba2)' },
-        { name: 'Electric Dreams',  artist: 'Neon Pulse',     duration: '4:15', gradient: 'linear-gradient(135deg, #f093fb, #f5576c)' },
-        { name: 'Golden Hour',      artist: 'Amber Skies',    duration: '3:28', gradient: 'linear-gradient(135deg, #4facfe, #00f2fe)' },
-        { name: 'Velvet Thunder',   artist: 'Storm Chaser',   duration: '5:01', gradient: 'linear-gradient(135deg, #43e97b, #38f9d7)' },
-        { name: 'Cosmic Drift',     artist: 'Star Wanderer',  duration: '3:55', gradient: 'linear-gradient(135deg, #fa709a, #fee140)' },
-        { name: 'Ocean Waves',      artist: 'Deep Current',   duration: '4:33', gradient: 'linear-gradient(135deg, #a18cd1, #fbc2eb)' },
-        { name: 'Neon Lights',      artist: 'City Pulse',     duration: '3:17', gradient: 'linear-gradient(135deg, #ffecd2, #fcb69f)' },
-        { name: 'Shadow Dance',     artist: 'Phantom Beat',   duration: '4:48', gradient: 'linear-gradient(135deg, #a1c4fd, #c2e9fb)' }
+        { name: 'Midnight Drive',   artist: 'Luna Wave',      duration: '3:42', art: 'shuffle-track-art--1' },
+        { name: 'Electric Dreams',  artist: 'Neon Pulse',     duration: '4:15', art: 'shuffle-track-art--2' },
+        { name: 'Golden Hour',      artist: 'Amber Skies',    duration: '3:28', art: 'shuffle-track-art--3' },
+        { name: 'Velvet Thunder',   artist: 'Storm Chaser',   duration: '5:01', art: 'shuffle-track-art--4' },
+        { name: 'Cosmic Drift',     artist: 'Star Wanderer',  duration: '3:55', art: 'shuffle-track-art--5' },
+        { name: 'Ocean Waves',      artist: 'Deep Current',   duration: '4:33', art: 'shuffle-track-art--6' },
+        { name: 'Neon Lights',      artist: 'City Pulse',     duration: '3:17', art: 'shuffle-track-art--7' },
+        { name: 'Shadow Dance',     artist: 'Phantom Beat',   duration: '4:48', art: 'shuffle-track-art--8' }
     ];
 
     var isMobile = window.innerWidth < 768;
@@ -753,7 +783,7 @@
             el.style.transform = 'translateY(' + (index * TRACK_HEIGHT) + 'px)';
 
             el.innerHTML =
-                '<div class="shuffle-track-art" style="background: ' + track.gradient + ';"></div>' +
+                '<div class="shuffle-track-art ' + track.art + '"></div>' +
                 '<div class="min-w-0 flex-1">' +
                     '<div class="shuffle-track-name">' + track.name + '</div>' +
                     '<div class="shuffle-track-artist">' + track.artist + '</div>' +
