@@ -5,16 +5,18 @@ Tests cover CRUD operations for raid playlist links,
 raid playlist creation, and to_dict serialization.
 """
 
-import pytest
 from unittest.mock import MagicMock
 
-from shuffify.models.db import db, RaidPlaylistLink
-from shuffify.services.user_service import UserService
+import pytest
+
+from shuffify.models.db import RaidPlaylistLink, db
 from shuffify.services.raid_link_service import (
-    RaidLinkService,
     RaidLinkExistsError,
     RaidLinkNotFoundError,
+    RaidLinkService,
 )
+from shuffify.services.user_service import UserService
+from shuffify.spotify.api import SpotifyAPI
 
 
 @pytest.fixture
@@ -44,7 +46,7 @@ def user2(db_app):
 @pytest.fixture
 def mock_api():
     """Mock SpotifyAPI client."""
-    api = MagicMock()
+    api = MagicMock(spec=SpotifyAPI)
     api.create_user_playlist.return_value = {
         "id": "new_raid_playlist_id",
         "name": "My Playlist [Raids]",

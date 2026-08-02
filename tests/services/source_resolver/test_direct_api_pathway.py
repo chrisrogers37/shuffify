@@ -1,11 +1,13 @@
 """Tests for DirectAPIPathway."""
 
-import pytest
 from unittest.mock import Mock
+
+import pytest
 
 from shuffify.services.source_resolver.direct_api_pathway import (
     DirectAPIPathway,
 )
+from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.exceptions import (
     SpotifyAPIError,
     SpotifyNotFoundError,
@@ -29,7 +31,7 @@ def mock_source():
 
 @pytest.fixture
 def mock_api():
-    api = Mock()
+    api = Mock(spec=SpotifyAPI)
     api.get_playlist_tracks.return_value = [
         {"uri": f"spotify:track:track{i}", "name": f"Track {i}"}
         for i in range(5)

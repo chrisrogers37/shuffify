@@ -5,30 +5,29 @@ Tests cover swap rotation mode (the only supported mode),
 parameter validation, edge cases, and dispatch.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
-from shuffify.enums import SnapshotType
-from shuffify.services.playlist_snapshot_service import (
-    PlaylistSnapshotService,
-)
-
+from shuffify.enums import JobType, SnapshotType
 from shuffify.services.executors import (
-    JobExecutorService,
     JobExecutionError,
+    JobExecutorService,
     PlaylistVerificationError,
 )
 from shuffify.services.executors.rotate_executor import (
-    execute_rotate,
-    _purge_archive_overlaps,
     _checked_remove,
+    _purge_archive_overlaps,
+    execute_rotate,
 )
+from shuffify.services.playlist_snapshot_service import (
+    PlaylistSnapshotService,
+)
+from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.exceptions import (
     SpotifyAPIError,
     SpotifyNotFoundError,
 )
-from shuffify.enums import JobType
-
 
 # Executor paths touch TrackLockService.safe_get_locked_uris
 # (db.session) even in their except-branch fallback, so every
@@ -86,7 +85,7 @@ def _make_api(
             Use this only to simulate a Spotify silent
             failure for PlaylistVerificationError tests.
     """
-    api = MagicMock()
+    api = MagicMock(spec=SpotifyAPI)
 
     state = {
         "target1": [t["uri"] for t in (prod_tracks or []) if t.get("uri")],

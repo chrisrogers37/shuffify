@@ -21,6 +21,7 @@ from shuffify.services.executors import (
     PlaylistVerificationError,
     verify_playlist_state,
 )
+from shuffify.spotify.api import SpotifyAPI
 
 
 def _tracks(uris):
@@ -248,7 +249,7 @@ class TestVerifyPlaylistStateAPIResilience:
         URI (e.g. local tracks). Those don't count toward
         the actual set.
         """
-        api = MagicMock()
+        api = MagicMock(spec=SpotifyAPI)
         api.get_playlist_tracks.return_value = [
             {"uri": "u1", "name": "u1"},
             {"uri": None, "name": "local"},

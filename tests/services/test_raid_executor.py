@@ -13,13 +13,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from shuffify.models.db import UpstreamSource
 from shuffify.services.executors.raid_executor import (
     _fetch_raid_sources_with_limits,
 )
 from shuffify.services.source_resolver.base import (
-    ResolveAllResult, ResolveResult,
+    ResolveAllResult,
+    ResolveResult,
 )
-from shuffify.models.db import UpstreamSource
+from shuffify.spotify.api import SpotifyAPI
 
 
 def _make_resolve_all(source, uris):
@@ -175,11 +177,11 @@ class TestLoadSourcesTargetScoping:
     def test_excludes_other_targets_search_sources(self, db_app):
         """A search source on target A must not be loaded when raiding
         target B -- prevents cross-playlist leakage (SR-002)."""
+        from shuffify.models.db import UpstreamSource, db
         from shuffify.services.executors.raid_executor import (
             _load_sources,
         )
         from shuffify.services.user_service import UserService
-        from shuffify.models.db import UpstreamSource, db
 
         with db_app.app_context():
             result = UserService.upsert_from_spotify(
@@ -216,11 +218,11 @@ class TestLoadSourcesTargetScoping:
         """A search source (no source_playlist_id) must be loaded for its
         target even when source_ids is empty -- the schedule's playlist-only
         list omits it (SR-001)."""
+        from shuffify.models.db import UpstreamSource, db
         from shuffify.services.executors.raid_executor import (
             _load_sources,
         )
         from shuffify.services.user_service import UserService
-        from shuffify.models.db import UpstreamSource, db
 
         with db_app.app_context():
             result = UserService.upsert_from_spotify(
@@ -256,7 +258,7 @@ class TestAddToRaidPlaylistSnapshot:
             _add_to_raid_playlist,
         )
 
-        api = MagicMock()
+        api = MagicMock(spec=SpotifyAPI)
         api.get_playlist_tracks.return_value = [
             {"uri": "spotify:track:existing"}
         ]
