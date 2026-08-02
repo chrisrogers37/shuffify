@@ -14,6 +14,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from shuffify.spotify.api import SpotifyAPI
+
 
 @pytest.fixture
 def seeded(db_app):
@@ -135,7 +137,7 @@ class TestForcedDripStillRuns:
             algorithm_params={"drip_count": 3},
             is_enabled=True,
         )
-        api = MagicMock()
+        api = MagicMock(spec=SpotifyAPI)
         api.get_playlist_tracks.return_value = []
 
         with db_app.app_context():

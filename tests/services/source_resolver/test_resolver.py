@@ -8,11 +8,12 @@ from shuffify.services.source_resolver.base import (
     ResolveResult,
 )
 from shuffify.services.source_resolver.resolver import SourceResolver
+from shuffify.spotify.api import SpotifyAPI
 
 
 @pytest.fixture
 def mock_api():
-    return Mock()
+    return Mock(spec=SpotifyAPI)
 
 
 def _make_source(source_type="external", playlist_id="pl_1"):

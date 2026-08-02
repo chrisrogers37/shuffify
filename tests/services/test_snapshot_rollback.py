@@ -42,6 +42,7 @@ from shuffify.services.playlist_snapshot_service import (
     PlaylistSnapshotService,
 )
 from shuffify.services.user_service import UserService
+from shuffify.spotify.api import SpotifyAPI
 
 
 @pytest.fixture
@@ -89,7 +90,7 @@ def _make_pve(playlist_id="target_rb", schedule_id=1):
 
 def _make_api():
     """Mock SpotifyAPI for rollback calls."""
-    api = MagicMock()
+    api = MagicMock(spec=SpotifyAPI)
     api.update_playlist_tracks.return_value = True
     return api
 

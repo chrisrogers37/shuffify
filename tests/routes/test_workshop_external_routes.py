@@ -8,6 +8,7 @@ import json
 from unittest.mock import MagicMock, Mock, patch
 
 from shuffify.models.playlist import Playlist
+from shuffify.spotify.api import SpotifyAPI
 
 # =============================================================================
 # Helpers
@@ -663,7 +664,7 @@ class TestSearchPlaylistsOwnerIdField:
         authenticated_client,
     ):
         """Search results should include owner_id field."""
-        mock_client = Mock()
+        mock_client = Mock(spec=SpotifyAPI)
         mock_client.search_playlists.return_value = [
             {
                 "id": "pl1",

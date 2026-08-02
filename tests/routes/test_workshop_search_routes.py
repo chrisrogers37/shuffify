@@ -12,6 +12,7 @@ import pytest
 import redis
 
 from shuffify.schemas.requests import WorkshopSearchRequest
+from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.cache import SpotifyCache
 
 # =============================================================================
@@ -276,7 +277,7 @@ class TestWorkshopSearchRoute:
         authenticated_client,
     ):
         """Search with no Spotify results should return empty tracks array."""
-        mock_client = Mock()
+        mock_client = Mock(spec=SpotifyAPI)
         mock_client.search_tracks.return_value = []
 
         mock_auth.return_value = mock_client

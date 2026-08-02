@@ -17,6 +17,7 @@ from shuffify.services.raid_dedupe import (
     build_full_exclusion_set,
 )
 from shuffify.services.user_service import UserService
+from shuffify.spotify.api import SpotifyAPI
 
 
 @pytest.fixture
@@ -36,7 +37,7 @@ def user(db_app):
 @pytest.fixture
 def mock_api():
     """Mock SpotifyAPI."""
-    api = MagicMock()
+    api = MagicMock(spec=SpotifyAPI)
     return api
 
 

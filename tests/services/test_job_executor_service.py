@@ -18,6 +18,7 @@ from shuffify.services.executors.raid_executor import (
 from shuffify.services.executors.shuffle_executor import (
     execute_shuffle,
 )
+from shuffify.spotify.api import SpotifyAPI
 
 # Executor paths touch TrackLockService (db.session) even in
 # their except-branch fallbacks, so every test in this module
@@ -57,7 +58,7 @@ def mock_user():
 @pytest.fixture
 def mock_api():
     """Create a mock SpotifyAPI instance."""
-    api = Mock()
+    api = Mock(spec=SpotifyAPI)
     api.get_playlist_tracks.return_value = [
         {
             "id": f"track{i}",

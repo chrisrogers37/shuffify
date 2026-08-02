@@ -21,6 +21,7 @@ from shuffify.services.source_resolver.base import (
     ResolveAllResult,
     ResolveResult,
 )
+from shuffify.spotify.api import SpotifyAPI
 
 
 def _make_resolve_all(source, uris):
@@ -257,7 +258,7 @@ class TestAddToRaidPlaylistSnapshot:
             _add_to_raid_playlist,
         )
 
-        api = MagicMock()
+        api = MagicMock(spec=SpotifyAPI)
         api.get_playlist_tracks.return_value = [
             {"uri": "spotify:track:existing"}
         ]

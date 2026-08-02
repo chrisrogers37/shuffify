@@ -23,6 +23,7 @@ from shuffify.services.executors.rotate_executor import (
 from shuffify.services.playlist_snapshot_service import (
     PlaylistSnapshotService,
 )
+from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.exceptions import (
     SpotifyAPIError,
     SpotifyNotFoundError,
@@ -84,7 +85,7 @@ def _make_api(
             Use this only to simulate a Spotify silent
             failure for PlaylistVerificationError tests.
     """
-    api = MagicMock()
+    api = MagicMock(spec=SpotifyAPI)
 
     state = {
         "target1": [t["uri"] for t in (prod_tracks or []) if t.get("uri")],

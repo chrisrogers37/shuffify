@@ -17,10 +17,10 @@ Flask-Limiter>=4.1.1
 # pip will NOT upgrade them on its own unless we set a minimum version.
 werkzeug>=3.1.8
 urllib3>=2.7.0
-certifi>=2026.6.17
+certifi>=2026.7.22
 MarkupSafe>=3.0.3
 PyYAML>=6.0.3
-pyasn1>=0.6.3
+pyasn1>=0.6.4
 wheel>=0.47.0
 authlib>=1.7.2
 nltk>=3.10.0

@@ -9,6 +9,7 @@ from shuffify.services.source_resolver.search_pathway import (
     PAGE_SIZE,
     SearchPathway,
 )
+from shuffify.spotify.api import SpotifyAPI
 
 
 @pytest.fixture
@@ -26,7 +27,7 @@ def mock_source():
 
 @pytest.fixture
 def mock_api():
-    api = Mock()
+    api = Mock(spec=SpotifyAPI)
     api.search_tracks.return_value = [
         {"uri": f"spotify:track:s{i}", "name": f"Track {i}"}
         for i in range(PAGE_SIZE)

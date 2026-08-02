@@ -15,6 +15,7 @@ from shuffify.services.playlist_pair_service import (
     PlaylistPairService,
 )
 from shuffify.services.user_service import UserService
+from shuffify.spotify.api import SpotifyAPI
 
 
 @pytest.fixture
@@ -44,7 +45,7 @@ def user2(db_app):
 @pytest.fixture
 def mock_api():
     """Mock SpotifyAPI client."""
-    api = MagicMock()
+    api = MagicMock(spec=SpotifyAPI)
     api.playlist_add_items.return_value = None
     api.playlist_remove_items.return_value = None
     api.create_user_playlist.return_value = {

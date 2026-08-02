@@ -27,6 +27,7 @@ from shuffify.services.raid_link_service import (
     RaidLinkService,
 )
 from shuffify.services.user_service import UserService
+from shuffify.spotify.api import SpotifyAPI
 
 
 @pytest.fixture
@@ -76,7 +77,7 @@ def schedule(user):
 @pytest.fixture
 def mock_api():
     """Mock SpotifyAPI."""
-    api = MagicMock()
+    api = MagicMock(spec=SpotifyAPI)
     return api
 
 
