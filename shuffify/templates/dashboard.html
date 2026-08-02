@@ -58,7 +58,7 @@
                 <div class="flex items-center space-x-2 flex-shrink-0">
                     <!-- Manage Button -->
                     <button id="manage-btn"
-                            onclick="toggleManageMode()"
+                            data-action-click="dash-001"
                             class="inline-flex items-center px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition duration-150 border border-white/20 hover:border-white/30"
                             title="Manage playlist tiles">
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -68,7 +68,7 @@
                     </button>
                     <!-- Refresh Playlists Button -->
                     <button id="refresh-playlists-btn"
-                            onclick="refreshPlaylists()"
+                            data-action-click="dash-002"
                             class="inline-flex items-center px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition duration-150 border border-white/20 hover:border-white/30"
                             title="Refresh playlists from Spotify">
                         <svg id="refresh-icon" class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -116,7 +116,7 @@
             </div>
             <div class="flex items-center space-x-2">
                 <button id="show-hidden-btn"
-                        onclick="toggleShowHidden()"
+                        data-action-click="dash-003"
                         class="inline-flex items-center px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition border border-white/20"
                         title="Show hidden playlists">
                     <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -125,7 +125,7 @@
                     </svg>
                     <span id="show-hidden-text">Show Hidden</span>
                 </button>
-                <button onclick="resetPreferences()"
+                <button data-action-click="dash-004"
                         class="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-200 text-sm font-medium transition border border-red-500/30"
                         title="Reset all tile preferences">
                     <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -169,7 +169,7 @@
         {% if hidden_playlists %}
         <div id="hidden-playlists-section" class="mt-8">
             <button id="hidden-toggle-btn"
-                    onclick="toggleHiddenSection()"
+                    data-action-click="dash-005"
                     class="w-full flex items-center justify-between px-4 py-3 rounded-xl backdrop-blur-md bg-white/5 border border-white/10 hover:bg-white/10 transition duration-150 cursor-pointer"
                     aria-expanded="false"
                     aria-controls="hidden-grid-wrapper">
@@ -829,7 +829,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         tile.addEventListener('click', (e) => {
             // If the click is on an interactive element inside the overlay, let it through
-            if (e.target.closest('.algo-icon-btn, .algo-settings-btn, .algo-popover-close, .algo-popover-shuffle, .undo-overlay-btn, a, button, input, select')) {
+            // [data-action-click] keeps this guard correct for controls migrated off
+            // inline onclick handlers: those used to call stopPropagation themselves,
+            // which a delegated handler cannot do -- it runs at the document, after
+            // bubbling. The check belongs here, on the parent, not on each child.
+            if (e.target.closest('.algo-icon-btn, .algo-settings-btn, .algo-popover-close, .algo-popover-shuffle, .undo-overlay-btn, [data-action-click], a, button, input, select')) {
                 return;
             }
             // If click is on the Spotify link in the info bar, let it through
@@ -1042,4 +1046,34 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 }
 </style>
+<script nonce="{{ csp_nonce }}">
+// ---------------------------------------------------------------------------
+// Event wiring: inline on* attributes cannot run under the CSP (a nonce
+// authorises an element, not an attribute), so each one is registered here
+// and dispatched by static/js/actions.js. This block must stay OUTSIDE any
+// Jinja conditional -- a registry that renders conditionally orphans every key
+// on the branches where it does not render.
+// ---------------------------------------------------------------------------
+registerActions({
+    // was onclick="toggleManageMode()"
+    'dash-001': function (el, event) { toggleManageMode(); },
+    // was onclick="refreshPlaylists()"
+    'dash-002': function (el, event) { refreshPlaylists(); },
+    // was onclick="toggleShowHidden()"
+    'dash-003': function (el, event) { toggleShowHidden(); },
+    // was onclick="resetPreferences()"
+    'dash-004': function (el, event) { resetPreferences(); },
+    // was onclick="toggleHiddenSection()"
+    'dash-005': function (el, event) { toggleHiddenSection(); },
+
+// playlist_card (macros/cards.html) is rendered only by this page. Its controls
+// previously called event.stopPropagation() themselves; that guard now lives on
+// the .card-tile handler above, which skips clicks landing on [data-action-click].
+    'card.favorite': function (el) { toggleFavorite(el.dataset.playlistId); },
+    'card.hide': function (el) { hidePlaylist(el.dataset.playlistId); },
+    'card.unhide': function (el) { unhidePlaylist(el.dataset.playlistId); },
+    'card.visibility': function (el) { togglePlaylistVisibility(el.dataset.playlistId, el); },
+});
+</script>
+
 {% endblock %}
