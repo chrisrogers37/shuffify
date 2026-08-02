@@ -28,27 +28,60 @@ STAND_IN = re.compile(
     r"^(mock_)?(api|spotify_api|spotify_client|client|auth_service|auth_svc)$"
 )
 MOCK_CALLS = {"Mock", "MagicMock"}
+# Patch targets that stand in for one of the two classes #521 measured.
+PATCH_TARGET = re.compile(r"(SpotifyAPI|AuthService|spotify\.api|auth_service)")
+
+
+def _is_specd(call):
+    return any(k.arg in ("spec", "spec_set", "autospec") for k in call.keywords)
+
 
 # file -> number of unspec'd stand-ins still to convert. May only decrease.
 # Regenerate with: python -m pytest tests/test_mock_spec_contract.py -q
 BASELINE = {
-    "routes/test_activity_routes.py": 2,
-    "routes/test_core_routes.py": 6,
-    "routes/test_schedules_routes.py": 6,
-    "routes/test_settings_routes.py": 2,
+    "routes/test_activity_routes.py": 4,
+    "routes/test_core_routes.py": 19,
+    "routes/test_error_page_rendering.py": 4,
+    "routes/test_schedules_routes.py": 12,
+    "routes/test_settings_routes.py": 4,
     "routes/test_shuffle_routes.py": 1,
     "routes/test_snapshot_routes.py": 1,
     "routes/test_workshop_external_routes.py": 2,
+    "routes/test_workshop_routes.py": 2,
     "routes/test_workshop_search_routes.py": 1,
+    "services/test_auth_service.py": 23,
     "services/test_drip_now_no_side_effects.py": 1,
     "services/test_job_executor_rotate.py": 12,
+    "services/test_job_executor_service.py": 2,
+    "services/test_playlist_lock.py": 1,
     "services/test_verify_playlist_state.py": 14,
-    "templates/test_dashboard_overlay.py": 1,
+    "spotify/test_api.py": 37,
+    "spotify/test_api_search.py": 4,
+    "spotify/test_api_write_contracts.py": 18,
+    "templates/test_dashboard_overlay.py": 2,
+    "test_integration.py": 4,
+    "test_rate_limiting.py": 1,
     "test_refresh_and_registry.py": 3,
 }
 
 
 def _unspecd_by_file():
+    """Count unspec'd stand-ins in ALL THREE idioms.
+
+    An earlier version of this file counted only ``name = Mock()``. navi found
+    that misses two other shapes, and that they are DISJOINT populations -- a
+    decorator is not an assignment, so there is zero overlap and the counts do
+    not merely differ, they describe different things:
+
+      1. ``name = Mock()``            -- assignment
+      2. ``return Mock()``            -- factory/fixture return
+      3. ``@patch("...SpotifyAPI")``  -- patch without autospec=True
+
+    Shape 3 is the largest population AND the most natural way to write a new
+    test, so a ratchet blind to it would have passed exactly the tests most
+    likely to be written next. That is the defect this file exists to prevent,
+    so leaving it out would have made this guard another check that cannot fail.
+    """
     counts = {}
     for path in sorted(TESTS.rglob("*.py")):
         try:
@@ -57,19 +90,38 @@ def _unspecd_by_file():
             continue
         n = 0
         for node in ast.walk(tree):
-            if not isinstance(node, ast.Assign):
-                continue
-            call = node.value
-            if not (
-                isinstance(call, ast.Call)
-                and getattr(call.func, "id", None) in MOCK_CALLS
+            # 1. name = Mock()
+            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+                call = node.value
+                if (
+                    getattr(call.func, "id", None) in MOCK_CALLS
+                    and not _is_specd(call)
+                    and any(
+                        STAND_IN.match(t.id)
+                        for t in node.targets
+                        if isinstance(t, ast.Name)
+                    )
+                ):
+                    n += 1
+            # 2. return Mock()
+            elif isinstance(node, ast.Return) and isinstance(node.value, ast.Call):
+                if getattr(node.value.func, "id", None) in MOCK_CALLS and not _is_specd(
+                    node.value
+                ):
+                    n += 1
+            # 3. @patch("...SpotifyAPI") with no autospec
+            elif isinstance(node, ast.Call) and (
+                getattr(node.func, "id", None) == "patch"
+                or getattr(node.func, "attr", None) == "object"
             ):
-                continue
-            if any(k.arg in ("spec", "spec_set") for k in call.keywords):
-                continue
-            names = [t.id for t in node.targets if isinstance(t, ast.Name)]
-            if any(STAND_IN.match(x) for x in names):
-                n += 1
+                arg = node.args[0] if node.args else None
+                target = arg.value if isinstance(arg, ast.Constant) else ""
+                if isinstance(target, str) and PATCH_TARGET.search(target):
+                    if not any(
+                        k.arg in ("autospec", "spec", "spec_set", "new_callable")
+                        for k in node.keywords
+                    ):
+                        n += 1
         if n:
             counts[str(path.relative_to(TESTS))] = n
     return counts
