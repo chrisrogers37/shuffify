@@ -8,13 +8,12 @@ toggle_pinned, reset_preferences, and apply_preferences.
 import pytest
 
 from shuffify.models.db import (
-    db,
-    User,
     PlaylistPreference,
+    User,
+    db,
 )
 from shuffify.services.playlist_preference_service import (
     PlaylistPreferenceService,
-    PlaylistPreferenceError,
 )
 
 

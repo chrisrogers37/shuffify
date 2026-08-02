@@ -8,13 +8,13 @@ import pytest
 from pydantic import ValidationError
 
 from shuffify.schemas import (
-    ShuffleRequest,
-    PlaylistQueryParams,
-    BasicShuffleParams,
     BalancedShuffleParams,
-    PercentageShuffleParams,
-    WorkshopCommitRequest,
+    BasicShuffleParams,
     ExternalPlaylistRequest,
+    PercentageShuffleParams,
+    PlaylistQueryParams,
+    ShuffleRequest,
+    WorkshopCommitRequest,
     parse_shuffle_request,
 )
 

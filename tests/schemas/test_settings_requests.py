@@ -12,7 +12,6 @@ from shuffify.schemas.settings_requests import (
     UserSettingsUpdateRequest,
 )
 
-
 # =============================================================================
 # UserSettingsUpdateRequest — Valid inputs
 # =============================================================================

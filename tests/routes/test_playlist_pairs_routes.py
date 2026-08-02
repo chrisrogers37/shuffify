@@ -5,7 +5,7 @@ Tests cover authentication, error handling, and basic CRUD
 for the /playlist/<id>/pair endpoints.
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 # =============================================================================
 # Authentication Tests

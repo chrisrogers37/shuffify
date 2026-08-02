@@ -7,23 +7,23 @@ Tests cover all extraction strategies:
 Plus caching, error handling, and integration with resolve().
 """
 
-import pytest
 from unittest.mock import Mock, patch
 
-from shuffify.services.source_resolver.public_scraper_pathway import (
-    PublicScraperPathway,
-    _extract_uris,
-    _extract_from_next_data,
-    _extract_from_track_list,
-    _extract_with_regex,
-    _get_track_uri_from_item,
-    _walk_json_for_tracks,
-    _try_parse_json,
-)
+import pytest
+
 from shuffify.services.source_resolver.base import (
     find_nested_key as _find_key,
 )
-
+from shuffify.services.source_resolver.public_scraper_pathway import (
+    PublicScraperPathway,
+    _extract_from_next_data,
+    _extract_from_track_list,
+    _extract_uris,
+    _extract_with_regex,
+    _get_track_uri_from_item,
+    _try_parse_json,
+    _walk_json_for_tracks,
+)
 
 # ======================================================================
 # Fixtures
@@ -740,6 +740,7 @@ class TestCaching:
     def test_cache_hit_returns_cached(self, mock_source, db_app):
         """Pre-populated cache row is returned directly."""
         from datetime import datetime, timedelta, timezone
+
         from shuffify.models.db import (
             ScrapedPlaylistCache,
             db,
@@ -768,6 +769,7 @@ class TestCaching:
     def test_cache_hit_empty_returns_failure(self, mock_source, db_app):
         """Cached empty result returns failure."""
         from datetime import datetime, timedelta, timezone
+
         from shuffify.models.db import (
             ScrapedPlaylistCache,
             db,
@@ -823,6 +825,7 @@ class TestCaching:
     def test_expired_cache_triggers_rescrape(self, mock_get, mock_source, db_app):
         """Expired cache row is ignored; fresh scrape runs."""
         from datetime import datetime, timedelta, timezone
+
         from shuffify.models.db import (
             ScrapedPlaylistCache,
             db,
@@ -1180,8 +1183,8 @@ class TestRequestTimeoutConfig:
 
     def test_uses_default_outside_app_context(self):
         from shuffify.services.source_resolver.public_scraper_pathway import (
-            _get_request_timeout,
             DEFAULT_REQUEST_TIMEOUT,
+            _get_request_timeout,
         )
 
         assert _get_request_timeout() == DEFAULT_REQUEST_TIMEOUT
@@ -1220,8 +1223,8 @@ class TestSleepWithBackoff:
     )
     def test_exponential_backoff_doubles_per_attempt(self, _mock_rand, mock_sleep):
         from shuffify.services.source_resolver.public_scraper_pathway import (
-            _sleep_with_backoff,
             BACKOFF_BASE,
+            _sleep_with_backoff,
         )
 
         _sleep_with_backoff(0)
@@ -1257,8 +1260,8 @@ class TestSleepWithBackoff:
         self, _mock_rand, mock_sleep
     ):
         from shuffify.services.source_resolver.public_scraper_pathway import (
-            _sleep_with_backoff,
             BACKOFF_BASE,
+            _sleep_with_backoff,
         )
 
         _sleep_with_backoff(1, retry_after="soon")
@@ -1271,8 +1274,8 @@ class TestSleepWithBackoff:
     )
     def test_max_backoff_caps_long_waits(self, _mock_rand, mock_sleep):
         from shuffify.services.source_resolver.public_scraper_pathway import (
-            _sleep_with_backoff,
             MAX_BACKOFF,
+            _sleep_with_backoff,
         )
 
         _sleep_with_backoff(0, retry_after="999")
@@ -1346,6 +1349,7 @@ class TestScraperFailureModes:
         ``test_expired_cache_triggers_rescrape`` to bracket the TTL
         boundary on both sides."""
         from datetime import datetime, timedelta, timezone
+
         from shuffify.models.db import (
             ScrapedPlaylistCache,
             db,

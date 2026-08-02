@@ -7,15 +7,14 @@ and auto-snapshot settings integration.
 
 import pytest
 
-from shuffify.models.db import db
-from shuffify.services.user_service import UserService
-from shuffify.services.playlist_snapshot_service import (
-    PlaylistSnapshotService,
-    PlaylistSnapshotError,
-    PlaylistSnapshotNotFoundError,
-    DEFAULT_MAX_SNAPSHOTS_PER_PLAYLIST,
-)
 from shuffify.enums import SnapshotType
+from shuffify.models.db import db
+from shuffify.services.playlist_snapshot_service import (
+    DEFAULT_MAX_SNAPSHOTS_PER_PLAYLIST,
+    PlaylistSnapshotNotFoundError,
+    PlaylistSnapshotService,
+)
+from shuffify.services.user_service import UserService
 
 
 @pytest.fixture

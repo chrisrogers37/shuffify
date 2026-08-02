@@ -49,7 +49,14 @@ jobs:
           pip install -r requirements/dev.txt
 
       - name: Lint (ruff)
-        run: ruff check shuffify/
+        # The whole tree, not just the application package. `tests/` was
+        # unlinted and had accumulated violations the gate could not see --
+        # including four unused locals, two of which were assertions somebody
+        # started writing and abandoned. Test code is where mocking discipline
+        # and import hygiene matter most, so it is the last place to leave
+        # unchecked. Local virtualenvs are excluded in pyproject.toml, which
+        # only became load-bearing once this stopped being scoped.
+        run: ruff check .
 
       # Two branches can hand-pick the same Alembic revision id and git merges
       # them without a conflict, because the filenames differ (#527). The app

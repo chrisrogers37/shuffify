@@ -4,11 +4,10 @@ Tests for track lock utility functions in shuffle_algorithms/utils.py.
 Covers split_locked_tracks and reassemble_with_locks.
 """
 
-import pytest
 
 from shuffify.shuffle_algorithms.utils import (
-    split_locked_tracks,
     reassemble_with_locks,
+    split_locked_tracks,
 )
 
 

@@ -4,9 +4,9 @@ Tests for BasicShuffle algorithm.
 Tests cover basic shuffling, keep_first parameter, and edge cases.
 """
 
-import pytest
 import random
-from collections import Counter
+
+import pytest
 
 from shuffify.shuffle_algorithms.basic import BasicShuffle
 

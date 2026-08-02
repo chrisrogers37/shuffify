@@ -4,9 +4,10 @@ Tests for the TokenService (Fernet encryption/decryption).
 
 import pytest
 from cryptography.fernet import Fernet
+
 from shuffify.services.token_service import (
-    TokenService,
     TokenEncryptionError,
+    TokenService,
 )
 
 

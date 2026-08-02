@@ -27,17 +27,19 @@ import pytest
 import requests
 
 from shuffify.services.source_resolver.public_scraper_pathway import (
-    PublicScraperPathway,
+    DEFAULT_REQUEST_TIMEOUT as REQUEST_TIMEOUT,
+)
+from shuffify.services.source_resolver.public_scraper_pathway import (
     EMBED_URL,
+    NEXT_DATA_PATTERN,
     PUBLIC_URL,
     REQUEST_HEADERS,
-    DEFAULT_REQUEST_TIMEOUT as REQUEST_TIMEOUT,
-    _extract_uris,
+    TRACK_LIST_SCRIPT_PATTERN,
+    PublicScraperPathway,
     _extract_from_next_data,
     _extract_from_track_list,
+    _extract_uris,
     _extract_with_regex,
-    NEXT_DATA_PATTERN,
-    TRACK_LIST_SCRIPT_PATTERN,
 )
 
 # ======================================================================

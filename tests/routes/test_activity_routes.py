@@ -4,10 +4,11 @@ Tests for the /activity route.
 Covers authentication gating and rendering with mocked service layer.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from shuffify.models.db import db, User
+import pytest
+
+from shuffify.models.db import User, db
 
 
 @pytest.fixture

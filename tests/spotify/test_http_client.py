@@ -3,24 +3,23 @@
 import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-
-import pytest
 from unittest.mock import MagicMock, patch
 
-from shuffify.spotify.http_client import (
-    SpotifyHTTPClient,
-    BASE_URL,
-    _calculate_backoff_delay,
-    get_shared_adapter,
-    MAX_RETRIES,
-)
+import pytest
+
 from shuffify.spotify.exceptions import (
     SpotifyAPIError,
     SpotifyNotFoundError,
     SpotifyRateLimitError,
     SpotifyTokenExpiredError,
 )
-
+from shuffify.spotify.http_client import (
+    BASE_URL,
+    MAX_RETRIES,
+    SpotifyHTTPClient,
+    _calculate_backoff_delay,
+    get_shared_adapter,
+)
 
 # =========================================================================
 # Helpers

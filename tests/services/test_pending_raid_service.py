@@ -7,12 +7,12 @@ cleanup of pending raid tracks.
 
 import pytest
 
-from shuffify.models.db import db, PendingRaidTrack
 from shuffify.enums import PendingRaidStatus
-from shuffify.services.user_service import UserService
+from shuffify.models.db import PendingRaidTrack
 from shuffify.services.pending_raid_service import (
     PendingRaidService,
 )
+from shuffify.services.user_service import UserService
 
 
 @pytest.fixture

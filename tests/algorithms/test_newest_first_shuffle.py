@@ -4,8 +4,8 @@ Tests for NewestFirstShuffle algorithm.
 Tests cover date-based sorting, jitter behavior, and edge cases.
 """
 
+
 import pytest
-import random
 
 from shuffify.shuffle_algorithms.newest_first import NewestFirstShuffle
 
@@ -109,7 +109,7 @@ class TestNewestFirstShuffleSorting:
             {
                 "uri": f"spotify:track:{i}",
                 "name": f"Track {i}",
-                "added_at": f"2025-{i+1:02d}-15T00:00:00Z",
+                "added_at": f"2025-{i + 1:02d}-15T00:00:00Z",
             }
             for i in range(12)
         ]
@@ -135,7 +135,7 @@ class TestNewestFirstShuffleJitter:
             {
                 "uri": f"spotify:track:{i}",
                 "name": f"Track {i}",
-                "added_at": f"2025-01-{i+1:02d}T00:00:00Z",
+                "added_at": f"2025-01-{i + 1:02d}T00:00:00Z",
             }
             for i in range(20)
         ]
@@ -305,7 +305,7 @@ class TestNewestFirstShuffleEdgeCases:
         tracks = [
             {
                 "uri": f"spotify:track:{i}",
-                "added_at": f"2025-0{i+1}-01T00:00:00Z",
+                "added_at": f"2025-0{i + 1}-01T00:00:00Z",
             }
             for i in range(5)
         ]

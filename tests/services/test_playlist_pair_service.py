@@ -5,11 +5,10 @@ Tests cover CRUD operations for playlist pairs, archive/unarchive
 track logic, archive playlist creation, and to_dict serialization.
 """
 
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
 
-from shuffify.models.db import PlaylistPair, db
 from shuffify.services.playlist_pair_service import (
     PlaylistPairExistsError,
     PlaylistPairNotFoundError,

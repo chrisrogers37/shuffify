@@ -5,9 +5,8 @@ Revises: 2c3960f86b3e
 Create Date: 2026-02-12 21:16:46.016867
 
 """
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = '5c6c7c0845ac'
@@ -34,7 +33,11 @@ def upgrade():
     with op.batch_alter_table('playlist_snapshots', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_playlist_snapshots_playlist_id'), ['playlist_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_playlist_snapshots_user_id'), ['user_id'], unique=False)
-        batch_op.create_index('ix_snapshot_user_playlist_created', ['user_id', 'playlist_id', 'created_at'], unique=False)
+        batch_op.create_index(
+            'ix_snapshot_user_playlist_created',
+            ['user_id', 'playlist_id', 'created_at'],
+            unique=False,
+        )
 
     # ### end Alembic commands ###
 

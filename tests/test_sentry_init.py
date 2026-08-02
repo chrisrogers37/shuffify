@@ -1,6 +1,6 @@
 """Tests for Sentry initialization in the Flask app factory (F5)."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from shuffify import _init_sentry, _strip_pii
 

@@ -9,7 +9,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from shuffify.models.db import RaidPlaylistLink, db
 from shuffify.services.raid_link_service import (
     RaidLinkExistsError,
     RaidLinkNotFoundError,

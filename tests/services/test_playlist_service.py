@@ -4,17 +4,17 @@ Tests for PlaylistService.
 Tests cover playlist retrieval, updates, and validation.
 """
 
-import pytest
-from unittest.mock import Mock, patch
 
+import pytest
+
+from shuffify.models.playlist import Playlist
 from shuffify.services import (
-    PlaylistService,
+    PlaylistAccessError,
     PlaylistError,
     PlaylistNotFoundError,
+    PlaylistService,
     PlaylistUpdateError,
-    PlaylistAccessError,
 )
-from shuffify.models.playlist import Playlist
 
 
 class TestPlaylistServiceAssertUserCanEdit:

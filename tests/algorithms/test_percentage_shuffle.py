@@ -4,8 +4,9 @@ Tests for PercentageShuffle algorithm.
 Tests cover percentage-based partial shuffling with location options.
 """
 
-import pytest
 import random
+
+import pytest
 
 from shuffify.shuffle_algorithms.percentage import PercentageShuffle
 

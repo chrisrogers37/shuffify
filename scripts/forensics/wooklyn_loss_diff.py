@@ -41,21 +41,21 @@ if REPO_ROOT not in sys.path:
 
 from shuffify import create_app  # noqa: E402
 from shuffify.models.db import (  # noqa: E402
-    db,
-    PlaylistSnapshot,
     PlaylistPair,
+    PlaylistSnapshot,
     User,
+    db,
 )
 from shuffify.services.token_service import TokenService  # noqa: E402
+from shuffify.shuffle_algorithms.utils import extract_uris  # noqa: E402
+from shuffify.spotify.api import SpotifyAPI  # noqa: E402
 from shuffify.spotify.auth import (  # noqa: E402
     SpotifyAuthManager,
     TokenInfo,
 )
-from shuffify.spotify.api import SpotifyAPI  # noqa: E402
 from shuffify.spotify.credentials import (  # noqa: E402
     SpotifyCredentials,
 )
-from shuffify.shuffle_algorithms.utils import extract_uris  # noqa: E402
 
 
 def _build_api(user: User, app_config) -> SpotifyAPI:

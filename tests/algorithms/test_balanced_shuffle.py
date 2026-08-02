@@ -4,9 +4,9 @@ Tests for BalancedShuffle algorithm.
 Tests cover sectioned shuffling with round-robin selection.
 """
 
-import pytest
 import random
-from collections import Counter
+
+import pytest
 
 from shuffify.shuffle_algorithms.balanced import BalancedShuffle
 

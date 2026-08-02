@@ -1,13 +1,12 @@
 """Initial schema: users, workshop_sessions, upstream_sources, schedules, job_executions
 
 Revision ID: aa2823fcd4b0
-Revises: 
+Revises:
 Create Date: 2026-02-12 10:00:01.123263
 
 """
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = 'aa2823fcd4b0'
@@ -68,7 +67,11 @@ def upgrade():
     sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('upstream_sources', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_upstream_sources_target_playlist_id'), ['target_playlist_id'], unique=False)
+        batch_op.create_index(
+            batch_op.f('ix_upstream_sources_target_playlist_id'),
+            ['target_playlist_id'],
+            unique=False,
+        )
         batch_op.create_index(batch_op.f('ix_upstream_sources_user_id'), ['user_id'], unique=False)
         batch_op.create_index('ix_upstream_user_target', ['user_id', 'target_playlist_id'], unique=False)
 

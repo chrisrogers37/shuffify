@@ -27,8 +27,8 @@ difference between a brief lock and minutes of `ACCESS EXCLUSIVE`.
 caused the rewrite.
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "d5e6f7a8b9c0"

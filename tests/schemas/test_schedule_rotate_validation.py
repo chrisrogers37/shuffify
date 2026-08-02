@@ -13,7 +13,6 @@ from shuffify.schemas.schedule_requests import (
     ScheduleUpdateRequest,
 )
 
-
 # =============================================================================
 # ScheduleCreateRequest — Valid Rotate
 # =============================================================================

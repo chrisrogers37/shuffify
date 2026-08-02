@@ -4,10 +4,11 @@ Tests for the /settings routes.
 Tests cover rendering the settings page and updating settings.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from shuffify.models.db import db, User, UserSettings
+import pytest
+
+from shuffify.models.db import User, UserSettings, db
 
 
 @pytest.fixture
@@ -74,7 +75,6 @@ class TestSettingsGetRoute:
         response = auth_client.get("/settings")
         assert response.status_code == 200
         assert b"Settings" in response.data
-
 
     @patch("shuffify.routes.settings.AuthService")
     def test_returns_json_for_ajax_request(

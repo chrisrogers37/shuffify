@@ -6,12 +6,11 @@ including creation, relationships, serialization, and constraints.
 """
 
 import json
-import pytest
 from datetime import datetime, timezone
 
-from shuffify.models.db import (
-    db, User, WorkshopSession, UpstreamSource, LoginHistory
-)
+import pytest
+
+from shuffify.models.db import LoginHistory, UpstreamSource, User, WorkshopSession, db
 
 
 @pytest.fixture

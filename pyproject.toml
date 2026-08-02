@@ -5,12 +5,23 @@ target-version = "py312"
 exclude = [
     ".git",
     "__pycache__",
-    "venv",
-    ".venv",
     "build",
     "dist",
     "*.egg-info",
     ".flask_session",
+    # Local virtualenvs, any naming convention. This became load-bearing when
+    # the lint moved from `shuffify/` to the whole tree: `ruff check .` with a
+    # venv in the working directory would otherwise walk site-packages and
+    # report thousands of findings in third-party code. `venv`/`.venv` alone
+    # did not cover the names people actually use.
+    "venv",
+    "venv-*",
+    ".venv",
+    ".venv-*",
+    "env",
+    "env-*",
+    ".env-*",
+    "virtualenv",
 ]
 
 [tool.ruff.lint]

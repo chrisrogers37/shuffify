@@ -6,8 +6,9 @@ algorithm icon buttons, gear icons, keep-first stepper,
 workshop/undo placement, info bar simplification, and hidden forms.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 MOCK_ALGORITHMS = [
     {
@@ -190,7 +191,7 @@ class TestOverlayRendering:
             "AlbumSequenceShuffle",
         ]:
             assert (
-                f'class="algo-settings-btn'
+                'class="algo-settings-btn'
                 in dashboard_html
             ), (
                 f"Gear icon missing for {class_name}"

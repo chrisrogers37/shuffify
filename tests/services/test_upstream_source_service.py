@@ -7,13 +7,13 @@ and source count limits.
 
 import pytest
 
-from shuffify.services.user_service import UserService
 from shuffify.services.upstream_source_service import (
-    UpstreamSourceService,
     UpstreamSourceError,
-    UpstreamSourceNotFoundError,
     UpstreamSourceLimitError,
+    UpstreamSourceNotFoundError,
+    UpstreamSourceService,
 )
+from shuffify.services.user_service import UserService
 
 
 @pytest.fixture

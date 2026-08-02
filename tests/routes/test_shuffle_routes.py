@@ -4,7 +4,8 @@ Tests for shuffle routes.
 Tests cover POST /shuffle/<playlist_id> and POST /undo/<playlist_id>.
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 
 class TestShuffleAuth:
     """Auth guard tests for shuffle endpoints."""
