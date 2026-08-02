@@ -38,6 +38,11 @@ Notes below are the non-obvious, environment-specific bits.
 - The core product logic (the 7 shuffle algorithms in
   `shuffify/shuffle_algorithms/`) is fully testable without Spotify — import
   `ShuffleRegistry` and call `.shuffle(tracks)` on sample track dicts.
+- Gotcha when testing OAuth: `GET /login` requires a `legal_consent` query param
+  (set by the landing page's Terms checkbox). A bare `GET /login` flashes an
+  error and redirects to `/`; use `/login?legal_consent=true` to reach the real
+  Spotify authorize redirect. Completing the login itself needs a human Spotify
+  account (reCAPTCHA/MFA on `accounts.spotify.com`) and cannot be automated.
 
 ### Tests
 - `pytest tests/ -m "not integration"` runs without any env vars: `config.py`
