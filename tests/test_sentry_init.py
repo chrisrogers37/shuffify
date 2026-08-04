@@ -1,8 +1,22 @@
 """Tests for Sentry initialization in the Flask app factory (F5)."""
 
+import json
+import re
 from unittest.mock import MagicMock, patch
 
-from shuffify import _init_sentry, _strip_pii
+import pytest
+
+from shuffify import (
+    _SENTRY_PII_DENYLIST,
+    _SENTRY_PII_EXACT_KEYS,
+    _SENTRY_SECRET_CONFIG_ATTRS,
+    _SENTRY_SECRET_URL_CONFIG_ATTRS,
+    _init_sentry,
+    _register_sentry_secret_values,
+    _sentry_key_is_sensitive,
+    _sentry_sensitive_key_pattern,
+    _strip_pii,
+)
 
 
 class _FakeConfig:
@@ -13,6 +27,20 @@ class _FakeConfig:
     SENTRY_TRACES_SAMPLE_RATE = 0.0
     SENTRY_PROFILES_SAMPLE_RATE = 0.0
     SENTRY_RELEASE = ""
+
+
+@pytest.fixture(autouse=True)
+def _clear_registered_secrets():
+    """Keep the known-secret registry out of neighbouring tests.
+
+    The registry is module-global and create_app registers into it, so any
+    test that builds an app would otherwise leave TestConfig's SECRET_KEY
+    armed for the rest of the session. _FakeConfig declares no secrets, so
+    registering it empties the registry.
+    """
+    _register_sentry_secret_values(_FakeConfig)
+    yield
+    _register_sentry_secret_values(_FakeConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +222,374 @@ class TestTagSentryScope:
         ):
             # Should not raise.
             _tag_sentry_scope(schedule, schedule_id=1)
+
+
+# ---------------------------------------------------------------------------
+# _strip_pii -- free-text (value-level) scrubbing
+# ---------------------------------------------------------------------------
+
+
+class TestStripPiiFreeText:
+    """Value-level scrubbing of secrets no key names (#514).
+
+    Key-based redaction cannot see a secret interpolated into a string. These
+    cover the three surfaces the scrubber previously documented as uncovered
+    -- log message text, exception strings, breadcrumb messages -- plus the
+    string leaves the same walk now reaches everywhere else.
+    """
+
+    # Structurally realistic, obviously fake. Spotify access tokens carry a
+    # BQ prefix and refresh tokens an AQ prefix, both far longer than an ID.
+    ACCESS_TOKEN = "BQDfaketokenAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    REFRESH_TOKEN = "AQDfakerefreshAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    # A real playlist ID shape -- diagnostic content that must survive.
+    PLAYLIST_ID = "37i9dQZF1DXcBWIGoYBM5M"
+
+    def test_token_interpolated_into_log_message_is_redacted(self):
+        """logger.error(f"...{token}") must not egress the token."""
+        event = {
+            "logentry": {
+                "message": f"Token exchange failed: {self.ACCESS_TOKEN}",
+                "formatted": f"Token exchange failed: {self.ACCESS_TOKEN}",
+            }
+        }
+        cleaned = _strip_pii(event, hint=None)
+
+        assert self.ACCESS_TOKEN not in cleaned["logentry"]["message"]
+        assert self.ACCESS_TOKEN not in cleaned["logentry"]["formatted"]
+        # The diagnostic half of the message survives.
+        assert "Token exchange failed" in cleaned["logentry"]["message"]
+
+    def test_token_in_logentry_params_is_redacted(self):
+        """logger.error("failed for %s", token) puts the token in params."""
+        event = {
+            "logentry": {
+                "message": "Token refresh failed for %s",
+                "params": [self.REFRESH_TOKEN],
+            }
+        }
+        cleaned = _strip_pii(event, hint=None)
+
+        assert self.REFRESH_TOKEN not in str(cleaned["logentry"]["params"])
+
+    def test_token_interpolated_into_exception_string_is_redacted(self):
+        """exception.values[].value is free text and must be scrubbed."""
+        event = {
+            "exception": {
+                "values": [
+                    {
+                        "type": "SpotifyTokenError",
+                        "value": f"refresh rejected: {self.REFRESH_TOKEN}",
+                    }
+                ]
+            }
+        }
+        cleaned = _strip_pii(event, hint=None)
+
+        value = cleaned["exception"]["values"][0]["value"]
+        assert self.REFRESH_TOKEN not in value
+        assert "refresh rejected" in value
+        # Untouched neighbours stay untouched.
+        assert cleaned["exception"]["values"][0]["type"] == "SpotifyTokenError"
+
+    def test_token_in_breadcrumb_message_is_redacted(self):
+        event = {
+            "breadcrumbs": {
+                "values": [
+                    {
+                        "category": "auth",
+                        "message": f"exchanging code for {self.ACCESS_TOKEN}",
+                    }
+                ]
+            }
+        }
+        cleaned = _strip_pii(event, hint=None)
+
+        assert self.ACCESS_TOKEN not in cleaned["breadcrumbs"]["values"][0]["message"]
+
+    def test_breadcrumbs_as_bare_list_are_scrubbed(self):
+        """Older payload shape: breadcrumbs is a list, not {"values": [...]}."""
+        event = {
+            "breadcrumbs": [
+                {"message": f"token={self.ACCESS_TOKEN}"},
+            ]
+        }
+        cleaned = _strip_pii(event, hint=None)
+
+        assert self.ACCESS_TOKEN not in cleaned["breadcrumbs"][0]["message"]
+
+    def test_repr_of_token_dict_in_message_is_redacted(self):
+        """The named regression: f"...{token_data}" reprs the whole dict."""
+        event = {
+            "logentry": {
+                "message": (
+                    "Token exchange failed: "
+                    f"{{'access_token': '{self.ACCESS_TOKEN}', "
+                    f"'expires_in': 3600, 'refresh_token': '{self.REFRESH_TOKEN}'}}"
+                )
+            }
+        }
+        cleaned = _strip_pii(event, hint=None)
+
+        message = cleaned["logentry"]["message"]
+        assert self.ACCESS_TOKEN not in message
+        assert self.REFRESH_TOKEN not in message
+        # Non-sensitive fields of the same dict stay readable.
+        assert "3600" in message
+
+    def test_query_string_credential_in_message_is_redacted(self):
+        """An OAuth callback URL logged whole carries ?code=..."""
+        event = {
+            "logentry": {
+                "message": (
+                    "callback hit: /callback?code=AQDfakeauthcodeAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&state=xyz"
+                )
+            }
+        }
+        cleaned = _strip_pii(event, hint=None)
+
+        message = cleaned["logentry"]["message"]
+        assert "AQDfakeauthcode" not in message
+        assert "state=xyz" in message
+
+    # The three tests below deliberately use secrets that do NOT match the
+    # BQ/AQ shape rule, so each isolates one locator. Without them the
+    # shape rule alone satisfies every assertion above and the label and
+    # Bearer locators could be deleted with the suite still green.
+
+    def test_labelled_secret_without_token_shape_is_redacted(self):
+        """A hex client_secret is caught by its label, not its shape."""
+        event = {
+            "logentry": {
+                "message": "exchange rejected: client_secret=7f3a9b2c1d4e5f60aabbcc"
+            }
+        }
+        cleaned = _strip_pii(event, hint=None)
+
+        assert "7f3a9b2c1d4e5f60aabbcc" not in cleaned["logentry"]["message"]
+        assert "exchange rejected" in cleaned["logentry"]["message"]
+
+    def test_bearer_value_without_token_shape_is_redacted(self):
+        """Bearer names its own value -- no key and no recognisable shape."""
+        event = {
+            "logentry": {"message": "retrying with Bearer 7f3a9b2c1d4e5f60aabbccddee"}
+        }
+        cleaned = _strip_pii(event, hint=None)
+
+        assert "7f3a9b2c1d4e5f60aabbccddee" not in cleaned["logentry"]["message"]
+        assert "retrying with Bearer" in cleaned["logentry"]["message"]
+
+    def test_labelled_secret_in_dict_repr_is_redacted(self):
+        """Quoted key/value pairs from a repr'd dict are labelled too."""
+        event = {
+            "exception": {
+                "values": [
+                    {"value": "auth payload {'password': 'hunter2pass', 'retries': 2}"}
+                ]
+            }
+        }
+        cleaned = _strip_pii(event, hint=None)
+
+        value = cleaned["exception"]["values"][0]["value"]
+        assert "hunter2pass" not in value
+        assert "'retries': 2" in value
+
+    def test_top_level_message_is_scrubbed(self):
+        """capture_message() writes event["message"], not event["logentry"]."""
+        event = {"message": f"manual capture: {self.ACCESS_TOKEN}"}
+        cleaned = _strip_pii(event, hint=None)
+
+        assert self.ACCESS_TOKEN not in cleaned["message"]
+        assert "manual capture" in cleaned["message"]
+
+    def test_secret_under_a_harmless_key_is_scrubbed(self):
+        """Any string leaf the walk reaches, not only the named surfaces.
+
+        These four nodes are walked for their sensitive *keys* already; the
+        secret here sits in the text of a value whose key is innocuous, which
+        is what the enumerated-field version of this fix missed.
+        """
+        event = {
+            "extra": {"detail": f"exchange failed for code={self.ACCESS_TOKEN}"},
+            "contexts": {"trace": {"note": f"Bearer {self.ACCESS_TOKEN}"}},
+            "request": {"query_string": f"code={self.ACCESS_TOKEN}&state=xyz"},
+            "breadcrumbs": {
+                "values": [{"data": {"url": f"/token?code={self.ACCESS_TOKEN}"}}]
+            },
+        }
+        cleaned = json.dumps(_strip_pii(event, hint=None))
+
+        assert self.ACCESS_TOKEN not in cleaned
+        assert "state=xyz" in cleaned
+
+    def test_diagnostic_identifiers_survive(self):
+        """Redaction must not gut the payload Sentry exists to show."""
+        event = {
+            "logentry": {
+                "message": (
+                    f"shuffle failed for playlist {self.PLAYLIST_ID} "
+                    "(status_code=429, schedule_id=11, tracks_total=241)"
+                )
+            },
+            "exception": {
+                "values": [
+                    {
+                        "type": "SpotifyRateLimitError",
+                        "value": "429 Too Many Requests, retry after 30s",
+                    }
+                ]
+            },
+        }
+        cleaned = _strip_pii(event, hint=None)
+
+        message = cleaned["logentry"]["message"]
+        assert self.PLAYLIST_ID in message
+        assert "429" in message
+        assert "schedule_id=11" in message
+        assert "tracks_total=241" in message
+        assert (
+            cleaned["exception"]["values"][0]["value"]
+            == "429 Too Many Requests, retry after 30s"
+        )
+
+    def test_missing_free_text_surfaces_are_tolerated(self):
+        """Events without logentry/exception/breadcrumbs pass through."""
+        event = {"extra": {"schedule_id": 7}}
+        assert _strip_pii(event, hint=None)["extra"] == {"schedule_id": 7}
+
+        malformed = {
+            "logentry": "not a dict",
+            "exception": {"values": "not a list"},
+            "breadcrumbs": 3,
+        }
+        # Must not raise.
+        _strip_pii(malformed, hint=None)
+
+
+class TestKnownSecretScrubbing:
+    """Exact-value redaction of secrets the process already holds (#514)."""
+
+    def test_client_secret_is_redacted_from_free_text(self):
+        class Cfg(_FakeConfig):
+            SPOTIFY_CLIENT_SECRET = "s3cr3t-client-value"
+
+        _register_sentry_secret_values(Cfg)
+
+        event = {
+            "logentry": {
+                "message": "auth failed using s3cr3t-client-value as the secret"
+            }
+        }
+        cleaned = _strip_pii(event, hint=None)
+
+        assert "s3cr3t-client-value" not in cleaned["logentry"]["message"]
+        assert "auth failed using" in cleaned["logentry"]["message"]
+
+    def test_secret_key_is_redacted_from_exception_text(self):
+        class Cfg(_FakeConfig):
+            SECRET_KEY = "flask-signing-key-abcdef"
+
+        _register_sentry_secret_values(Cfg)
+
+        event = {
+            "exception": {
+                "values": [{"value": "bad signature for flask-signing-key-abcdef"}]
+            }
+        }
+        cleaned = _strip_pii(event, hint=None)
+
+        assert (
+            "flask-signing-key-abcdef" not in cleaned["exception"]["values"][0]["value"]
+        )
+
+    def test_short_or_empty_config_values_are_not_registered(self):
+        """A blank or trivially short secret must not redact everything."""
+
+        class Cfg(_FakeConfig):
+            SPOTIFY_CLIENT_SECRET = ""
+            SECRET_KEY = "dev"
+
+        _register_sentry_secret_values(Cfg)
+
+        event = {"logentry": {"message": "dev server started"}}
+        cleaned = _strip_pii(event, hint=None)
+
+        assert cleaned["logentry"]["message"] == "dev server started"
+
+    def test_init_registers_config_secrets(self):
+        class Cfg(_FakeConfig):
+            SENTRY_DSN = "https://x@y/1"
+            SPOTIFY_CLIENT_SECRET = "registered-via-init-secret"
+
+        with patch("sentry_sdk.init"):
+            _init_sentry(Cfg)
+
+        event = {"logentry": {"message": "leak registered-via-init-secret here"}}
+        assert (
+            "registered-via-init-secret"
+            not in _strip_pii(event, hint=None)["logentry"]["message"]
+        )
+
+
+class TestSecretPolicyDoesNotRot:
+    """Guards on the two places this fix can silently stop covering things."""
+
+    # Config attributes whose *name* looks secret-shaped. Adding
+    # SPOTIFY_CLIENT_SECRET_V2 to config.py and forgetting to register it is a
+    # leak every other layer reports as green.
+    SECRET_SHAPED = re.compile(r"SECRET|TOKEN|KEY|PASSWORD|DSN|URL|URI|CRED", re.I)
+
+    # Deliberately not secrets. Each entry is a decision, not an oversight.
+    NOT_SECRETS = {
+        "CACHE_KEY_PREFIX",  # a namespace string, e.g. "shuffify:cache:"
+        "SESSION_KEY_PREFIX",  # ditto
+        "SPOTIFY_REDIRECT_URI",  # public; registered in the Spotify dashboard
+        "SENTRY_DSN",  # write-only ingest key, public by Sentry's own design
+    }
+
+    def test_every_secret_shaped_config_attr_is_classified(self):
+        from config import Config
+
+        classified = (
+            set(_SENTRY_SECRET_CONFIG_ATTRS)
+            | set(_SENTRY_SECRET_URL_CONFIG_ATTRS)
+            | self.NOT_SECRETS
+        )
+        unclassified = sorted(
+            attr
+            for attr in dir(Config)
+            if attr.isupper()
+            and self.SECRET_SHAPED.search(attr)
+            and attr not in classified
+        )
+
+        assert not unclassified, (
+            f"{unclassified} look secret-shaped but are neither registered for "
+            "redaction nor acknowledged as non-secret"
+        )
+
+    def test_derived_key_pattern_agrees_with_the_predicate(self):
+        """The regex must open a match on every key the predicate calls sensitive.
+
+        The pattern is a second encoding of the same policy. Over-matching is
+        visible (something harmless gets redacted); under-matching is silent,
+        and no other test would see it.
+        """
+        probe = re.compile(_sentry_sensitive_key_pattern() + "$", re.IGNORECASE)
+
+        for key in list(_SENTRY_PII_DENYLIST) + list(_SENTRY_PII_EXACT_KEYS):
+            for candidate in (key, key.upper(), f"spotify_{key}", f"{key}_1"):
+                if _sentry_key_is_sensitive(candidate):
+                    assert probe.match(candidate), f"pattern misses {candidate!r}"
+
+    def test_exact_keys_keep_their_boundaries_in_text(self):
+        """ "code" must not redact status_code -- the reason the exact list exists."""
+        assert not _sentry_key_is_sensitive("status_code")
+
+        event = {"logentry": {"message": "request failed status_code=429"}}
+        cleaned = _strip_pii(event, hint=None)
+
+        assert "status_code=429" in cleaned["logentry"]["message"]
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-"""Outbound-payload tests for Sentry secret egress (issue #436).
+"""Outbound-payload tests for Sentry secret egress (issues #436, #514).
 
 These tests assert on the bytes that would leave the process, not on
 configuration. A scrubber verified only in isolation can pass while the real
@@ -32,6 +32,11 @@ REFRESH_TOKEN = "SECRETMARKER-refresh-token-45c48cce2e2d"
 CLIENT_SECRET = "SECRETMARKER-client-secret-d3d9446802a4"
 ALL_SECRETS = (AUTH_CODE, ACCESS_TOKEN, REFRESH_TOKEN, CLIENT_SECRET)
 
+# The markers above are deliberately unlike real OAuth material, so they
+# exercise the key and known-secret paths. This one carries the BQ prefix
+# and length that #514's shape locator keys on.
+SHAPED_ACCESS_TOKEN = "BQ" + "SECRETMARKER514accesstoken" + "A" * 32
+
 
 class _SinkHandler(BaseHTTPRequestHandler):
     """Collects envelope bodies, transparently decompressing them."""
@@ -59,7 +64,11 @@ def sentry_sink():
     """A local Sentry ingest that records raw envelope bodies."""
     server = ThreadingHTTPServer(("127.0.0.1", 0), _SinkHandler)
     server.captured = []
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    # Default poll_interval is 0.5s, which server.shutdown() blocks on --
+    # half a second of teardown per test, for six tests.
+    threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True
+    ).start()
     try:
         yield server
     finally:
@@ -88,6 +97,10 @@ def _sink_config(server):
         SENTRY_TRACES_SAMPLE_RATE = 0.0
         SENTRY_PROFILES_SAMPLE_RATE = 0.0
         SENTRY_RELEASE = ""
+        # Production always holds this, and _init_sentry registers it for
+        # exact-match free-text redaction (#514). Declaring it here keeps the
+        # sink boot faithful to the real one.
+        SPOTIFY_CLIENT_SECRET = CLIENT_SECRET
 
     return SinkConfig
 
@@ -201,6 +214,92 @@ class TestSentryEgress:
         )
         for secret in ALL_SECRETS:
             assert secret not in payload, f"{secret[:24]}... survived scrubbing"
+
+
+def _emit_error(message, *args, **kwargs):
+    """Log a real ERROR through a shuffify logger so the integration sees it.
+
+    event_level=WARNING means this becomes a Sentry event, taking the same
+    LoggingIntegration path production log calls take.
+    """
+    _reenable_shuffify_loggers()
+    logger = logging.getLogger("shuffify.tests.free_text_egress")
+    logger.disabled = False
+    logger.error(message, *args, **kwargs)
+
+
+class TestFreeTextEgress:
+    """Secrets interpolated into text, not stored under a key (#514).
+
+    Key-based redaction cannot see these. Each test asserts both that the
+    secret is off the wire and that the surface carrying it was actually
+    present -- a payload that never contained the message would satisfy the
+    first assertion while proving nothing.
+    """
+
+    def test_interpolated_secrets_in_log_message_do_not_egress(
+        self, sentry_sink, sentry_client_teardown
+    ):
+        """f-string interpolation into the message text."""
+        assert _init_sentry(_sink_config(sentry_sink)) is True
+
+        _emit_error(
+            f"Token exchange failed for {SHAPED_ACCESS_TOKEN} " f"using {CLIENT_SECRET}"
+        )
+        payload = _flush_and_read(sentry_sink)
+
+        assert payload, "no envelope was sent"
+        # The message still arrived; only the secret spans were replaced.
+        assert "Token exchange failed" in payload
+        assert SHAPED_ACCESS_TOKEN not in payload
+        assert CLIENT_SECRET not in payload
+
+    def test_secret_in_log_params_does_not_egress(
+        self, sentry_sink, sentry_client_teardown
+    ):
+        """logger.error("... %s", token) puts the token in logentry.params."""
+        assert _init_sentry(_sink_config(sentry_sink)) is True
+
+        _emit_error("Token refresh failed for %s", SHAPED_ACCESS_TOKEN)
+        payload = _flush_and_read(sentry_sink)
+
+        assert "Token refresh failed" in payload
+        assert SHAPED_ACCESS_TOKEN not in payload
+
+    def test_secret_in_exception_string_does_not_egress(
+        self, sentry_sink, sentry_client_teardown
+    ):
+        """exception.values[].value is free text the key walk never reads."""
+        assert _init_sentry(_sink_config(sentry_sink)) is True
+
+        try:
+            raise SpotifyTokenError(f"refresh rejected: refresh_token={REFRESH_TOKEN}")
+        except SpotifyTokenError:
+            _emit_error("token refresh failed", exc_info=True)
+
+        payload = _flush_and_read(sentry_sink)
+
+        assert '"exception"' in payload
+        assert "refresh rejected" in payload
+        assert REFRESH_TOKEN not in payload
+
+    def test_secret_in_breadcrumb_message_does_not_egress(
+        self, sentry_sink, sentry_client_teardown
+    ):
+        """Breadcrumbs ride along with the next event and carry free text."""
+        import sentry_sdk
+
+        assert _init_sentry(_sink_config(sentry_sink)) is True
+
+        sentry_sdk.add_breadcrumb(
+            category="auth", message=f"exchanging code={AUTH_CODE}"
+        )
+        _emit_error("auth flow failed")
+        payload = _flush_and_read(sentry_sink)
+
+        assert '"breadcrumbs"' in payload
+        assert "exchanging" in payload
+        assert AUTH_CODE not in payload
 
 
 class TestStripPiiExceptionFrames:
