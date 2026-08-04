@@ -358,25 +358,27 @@ class TestStripPiiFreeText:
     # Bearer locators could be deleted with the suite still green.
 
     def test_labelled_secret_without_token_shape_is_redacted(self):
-        """A hex client_secret is caught by its label, not its shape."""
+        """A client_secret is caught by its label, not by its shape."""
         event = {
             "logentry": {
-                "message": "exchange rejected: client_secret=7f3a9b2c1d4e5f60aabbcc"
+                "message": "exchange rejected: client_secret=EXAMPLE-not-a-real-client-secret"
             }
         }
         cleaned = _strip_pii(event, hint=None)
 
-        assert "7f3a9b2c1d4e5f60aabbcc" not in cleaned["logentry"]["message"]
+        assert "EXAMPLE-not-a-real-client-secret" not in cleaned["logentry"]["message"]
         assert "exchange rejected" in cleaned["logentry"]["message"]
 
     def test_bearer_value_without_token_shape_is_redacted(self):
         """Bearer names its own value -- no key and no recognisable shape."""
         event = {
-            "logentry": {"message": "retrying with Bearer 7f3a9b2c1d4e5f60aabbccddee"}
+            "logentry": {
+                "message": "retrying with Bearer EXAMPLE-not-a-real-bearer-value"
+            }
         }
         cleaned = _strip_pii(event, hint=None)
 
-        assert "7f3a9b2c1d4e5f60aabbccddee" not in cleaned["logentry"]["message"]
+        assert "EXAMPLE-not-a-real-bearer-value" not in cleaned["logentry"]["message"]
         assert "retrying with Bearer" in cleaned["logentry"]["message"]
 
     def test_labelled_secret_in_dict_repr_is_redacted(self):
