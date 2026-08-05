@@ -23,7 +23,8 @@ ROUTES_DIR = pathlib.Path(__file__).resolve().parent.parent / "shuffify" / "rout
 # `/` renders the login page itself for anonymous visitors and is the target
 # every other page redirects to, so it must not carry the redirecting guard --
 # that would be an infinite redirect. It is the one legitimate hand-rolled case.
-LOGIN_PAGE_ENDPOINT = ("core.py", "index")
+LOGIN_PAGE_FILE = "core.py"
+LOGIN_PAGE_FUNC = "index"
 
 
 def _route_handlers():
@@ -72,7 +73,7 @@ def test_html_route_does_not_use_json_auth_decorator(fname, func, decorators):
 )
 def test_html_route_is_guarded(fname, func, decorators):
     """Every HTML page uses the page guard, except the login page itself."""
-    if (fname, func) == LOGIN_PAGE_ENDPOINT:
+    if fname == LOGIN_PAGE_FILE and func == LOGIN_PAGE_FUNC:
         pytest.skip("the login page renders anonymously by design")
     assert any("require_auth_page" in d for d in decorators), (
         f"{fname}:{func} renders a template without @require_auth_page."
