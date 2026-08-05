@@ -4,8 +4,9 @@ Tests for refresh playlists route and updated registry behavior.
 Covers the new POST /refresh-playlists endpoint and hidden algorithm filtering.
 """
 
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, MagicMock, patch
 
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 

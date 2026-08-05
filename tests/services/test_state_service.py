@@ -4,16 +4,16 @@ Tests for StateService.
 Tests cover playlist state history management, undo/redo functionality.
 """
 
+
 import pytest
-from unittest.mock import Mock
 
 from shuffify.services import (
-    StateService,
-    StateError,
-    NoHistoryError,
-    AlreadyAtOriginalError,
-    PlaylistState,
     PLAYLIST_STATES_KEY,
+    AlreadyAtOriginalError,
+    NoHistoryError,
+    PlaylistState,
+    StateError,
+    StateService,
 )
 
 

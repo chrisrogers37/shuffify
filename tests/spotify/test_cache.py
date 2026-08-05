@@ -1,8 +1,8 @@
 """Tests for Spotify API caching functionality."""
 
 import json
-import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock, Mock
+
 import redis
 
 from shuffify.spotify.cache import SpotifyCache

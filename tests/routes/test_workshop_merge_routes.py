@@ -5,11 +5,9 @@ Covers the /api/user-playlists endpoint and the interaction between
 source playlists and the existing /playlist/<id> endpoint.
 """
 
-import json
-from unittest.mock import patch, Mock, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
 from shuffify.models.playlist import Playlist
-
 
 # =============================================================================
 # Helpers

@@ -4,14 +4,15 @@ Tests for SpotifyAuthManager and TokenInfo.
 Tests cover token validation, OAuth flow, and token refresh.
 """
 
-import pytest
 import time
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from shuffify.spotify.auth import (
+    DEFAULT_SCOPES,
     SpotifyAuthManager,
     TokenInfo,
-    DEFAULT_SCOPES,
 )
 from shuffify.spotify.credentials import SpotifyCredentials
 from shuffify.spotify.exceptions import (
@@ -19,7 +20,6 @@ from shuffify.spotify.exceptions import (
     SpotifyTokenError,
     SpotifyTokenExpiredError,
 )
-
 
 # =============================================================================
 # Fixtures

@@ -5,8 +5,9 @@ Verifies that /login and /callback are rate-limited to prevent
 abuse of the OAuth flow.
 """
 
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 
 @pytest.fixture

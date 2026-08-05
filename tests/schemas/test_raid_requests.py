@@ -9,14 +9,13 @@ import pytest
 from pydantic import ValidationError
 
 from shuffify.schemas.raid_requests import (
-    WatchPlaylistRequest,
-    UnwatchPlaylistRequest,
     AddRaidUrlRequest,
     RaidNowRequest,
+    UnwatchPlaylistRequest,
     UpdateRaidScheduleRequest,
+    WatchPlaylistRequest,
 )
 from shuffify.services.schedule_utils import build_cron
-
 
 # =============================================================================
 # WatchPlaylistRequest

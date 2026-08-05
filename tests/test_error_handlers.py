@@ -10,18 +10,18 @@ from flask import Flask
 
 from shuffify.error_handlers import register_error_handlers
 from shuffify.services import (
+    AlreadyAtOriginalError,
     AuthenticationError,
-    TokenValidationError,
+    InvalidAlgorithmError,
+    NoHistoryError,
+    ParameterValidationError,
     PlaylistError,
     PlaylistNotFoundError,
     PlaylistUpdateError,
     ShuffleError,
-    InvalidAlgorithmError,
-    ParameterValidationError,
     ShuffleExecutionError,
     StateError,
-    NoHistoryError,
-    AlreadyAtOriginalError,
+    TokenValidationError,
 )
 
 
@@ -164,4 +164,3 @@ class TestHTTPErrorHandlers:
         data = response.get_json()
         assert data is not None
         assert data["success"] is False
-

@@ -4,8 +4,9 @@ Tests for AlbumSequenceShuffle algorithm.
 Tests cover album grouping, shuffle behavior, and edge cases.
 """
 
-import pytest
 import random
+
+import pytest
 
 from shuffify.shuffle_algorithms.album_sequence import AlbumSequenceShuffle
 
@@ -129,9 +130,6 @@ class TestAlbumSequenceShuffleShuffle:
         """Tracks from the same album should be adjacent in result."""
         for _ in range(20):
             result = algorithm.shuffle(sample_tracks)
-
-            # Build URI-to-album mapping
-            uri_to_album = {t["uri"]: t["album"]["name"] for t in sample_tracks}
 
             # Check contiguity: find each album's tracks and verify they're adjacent
             album_a_uris = {"spotify:track:a1", "spotify:track:a2", "spotify:track:a3"}

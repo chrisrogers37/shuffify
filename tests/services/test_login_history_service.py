@@ -5,14 +5,15 @@ Tests cover login recording, logout recording, recent logins
 retrieval, and login statistics computation.
 """
 
-import pytest
 from unittest.mock import Mock
 
-from shuffify.models.db import db, LoginHistory
-from shuffify.services.user_service import UserService
+import pytest
+
+from shuffify.models.db import LoginHistory, db
 from shuffify.services.login_history_service import (
     LoginHistoryService,
 )
+from shuffify.services.user_service import UserService
 
 
 @pytest.fixture

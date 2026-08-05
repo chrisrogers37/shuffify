@@ -5,9 +5,7 @@ Covers authentication, validation, happy paths for all
 4 endpoints.
 """
 
-from unittest.mock import patch, MagicMock
-
-
+from unittest.mock import MagicMock, patch
 
 # =============================================================
 # Authentication Tests

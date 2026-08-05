@@ -5,27 +5,27 @@ Tests cover the full flow from authentication through shuffle and undo.
 These tests verify that all modules work together correctly.
 """
 
-import pytest
 import time
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
-from shuffify.spotify import (
-    SpotifyCredentials,
-    SpotifyAuthManager,
-    SpotifyAPI,
-    TokenInfo,
-)
+import pytest
+
 from shuffify.services import (
-    AuthService,
     PlaylistService,
     ShuffleService,
     StateService,
 )
-
+from shuffify.spotify import (
+    SpotifyAPI,
+    SpotifyAuthManager,
+    SpotifyCredentials,
+    TokenInfo,
+)
 
 # =============================================================================
 # Fixtures
 # =============================================================================
+
 
 @pytest.fixture
 def credentials():
@@ -383,9 +383,10 @@ class TestFullFlowIntegration:
             assert len(shuffled_uris) == 10
             assert shuffled_uris[:2] == current_uris[:2]  # First 2 preserved
 
-            # 6. Check if order changed
-            changed = ShuffleService.shuffle_changed_order(current_uris, shuffled_uris)
-            # May or may not change depending on random seed
+            # 6. Exercise the change check. Whether it reports a change
+            #    depends on the unseeded shuffle, so there is nothing to
+            #    assert here -- shuffle_changed_order has its own tests.
+            ShuffleService.shuffle_changed_order(current_uris, shuffled_uris)
 
             # 7. Record new state
             StateService.record_new_state(mock_session, 'playlist123', shuffled_uris)

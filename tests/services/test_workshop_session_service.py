@@ -8,11 +8,11 @@ import pytest
 
 from shuffify.services.user_service import UserService
 from shuffify.services.workshop_session_service import (
-    WorkshopSessionService,
-    WorkshopSessionError,
-    WorkshopSessionNotFoundError,
-    WorkshopSessionLimitError,
     MAX_SESSIONS_PER_PLAYLIST,
+    WorkshopSessionError,
+    WorkshopSessionLimitError,
+    WorkshopSessionNotFoundError,
+    WorkshopSessionService,
 )
 
 

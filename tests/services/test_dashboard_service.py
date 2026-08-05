@@ -4,12 +4,13 @@ Tests for DashboardService data aggregation.
 These tests require a Flask app context with SQLAlchemy configured.
 """
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
-from datetime import datetime, timezone, timedelta
 
 from shuffify.services.dashboard_service import (
-    DashboardService,
     DashboardError,  # noqa: F401
+    DashboardService,
 )
 
 
@@ -17,11 +18,11 @@ from shuffify.services.dashboard_service import (
 def db_user(app_context):
     """Create a test user in the database."""
     from shuffify.models.db import (
-        db,
-        User,
-        Schedule,
-        JobExecution,
         ActivityLog,
+        JobExecution,
+        Schedule,
+        User,
+        db,
     )
 
     # Clean up
@@ -67,10 +68,10 @@ def sample_schedule(db_user, app_context):
 @pytest.fixture
 def sample_activities(db_user, app_context):
     """Create sample activity log entries."""
+    from shuffify.enums import ActivityType
     from shuffify.services.activity_log_service import (
         ActivityLogService,
     )
-    from shuffify.enums import ActivityType
 
     activities = []
     activities.append(
@@ -348,7 +349,7 @@ class TestRecentExecutions:
         self, db_user, sample_schedule, app_context
     ):
         """Should include schedule_name in execution dicts."""
-        from shuffify.models.db import db, JobExecution
+        from shuffify.models.db import JobExecution, db
 
         execution = JobExecution(
             schedule_id=sample_schedule.id,
@@ -374,7 +375,7 @@ class TestRecentExecutions:
         self, db_user, sample_schedule, app_context
     ):
         """Should respect the limit parameter."""
-        from shuffify.models.db import db, JobExecution
+        from shuffify.models.db import JobExecution, db
 
         for i in range(5):
             execution = JobExecution(

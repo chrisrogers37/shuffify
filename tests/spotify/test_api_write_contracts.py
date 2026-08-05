@@ -9,10 +9,9 @@ fails *after* the playlist has already been mutated, so subsequent
 reads don't return stale URIs.
 """
 
-import time
-from unittest.mock import patch, MagicMock
-
 import re
+import time
+from unittest.mock import MagicMock, patch
 
 import pytest
 

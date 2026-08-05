@@ -5,22 +5,23 @@ Tests cover watch/unwatch operations, raid status retrieval,
 schedule management, and the _find_raid_schedule helper.
 """
 
-import pytest
 from unittest.mock import patch
 
-from shuffify.services.user_service import UserService
-from shuffify.services.upstream_source_service import (
-    UpstreamSourceService,
-    UpstreamSourceNotFoundError,
+import pytest
+
+from shuffify.enums import JobType
+from shuffify.services.raid_sync_service import (
+    RaidSyncError,
+    RaidSyncService,
 )
 from shuffify.services.scheduler_service import (
     SchedulerService,
 )
-from shuffify.services.raid_sync_service import (
-    RaidSyncService,
-    RaidSyncError,
+from shuffify.services.upstream_source_service import (
+    UpstreamSourceNotFoundError,
+    UpstreamSourceService,
 )
-from shuffify.enums import JobType
+from shuffify.services.user_service import UserService
 
 
 @pytest.fixture

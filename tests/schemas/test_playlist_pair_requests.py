@@ -10,12 +10,11 @@ import pytest
 from pydantic import ValidationError
 
 from shuffify.schemas.playlist_pair_requests import (
-    CreatePairRequest,
-    UpdatePairRequest,
     ArchiveTracksRequest,
+    CreatePairRequest,
     UnarchiveTracksRequest,
+    UpdatePairRequest,
 )
-
 
 # =============================================================================
 # CreatePairRequest

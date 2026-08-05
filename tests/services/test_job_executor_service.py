@@ -4,12 +4,13 @@ Tests for JobExecutorService.
 Tests the job execution logic with mocked Spotify API calls.
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import patch, Mock
 
 from shuffify.services.executors import (
-    JobExecutorService,
     JobExecutionError,
+    JobExecutorService,
 )
 from shuffify.services.executors.raid_executor import (
     execute_raid,
@@ -17,7 +18,7 @@ from shuffify.services.executors.raid_executor import (
 from shuffify.services.executors.shuffle_executor import (
     execute_shuffle,
 )
-
+from shuffify.spotify.api import SpotifyAPI
 
 # Executor paths touch TrackLockService (db.session) even in
 # their except-branch fallbacks, so every test in this module
@@ -57,7 +58,7 @@ def mock_user():
 @pytest.fixture
 def mock_api():
     """Create a mock SpotifyAPI instance."""
-    api = Mock()
+    api = Mock(spec=SpotifyAPI)
     api.get_playlist_tracks.return_value = [
         {
             "id": f"track{i}",
@@ -191,7 +192,8 @@ class TestExecuteRaid:
         absent from the schedule's denormalized source_playlist_ids list."""
         from shuffify.models.db import UpstreamSource
         from shuffify.services.source_resolver.base import (
-            ResolveAllResult, ResolveResult,
+            ResolveAllResult,
+            ResolveResult,
         )
 
         mock_schedule.job_type = "raid"
@@ -262,6 +264,7 @@ class TestRaidSourceFailureLogging:
         source_playlist_id / source_name / pathway / partial /
         error_message."""
         import logging
+
         from shuffify.services.source_resolver.base import (
             ResolveAllResult,
             ResolveResult,
@@ -356,6 +359,7 @@ class TestRaidSourceFailureLogging:
         """Happy path: a successful resolve must NOT emit the
         failure warning or activity entry."""
         import logging
+
         from shuffify.services.source_resolver.base import (
             ResolveAllResult,
             ResolveResult,
@@ -415,7 +419,7 @@ class TestExecuteRaidForUser:
     and are recorded, just like scheduled raids (SR-010)."""
 
     def test_records_schedule_less_execution(self):
-        from shuffify.models.db import db, User, JobExecution
+        from shuffify.models.db import JobExecution, User, db
 
         user = User(
             spotify_id="inline_raider", display_name="R"
@@ -459,8 +463,8 @@ class TestExecuteDripForUser:
     a mock Schedule(id=0) (#332, the SR-010 drip twin)."""
 
     def test_records_schedule_less_drip_execution(self):
-        from shuffify.models.db import db, User, JobExecution, Schedule
         from shuffify.enums import JobType
+        from shuffify.models.db import JobExecution, Schedule, User, db
 
         user = User(spotify_id="inline_dripper", display_name="D")
         db.session.add(user)
@@ -497,17 +501,17 @@ class TestRevertJobRaidStaging:
     pending tracks staged after rollback (SR-008)."""
 
     def test_reverts_only_job_pending_tracks_for_target(self):
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
 
+        from shuffify.enums import PendingRaidStatus
+        from shuffify.models.db import (
+            PendingRaidTrack,
+            User,
+            db,
+        )
         from shuffify.services.executors.base_executor import (
             _revert_job_raid_staging,
         )
-        from shuffify.models.db import (
-            db,
-            User,
-            PendingRaidTrack,
-        )
-        from shuffify.enums import PendingRaidStatus
 
         user = User(spotify_id="sr008_user", display_name="U")
         db.session.add(user)
@@ -810,10 +814,10 @@ class TestExecuteLocking:
         as a JobExecution + schedule.last_status, so contention is visible in
         history instead of only a WARNING log (SR-035)."""
         from shuffify.models.db import (
-            db,
-            User,
-            Schedule,
             JobExecution,
+            Schedule,
+            User,
+            db,
         )
 
         user = User(spotify_id="lock_user", display_name="L")
@@ -851,17 +855,18 @@ class TestJobScopedRollback:
     not a concurrent or manual snapshot in the same time window (SR-019)."""
 
     def test_restore_scopes_to_job_execution_id(self):
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
+
+        from shuffify.enums import SnapshotType
+        from shuffify.models.db import (
+            JobExecution,
+            PlaylistSnapshot,
+            User,
+            db,
+        )
         from shuffify.services.executors.base_executor import (
             _restore_job_snapshots,
         )
-        from shuffify.models.db import (
-            db,
-            User,
-            JobExecution,
-            PlaylistSnapshot,
-        )
-        from shuffify.enums import SnapshotType
 
         user = User(spotify_id="sr019_user", display_name="U")
         db.session.add(user)

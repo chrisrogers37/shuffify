@@ -8,8 +8,8 @@ import pytest
 from pydantic import ValidationError
 
 from shuffify.schemas.pending_raid_requests import (
-    PromoteTracksRequest,
     DismissTracksRequest,
+    PromoteTracksRequest,
 )
 
 

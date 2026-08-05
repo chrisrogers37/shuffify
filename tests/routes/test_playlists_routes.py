@@ -5,7 +5,8 @@ Tests cover refresh-playlists, get-playlist, get-stats,
 and user-playlists API.
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 
 class TestRefreshPlaylists:
     """Tests for POST /refresh-playlists."""

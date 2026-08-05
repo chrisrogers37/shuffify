@@ -5,15 +5,16 @@ Tests cover log creation, query methods, error handling,
 and the non-blocking guarantee.
 """
 
-import pytest
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-from shuffify.models.db import db, ActivityLog, User
+import pytest
+
+from shuffify.enums import ActivityType
+from shuffify.models.db import ActivityLog, User, db
 from shuffify.services.activity_log_service import (
     ActivityLogService,
 )
-from shuffify.enums import ActivityType
 
 
 @pytest.fixture

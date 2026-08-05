@@ -7,15 +7,14 @@ get_locked_uris, is_locked, cleanup_expired,
 and update_positions_after_reorder.
 """
 
-import pytest
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from shuffify.enums import LockTier
-from shuffify.models.db import db, User, TrackLock
+from shuffify.models.db import TrackLock, User, db
 from shuffify.services.track_lock_service import (
     TrackLockService,
-    TrackLockError,
-    STANDARD_EXPIRY_DAYS,
 )
 
 

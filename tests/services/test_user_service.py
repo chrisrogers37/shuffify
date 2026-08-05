@@ -4,14 +4,15 @@ Tests for UserService.
 Tests cover user upsert, lookup, and error handling.
 """
 
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 
 from shuffify.models.db import User
 from shuffify.services.user_service import (
+    UpsertResult,
     UserService,
     UserServiceError,
-    UpsertResult,
 )
 
 

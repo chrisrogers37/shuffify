@@ -9,17 +9,15 @@ import pytest
 from pydantic import ValidationError
 
 from shuffify.schemas.schedule_requests import (
+    VALID_INTERVAL_VALUES,
     ScheduleCreateRequest,
     ScheduleUpdateRequest,
-    VALID_JOB_TYPES,
-    VALID_SCHEDULE_TYPES,
-    VALID_INTERVAL_VALUES,
 )
-
 
 # =============================================================================
 # Helpers
 # =============================================================================
+
 
 def _base_create_kwargs(**overrides):
     """Return minimal valid kwargs for ScheduleCreateRequest."""

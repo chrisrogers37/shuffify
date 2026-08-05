@@ -5,8 +5,7 @@ Tests cover authentication, validation, and basic success paths
 for the pending raid track inbox endpoints.
 """
 
-from unittest.mock import patch, MagicMock
-
+from unittest.mock import MagicMock, patch
 
 # =============================================================
 # Authentication Tests

@@ -4,8 +4,9 @@ Tests for Flask app factory and Redis initialization.
 Tests cover create_app, Redis session storage, and cache helper functions.
 """
 
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
 import redis
 
 
@@ -116,10 +117,10 @@ class TestCreateApp:
             },
             clear=True,
         ):
-            from shuffify import create_app
-
             # Force no REDIS_URL
             import os
+
+            from shuffify import create_app
 
             os.environ.pop("REDIS_URL", None)
 
@@ -170,8 +171,8 @@ class TestCreateApp:
         silently disabled (scheduled jobs would die quietly)."""
         from config import TestConfig
         from shuffify.services.token_service import (
-            TokenService,
             TokenEncryptionError,
+            TokenService,
         )
 
         monkeypatch.setattr(TestConfig, "TOKEN_ENCRYPTION_KEY", "not-a-key")
@@ -239,9 +240,10 @@ class TestGetSpotifyCache:
 
     def test_get_spotify_cache_uses_flask_config(self):
         """Should use Flask config settings when in app context."""
+        from flask import Flask
+
         import shuffify
         from shuffify.spotify.cache import SpotifyCache
-        from flask import Flask
 
         mock_redis = Mock(spec=redis.Redis)
         shuffify._redis_client = mock_redis
@@ -518,6 +520,7 @@ class TestSecurityHeaders:
         """HSTS should be sent when debug is False (production)."""
         import os
         from unittest.mock import patch
+
         from config import ProdConfig
 
         monkeypatch.setattr(ProdConfig, "REDIS_URL", "redis://localhost:6379/0")

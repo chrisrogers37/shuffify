@@ -5,10 +5,10 @@ This module provides common fixtures used across all test modules,
 including mock Spotify clients, sample data, and Flask app contexts.
 """
 
-import pytest
-from unittest.mock import Mock
 import time
+from unittest.mock import Mock
 
+import pytest
 
 # =============================================================================
 # Sample Data Fixtures

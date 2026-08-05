@@ -4,12 +4,13 @@ Tests for AuthService.
 Tests cover OAuth flow, token validation, and client creation.
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, ANY
 
 from shuffify.services import (
-    AuthService,
     AuthenticationError,
+    AuthService,
     TokenValidationError,
 )
 
@@ -357,6 +358,7 @@ class TestAuthServiceTokenRefreshPersistence:
         must be written back to session['spotify_token'] so subsequent
         requests don't refresh again or fail (SR-004)."""
         from flask import session
+
         from shuffify.spotify.auth import SpotifyAuthManager
 
         refreshed = self._refreshed_token_info()

@@ -5,15 +5,16 @@ Tests cover all data operations: user, playlists, tracks, and audio features.
 Also includes tests for caching integration and error handler decorator.
 """
 
-import pytest
 import time
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
+
+import pytest
 
 from shuffify.spotify.api import SpotifyAPI
-from shuffify.spotify.error_handling import api_error_handler
 from shuffify.spotify.auth import SpotifyAuthManager, TokenInfo
 from shuffify.spotify.cache import SpotifyCache
 from shuffify.spotify.credentials import SpotifyCredentials
+from shuffify.spotify.error_handling import api_error_handler
 from shuffify.spotify.exceptions import (
     SpotifyAPIError,
     SpotifyNotFoundError,
@@ -21,10 +22,10 @@ from shuffify.spotify.exceptions import (
     SpotifyTokenExpiredError,
 )
 
-
 # =============================================================================
 # Fixtures
 # =============================================================================
+
 
 @pytest.fixture
 def credentials():
@@ -953,6 +954,9 @@ class TestSpotifyAPICaching:
             result = api.get_playlist('pl1')
 
             assert result == cached_playlist
+            # A cache hit means the HTTP client is never touched. Without
+            # this the test passes even if the cache is bypassed.
+            assert not mock_http.method_calls
 
     def test_get_playlist_tracks_uses_cache(
         self, valid_token_info, auth_manager,

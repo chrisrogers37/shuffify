@@ -7,9 +7,9 @@ Covers build_cron for all frequencies, edge-case times, and error paths.
 import pytest
 
 from shuffify.services.schedule_utils import (
-    build_cron,
     TIME_CAPABLE_FREQUENCIES,
     TIME_RE,
+    build_cron,
 )
 
 
