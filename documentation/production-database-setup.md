@@ -11,7 +11,11 @@ Shuffify uses SQLite by default for local development. For production, it suppor
 - Converts `postgres://` to `postgresql://` (for Neon/Railway compatibility)
 - Enables SSL when connecting to managed PostgreSQL providers
 - Configures connection pooling (pool size 5, recycle every 300s)
-- Runs Alembic migrations on startup to create/update all tables
+- Verifies the schema is at Alembic head on startup, and refuses to serve if it is not
+
+> **⚠️ It does NOT apply migrations for you on DigitalOcean App Platform.** See
+> [Migrations](#migrations) below before you deploy — this is currently a manual step,
+> and getting it wrong means the app will not boot.
 
 **Tables created** (14 total):
 
@@ -74,7 +78,8 @@ On the next deploy/restart, the app will:
 2. Run all Alembic migrations to create the 14 tables
 3. Begin storing user data persistently
 
-No manual migration step is needed -- migrations run automatically on startup.
+**A manual migration step IS needed on DigitalOcean App Platform** — step 2 above does
+not happen by itself there. See [Migrations](#migrations).
 
 ---
 
@@ -104,7 +109,8 @@ postgresql://postgres:password@hostname.railway.app:5432/railway
 
 ### 3. Deploy
 
-Same as Neon -- the app handles migrations automatically on startup.
+Same as Neon. Note the same caveat: on DigitalOcean App Platform the app does **not**
+apply migrations itself — see [Migrations](#migrations).
 
 ---
 
@@ -244,17 +250,39 @@ Expected output:
 
 ## Migrations
 
-### Automatic (Default)
+### On DigitalOcean App Platform: migrations are MANUAL today
 
-Migrations run automatically when the app starts. The startup logic:
+**Nothing applies migrations automatically on our production platform.** App Platform's
+`run_command` **replaces** the container `ENTRYPOINT`, so `scripts/docker-entrypoint.sh`
+— the script written to run `flask db upgrade` before Gunicorn starts — has never
+executed in production. Confirmed from a deploy log whose first line is
+`Starting gunicorn`, with no entrypoint output at all.
 
-1. Checks if a `migrations/` directory exists
-2. If yes, runs `flask db upgrade` (Alembic) to apply any pending migrations
-3. If no, falls back to `db.create_all()` (creates tables without migration history)
+The app factory still *verifies* the schema is at head and refuses to boot if it is not,
+so a missed migration surfaces as a failed deploy rather than silent corruption.
 
-### Manual (If Needed)
+**What you must do after deploying a release that adds a migration:** apply it yourself,
+using the Manual steps below, with `SHUFFIFY_MIGRATION_STEP=1` and
+`SCHEDULER_ENABLED=false` set on that process (see the note under Manual).
 
-If you need to run migrations manually (e.g., debugging):
+The intended fix is a `PRE_DEPLOY` job (`db-migrate`) that runs `flask db upgrade` before
+traffic cuts over. It is **proposed, not implemented** —
+[#531](https://github.com/chrisrogers37/shuffify/issues/531). A **migration freeze** is in
+effect until production's schema is reconciled.
+
+### Where migrations DO run automatically
+
+On any platform that honours `ENTRYPOINT` — `docker run`, docker-compose — the entrypoint
+applies them before Gunicorn starts:
+
+1. Runs `flask db upgrade` (Alembic) to apply any pending migrations
+2. Refuses to start the container if that fails, unless
+   `SHUFFIFY_ALLOW_SCHEMA_DRIFT=true`
+
+Locally with SQLite and no `DATABASE_URL`, `db.create_all()` builds the tables directly and
+there is no migration chain to apply.
+
+### Manual (required on DigitalOcean, also for debugging)
 
 ```bash
 # Set required env vars
@@ -265,8 +293,13 @@ export DATABASE_URL=postgresql://...
 # Check current migration status
 flask db current
 
-# Apply pending migrations
-flask db upgrade
+# Apply pending migrations.
+# SHUFFIFY_MIGRATION_STEP=1 exempts this process from the schema guard --
+# without it the app factory refuses to build the app for the very schema
+# state this command exists to fix.
+# SCHEDULER_ENABLED=false stops this short-lived process starting APScheduler
+# and executing scheduled jobs.
+SHUFFIFY_MIGRATION_STEP=1 SCHEDULER_ENABLED=false flask db upgrade
 
 # View migration history
 flask db history

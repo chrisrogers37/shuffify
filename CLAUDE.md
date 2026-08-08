@@ -596,7 +596,7 @@ Two config attributes decide it — `TESTING` and `MIGRATE_ON_STARTUP`:
 |-------------|-----------|----------------------|----------|
 | Tests | `True` | — | Tables built directly from the models via `db.create_all()`; no migration chain |
 | Development | `True` | `True` | Also `db.create_all()` today — `TESTING=True` short-circuits before the migration branch is reached (#325) |
-| Production | `False` | `False` | `scripts/docker-entrypoint.sh` runs `flask db upgrade` **before** Gunicorn starts; the app factory then only *verifies* the schema is at head and refuses to start if it is not |
+| Production | `False` | `False` | **Nothing applies migrations automatically** — `scripts/docker-entrypoint.sh` is bypassed on DigitalOcean App Platform (see the warning below). The app factory only *verifies* the schema is at head and refuses to start if it is not |
 
 Development does **not** currently exercise the Alembic chain: `DevConfig`
 sets `TESTING = True`, which routes it to `db.create_all()`. That is the bug
@@ -605,22 +605,51 @@ tracked in #325 — schema drift between what Alembic produces and what
 is what a non-production environment uses to opt into in-process migration
 once `TESTING` is corrected.
 
-Migrations do not run inside the production web process. Applying them once in
-the entrypoint — before Gunicorn forks — is what keeps concurrent workers from
-racing on the same upgrade, and it means a stale schema is caught at boot
-rather than surfacing as data corruption under traffic.
+> **⚠️ Production migrations are NOT automated today — do not assume a deploy applies them.**
+>
+> DigitalOcean App Platform's `run_command` **replaces** the container `ENTRYPOINT`, so
+> `scripts/docker-entrypoint.sh` has never executed in production. Confirmed from a deploy
+> log whose first line is `Starting gunicorn`, with no entrypoint output at all. Production
+> served a stale schema silently for weeks until #503's schema gate refused to boot on it.
+>
+> What follows from that, all of it current:
+>
+> - **No process runs `flask db upgrade` in production.** Migrations have to be applied
+>   deliberately; deploying does not do it.
+> - Production runs with `SHUFFIFY_ALLOW_SCHEMA_DRIFT` set, serving behind Alembic head.
+> - A **migration freeze** is in effect — no new Alembic revision merges to `main` until
+>   production's schema is reconciled. `deploy_on_push: true` makes every merge a live deploy,
+>   so an extra revision widens the gap it has to catch up across.
+>
+> The intended fix is a DigitalOcean `PRE_DEPLOY` job (`db-migrate`) running `flask db upgrade`
+> before traffic cuts over. It is **proposed, not implemented** — tracked in
+> [#531](https://github.com/chrisrogers37/shuffify/issues/531). Do not describe it here as the
+> mechanism until it exists; documenting a mechanism that does not run is what caused this.
+
+The entrypoint's rationale still holds **wherever it actually runs** — `docker run`,
+docker-compose, and any platform that honours `ENTRYPOINT`. Applying migrations once there,
+before Gunicorn forks, is what keeps concurrent workers from racing on the same upgrade, and
+it means a stale schema is caught at boot rather than surfacing as data corruption under
+traffic. It is correct code in an inert position, which is why it should be fixed in place
+rather than deleted.
 
 **`SHUFFIFY_ALLOW_SCHEMA_DRIFT`** is the break-glass override. Set it to `true`
 and the entrypoint tolerates a failed upgrade while the app factory downgrades
 the schema check to an ERROR log, so a misfiring guard can be cleared from the
 platform console in one restart instead of blocking every deploy until a fix
 ships. It is a recovery lever, not a setting — a deploy running with it set is
-serving against a schema the code does not expect.
+serving against a schema the code does not expect. **In production only the
+app-factory half of that is live**, since the entrypoint does not run there; it
+is what is currently holding production up, and it is load-bearing until #531
+is resolved.
 
-**`SHUFFIFY_MIGRATION_STEP`** is set by the entrypoint only, and exempts that
-one process from the schema check. `flask db upgrade` builds the whole app, so
-without it the check would refuse to construct the app for the very schema
-state the command exists to fix. Never set it on a process that serves traffic.
+**`SHUFFIFY_MIGRATION_STEP`** exempts one process from the schema check.
+`flask db upgrade` builds the whole app, so without it the check would refuse to
+construct the app for the very schema state the command exists to fix. In this
+repo the entrypoint is its only setter — which means **nothing sets it in
+production**, and any process there that runs `flask db upgrade` (a manual
+`console` session today, the `db-migrate` job if #531 lands) must set it
+itself. Never set it on a process that serves traffic.
 
 **Local development**: If `DATABASE_URL` is not set, the app falls back to SQLite (`sqlite:///shuffify.db`). No migration setup needed for SQLite — `db.create_all()` handles it.
 

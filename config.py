@@ -108,9 +108,13 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Schema management: whether the app applies Alembic migrations itself
-    # during startup. False means something outside the app has already run
-    # them -- the container entrypoint -- and the app factory only verifies
-    # the schema is at head, refusing to serve if it is not.
+    # during startup. False means something outside the app is expected to
+    # have run them already, and the app factory only verifies the schema is
+    # at head, refusing to serve if it is not.
+    #
+    # In production that "something" is currently NOTHING -- the container
+    # entrypoint meant to fill the role is bypassed by DigitalOcean App
+    # Platform, which replaces ENTRYPOINT with run_command. See issue #531.
     MIGRATE_ON_STARTUP = True
 
     # Scheduler configuration
@@ -146,7 +150,9 @@ class ProdConfig(Config):
     DEBUG = False
     TESTING = False
 
-    # Migrations run in the container entrypoint, before Gunicorn starts.
+    # Nothing applies migrations in production today: the container
+    # entrypoint that was meant to is bypassed on DigitalOcean App
+    # Platform. They must be applied deliberately. See issue #531.
     MIGRATE_ON_STARTUP = False
     SCHEDULER_ENABLED = os.getenv("SCHEDULER_ENABLED", "true").lower() == "true"
     SESSION_COOKIE_SECURE = True
