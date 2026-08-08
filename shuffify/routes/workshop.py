@@ -10,7 +10,6 @@ from flask import jsonify, render_template, request, session
 from shuffify.enums import ActivityType, SnapshotType
 from shuffify.routes import (
     clear_session_and_show_login,
-    get_db_user,
     json_error,
     json_success,
     load_schedule_context,
@@ -75,12 +74,9 @@ def workshop(playlist_id, api=None, user=None, spotify_profile=None):
 
         algorithms = ShuffleService.list_algorithms()
 
-        upstream_sources_json = {}
-        db_user = get_db_user()
-        if db_user:
-            upstream_sources_json, _ = (
-                load_schedule_context(db_user)
-            )
+        upstream_sources_json, _ = (
+            load_schedule_context(user)
+        )
 
         prev_playlist_id = None
         next_playlist_id = None
@@ -91,29 +87,28 @@ def workshop(playlist_id, api=None, user=None, spotify_profile=None):
             ordered_ids = [
                 p["id"] for p in all_playlists
             ]
-            if db_user:
-                try:
-                    preferences = (
+            try:
+                preferences = (
+                    PlaylistPreferenceService
+                    .get_user_preferences(user.id)
+                )
+                if preferences:
+                    favs, visible, _hidden = (
                         PlaylistPreferenceService
-                        .get_user_preferences(db_user.id)
-                    )
-                    if preferences:
-                        favs, visible, _hidden = (
-                            PlaylistPreferenceService
-                            .apply_preferences(
-                                all_playlists, preferences
-                            )
+                        .apply_preferences(
+                            all_playlists, preferences
                         )
-                        ordered_ids = [
-                            p["id"]
-                            for p in favs + visible
-                        ]
-                except Exception as e:
-                    logger.debug(
-                        "Could not apply playlist "
-                        "preferences for navigation: %s",
-                        e,
                     )
+                    ordered_ids = [
+                        p["id"]
+                        for p in favs + visible
+                    ]
+            except Exception as e:
+                logger.debug(
+                    "Could not apply playlist "
+                    "preferences for navigation: %s",
+                    e,
+                )
 
             if playlist_id in ordered_ids:
                 idx = ordered_ids.index(playlist_id)
