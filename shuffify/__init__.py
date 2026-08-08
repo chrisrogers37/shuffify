@@ -223,10 +223,16 @@ def _init_token_encryption(app):
 # schema-drift check from a startup failure to an ERROR log. It exists so a
 # misfiring guard can be cleared from the platform console in one restart,
 # rather than blocking every deploy until a code change ships.
+#
+# On production only the app-factory half is live -- the entrypoint does not
+# run there (issue #531) -- and this override is currently what keeps the
+# service up while the schema sits behind head.
 SCHEMA_DRIFT_OVERRIDE_VAR = "SHUFFIFY_ALLOW_SCHEMA_DRIFT"
 
-# Internal handshake, set by the entrypoint while it applies migrations --
-# not an operator knob. `flask db upgrade` imports run.py and builds the whole
+# Internal handshake, set by whatever process applies migrations -- in this
+# repo only the entrypoint sets it, which means nothing sets it in production
+# (issue #531). Not an operator knob. `flask db upgrade` imports run.py and
+# builds the whole
 # application, so without this the schema check would fire inside the
 # migration step and refuse to let it run: the check would be asserting the
 # very invariant that step exists to establish.
@@ -272,9 +278,12 @@ def _schema_revision_state(migrations_dir):
 def _verify_schema_at_head(migrations_dir):
     """Fail fast when the production schema is not at the migration head.
 
-    Production applies migrations in the container entrypoint, before Gunicorn
-    starts, so by the time the app factory runs "schema is at head" is an
-    invariant to check rather than work to do. The check is satisfied entirely
+    Production was designed to apply migrations in the container entrypoint
+    before Gunicorn starts, so by the time the app factory runs "schema is at
+    head" is an invariant to check rather than work to do. That entrypoint is
+    bypassed on DigitalOcean App Platform and has never run there (issue
+    #531), which is why this check fires in production rather than passing.
+    The check is satisfied entirely
     from the image -- the migration chain ships with the code -- so it cannot
     block a boot on infrastructure that has not been provisioned.
 
@@ -298,10 +307,11 @@ def _verify_schema_at_head(migrations_dir):
 
     message = (
         "Database schema is not at Alembic head: current=%s, head=%s. "
-        "Migrations are applied by the container entrypoint before Gunicorn "
-        "starts, so this means the entrypoint was bypassed or its upgrade "
-        "failed. Apply them with 'flask db upgrade', or set %s=true to start "
-        "anyway and serve against the current schema."
+        "Nothing applies migrations automatically in this deployment: the "
+        "container entrypoint is bypassed on DigitalOcean App Platform "
+        "(shuffify#531), so they must be applied deliberately. Apply them "
+        "with 'flask db upgrade', or set %s=true to start anyway and serve "
+        "against the current schema."
         % (
             current or "none (database never migrated)",
             ",".join(sorted(heads)) or "none",
@@ -321,9 +331,10 @@ def _verify_schema_at_head(migrations_dir):
 def _upgrade_schema():
     """Apply pending Alembic migrations in-process.
 
-    The development path. Production migrates in the container entrypoint;
-    running the upgrade from the app factory there would put schema mutation
-    inside every process that serves requests.
+    The development path. Production must not migrate here -- running the
+    upgrade from the app factory would put schema mutation inside every
+    process that serves requests. Production's out-of-app migration step is
+    currently missing rather than merely elsewhere (issue #531).
     """
     from flask_migrate import upgrade
 
@@ -339,8 +350,10 @@ def _init_database(app):
     - ``TESTING`` builds tables straight from the models; there is no
       migration chain to apply against in-memory SQLite.
     - ``MIGRATE_ON_STARTUP=False`` (production) means something outside the
-      app already ran ``flask db upgrade`` -- the container entrypoint -- so
-      the factory only verifies the result and refuses to serve a stale one.
+      app is expected to have run ``flask db upgrade`` already, so the factory
+      only verifies the result and refuses to serve a stale one. Today nothing
+      does: the container entrypoint intended for it is bypassed on
+      DigitalOcean App Platform (issue #531).
     - ``MIGRATE_ON_STARTUP=True`` applies migrations in-process.
 
     Note that ``DevConfig`` currently sets ``TESTING=True``, so development

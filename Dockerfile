@@ -45,9 +45,19 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 # session fallback stays writable; gunicorn binds :8000 (>1024, no root needed).
 USER nobody
 
-# Apply migrations before the server starts. ENTRYPOINT rather than a longer
-# CMD so the migration step survives a platform-level run-command override --
-# those replace CMD, leaving ENTRYPOINT to wrap whatever they substitute.
+# Apply migrations before the server starts, on any platform that honours
+# ENTRYPOINT.
+#
+# CORRECTION -- the original rationale here was wrong, and the error was the
+# proximate cause of a production incident. It claimed ENTRYPOINT was chosen
+# so the migration step "survives a platform-level run-command override,
+# because those replace CMD". DigitalOcean App Platform's `run_command`
+# replaces the ENTRYPOINT too, so on production this line is inert and the
+# migration step has never run. See scripts/docker-entrypoint.sh and
+# https://github.com/chrisrogers37/shuffify/issues/531.
+#
+# Keep it: it is correct for `docker run`, docker-compose, and any platform
+# that does honour ENTRYPOINT. Just do not read it as the production path.
 ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
 
 # Run the application
