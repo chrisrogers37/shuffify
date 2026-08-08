@@ -28,7 +28,13 @@ from pathlib import Path
 
 import pytest
 
-TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "shuffify" / "templates"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+TEMPLATE_DIR = REPO_ROOT / "shuffify" / "templates"
+# Served by the /terms and /privacy routes and carrying the same CSP, but
+# outside templates/ -- which is why both rendered unstyled for as long as
+# they did. A guard scoped more narrowly than the header it guards is how
+# each half of this defect has been found late.
+PUBLIC_DIR = REPO_ROOT / "shuffify" / "static" / "public"
 
 # A <style> block is nonced and legitimate, and its CSS body can mention
 # `style="..."` in prose. Strip those regions before scanning so documentation
@@ -62,7 +68,11 @@ def _strip_js_comments(text: str) -> str:
 
 
 def _templates():
-    return sorted(TEMPLATE_DIR.rglob("*.html"))
+    return sorted(TEMPLATE_DIR.rglob("*.html")) + sorted(PUBLIC_DIR.rglob("*.html"))
+
+
+def _rel(path: Path) -> str:
+    return str(path.relative_to(REPO_ROOT))
 
 
 def _scannable(path: Path) -> str:
@@ -86,7 +96,7 @@ def test_no_style_attribute(path):
     """`style="..."` is inert under this CSP — the #537 defect."""
     hits = _offending_lines(path, STYLE_ATTR)
     assert not hits, (
-        f"{path.relative_to(TEMPLATE_DIR)} declares style via an attribute, "
+        f"{_rel(path)} declares style via an attribute, "
         "which CSP drops silently:\n"
         + "\n".join(f"  line {n}: {t}" for n, t in hits)
         + "\nPut the declaration in the nonced <style> block as a class, or "
@@ -99,7 +109,7 @@ def test_no_inline_event_handler(path):
     """Inline `on*=` handlers are inert under this CSP — the #499 defect."""
     hits = _offending_lines(path, HANDLER_ATTR)
     assert not hits, (
-        f"{path.relative_to(TEMPLATE_DIR)} declares an inline event handler, "
+        f"{_rel(path)} declares an inline event handler, "
         "which CSP drops silently:\n"
         + "\n".join(f"  line {n}: {t}" for n, t in hits)
         + '\nUse the delegated dispatcher: data-action-click="..." plus a '
@@ -136,3 +146,66 @@ def test_the_guard_can_actually_see_a_violation():
     assert not STYLE_ATTR.search('<div class="shuffle-track-art--1">')
     assert not HANDLER_ATTR.search('<button data-action-click="card.open">')
     assert not HANDLER_ATTR.search("el.style.transform = 'translateY(0)'")
+
+
+# The legal pages carried neither a style attribute nor an on* handler, so the
+# two checks above passed them while both their scripts were refused. Scope and
+# rule are separate gaps: widening one without adding the other still misses it.
+SCRIPT_SRC_HOST = re.compile(r"""<script[^>]*\bsrc\s*=\s*["'](https?://[^"'/]+)""", re.I)
+INLINE_SCRIPT_OPEN = re.compile(r"""<script(?![^>]*\bsrc\s*=)([^>]*)>""", re.I)
+NONCE_ATTR = re.compile(r"""\bnonce\s*=""", re.I)
+
+
+def _csp_script_src_hosts():
+    """Hosts the SHIPPED policy actually permits, read off a real response."""
+    src = (REPO_ROOT / "shuffify" / "__init__.py").read_text(encoding="utf-8")
+    m = re.search(r'"script-src ([^"]+)"', src)
+    assert m, (
+        "could not locate the script-src directive in shuffify/__init__.py -- "
+        "this check silently permits everything if that regex stops matching"
+    )
+    hosts = {t for t in m.group(1).split() if t.startswith("http")}
+    assert hosts, "script-src names no external host; expected at least one"
+    return hosts
+
+
+@pytest.mark.parametrize("path", _templates(), ids=lambda p: p.name)
+def test_external_scripts_are_permitted_by_script_src(path):
+    """A <script src> host absent from script-src never executes."""
+    allowed = _csp_script_src_hosts()
+    bad = []
+    for lineno, line in enumerate(_scannable(path).splitlines(), start=1):
+        for origin in SCRIPT_SRC_HOST.findall(line):
+            if not any(
+                origin == a.rstrip("/") or origin.endswith(a.split("://")[1].lstrip("*"))
+                for a in allowed
+            ):
+                bad.append((lineno, origin))
+    assert not bad, (
+        f"{_rel(path)} loads a script from a host script-src does not permit, "
+        "so it is refused and never runs:\n"
+        + "\n".join(f"  line {n}: {o}" for n, o in bad)
+        + f"\nPermitted: {sorted(allowed)}. Either serve the asset from "
+        "'self' at build time or add the host deliberately."
+    )
+
+
+@pytest.mark.parametrize(
+    "path", sorted(PUBLIC_DIR.rglob("*.html")), ids=lambda p: p.name
+)
+def test_static_public_pages_have_no_inline_script(path):
+    """These files are sent verbatim -- nothing can stamp a nonce into them.
+
+    A template can carry `<script nonce="{{ csp_nonce }}">`. A static file has
+    no render step, so every inline script in one is unconditionally refused.
+    """
+    bad = [
+        (n, ln.strip()[:100])
+        for n, ln in enumerate(_scannable(path).splitlines(), start=1)
+        if INLINE_SCRIPT_OPEN.search(ln) and not NONCE_ATTR.search(ln)
+    ]
+    assert not bad, (
+        f"{_rel(path)} contains an inline <script> that CSP refuses; a static "
+        "file cannot be given a nonce:\n"
+        + "\n".join(f"  line {n}: {t}" for n, t in bad)
+    )

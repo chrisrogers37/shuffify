@@ -606,10 +606,61 @@ class TestSecurityHeaders:
         csp = client.get("/health").headers["Content-Security-Policy"]
         assert "cdn.tailwindcss.com" not in csp
 
-    def test_csp_img_src_allows_spotify(self, client):
-        """CSP should allow Spotify image CDNs."""
+    # Every one of these was observed REFUSED in Chromium under the previous
+    # policy, which named i.scdn.co specifically while wildcarding the sibling
+    # CDN. mosaic is the four-up cover a playlist gets when it has no custom
+    # art -- 3 of the owner's 6 tiles (#539). Asserting the substring
+    # "https://i.scdn.co" passed throughout, because it is a pattern match on
+    # the policy rather than a check of what the policy permits.
+    SPOTIFY_IMAGE_HOSTS = [
+        "i.scdn.co",
+        "mosaic.scdn.co",
+        "thisis-images.scdn.co",
+        "daily-mix.scdn.co",
+        "newjams-images.scdn.co",
+        "lineup-images.scdn.co",
+        "charts-images.scdn.co",
+        "seeded-session-images.scdn.co",
+        "image-cdn-ak.spotifycdn.com",
+        "image-cdn-fa.spotifycdn.com",
+        "seed-mix-image.spotifycdn.com",
+    ]
+
+    @staticmethod
+    def _img_src_permits(csp, host):
+        """Does img-src actually admit this host? Sources, not substrings."""
+        import re as _re
+
+        m = _re.search(r"img-src ([^;]+)", csp)
+        assert m, "img-src directive absent -- this check would permit anything"
+        for src in m.group(1).split():
+            if not src.startswith("http"):
+                continue
+            pattern = src.split("://", 1)[1]
+            if pattern.startswith("*."):
+                if host.endswith(pattern[1:]):
+                    return True
+            elif host == pattern:
+                return True
+        return False
+
+    def test_csp_img_src_allows_every_spotify_cover_host(self, client):
+        """A cover host the policy omits renders as broken alt text (#539)."""
         csp = client.get("/health").headers["Content-Security-Policy"]
-        assert "https://i.scdn.co" in csp
+        missing = [
+            h for h in self.SPOTIFY_IMAGE_HOSTS
+            if not self._img_src_permits(csp, h)
+        ]
+        assert not missing, (
+            "img-src does not permit these Spotify image hosts, so covers "
+            f"served from them fail to load: {missing}"
+        )
+
+    def test_img_src_matcher_rejects_an_unrelated_host(self, client):
+        """The matcher above must be able to say no, or it proves nothing."""
+        csp = client.get("/health").headers["Content-Security-Policy"]
+        assert not self._img_src_permits(csp, "evil.example.com")
+        assert not self._img_src_permits(csp, "scdn.co.evil.example.com")
 
     def test_csp_blocks_object_embeds(self, client):
         """CSP should block object/embed elements."""
