@@ -6,7 +6,7 @@ import logging
 
 from flask import render_template
 
-from shuffify.routes import main, require_auth_and_db
+from shuffify.routes import main, require_auth_page
 from shuffify.services import (
     ActivityLogService,
     DashboardService,
@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 @main.route("/activity")
-@require_auth_and_db
-def activity(api=None, user=None):
+@require_auth_page
+def activity(api=None, user=None, spotify_profile=None):
     """Activity Log page with full history and KPI stats."""
     stats = DashboardService.get_quick_stats(user.id)
     activities = ActivityLogService.get_recent(

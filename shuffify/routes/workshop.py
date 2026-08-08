@@ -5,19 +5,19 @@ search, external playlist loading, and session persistence.
 
 import logging
 
-from flask import jsonify, redirect, render_template, request, session, url_for
+from flask import jsonify, render_template, request, session
 
 from shuffify.enums import ActivityType, SnapshotType
 from shuffify.routes import (
     clear_session_and_show_login,
     get_db_user,
-    is_authenticated,
     json_error,
     json_success,
     load_schedule_context,
     log_activity,
     main,
     require_auth_and_db,
+    require_auth_page,
     validate_json,
 )
 from shuffify.schemas import (
@@ -28,7 +28,6 @@ from shuffify.schemas import (
 )
 from shuffify.services import (
     AuthenticationError,
-    AuthService,
     PlaylistError,
     PlaylistService,
     PlaylistSnapshotService,
@@ -50,8 +49,8 @@ logger = logging.getLogger(__name__)
 
 
 @main.route("/workshop")
-@require_auth_and_db
-def workshop_hub(api=None, user=None):
+@require_auth_page
+def workshop_hub(api=None, user=None, spotify_profile=None):
     """Render the Workshop hub with no playlist selected."""
     algorithms = ShuffleService.list_algorithms()
     return render_template(
@@ -65,17 +64,10 @@ def workshop_hub(api=None, user=None):
 
 
 @main.route("/workshop/<playlist_id>")
-def workshop(playlist_id):
+@require_auth_page
+def workshop(playlist_id, api=None, user=None, spotify_profile=None):
     """Render the Playlist Workshop page."""
-    if not is_authenticated():
-        return redirect(url_for("main.index"))
-
     try:
-        api = AuthService.get_authenticated_api(
-            session["spotify_token"]
-        )
-        user = AuthService.get_user_data(api)
-
         playlist_service = PlaylistService(api)
         playlist = playlist_service.get_playlist(
             playlist_id, include_features=False
@@ -141,7 +133,7 @@ def workshop(playlist_id):
             )
 
         logger.info(
-            f"User {user.get('display_name', 'Unknown')} "
+            f"User {(spotify_profile or {}).get('display_name', 'Unknown')} "
             f"opened workshop for playlist "
             f"'{playlist.name}' ({len(playlist)} tracks)"
         )
@@ -149,7 +141,7 @@ def workshop(playlist_id):
         return render_template(
             "workshop.html",
             playlist=playlist.to_dict(),
-            user=user,
+            user=spotify_profile,
             algorithms=algorithms,
             upstream_sources_json=upstream_sources_json,
             prev_playlist_id=prev_playlist_id,

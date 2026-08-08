@@ -10,7 +10,6 @@ from flask import (
     redirect,
     render_template,
     request,
-    session,
     url_for,
 )
 from pydantic import ValidationError
@@ -20,17 +19,15 @@ from shuffify.error_handlers import (
 )
 from shuffify.routes import (
     clear_session_and_show_login,
-    get_db_user,
-    is_authenticated,
     json_error,
     json_success,
     main,
     require_auth_and_db,
+    require_auth_page,
 )
 from shuffify.schemas import UserSettingsUpdateRequest
 from shuffify.services import (
     AuthenticationError,
-    AuthService,
     ShuffleService,
     UserSettingsError,
     UserSettingsService,
@@ -40,28 +37,11 @@ logger = logging.getLogger(__name__)
 
 
 @main.route("/settings")
-def settings():
+@require_auth_page
+def settings(api=None, user=None, spotify_profile=None):
     """Render the user settings page."""
-    if not is_authenticated():
-        return redirect(url_for("main.index"))
-
     try:
-        api = AuthService.get_authenticated_api(
-            session["spotify_token"]
-        )
-        user = AuthService.get_user_data(api)
-
-        db_user = get_db_user()
-        if not db_user:
-            flash(
-                "Please log in again to access settings.",
-                "error",
-            )
-            return redirect(url_for("main.index"))
-
-        user_settings = UserSettingsService.get_or_create(
-            db_user.id
-        )
+        user_settings = UserSettingsService.get_or_create(user.id)
         algorithms = ShuffleService.list_algorithms()
         algorithm_options = [
             {"value": "", "label": "No default (choose each time)"}
@@ -83,7 +63,7 @@ def settings():
 
         return render_template(
             "settings.html",
-            user=user,
+            user=spotify_profile,
             settings=user_settings.to_dict(),
             algorithms=algorithms,
             algorithm_options=algorithm_options,

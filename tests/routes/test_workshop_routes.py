@@ -53,7 +53,8 @@ class TestWorkshopPage:
         response = client.get("/workshop/playlist123")
         assert response.status_code in (302, 200)
 
-    @patch("shuffify.routes.workshop.AuthService")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.AuthService")
     @patch("shuffify.routes.workshop.PlaylistService")
     @patch("shuffify.routes.workshop.ShuffleService")
     def test_workshop_renders_with_valid_playlist(
@@ -61,6 +62,7 @@ class TestWorkshopPage:
         mock_shuffle_svc,
         mock_playlist_svc,
         mock_auth_svc,
+        mock_get_db_user,
         authenticated_client,
         sample_user,
     ):
@@ -68,6 +70,7 @@ class TestWorkshopPage:
         mock_auth_svc.validate_session_token.return_value = True
         mock_auth_svc.get_authenticated_client.return_value = Mock()
         mock_auth_svc.get_user_data.return_value = sample_user
+        mock_get_db_user.return_value = Mock(id=1, spotify_id="u1")
 
         mock_ps_instance = Mock()
         mock_ps_instance.get_playlist.return_value = _make_mock_playlist()
@@ -88,7 +91,8 @@ class TestWorkshopPage:
         assert b"Track 1" in response.data
         assert b"Save to Spotify" in response.data
 
-    @patch("shuffify.routes.workshop.AuthService")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.AuthService")
     @patch("shuffify.routes.workshop.PlaylistService")
     @patch("shuffify.routes.workshop.ShuffleService")
     def test_workshop_escapes_malicious_track_uri(
@@ -96,6 +100,7 @@ class TestWorkshopPage:
         mock_shuffle_svc,
         mock_playlist_svc,
         mock_auth_svc,
+        mock_get_db_user,
         authenticated_client,
         sample_user,
     ):
@@ -103,6 +108,7 @@ class TestWorkshopPage:
         mock_auth_svc.validate_session_token.return_value = True
         mock_auth_svc.get_authenticated_client.return_value = Mock()
         mock_auth_svc.get_user_data.return_value = sample_user
+        mock_get_db_user.return_value = Mock(id=1, spotify_id="u1")
 
         malicious_uri = "spotify:track:x'));alert(document.cookie);//"
         playlist = Playlist(

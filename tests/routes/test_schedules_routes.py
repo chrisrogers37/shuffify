@@ -127,9 +127,9 @@ class TestGetSchedulesPage:
     )
     @patch("shuffify.routes.schedules.ShuffleService")
     @patch("shuffify.routes.schedules.PlaylistService")
-    @patch("shuffify.routes.schedules.get_db_user")
-    @patch("shuffify.routes.schedules.AuthService")
-    @patch("shuffify.routes.schedules.is_authenticated")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.routes.require_auth")
     def test_renders_page_for_authenticated_user(
         self,
         mock_is_auth,
@@ -181,9 +181,9 @@ class TestGetSchedulesPage:
             resp = auth_client.get("/schedules")
             assert resp.status_code == 200
 
-    @patch("shuffify.routes.schedules.get_db_user")
-    @patch("shuffify.routes.schedules.AuthService")
-    @patch("shuffify.routes.schedules.is_authenticated")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.routes.require_auth")
     def test_no_db_user_redirects(
         self,
         mock_is_auth,
@@ -712,9 +712,9 @@ class TestWorkshopLinkage:
     )
     @patch("shuffify.routes.schedules.ShuffleService")
     @patch("shuffify.routes.schedules.PlaylistService")
-    @patch("shuffify.routes.schedules.get_db_user")
-    @patch("shuffify.routes.schedules.AuthService")
-    @patch("shuffify.routes.schedules.is_authenticated")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.routes.require_auth")
     def test_loads_upstream_sources_map(
         self,
         mock_is_auth,
@@ -776,9 +776,9 @@ class TestWorkshopLinkage:
     )
     @patch("shuffify.routes.schedules.ShuffleService")
     @patch("shuffify.routes.schedules.PlaylistService")
-    @patch("shuffify.routes.schedules.get_db_user")
-    @patch("shuffify.routes.schedules.AuthService")
-    @patch("shuffify.routes.schedules.is_authenticated")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.routes.require_auth")
     def test_loads_pairs_by_playlist(
         self,
         mock_is_auth,
@@ -840,9 +840,9 @@ class TestWorkshopLinkage:
     )
     @patch("shuffify.routes.schedules.ShuffleService")
     @patch("shuffify.routes.schedules.PlaylistService")
-    @patch("shuffify.routes.schedules.get_db_user")
-    @patch("shuffify.routes.schedules.AuthService")
-    @patch("shuffify.routes.schedules.is_authenticated")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.routes.require_auth")
     def test_sources_grouped_by_target(
         self,
         mock_is_auth,
@@ -912,9 +912,9 @@ class TestWorkshopLinkage:
     )
     @patch("shuffify.routes.schedules.ShuffleService")
     @patch("shuffify.routes.schedules.PlaylistService")
-    @patch("shuffify.routes.schedules.get_db_user")
-    @patch("shuffify.routes.schedules.AuthService")
-    @patch("shuffify.routes.schedules.is_authenticated")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.AuthService")
+    @patch("shuffify.routes.require_auth")
     def test_empty_sources_and_pairs_handled(
         self,
         mock_is_auth,

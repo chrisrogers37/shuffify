@@ -9,7 +9,6 @@ from flask import (
     jsonify,
     redirect,
     render_template,
-    session,
     url_for,
 )
 
@@ -17,14 +16,13 @@ from shuffify.enums import ActivityType, JobType
 from shuffify.models.db import Schedule
 from shuffify.routes import (
     clear_session_and_show_login,
-    get_db_user,
-    is_authenticated,
     json_error,
     json_success,
     load_schedule_context,
     log_activity,
     main,
     require_auth_and_db,
+    require_auth_page,
     validate_json,
 )
 from shuffify.schemas import (
@@ -33,7 +31,6 @@ from shuffify.schemas import (
 )
 from shuffify.services import (
     AuthenticationError,
-    AuthService,
     PlaylistError,
     PlaylistPairService,
     PlaylistService,
@@ -72,24 +69,11 @@ def playlist_schedules(
 
 
 @main.route("/schedules")
-def schedules():
+@require_auth_page
+def schedules(api=None, user=None, spotify_profile=None):
     """Render the Schedules management page."""
-    if not is_authenticated():
-        return redirect(url_for("main.index"))
-
     try:
-        api = AuthService.get_authenticated_api(
-            session["spotify_token"]
-        )
-        user = AuthService.get_user_data(api)
-
-        db_user = get_db_user()
-        if not db_user:
-            flash(
-                "Please log in again to access schedules.",
-                "error",
-            )
-            return redirect(url_for("main.index"))
+        db_user = user
 
         user_schedules = (
             SchedulerService.get_user_schedules(db_user.id)
@@ -106,7 +90,7 @@ def schedules():
 
         return render_template(
             "schedules.html",
-            user=user,
+            user=spotify_profile,
             schedules=[
                 s.to_dict() for s in user_schedules
             ],

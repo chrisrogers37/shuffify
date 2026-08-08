@@ -269,7 +269,7 @@ class TestGlobal500Handler:
 class TestSchedulesErrorHandling:
     """Tests for broadened schedules route exception handling."""
 
-    @patch("shuffify.routes.schedules.AuthService")
+    @patch("shuffify.routes.AuthService")
     @patch(
         "shuffify.routes.schedules.SchedulerService"
     )
@@ -292,7 +292,7 @@ class TestSchedulesErrorHandling:
         assert resp.status_code == 302
         assert resp.location.endswith("/")
 
-    @patch("shuffify.routes.schedules.AuthService")
+    @patch("shuffify.routes.AuthService")
     @patch(
         "shuffify.routes.schedules.SchedulerService"
     )
@@ -319,7 +319,7 @@ class TestSchedulesErrorHandling:
 class TestSettingsErrorHandling:
     """Tests for broadened settings route exception handling."""
 
-    @patch("shuffify.routes.settings.AuthService")
+    @patch("shuffify.routes.AuthService")
     @patch(
         "shuffify.routes.settings.UserSettingsService"
     )
@@ -342,7 +342,7 @@ class TestSettingsErrorHandling:
         assert resp.status_code == 302
         assert resp.location.endswith("/")
 
-    @patch("shuffify.routes.settings.AuthService")
+    @patch("shuffify.routes.AuthService")
     @patch(
         "shuffify.routes.settings.UserSettingsService"
     )
