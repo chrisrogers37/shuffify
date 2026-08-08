@@ -1,8 +1,10 @@
 import atexit
 import logging
 import os
+import re
 import secrets
 from typing import Optional
+from urllib.parse import urlsplit
 
 import redis
 from flask import Flask, g
@@ -434,8 +436,162 @@ def _sentry_key_is_sensitive(key):
     return any(token in lowered for token in _SENTRY_PII_DENYLIST)
 
 
+_SENTRY_REDACTED = "[Filtered]"
+
+# Config attributes whose values are secrets in their own right. Registered at
+# init so free-text redaction can match them exactly -- no false positives, but
+# only covers what the process knows at startup. Per-user OAuth material is not
+# knowable here and is matched by shape instead.
+_SENTRY_SECRET_CONFIG_ATTRS = (
+    "SPOTIFY_CLIENT_SECRET",
+    "SECRET_KEY",
+    "TOKEN_ENCRYPTION_KEY",
+    "TOKEN_ENCRYPTION_KEY_FALLBACKS",
+)
+
+# Config attributes holding a URL whose password component is a secret. The
+# URL itself is diagnostic and stays readable; only the password is registered.
+# _init_database logs a failed connect at ERROR with exc_info, which is exactly
+# the path that puts a DSN into an exception string.
+_SENTRY_SECRET_URL_CONFIG_ATTRS = (
+    "SQLALCHEMY_DATABASE_URI",
+    "DATABASE_URL",
+    "REDIS_URL",
+)
+
+# A secret shorter than this is not safe to substring-match: a three-character
+# SECRET_KEY would blank an unrelated fragment of every message containing it.
+_SENTRY_MIN_SECRET_LEN = 8
+
+_sentry_known_secrets: tuple = ()
+
+# "Bearer <token>" -- the value sits under no key; the auth scheme names it.
+_SENTRY_BEARER_RE = re.compile(r"\b(Bearer\s+)([A-Za-z0-9._~+/=-]{8,})", re.IGNORECASE)
+
+
+def _sentry_sensitive_key_pattern():
+    """Derive a key sub-pattern from the two lists _sentry_key_is_sensitive reads.
+
+    Only a *sensitive* key may open a match. Letting any key open one lets a
+    harmless pair swallow a sensitive pair inside its value span: in
+    "rejected: client_secret=abc" the key "rejected" matches, its value runs to
+    the end, the pair is judged harmless, and the credential is consumed
+    without ever being examined.
+
+    Derived rather than hand-written so the denylists stay the single source of
+    truth. Exact keys keep their boundaries -- "code" must not match inside
+    "status_code", which is the distinction _SENTRY_PII_EXACT_KEYS exists for.
+
+    The group is atomic. Without it the pattern is quadratic: inside one
+    unbroken word-character run every denylist occurrence opens a candidate
+    key, and when the separator then fails the trailing ``*`` backtracks across
+    the rest of the run re-failing the lookahead at each step. Exception
+    strings are built from uncapped third-party response bodies, and Sentry
+    serialises to 100_000 characters before before_send sees the text, so that
+    is reachable input, not a theoretical one -- 100 KB of "email" repeated
+    took 48 s to scrub, versus 9 ms atomic. Committing to the first split is
+    safe here because every successful key match ends at the same place: the
+    run boundary the trailing lookahead requires.
+    """
+    substring = "|".join(re.escape(token) for token in _SENTRY_PII_DENYLIST)
+    exact = "|".join(re.escape(key) for key in _SENTRY_PII_EXACT_KEYS)
+    return (
+        r"(?<![A-Za-z0-9_-])"
+        rf"(?>[A-Za-z0-9_-]*(?:{substring})[A-Za-z0-9_-]*|(?:{exact}))"
+        r"(?![A-Za-z0-9_-])"
+    )
+
+
+# key=value, key: value, 'key': 'value' -- the same key policy the dict walk
+# uses, projected onto text. Deriving the key from the shared denylists rather
+# than carrying a second one means widening a list improves both surfaces.
+_SENTRY_LABELLED_RE = re.compile(
+    rf"""(?P<key>{_sentry_sensitive_key_pattern()})
+        (?P<pre>['"]?\s*[=:]\s*)
+        (?P<quote>['"]?)
+        (?P<value>[^\s'",;&}}\]]+)""",
+    re.VERBOSE | re.IGNORECASE,
+)
+
+# Backreferences by name: keep the key, separator and opening quote, drop the
+# value. A template rather than a callback -- the pattern admits only sensitive
+# keys, so a per-match Python call would have nothing left to decide.
+_SENTRY_LABELLED_SUB = r"\g<key>\g<pre>\g<quote>" + _SENTRY_REDACTED
+
+# Spotify OAuth material is recognisable by prefix and length: access tokens
+# carry BQ, refresh tokens and authorization codes AQ, and Fernet ciphertext
+# (the at-rest form of a refresh token) gAAAAA. The 38-character tail keeps the
+# pattern clear of 22-character Spotify object IDs, which are exactly the
+# diagnostic content Sentry exists to show.
+_SENTRY_OAUTH_TOKEN_RE = re.compile(r"\b(?:BQ|AQ)[A-Za-z0-9_-]{38,}")
+_SENTRY_FERNET_RE = re.compile(r"\bgAAAAA[A-Za-z0-9_=-]{20,}")
+
+
+def _register_sentry_secret_values(config_class):
+    """Snapshot the secrets this process holds, for exact-match redaction.
+
+    Replaces the registry rather than extending it, so re-initialising against
+    a different config cannot leave a stale value behind. Returns the registry
+    for inspection.
+    """
+    global _sentry_known_secrets
+
+    values = []
+    for attr in _SENTRY_SECRET_CONFIG_ATTRS:
+        raw = getattr(config_class, attr, None)
+        candidates = raw if isinstance(raw, (list, tuple, set)) else [raw]
+        for candidate in candidates:
+            if isinstance(candidate, bytes):
+                candidate = candidate.decode("utf-8", "replace")
+            if isinstance(candidate, str) and len(candidate) >= _SENTRY_MIN_SECRET_LEN:
+                values.append(candidate)
+
+    for attr in _SENTRY_SECRET_URL_CONFIG_ATTRS:
+        url = getattr(config_class, attr, None)
+        if not isinstance(url, str) or "@" not in url:
+            continue
+        try:
+            password = urlsplit(url).password
+        except ValueError:
+            continue
+        if password and len(password) >= _SENTRY_MIN_SECRET_LEN:
+            values.append(password)
+
+    # Longest first, so a secret containing another is redacted whole.
+    _sentry_known_secrets = tuple(sorted(set(values), key=len, reverse=True))
+    return _sentry_known_secrets
+
+
+def _scrub_text(text):
+    """Redact secret-shaped spans from free text.
+
+    Only the matched span is replaced, never the whole string, so the
+    surrounding diagnostic survives. Four locators run: exact known secrets,
+    Bearer values, values under a sensitive label, and Spotify OAuth material
+    matched by prefix and length.
+
+    One adjacency is load-bearing: Bearer must precede the label locator. On
+    "Authorization: Bearer <token>" the label locator's value stops at
+    whitespace, so running it first redacts the word "Bearer" and leaves the
+    token on the wire.
+    """
+    if not isinstance(text, str) or not text:
+        return text
+
+    for secret in _sentry_known_secrets:
+        text = text.replace(secret, _SENTRY_REDACTED)
+
+    text = _SENTRY_BEARER_RE.sub(lambda m: m.group(1) + _SENTRY_REDACTED, text)
+
+    # Only the value is dropped. The closing quote sits outside the match --
+    # the value class excludes it -- so the opening one is all that is re-emitted.
+    text = _SENTRY_LABELLED_RE.sub(_SENTRY_LABELLED_SUB, text)
+    text = _SENTRY_OAUTH_TOKEN_RE.sub(_SENTRY_REDACTED, text)
+    return _SENTRY_FERNET_RE.sub(_SENTRY_REDACTED, text)
+
+
 def _strip_pii(event, hint):
-    """Sentry before_send hook: redact known-sensitive keys.
+    """Sentry before_send hook: redact sensitive keys and secret-shaped values.
 
     Walks request headers, request data, extras, contexts, breadcrumbs, and
     exception stack-trace frame variables; replaces any value whose key is
@@ -446,26 +602,41 @@ def _strip_pii(event, hint):
     disabled at the SDK level in _init_sentry. This walk keeps secrets out of
     the payload even if a stack trace arrives carrying them anyway.
 
-    Boundary -- redaction is **key-based only**. A value is filtered because
-    the key naming it is sensitive; the scrubber never inspects free text.
-    Anything interpolated into a string rather than stored under a key passes
-    through untouched: log message text (``logentry.message``), exception
-    strings (``exception.values[].value``), and breadcrumb messages. So
-    ``logger.error("failed for %s", token)`` egresses the token even though
-    ``logger.error("failed", extra={"token": token})`` would not. Do not
-    interpolate credentials into messages or exception text on the assumption
-    that this hook covers them. Value/pattern-based scrubbing is tracked in
-    issue #514.
+    Two policies run in the same walk. A value under a sensitive *key* is
+    replaced wholesale. Every string *leaf* additionally goes through
+    _scrub_text, which redacts secret-shaped spans in place -- so a credential
+    interpolated into a string, which no key names, is caught too:
+    ``logger.error("failed for %s", token)`` no longer egresses the token.
+    That closes log message text (``logentry``), exception strings
+    (``exception.values[].value``) and breadcrumb messages, the three surfaces
+    #514 named, and everything else the walk reaches for free.
+
+    The two policies differ in kind. Key matching is exact: nothing under a
+    sensitive key escapes. Value matching is best-effort -- it recognises the
+    secrets this process holds (including the password inside a configured
+    connection string), Bearer values, values under a sensitive label, and
+    Spotify OAuth material by shape. It is a backstop for the credential
+    someone interpolates into a message, not a licence to do so; prefer
+    ``extra={"token": token}``, which the exact pass covers.
+
+    Known bound: this governs the Sentry egress only. The same interpolated
+    secret still reaches stderr and the platform log store through the ordinary
+    logging handlers, which this hook is not in the path of.
     """
 
     def _redact(obj):
         if isinstance(obj, dict):
             return {
-                k: ("[Filtered]" if _sentry_key_is_sensitive(k) else _redact(v))
+                k: (_SENTRY_REDACTED if _sentry_key_is_sensitive(k) else _redact(v))
                 for k, v in obj.items()
             }
-        if isinstance(obj, list):
+        if isinstance(obj, (list, tuple)):
             return [_redact(item) for item in obj]
+        # String leaves get the value-level pass. Scrubbing here rather than at
+        # an enumerated list of fields is what makes the free-text cover fail
+        # closed: a payload field nobody listed is still walked.
+        if isinstance(obj, str):
+            return _scrub_text(obj)
         return obj
 
     def _redact_stacktrace(stacktrace):
@@ -489,11 +660,20 @@ def _strip_pii(event, hint):
         event["contexts"] = _redact(event["contexts"])
     if "breadcrumbs" in event:
         event["breadcrumbs"] = _redact(event["breadcrumbs"])
+    # Free-text nodes the walk above is not applied to. logentry carries
+    # message, formatted and params, and _redact handles all three shapes --
+    # params is record.args, a list or a mapping.
+    if "logentry" in event:
+        event["logentry"] = _redact(event["logentry"])
+    if isinstance(event.get("message"), str):
+        event["message"] = _scrub_text(event["message"])
 
     exception = event.get("exception")
     if isinstance(exception, dict):
         for value in exception.get("values") or []:
             if isinstance(value, dict):
+                if isinstance(value.get("value"), str):
+                    value["value"] = _scrub_text(value["value"])
                 _redact_stacktrace(value.get("stacktrace"))
     _redact_stacktrace(event.get("stacktrace"))
 
@@ -513,6 +693,10 @@ def _init_sentry(config_class):
     Sentry disabled). Imports sentry_sdk lazily so the module is
     optional at install time.
     """
+    # Registered before the DSN guard so the scrubber is armed regardless of
+    # whether this particular process ends up sending events.
+    _register_sentry_secret_values(config_class)
+
     dsn = getattr(config_class, "SENTRY_DSN", "") or ""
     if not dsn:
         logger.info("Sentry disabled (no SENTRY_DSN configured)")
