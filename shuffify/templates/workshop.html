@@ -1192,7 +1192,8 @@
 const workshopState = {
     playlistId: {{ playlist.id | tojson }},
     playlistName: {{ playlist.name | tojson }},
-    currentUserId: {{ user.id | tojson }},
+    {# spotify_profile is None whenever the profile fetch fails -- require_auth_page allows that by design. #}
+    currentUserId: {{ (user or {}).get('id') | tojson }},
     savedUris: {{ playlist.tracks | map(attribute='uri') | list | tojson }},
     workingUris: {{ playlist.tracks | map(attribute='uri') | list | tojson }},
     isDirty: false,
