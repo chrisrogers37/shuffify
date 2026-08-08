@@ -9,6 +9,7 @@ import json
 from unittest.mock import MagicMock, Mock, patch
 
 from shuffify.models.playlist import Playlist
+from shuffify.spotify.exceptions import SpotifyError
 
 # =============================================================================
 # Fixtures
@@ -153,6 +154,95 @@ class TestWorkshopPage:
         # the safe attribute context, read back cleanly via element.dataset.)
         assert b"toggleTrackLock('" not in response.data
         assert b"deleteTrack('" not in response.data
+
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.AuthService", autospec=True)
+    @patch("shuffify.routes.workshop.PlaylistService")
+    @patch("shuffify.routes.workshop.ShuffleService")
+    def test_workshop_renders_when_spotify_profile_is_unavailable(
+        self,
+        mock_shuffle_svc,
+        mock_playlist_svc,
+        mock_auth_svc,
+        mock_get_db_user,
+        authenticated_client,
+    ):
+        """A failed profile fetch must not 500 an authenticated user (#547).
+
+        require_auth_page swallows SpotifyError from the profile fetch and
+        continues with spotify_profile=None deliberately -- a Spotify hiccup
+        should not bounce an authenticated user back to the login page. Every
+        profile dereference on the page has to survive the None that produces.
+        """
+        mock_auth_svc.validate_session_token.return_value = True
+        mock_auth_svc.get_authenticated_api.return_value = Mock()
+        mock_auth_svc.get_user_data.side_effect = SpotifyError(
+            "Spotify profile fetch failed"
+        )
+        mock_get_db_user.return_value = Mock(id=1, spotify_id="u1")
+
+        mock_ps_instance = Mock()
+        mock_ps_instance.get_playlist.return_value = _make_mock_playlist()
+        mock_playlist_svc.return_value = mock_ps_instance
+
+        mock_shuffle_svc.list_algorithms.return_value = [
+            {
+                "name": "Basic",
+                "class_name": "BasicShuffle",
+                "description": "Random shuffle",
+                "parameters": {},
+            }
+        ]
+
+        response = authenticated_client.get("/workshop/playlist123")
+        assert response.status_code == 200
+        assert b"Workshop Test Playlist" in response.data
+        # tojson on an unguarded Undefined raises TypeError, which reaches the
+        # generic 500 page. null is the honest value for "current user
+        # unknown", and the one consumer (the isNonOwned ownership check)
+        # degrades to treating playlists as not-yours rather than crashing.
+        assert b"currentUserId: null" in response.data
+
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.AuthService", autospec=True)
+    @patch("shuffify.routes.workshop.PlaylistService")
+    @patch("shuffify.routes.workshop.ShuffleService")
+    def test_workshop_emits_the_real_user_id_when_profile_is_available(
+        self,
+        mock_shuffle_svc,
+        mock_playlist_svc,
+        mock_auth_svc,
+        mock_get_db_user,
+        authenticated_client,
+        sample_user,
+    ):
+        """The null-guard must not cost the real id (#547).
+
+        The other half of the pair. Asserting only the None case is satisfied
+        by deleting the line or hardcoding null, which would break the
+        ownership check for every user whose profile loaded fine.
+        """
+        mock_auth_svc.validate_session_token.return_value = True
+        mock_auth_svc.get_authenticated_api.return_value = Mock()
+        mock_auth_svc.get_user_data.return_value = sample_user
+        mock_get_db_user.return_value = Mock(id=1, spotify_id="u1")
+
+        mock_ps_instance = Mock()
+        mock_ps_instance.get_playlist.return_value = _make_mock_playlist()
+        mock_playlist_svc.return_value = mock_ps_instance
+
+        mock_shuffle_svc.list_algorithms.return_value = [
+            {
+                "name": "Basic",
+                "class_name": "BasicShuffle",
+                "description": "Random shuffle",
+                "parameters": {},
+            }
+        ]
+
+        response = authenticated_client.get("/workshop/playlist123")
+        assert response.status_code == 200
+        assert b'currentUserId: "user123"' in response.data
 
 
 # =============================================================================
