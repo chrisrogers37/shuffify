@@ -16,7 +16,7 @@ safety>=3.8.1
 bandit==1.9.4
 
 # Development
-ipython==9.16.0
+ipython==9.16.1
 # python-dotenv version is inherited from base.txt
 
 # Observability (mirrors prod.txt so tests can patch sentry_sdk)
