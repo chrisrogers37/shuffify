@@ -260,8 +260,21 @@ class TestStripPiiFreeText:
         # The diagnostic half of the message survives.
         assert "Token exchange failed" in cleaned["logentry"]["message"]
 
-    def test_token_in_logentry_params_is_redacted(self):
-        """logger.error("failed for %s", token) puts the token in params."""
+    def test_oauth_shaped_token_in_logentry_params_is_redacted(self):
+        """The SHAPE locator reaches params -- and that is all this proves.
+
+        Renamed from test_token_in_logentry_params_is_redacted. The old name and
+        docstring claimed the params *surface* was validated; only the OAuth
+        shape was. The value here matches ``_SENTRY_OAUTH_TOKEN_RE``, so the
+        assertion is satisfied by the shape rule alone and would still pass if
+        every other locator were deleted. Swap this value for a bare unshaped
+        string and it leaks -- which is exactly what the bound test below
+        records.
+
+        Kept rather than deleted because it is the only test for this genuine
+        cell (OAuth shape x params). The two tests that actually discriminate
+        params handling are the labelled/Bearer pair below.
+        """
         event = {
             "logentry": {
                 "message": "Token refresh failed for %s",
@@ -318,24 +331,62 @@ class TestStripPiiFreeText:
 
         assert self.ACCESS_TOKEN not in cleaned["breadcrumbs"][0]["message"]
 
-    def test_repr_of_token_dict_in_message_is_redacted(self):
-        """The named regression: f"...{token_data}" reprs the whole dict."""
+    def test_repr_of_token_dict_in_message_is_redacted_by_label_alone(self):
+        """The named regression, with the shape coincidence removed.
+
+        The original version of this test used ACCESS_TOKEN/REFRESH_TOKEN, which
+        are OAuth-shaped AND sit under ``access_token``/``refresh_token`` -- both
+        on ``_SENTRY_PII_DENYLIST``. It therefore passed for two independent
+        reasons at once and could not tell you which locator worked, or whether
+        either alone sufficed. Neutralising the shape regexes left it green.
+
+        This half keeps the denylisted keys and drops the shape, so only the
+        LABEL locator can satisfy it.
+        """
         event = {
             "logentry": {
                 "message": (
                     "Token exchange failed: "
-                    f"{{'access_token': '{self.ACCESS_TOKEN}', "
-                    f"'expires_in': 3600, 'refresh_token': '{self.REFRESH_TOKEN}'}}"
+                    "{'access_token': 'EXAMPLE-not-a-real-access-token', "
+                    "'expires_in': 3600, "
+                    "'refresh_token': 'EXAMPLE-not-a-real-refresh-token'}"
                 )
             }
         }
         cleaned = _strip_pii(event, hint=None)
 
         message = cleaned["logentry"]["message"]
-        assert self.ACCESS_TOKEN not in message
-        assert self.REFRESH_TOKEN not in message
+        assert "EXAMPLE-not-a-real-access-token" not in message
+        assert "EXAMPLE-not-a-real-refresh-token" not in message
         # Non-sensitive fields of the same dict stay readable.
         assert "3600" in message
+
+    def test_repr_of_token_dict_in_message_is_redacted_by_shape_alone(self):
+        """The other half: shape with no denylisted key to ride on.
+
+        ``payload_id`` is on neither denylist, so the label locator cannot fire
+        and only the OAuth shape rule can satisfy this. Together with the test
+        above, the pair distinguishes which locator does the work -- which the
+        single doubly-covered test could not.
+        """
+        event = {
+            "logentry": {
+                "message": (f"Token exchange failed: {{'payload_id': '{self.ACCESS_TOKEN}', 'expires_in': 3600}}")
+            }
+        }
+        cleaned = _strip_pii(event, hint=None)
+
+        message = cleaned["logentry"]["message"]
+        assert self.ACCESS_TOKEN not in message
+        assert "3600" in message
+
+    # test_repr_of_token_dict_in_message_is_redacted was REPLACED by the two
+    # tests above, not supplemented. It used OAuth-shaped values under
+    # denylisted keys, so shape and label each satisfied it independently;
+    # neutralising the shape regexes left it green. Keeping it alongside the
+    # split pair would add no information and would still read as coverage it
+    # never had. Its named regression -- the whole-dict repr -- is asserted by
+    # both halves, each with one locator isolated.
 
     def test_query_string_credential_in_message_is_redacted(self):
         """An OAuth callback URL logged whole carries ?code=..."""
@@ -359,11 +410,7 @@ class TestStripPiiFreeText:
 
     def test_labelled_secret_without_token_shape_is_redacted(self):
         """A client_secret is caught by its label, not by its shape."""
-        event = {
-            "logentry": {
-                "message": "exchange rejected: client_secret=EXAMPLE-not-a-real-client-secret"
-            }
-        }
+        event = {"logentry": {"message": "exchange rejected: client_secret=EXAMPLE-not-a-real-client-secret"}}
         cleaned = _strip_pii(event, hint=None)
 
         assert "EXAMPLE-not-a-real-client-secret" not in cleaned["logentry"]["message"]
@@ -371,25 +418,85 @@ class TestStripPiiFreeText:
 
     def test_bearer_value_without_token_shape_is_redacted(self):
         """Bearer names its own value -- no key and no recognisable shape."""
-        event = {
-            "logentry": {
-                "message": "retrying with Bearer EXAMPLE-not-a-real-bearer-value"
-            }
-        }
+        event = {"logentry": {"message": "retrying with Bearer EXAMPLE-not-a-real-bearer-value"}}
         cleaned = _strip_pii(event, hint=None)
 
         assert "EXAMPLE-not-a-real-bearer-value" not in cleaned["logentry"]["message"]
         assert "retrying with Bearer" in cleaned["logentry"]["message"]
 
-    def test_labelled_secret_in_dict_repr_is_redacted(self):
-        """Quoted key/value pairs from a repr'd dict are labelled too."""
+    # The two below mirror that pair at the params position, for the same
+    # reason: the only pre-existing params test used an OAuth-shaped value, so
+    # it was satisfied by the shape rule and said nothing about params. These
+    # use values the shape rule cannot match, so each isolates one locator and
+    # would go red if that locator were removed.
+
+    def test_labelled_secret_without_token_shape_in_params_is_redacted(self):
+        """A client_secret in params is caught by its label, not its shape."""
         event = {
-            "exception": {
-                "values": [
-                    {"value": "auth payload {'password': 'hunter2pass', 'retries': 2}"}
-                ]
+            "logentry": {
+                "message": "exchange rejected: %s",
+                "params": ["client_secret=EXAMPLE-not-a-real-client-secret"],
             }
         }
+        cleaned = _strip_pii(event, hint=None)
+
+        params = str(cleaned["logentry"]["params"])
+        assert "EXAMPLE-not-a-real-client-secret" not in params
+        assert "client_secret" in params
+
+    def test_bearer_value_without_token_shape_in_params_is_redacted(self):
+        """Bearer names its own value in params -- no key, no shape."""
+        event = {
+            "logentry": {
+                "message": "retrying with %s",
+                "params": ["Bearer EXAMPLE-not-a-real-bearer-value"],
+            }
+        }
+        cleaned = _strip_pii(event, hint=None)
+
+        params = str(cleaned["logentry"]["params"])
+        assert "EXAMPLE-not-a-real-bearer-value" not in params
+        assert "Bearer" in params
+
+    def test_unshaped_secret_in_params_survives_the_best_effort_bound(self):
+        """A secret with NO shape, NO label and NO registration is NOT redacted.
+
+        This test asserts the leak on purpose. It is the executable form of the
+        bound ``_strip_pii`` already documents in prose at
+        ``shuffify/__init__.py:628-633`` -- value matching is "best-effort", "a
+        backstop for the credential someone interpolates into a message, not a
+        licence to do so". The four value locators are registered-secret,
+        Bearer, labelled, and OAuth/Fernet shape; a value that is none of those
+        has no locator at all, so it passes through untouched.
+
+        Keeping that as prose only means the day someone claims the redactor
+        covers arbitrary secrets, nothing contradicts them. If the walk is ever
+        extended to close this gap, THIS TEST SHOULD FAIL -- invert it and it
+        becomes the regression guard. Do not "fix" it by deleting it.
+
+        One position is enough: ``_scrub_text`` is a pure function of its string
+        argument with no per-position branching, so the gap is a property of the
+        shape, not of params.
+        """
+        event = {
+            "logentry": {
+                "message": "sync failed for %s (attempt %s)",
+                "params": ["unshapedsecretvalue12345", "3"],
+            }
+        }
+        cleaned = _strip_pii(event, hint=None)
+
+        params = cleaned["logentry"]["params"]
+        # (1) the bare secret is still there -- current behaviour, not aspiration
+        assert "unshapedsecretvalue12345" in str(params)
+        # (2) a neighbouring non-secret survives untouched, so this is not
+        #     vacuously passing on an event the redactor never walked
+        assert "3" in str(params)
+        assert params[1] == "3"
+
+    def test_labelled_secret_in_dict_repr_is_redacted(self):
+        """Quoted key/value pairs from a repr'd dict are labelled too."""
+        event = {"exception": {"values": [{"value": "auth payload {'password': 'hunter2pass', 'retries': 2}"}]}}
         cleaned = _strip_pii(event, hint=None)
 
         value = cleaned["exception"]["values"][0]["value"]
@@ -415,9 +522,7 @@ class TestStripPiiFreeText:
             "extra": {"detail": f"exchange failed for code={self.ACCESS_TOKEN}"},
             "contexts": {"trace": {"note": f"Bearer {self.ACCESS_TOKEN}"}},
             "request": {"query_string": f"code={self.ACCESS_TOKEN}&state=xyz"},
-            "breadcrumbs": {
-                "values": [{"data": {"url": f"/token?code={self.ACCESS_TOKEN}"}}]
-            },
+            "breadcrumbs": {"values": [{"data": {"url": f"/token?code={self.ACCESS_TOKEN}"}}]},
         }
         cleaned = json.dumps(_strip_pii(event, hint=None))
 
@@ -449,10 +554,7 @@ class TestStripPiiFreeText:
         assert "429" in message
         assert "schedule_id=11" in message
         assert "tracks_total=241" in message
-        assert (
-            cleaned["exception"]["values"][0]["value"]
-            == "429 Too Many Requests, retry after 30s"
-        )
+        assert cleaned["exception"]["values"][0]["value"] == "429 Too Many Requests, retry after 30s"
 
     def test_missing_free_text_surfaces_are_tolerated(self):
         """Events without logentry/exception/breadcrumbs pass through."""
@@ -477,11 +579,7 @@ class TestKnownSecretScrubbing:
 
         _register_sentry_secret_values(Cfg)
 
-        event = {
-            "logentry": {
-                "message": "auth failed using s3cr3t-client-value as the secret"
-            }
-        }
+        event = {"logentry": {"message": "auth failed using s3cr3t-client-value as the secret"}}
         cleaned = _strip_pii(event, hint=None)
 
         assert "s3cr3t-client-value" not in cleaned["logentry"]["message"]
@@ -493,16 +591,10 @@ class TestKnownSecretScrubbing:
 
         _register_sentry_secret_values(Cfg)
 
-        event = {
-            "exception": {
-                "values": [{"value": "bad signature for flask-signing-key-abcdef"}]
-            }
-        }
+        event = {"exception": {"values": [{"value": "bad signature for flask-signing-key-abcdef"}]}}
         cleaned = _strip_pii(event, hint=None)
 
-        assert (
-            "flask-signing-key-abcdef" not in cleaned["exception"]["values"][0]["value"]
-        )
+        assert "flask-signing-key-abcdef" not in cleaned["exception"]["values"][0]["value"]
 
     def test_short_or_empty_config_values_are_not_registered(self):
         """A blank or trivially short secret must not redact everything."""
@@ -527,10 +619,7 @@ class TestKnownSecretScrubbing:
             _init_sentry(Cfg)
 
         event = {"logentry": {"message": "leak registered-via-init-secret here"}}
-        assert (
-            "registered-via-init-secret"
-            not in _strip_pii(event, hint=None)["logentry"]["message"]
-        )
+        assert "registered-via-init-secret" not in _strip_pii(event, hint=None)["logentry"]["message"]
 
 
 class TestSecretPolicyDoesNotRot:
@@ -552,22 +641,15 @@ class TestSecretPolicyDoesNotRot:
     def test_every_secret_shaped_config_attr_is_classified(self):
         from config import Config
 
-        classified = (
-            set(_SENTRY_SECRET_CONFIG_ATTRS)
-            | set(_SENTRY_SECRET_URL_CONFIG_ATTRS)
-            | self.NOT_SECRETS
-        )
+        classified = set(_SENTRY_SECRET_CONFIG_ATTRS) | set(_SENTRY_SECRET_URL_CONFIG_ATTRS) | self.NOT_SECRETS
         unclassified = sorted(
             attr
             for attr in dir(Config)
-            if attr.isupper()
-            and self.SECRET_SHAPED.search(attr)
-            and attr not in classified
+            if attr.isupper() and self.SECRET_SHAPED.search(attr) and attr not in classified
         )
 
         assert not unclassified, (
-            f"{unclassified} look secret-shaped but are neither registered for "
-            "redaction nor acknowledged as non-secret"
+            f"{unclassified} look secret-shaped but are neither registered for redaction nor acknowledged as non-secret"
         )
 
     def test_derived_key_pattern_agrees_with_the_predicate(self):
