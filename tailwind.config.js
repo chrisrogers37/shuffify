@@ -8,6 +8,9 @@ module.exports = {
   content: [
     "./shuffify/templates/**/*.html",
     "./shuffify/static/**/*.js",
+    // Served by the /terms and /privacy routes. Outside this glob their
+    // utilities compile to nothing and the pages render unstyled.
+    "./shuffify/static/public/**/*.html",
   ],
   theme: {
     extend: {

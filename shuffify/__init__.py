@@ -786,7 +786,14 @@ def _apply_security_headers(app):
             # and is no longer fetched from a CDN, so its host is not listed.
             f"script-src 'self' https://cdn.jsdelivr.net 'nonce-{nonce}'; "
             f"style-src 'self' 'nonce-{nonce}'; "
-            "img-src 'self' https://i.scdn.co https://*.spotifycdn.com data:; "
+            # Spotify serves cover art from many scdn.co subdomains, not just
+            # i: an auto-generated four-up mosaic comes from mosaic.scdn.co,
+            # editorial art from thisis-images, daily-mix, newjams-images,
+            # lineup-images, charts-images and seeded-session-images. Naming
+            # one host while wildcarding the sibling CDN was the asymmetry
+            # that blocked them; the set is open-ended, so it is matched the
+            # same way *.spotifycdn.com already is.
+            "img-src 'self' https://*.scdn.co https://*.spotifycdn.com data:; "
             "connect-src 'self'; "
             "font-src 'self'; "
             "object-src 'none'; "
