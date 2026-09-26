@@ -43,6 +43,14 @@ from shuffify.services.playlist_preference_service import (
 
 logger = logging.getLogger(__name__)
 
+# Messages for the ``error`` code Spotify appends to the OAuth callback. Only
+# these app-authored strings are displayed; the query string's free-text
+# ``error_description`` is not.
+_OAUTH_ERROR_MESSAGES = {
+    "access_denied": "Spotify access was not granted, so you have not been logged in.",
+}
+_OAUTH_ERROR_DEFAULT = "Spotify sign-in did not complete. Please try again."
+
 
 # =============================================================================
 # Public Routes
@@ -213,11 +221,8 @@ def callback():
     # Check for OAuth errors
     error = request.args.get("error")
     if error:
-        logger.error(f"OAuth error: {error}")
-        flash(
-            f"OAuth Error: {request.args.get('error_description', 'Unknown error')}",
-            "error",
-        )
+        logger.error("OAuth error: %r", error[:100])
+        flash(_OAUTH_ERROR_MESSAGES.get(error, _OAUTH_ERROR_DEFAULT), "error")
         return redirect(url_for("main.index"))
 
     # Get authorization code

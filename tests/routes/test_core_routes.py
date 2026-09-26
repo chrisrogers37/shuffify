@@ -9,6 +9,8 @@ import logging
 import time
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 class TestIndexRoute:
     """Tests for GET /."""
@@ -143,6 +145,26 @@ class TestCallbackRoute:
                 "/callback?error=access_denied&error_description=User+denied+access"
             )
             assert resp.status_code == 302
+
+    @pytest.mark.parametrize(
+        "query, marker",
+        [
+            (
+                {"error": "access_denied", "error_description": "Visit example.invalid to restore access"},
+                "Visit example.invalid to restore access",
+            ),
+            ({"error": "not_a_spotify_error_code"}, "not_a_spotify_error_code"),
+        ],
+        ids=["error-description", "unknown-error-code"],
+    )
+    def test_oauth_error_flashes_only_app_authored_text(self, db_app, query, marker):
+        """Callback query text never reaches the page; a known code picks a fixed message."""
+        with db_app.test_client() as client:
+            client.get("/callback", query_string=query)
+            with client.session_transaction() as sess:
+                messages = [message for _, message in sess.get("_flashes", [])]
+        assert messages, "expected a flashed message for the OAuth error"
+        assert not any(marker in m for m in messages)
 
     def test_missing_code_redirects(self, db_app):
         """No authorization code should redirect to index."""
