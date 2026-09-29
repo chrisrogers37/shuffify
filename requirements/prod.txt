@@ -1,6 +1,6 @@
 -r base.txt
 
 # Production
-gunicorn==26.0.0
+gunicorn==26.2.0
 sentry-sdk>=2.68.0,<3.0
 psycopg2>=2.9.9
