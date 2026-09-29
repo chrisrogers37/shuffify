@@ -7,16 +7,16 @@ pytest-mock==3.15.1
 
 # Code Quality
 # ruff replaces flake8 (lint) and isort (import sorting); config in pyproject.toml.
-ruff==0.16.3
+ruff==0.16.9
 black>=26.5.1
-mypy==2.3.0
+mypy==2.3.1
 
 # Security & Quality
 safety>=3.8.1
 bandit==1.9.4
 
 # Development
-ipython==9.16.1
+ipython==9.17.1
 # python-dotenv version is inherited from base.txt
 
 # Observability (mirrors prod.txt so tests can patch sentry_sdk)
