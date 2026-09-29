@@ -24,4 +24,4 @@ pyasn1>=0.6.4
 wheel>=0.48.0
 authlib>=1.7.2
 nltk>=3.10.3
-tornado>=6.5.8
+tornado>=6.5.10
