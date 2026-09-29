@@ -25,6 +25,7 @@ HTML string that later reaches `innerHTML`, which is how the gradients got in.
 
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -151,38 +152,54 @@ def test_the_guard_can_actually_see_a_violation():
 # The legal pages carried neither a style attribute nor an on* handler, so the
 # two checks above passed them while both their scripts were refused. Scope and
 # rule are separate gaps: widening one without adding the other still misses it.
-SCRIPT_SRC_HOST = re.compile(r"""<script[^>]*\bsrc\s*=\s*["'](https?://[^"'/]+)""", re.I)
+SCRIPT_SRC_URL = re.compile(r"""<script[^>]*\bsrc\s*=\s*["'](https?://[^"']+)""", re.I)
 INLINE_SCRIPT_OPEN = re.compile(r"""<script(?![^>]*\bsrc\s*=)([^>]*)>""", re.I)
 NONCE_ATTR = re.compile(r"""\bnonce\s*=""", re.I)
 
 
-def _csp_script_src_hosts():
-    """Hosts the SHIPPED policy actually permits, read off a real response."""
+def _csp_script_src_sources():
+    """External sources the shipped policy permits, read from the policy source."""
     src = (REPO_ROOT / "shuffify" / "__init__.py").read_text(encoding="utf-8")
     m = re.search(r'"script-src ([^"]+)"', src)
     assert m, (
         "could not locate the script-src directive in shuffify/__init__.py -- "
         "this check silently permits everything if that regex stops matching"
     )
-    hosts = {t for t in m.group(1).split() if t.startswith("http")}
-    assert hosts, "script-src names no external host; expected at least one"
-    return hosts
+    sources = {t for t in m.group(1).split() if t.startswith("http")}
+    assert sources, "script-src names no external source; expected at least one"
+    return sources
+
+
+def _source_permits(source: str, url: str) -> bool:
+    """CSP host-source matching, reduced to the forms this policy uses.
+
+    A source with no path permits any file on its host (``*.`` subdomain
+    wildcards included); a path ending in '/' permits that directory; any
+    other path permits exactly that one file.
+    """
+    src, target = urlsplit(source), urlsplit(url)
+    host, want = target.hostname or "", src.hostname or ""
+    host_ok = host == want or (want.startswith("*.") and host.endswith(want[1:]))
+    if src.scheme != target.scheme or not host_ok:
+        return False
+    if src.path in ("", "/"):
+        return True
+    if src.path.endswith("/"):
+        return target.path.startswith(src.path)
+    return target.path == src.path
 
 
 @pytest.mark.parametrize("path", _templates(), ids=lambda p: p.name)
 def test_external_scripts_are_permitted_by_script_src(path):
     """A <script src> host absent from script-src never executes."""
-    allowed = _csp_script_src_hosts()
+    allowed = _csp_script_src_sources()
     bad = []
     for lineno, line in enumerate(_scannable(path).splitlines(), start=1):
-        for origin in SCRIPT_SRC_HOST.findall(line):
-            if not any(
-                origin == a.rstrip("/") or origin.endswith(a.split("://")[1].lstrip("*"))
-                for a in allowed
-            ):
-                bad.append((lineno, origin))
+        for url in SCRIPT_SRC_URL.findall(line):
+            if not any(_source_permits(source, url) for source in allowed):
+                bad.append((lineno, url))
     assert not bad, (
-        f"{_rel(path)} loads a script from a host script-src does not permit, "
+        f"{_rel(path)} loads a script that script-src does not permit, "
         "so it is refused and never runs:\n"
         + "\n".join(f"  line {n}: {o}" for n, o in bad)
         + f"\nPermitted: {sorted(allowed)}. Either serve the asset from "

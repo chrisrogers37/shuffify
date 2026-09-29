@@ -155,3 +155,52 @@ def test_safeurl_blocks_dangerous_schemes():
     harness = fn + "\nconsole.log(JSON.stringify(%s.map((c) => safeUrl(c[0]))));" % json.dumps(cases)
     result = subprocess.run(["node", "-e", harness], capture_output=True, text=True, check=True)
     assert json.loads(result.stdout) == [want for _, want in cases]
+
+
+# The ``${field}`` check above only sees template literals. A render path that
+# builds markup by concatenation -- ``'<p>' + field + '</p>'`` -- is invisible
+# to it, which is how a field can stay escaped in one file and bare in another.
+_BARE_CONCAT_OPERAND = re.compile(r"\+\s*\(*\s*$")
+
+
+def _function_source(text: str, name: str) -> str:
+    """Source of a top-level ``function name(...)``; it closes on a column-0 '}'."""
+    match = re.search(rf"^function {name}\(.*?^\}}", text, re.S | re.M)
+    assert match, f"could not locate function {name}() -- this guard would pass vacuously"
+    return match.group(0)
+
+
+def _mentions(expr: str) -> re.Pattern:
+    """Match ``expr`` as a whole expression, never as part of a longer name."""
+    return re.compile(r"(?<![\w.])" + re.escape(expr) + r"(?!\w)")
+
+
+def _bare_concat_lines(source: str, expr: str):
+    """Yield line numbers where ``expr`` is a direct operand of '+' concatenation."""
+    for match in _mentions(expr).finditer(source):
+        if _BARE_CONCAT_OPERAND.search(source[: match.start()]):
+            yield source.count("\n", 0, match.start()) + 1
+
+
+# (render function in workshop.html, value it concatenates into innerHTML).
+# The archive name is written from a Spotify playlist name, which the
+# playlist's owner sets. The snapshot description holds the same rule so the
+# path stays safe if a writer ever records Spotify-supplied text in it.
+CONCAT_RENDERED_FIELDS = [
+    ("renderRotationPanel", "data.pair.archive_playlist_name"),
+    ("renderSnapshotTimeline", "description"),
+]
+
+
+@pytest.mark.parametrize("function,expr", CONCAT_RENDERED_FIELDS)
+def test_concatenated_field_is_escaped(function, expr):
+    """A concatenated value reaches innerHTML only through an escape helper."""
+    source = _function_source(WORKSHOP.read_text(encoding="utf-8"), function)
+    assert _mentions(expr).search(source), (
+        f"{function}() no longer references {expr}; update CONCAT_RENDERED_FIELDS"
+    )
+    offenders = list(_bare_concat_lines(source, expr))
+    assert not offenders, (
+        f"workshop.html {function}(): '{expr}' is concatenated into markup without "
+        f"escapeHtml()/escapeAttr() at function-relative line(s) {offenders}."
+    )

@@ -1177,7 +1177,8 @@
 <!-- SortableJS via CDN, pinned by subresource integrity. The hash covers the
      exact published bytes of sortablejs@1.15.6, so a tampered or swapped CDN
      response is rejected by the browser instead of executed on an
-     authenticated page. Bump the version and the hash together, never alone. -->
+     authenticated page. Bump the version, the hash and the script-src path in
+     shuffify/__init__.py together, never one alone. -->
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"
         integrity="sha384-HZZ/fukV+9G8gwTNjN7zQDG0Sp7MsZy5DDN6VfY3Be7V9dvQpEpR2jF2HlyFUUjU"
         crossorigin="anonymous"
@@ -3087,7 +3088,7 @@ function renderSnapshotTimeline() {
         else if (diff < 0) diffText = ' <span class="text-red-400 text-xs">(' + absDiff + ' fewer track' + (absDiff !== 1 ? 's' : '') + ')</span>';
 
         var description = humanizeDescription(snap.trigger_description);
-        var descHtml = description ? '<p class="text-white/40 text-xs mt-1 truncate" title="' + description.replace(/"/g, '&quot;') + '">' + description + '</p>' : '';
+        var descHtml = description ? '<p class="text-white/40 text-xs mt-1 truncate" title="' + escapeAttr(description) + '">' + escapeHtml(description) + '</p>' : '';
 
         // Date group separator
         var group = getDateGroup(snap.created_at);
@@ -5282,7 +5283,7 @@ function renderRotationPanel(data) {
         html += '<span class="w-2 h-2 rounded-full bg-green-400"></span>';
         html += '<span class="text-white/80 text-sm font-semibold">Archive Paired</span>';
         html += '</div>';
-        html += '<p class="text-white/50 text-xs">Archive: ' + (data.pair.archive_playlist_name || data.pair.archive_playlist_id) + '</p>';
+        html += '<p class="text-white/50 text-xs">Archive: ' + escapeHtml(data.pair.archive_playlist_name || data.pair.archive_playlist_id) + '</p>';
         html += '</div>';
     } else {
         html += '<div class="rounded-xl bg-white/10 border border-white/20 p-4 mb-3">';

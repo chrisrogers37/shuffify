@@ -781,10 +781,11 @@ def _apply_security_headers(app):
         # Content Security Policy — nonce-based, no unsafe-inline
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            # cdn.jsdelivr.net serves SortableJS only, pinned by SRI at the
-            # script tag. Tailwind is compiled into static/css at build time
-            # and is no longer fetched from a CDN, so its host is not listed.
-            f"script-src 'self' https://cdn.jsdelivr.net 'nonce-{nonce}'; "
+            # The one external script, SortableJS, is permitted by its exact
+            # file path rather than by host, and is also pinned by SRI at its
+            # script tag -- bump the version in both places together. Tailwind
+            # is compiled into static/css at build time, so no CDN serves it.
+            f"script-src 'self' https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js 'nonce-{nonce}'; "
             f"style-src 'self' 'nonce-{nonce}'; "
             # Spotify serves cover art from many scdn.co subdomains, not just
             # i: an auto-generated four-up mosaic comes from mosaic.scdn.co,

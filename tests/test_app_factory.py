@@ -592,10 +592,24 @@ class TestSecurityHeaders:
         assert len(nonces) == 2
         assert nonces[0] == nonces[1]
 
-    def test_csp_script_src_allows_jsdelivr(self, client):
-        """jsdelivr serves SortableJS, pinned by SRI at the script tag."""
+    def test_csp_script_src_pins_external_scripts_to_files(self, client):
+        """An external script source names one file, never a whole host.
+
+        A host-only source permits every file that host serves. The one
+        external script (SortableJS, also pinned by SRI at its tag) is
+        permitted by its exact path instead.
+        """
+        from urllib.parse import urlsplit
+
         csp = client.get("/health").headers["Content-Security-Policy"]
-        assert "https://cdn.jsdelivr.net" in csp
+        script_src = next(d.split()[1:] for d in csp.split(";") if d.strip().startswith("script-src"))
+        external = [s for s in script_src if s.startswith("http")]
+        assert external, "expected the SortableJS source in script-src"
+        for source in external:
+            path = urlsplit(source).path
+            assert path and not path.endswith("/"), (
+                f"script-src permits everything under {source!r}; pin the exact file"
+            )
 
     def test_csp_script_src_does_not_allow_tailwind_cdn(self, client):
         """Tailwind is compiled to static/css and is never fetched (SR-042).
