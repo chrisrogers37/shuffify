@@ -1,0 +1,41 @@
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    "*.egg-info",
+    ".flask_session",
+    # Local virtualenvs, any naming convention: `ruff check .` with a venv in
+    # the working directory would otherwise walk site-packages and report
+    # findings in third-party code.
+    "venv",
+    "venv-*",
+    ".venv",
+    ".venv-*",
+    "env",
+    "env-*",
+    ".env-*",
+    "virtualenv",
+]
+
+[tool.ruff.lint]
+# Some pycodestyle E-codes are preview-gated in ruff and are silently skipped
+# without this, including E225, E231 and the E301-E306 blank-line family.
+# tests/test_lint_config_parity.py runs known violations through this config
+# to prove they are caught.
+preview = true
+# E/W: pycodestyle, F: pyflakes, I: import sorting.
+select = ["E", "W", "F", "I"]
+# E203 (whitespace before ':') conflicts with black's slice formatting.
+ignore = ["E203"]
+
+[tool.ruff.lint.per-file-ignores]
+# The blueprint's route modules are imported at the bottom of the package to
+# break a circular import, and are re-exported rather than used locally.
+"shuffify/routes/__init__.py" = ["E402", "F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["shuffify"]

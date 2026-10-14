@@ -1,0 +1,229 @@
+/* Shared routine forms, schedule history and Activity presentation. */
+@layer components {
+  .sh-routines-page {
+    padding-bottom: var(--sh-space-8);
+  }
+
+  .sh-routine-card,
+  .sh-activity-panel,
+  .sh-activity-stat,
+  .sh-routine-empty {
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-panel);
+    background: var(--sh-surface);
+  }
+
+  .sh-routine-card {
+    padding: var(--sh-space-4);
+    display: grid;
+    gap: var(--sh-space-2);
+    min-width: 0;
+  }
+
+  .sh-routine-header,
+  .sh-routine-create,
+  .sh-routine-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: var(--sh-space-4);
+  }
+
+  .sh-routine-header { justify-content: space-between; }
+  .sh-routine-create > *, .sh-routine-filters > * { min-width: min(100%, 12rem); }
+  .sh-routine-filters { margin-block: var(--sh-space-5); }
+  .sh-routine-filters label { display: block; margin-bottom: var(--sh-space-1); }
+  .sh-routine-list { display: grid; gap: var(--sh-space-4); }
+  .sh-routine-latest { overflow-wrap: anywhere; }
+
+  .sh-routine-info {
+    flex: 1 1 var(--sh-layout-copy);
+    min-width: 0;
+  }
+
+  .sh-routine-title {
+    color: var(--sh-ink);
+    font-family: var(--sh-font-display);
+    font-size: var(--sh-type-subheading);
+    font-weight: var(--sh-weight-bold);
+    line-height: var(--sh-leading-subheading);
+    letter-spacing: var(--sh-tracking-card);
+  }
+
+  .sh-routine-name,
+  .sh-activity-description {
+    overflow-wrap: anywhere;
+  }
+
+  .sh-routine-emphasis,
+  .sh-routine-history-symbol {
+    font-weight: var(--sh-weight-semibold);
+  }
+
+  .sh-routine-actions {
+    display: flex;
+    flex-wrap: wrap;
+    flex: none;
+    max-width: 100%;
+    align-items: center;
+    gap: var(--sh-space-2);
+  }
+
+  .sh-routine-actions > * { min-height: var(--sh-space-11); }
+
+  .sh-routine-disclosure {
+    margin-top: var(--sh-space-5);
+    padding-top: var(--sh-space-5);
+    border-top: 1px solid var(--sh-border);
+  }
+
+  .sh-routine-section-label {
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    font-weight: var(--sh-weight-semibold);
+    line-height: var(--sh-leading-normal);
+    letter-spacing: var(--sh-tracking-label);
+    text-transform: uppercase;
+  }
+
+  .sh-routine-source-list {
+    max-height: calc(var(--sh-space-20) * 2);
+    overflow-y: auto;
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-control);
+    background: var(--sh-base);
+    padding: var(--sh-space-2);
+  }
+
+  .sh-routine-choice {
+    display: flex;
+    min-height: var(--sh-space-11);
+    align-items: center;
+    gap: var(--sh-space-2);
+    padding: var(--sh-space-2);
+    border-radius: var(--sh-radius-control);
+    cursor: pointer;
+  }
+
+  .sh-routine-choice:hover {
+    background: var(--sh-raised);
+  }
+
+  .sh-routine-checkbox {
+    flex: none;
+    width: var(--sh-space-4);
+    height: var(--sh-space-4);
+    accent-color: var(--sh-accent);
+  }
+
+  .sh-routine-callout {
+    padding: var(--sh-space-3);
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-control);
+  }
+
+  .sh-routine-callout-warning {
+    color: var(--sh-warning);
+    border-color: var(--sh-warning);
+    background: var(--sh-warning-surface);
+  }
+
+  .sh-routine-callout-success {
+    color: var(--sh-success);
+    border-color: var(--sh-success);
+    background: var(--sh-success-surface);
+  }
+
+  .sh-routine-history-row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sh-space-2);
+    padding: var(--sh-space-3);
+    border-radius: var(--sh-radius-control);
+    background: var(--sh-raised);
+    overflow-wrap: anywhere;
+  }
+
+  .sh-routine-empty,
+  .sh-activity-empty {
+    padding: var(--sh-space-8);
+    color: var(--sh-muted);
+    text-align: center;
+  }
+
+  .sh-activity-stat {
+    padding: var(--sh-space-5);
+    text-align: center;
+  }
+
+  .sh-activity-stat-value {
+    color: var(--sh-ink);
+    font-family: var(--sh-font-display);
+    font-size: var(--sh-type-heading);
+    font-weight: var(--sh-weight-bold);
+    line-height: var(--sh-leading-heading);
+  }
+
+  .sh-activity-panel { overflow: hidden; }
+
+  .sh-activity-panel-heading {
+    padding: var(--sh-space-5) var(--sh-space-6);
+    border-bottom: 1px solid var(--sh-border);
+  }
+
+  .sh-activity-log {
+    max-height: calc(var(--sh-space-16) * 8);
+    overflow-y: auto;
+  }
+
+  .sh-activity-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sh-space-3);
+    padding: var(--sh-space-4) var(--sh-space-6);
+    border-bottom: 1px solid var(--sh-border);
+  }
+
+  .sh-activity-row:last-child { border-bottom: 0; }
+
+  .sh-activity-icon {
+    display: flex;
+    flex: none;
+    width: var(--sh-space-8);
+    height: var(--sh-space-8);
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-control);
+    background: var(--sh-raised);
+    color: var(--sh-accent);
+  }
+
+  .sh-activity-details {
+    flex: 1 1 var(--sh-space-22);
+    min-width: 0;
+  }
+
+  .sh-activity-time {
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    line-height: var(--sh-leading-normal);
+    flex-basis: 100%;
+    margin-left: calc(var(--sh-space-8) + var(--sh-space-3));
+  }
+
+  .sh-activity-execution { justify-content: space-between; }
+
+  .sh-activity-execution-result {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sh-space-3);
+  }
+  @screen sm {
+    .sh-routine-card { padding: var(--sh-space-6); }
+    .sh-routine-actions { gap: var(--sh-space-2); }
+    .sh-activity-time { flex-basis: auto; margin-left: auto; }
+  }
+}

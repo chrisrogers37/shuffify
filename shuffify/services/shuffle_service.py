@@ -1,0 +1,212 @@
+"""
+Shuffle service for managing playlist shuffle operations.
+
+Handles algorithm selection, parameter validation, and shuffle execution.
+Uses Pydantic schemas for type-safe parameter validation.
+"""
+
+import logging
+from typing import Any, Dict, List, Optional, Union
+
+from shuffify.shuffle_algorithms.registry import ShuffleRegistry
+from shuffify.spotify.api import SpotifyAPI
+
+logger = logging.getLogger(__name__)
+
+
+class ShuffleError(Exception):
+    """Base exception for shuffle operations."""
+
+    pass
+
+
+class InvalidAlgorithmError(ShuffleError):
+    """Raised when an invalid algorithm is requested."""
+
+    pass
+
+
+class ParameterValidationError(ShuffleError):
+    """Raised when algorithm parameters are invalid."""
+
+    pass
+
+
+class ShuffleExecutionError(ShuffleError):
+    """Raised when shuffle execution fails."""
+
+    pass
+
+
+class ShuffleService:
+    """Service for managing shuffle algorithm execution."""
+
+    @staticmethod
+    def list_algorithms() -> List[Dict[str, Any]]:
+        """
+        Get all available shuffle algorithms.
+
+        Returns:
+            List of algorithm metadata dictionaries.
+        """
+        return ShuffleRegistry.list_algorithms()
+
+    @staticmethod
+    def get_algorithm(name: str) -> Any:
+        """
+        Get an algorithm instance by name.
+
+        Args:
+            name: The algorithm name (e.g., 'BasicShuffle').
+
+        Returns:
+            An instantiated algorithm object.
+
+        Raises:
+            InvalidAlgorithmError: If the algorithm doesn't exist.
+        """
+        try:
+            algorithm_class = ShuffleRegistry.get_algorithm(name)
+            return algorithm_class()
+        except ValueError:
+            valid_names = sorted(ShuffleRegistry.get_available_algorithms().keys())
+            logger.error(f"Invalid algorithm requested: {name}")
+            raise InvalidAlgorithmError(
+                f"Invalid algorithm '{name}'. "
+                f"Valid options: {', '.join(valid_names)}"
+            )
+
+    @staticmethod
+    def execute(
+        algorithm_name: str,
+        tracks: List[Dict[str, Any]],
+        params: Optional[Dict[str, Any]] = None,
+        api: Optional[SpotifyAPI] = None,
+        locked_positions: Optional[Dict[Union[int, str], str]] = None,
+    ) -> List[str]:
+        """
+        Execute a shuffle algorithm on a list of tracks.
+
+        When locked_positions is provided, locked tracks are
+        excluded from the shuffle and reassembled at their
+        original positions afterward.
+
+        Args:
+            algorithm_name: The name of the algorithm to use.
+            tracks: List of track dictionaries with at least 'uri' key.
+            params: Optional algorithm parameters.
+            api: Optional SpotifyAPI for algorithms that need it.
+            locked_positions: Optional {position: uri} map of locked tracks.
+
+        Returns:
+            List of track URIs in the new shuffled order.
+
+        Raises:
+            InvalidAlgorithmError: If the algorithm doesn't exist.
+            ShuffleExecutionError: If shuffle execution fails.
+        """
+        from shuffify.shuffle_algorithms.utils import (
+            reassemble_with_locks,
+            split_locked_tracks,
+        )
+
+        params = params or {}
+
+        try:
+            algorithm = ShuffleService.get_algorithm(algorithm_name)
+
+            if api:
+                params["sp"] = api
+
+            # Split locked tracks out before shuffling
+            validated_locks, unlocked_tracks = (
+                split_locked_tracks(
+                    tracks, locked_positions or {}
+                )
+            )
+
+            if validated_locks and not unlocked_tracks:
+                logger.info(
+                    "All tracks locked — returning "
+                    "original order for %s",
+                    algorithm_name,
+                )
+                return [
+                    t["uri"] for t in tracks
+                    if t.get("uri")
+                ]
+
+            shuffled_uris = algorithm.shuffle(
+                unlocked_tracks, **params
+            )
+
+            if validated_locks:
+                shuffled_uris = reassemble_with_locks(
+                    shuffled_uris,
+                    validated_locks,
+                    len(tracks),
+                )
+                logger.info(
+                    "Executed %s on %d tracks "
+                    "(%d locked)",
+                    algorithm_name,
+                    len(tracks),
+                    len(validated_locks),
+                )
+            else:
+                logger.info(
+                    "Executed %s on %d tracks",
+                    algorithm_name,
+                    len(tracks),
+                )
+
+            return shuffled_uris
+
+        except InvalidAlgorithmError:
+            raise
+        except Exception as e:
+            logger.error(
+                "Shuffle execution failed: %s",
+                e, exc_info=True,
+            )
+            raise ShuffleExecutionError(
+                f"Failed to execute shuffle: {e}"
+            )
+
+    @staticmethod
+    def shuffle_changed_order(
+        original_uris: List[str], shuffled_uris: List[str]
+    ) -> bool:
+        """
+        Check if the shuffle actually changed the track order.
+
+        Args:
+            original_uris: List of URIs before shuffle.
+            shuffled_uris: List of URIs after shuffle.
+
+        Returns:
+            True if the order changed, False if unchanged.
+        """
+        if not shuffled_uris:
+            return False
+        return shuffled_uris != original_uris
+
+    @staticmethod
+    def prepare_tracks_for_shuffle(
+        tracks: List[Dict[str, Any]], current_uris: List[str]
+    ) -> List[Dict[str, Any]]:
+        """
+        Prepare tracks for shuffling by ordering them according to current URIs.
+
+        This ensures the tracks are in the same order as the state we're shuffling from,
+        which may differ from the order Spotify returns if the user has manually reordered.
+
+        Args:
+            tracks: List of track dictionaries from the playlist.
+            current_uris: List of URIs representing the current order.
+
+        Returns:
+            List of track dictionaries ordered according to current_uris.
+        """
+        uri_to_track = {t["uri"]: t for t in tracks}
+        return [uri_to_track[uri] for uri in current_uris if uri in uri_to_track]

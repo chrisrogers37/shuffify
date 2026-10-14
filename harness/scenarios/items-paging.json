@@ -1,0 +1,70 @@
+{
+  "id": "items-paging",
+  "summary": "A playlist's items come 20 to a page by default and at most 50; a limit of 0 or 51 is refused.",
+  "behaviours": [
+    "paging.items",
+    "paging.limit-zero-refused"
+  ],
+  "playlists": {
+    "canary": "own"
+  },
+  "tracks": 1,
+  "steps": [
+    {
+      "call": "PUT /playlists/{canary}/items",
+      "body": {
+        "uris": [
+          {
+            "$repeat": "{track1}",
+            "times": 25
+          }
+        ]
+      },
+      "status": 200
+    },
+    {
+      "call": "GET /playlists/{canary}/items",
+      "status": 200,
+      "count": {
+        "items": 20
+      },
+      "json": {
+        "total": 25
+      }
+    },
+    {
+      "call": "GET /playlists/{canary}/items",
+      "query": {
+        "offset": "20"
+      },
+      "status": 200,
+      "count": {
+        "items": 5
+      }
+    },
+    {
+      "call": "GET /playlists/{canary}/items",
+      "query": {
+        "limit": "50"
+      },
+      "status": 200,
+      "count": {
+        "items": 25
+      }
+    },
+    {
+      "call": "GET /playlists/{canary}/items",
+      "query": {
+        "limit": "51"
+      },
+      "status": 400
+    },
+    {
+      "call": "GET /playlists/{canary}/items",
+      "query": {
+        "limit": "0"
+      },
+      "status": 400
+    }
+  ]
+}

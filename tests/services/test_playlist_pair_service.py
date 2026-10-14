@@ -1,0 +1,530 @@
+"""
+Tests for PlaylistPairService.
+
+Tests cover CRUD operations for playlist pairs, archive/unarchive
+track logic, archive playlist creation, and to_dict serialization.
+"""
+
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from shuffify.models.db import db
+from shuffify.services.playlist_pair_service import (
+    PlaylistPairExistsError,
+    PlaylistPairNotFoundError,
+    PlaylistPairService,
+)
+from shuffify.services.user_service import UserService
+from shuffify.spotify.api import SpotifyAPI
+
+
+@pytest.fixture
+def user(db_app):
+    """Provide a test user."""
+    with db_app.app_context():
+        result = UserService.upsert_from_spotify({
+            "id": "user123",
+            "display_name": "Test User",
+            "images": [],
+        })
+        yield result.user
+
+
+@pytest.fixture
+def user2(db_app):
+    """Provide a second test user."""
+    with db_app.app_context():
+        result = UserService.upsert_from_spotify({
+            "id": "user456",
+            "display_name": "Test User 2",
+            "images": [],
+        })
+        yield result.user
+
+
+@pytest.fixture
+def mock_api():
+    """Mock SpotifyAPI client."""
+    api = MagicMock(spec=SpotifyAPI)
+    api.playlist_add_items.return_value = None
+    api.playlist_remove_items.return_value = None
+    api.create_user_playlist.return_value = {
+        "id": "new_archive_id",
+        "name": "My Playlist [Archive]",
+    }
+    return api
+
+
+# =============================================================================
+# Create Pair
+# =============================================================================
+
+
+class TestCreatePair:
+    """Tests for PlaylistPairService.create_pair."""
+
+    def test_create_pair_success(self, user):
+        pair = PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+            production_playlist_name="My Playlist",
+            archive_playlist_name="My Playlist [Archive]",
+        )
+        assert pair.id is not None
+        assert pair.production_playlist_id == "prod1"
+        assert pair.archive_playlist_id == "arch1"
+        assert pair.auto_archive_on_remove is True
+
+    def test_create_pair_duplicate_raises(self, user):
+        PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+        )
+        with pytest.raises(PlaylistPairExistsError):
+            PlaylistPairService.create_pair(
+                user_id=user.id,
+                production_playlist_id="prod1",
+                archive_playlist_id="arch2",
+            )
+
+    def test_create_pair_different_playlists_ok(self, user):
+        p1 = PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+        )
+        p2 = PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod2",
+            archive_playlist_id="arch2",
+        )
+        assert p1.id != p2.id
+
+    def test_create_pair_different_users_same_playlist(
+        self, user, user2
+    ):
+        p1 = PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+        )
+        p2 = PlaylistPairService.create_pair(
+            user_id=user2.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch_other",
+        )
+        assert p1.id != p2.id
+
+    def test_create_pair_without_names(self, user):
+        pair = PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+        )
+        assert pair.production_playlist_name is None
+        assert pair.archive_playlist_name is None
+
+    def test_create_pair_with_auto_archive_off(self, user):
+        pair = PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+            auto_archive_on_remove=False,
+        )
+        assert pair.auto_archive_on_remove is False
+
+
+# =============================================================================
+# Get Pair
+# =============================================================================
+
+
+class TestGetPair:
+    """Tests for PlaylistPairService.get_pair_for_playlist."""
+
+    def test_get_pair_found(self, user):
+        PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+        )
+        pair = PlaylistPairService.get_pair_for_playlist(
+            user.id, "prod1"
+        )
+        assert pair is not None
+        assert pair.production_playlist_id == "prod1"
+
+    def test_get_pair_not_found(self, user):
+        pair = PlaylistPairService.get_pair_for_playlist(
+            user.id, "nonexistent"
+        )
+        assert pair is None
+
+    def test_get_pair_wrong_user(self, user, user2):
+        PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+        )
+        pair = PlaylistPairService.get_pair_for_playlist(
+            user2.id, "prod1"
+        )
+        assert pair is None
+
+
+# =============================================================================
+# List Pairs
+# =============================================================================
+
+
+class TestListPairs:
+    """Tests for PlaylistPairService.get_pairs_for_user."""
+
+    def test_list_multiple(self, user):
+        PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+        )
+        PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod2",
+            archive_playlist_id="arch2",
+        )
+        pairs = PlaylistPairService.get_pairs_for_user(user.id)
+        assert len(pairs) == 2
+
+    def test_list_empty(self, user):
+        pairs = PlaylistPairService.get_pairs_for_user(user.id)
+        assert pairs == []
+
+    def test_list_scoped_to_user(self, user, user2):
+        PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+        )
+        PlaylistPairService.create_pair(
+            user_id=user2.id,
+            production_playlist_id="prod2",
+            archive_playlist_id="arch2",
+        )
+        pairs = PlaylistPairService.get_pairs_for_user(user.id)
+        assert len(pairs) == 1
+        assert pairs[0].production_playlist_id == "prod1"
+
+
+# =============================================================================
+# Delete Pair
+# =============================================================================
+
+
+class TestDeletePair:
+    """Tests for PlaylistPairService.delete_pair."""
+
+    def test_delete_success(self, user):
+        PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+        )
+        PlaylistPairService.delete_pair(user.id, "prod1")
+        pair = PlaylistPairService.get_pair_for_playlist(
+            user.id, "prod1"
+        )
+        assert pair is None
+
+    def test_delete_nonexistent_raises(self, user):
+        with pytest.raises(PlaylistPairNotFoundError):
+            PlaylistPairService.delete_pair(
+                user.id, "nonexistent"
+            )
+
+    def test_delete_wrong_user_raises(self, user, user2):
+        PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+        )
+        with pytest.raises(PlaylistPairNotFoundError):
+            PlaylistPairService.delete_pair(
+                user2.id, "prod1"
+            )
+
+
+# =============================================================================
+# Archive Tracks
+# =============================================================================
+
+
+class TestArchiveTracks:
+    """Tests for PlaylistPairService.archive_tracks."""
+
+    def test_archive_success(self, mock_api):
+        uris = ["spotify:track:a1b2c3d4e5f6g7h8i9j0k1"]
+        count = PlaylistPairService.archive_tracks(
+            mock_api, "arch1", uris
+        )
+        assert count == 1
+        mock_api.playlist_add_items.assert_called_once_with(
+            "arch1", uris
+        )
+
+    def test_archive_empty_list(self, mock_api):
+        count = PlaylistPairService.archive_tracks(
+            mock_api, "arch1", []
+        )
+        assert count == 0
+        mock_api.playlist_add_items.assert_not_called()
+
+    def test_archive_large_batch(self, mock_api):
+        uris = [
+            f"spotify:track:{'x' * 22}"
+            for _ in range(150)
+        ]
+        count = PlaylistPairService.archive_tracks(
+            mock_api, "arch1", uris
+        )
+        assert count == 150
+        mock_api.playlist_add_items.assert_called_once_with(
+            "arch1", uris
+        )
+
+
+# =============================================================================
+# Unarchive Tracks
+# =============================================================================
+
+
+class TestUnarchiveTracks:
+    """Tests for PlaylistPairService.unarchive_tracks."""
+
+    def test_unarchive_success(self, mock_api):
+        uris = ["spotify:track:a1b2c3d4e5f6g7h8i9j0k1"]
+        count = PlaylistPairService.unarchive_tracks(
+            mock_api, "prod1", "arch1", uris
+        )
+        assert count == 1
+        mock_api.playlist_add_items.assert_called_once_with(
+            "prod1", uris
+        )
+        mock_api.playlist_remove_items \
+            .assert_called_once_with("arch1", uris)
+
+    def test_unarchive_empty_list(self, mock_api):
+        count = PlaylistPairService.unarchive_tracks(
+            mock_api, "prod1", "arch1", []
+        )
+        assert count == 0
+        mock_api.playlist_add_items.assert_not_called()
+
+
+# =============================================================================
+# Remove From Archive (finalize restore)
+# =============================================================================
+
+
+class TestRemoveFromArchive:
+    """Tests for PlaylistPairService.remove_from_archive."""
+
+    def test_remove_success(self, mock_api):
+        uris = ["spotify:track:a1b2c3d4e5f6g7h8i9j0k1"]
+        count = PlaylistPairService.remove_from_archive(
+            mock_api, "arch1", uris
+        )
+        assert count == 1
+        mock_api.playlist_remove_items \
+            .assert_called_once_with("arch1", uris)
+
+    def test_remove_does_not_add_to_production(
+        self, mock_api
+    ):
+        uris = ["spotify:track:a1b2c3d4e5f6g7h8i9j0k1"]
+        PlaylistPairService.remove_from_archive(
+            mock_api, "arch1", uris
+        )
+        mock_api.playlist_add_items.assert_not_called()
+
+    def test_remove_empty_list(self, mock_api):
+        count = PlaylistPairService.remove_from_archive(
+            mock_api, "arch1", []
+        )
+        assert count == 0
+        mock_api.playlist_remove_items.assert_not_called()
+
+    def test_remove_multiple_tracks(self, mock_api):
+        uris = [
+            "spotify:track:a1b2c3d4e5f6g7h8i9j0k1",
+            "spotify:track:b2c3d4e5f6g7h8i9j0k1l2",
+            "spotify:track:c3d4e5f6g7h8i9j0k1l2m3",
+        ]
+        count = PlaylistPairService.remove_from_archive(
+            mock_api, "arch1", uris
+        )
+        assert count == 3
+        mock_api.playlist_remove_items \
+            .assert_called_once_with("arch1", uris)
+
+
+# =============================================================================
+# Create Archive Playlist
+# =============================================================================
+
+
+class TestCreateArchivePlaylist:
+    """Tests for PlaylistPairService.create_archive_playlist."""
+
+    def test_create_success(self, mock_api):
+        pid, pname = PlaylistPairService.create_archive_playlist(
+            mock_api, "My Playlist"
+        )
+        assert pid == "new_archive_id"
+        assert pname == "My Playlist [Archive]"
+        mock_api.create_user_playlist.assert_called_once_with(
+            "My Playlist [Archive]",
+            public=False,
+            description="Archive playlist for removed tracks",
+        )
+
+    def test_create_api_error(self, mock_api):
+        mock_api.create_user_playlist.side_effect = Exception(
+            "API error"
+        )
+        with pytest.raises(Exception, match="API error"):
+            PlaylistPairService.create_archive_playlist(
+                mock_api, "Test"
+            )
+
+
+# =============================================================================
+# PlaylistPair.to_dict Serialization
+# =============================================================================
+
+
+class TestPlaylistPairToDict:
+    """Tests for PlaylistPair.to_dict()."""
+
+    def test_to_dict_contains_expected_keys(self, user):
+        pair = PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+            production_playlist_name="My Playlist",
+            archive_playlist_name="My Playlist [Archive]",
+        )
+        d = pair.to_dict()
+        assert d["id"] == pair.id
+        assert d["production_playlist_id"] == "prod1"
+        assert d["archive_playlist_id"] == "arch1"
+        assert d["production_playlist_name"] == "My Playlist"
+        assert d["archive_playlist_name"] == "My Playlist [Archive]"
+        assert d["auto_archive_on_remove"] is True
+        assert "created_at" in d
+        assert "updated_at" in d
+
+
+# =============================================================================
+# Update Pair
+# =============================================================================
+
+
+class TestUpdatePair:
+    """Tests for PlaylistPairService.update_pair."""
+
+    def test_update_auto_archive_true(self, user):
+        PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+        )
+        pair = PlaylistPairService.update_pair(
+            user.id, "prod1",
+            auto_archive_on_remove=False,
+        )
+        assert pair.auto_archive_on_remove is False
+
+    def test_update_auto_archive_false(self, user):
+        pair = PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+        )
+        # Default is True, toggle to False then True
+        PlaylistPairService.update_pair(
+            user.id, "prod1",
+            auto_archive_on_remove=False,
+        )
+        pair = PlaylistPairService.update_pair(
+            user.id, "prod1",
+            auto_archive_on_remove=True,
+        )
+        assert pair.auto_archive_on_remove is True
+
+    def test_update_nonexistent_raises(self, user):
+        with pytest.raises(PlaylistPairNotFoundError):
+            PlaylistPairService.update_pair(
+                user.id, "nonexistent",
+                auto_archive_on_remove=True,
+            )
+
+    def test_update_wrong_user_raises(
+        self, user, user2
+    ):
+        PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+        )
+        with pytest.raises(PlaylistPairNotFoundError):
+            PlaylistPairService.update_pair(
+                user2.id, "prod1",
+                auto_archive_on_remove=False,
+            )
+
+    def test_update_none_skips_field(self, user):
+        PlaylistPairService.create_pair(
+            user_id=user.id,
+            production_playlist_id="prod1",
+            archive_playlist_id="arch1",
+        )
+        pair = PlaylistPairService.update_pair(
+            user.id, "prod1",
+            auto_archive_on_remove=None,
+        )
+        # None values are skipped, default remains True
+        assert pair.auto_archive_on_remove is True
+
+
+class TestStagedWrites:
+    """commit=False flushes, lets errors propagate and leaves the transaction to the caller."""
+
+    def test_staged_create_and_update_flush_without_committing(self, user):
+        with patch("shuffify.services.base.safe_commit") as commit:
+            pair = PlaylistPairService.create_pair(user.id, "prod1", "arch1", commit=False)
+            PlaylistPairService.update_pair(
+                user.id, "prod1", archive_playlist_id="arch2", auto_archive_on_remove=False, commit=False
+            )
+        commit.assert_not_called()
+        assert pair.id is not None
+        staged = PlaylistPairService.get_pair_for_playlist(user.id, "prod1")
+        assert (staged.archive_playlist_id, staged.auto_archive_on_remove) == ("arch2", False)
+        db.session.rollback()
+        assert PlaylistPairService.get_pair_for_playlist(user.id, "prod1") is None
+
+    def test_a_staged_delete_flushes_before_a_repair_and_errors_do_not_roll_back(self, user):
+        PlaylistPairService.create_pair(user.id, "prod1", "arch1")
+        with patch("shuffify.services.base.safe_commit") as commit:
+            PlaylistPairService.delete_pair(user.id, "prod1", commit=False)
+            assert PlaylistPairService.get_pair_for_playlist(user.id, "prod1") is None
+            PlaylistPairService.create_pair(user.id, "prod1", "arch2", commit=False)
+            with pytest.raises(PlaylistPairExistsError):
+                PlaylistPairService.create_pair(user.id, "prod1", "arch3", commit=False)
+            with pytest.raises(PlaylistPairNotFoundError):
+                PlaylistPairService.delete_pair(user.id, "prod2", commit=False)
+        commit.assert_not_called()
+        assert PlaylistPairService.get_pair_for_playlist(user.id, "prod1").archive_playlist_id == "arch2"
+        db.session.rollback()
+        assert PlaylistPairService.get_pair_for_playlist(user.id, "prod1").archive_playlist_id == "arch1"

@@ -1,0 +1,128 @@
+@layer components {
+/* Static legal pages share the public shell through tailwind.css. */
+.legal-page {
+    padding-block: var(--sh-space-10) var(--sh-space-16);
+}
+
+.legal-document {
+    width: 100%;
+    max-width: var(--sh-layout-legal-copy);
+    margin-inline: auto;
+    font-size: var(--sh-type-reading);
+    line-height: var(--sh-leading-reading);
+}
+
+.legal-heading {
+    margin-bottom: var(--sh-space-8);
+    border-bottom: 1px solid var(--sh-border);
+    padding-bottom: var(--sh-space-8);
+}
+
+.legal-heading h1 {
+    color: var(--sh-ink);
+    font-family: var(--sh-font-display);
+    font-size: var(--sh-type-document-title);
+    font-weight: var(--sh-weight-bold);
+    letter-spacing: var(--sh-tracking-heading);
+    line-height: var(--sh-leading-heading);
+    overflow-wrap: break-word;
+}
+
+.legal-copy {
+    color: var(--sh-muted);
+    overflow-wrap: break-word;
+}
+
+.legal-copy section + section {
+    margin-top: var(--sh-space-8);
+}
+
+.legal-copy section {
+    scroll-margin-top: var(--sh-space-6);
+}
+
+.legal-copy h2 {
+    margin-bottom: var(--sh-space-3);
+    color: var(--sh-ink);
+    font-family: var(--sh-font-display);
+    font-size: var(--sh-type-subheading);
+    font-weight: var(--sh-weight-bold);
+    letter-spacing: var(--sh-tracking-card);
+    line-height: var(--sh-leading-subheading);
+}
+
+.legal-copy p + p,
+.legal-copy p + ul,
+.legal-copy ul + p {
+    margin-top: var(--sh-space-3);
+}
+
+.legal-copy ul {
+    padding-inline-start: var(--sh-space-6);
+    list-style: disc;
+}
+
+.legal-copy li + li {
+    margin-top: var(--sh-space-2);
+}
+
+.legal-copy li::marker {
+    color: var(--sh-accent);
+}
+
+.legal-copy strong {
+    color: var(--sh-ink);
+    font-weight: var(--sh-weight-semibold);
+}
+
+.legal-copy a {
+    display: inline-flex;
+    min-height: var(--sh-space-11);
+    align-items: center;
+    color: var(--sh-accent);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+    transition: color var(--sh-motion-feedback) var(--sh-motion-ease);
+}
+
+.legal-copy a:hover {
+    color: var(--sh-accent-hover);
+}
+
+.legal-copy .legal-updated {
+    margin-top: var(--sh-space-10);
+    border-top: 1px solid var(--sh-border);
+    padding-top: var(--sh-space-6);
+    font-size: var(--sh-type-body);
+    line-height: var(--sh-leading-eyebrow);
+}
+
+.legal-back {
+    margin-top: var(--sh-space-6);
+}
+
+@screen md {
+    .legal-page {
+        padding-block: var(--sh-space-16) var(--sh-space-22);
+    }
+
+    .legal-heading {
+        margin-bottom: var(--sh-space-10);
+        padding-bottom: var(--sh-space-10);
+    }
+
+    .legal-heading h1 {
+        font-size: var(--sh-type-title);
+        line-height: var(--sh-leading-document-title-wide);
+    }
+
+    .legal-copy section + section {
+        margin-top: var(--sh-space-10);
+    }
+
+    .legal-copy h2 {
+        font-size: var(--sh-type-subheading-wide);
+        line-height: var(--sh-leading-subheading-wide);
+    }
+}
+}

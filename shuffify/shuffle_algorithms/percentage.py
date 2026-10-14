@@ -1,0 +1,99 @@
+import random
+from typing import Any, Dict, List, Optional
+
+from . import ShuffleAlgorithm
+from .utils import extract_uris
+
+
+class PercentageShuffle(ShuffleAlgorithm):
+    """Shuffle a portion of your playlist while keeping the rest in order."""
+
+    @property
+    def name(self) -> str:
+        return "Percentage"
+
+    @property
+    def description(self) -> str:
+        return "Shuffle a portion of your playlist while keeping the rest in order."
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "shuffle_percentage": {
+                "type": "float",
+                "description": "Percentage of tracks to shuffle (0-100)",
+                "default": 50.0,
+                "min": 0.0,
+                "max": 100.0,
+            },
+            "shuffle_location": {
+                "type": "string",
+                "description": "Location to shuffle (front or back)",
+                "default": "front",
+                "options": ["front", "back"],
+            },
+        }
+
+    @property
+    def requires_features(self) -> bool:
+        return False
+
+    def shuffle(
+        self,
+        tracks: List[Dict[str, Any]],
+        features: Optional[Dict[str, Dict[str, Any]]] = None,
+        **kwargs,
+    ) -> List[str]:
+        """
+        Shuffle a portion of the playlist while keeping the rest in order.
+
+        Args:
+            tracks: List of track dictionaries from Spotify API
+            features: Optional dictionary of track URIs to audio features (unused in percentage shuffle)
+            **kwargs: Additional parameters
+                - shuffle_percentage: Percentage of tracks to shuffle (0-100)
+                - shuffle_location: Location to shuffle ('front' or 'back')
+
+        Returns:
+            List of shuffled track URIs
+        """
+        shuffle_percentage = kwargs.get("shuffle_percentage", 50.0)
+        shuffle_location = kwargs.get("shuffle_location", "front")
+
+        if not isinstance(shuffle_percentage, (int, float)):
+            raise ValueError(
+                f"shuffle_percentage must be numeric, got {type(shuffle_percentage).__name__}"
+            )
+        if not 0.0 <= shuffle_percentage <= 100.0:
+            raise ValueError(
+                f"shuffle_percentage must be between 0 and 100, got {shuffle_percentage}"
+            )
+        if shuffle_location not in ("front", "back"):
+            raise ValueError(
+                f"shuffle_location must be 'front' or 'back', got {shuffle_location!r}"
+            )
+
+        uris = extract_uris(tracks)
+
+        if len(uris) <= 1:
+            return uris
+
+        # Calculate number of tracks to shuffle
+        total_tracks = len(uris)
+        shuffle_count = int(total_tracks * (shuffle_percentage / 100.0))
+
+        if shuffle_count <= 0:
+            return uris
+
+        if shuffle_location == "front":
+            # Shuffle the front portion
+            to_shuffle = uris[:shuffle_count]
+            kept = uris[shuffle_count:]
+            random.shuffle(to_shuffle)
+            return to_shuffle + kept
+        else:
+            # Shuffle the back portion
+            kept = uris[:-shuffle_count]
+            to_shuffle = uris[-shuffle_count:]
+            random.shuffle(to_shuffle)
+            return kept + to_shuffle

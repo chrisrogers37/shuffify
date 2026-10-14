@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+
+{% block title %}Something went wrong - Shuffify{% endblock %}
+
+{% block main_classes %}sh-error-main{% endblock %}
+
+{% block content %}
+{% from 'macros/design_states.html' import error_panel %}
+{{ error_panel(500, 'Something went wrong', "We hit an unexpected error. This has been logged and we'll look into it.", url_for('main.index'), icon='server', retry=true) }}
+
+<script nonce="{{ csp_nonce }}">
+// ---------------------------------------------------------------------------
+// Event wiring: inline on* attributes cannot run under the CSP (a nonce
+// authorises an element, not an attribute), so each one is registered here
+// and dispatched by static/js/actions.js. This block must stay OUTSIDE any
+// Jinja conditional -- a registry that renders conditionally orphans every key
+// on the branches where it does not render.
+// ---------------------------------------------------------------------------
+registerActions({
+    'err-001': function (el, event) { window.location.reload(); },
+});
+</script>
+
+{% endblock %}

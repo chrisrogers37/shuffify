@@ -1,0 +1,52 @@
+{
+  "id": "add-at-position",
+  "summary": "Adding at a position inserts there; without one, at the end.",
+  "behaviours": [
+    "writes.add-at-position"
+  ],
+  "playlists": {
+    "canary": "own"
+  },
+  "tracks": 4,
+  "steps": [
+    {
+      "call": "PUT /playlists/{canary}/items",
+      "body": {
+        "uris": [
+          "{track1}",
+          "{track2}"
+        ]
+      },
+      "status": 200
+    },
+    {
+      "call": "POST /playlists/{canary}/items",
+      "body": {
+        "uris": [
+          "{track3}"
+        ],
+        "position": 1
+      },
+      "status": 201
+    },
+    {
+      "call": "POST /playlists/{canary}/items",
+      "body": {
+        "uris": [
+          "{track4}"
+        ]
+      },
+      "status": 201
+    },
+    {
+      "call": "GET /playlists/{canary}/items",
+      "status": 200,
+      "uris": [
+        "{track1}",
+        "{track3}",
+        "{track2}",
+        "{track4}"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "_about": "Seeded state for the fake Spotify. Tracks are generated (see store.py); each playlist takes a slice of that catalogue: [start, end) indexes, optionally repeated. Seven users, more than a Development Mode app's five-user cap. All names are invented.",
+  "catalog": {"artists": 24, "albums_per_artist": 2, "tracks_per_album": 8},
+  "users": [
+    {"id": "alice", "display_name": "Alice Harness"},
+    {"id": "bob", "display_name": "Bob Harness"},
+    {"id": "carol", "display_name": "Carol Harness"},
+    {"id": "dave", "display_name": "Dave Harness"},
+    {"id": "erin", "display_name": "Erin Harness"},
+    {"id": "frank", "display_name": "Frank Harness"},
+    {"id": "grace", "display_name": "Grace Harness"}
+  ],
+  "playlists": [
+    {"key": "alice-morning-mix", "owner": "alice", "name": "Morning Mix", "description": "Forty tracks to shuffle.", "public": false, "tracks": [0, 40]},
+    {"key": "alice-long-haul", "owner": "alice", "name": "Long Haul", "description": "250 tracks: more than one page, more than one write batch.", "public": true, "tracks": [40, 290]},
+    {"key": "alice-morning-archive", "owner": "alice", "name": "Morning Mix [Archive]", "description": "", "public": false, "tracks": [0, 0]},
+    {"key": "alice-old-faithful", "owner": "alice", "name": "Old Faithful", "description": "Served in the legacy response shape (tracks / track keys).", "public": false, "shape": "legacy", "tracks": [290, 302]},
+    {"key": "alice-on-repeat", "owner": "alice", "name": "On Repeat", "description": "Every track twice.", "public": false, "tracks": [302, 307], "repeat": 2},
+    {"key": "bob-road-trip", "owner": "bob", "name": "Road Trip", "description": "Collaborative: Alice can edit it.", "public": false, "collaborative": true, "collaborators": ["alice"], "tracks": [100, 130]},
+    {"key": "bob-finds", "owner": "bob", "name": "Bob's Finds", "description": "Public, followed by Alice: a raid source she cannot edit.", "public": true, "followers": ["alice"], "tracks": [150, 210]},
+    {"key": "carol-late-night", "owner": "carol", "name": "Late Night", "description": "", "public": true, "tracks": [210, 240]},
+    {"key": "dave-private-stash", "owner": "dave", "name": "Dave's Private Stash", "description": "", "public": false, "tracks": [240, 250]},
+    {"key": "erin-workout", "owner": "erin", "name": "Workout", "description": "", "public": true, "tracks": [250, 280]},
+    {"key": "frank-focus", "owner": "frank", "name": "Focus", "description": "", "public": true, "tracks": [280, 300]},
+    {"key": "grace-sunday", "owner": "grace", "name": "Sunday", "description": "", "public": true, "tracks": [300, 330]}
+  ]
+}

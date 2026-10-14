@@ -1,0 +1,42 @@
+{
+  "id": "remove-every-occurrence",
+  "summary": "Removing a URI removes every occurrence of it.",
+  "behaviours": [
+    "writes.remove-every-occurrence"
+  ],
+  "playlists": {
+    "canary": "own"
+  },
+  "tracks": 2,
+  "steps": [
+    {
+      "call": "PUT /playlists/{canary}/items",
+      "body": {
+        "uris": [
+          "{track1}",
+          "{track2}",
+          "{track1}"
+        ]
+      },
+      "status": 200
+    },
+    {
+      "call": "DELETE /playlists/{canary}/items",
+      "body": {
+        "items": [
+          {
+            "uri": "{track1}"
+          }
+        ]
+      },
+      "status": 200
+    },
+    {
+      "call": "GET /playlists/{canary}/items",
+      "status": 200,
+      "uris": [
+        "{track2}"
+      ]
+    }
+  ]
+}

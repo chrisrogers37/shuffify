@@ -1,0 +1,20 @@
+/* Shared design sources are compiled into the committed same-origin stylesheet.
+   Edit assets/design/; never edit shuffify/static/css/tailwind.css directly. */
+@import "./design/core.css";
+@import "./design/components/library.css";
+@import "./design/components/workspace.css";
+@import "./design/components/routines.css";
+@import "./design/components/action-footer.css";
+@import "./design/pages/landing.css";
+@import "./design/pages/errors.css";
+@import "./design/pages/legal.css";
+@import "./design/pages/settings.css";
+@import "./design/pages/library.css";
+@import "./design/pages/workspace.css";
+@import "./design/pages/setup.css";
+@import "./design/pages/activity.css";
+@import "./design/pages/routines.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

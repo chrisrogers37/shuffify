@@ -1,0 +1,109 @@
+"""
+Enums for job types, schedule types, and interval values.
+
+Single source of truth for string constants used across schemas,
+models, services, and the scheduler.
+"""
+
+from enum import StrEnum
+
+
+class JobType(StrEnum):
+    """Types of scheduled jobs."""
+
+    RAID = "raid"
+    SHUFFLE = "shuffle"
+    RAID_AND_SHUFFLE = "raid_and_shuffle"
+    RAID_AND_DRIP = "raid_and_drip"
+    ROTATE = "rotate"
+    DRIP = "drip"
+
+
+class RotationMode(StrEnum):
+    """Modes for the scheduled rotation job type."""
+
+    SWAP = "swap"
+
+
+class ScheduleType(StrEnum):
+    """Schedule trigger types."""
+
+    INTERVAL = "interval"
+    CRON = "cron"
+
+
+class IntervalValue(StrEnum):
+    """Predefined interval values for interval schedules."""
+
+    EVERY_6H = "every_6h"
+    EVERY_12H = "every_12h"
+    DAILY = "daily"
+    EVERY_3D = "every_3d"
+    WEEKLY = "weekly"
+
+
+class SnapshotType(StrEnum):
+    """Types of playlist snapshots."""
+
+    AUTO_PRE_SHUFFLE = "auto_pre_shuffle"
+    AUTO_PRE_RAID = "auto_pre_raid"
+    AUTO_PRE_COMMIT = "auto_pre_commit"
+    AUTO_PRE_ROTATE = "auto_pre_rotate"
+    AUTO_PRE_DRIP = "auto_pre_drip"
+    MANUAL = "manual"
+    SCHEDULED_PRE_EXECUTION = "scheduled_pre_execution"
+
+
+class LockTier(StrEnum):
+    """Tiers for per-track playlist locks."""
+
+    STANDARD = "standard"  # 30-day auto-expiry
+    SUPER = "super"  # permanent
+
+
+class PendingRaidStatus(StrEnum):
+    """Status of a pending raid track."""
+
+    PENDING = "pending"
+    PROMOTED = "promoted"
+    DISMISSED = "dismissed"
+
+
+class ActivityType(StrEnum):
+    """Types of user activities tracked in the activity log."""
+
+    SHUFFLE = "shuffle"
+    WORKSHOP_COMMIT = "workshop_commit"
+    WORKSHOP_SESSION_SAVE = "workshop_session_save"
+    WORKSHOP_SESSION_DELETE = "workshop_session_delete"
+    UPSTREAM_SOURCE_ADD = "upstream_source_add"
+    UPSTREAM_SOURCE_DELETE = "upstream_source_delete"
+    SCHEDULE_CREATE = "schedule_create"
+    SCHEDULE_UPDATE = "schedule_update"
+    SCHEDULE_DELETE = "schedule_delete"
+    SCHEDULE_TOGGLE = "schedule_toggle"
+    SCHEDULE_RUN = "schedule_run"
+    SCHEDULE_RUN_ROLLED_BACK = "schedule_run_rolled_back"
+    SNAPSHOT_CREATE = "snapshot_create"
+    SNAPSHOT_RESTORE = "snapshot_restore"
+    SNAPSHOT_DELETE = "snapshot_delete"
+    ARCHIVE_TRACKS = "archive_tracks"
+    UNARCHIVE_TRACKS = "unarchive_tracks"
+    PAIR_CREATE = "pair_create"
+    PAIR_DELETE = "pair_delete"
+    RAID_WATCH_ADD = "raid_watch_add"
+    RAID_WATCH_REMOVE = "raid_watch_remove"
+    RAID_SYNC_NOW = "raid_sync_now"
+    RAID_SOURCE_RESOLVE_FAILED = "raid_source_resolve_failed"
+    RAID_PROMOTE = "raid_promote"
+    RAID_DISMISS = "raid_dismiss"
+    RAID_DRIP = "raid_drip"
+    RAID_LINK_CREATE = "raid_link_create"
+    RAID_LINK_DELETE = "raid_link_delete"
+    PLAYLIST_SETUP_SAVE = "playlist_setup_save"
+    PLAYLIST_SETUP_CREATE = "playlist_setup_create"
+    TRACK_LOCK = "track_lock"
+    TRACK_UNLOCK = "track_unlock"
+    SETTINGS_CHANGE = "settings_change"
+    LOGIN = "login"
+    LOGOUT = "logout"

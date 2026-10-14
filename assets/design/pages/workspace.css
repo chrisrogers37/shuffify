@@ -1,0 +1,126 @@
+/* Playlist workspace composition: identity header, action and tool bars, track
+   rows and row actions, tool panels and the narrow draft footer. Compose the shared
+   recipes and tokens; recipes stay in components/workspace.css, and the draft footer is the
+   shared sticky action footer (components/action-footer.css). */
+
+@layer components {
+  /* The workspace is a core container (at most 1200px, 20px gutters, 40px from 768px). From
+     the workspace width an open task takes 360px beside the playlist, 24px apart (the core
+     grid). */
+  #workshop-review-workspace { padding-top: var(--sh-space-6); }
+
+  /* Primary content in reading order: identity, the draft group, the action and tool bars,
+     then the list. Below the workspace width the draft group is the sticky footer after the
+     list (CSS order moves the one element; nothing is duplicated). */
+  .sh-workspace-primary {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: var(--sh-space-5);
+  }
+
+  .sh-workspace-identity {
+    display: grid;
+    min-width: 0;
+    gap: var(--sh-space-2);
+  }
+  .sh-workspace-title { overflow-wrap: anywhere; }
+  /* The selector's list opens under its row, inside the content width at every size. */
+  .sh-workspace-identity-row {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sh-space-2) var(--sh-space-3);
+  }
+  .sh-workspace-popover {
+    position: absolute;
+    top: calc(100% + var(--sh-space-2));
+    left: 0;
+    z-index: 50;
+    width: min(var(--sh-layout-message), 100%);
+    overflow: hidden;
+  }
+  .sh-workspace-hub-popover {
+    left: 50%;
+    width: min(var(--sh-layout-message), calc(100vw - 2 * var(--sh-space-gutter)));
+    transform: translateX(-50%);
+  }
+  .sh-workspace-popover-list {
+    max-height: calc(4 * var(--sh-space-18));
+    overflow-y: auto;
+  }
+
+  .sh-workspace-draft {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sh-space-3);
+  }
+  .sh-workspace-save-status {
+    display: grid;
+    flex: 1 1 calc(3 * var(--sh-space-20));
+    min-width: 0;
+    justify-items: start;
+    gap: var(--sh-space-2);
+  }
+  .sh-workspace-draft-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sh-space-2);
+  }
+  .sh-workspace-actions,
+  .sh-workspace-tools {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sh-space-2) var(--sh-space-3);
+  }
+  #workshop-algorithm-summary { min-width: 0; overflow-wrap: anywhere; }
+
+  /* The playlist scrolls with the document: no nested track scroller. Rows sit 8px apart. */
+  .sh-workspace-list {
+    display: grid;
+    min-width: 0;
+    gap: var(--sh-space-3);
+  }
+  .sh-workspace-tracks {
+    display: grid;
+    min-width: 0;
+    gap: var(--sh-space-2);
+  }
+  /* A row's open actions: under the row's own line, inside the row. */
+  .sh-workspace-row-actions {
+    display: grid;
+    flex-basis: 100%;
+    min-width: 0;
+    gap: var(--sh-space-3);
+    border-top: 1px solid var(--sh-border);
+    padding-block: var(--sh-space-3) var(--sh-space-1);
+  }
+
+  /* Tool panels, Save and results take core's task layout: beside the playlist from the
+     workspace width, else (and for a full-width setup task) in the content area, scrolling with
+     the document. A setup task's prose keeps a readable measure. */
+  .sh-workspace-setup { max-width: var(--sh-layout-legal-copy); }
+
+  #workshop-save-panel .sh-panel-footer {
+    background: var(--sh-surface);
+    border-radius: 0 0 var(--sh-radius-panel) var(--sh-radius-panel);
+  }
+  #workshop-source-results > * + * { margin-top: var(--sh-space-4); }
+  #workshop-source-results button { max-width: 100%; white-space: normal; }
+
+  /* Below the workspace width only Add tracks and Inbox stay in the bars; Playlist tools
+     lists every destination. Every wide-only control is a button (core's inline-flex). */
+  .sh-workspace-wide-only { display: none; }
+
+  @screen sh-workspace {
+    .sh-workspace-primary { padding-bottom: var(--sh-space-10); }
+    .sh-workspace-wide-only { display: inline-flex; }
+    .sh-workspace-narrow-only { display: none; }
+  }
+}

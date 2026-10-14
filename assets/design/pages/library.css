@@ -1,0 +1,105 @@
+/* Library page composition: the header, sections and playlist rows.
+   It only arranges the shared recipes and tokens; recipes and their states stay in
+   components/library.css. */
+@layer components {
+  /* Header: "Your playlists" and its controls, then the plain welcome text. */
+  .sh-library-header { display: grid; gap: var(--sh-space-3); }
+  /* The title row, and Organize mode's note: what its controls save, and the reset that
+     clears them. Each puts its words first and its controls after, wrapping when narrow. */
+  .sh-library-title-row,
+  .sh-library-organize-note {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sh-space-3);
+  }
+  .sh-library-header-actions { display: flex; flex-wrap: wrap; gap: var(--sh-space-2); }
+  .sh-library-intro {
+    max-width: var(--sh-layout-legal-copy);
+    font-size: var(--sh-type-body);
+    line-height: var(--sh-leading-description);
+  }
+  .sh-library-greeting { color: var(--sh-ink); font-weight: var(--sh-weight-semibold); }
+  .sh-library-organize-note > p {
+    flex: 1 1 calc(var(--sh-space-20) * 4);
+    min-width: 0;
+    max-width: var(--sh-layout-legal-copy);
+  }
+
+  /* Sections: a heading with its count, then an ordered list of rows. */
+  .sh-library-section-header {
+    display: flex;
+    align-items: center;
+    gap: var(--sh-space-2);
+    margin-bottom: var(--sh-space-3);
+  }
+  .sh-library-list { display: grid; gap: var(--sh-space-2); }
+  .sh-library-hidden-label { display: inline-flex; align-items: center; gap: var(--sh-space-2); }
+  #hidden-grid-wrapper { margin-top: var(--sh-space-3); }
+
+  /* Rows: intact 64px artwork, then the name and count. The links, the Playlist actions
+     disclosure and the Organize controls follow; below 768px the links take a line. */
+  .sh-library-row {
+    display: grid;
+    grid-template-columns: var(--sh-space-16) minmax(0, 1fr);
+    align-items: center;
+    gap: var(--sh-space-3) var(--sh-space-4);
+    min-width: 0;
+    padding: var(--sh-space-3);
+  }
+  .sh-library-row > .sh-library-row-links,
+  .sh-library-row > .sh-library-actions,
+  .sh-library-row > .sh-library-organize { grid-column: 1 / -1; }
+  .sh-library-row-art { display: flex; width: var(--sh-space-16); height: var(--sh-space-16); }
+  .sh-library-row-info { min-width: 0; }
+  .sh-library-row-title {
+    font-size: var(--sh-type-reading);
+    line-height: var(--sh-leading-subheading);
+    overflow-wrap: anywhere;
+  }
+  /* A row's links, and its Organize controls: favorite, hide or show, and its place in
+     its section. Each is one line that wraps. */
+  .sh-library-row-links,
+  .sh-library-organize,
+  .sh-library-order,
+  .sh-library-position {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sh-space-2);
+  }
+  @screen md {
+    .sh-library-row { grid-template-columns: var(--sh-space-16) minmax(0, 1fr) auto; }
+    .sh-library-row > .sh-library-row-links { grid-column: auto; justify-content: flex-end; }
+    /* Playlist actions and Organize sit under the name, as part of the same playlist. */
+    .sh-library-row > .sh-library-actions,
+    .sh-library-row > .sh-library-organize { grid-column: 2 / -1; }
+  }
+
+  /* Playlist actions: the labelled disclosure holding the row's Spotify changes. */
+  .sh-library-actions-body {
+    display: grid;
+    gap: var(--sh-space-4);
+    max-width: var(--sh-layout-workspace-min);
+    border-top: 1px solid var(--sh-border);
+    padding-top: var(--sh-space-3);
+  }
+  .sh-library-visibility { display: grid; justify-items: start; gap: var(--sh-space-2); }
+
+  /* Organize controls, set apart from Playlist actions above them. */
+  .sh-library-organize {
+    border-top: 1px solid var(--sh-border);
+    padding-top: var(--sh-space-3);
+  }
+  .sh-library-position > .sh-input { width: var(--sh-space-20); }
+  .sh-library-grip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--sh-space-11);
+    min-height: var(--sh-space-11);
+    color: var(--sh-muted);
+    cursor: grab;
+  }
+}

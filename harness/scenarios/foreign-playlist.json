@@ -1,0 +1,26 @@
+{
+  "id": "foreign-playlist",
+  "summary": "Another user's playlist answers with its details but without its items, and its items are refused.",
+  "behaviours": [
+    "items.foreign-playlist"
+  ],
+  "playlists": {
+    "theirs": "foreign"
+  },
+  "steps": [
+    {
+      "call": "GET /playlists/{theirs}",
+      "status": 200,
+      "json": {
+        "id": "{theirs}"
+      },
+      "absent": [
+        "items"
+      ]
+    },
+    {
+      "call": "GET /playlists/{theirs}/items",
+      "status": 403
+    }
+  ]
+}

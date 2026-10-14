@@ -1,0 +1,41 @@
+{
+  "id": "search-paging",
+  "summary": "Search results come 5 to a page by default and at most 10.",
+  "behaviours": [
+    "paging.search"
+  ],
+  "steps": [
+    {
+      "call": "GET /search",
+      "query": {
+        "q": "velvet",
+        "type": "track"
+      },
+      "status": 200,
+      "count": {
+        "tracks.items": 5
+      }
+    },
+    {
+      "call": "GET /search",
+      "query": {
+        "q": "velvet",
+        "type": "track",
+        "limit": "10"
+      },
+      "status": 200,
+      "count": {
+        "tracks.items": 10
+      }
+    },
+    {
+      "call": "GET /search",
+      "query": {
+        "q": "velvet",
+        "type": "track",
+        "limit": "11"
+      },
+      "status": 400
+    }
+  ]
+}

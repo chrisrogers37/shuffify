@@ -1,0 +1,155 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  css:
+    name: Tailwind stylesheet up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The compiled stylesheet is committed, so a deploy never depends on a
+      # build-time download. This fails when a template changed without a
+      # rebuild, which would otherwise ship stale CSS silently.
+      - name: Verify committed CSS matches templates
+        run: ./scripts/build-css.sh --check
+
+  backend:
+    name: Backend lint & tests
+    runs-on: ubuntu-latest
+    env:
+      # Config is read at import time, so provide test credentials up front.
+      # Fixtures override these; production values are never used in CI.
+      APP_CONFIG: testing
+      SPOTIFY_CLIENT_ID: test_client_id
+      SPOTIFY_CLIENT_SECRET: test_client_secret
+      SPOTIFY_REDIRECT_URI: http://localhost:8000/callback
+      SECRET_KEY: ci-test-secret-key
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements/dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/dev.txt
+
+      - name: Lint (ruff)
+        # The whole tree, tests included. Local virtualenvs are excluded in
+        # pyproject.toml.
+        run: ruff check .
+
+      # Two branches can hand-pick the same Alembic revision id and git merges
+      # them without a conflict, because the filenames differ. The app
+      # refuses to boot unless the schema is exactly at head, so an
+      # ambiguous head is a failed deploy rather than a migration warning.
+      # Pure text analysis: no database, no app import, so it runs here rather
+      # than waiting on the test step.
+      - name: Migration chain integrity
+        run: python scripts/check-migration-chain.py
+
+      - name: Format check (black)
+        # Non-blocking: ruff is the enforced linter, so this only reports
+        # formatting drift.
+        run: black --check shuffify/
+        continue-on-error: true
+
+      - name: Tests + coverage
+        run: |
+          pytest tests/ -m "not integration" \
+            --cov=shuffify --cov-report=term-missing \
+            --cov-fail-under=${COV_MIN}
+        env:
+          # Minimum coverage; ratchet up as coverage improves.
+          COV_MIN: '80'
+
+  harness:
+    name: Harness (fresh PostgreSQL migrations + app boot)
+    runs-on: ubuntu-latest
+    env:
+      HARNESS_SERVICES: external
+      HARNESS_PYTHON: python
+      DATABASE_URL: postgresql://shuffify@127.0.0.1:5432/shuffify_harness
+      REDIS_URL: redis://127.0.0.1:6379/0
+    # This job builds a new PostgreSQL 16 database the way every new database
+    # is built (`flask create-schema` from the models, then `flask db
+    # upgrade`) and boots the real app on it under the harness config:
+    # schema gate, Redis sessions and the scheduler live, and the network
+    # guard on. Lint and tests are the backend job's, so --quick skips them.
+    # The behaviour tests (tests/e2e) then drive that app against the fake
+    # Spotify, a browser pass included, whose screenshots are kept as an
+    # artifact.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: shuffify_harness
+          POSTGRES_USER: shuffify
+          # A throwaway CI container needs no password.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U shuffify -d shuffify_harness"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements/dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/dev.txt
+
+      - name: Harness setup
+        run: scripts/harness.sh setup --quick
+
+      # The browser pass (tests/e2e/test_pages.py) drives headless Chromium.
+      - name: Install headless Chromium
+        run: python -m playwright install --with-deps --only-shell chromium
+
+      - name: Behaviour tests
+        timeout-minutes: 15
+        run: scripts/harness.sh e2e
+
+      - name: Page screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: page-screenshots
+          path: .harness/screenshots/
+          include-hidden-files: true
+          if-no-files-found: ignore
+
+      - name: Harness logs
+        if: failure()
+        run: |
+          cat .harness/migrate.log || true
+          cat .harness/app.log || true
+          cat .harness/fake-spotify.log || true
+          cat .harness/netguard-violations.log || true

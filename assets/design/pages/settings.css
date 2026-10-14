@@ -1,0 +1,81 @@
+@layer components {
+  .sh-settings-page {
+    padding-block: var(--sh-space-10) var(--sh-space-16);
+  }
+
+  .sh-settings-content {
+    max-width: var(--sh-layout-legal-copy);
+    margin-inline: auto;
+  }
+
+  .sh-settings-heading {
+    margin-bottom: var(--sh-space-8);
+  }
+
+  .sh-settings-heading h1 {
+    font-size: var(--sh-type-heading);
+    line-height: var(--sh-type-leading-heading);
+  }
+
+  .sh-settings-heading p {
+    margin-top: var(--sh-space-3);
+    font-size: var(--sh-type-body);
+    line-height: var(--sh-type-leading-body);
+  }
+
+  .sh-settings-fields {
+    min-width: 0;
+  }
+
+  .sh-settings-section {
+    display: grid;
+    min-width: 0;
+    gap: var(--sh-space-6);
+    border-top: 1px solid var(--sh-border);
+    padding-block: var(--sh-space-6);
+  }
+
+  .sh-settings-section h2 {
+    font-size: var(--sh-type-card);
+    line-height: var(--sh-leading-subheading);
+  }
+
+  .sh-settings-limit {
+    max-width: var(--sh-space-22);
+  }
+
+  .sh-settings-save {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sh-space-4);
+    padding-block: var(--sh-space-6);
+  }
+
+  .sh-settings-account {
+    margin-top: var(--sh-space-6);
+    padding-bottom: 0;
+    font-size: var(--sh-type-body);
+  }
+
+  .sh-settings-account-name {
+    color: var(--sh-ink);
+    overflow-wrap: anywhere;
+  }
+
+  .sh-settings-unavailable {
+    display: grid;
+    gap: var(--sh-space-4);
+  }
+
+  .sh-settings-unavailable dd {
+    margin-top: var(--sh-space-1);
+  }
+
+  @screen md {
+    .sh-settings-page {
+      padding-block: var(--sh-space-14) var(--sh-space-20);
+    }
+  }
+}

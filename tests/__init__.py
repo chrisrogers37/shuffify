@@ -1,0 +1,1 @@
+"""Shuffify test suite."""

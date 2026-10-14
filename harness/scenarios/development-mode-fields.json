@@ -1,0 +1,33 @@
+{
+  "id": "development-mode-fields",
+  "summary": "A Development Mode app gets no email, country, product, followers or explicit-content setting for the user, and no popularity or markets for a track.",
+  "behaviours": [
+    "dev-mode.fields-removed"
+  ],
+  "tracks": 1,
+  "steps": [
+    {
+      "call": "GET /me",
+      "status": 200,
+      "absent": [
+        "email",
+        "country",
+        "product",
+        "followers",
+        "explicit_content"
+      ]
+    },
+    {
+      "call": "GET /tracks/{track1.id}",
+      "status": 200,
+      "json": {
+        "uri": "{track1}"
+      },
+      "absent": [
+        "popularity",
+        "available_markets",
+        "album.available_markets"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+"""Direct API pathway — resolves tracks via Spotify Web API."""
+
+import logging
+
+from shuffify.spotify.exceptions import (
+    SpotifyAPIError,
+    SpotifyNotFoundError,
+    SpotifyTokenExpiredError,
+)
+
+from .base import ResolveResult
+
+logger = logging.getLogger(__name__)
+
+HANDLED_SOURCE_TYPES = ("own", "external")
+
+
+class DirectAPIPathway:
+    """Pathway 1: Fetch tracks directly from Spotify API.
+
+    Works for playlists the user owns or collaborates on.
+    Spotify withholds the items of external playlists.
+    """
+
+    @property
+    def name(self) -> str:
+        return "direct_api"
+
+    def can_handle(self, source) -> bool:
+        return source.source_type in HANDLED_SOURCE_TYPES
+
+    def resolve(self, source, api=None) -> ResolveResult:
+        if api is None:
+            # No API client → this pathway cannot apply. Signal to
+            # the resolver to fall through silently rather than log
+            # a hard failure.
+            return ResolveResult(
+                track_uris=[],
+                pathway_name=self.name,
+                success=False,
+                applicable=False,
+                error_message="No API client provided",
+            )
+
+        playlist_id = source.source_playlist_id
+        if not playlist_id:
+            return ResolveResult(
+                track_uris=[],
+                pathway_name=self.name,
+                success=False,
+                applicable=False,
+                error_message="No playlist ID on source",
+            )
+
+        try:
+            tracks = api.get_playlist_tracks(playlist_id)
+        except SpotifyNotFoundError:
+            logger.info(
+                "DirectAPI: playlist %s not found, "
+                "deferring to next pathway",
+                playlist_id,
+            )
+            return ResolveResult(
+                track_uris=[],
+                pathway_name=self.name,
+                success=False,
+                error_message="Playlist not found via API",
+            )
+        except SpotifyTokenExpiredError:
+            # Let the executor's auth-refresh layer
+            # (`JobExecutorService._get_spotify_api`) catch and
+            # re-arm the token. Falling through to SearchPathway
+            # / PublicScraperPathway here would burn two extra
+            # network calls and obscure the real cause.
+            raise
+        except SpotifyAPIError as e:
+            logger.warning(
+                "DirectAPI failed for %s: %s: %s",
+                playlist_id,
+                type(e).__name__,
+                e,
+            )
+            return ResolveResult(
+                track_uris=[],
+                pathway_name=self.name,
+                success=False,
+                error_message=f"{type(e).__name__}: {e}",
+            )
+
+        uris = [
+            t["uri"] for t in tracks if t.get("uri")
+        ]
+
+        if not uris:
+            # Empty result — likely Spotify withholding the items
+            logger.info(
+                "DirectAPI returned empty tracks for %s "
+                "(likely API restriction)",
+                playlist_id,
+            )
+            return ResolveResult(
+                track_uris=[],
+                pathway_name=self.name,
+                success=False,
+            )
+
+        return ResolveResult(
+            track_uris=uris,
+            pathway_name=self.name,
+            success=True,
+        )

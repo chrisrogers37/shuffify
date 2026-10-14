@@ -1,0 +1,53 @@
+/* Dedicated guided routine task. The shared design tokens own its palette and type scale. */
+@layer components {
+  .sh-routine-task {
+    display: grid;
+    gap: var(--sh-space-6);
+    min-width: 0;
+    padding-block: var(--sh-space-6) var(--sh-space-10);
+  }
+  .sh-routine-task-header { display: grid; justify-items: start; gap: var(--sh-space-3); min-width: 0; }
+  .sh-routine-task-header h1 { overflow-wrap: anywhere; }
+  .sh-routine-status { min-height: 1.5em; color: var(--sh-ink); }
+  .sh-routine-progress ol { display: flex; flex-wrap: wrap; gap: var(--sh-space-2); padding: 0; list-style: none; }
+  .sh-routine-progress li {
+    border: 1px solid var(--sh-border); border-radius: var(--sh-radius-control);
+    padding: var(--sh-space-2) var(--sh-space-3); color: var(--sh-muted);
+  }
+  .sh-routine-progress [aria-current="step"] { color: var(--sh-ink); border-color: var(--sh-accent); font-weight: var(--sh-weight-semibold); }
+  .sh-routine-layout { display: grid; gap: var(--sh-space-6); min-width: 0; }
+  .sh-routine-main, .sh-routine-summary, .sh-routine-step { min-width: 0; }
+  .sh-routine-main { display: grid; gap: var(--sh-space-5); }
+  .sh-routine-step, .sh-routine-summary { padding: var(--sh-space-6); border-radius: var(--sh-radius-panel); }
+  .sh-routine-step { display: grid; gap: var(--sh-space-5); }
+  .sh-routine-step > .sh-heading { scroll-margin-top: calc(var(--sh-space-nav) + var(--sh-space-4)); }
+  .sh-routine-step[hidden] { display: none; }
+  .sh-routine-goals, .sh-routine-field-grid, .sh-routine-result-actions { display: grid; gap: var(--sh-space-3); }
+  .sh-routine-goals button, .sh-routine-result-actions a { min-height: var(--sh-space-control); }
+  .sh-routine-group { display: grid; gap: var(--sh-space-3); border-top: 1px solid var(--sh-border); padding-top: var(--sh-space-5); }
+  .sh-routine-group[hidden] { display: none; }
+  .sh-routine-list { padding-left: var(--sh-space-5); list-style: disc; overflow-wrap: anywhere; }
+  .sh-routine-candidates { display: grid; gap: var(--sh-space-3); }
+  .sh-routine-candidate { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sh-space-3); padding: var(--sh-space-3); border: 1px solid var(--sh-border); border-radius: var(--sh-radius-control); }
+  .sh-routine-candidate p { overflow-wrap: anywhere; }
+  .sh-routine-shared-note { border-left: 3px solid var(--sh-accent); padding: var(--sh-space-3); background: var(--sh-surface); }
+  .sh-routine-review-details dl, .sh-routine-summary dl { display: grid; gap: var(--sh-space-3); min-width: 0; }
+  #routine-review-disclosure summary { min-height: var(--sh-space-control); cursor: pointer; padding-block: var(--sh-space-3); }
+  .sh-routine-fact { display: grid; gap: var(--sh-space-1); border-bottom: 1px solid var(--sh-border); padding-bottom: var(--sh-space-2); min-width: 0; }
+  .sh-routine-fact dt { color: var(--sh-muted); font-size: var(--sh-type-caption); }
+  .sh-routine-fact dd { margin: 0; overflow-wrap: anywhere; }
+  .sh-routine-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sh-space-3); }
+  .sh-routine-footer button { min-height: var(--sh-space-control); }
+  .sh-routine-footer button[aria-disabled="true"] { cursor: progress; opacity: .65; }
+  @media (max-width: 63.999rem) {
+    .sh-routine-task[data-view="review"] .sh-routine-summary { display: none; }
+  }
+  @media (min-width: 48rem) {
+    .sh-routine-field-grid, .sh-routine-goals, .sh-routine-result-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (min-width: 64rem) {
+    .sh-routine-layout { grid-template-columns: minmax(0, 1.8fr) minmax(16rem, .8fr); align-items: start; }
+    .sh-routine-summary { position: sticky; top: var(--sh-space-6); }
+    .sh-routine-step > .sh-heading { scroll-margin-top: calc(var(--sh-space-nav-wide) + var(--sh-space-4)); }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "id": "write-limits",
+  "summary": "A write takes at most 100 URIs, each of a track Spotify has; a refused write changes nothing.",
+  "behaviours": [
+    "writes.max-100-uris",
+    "writes.unknown-track-refused"
+  ],
+  "playlists": {
+    "canary": "own"
+  },
+  "tracks": 1,
+  "steps": [
+    {
+      "call": "PUT /playlists/{canary}/items",
+      "body": {
+        "uris": [
+          "{track1}"
+        ]
+      },
+      "status": 200
+    },
+    {
+      "call": "PUT /playlists/{canary}/items",
+      "body": {
+        "uris": [
+          {
+            "$repeat": "{track1}",
+            "times": 101
+          }
+        ]
+      },
+      "status": 400
+    },
+    {
+      "call": "POST /playlists/{canary}/items",
+      "body": {
+        "uris": [
+          {
+            "$repeat": "{track1}",
+            "times": 101
+          }
+        ]
+      },
+      "status": 400
+    },
+    {
+      "call": "POST /playlists/{canary}/items",
+      "body": {
+        "uris": [
+          "spotify:track:0000000000000000000000"
+        ]
+      },
+      "status": 400
+    },
+    {
+      "call": "GET /playlists/{canary}/items",
+      "status": 200,
+      "uris": [
+        "{track1}"
+      ]
+    }
+  ]
+}

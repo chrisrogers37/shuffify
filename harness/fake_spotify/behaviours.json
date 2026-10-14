@@ -1,0 +1,171 @@
+{
+  "_about": "Every behaviour the fake Spotify models, labelled by how it is known. docs-only: from Spotify's documentation (references, changelogs, announcements) alone. checked-live: confirmed against real Spotify too; 'checked' says how. Each names the scenario (harness/scenarios/) a live replay checks it with, or says why none can. tests/test_scenarios.py keeps this file and the scenarios in step. A passing live replay makes a scenario's behaviours checked-live.",
+  "behaviours": [
+    {
+      "id": "paging.items",
+      "summary": "A playlist's items come 20 to a page by default, at most 50.",
+      "source": "https://developer.spotify.com/documentation/web-api/reference/get-playlists-items",
+      "label": "docs-only",
+      "scenario": "items-paging"
+    },
+    {
+      "id": "paging.limit-zero-refused",
+      "summary": "A limit of 0 is refused, though the schema allows it.",
+      "source": "shuffify/routes/playlist_pairs.py (\"Spotify API rejects limit=0\")",
+      "label": "checked-live",
+      "checked": "Observed in real Spotify responses; the archive view records the refusal.",
+      "scenario": "items-paging"
+    },
+    {
+      "id": "paging.my-playlists",
+      "summary": "The user's playlists come at most 50 to a page, from an offset of at most 100,000.",
+      "source": "https://developer.spotify.com/documentation/web-api/reference/get-a-list-of-current-users-playlists",
+      "label": "docs-only",
+      "scenario": "my-playlists-bounds"
+    },
+    {
+      "id": "paging.search",
+      "summary": "Search results come 5 to a page by default, at most 10.",
+      "source": "https://developer.spotify.com/documentation/web-api/reference/search",
+      "label": "docs-only",
+      "scenario": "search-paging"
+    },
+    {
+      "id": "items.foreign-playlist",
+      "summary": "Another user's playlist answers with its details but not its items, and its items are a 403.",
+      "source": "https://developer.spotify.com/documentation/web-api/references/changes/february-2026",
+      "label": "docs-only",
+      "scenario": "foreign-playlist"
+    },
+    {
+      "id": "writes.max-100-uris",
+      "summary": "A write takes at most 100 URIs.",
+      "source": "https://developer.spotify.com/documentation/web-api/reference/add-tracks-to-playlist",
+      "label": "docs-only",
+      "scenario": "write-limits"
+    },
+    {
+      "id": "writes.unknown-track-refused",
+      "summary": "A write naming a track Spotify does not have is refused with a 400.",
+      "source": "https://developer.spotify.com/documentation/web-api/reference/add-tracks-to-playlist",
+      "label": "docs-only",
+      "scenario": "write-limits"
+    },
+    {
+      "id": "writes.remove-every-occurrence",
+      "summary": "Removing a URI removes every occurrence of it.",
+      "source": "https://developer.spotify.com/documentation/web-api/reference/remove-tracks-playlist",
+      "label": "docs-only",
+      "scenario": "remove-every-occurrence"
+    },
+    {
+      "id": "writes.add-at-position",
+      "summary": "Adding at a position inserts there; without one, at the end.",
+      "source": "https://developer.spotify.com/documentation/web-api/reference/add-tracks-to-playlist",
+      "label": "docs-only",
+      "scenario": "add-at-position"
+    },
+    {
+      "id": "writes.change-details-no-body",
+      "summary": "Change Playlist Details answers 200 with no body.",
+      "source": "https://developer.spotify.com/documentation/web-api/reference/change-playlist-details",
+      "label": "docs-only",
+      "scenario": "change-details"
+    },
+    {
+      "id": "dev-mode.fields-removed",
+      "summary": "A Development Mode app gets no email, country, product, followers or explicit-content setting for the user, and no popularity or markets for a track.",
+      "source": "https://developer.spotify.com/documentation/web-api/references/changes/february-2026",
+      "label": "docs-only",
+      "scenario": "development-mode-fields"
+    },
+    {
+      "id": "dev-mode.audio-features-refused",
+      "summary": "Audio features are a 403 for a Development Mode app.",
+      "source": "https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api",
+      "label": "docs-only",
+      "scenario": "audio-features"
+    },
+    {
+      "id": "dev-mode.removed-endpoints",
+      "summary": "The endpoints removed for Development Mode apps (Get Several Tracks, Create Playlist for a user ID) are not served; the fake answers 404.",
+      "source": "https://developer.spotify.com/documentation/web-api/references/changes/february-2026",
+      "label": "docs-only",
+      "scenario": "removed-endpoints",
+      "note": "Only the read is replayed: the removed create would make a playlist if it still worked."
+    },
+    {
+      "id": "scopes.writes-need-modify-scope",
+      "summary": "A write needs playlist-modify-public or -private for the playlist's visibility, a create the one for the new playlist's; without it, a 403.",
+      "source": "https://developer.spotify.com/documentation/web-api/concepts/scopes",
+      "label": "docs-only",
+      "scenario": null,
+      "why": "Needs a token granted fewer scopes than shuffify asks for; a replay has the one token."
+    },
+    {
+      "id": "scopes.read-private",
+      "summary": "Without playlist-read-private, the user's playlists list only the public ones.",
+      "source": "https://developer.spotify.com/documentation/web-api/reference/get-a-list-of-current-users-playlists",
+      "label": "docs-only",
+      "scenario": null,
+      "why": "Needs a token granted fewer scopes than shuffify asks for; a replay has the one token."
+    },
+    {
+      "id": "oauth.redirect-uris",
+      "summary": "Redirect URIs are HTTPS, or HTTP on a loopback IP literal, never localhost.",
+      "source": "https://developer.spotify.com/blog/2025-02-12-increasing-the-security-requirements-for-integrating-with-spotify",
+      "label": "docs-only",
+      "scenario": null,
+      "why": "Spotify's authorize page decides it; a Web API replay does not drive a login."
+    },
+    {
+      "id": "oauth.refresh-may-keep-token",
+      "summary": "A refresh may answer without a new refresh token; the client keeps the old one.",
+      "source": "https://developer.spotify.com/documentation/web-api/tutorials/refreshing-tokens",
+      "label": "docs-only",
+      "scenario": null,
+      "why": "Token exchange happens before a replay starts, outside the Web API."
+    },
+    {
+      "id": "responses.legacy-shape",
+      "summary": "Older responses name a playlist's items tracks, and each item's track track.",
+      "source": "https://developer.spotify.com/documentation/web-api/reference/get-playlists-items",
+      "label": "docs-only",
+      "scenario": null,
+      "why": "An older shape Spotify cannot be asked to answer in."
+    },
+    {
+      "id": "public-pages.embed",
+      "summary": "A public playlist's embed page carries it in a __NEXT_DATA__ script, as entity.trackList.",
+      "source": "tests/services/source_resolver/test_live_scraper_validation.py",
+      "label": "checked-live",
+      "checked": "On demand (.github/workflows/live-integration.yml): reads real embed and public pages, no credentials.",
+      "scenario": null,
+      "why": "A public web page, not a Web API call; the live integration tests replay it."
+    },
+    {
+      "id": "faults.rate-limit",
+      "summary": "A rate-limited call is a 429 that normally carries Retry-After in seconds; the limit counts calls over a rolling 30-second window.",
+      "source": "https://developer.spotify.com/documentation/web-api/concepts/rate-limits",
+      "label": "docs-only",
+      "scenario": null,
+      "why": "Spotify cannot be made to answer this way on demand; the fake answers it as an armed fault (faults.py)."
+    },
+    {
+      "id": "faults.quota-exceeded",
+      "summary": "A spent quota is a 429 whose error object carries \"reason\": \"QUOTA_EXCEEDED\".",
+      "source": "https://developer.spotify.com/documentation/web-api/references/changes/july-2026",
+      "label": "docs-only",
+      "scenario": null,
+      "why": "Spotify cannot be made to answer this way on demand; the fake answers it as an armed fault (faults.py)."
+    },
+    {
+      "id": "faults.server-errors",
+      "summary": "500, 502 and 503 can answer any endpoint, in the same error shape.",
+      "source": "https://developer.spotify.com/documentation/web-api/concepts/api-calls",
+      "label": "docs-only",
+      "scenario": null,
+      "why": "Spotify cannot be made to answer this way on demand; the fake answers it as an armed fault (faults.py)."
+    }
+  ]
+}

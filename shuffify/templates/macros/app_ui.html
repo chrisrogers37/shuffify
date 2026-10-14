@@ -1,0 +1,114 @@
+{# Shared task views. Values and save state belong to each consuming page.
+   Place contextual panels beside [data-panel-primary] inside
+   .sh-workspace[data-panel-workspace]. Open through AppPanels.open().
+   Pass a caller receiving 'body'/'footer'; use the footer branch for actions (a task whose
+   footer branch renders nothing gets no footer).
+   True modal dialogs use the same content structure with modal=true; full=true makes a
+   contextual task take the content area at every width (multi-step setup). #}
+{% macro task_panel(panel_id, title, close_label='Close', modal=false, full=false) %}
+<section id="{{ panel_id }}" class="sh-task-panel{% if modal %} sh-panel-modal{% endif %}"
+         data-app-panel{% if modal %} data-panel-modal{% endif %}{% if full and not modal %} data-panel-full{% endif %}
+         role="{{ 'dialog' if modal else 'region' }}"
+         aria-labelledby="{{ panel_id }}-heading"{% if modal %} aria-modal="true"{% endif %}
+         hidden inert>
+  <header class="sh-panel-header">
+    <h2 id="{{ panel_id }}-heading" data-panel-heading tabindex="-1">{{ title }}</h2>
+    <button type="button" class="sh-button sh-button-secondary" data-panel-close>{{ close_label }}</button>
+  </header>
+  <div class="sh-panel-body">{{ caller('body') }}</div>
+  {%- set footer = caller('footer') %}
+  {%- if footer | trim %}
+  <footer class="sh-panel-footer">{{ footer }}</footer>
+  {%- endif %}
+</section>
+{% endmacro %}
+
+{# A playlist's Spotify link: the official white logo, opening Spotify in a new tab.
+   group: when the link sits in Workshop, the data-workshop-compat group that decides
+   when Workshop blocks it. #}
+{% macro spotify_link(url, name, group=none) %}
+<a href="{{ url }}" target="_blank" rel="noopener noreferrer" class="sh-spotify-link"{% if group %} data-workshop-compat="{{ group }}"{% endif %}
+   aria-label="Open {{ name }} on Spotify (new tab)">
+    <img class="sh-spotify-logo" src="{{ url_for('static', filename='images/spotify-logo-white.svg') }}" alt="Spotify">
+</a>
+{% endmacro %}
+
+{# Live action review/results view plus its leave decision, shared by Library,
+   Workshop and Routines. playlist-operations.js owns every state and label;
+   back_label names the page the view returns to. Place the panel beside
+   [data-panel-primary] and the leave dialog outside the workspace. #}
+{% macro live_operation_panel(back_label, note) %}
+<section id="live-operation-panel" class="sh-task-panel" data-app-panel hidden inert aria-labelledby="live-operation-heading">
+    <header class="sh-panel-header">
+        <button type="button" id="live-operation-back" data-panel-close class="sh-button-secondary" data-results-label="{{ back_label }}">{{ back_label }}</button>
+        <h2 id="live-operation-heading" data-panel-heading tabindex="-1" data-results-label="Live action results">Live action results</h2>
+    </header>
+    <div class="sh-panel-body space-y-4">
+        <p id="live-operation-status"></p>
+        <div id="live-operation-review" class="space-y-3" hidden></div>
+        <nav id="live-operation-summary" class="sh-callout p-3 space-y-2" aria-label="Results needing attention" hidden></nav>
+        <ol id="live-operation-results" class="space-y-3" aria-label="Live actions and resource outcomes"></ol>
+        <p id="live-operation-note" class="sh-detail sh-text-muted">{{ note }}</p>
+    </div>
+    <footer class="sh-panel-footer">
+        <p id="live-operation-footer-status" class="sh-detail" hidden></p>
+        <button type="button" id="live-operation-run" class="sh-button" hidden></button>
+        <button type="button" id="live-operation-discard" class="sh-button-secondary" hidden>Discard draft changes</button>
+        <button type="button" id="live-operation-close" data-panel-close class="sh-button-secondary" data-results-label="{{ back_label }}">{{ back_label }}</button>
+    </footer>
+</section>
+{% endmacro %}
+
+{# One polite announcer per authenticated page, outside every panel and the primary
+   content, so live action progress is heard even when the results view is closed
+   or the page content is inert. #}
+{% macro live_operation_announcer() %}
+<div id="live-operation-announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-panel-live></div>
+{% endmacro %}
+
+{# The shared confirmation for destructive choices (AppConfirm.ask in app-panels.js). #}
+{% macro app_confirm() %}
+<section id="app-confirm" class="sh-task-panel sh-panel-modal" data-app-panel data-panel-modal role="dialog"
+         aria-modal="true" aria-labelledby="app-confirm-heading" aria-describedby="app-confirm-text" hidden inert>
+    <header class="sh-panel-header">
+        <h2 id="app-confirm-heading" data-panel-heading tabindex="-1">Are you sure?</h2>
+    </header>
+    <div class="sh-panel-body">
+        <p id="app-confirm-text"></p>
+    </div>
+    <footer class="sh-panel-footer">
+        <button type="button" id="app-confirm-cancel" class="sh-button-secondary" data-panel-close="cancel">Cancel</button>
+        <button type="button" id="app-confirm-ok" class="sh-button-danger" data-panel-close="confirm">Confirm</button>
+    </footer>
+</section>
+{% endmacro %}
+
+{# A persistent notice for a change the page cannot show until it reloads; the
+   reload still asks the shared navigation guard (AppNavigation.reloadOrNotice). #}
+{% macro reload_notice(prefix, container_class) %}
+<div id="{{ prefix }}-reload-notice" class="{{ container_class }}" hidden>
+    <div class="sh-callout flex items-center justify-between flex-wrap gap-3">
+        <p id="{{ prefix }}-reload-message" data-reload-notice-text></p>
+        <button type="button" id="{{ prefix }}-reload-btn" class="sh-button-secondary" data-app-reload>Reload to show the latest</button>
+    </div>
+</div>
+{% endmacro %}
+
+{% macro live_operation_leave() %}
+<section id="live-operation-leave" class="sh-task-panel sh-panel-modal" data-app-panel data-panel-modal role="dialog"
+         aria-modal="true" aria-labelledby="live-operation-leave-heading" aria-describedby="live-operation-leave-text" hidden inert>
+    <header class="sh-panel-header">
+        <h2 id="live-operation-leave-heading" data-panel-heading tabindex="-1">Leave this page?</h2>
+    </header>
+    <div class="sh-panel-body">
+        <p id="live-operation-leave-text">Some live action results on this page still need attention. Leaving or reloading loses these details from this page. It does not cancel or undo anything already sent to Spotify.</p>
+    </div>
+    <footer class="sh-panel-footer">
+        <button type="button" id="live-operation-leave-review" class="sh-button-secondary">Review results</button>
+        <button type="button" id="live-operation-leave-save" class="sh-button-secondary" hidden>Review &amp; save</button>
+        <button type="button" id="live-operation-leave-stay" class="sh-button-secondary">Stay</button>
+        <button type="button" id="live-operation-leave-discard" class="sh-button-danger" hidden>Discard draft changes and leave</button>
+        <button type="button" id="live-operation-leave-confirm" class="sh-button-danger">Leave and lose these details</button>
+    </footer>
+</section>
+{% endmacro %}

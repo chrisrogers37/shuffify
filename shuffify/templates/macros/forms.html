@@ -1,0 +1,33 @@
+{# macros/forms.html - Reusable form field macros #}
+
+{% macro select_field(label, field_id, field_name, options, selected='', help_text='', presentation='after-hours') %}
+<div class="sh-form-field">
+  <label for="{{ field_id }}" class="sh-field-label">{{ label }}</label>
+  <select id="{{ field_id }}" name="{{ field_name }}" class="sh-input"{% if help_text %} aria-describedby="{{ field_id }}-help"{% endif %}>
+    {% for option in options %}
+    <option value="{{ option.value }}"{% if option.value == selected %} selected{% endif %}>{{ option.label }}</option>
+    {% endfor %}
+  </select>
+  {% if help_text %}
+  <p id="{{ field_id }}-help" class="sh-field-help">{{ help_text }}</p>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{#- A labelled checkbox. field_name, when given, submits it with its form as "true". attributes
+    are more attributes for the checkbox (its action); describedby is one more id it is
+    described by, after its description (the error line beside it). -#}
+{% macro toggle_field(label, field_id, field_name='', checked=false, description='', presentation='after-hours', attributes={}, describedby='') %}
+{%- set described = ([field_id ~ '-help'] if description else []) + ([describedby] if describedby else []) %}
+<label for="{{ field_id }}" class="sh-toggle">
+  <span>
+    <span class="sh-field-label">{{ label }}</span>
+    {% if description %}
+    <span id="{{ field_id }}-help" class="sh-field-help">{{ description }}</span>
+    {% endif %}
+  </span>
+  <input type="checkbox" id="{{ field_id }}"{% if field_name %} name="{{ field_name }}" value="true"{% endif %}
+         {% if described %}aria-describedby="{{ described | join(' ') }}"{% endif %}{{ attributes | xmlattr }}
+         {% if checked %}checked{% endif %}>
+</label>
+{% endmacro %}

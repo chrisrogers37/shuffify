@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% from "macros/forms.html" import select_field, toggle_field %}
+
+{% block presentation_mode %}public{% endblock %}
+{% block title %}Settings - Shuffify{% endblock %}
+
+{% block content %}
+<div class="sh-container sh-settings-page">
+    <div class="sh-settings-content">
+        <header class="sh-settings-heading">
+            <h1 class="sh-heading">Settings</h1>
+            <p class="sh-text-muted">Your preferences for shuffling, saved history, and your library.</p>
+        </header>
+
+        <form id="settings-form" method="POST" action="{{ url_for('main.update_settings') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {# Preserve unavailable preferences when the other settings are saved. #}
+            <input type="hidden" id="theme" name="theme" value="{{ settings.theme }}">
+            <input type="hidden" id="notifications_enabled" name="notifications_enabled" value="{{ 'true' if settings.notifications_enabled else 'false' }}">
+            <fieldset id="settings-fields" class="sh-settings-fields">
+                <legend class="sr-only">App preferences</legend>
+                <section class="sh-settings-section" aria-labelledby="shuffle-settings-title">
+                    <h2 class="sh-heading" id="shuffle-settings-title">Shuffle defaults</h2>
+                    {{ select_field(
+                        label='Default shuffle algorithm',
+                        field_id='default_algorithm',
+                        field_name='default_algorithm',
+                        options=algorithm_options,
+                        selected=settings.default_algorithm or '',
+                        help_text='Pre-select this algorithm when shuffling playlists.',
+                        presentation='after-hours'
+                    ) }}
+                </section>
+
+                <section class="sh-settings-section" aria-labelledby="history-settings-title">
+                    <h2 class="sh-heading" id="history-settings-title">Snapshots &amp; History</h2>
+                    {{ toggle_field(
+                        label='Save a snapshot before shuffling',
+                        field_id='auto_snapshot_enabled',
+                        field_name='auto_snapshot_enabled',
+                        checked=settings.auto_snapshot_enabled,
+                        description='Keep the playlist order so you can restore it later.',
+                        presentation='after-hours'
+                    ) }}
+                    <div class="sh-form-field">
+                        <label for="max_snapshots_per_playlist" class="sh-field-label">Maximum snapshots per playlist</label>
+                        <input type="number" id="max_snapshots_per_playlist" name="max_snapshots_per_playlist"
+                               value="{{ settings.max_snapshots_per_playlist }}" min="1" max="50" required
+                               class="sh-input sh-settings-limit" aria-describedby="max_snapshots_per_playlist-help max_snapshots_per_playlist-error">
+                        <p id="max_snapshots_per_playlist-help" class="sh-field-help">Keep 1–50 snapshots. The oldest is removed when the limit is reached.</p>
+                        <p id="max_snapshots_per_playlist-error" class="sh-field-error" hidden></p>
+                    </div>
+                </section>
+
+                <section class="sh-settings-section" aria-labelledby="library-settings-title">
+                    <h2 class="sh-heading" id="library-settings-title">Library</h2>
+                    {{ toggle_field(
+                        label='Show recent activity',
+                        field_id='dashboard_show_recent_activity',
+                        field_name='dashboard_show_recent_activity',
+                        checked=settings.dashboard_show_recent_activity,
+                        description='Show recent shuffle and raid activity in your library.',
+                        presentation='after-hours'
+                    ) }}
+                </section>
+            </fieldset>
+
+            <div id="settings-error" class="sh-form-error" role="alert" tabindex="-1" hidden></div>
+            <div class="sh-settings-save">
+                <p class="sh-field-help">Saves your app preferences.</p>
+                <button type="submit" class="sh-button">Save settings</button>
+            </div>
+        </form>
+
+        <section class="sh-settings-section sh-settings-account" aria-labelledby="account-settings-title">
+            <h2 class="sh-heading" id="account-settings-title">Account</h2>
+            <p class="sh-text-muted">Connected as <strong class="sh-settings-account-name">{{ user.display_name or user.id }}</strong>.</p>
+            <dl class="sh-settings-unavailable">
+                <div>
+                    <dt class="sh-field-label">Appearance</dt>
+                    <dd class="sh-field-help">Theme selection is not available yet. Your saved preference is preserved.</dd>
+                </div>
+                <div>
+                    <dt class="sh-field-label">Routine notifications</dt>
+                    <dd class="sh-field-help">Notifications are not available yet. Your saved preference is preserved.</dd>
+                </div>
+            </dl>
+            <form id="settings-logout-form" method="POST" action="{{ url_for('main.logout') }}" data-app-logout>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="sh-button-secondary">Log out</button>
+            </form>
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/settings.js') }}"></script>
+{% endblock %}

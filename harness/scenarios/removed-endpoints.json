@@ -1,0 +1,18 @@
+{
+  "id": "removed-endpoints",
+  "summary": "Get Several Tracks is not served to Development Mode apps.",
+  "behaviours": [
+    "dev-mode.removed-endpoints"
+  ],
+  "tracks": 1,
+  "steps": [
+    {
+      "call": "GET /tracks",
+      "query": {
+        "ids": "{track1.id}"
+      },
+      "status": 404,
+      "unserved": true
+    }
+  ]
+}

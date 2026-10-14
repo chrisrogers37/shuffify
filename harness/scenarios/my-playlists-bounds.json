@@ -1,0 +1,37 @@
+{
+  "id": "my-playlists-bounds",
+  "summary": "The user's playlists come at most 50 to a page, from an offset of at most 100,000.",
+  "behaviours": [
+    "paging.my-playlists"
+  ],
+  "steps": [
+    {
+      "call": "GET /me/playlists",
+      "query": {
+        "limit": "50"
+      },
+      "status": 200
+    },
+    {
+      "call": "GET /me/playlists",
+      "query": {
+        "limit": "51"
+      },
+      "status": 400
+    },
+    {
+      "call": "GET /me/playlists",
+      "query": {
+        "offset": "100000"
+      },
+      "status": 200
+    },
+    {
+      "call": "GET /me/playlists",
+      "query": {
+        "offset": "100001"
+      },
+      "status": 400
+    }
+  ]
+}

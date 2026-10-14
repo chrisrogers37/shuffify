@@ -1,0 +1,178 @@
+"""Tests for DirectAPIPathway."""
+
+from unittest.mock import Mock
+
+import pytest
+
+from shuffify.services.source_resolver.direct_api_pathway import (
+    DirectAPIPathway,
+)
+from shuffify.spotify.api import SpotifyAPI
+from shuffify.spotify.exceptions import (
+    SpotifyAPIError,
+    SpotifyNotFoundError,
+    SpotifyRateLimitError,
+    SpotifyTokenExpiredError,
+)
+
+
+@pytest.fixture
+def pathway():
+    return DirectAPIPathway()
+
+
+@pytest.fixture
+def mock_source():
+    source = Mock()
+    source.source_playlist_id = "pl_abc123"
+    source.source_type = "external"
+    return source
+
+
+@pytest.fixture
+def mock_api():
+    api = Mock(spec=SpotifyAPI)
+    api.get_playlist_tracks.return_value = [
+        {"uri": f"spotify:track:track{i}", "name": f"Track {i}"}
+        for i in range(5)
+    ]
+    return api
+
+
+class TestCanHandle:
+    """Tests for DirectAPIPathway.can_handle()."""
+
+    def test_handles_own(self, pathway):
+        source = Mock(source_type="own")
+        assert pathway.can_handle(source) is True
+
+    def test_handles_external(self, pathway):
+        source = Mock(source_type="external")
+        assert pathway.can_handle(source) is True
+
+    def test_rejects_search_query(self, pathway):
+        source = Mock(source_type="search_query")
+        assert pathway.can_handle(source) is False
+
+    def test_rejects_unknown(self, pathway):
+        source = Mock(source_type="other")
+        assert pathway.can_handle(source) is False
+
+
+class TestResolve:
+    """Tests for DirectAPIPathway.resolve()."""
+
+    def test_happy_path(self, pathway, mock_source, mock_api):
+        result = pathway.resolve(mock_source, api=mock_api)
+        assert result.success is True
+        assert result.pathway_name == "direct_api"
+        assert len(result.track_uris) == 5
+        assert result.track_uris[0] == "spotify:track:track0"
+
+    def test_empty_response_returns_failure(
+        self, pathway, mock_source, mock_api
+    ):
+        """Empty tracks means Spotify withheld the items — not an error."""
+        mock_api.get_playlist_tracks.return_value = []
+        result = pathway.resolve(mock_source, api=mock_api)
+        assert result.success is False
+        assert result.track_uris == []
+        assert result.error_message is None
+
+    def test_not_found_returns_failure(
+        self, pathway, mock_source, mock_api
+    ):
+        """NotFoundError should return failure, not raise,
+        to allow scraper fallback."""
+        mock_api.get_playlist_tracks.side_effect = (
+            SpotifyNotFoundError("Not found")
+        )
+        result = pathway.resolve(mock_source, api=mock_api)
+        assert result.success is False
+        assert "not found" in result.error_message.lower()
+
+    def test_api_error_returns_failure(
+        self, pathway, mock_source, mock_api
+    ):
+        # Only SpotifyAPIError subclasses are caught and converted to a
+        # failure ResolveResult — bare exceptions propagate so
+        # the executor's auth/transport layer can react. The
+        # realistic API failure (rate-limit, etc.) is still
+        # captured here.
+        mock_api.get_playlist_tracks.side_effect = (
+            SpotifyRateLimitError("rate limited")
+        )
+        result = pathway.resolve(mock_source, api=mock_api)
+        assert result.success is False
+        assert "rate limited" in result.error_message
+        assert (
+            "SpotifyRateLimitError" in result.error_message
+        )
+
+    def test_spotify_api_error_returns_failure(
+        self, pathway, mock_source, mock_api
+    ):
+        """Generic SpotifyAPIError is caught and converted to a
+        failure ResolveResult so fallback pathways can run."""
+        mock_api.get_playlist_tracks.side_effect = (
+            SpotifyAPIError("upstream 500")
+        )
+        result = pathway.resolve(mock_source, api=mock_api)
+        assert result.success is False
+        assert "upstream 500" in result.error_message
+        assert "SpotifyAPIError" in result.error_message
+
+    def test_token_expired_propagates(
+        self, pathway, mock_source, mock_api
+    ):
+        """SpotifyTokenExpiredError must propagate so the
+        executor's auth-refresh layer can re-arm the token —
+        not be silently swallowed."""
+        mock_api.get_playlist_tracks.side_effect = (
+            SpotifyTokenExpiredError("token expired")
+        )
+        with pytest.raises(SpotifyTokenExpiredError):
+            pathway.resolve(mock_source, api=mock_api)
+
+    def test_unexpected_exception_propagates(
+        self, pathway, mock_source, mock_api
+    ):
+        """Unexpected non-Spotify exceptions propagate so the
+        outer layer can decide how to handle them."""
+        mock_api.get_playlist_tracks.side_effect = (
+            RuntimeError("totally unexpected")
+        )
+        with pytest.raises(RuntimeError):
+            pathway.resolve(mock_source, api=mock_api)
+
+    def test_no_api_returns_failure(self, pathway, mock_source):
+        result = pathway.resolve(mock_source, api=None)
+        assert result.success is False
+        assert "No API client" in result.error_message
+        # No API client → not applicable, resolver falls through.
+        assert result.applicable is False
+
+    def test_no_playlist_id_returns_failure(self, pathway, mock_api):
+        source = Mock(source_playlist_id=None, source_type="external")
+        result = pathway.resolve(source, api=mock_api)
+        assert result.success is False
+        assert "No playlist ID" in result.error_message
+        assert result.applicable is False
+
+    def test_skips_tracks_without_uri(
+        self, pathway, mock_source, mock_api
+    ):
+        mock_api.get_playlist_tracks.return_value = [
+            {"uri": "spotify:track:a", "name": "A"},
+            {"name": "Local track"},  # No URI
+            {"uri": "spotify:track:b", "name": "B"},
+        ]
+        result = pathway.resolve(mock_source, api=mock_api)
+        assert result.success is True
+        assert result.track_uris == [
+            "spotify:track:a",
+            "spotify:track:b",
+        ]
+
+    def test_name_property(self, pathway):
+        assert pathway.name == "direct_api"

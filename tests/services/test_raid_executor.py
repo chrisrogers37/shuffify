@@ -1,0 +1,360 @@
+"""
+Tests for raid_executor._fetch_raid_sources_with_limits.
+
+Verifies that per-source raid_count limits are applied to the
+*fresh* pool (source URIs minus exclusion set), not to the raw
+source. Sampling raid_count from the raw source before exclusion
+collapses yield to near-zero when the source heavily overlaps the
+user's existing catalog — which is common once the same source has
+been raided repeatedly.
+"""
+
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from shuffify.models.db import UpstreamSource
+from shuffify.services.executors.raid_executor import (
+    MAX_METADATA_LOOKUPS,
+    _build_track_dicts,
+    _fetch_raid_sources_with_limits,
+)
+from shuffify.services.source_resolver.base import (
+    ResolveAllResult,
+    ResolveResult,
+)
+from shuffify.spotify.api import SpotifyAPI
+from shuffify.spotify.exceptions import SpotifyAPIError
+
+
+def _make_resolve_all(source, uris):
+    """Build a ResolveAllResult with one source returning the given URIs."""
+    result = ResolveResult(
+        track_uris=list(uris),
+        pathway_name="public_scraper",
+        success=True,
+    )
+    return ResolveAllResult(
+        new_uris=list(uris),
+        source_results=[(source, result)],
+    )
+
+
+@pytest.fixture
+def patched_resolver_and_tracking():
+    """Patch SourceResolver and _update_source_tracking for isolated logic tests."""
+    with patch(
+        "shuffify.services.executors.raid_executor.SourceResolver"
+    ) as resolver_cls, patch(
+        "shuffify.services.executors.raid_executor."
+        "_update_source_tracking"
+    ):
+        yield resolver_cls
+
+
+class TestFetchRaidSourcesWithLimits:
+    """raid_count must cap the *fresh* pool, not the raw source."""
+
+    def test_returns_exactly_fresh_pool_when_smaller_than_raid_count(
+        self, db_app, patched_resolver_and_tracking,
+    ):
+        """When fresh pool < raid_count, every fresh URI must be returned.
+
+        Example: a source has 100 URIs, 94 already promoted or
+        dismissed, so the fresh pool is 6 and raid_count is 10; all 6
+        are returned, not a random subset of 10 from the full 100.
+        """
+        source = UpstreamSource(
+            source_playlist_id="src1",
+            source_type="external",
+            raid_count=10,
+        )
+        source_uris = [f"spotify:track:{i:022d}" for i in range(100)]
+        excluded = set(source_uris[:94])
+        fresh = set(source_uris[94:])
+
+        resolver_cls = patched_resolver_and_tracking
+        resolver_cls.return_value.resolve_all.return_value = (
+            _make_resolve_all(source, source_uris)
+        )
+
+        with db_app.app_context():
+            result, _ = _fetch_raid_sources_with_limits(
+                api=MagicMock(),
+                sources=[source],
+                exclusion_set=excluded,
+                user_id=None,
+            )
+
+        assert set(result) == fresh, (
+            f"Expected all 6 fresh URIs, got {len(result)}: {result}"
+        )
+
+    def test_returned_uris_never_overlap_exclusion(
+        self, db_app, patched_resolver_and_tracking,
+    ):
+        """Final invariant: no returned URI may be in the exclusion set."""
+        source = UpstreamSource(
+            source_playlist_id="src2",
+            source_type="external",
+            raid_count=5,
+        )
+        source_uris = [f"spotify:track:{i:022d}" for i in range(20)]
+        excluded = set(source_uris[:15])
+
+        resolver_cls = patched_resolver_and_tracking
+        resolver_cls.return_value.resolve_all.return_value = (
+            _make_resolve_all(source, source_uris)
+        )
+
+        with db_app.app_context():
+            result, _ = _fetch_raid_sources_with_limits(
+                api=MagicMock(),
+                sources=[source],
+                exclusion_set=excluded,
+                user_id=None,
+            )
+
+        assert excluded.isdisjoint(result)
+
+    def test_caps_at_raid_count_when_fresh_pool_is_larger(
+        self, db_app, patched_resolver_and_tracking,
+    ):
+        """When fresh pool > raid_count, return exactly raid_count fresh URIs."""
+        source = UpstreamSource(
+            source_playlist_id="src3",
+            source_type="external",
+            raid_count=5,
+        )
+        source_uris = [f"spotify:track:{i:022d}" for i in range(20)]
+        excluded = set()  # all fresh
+
+        resolver_cls = patched_resolver_and_tracking
+        resolver_cls.return_value.resolve_all.return_value = (
+            _make_resolve_all(source, source_uris)
+        )
+
+        with db_app.app_context():
+            result, _ = _fetch_raid_sources_with_limits(
+                api=MagicMock(),
+                sources=[source],
+                exclusion_set=excluded,
+                user_id=None,
+            )
+
+        assert len(result) == 5
+        assert set(result).issubset(set(source_uris))
+
+    def test_empty_fresh_pool_returns_empty(
+        self, db_app, patched_resolver_and_tracking,
+    ):
+        """When every source URI is excluded, return [] (not crash)."""
+        source = UpstreamSource(
+            source_playlist_id="src4",
+            source_type="external",
+            raid_count=5,
+        )
+        source_uris = [f"spotify:track:{i:022d}" for i in range(10)]
+        excluded = set(source_uris)
+
+        resolver_cls = patched_resolver_and_tracking
+        resolver_cls.return_value.resolve_all.return_value = (
+            _make_resolve_all(source, source_uris)
+        )
+
+        with db_app.app_context():
+            result, _ = _fetch_raid_sources_with_limits(
+                api=MagicMock(),
+                sources=[source],
+                exclusion_set=excluded,
+                user_id=None,
+            )
+
+        assert result == []
+
+
+class TestLoadSourcesTargetScoping:
+    """_load_sources must scope to the target playlist and include all
+    source types."""
+
+    def test_excludes_other_targets_search_sources(self, db_app):
+        """A search source on target A must not be loaded when raiding
+        target B -- prevents cross-playlist leakage."""
+        from shuffify.models.db import UpstreamSource, db
+        from shuffify.services.executors.raid_executor import (
+            _load_sources,
+        )
+        from shuffify.services.user_service import UserService
+
+        with db_app.app_context():
+            result = UserService.upsert_from_spotify(
+                {"id": "leak_user", "display_name": "L", "images": []}
+            )
+            uid = result.user.id
+            db.session.add_all([
+                UpstreamSource(
+                    user_id=uid,
+                    target_playlist_id="targetA",
+                    source_type="search_query",
+                    search_query="jazz",
+                    raid_count=5,
+                ),
+                UpstreamSource(
+                    user_id=uid,
+                    target_playlist_id="targetB",
+                    source_type="search_query",
+                    search_query="rock",
+                    raid_count=5,
+                ),
+            ])
+            db.session.commit()
+
+            loaded = _load_sources([], uid, "targetA")
+
+            queries = [s.search_query for s in loaded]
+            assert "jazz" in queries
+            assert "rock" not in queries
+
+    def test_includes_search_sources_for_target_with_empty_source_ids(
+        self, db_app
+    ):
+        """A search source (no source_playlist_id) must be loaded for its
+        target even when source_ids is empty -- the schedule's playlist-only
+        list omits it."""
+        from shuffify.models.db import UpstreamSource, db
+        from shuffify.services.executors.raid_executor import (
+            _load_sources,
+        )
+        from shuffify.services.user_service import UserService
+
+        with db_app.app_context():
+            result = UserService.upsert_from_spotify(
+                {"id": "search_user", "display_name": "S", "images": []}
+            )
+            uid = result.user.id
+            db.session.add(
+                UpstreamSource(
+                    user_id=uid,
+                    target_playlist_id="tgt",
+                    source_type="search_query",
+                    search_query="ambient",
+                    raid_count=5,
+                )
+            )
+            db.session.commit()
+
+            loaded = _load_sources([], uid, "tgt")
+
+            assert any(
+                s.source_type == "search_query"
+                and s.search_query == "ambient"
+                for s in loaded
+            )
+
+
+class TestAddToRaidPlaylistSnapshot:
+    """The raid playlist is snapshotted before writing to it, so a post-write
+    verification failure can be rolled back."""
+
+    def test_snapshots_raid_playlist_before_write(self, db_app):
+        from shuffify.services.executors.raid_executor import (
+            _add_to_raid_playlist,
+        )
+
+        api = MagicMock(spec=SpotifyAPI)
+        api.get_playlist_tracks.return_value = [
+            {"uri": "spotify:track:existing"}
+        ]
+        link = MagicMock()
+        link.raid_playlist_id = "raid_pl"
+
+        with db_app.app_context():
+            with patch(
+                "shuffify.services.raid_link_service."
+                "RaidLinkService.get_link_for_playlist",
+                return_value=link,
+            ), patch(
+                "shuffify.services.executors.raid_executor."
+                "PlaylistSnapshotService"
+            ) as mock_snap, patch(
+                "shuffify.services.executors.raid_executor."
+                "verify_playlist_state"
+            ):
+                mock_snap.is_auto_snapshot_enabled.return_value = True
+                _add_to_raid_playlist(
+                    api,
+                    user_id=1,
+                    target_id="tgt",
+                    uris=["spotify:track:new"],
+                    schedule_id=1,
+                )
+
+        mock_snap.auto_snapshot_if_enabled.assert_called_once()
+        kwargs = mock_snap.auto_snapshot_if_enabled.call_args.kwargs
+        assert kwargs["playlist_id"] == "raid_pl"
+        assert kwargs["track_uris"] == [
+            "spotify:track:existing"
+        ]
+
+
+class TestFetchProvenance:
+    """_fetch returns which source each fresh URI came from, so staged tracks
+    record correct provenance (the source, not the target)."""
+
+    def test_returns_source_provenance(
+        self, db_app, patched_resolver_and_tracking
+    ):
+        source = UpstreamSource(
+            source_playlist_id="src1",
+            source_name="Cool Source",
+            source_type="external",
+            raid_count=10,
+        )
+        source_uris = ["spotify:track:a", "spotify:track:b"]
+        resolver_cls = patched_resolver_and_tracking
+        resolver_cls.return_value.resolve_all.return_value = (
+            _make_resolve_all(source, source_uris)
+        )
+
+        with db_app.app_context():
+            deduped, provenance = _fetch_raid_sources_with_limits(
+                api=MagicMock(),
+                sources=[source],
+                exclusion_set=set(),
+                user_id=None,
+            )
+
+        assert set(deduped) == set(source_uris)
+        assert provenance["spotify:track:a"] == (
+            "Cool Source", "src1",
+        )
+        assert provenance["spotify:track:b"] == (
+            "Cool Source", "src1",
+        )
+
+
+class TestBuildTrackDicts:
+    """Metadata is one request per track, so a large raid looks up only
+    the first MAX_METADATA_LOOKUPS and stages the rest by URI alone."""
+
+    def test_looks_up_at_most_the_cap_and_stages_the_rest_bare(self):
+        uris = [f"spotify:track:{i:022d}" for i in range(MAX_METADATA_LOOKUPS + 10)]
+        api = MagicMock(spec=SpotifyAPI)
+        api.get_tracks.side_effect = lambda batch: [
+            {"uri": u, "name": "T", "artists": [], "album": {"name": "", "images": []}, "duration_ms": 1}
+            for u in batch
+        ]
+
+        dicts = _build_track_dicts(api, uris)
+
+        api.get_tracks.assert_called_once_with(uris[:MAX_METADATA_LOOKUPS])
+        assert [d["uri"] for d in dicts] == uris
+        assert all(d.get("name") == "T" for d in dicts[:MAX_METADATA_LOOKUPS])
+        assert dicts[MAX_METADATA_LOOKUPS:] == [{"uri": u} for u in uris[MAX_METADATA_LOOKUPS:]]
+
+    def test_a_failed_lookup_stages_every_track_bare(self):
+        uris = ["spotify:track:" + "A" * 22]
+        api = MagicMock(spec=SpotifyAPI)
+        api.get_tracks.side_effect = SpotifyAPIError("down")
+
+        assert _build_track_dicts(api, uris) == [{"uri": uris[0]}]

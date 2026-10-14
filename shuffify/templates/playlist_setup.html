@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% from "macros/forms.html" import toggle_field %}
+
+{#- Shared playlist setup. Sources, the collection and the archive
+    are settings shared by every routine of this playlist. Staging, Undo, Back, the section
+    links and Refresh only read or change this page; Save playlist settings and Create playlist
+    in Spotify are the only requests that change anything. static/js/playlist-setup.js owns
+    every state; this markup is its skeleton, and each list is built from SETUP_PAGE. -#}
+
+{% block presentation_mode %}public{% endblock %}
+{% block title %}Playlist setup · {{ target.name }} - Shuffify{% endblock %}
+
+{% block content %}
+<div id="setup-page" class="sh-container sh-setup-page" data-setup-section="{{ section }}">
+    <header class="sh-setup-header">
+        <a id="setup-back" href="{{ return_link.href }}" class="sh-button-secondary sh-setup-back">{{ return_link.label }}</a>
+        <h1 id="setup-title" class="sh-heading sh-setup-title">Playlist setup · {{ target.name }}</h1>
+        <p id="setup-identity" class="sh-setup-identity">Sources, collection and archive for <span class="sh-setup-name">{{ target.name }}</span>. Its existing routines use these settings on their next run.</p>
+        <p id="setup-boundary" class="sh-setup-boundary">Settings for this playlist · Save applies immediately</p>
+        <nav id="setup-nav" class="sh-setup-nav" aria-label="Setup sections">
+            <ul>
+                <li><a href="#setup-sources">Sources</a></li>
+                <li><a href="#setup-collection">Collection</a></li>
+                <li><a href="#setup-archive">Archive</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <div class="sh-setup-layout">
+        <div class="sh-setup-sections">
+            <section id="setup-sources" class="sh-setup-section sh-surface" aria-labelledby="setup-sources-heading" data-panel-return>
+                <h2 id="setup-sources-heading" class="sh-heading sh-setup-section-title" tabindex="-1">Sources</h2>
+                <p class="sh-detail sh-text-muted">Playlists and searches that collecting routines check for new tracks.</p>
+                <p id="setup-source-limit" class="sh-detail"></p>
+                <ul id="setup-source-list" class="sh-setup-list" aria-label="Sources"></ul>
+                <p id="setup-source-empty" class="sh-detail sh-text-muted" hidden>No sources yet.</p>
+                <div id="setup-routine-only" class="sh-setup-group" hidden>
+                    <h3 id="setup-routine-only-heading" class="sh-setup-subheading">Used only by routines</h3>
+                    <p class="sh-detail sh-text-muted">These playlists are collected by a routine without being saved sources.</p>
+                    <ul id="setup-routine-only-list" class="sh-setup-list" aria-labelledby="setup-routine-only-heading"></ul>
+                </div>
+                <form id="setup-add-playlist-form" class="sh-form-field" data-action-submit="setup.add-playlist" novalidate>
+                    <label for="setup-add-playlist-input" class="sh-field-label">Add by playlist link or ID</label>
+                    <div class="sh-setup-inline">
+                        <input id="setup-add-playlist-input" type="text" class="sh-input" autocomplete="off" spellcheck="false"
+                               aria-describedby="setup-add-playlist-help setup-add-playlist-error" data-action-input="setup.edit">
+                        <button id="setup-add-playlist" type="submit" class="sh-button-secondary">Add source</button>
+                    </div>
+                    <p id="setup-add-playlist-help" class="sh-field-help">A Spotify playlist link, URI or ID.</p>
+                    <p id="setup-add-playlist-error" class="sh-field-error" hidden></p>
+                </form>
+                <form id="setup-add-search-form" class="sh-form-field" data-action-submit="setup.add-search" novalidate>
+                    <label for="setup-add-search-input" class="sh-field-label">Add by search words</label>
+                    <div class="sh-setup-inline">
+                        <input id="setup-add-search-input" type="text" class="sh-input" autocomplete="off" maxlength="500"
+                               aria-describedby="setup-add-search-help setup-add-search-error" data-action-input="setup.edit">
+                        <button id="setup-add-search" type="submit" class="sh-button-secondary">Add search source</button>
+                    </div>
+                    <p id="setup-add-search-help" class="sh-field-help">Routines collect from playlists that Spotify finds for these words.</p>
+                    <p id="setup-add-search-error" class="sh-field-error" hidden></p>
+                </form>
+            </section>
+
+            {% for purpose, title, intro in [
+                ('collection', 'Collection', 'Collected tracks wait in this Spotify playlist until they are added to the playlist.'),
+                ('archive', 'Archive', 'A second Spotify playlist for music set aside. Rotation exchanges tracks with it, and collecting skips what it holds.')
+            ] %}
+            <section id="setup-{{ purpose }}" class="sh-setup-section sh-surface" aria-labelledby="setup-{{ purpose }}-heading" data-panel-return>
+                <h2 id="setup-{{ purpose }}-heading" class="sh-heading sh-setup-section-title" tabindex="-1">{{ title }}</h2>
+                <p class="sh-detail sh-text-muted">{{ intro }}</p>
+                <p id="setup-{{ purpose }}-shared-note" class="sh-callout sh-detail" hidden>This playlist is both the collection and the archive. It stays that way until you change one of them.</p>
+                <div id="setup-{{ purpose }}-current" class="sh-setup-current"></div>
+                <div id="setup-{{ purpose }}-choose" class="sh-setup-group" hidden>
+                    <div class="sh-form-field">
+                        <label for="setup-{{ purpose }}-select" class="sh-field-label">Your playlists</label>
+                        <select id="setup-{{ purpose }}-select" class="sh-input" data-action-change="setup.edit"
+                                aria-describedby="setup-{{ purpose }}-list-status setup-{{ purpose }}-select-error">
+                            <option value="">Choose a playlist</option>
+                        </select>
+                        <p id="setup-{{ purpose }}-list-status" class="sh-field-help"></p>
+                        <p id="setup-{{ purpose }}-select-error" class="sh-field-error" hidden></p>
+                    </div>
+                    <div class="sh-setup-actions">
+                        <button id="setup-{{ purpose }}-use" type="button" class="sh-button-secondary"
+                                data-action-click="setup.use" data-purpose="{{ purpose }}">Use existing playlist</button>
+                        <button id="setup-{{ purpose }}-refresh" type="button" class="sh-button-secondary"
+                                data-action-click="setup.refresh" data-purpose="{{ purpose }}">Refresh my playlists</button>
+                    </div>
+                    <form id="setup-{{ purpose }}-create-form" class="sh-form-field" data-action-submit="setup.create"
+                          data-purpose="{{ purpose }}" novalidate>
+                        <label for="setup-{{ purpose }}-create-name" class="sh-field-label">Or name a new playlist</label>
+                        <input id="setup-{{ purpose }}-create-name" type="text" class="sh-input" autocomplete="off" maxlength="100"
+                               aria-describedby="setup-{{ purpose }}-create-help setup-{{ purpose }}-create-error" data-action-input="setup.edit">
+                        <p id="setup-{{ purpose }}-create-help" class="sh-field-help">Creating makes a private playlist in your Spotify library right away. It is used here only after you save.</p>
+                        <p id="setup-{{ purpose }}-create-error" class="sh-field-error" hidden></p>
+                        <div class="sh-setup-actions">
+                            <button id="setup-{{ purpose }}-create" type="submit" class="sh-button-secondary">Create playlist in Spotify</button>
+                            <button id="setup-{{ purpose }}-create-another" type="button" class="sh-button-secondary" hidden
+                                    data-action-click="setup.create-another" data-purpose="{{ purpose }}">Create another playlist</button>
+                        </div>
+                    </form>
+                </div>
+                <div id="setup-{{ purpose }}-found" class="sh-setup-inline" hidden>
+                    <p id="setup-{{ purpose }}-found-text" class="sh-detail"></p>
+                    <button id="setup-{{ purpose }}-found-use" type="button" class="sh-button-secondary"
+                            aria-describedby="setup-{{ purpose }}-found-text"
+                            data-action-click="setup.use-found" data-purpose="{{ purpose }}">Use it</button>
+                </div>
+                <p id="setup-{{ purpose }}-create-status" class="sh-detail" hidden></p>
+                {% if purpose == 'collection' %}
+                <div id="setup-drip" class="sh-setup-group" hidden>
+                    {{ toggle_field('Add collected tracks automatically', 'setup-drip-enabled',
+                                    description='Applies to saved routine runs.',
+                                    attributes={'data-action-change': 'setup.drip'},
+                                    describedby='setup-drip-enabled-error') }}
+                    <p id="setup-drip-enabled-error" class="sh-field-error" hidden></p>
+                    <div class="sh-form-field">
+                        <label for="setup-drip-count" class="sh-field-label">Tracks added per run</label>
+                        <input id="setup-drip-count" type="number" inputmode="numeric" class="sh-input sh-setup-number"
+                               data-action-change="setup.drip" aria-describedby="setup-drip-count-help setup-drip-count-error">
+                        <p id="setup-drip-count-help" class="sh-field-help">Applies to saved routine runs.</p>
+                        <p id="setup-drip-count-error" class="sh-field-error" hidden></p>
+                    </div>
+                </div>
+                {% else %}
+                <div id="setup-auto-archive-group" class="sh-setup-group" hidden>
+                    {{ toggle_field('Auto-archive removed tracks', 'setup-auto-archive',
+                                    description='Used by Workshop drafts only.',
+                                    attributes={'data-action-change': 'setup.auto-archive'},
+                                    describedby='setup-auto-archive-error') }}
+                    <p id="setup-auto-archive-error" class="sh-field-error" hidden></p>
+                </div>
+                {% endif %}
+            </section>
+            {% endfor %}
+        </div>
+
+        <div class="sh-setup-side">
+            <aside id="setup-summary" class="sh-setup-summary sh-surface" aria-labelledby="setup-summary-heading">
+                <h2 id="setup-summary-heading" class="sh-heading sh-setup-section-title">Saved settings for this playlist</h2>
+                <dl id="setup-saved" class="sh-setup-saved"></dl>
+                <div class="sh-setup-group">
+                    <h3 id="setup-routines-heading" class="sh-setup-subheading">Routines on this playlist</h3>
+                    <ul id="setup-routines" class="sh-setup-list" aria-labelledby="setup-routines-heading"></ul>
+                    <p id="setup-routines-empty" class="sh-detail sh-text-muted" hidden>No routines yet. Saving here never creates one.</p>
+                </div>
+                <div id="setup-pending" class="sh-setup-group" data-panel-return role="group" aria-labelledby="setup-pending-heading">
+                    <h3 id="setup-pending-heading" class="sh-setup-subheading">Pending changes</h3>
+                    <ul id="setup-pending-list" class="sh-setup-list"></ul>
+                    <p id="setup-pending-empty" class="sh-detail sh-text-muted">No pending changes.</p>
+                    <div id="setup-stale" class="sh-setup-group" hidden>
+                        <h4 id="setup-stale-heading" class="sh-setup-subheading">No longer applies</h4>
+                        <ul id="setup-stale-list" class="sh-setup-list" aria-labelledby="setup-stale-heading"></ul>
+                    </div>
+                </div>
+                <div id="setup-review" class="sh-setup-group sh-setup-review sh-divider" hidden>
+                    <h3 id="setup-review-heading" class="sh-setup-subheading" tabindex="-1">Review</h3>
+                    <ul id="setup-review-changes" class="sh-setup-list" aria-label="Changes to save"></ul>
+                    <h4 id="setup-review-affected-heading" class="sh-setup-subheading" hidden>Existing routines affected</h4>
+                    <ul id="setup-review-affected" class="sh-setup-list" aria-labelledby="setup-review-affected-heading" hidden></ul>
+                    <h4 id="setup-review-unaffected-heading" class="sh-setup-subheading" hidden>Not affected</h4>
+                    <ul id="setup-review-unaffected" class="sh-setup-list" aria-labelledby="setup-review-unaffected-heading" hidden></ul>
+                    <ul id="setup-review-notes" class="sh-setup-list" aria-label="Notes" hidden></ul>
+                    <label for="setup-ack" class="sh-toggle sh-setup-ack">
+                        <span id="setup-ack-text" class="sh-field-label">I understand these existing routines will use these settings. Saving does not start or schedule any routine.</span>
+                        <input id="setup-ack" type="checkbox" data-action-change="setup.ack">
+                    </label>
+                </div>
+                <div id="setup-outcome" class="sh-setup-group sh-setup-outcome sh-divider" hidden>
+                    <h3 id="setup-outcome-heading" class="sh-setup-subheading" tabindex="-1"></h3>
+                    <p id="setup-outcome-text" class="sh-detail"></p>
+                    <ul id="setup-outcome-list" class="sh-setup-list" hidden></ul>
+                    <button id="setup-check-again" type="button" class="sh-button-secondary" hidden
+                            data-action-click="setup.check-again">Check again</button>
+                </div>
+            </aside>
+            <div id="setup-footer" class="sh-setup-footer sh-action-footer" data-action-footer role="group" aria-label="Playlist setup actions">
+                <div class="sh-setup-footer-status">
+                    <p id="setup-pending-count" class="sh-detail sh-setup-emphasis"></p>
+                    <p id="setup-status" class="sh-detail" hidden></p>
+                </div>
+                <div class="sh-setup-actions">
+                    <button id="setup-review-btn" type="button" class="sh-button-secondary"
+                            data-action-click="setup.review">Review changes</button>
+                    <button id="setup-save" type="button" class="sh-button" aria-describedby="setup-save-reason"
+                            data-action-click="setup.save">Save playlist settings</button>
+                </div>
+                <p id="setup-save-reason" class="sr-only"></p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+// The page's data: the saved shared settings (setup context), its request paths and the
+// section to start at. playlist-setup.js keeps every later state in page memory only.
+const SETUP_PAGE = {
+    target: {{ target | tojson }},
+    context: {{ setup_context | tojson }},
+    urls: {{ setup_urls | tojson }},
+    section: {{ section | tojson }}
+};
+</script>
+<script src="{{ url_for('static', filename='js/playlist-setup.js') }}" defer></script>
+{% endblock %}

@@ -1,0 +1,20 @@
+{
+  "id": "change-details",
+  "summary": "Changing a playlist's details answers 200 with no body.",
+  "behaviours": [
+    "writes.change-details-no-body"
+  ],
+  "playlists": {
+    "canary": "own"
+  },
+  "steps": [
+    {
+      "call": "PUT /playlists/{canary}",
+      "body": {
+        "description": "Checked by the shuffify canary"
+      },
+      "status": 200,
+      "no_body": true
+    }
+  ]
+}

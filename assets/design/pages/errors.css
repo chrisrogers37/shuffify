@@ -1,0 +1,95 @@
+@layer components {
+/* Anonymous error pages opt in to the After Hours public design system. */
+.sh-error-main {
+    display: flex;
+}
+
+.sh-error-page {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    flex: 1;
+    place-items: center;
+    padding: var(--sh-space-16) var(--sh-space-5);
+}
+
+.sh-error-panel {
+    width: 100%;
+    max-width: var(--sh-layout-error-panel);
+    padding: var(--sh-space-8) var(--sh-space-6);
+    text-align: center;
+}
+
+.sh-error-icon {
+    display: flex;
+    width: var(--sh-space-16);
+    height: var(--sh-space-16);
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto var(--sh-space-6);
+    border-radius: var(--sh-radius-panel);
+}
+
+.sh-error-icon svg {
+    width: var(--sh-space-8);
+    height: var(--sh-space-8);
+}
+
+.sh-error-icon-warning {
+    background: var(--sh-warning-surface);
+    color: var(--sh-warning);
+}
+
+.sh-error-icon-danger {
+    background: var(--sh-error-surface);
+    color: var(--sh-error);
+}
+
+.sh-error-code {
+    margin-bottom: var(--sh-space-3);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    font-weight: var(--sh-weight-bold);
+    letter-spacing: var(--sh-tracking-code);
+    line-height: var(--sh-type-leading-caption);
+    text-transform: uppercase;
+}
+
+.sh-error-title {
+    margin-bottom: var(--sh-space-4);
+    font-size: var(--sh-type-heading);
+    line-height: var(--sh-type-leading-heading);
+    overflow-wrap: anywhere;
+}
+
+.sh-error-message {
+    margin: 0 auto;
+    max-width: var(--sh-layout-message);
+    font-size: var(--sh-type-ui);
+    line-height: var(--sh-space-6);
+    overflow-wrap: anywhere;
+}
+
+.sh-error-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sh-space-3);
+    margin-top: var(--sh-space-8);
+}
+
+.sh-error-actions svg {
+    width: var(--sh-space-5);
+    height: var(--sh-space-5);
+    flex-shrink: 0;
+}
+
+@screen md {
+    .sh-error-page {
+        padding: var(--sh-space-22) var(--sh-space-10);
+    }
+
+    .sh-error-panel {
+        padding: var(--sh-space-12);
+    }
+}
+}

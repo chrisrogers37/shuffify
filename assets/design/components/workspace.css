@@ -1,0 +1,171 @@
+/* Workshop recipes: the component layer of the playlist workspace. Shared controls, text,
+   surfaces and status badges stay in core.css; pages/workspace.css composes the page.
+   No route or action semantics. */
+@layer components {
+  .sh-workshop-subheading {
+    color: var(--sh-ink);
+    font-family: var(--sh-font-display);
+    font-size: var(--sh-type-card);
+    font-weight: var(--sh-weight-bold);
+    line-height: var(--sh-type-leading-card);
+    letter-spacing: var(--sh-tracking-card);
+  }
+
+  .sh-workshop-emphasis { font-weight: var(--sh-weight-semibold); }
+  .sh-workshop-number { font-variant-numeric: tabular-nums; }
+  .sh-workshop-divider-top { border-top: 1px solid var(--sh-border); }
+  .sh-workshop-divider-bottom { border-bottom: 1px solid var(--sh-border); }
+
+  .sh-workshop-artwork {
+    overflow: hidden;
+    flex-shrink: 0;
+    border-radius: var(--sh-radius-artwork);
+    background: var(--sh-raised);
+    object-fit: contain;
+  }
+  .sh-workshop-row {
+    border-radius: var(--sh-radius-control);
+    transition: background-color var(--sh-motion-feedback) var(--sh-motion-ease);
+  }
+  .sh-workshop-row:hover { background: var(--sh-raised); }
+
+  /* A track row: at least 64px, the pointer-only drag handle, the position, intact 40px
+     artwork, the title and artist (with the lock in words), the duration from 640px and one
+     44px actions button. Its open actions take a line of their own. */
+  .sh-workshop .track-item {
+    display: flex;
+    min-height: var(--sh-space-16);
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sh-space-2) var(--sh-space-3);
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-control);
+    padding: var(--sh-space-2) var(--sh-space-3);
+    background: var(--sh-surface);
+  }
+  .sh-workshop .drag-handle {
+    display: inline-flex;
+    width: var(--sh-space-6);
+    min-height: var(--sh-space-11);
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    color: var(--sh-muted);
+    cursor: grab;
+  }
+  .sh-workshop .drag-handle:active { cursor: grabbing; }
+  .sh-workshop .track-number { min-width: 2ch; flex-shrink: 0; text-align: right; }
+  .sh-workshop .track-art {
+    width: var(--sh-space-10);
+    height: var(--sh-space-10);
+    flex-shrink: 0;
+  }
+  .sh-workshop .track-text { min-width: 0; flex: 1 1 0; }
+  .sh-workshop .track-title,
+  .sh-workshop .track-artist { overflow-wrap: anywhere; }
+  .sh-workshop .track-duration { display: none; flex-shrink: 0; }
+  /* Below the workspace width the document's scroll padding keeps a focused actions button
+     clear of the sticky draft footer; this margin keeps its focus ring (3px, 4px out) clear too. */
+  .sh-workshop .track-actions-btn { flex-shrink: 0; scroll-margin-bottom: var(--sh-space-2); }
+  .sh-workshop .track-actions-btn[aria-expanded="true"] { border-color: var(--sh-accent); }
+
+  .sh-workshop-popover {
+    border: 1px solid var(--sh-control-border);
+    border-radius: var(--sh-radius-panel);
+    background: var(--sh-raised);
+    color: var(--sh-ink);
+    box-shadow: var(--sh-shadow-popover);
+  }
+  .sh-workshop-playlist-option {
+    min-height: var(--sh-space-14);
+    border: 1px solid transparent;
+    border-radius: var(--sh-radius-control);
+    padding: var(--sh-space-3);
+    color: var(--sh-ink);
+    font-size: var(--sh-type-body);
+    transition: background-color var(--sh-motion-feedback) var(--sh-motion-ease);
+  }
+  .sh-workshop-playlist-option:hover { background: var(--sh-surface); }
+  .sh-workshop-playlist-current {
+    border-color: var(--sh-accent);
+    background: var(--sh-surface);
+  }
+  .sh-workshop-callout-error {
+    border-color: var(--sh-error);
+    background: var(--sh-error-surface);
+    color: var(--sh-error);
+  }
+
+  .sh-workshop-toggle {
+    position: relative;
+    display: inline-flex;
+    width: var(--sh-space-11);
+    min-width: var(--sh-space-11);
+    height: var(--sh-space-11);
+    min-height: var(--sh-space-11);
+    align-items: center;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .sh-workshop-toggle::before {
+    content: '';
+    position: absolute;
+    inset-inline-start: var(--sh-space-1);
+    top: var(--sh-space-3);
+    width: var(--sh-space-9);
+    height: var(--sh-space-5);
+    border: 1px solid var(--sh-control-border);
+    border-radius: var(--sh-radius-control);
+    background: var(--sh-surface);
+    transition: background-color var(--sh-motion-feedback) var(--sh-motion-ease);
+  }
+  .sh-workshop-toggle-on::before {
+    background: var(--sh-accent);
+    border-color: var(--sh-accent);
+  }
+  .sh-workshop-toggle-dot {
+    position: absolute;
+    left: var(--sh-space-2);
+    width: var(--sh-space-3);
+    height: var(--sh-space-3);
+    border-radius: var(--sh-radius-full);
+    background: var(--sh-ink);
+    transition: transform var(--sh-motion-feedback) var(--sh-motion-ease);
+  }
+  .sh-workshop-toggle-dot-on {
+    transform: translateX(var(--sh-space-4));
+    background: var(--sh-accent-ink);
+  }
+  .sh-workshop-field-saved { border-color: var(--sh-success); }
+  .sh-workshop-track-added { color: var(--sh-muted); }
+
+  .sh-workshop .sortable-ghost {
+    opacity: 0.4;
+    background: var(--sh-success-surface);
+    border-radius: var(--sh-radius-control);
+  }
+  .sh-workshop .sortable-chosen { background: var(--sh-raised); }
+  .sh-workshop .sortable-drag {
+    background: var(--sh-success-surface);
+    border-radius: var(--sh-radius-control);
+    box-shadow: var(--sh-shadow-popover);
+  }
+  .sh-workshop .track-locked-standard {
+    border-left: 3px solid var(--sh-warning);
+    background: var(--sh-warning-surface);
+  }
+  .sh-workshop .track-locked-super {
+    border-left: 3px solid var(--sh-error);
+    background: var(--sh-error-surface);
+  }
+  .sh-workshop .track-locked .drag-handle { pointer-events: none; opacity: 0.4; }
+
+  @screen sm {
+    .sh-workshop .track-duration { display: inline; }
+  }
+
+  @media (max-width: 639px) {
+    .sh-workshop .track-item { gap: var(--sh-space-2); padding-inline: var(--sh-space-2); }
+    .sh-workshop .sh-input { min-width: 0; }
+  }
+}

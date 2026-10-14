@@ -1,0 +1,324 @@
+"""
+Tests for shared service base utilities.
+
+Tests cover safe_commit, commit_or_stage, get_user_or_raise,
+get_owned_entity, ensure_private and create_private_playlist.
+"""
+
+from unittest.mock import Mock, patch
+
+import pytest
+from sqlalchemy.exc import IntegrityError
+
+from shuffify.models.db import (
+    User,
+    WorkshopSession,
+    db,
+)
+from shuffify.services.base import (
+    commit_or_stage,
+    create_private_playlist,
+    ensure_private,
+    get_owned_entity,
+    get_user_or_raise,
+    safe_commit,
+)
+from shuffify.spotify.api import SpotifyAPI
+from shuffify.spotify.exceptions import SpotifyWriteUnverifiedError
+
+
+class FakeError(Exception):
+    """Fake exception class for verifying exception behavior."""
+
+    pass
+
+
+class FakeNotFoundError(Exception):
+    """Fake exception for not-found scenarios."""
+
+    pass
+
+
+@pytest.fixture
+def test_user(app_ctx):
+    """Create a test user in the database."""
+    user = User(
+        spotify_id="base_test_user",
+        display_name="Base Test User",
+    )
+    db.session.add(user)
+    db.session.commit()
+    return user
+
+
+class TestSafeCommit:
+    """Tests for safe_commit utility."""
+
+    def test_success(self, app_ctx, test_user):
+        """Should commit and persist changes."""
+        user2 = User(
+            spotify_id="new_user",
+            display_name="New User",
+        )
+        db.session.add(user2)
+        safe_commit("create test user", FakeError)
+
+        found = User.query.filter_by(
+            spotify_id="new_user"
+        ).first()
+        assert found is not None
+        assert found.display_name == "New User"
+
+    def test_rollback_on_failure(
+        self, app_ctx, test_user
+    ):
+        """Should rollback and raise on commit failure."""
+        duplicate = User(
+            spotify_id="base_test_user",
+            display_name="Duplicate",
+        )
+        db.session.add(duplicate)
+
+        with pytest.raises(FakeError, match="Failed to"):
+            safe_commit("create duplicate user", FakeError)
+
+    def test_session_clean_after_rollback(
+        self, app_ctx, test_user
+    ):
+        """After failed safe_commit, session should be clean."""
+        duplicate = User(
+            spotify_id="base_test_user",
+            display_name="Duplicate",
+        )
+        db.session.add(duplicate)
+
+        with pytest.raises(FakeError):
+            safe_commit("create duplicate", FakeError)
+
+        # Session should be usable after rollback
+        user2 = User(
+            spotify_id="after_rollback",
+            display_name="After Rollback",
+        )
+        db.session.add(user2)
+        db.session.commit()
+        found = User.query.filter_by(
+            spotify_id="after_rollback"
+        ).first()
+        assert found is not None
+
+    def test_default_exception_class(
+        self, app_ctx, test_user
+    ):
+        """Should raise plain Exception when no class given."""
+        duplicate = User(
+            spotify_id="base_test_user",
+            display_name="Duplicate",
+        )
+        db.session.add(duplicate)
+
+        with pytest.raises(Exception, match="Failed to"):
+            safe_commit("create duplicate user")
+
+    def test_custom_exception_class(
+        self, app_ctx, test_user
+    ):
+        """Should raise the specified custom exception."""
+        duplicate = User(
+            spotify_id="base_test_user",
+            display_name="Duplicate",
+        )
+        db.session.add(duplicate)
+
+        with pytest.raises(FakeError):
+            safe_commit("create duplicate", FakeError)
+
+
+class TestCommitOrStage:
+    """commit=True is safe_commit; commit=False flushes and leaves the transaction to the caller."""
+
+    def test_committing_is_safe_commit(self, app_ctx, test_user):
+        db.session.add(User(spotify_id="committed", display_name="Committed"))
+        commit_or_stage(True, "create a user", FakeError)
+        db.session.rollback()
+        assert User.query.filter_by(spotify_id="committed").first() is not None
+        db.session.add(User(spotify_id="base_test_user", display_name="Duplicate"))
+        with pytest.raises(FakeError, match="Failed to create a duplicate"):
+            commit_or_stage(True, "create a duplicate", FakeError)
+        assert User.query.filter_by(spotify_id="base_test_user").count() == 1
+
+    def test_staging_flushes_without_committing(self, app_ctx, test_user):
+        db.session.add(User(spotify_id="staged", display_name="Staged"))
+        with patch.object(db.session, "commit") as commit:
+            commit_or_stage(False, "stage a user", FakeError)
+        commit.assert_not_called()
+        assert User.query.filter_by(spotify_id="staged").one().id is not None
+        db.session.rollback()
+        assert User.query.filter_by(spotify_id="staged").first() is None
+
+    def test_a_staging_error_propagates_unwrapped_and_is_not_rolled_back(self, app_ctx, test_user):
+        db.session.add(User(spotify_id="base_test_user", display_name="Duplicate"))
+        with patch.object(db.session, "rollback") as rollback, pytest.raises(IntegrityError):
+            commit_or_stage(False, "stage a duplicate", FakeError)
+        rollback.assert_not_called()
+        db.session.rollback()
+
+
+class TestGetUserOrRaise:
+    """Tests for get_user_or_raise utility."""
+
+    def test_returns_user_when_found(
+        self, app_ctx, test_user
+    ):
+        """Should return the user when found."""
+        user = get_user_or_raise(
+            "base_test_user", FakeError
+        )
+        assert user is not None
+        assert user.spotify_id == "base_test_user"
+
+    def test_raises_when_not_found(self, app_ctx):
+        """Should raise when user not found."""
+        with pytest.raises(
+            FakeError, match="User not found"
+        ):
+            get_user_or_raise("ghost", FakeError)
+
+    def test_returns_none_when_no_exception_class(
+        self, app_ctx
+    ):
+        """Should return None when no exception class."""
+        result = get_user_or_raise("ghost")
+        assert result is None
+
+    def test_exception_message_contains_spotify_id(
+        self, app_ctx
+    ):
+        """Should include spotify_id in error message."""
+        with pytest.raises(
+            FakeError, match="nonexistent_user"
+        ):
+            get_user_or_raise(
+                "nonexistent_user", FakeError
+            )
+
+    def test_returns_user_without_exception_class(
+        self, app_ctx, test_user
+    ):
+        """Should return user even when no exception class."""
+        user = get_user_or_raise("base_test_user")
+        assert user is not None
+        assert user.spotify_id == "base_test_user"
+
+
+class TestGetOwnedEntity:
+    """Tests for get_owned_entity utility."""
+
+    def test_returns_entity_when_owned(
+        self, app_ctx, test_user
+    ):
+        """Should return entity when ownership matches."""
+        ws = WorkshopSession(
+            user_id=test_user.id,
+            playlist_id="p1",
+            session_name="Test",
+        )
+        ws.track_uris = ["spotify:track:a"]
+        db.session.add(ws)
+        db.session.commit()
+
+        result = get_owned_entity(
+            WorkshopSession,
+            ws.id,
+            test_user.id,
+            FakeNotFoundError,
+        )
+        assert result.id == ws.id
+
+    def test_raises_when_not_found(
+        self, app_ctx, test_user
+    ):
+        """Should raise when entity does not exist."""
+        with pytest.raises(FakeNotFoundError):
+            get_owned_entity(
+                WorkshopSession,
+                99999,
+                test_user.id,
+                FakeNotFoundError,
+            )
+
+    def test_raises_when_wrong_owner(
+        self, app_ctx, test_user
+    ):
+        """Should raise when user_id does not match."""
+        ws = WorkshopSession(
+            user_id=test_user.id,
+            playlist_id="p1",
+            session_name="Test",
+        )
+        ws.track_uris = ["spotify:track:a"]
+        db.session.add(ws)
+        db.session.commit()
+
+        with pytest.raises(FakeNotFoundError):
+            get_owned_entity(
+                WorkshopSession,
+                ws.id,
+                99999,
+                FakeNotFoundError,
+            )
+
+    def test_exception_message_contains_class_name(
+        self, app_ctx, test_user
+    ):
+        """Should include entity class name in message."""
+        with pytest.raises(
+            FakeNotFoundError,
+            match="WorkshopSession",
+        ):
+            get_owned_entity(
+                WorkshopSession,
+                99999,
+                test_user.id,
+                FakeNotFoundError,
+            )
+
+
+class TestEnsurePrivate:
+    """The follow-up PUT that keeps a created playlist private."""
+
+    def test_confirms_a_private_playlist(self):
+        api = Mock(spec=SpotifyAPI)
+        assert ensure_private(api, "pl1") is True
+        api.update_playlist_details.assert_called_once_with("pl1", public=False)
+
+    def test_a_failure_is_logged_and_reported_never_raised(self, caplog):
+        api = Mock(spec=SpotifyAPI)
+        api.update_playlist_details.side_effect = RuntimeError("timed out")
+        assert ensure_private(api, "pl1") is False
+        assert "Could not make playlist pl1 private" in caplog.text
+
+    def test_create_private_playlist_keeps_its_playlist_when_privacy_fails(self):
+        api = Mock(spec=SpotifyAPI)
+        api.create_user_playlist.return_value = {"id": "pl1"}
+        api.update_playlist_details.side_effect = RuntimeError("timed out")
+        assert create_private_playlist(api, "Mix", "Archive", "Archived") == ("pl1", "Mix [Archive]")
+        api.create_user_playlist.assert_called_once_with("Mix [Archive]", public=False, description="Archived")
+        api.update_playlist_details.assert_called_once_with("pl1", public=False)
+
+
+class TestCreatePrivatePlaylist:
+    """An answer without a usable ID may hide a playlist that exists."""
+
+    @pytest.mark.parametrize(
+        "answer",
+        [None, {}, {"id": ""}],
+        ids=["empty-2xx", "no-id", "blank-id"],
+    )
+    def test_an_answer_without_a_usable_id_is_an_unknown_creation(self, answer):
+        api = Mock(spec=SpotifyAPI)
+        api.create_user_playlist.return_value = answer
+        with pytest.raises(SpotifyWriteUnverifiedError, match="without an ID"):
+            create_private_playlist(api, "Mix", "Archive", "Archived")
+        api.create_user_playlist.assert_called_once_with("Mix [Archive]", public=False, description="Archived")
+        api.update_playlist_details.assert_not_called()

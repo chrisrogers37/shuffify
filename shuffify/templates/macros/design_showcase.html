@@ -1,0 +1,81 @@
+{# Shared, static walkthrough markup. Content stays escaped by Jinja. #}
+{% macro showcase(id, eyebrow, title, description, steps, numbered=True) -%}
+<section id="{{ id }}" class="sh-container sh-showcase" aria-labelledby="{{ id }}-title">
+    <div class="sh-showcase-copy">
+        <p class="sh-eyebrow"><span aria-hidden="true"></span>{{ eyebrow }}</p>
+        <h2 id="{{ id }}-title" class="sh-heading sh-showcase-title">{{ title }}</h2>
+        <p class="sh-showcase-description">{{ description }}</p>
+        {% if numbered %}<ol class="sh-showcase-steps">{% else %}<ul class="sh-showcase-steps sh-showcase-options" role="list">{% endif %}
+            {% for heading, detail in steps %}
+            <li><strong>{{ heading }}</strong><p>{{ detail }}</p></li>
+            {% endfor %}
+        {% if numbered %}</ol>{% else %}</ul>{% endif %}
+    </div>
+    {{ caller() }}
+</section>
+{%- endmacro %}
+
+{% macro example_panel(title, caption, label='') -%}
+<figure class="sh-surface sh-example">
+    <div class="sh-example-head">
+        {% if label %}<p class="sh-example-label">{{ label }}</p>{% endif %}
+        <h3>{{ title }}</h3>
+    </div>
+    <div class="sh-example-body">
+        {{ caller() }}
+    </div>
+    <figcaption class="sh-example-caption">
+        {% if caption %}<p>{{ caption }}</p>{% endif %}
+        <p class="sh-example-sample-note">Sample playlists and songs.</p>
+    </figcaption>
+</figure>
+{%- endmacro %}
+
+{% macro playlist_row(name, detail, metric='') -%}
+<li class="sh-example-row">
+    <div>
+        <p class="sh-example-name">{{ name }}</p>
+        <p class="sh-example-detail">{{ detail }}</p>
+    </div>
+    {% if metric %}<span class="sh-example-badge">{{ metric }}</span>{% endif %}
+</li>
+{%- endmacro %}
+
+{% macro flow(label, arrow='↓') -%}
+<p class="sh-example-flow"><span aria-hidden="true">{{ arrow }}</span><span>{{ label }}</span></p>
+{%- endmacro %}
+
+{# Literal classes keep every shared palette variant in the Tailwind build. #}
+{% macro cover_palette(cover=1) -%}
+{% set palettes = ['sh-illustration-cover', 'sh-illustration-cover-2', 'sh-illustration-cover-3', 'sh-illustration-cover-4', 'sh-illustration-cover-5', 'sh-illustration-cover-6', 'sh-illustration-cover-7', 'sh-illustration-cover-8'] -%}
+{{ palettes[(cover|int) - 1] if cover in [1, 2, 3, 4, 5, 6, 7, 8] else palettes[0] }}
+{%- endmacro %}
+
+{# Song identity and visible status use the shared illustration palette. #}
+{% macro song_tile(name, cover=1, tag='') -%}
+{% set incoming = tag == 'New' %}
+<li class="sh-song-tile{% if incoming %} sh-song-tile-highlight{% endif %}">
+    <span class="sh-song-cover {{ cover_palette(cover) }}" aria-hidden="true">{{ name[:1]|upper }}</span>
+    <div class="sh-song-copy">
+        <p class="sh-song-name">{{ name }}</p>
+        {% if tag %}
+        <span class="sh-song-tag{% if incoming %} sh-song-tag-highlight{% endif %}">{{ tag }}</span>
+        {% endif %}
+    </div>
+</li>
+{%- endmacro %}
+
+{% macro mini_playlist(role, stage, tracks, empty='No songs waiting') -%}
+<div class="sh-mini-playlist">
+    <h4 class="sh-mini-playlist-title">{{ role }}</h4>
+    {% if tracks %}
+    <ul class="sh-mini-playlist-tracks" role="list" aria-label="{{ stage }}: {{ role }}">
+        {% for name, cover, tag in tracks %}
+        {{ song_tile(name, cover, tag) }}
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="sh-mini-playlist-empty">{{ empty }}</p>
+    {% endif %}
+</div>
+{%- endmacro %}

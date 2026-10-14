@@ -1,0 +1,719 @@
+"""
+Tests for Flask app factory and Redis initialization.
+
+Tests cover create_app, Redis session storage, and cache helper functions.
+"""
+
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
+import redis
+
+
+@pytest.fixture
+def no_schema_check(monkeypatch):
+    """Neutralize the production schema guard for this test.
+
+    create_app("production") verifies the database is at Alembic head and
+    refuses to build otherwise. Tests that construct a
+    production-configured app only to inspect session backends or response
+    headers are not exercising a production boot, and must not depend on
+    whatever migration state the local SQLite file happens to be in.
+    """
+    monkeypatch.setattr("shuffify._verify_schema_at_head", lambda _dir: None)
+
+
+class TestCreateApp:
+    """Tests for create_app function."""
+
+    def test_create_app_development_config(self):
+        """Should create app with development config."""
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+                "REDIS_URL": "",
+            },
+        ):
+            from shuffify import create_app
+
+            app = create_app("development")
+
+            assert app is not None
+            assert app.config["DEBUG"] is True
+
+    def test_create_app_uses_app_config_default(self):
+        """Should use APP_CONFIG when config_name not provided."""
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+                "APP_CONFIG": "development",
+                "REDIS_URL": "",
+            },
+        ):
+            from shuffify import create_app
+
+            app = create_app()
+
+            assert app.config["DEBUG"] is True
+
+    def test_create_app_with_redis_url(self, monkeypatch):
+        """Should configure Redis session when REDIS_URL provided."""
+        from config import DevConfig
+
+        monkeypatch.setattr(DevConfig, "REDIS_URL", "redis://localhost:6379/0")
+        mock_redis = MagicMock(spec=redis.Redis)
+        mock_redis.ping.return_value = True
+
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+                "REDIS_URL": "redis://localhost:6379/0",
+            },
+        ):
+            with patch("shuffify.redis.from_url", return_value=mock_redis):
+                from shuffify import create_app
+
+                app = create_app("development")
+
+                assert app.config["SESSION_TYPE"] == "redis"
+                assert app.config.get("SESSION_REDIS") is mock_redis
+
+    def test_create_app_redis_connection_failure_fallback(self):
+        """Should fall back to filesystem when Redis connection fails."""
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+                "REDIS_URL": "redis://localhost:6379/0",
+            },
+        ):
+            with patch("shuffify.redis.from_url") as mock_from_url:
+                mock_redis = Mock()
+                mock_redis.ping.side_effect = redis.ConnectionError(
+                    "Connection refused"
+                )
+                mock_from_url.return_value = mock_redis
+
+                from shuffify import create_app
+
+                app = create_app("development")
+
+                assert app.config["SESSION_TYPE"] == "filesystem"
+
+    def test_create_app_no_redis_url(self):
+        """Should use filesystem sessions when REDIS_URL not set."""
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+            },
+            clear=True,
+        ):
+            # Force no REDIS_URL
+            import os
+
+            from shuffify import create_app
+
+            os.environ.pop("REDIS_URL", None)
+
+            app = create_app("development")
+
+            assert app.config["SESSION_TYPE"] == "filesystem"
+
+    def test_create_app_registers_blueprints(self):
+        """Should register main blueprint."""
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+                "REDIS_URL": "",
+            },
+        ):
+            from shuffify import create_app
+
+            app = create_app("development")
+
+            # Check that routes are registered
+            rules = [rule.rule for rule in app.url_map.iter_rules()]
+            assert "/" in rules
+            assert "/health" in rules
+
+    def test_create_app_debug_adds_no_cache_headers(self):
+        """Should add no-cache headers in debug mode."""
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+                "REDIS_URL": "",
+            },
+        ):
+            from shuffify import create_app
+
+            app = create_app("development")
+
+            with app.test_client() as client:
+                response = client.get("/health")
+                assert "no-cache" in response.headers.get("Cache-Control", "")
+
+    def test_create_app_fails_fast_on_malformed_token_key(self, monkeypatch):
+        """An explicitly configured but unusable TOKEN_ENCRYPTION_KEY
+        must fail the boot, not warn and run with token encryption
+        silently disabled (scheduled jobs would die quietly)."""
+        from config import TestConfig
+        from shuffify.services.token_service import (
+            TokenEncryptionError,
+            TokenService,
+        )
+
+        monkeypatch.setattr(TestConfig, "TOKEN_ENCRYPTION_KEY", "not-a-key")
+        from shuffify import create_app
+
+        with pytest.raises(TokenEncryptionError, match="Fernet"):
+            create_app("testing")
+        TokenService.reset()
+
+    def test_scheduler_less_process_exits_cleanly(self):
+        """No exit hook imports the scheduler module after threading has shut down.
+
+        A fresh interpreter, because exit hooks only run at interpreter exit.
+        """
+        import os
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        # "import pytest" first: config.py then skips load_dotenv. A minimal
+        # environment, with Redis off, so nothing is contacted.
+        result = subprocess.run(
+            [sys.executable, "-c", "import pytest; from shuffify import create_app; create_app('testing')"],
+            cwd=Path(__file__).resolve().parent.parent,
+            env={"PATH": os.environ.get("PATH", ""), "HOME": os.environ.get("HOME", "/tmp"), "REDIS_URL": ""},
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "Exception ignored in atexit" not in result.stderr, result.stderr
+
+
+class TestGetRedisClient:
+    """Tests for get_redis_client function."""
+
+    def test_get_redis_client_returns_none_when_not_configured(self):
+        """Should return None when Redis not configured."""
+        import shuffify
+
+        # Reset the global
+        shuffify._redis_client = None
+
+        result = shuffify.get_redis_client()
+        assert result is None
+
+    def test_get_redis_client_returns_client_when_configured(self):
+        """Should return Redis client when configured."""
+        import shuffify
+
+        mock_redis = Mock(spec=redis.Redis)
+        shuffify._redis_client = mock_redis
+
+        result = shuffify.get_redis_client()
+        assert result is mock_redis
+
+        # Clean up
+        shuffify._redis_client = None
+
+
+class TestGetSpotifyCache:
+    """Tests for get_spotify_cache function."""
+
+    def test_get_spotify_cache_returns_none_when_redis_not_configured(self):
+        """Should return None when Redis not configured."""
+        import shuffify
+
+        shuffify._redis_client = None
+
+        result = shuffify.get_spotify_cache()
+        assert result is None
+
+    def test_get_spotify_cache_returns_cache_with_defaults(self):
+        """Should return SpotifyCache with default settings outside Flask context."""
+        import shuffify
+        from shuffify.spotify.cache import SpotifyCache
+
+        mock_redis = Mock(spec=redis.Redis)
+        shuffify._redis_client = mock_redis
+
+        result = shuffify.get_spotify_cache()
+
+        assert isinstance(result, SpotifyCache)
+        assert result._redis is mock_redis
+
+        # Clean up
+        shuffify._redis_client = None
+
+    def test_get_spotify_cache_uses_flask_config(self):
+        """Should use Flask config settings when in app context."""
+        from flask import Flask
+
+        import shuffify
+        from shuffify.spotify.cache import SpotifyCache
+
+        mock_redis = Mock(spec=redis.Redis)
+        shuffify._redis_client = mock_redis
+
+        # Create a minimal Flask app for the test to avoid Redis connection
+        app = Flask(__name__)
+        app.config["CACHE_KEY_PREFIX"] = "test:cache:"
+        app.config["CACHE_DEFAULT_TTL"] = 300
+        app.config["CACHE_PLAYLIST_TTL"] = 120  # Custom TTL
+        app.config["CACHE_USER_TTL"] = 600
+        app.config["CACHE_AUDIO_FEATURES_TTL"] = 86400
+
+        with app.app_context():
+            result = shuffify.get_spotify_cache()
+
+            assert isinstance(result, SpotifyCache)
+            assert result._playlist_ttl == 120
+
+        # Clean up
+        shuffify._redis_client = None
+
+
+class TestRedisClientCreation:
+    """Tests for _create_redis_client function."""
+
+    def test_create_redis_client_success(self):
+        """Should create Redis client from URL."""
+        from shuffify import _create_redis_client
+
+        with patch("shuffify.redis.from_url") as mock_from_url:
+            mock_client = Mock(spec=redis.Redis)
+            mock_from_url.return_value = mock_client
+
+            result = _create_redis_client("redis://localhost:6379/0")
+
+            assert result is mock_client
+            mock_from_url.assert_called_once_with(
+                "redis://localhost:6379/0", decode_responses=False
+            )
+
+
+class TestConfigIntegration:
+    """Tests for configuration integration with Redis."""
+
+    def test_config_has_redis_settings(self):
+        """Should have Redis configuration settings."""
+        from config import Config
+
+        assert hasattr(Config, "REDIS_URL")
+        assert hasattr(Config, "SESSION_TYPE")
+        assert hasattr(Config, "SESSION_KEY_PREFIX")
+        assert hasattr(Config, "CACHE_KEY_PREFIX")
+        assert hasattr(Config, "CACHE_PLAYLIST_TTL")
+        assert hasattr(Config, "CACHE_USER_TTL")
+        assert hasattr(Config, "CACHE_AUDIO_FEATURES_TTL")
+
+    def test_production_config_requires_redis_url(self):
+        """Production config should have REDIS_URL from environment."""
+        from config import ProdConfig
+
+        assert hasattr(ProdConfig, "REDIS_URL")
+
+    def test_development_config_has_default_redis_url(self):
+        """Development config should have default Redis URL."""
+        from config import DevConfig
+
+        # Should have a default for local development
+        assert DevConfig.REDIS_URL is not None or hasattr(DevConfig, "REDIS_URL")
+
+
+class TestSecretKeyValidation:
+    """Tests for SECRET_KEY enforcement in production config."""
+
+    def test_production_requires_secret_key(self):
+        """validate_required_env_vars should reject missing SECRET_KEY in production."""
+        from config import validate_required_env_vars
+
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+            },
+            clear=False,
+        ):
+            # Remove SECRET_KEY if present
+            import os
+
+            os.environ.pop("SECRET_KEY", None)
+            with pytest.raises(ValueError, match="SECRET_KEY"):
+                validate_required_env_vars("production")
+
+    def test_production_passes_with_secret_key(self):
+        """validate_required_env_vars should pass when SECRET_KEY is set in production."""
+        from config import validate_required_env_vars
+
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+                "SECRET_KEY": "a-real-secret-from-env",
+            },
+        ):
+            validate_required_env_vars("production")  # Should not raise
+
+    def test_development_allows_missing_secret_key(self):
+        """validate_required_env_vars should not require SECRET_KEY in development."""
+        from config import validate_required_env_vars
+
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+            },
+            clear=False,
+        ):
+            import os
+
+            os.environ.pop("SECRET_KEY", None)
+            validate_required_env_vars("development")  # Should not raise
+
+    def test_prod_config_no_weak_default(self):
+        """ProdConfig should not inherit the weak dev default for SECRET_KEY."""
+        from config import ProdConfig
+
+        # ProdConfig.SECRET_KEY should be whatever os.environ.get returns,
+        # NOT the hardcoded 'a_default_secret_key_for_development'
+        assert ProdConfig.SECRET_KEY != "a_default_secret_key_for_development"
+
+    def test_base_config_no_hardcoded_fallback(self):
+        """Base Config should not have a hardcoded SECRET_KEY fallback."""
+        from config import Config
+
+        assert Config.SECRET_KEY != "a_default_secret_key_for_development"
+
+    def test_dev_config_always_has_secret_key(self):
+        """DevConfig should auto-generate a SECRET_KEY if not in env."""
+        from config import DevConfig
+
+        assert DevConfig.SECRET_KEY is not None
+        assert len(DevConfig.SECRET_KEY) > 0
+
+    def test_test_config_has_explicit_secret_key(self):
+        """TestConfig should have an explicit SECRET_KEY."""
+        from config import TestConfig
+
+        assert TestConfig.SECRET_KEY == "test-secret-key"
+
+
+class TestRedisProductionRequirement:
+    """Tests for Redis behavior in production.
+
+    Production deployments without a provisioned Redis must fall back to
+    filesystem sessions rather than crash on boot.
+    """
+
+    def test_production_falls_back_when_redis_url_unset(self, no_schema_check):
+        """Production should warn + fall back to filesystem when REDIS_URL is unset."""
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+                "SECRET_KEY": "test-secret",
+                "REDIS_URL": "",
+            },
+        ):
+            from shuffify import create_app
+
+            app = create_app("production")
+            assert app.config["SESSION_TYPE"] == "filesystem"
+
+    def test_production_falls_back_on_redis_connection_failure(
+        self, monkeypatch, no_schema_check
+    ):
+        """Production should warn + fall back to filesystem when Redis is unreachable."""
+        from config import ProdConfig
+
+        monkeypatch.setattr(ProdConfig, "REDIS_URL", "redis://localhost:6379/0")
+
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+                "SECRET_KEY": "test-secret",
+                "REDIS_URL": "redis://localhost:6379/0",
+            },
+        ):
+            with patch("shuffify.redis.from_url") as mock_from_url:
+                mock_redis_client = Mock()
+                mock_redis_client.ping.side_effect = redis.ConnectionError(
+                    "Connection refused"
+                )
+                mock_from_url.return_value = mock_redis_client
+
+                from shuffify import create_app
+
+                app = create_app("production")
+                assert app.config["SESSION_TYPE"] == "filesystem"
+
+    def test_development_falls_back_to_filesystem(self):
+        """Development should fall back to filesystem when Redis fails."""
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+                "REDIS_URL": "redis://localhost:6379/0",
+            },
+        ):
+            with patch("shuffify.redis.from_url") as mock_from_url:
+                mock_redis_client = Mock()
+                mock_redis_client.ping.side_effect = redis.ConnectionError(
+                    "Connection refused"
+                )
+                mock_from_url.return_value = mock_redis_client
+
+                from shuffify import create_app
+
+                app = create_app("development")
+                assert app.config["SESSION_TYPE"] == "filesystem"
+
+
+class TestSecurityHeaders:
+    """Tests for security response headers."""
+
+    def test_x_content_type_options_present(self, client):
+        """All responses should include X-Content-Type-Options: nosniff."""
+        response = client.get("/health")
+        assert response.headers.get("X-Content-Type-Options") == "nosniff"
+
+    def test_x_frame_options_present(self, client):
+        """All responses should include X-Frame-Options: DENY."""
+        response = client.get("/health")
+        assert response.headers.get("X-Frame-Options") == "DENY"
+
+    def test_referrer_policy_present(self, client):
+        """All responses should include Referrer-Policy."""
+        response = client.get("/health")
+        assert (
+            response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+        )
+
+    def test_hsts_not_present_in_debug_mode(self):
+        """HSTS should NOT be sent in debug/development mode."""
+        import os
+        from unittest.mock import patch
+
+        os.environ.pop("DATABASE_URL", None)
+
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+            },
+        ):
+            from shuffify import create_app
+
+            app = create_app("development")
+            app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
+
+            with app.test_client() as debug_client:
+                response = debug_client.get("/health")
+                assert "Strict-Transport-Security" not in response.headers
+
+    def test_hsts_present_in_production_mode(self, monkeypatch, no_schema_check):
+        """HSTS should be sent when debug is False (production)."""
+        import os
+        from unittest.mock import patch
+
+        from config import ProdConfig
+
+        monkeypatch.setattr(ProdConfig, "REDIS_URL", "redis://localhost:6379/0")
+        os.environ.pop("DATABASE_URL", None)
+
+        mock_redis = MagicMock(spec=redis.Redis)
+        mock_redis.ping.return_value = True
+
+        with patch.dict(
+            "os.environ",
+            {
+                "SPOTIFY_CLIENT_ID": "test_id",
+                "SPOTIFY_CLIENT_SECRET": "test_secret",
+                "SPOTIFY_REDIRECT_URI": "http://localhost:5000/callback",
+                "SECRET_KEY": "test-secret-key-for-testing",
+                "REDIS_URL": "redis://localhost:6379/0",
+            },
+        ):
+            with patch("shuffify.redis.from_url", return_value=mock_redis):
+                from shuffify import create_app
+
+                app = create_app("production")
+                app.config["TESTING"] = True
+
+                with app.test_client() as prod_client:
+                    response = prod_client.get("/health")
+                    hsts = response.headers.get("Strict-Transport-Security")
+                    assert hsts is not None
+                    assert "max-age=31536000" in hsts
+                    assert "includeSubDomains" in hsts
+                    assert "preload" in hsts
+
+    def test_csp_header_present(self, client):
+        """All responses should include Content-Security-Policy."""
+        response = client.get("/health")
+        csp = response.headers.get("Content-Security-Policy")
+        assert csp is not None
+
+    def test_csp_default_src_self(self, client):
+        """CSP should restrict default-src to 'self'."""
+        csp = client.get("/health").headers["Content-Security-Policy"]
+        assert "default-src 'self'" in csp
+
+    def test_csp_uses_nonce_not_unsafe_inline(self, client):
+        """CSP should use nonce-based policy, not unsafe-inline."""
+        csp = client.get("/health").headers["Content-Security-Policy"]
+        assert "'unsafe-inline'" not in csp
+        assert "'nonce-" in csp
+
+    def test_csp_nonce_differs_per_request(self, client):
+        """Each request should get a unique CSP nonce."""
+        import re
+
+        csp1 = client.get("/health").headers["Content-Security-Policy"]
+        csp2 = client.get("/health").headers["Content-Security-Policy"]
+        nonces1 = re.findall(r"'nonce-([^']+)'", csp1)
+        nonces2 = re.findall(r"'nonce-([^']+)'", csp2)
+        assert nonces1
+        assert nonces2
+        assert nonces1[0] != nonces2[0]
+
+    def test_csp_nonce_in_script_and_style_src(self, client):
+        """CSP nonce should appear in both script-src and style-src."""
+        import re
+
+        csp = client.get("/health").headers["Content-Security-Policy"]
+        nonces = re.findall(r"'nonce-([^']+)'", csp)
+        # Same nonce used for both directives
+        assert len(nonces) == 2
+        assert nonces[0] == nonces[1]
+
+    def test_csp_script_src_pins_external_scripts_to_files(self, client):
+        """An external script source names one file, never a whole host.
+
+        A host-only source permits every file that host serves. The one
+        external script (SortableJS, also pinned by SRI at its tag) is
+        permitted by its exact path instead.
+        """
+        from urllib.parse import urlsplit
+
+        csp = client.get("/health").headers["Content-Security-Policy"]
+        script_src = next(d.split()[1:] for d in csp.split(";") if d.strip().startswith("script-src"))
+        external = [s for s in script_src if s.startswith("http")]
+        assert external, "expected the SortableJS source in script-src"
+        for source in external:
+            path = urlsplit(source).path
+            assert path and not path.endswith("/"), (
+                f"script-src permits everything under {source!r}; pin the exact file"
+            )
+
+    def test_csp_script_src_does_not_allow_tailwind_cdn(self, client):
+        """Tailwind is compiled to static/css and is never fetched.
+
+        An allow-list entry no template uses is standing permission for a
+        host that has no reason to execute here.
+        """
+        csp = client.get("/health").headers["Content-Security-Policy"]
+        assert "cdn.tailwindcss.com" not in csp
+
+    # Spotify serves cover art from many scdn.co and spotifycdn.com
+    # subdomains; mosaic is the four-up cover a playlist gets when it has no
+    # custom art. Each host is checked against the sources img-src declares,
+    # not by matching a substring of the policy.
+    SPOTIFY_IMAGE_HOSTS = [
+        "i.scdn.co",
+        "mosaic.scdn.co",
+        "thisis-images.scdn.co",
+        "daily-mix.scdn.co",
+        "newjams-images.scdn.co",
+        "lineup-images.scdn.co",
+        "charts-images.scdn.co",
+        "seeded-session-images.scdn.co",
+        "image-cdn-ak.spotifycdn.com",
+        "image-cdn-fa.spotifycdn.com",
+        "seed-mix-image.spotifycdn.com",
+    ]
+
+    @staticmethod
+    def _img_src_permits(csp, host):
+        """Does img-src actually admit this host? Sources, not substrings."""
+        import re as _re
+
+        m = _re.search(r"img-src ([^;]+)", csp)
+        assert m, "img-src directive absent -- this check would permit anything"
+        for src in m.group(1).split():
+            if not src.startswith("http"):
+                continue
+            pattern = src.split("://", 1)[1]
+            if pattern.startswith("*."):
+                if host.endswith(pattern[1:]):
+                    return True
+            elif host == pattern:
+                return True
+        return False
+
+    def test_csp_img_src_allows_every_spotify_cover_host(self, client):
+        """A cover host the policy omits renders as broken alt text."""
+        csp = client.get("/health").headers["Content-Security-Policy"]
+        missing = [
+            h for h in self.SPOTIFY_IMAGE_HOSTS
+            if not self._img_src_permits(csp, h)
+        ]
+        assert not missing, (
+            "img-src does not permit these Spotify image hosts, so covers "
+            f"served from them fail to load: {missing}"
+        )
+
+    def test_img_src_matcher_rejects_an_unrelated_host(self, client):
+        """The matcher above must be able to say no, or it proves nothing."""
+        csp = client.get("/health").headers["Content-Security-Policy"]
+        assert not self._img_src_permits(csp, "evil.example.com")
+        assert not self._img_src_permits(csp, "scdn.co.evil.example.com")
+
+    def test_csp_blocks_object_embeds(self, client):
+        """CSP should block object/embed elements."""
+        csp = client.get("/health").headers["Content-Security-Policy"]
+        assert "object-src 'none'" in csp
+
+    def test_csp_frame_ancestors_none(self, client):
+        """CSP should prevent framing (reinforces X-Frame-Options)."""
+        csp = client.get("/health").headers["Content-Security-Policy"]
+        assert "frame-ancestors 'none'" in csp
+
+    def test_csp_on_non_health_routes(self, client):
+        """CSP should be present on all routes."""
+        response = client.get("/")
+        assert response.headers.get("Content-Security-Policy") is not None
+
+    def test_security_headers_on_non_health_routes(self, client):
+        """Security headers should be on all routes, not just /health."""
+        response = client.get("/")
+        assert response.headers.get("X-Content-Type-Options") == "nosniff"
+        assert response.headers.get("X-Frame-Options") == "DENY"
+        assert (
+            response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+        )

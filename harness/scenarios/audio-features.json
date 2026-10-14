@@ -1,0 +1,17 @@
+{
+  "id": "audio-features",
+  "summary": "Audio features are refused to a Development Mode app.",
+  "behaviours": [
+    "dev-mode.audio-features-refused"
+  ],
+  "tracks": 1,
+  "steps": [
+    {
+      "call": "GET /audio-features",
+      "query": {
+        "ids": "{track1.id}"
+      },
+      "status": 403
+    }
+  ]
+}

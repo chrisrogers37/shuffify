@@ -1,0 +1,27 @@
+{
+  "_doc": "The one wording of each setup change. The server's normalized summary (playlist_setup_service) and the page's pending-list description (playlist-setup.js describe) must both produce these strings; each side's test reads this file. Names: sources by id, playlists by id.",
+  "sources": {"5": {"name": "Indie Finds", "raid_count": 5}},
+  "playlists": {"late": "Late Night", "old": "Old Faithful", "new": "New Mix", "arch": "Morning Archive", "arch2": "Spare Archive"},
+  "saved": {"collection": "old", "archive": "arch"},
+  "cases": [
+    {"change": {"op": "add_playlist_source", "playlist_id": "late"}, "summary": "Add source: Late Night (playlist)"},
+    {"change": {"op": "add_search_source", "search_query": "late night jazz"}, "summary": "Add source: “late night jazz” (search)"},
+    {"change": {"op": "remove_source", "source_id": 5}, "summary": "Remove source: Indie Finds"},
+    {"change": {"op": "set_source_count", "source_id": 5, "raid_count": 7}, "summary": "Indie Finds: collect 7 per run (was 5)"},
+    {"change": {"op": "remove_routine_source", "playlist_id": "ghost1"}, "summary": "Stop routines collecting from ghost1"},
+    {"change": {"op": "replace_collection", "playlist_id": "new"}, "summary": "Collection: replace Old Faithful with New Mix"},
+    {"change": {"op": "unlink_collection"}, "summary": "Collection: unlink Old Faithful"},
+    {"change": {"op": "set_drip", "drip_enabled": true}, "summary": "Collection: add collected tracks automatically"},
+    {"change": {"op": "set_drip", "drip_enabled": false}, "summary": "Collection: stop adding collected tracks automatically"},
+    {"change": {"op": "set_drip", "drip_count": 4}, "summary": "Collection: add 4 per run"},
+    {"change": {"op": "set_drip", "drip_enabled": true, "drip_count": 4}, "summary": "Collection: add collected tracks automatically, add 4 per run"},
+    {"change": {"op": "replace_archive", "playlist_id": "arch2"}, "summary": "Archive: replace Morning Archive with Spare Archive"},
+    {"change": {"op": "unpair_archive"}, "summary": "Archive: unlink Morning Archive"},
+    {"change": {"op": "set_auto_archive", "value": true}, "summary": "Archive: auto-archive removed tracks"},
+    {"change": {"op": "set_auto_archive", "value": false}, "summary": "Archive: stop auto-archiving removed tracks"}
+  ],
+  "unsaved_cases": [
+    {"change": {"op": "link_collection", "playlist_id": "old"}, "summary": "Collection: use Old Faithful"},
+    {"change": {"op": "pair_archive", "playlist_id": "arch"}, "summary": "Archive: use Morning Archive"}
+  ]
+}

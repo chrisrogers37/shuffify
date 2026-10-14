@@ -1,0 +1,69 @@
+@layer components {
+  .sh-library { padding-block: var(--sh-space-8) var(--sh-space-16); }
+  .sh-library-section { margin-top: var(--sh-space-6); }
+  .sh-library-section-heading { font-size: var(--sh-type-lead); }
+  .sh-library-inline-link { color: var(--sh-ink); text-decoration: underline; text-underline-offset: var(--sh-space-1); }
+  .sh-library-favorite { color: var(--sh-accent); }
+  .sh-library-hidden-toggle { width: 100%; justify-content: space-between; }
+  /* A disclosure's chevron turns while it is open: in an open details element's summary,
+     or in a control that says it is expanded. */
+  .sh-library-chevron { transition: transform var(--sh-motion-feedback) var(--sh-motion-ease); }
+  details[open] > summary .sh-library-chevron,
+  [aria-expanded="true"] > .sh-library-chevron { transform: rotate(180deg); }
+  /* A playlist row's states: hidden, draggable in Organize, a drop target, being dragged. */
+  .sh-library-row[data-hidden="true"] { border-style: dashed; }
+  .sh-library-row.organize-mode-active { cursor: grab; }
+  .sh-library-row.organize-mode-active:active { cursor: grabbing; }
+  .sh-library-row.drag-over { border-color: var(--sh-accent); outline: 2px solid var(--sh-accent); outline-offset: 2px; }
+  .sh-library-row.sh-library-dragging { opacity: 0.5; }
+  .sh-library-cover { width: 100%; height: 100%; object-fit: contain; border-radius: var(--sh-radius-artwork); }
+  .sh-library-cover-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-artwork);
+    background: var(--sh-base);
+    color: var(--sh-muted);
+  }
+  .sh-library-music-symbol { font-size: var(--sh-type-heading); }
+  /* Restore's longer label takes its own line rather than squeezing Shuffle now. */
+  .sh-library-quick-actions { display: flex; flex-wrap: wrap; gap: var(--sh-space-2); }
+  .sh-library-quick-actions .library-quick-shuffle { flex: 1; }
+  .sh-library-quiet-control {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sh-space-1);
+    min-height: var(--sh-space-11);
+    padding: var(--sh-space-2);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-body);
+    cursor: pointer;
+    list-style: none;
+  }
+  .sh-library-quiet-control::-webkit-details-marker { display: none; }
+  .sh-library-quiet-control:hover { color: var(--sh-ink); }
+  /* Start-aligned: its words line up with the text above it, inside the same padded target. */
+  .sh-library-quiet-control-start {
+    justify-content: flex-start;
+    width: fit-content;
+    margin-inline-start: calc(var(--sh-space-2) * -1);
+  }
+  .sh-library-shuffle-details { margin-top: var(--sh-space-1); }
+  .sh-library-shuffle-details > summary { flex-wrap: wrap; }
+  .sh-library-shuffle-fields { display: grid; gap: var(--sh-space-2); }
+  .sh-library-shuffle-details > .sh-library-shuffle-fields {
+    border-top: 1px solid var(--sh-border);
+    margin-bottom: var(--sh-space-3);
+    padding-top: var(--sh-space-3);
+  }
+  .sh-library-shuffle-fields .sh-field-label { display: block; margin-bottom: var(--sh-space-1); }
+  .sh-library-quick-shuffle > .sh-caption { margin-top: var(--sh-space-2); }
+  #live-operation-review ul { padding-left: var(--sh-space-4); list-style: disc; }
+  @screen lg {
+    .sh-library-cover { border-radius: var(--sh-radius-control); }
+  }
+}

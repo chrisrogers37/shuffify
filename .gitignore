@@ -1,0 +1,78 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments, whatever they are named
+venv/
+venv-*/
+.venv/
+.venv-*/
+ENV/
+env/
+env-*/
+.env-*/
+virtualenv/
+# The marker file at the root of every venv, as a backstop for a name none of
+# the patterns above anticipated.
+pyvenv.cfg
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Flask
+instance/
+.webassets-cache
+.flask_session/
+*.db
+
+# Logs
+*.log
+logs/
+
+# Docker
+.docker/
+
+# Testing
+.coverage
+# Local test harness state (scripts/harness.sh): database files, logs,
+# generated per-checkout secrets.
+.harness/
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Spotify specific
+.cache-*
+.spotify_cache
+.cache
+
+# Jupyter Notebooks
+*.ipynb
+test_notebook.ipynb

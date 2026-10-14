@@ -1,0 +1,9 @@
+# Production override — restart policy and any prod-only settings.
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# The base docker-compose.yml has no host source mount. Dev gets one
+# via docker-compose.override.yml (auto-loaded). Prod skips the
+# override by specifying files explicitly.
+services:
+  app:
+    restart: unless-stopped

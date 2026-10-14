@@ -1,0 +1,434 @@
+"""
+Upstream source service for managing persistent source configurations.
+
+Handles CRUD operations for UpstreamSource records, which link a source
+playlist to a target playlist for a specific user.
+"""
+
+import logging
+from typing import List, Optional
+
+from shuffify.models.db import UpstreamSource, User, db
+from shuffify.services.base import (
+    commit_or_stage,
+    get_owned_entity,
+    get_user_or_raise,
+    safe_commit,
+)
+from shuffify.services.playlist_lock import locked_commit_target
+
+logger = logging.getLogger(__name__)
+
+
+class UpstreamSourceError(Exception):
+    """Base exception for upstream source operations."""
+
+    pass
+
+
+class UpstreamSourceNotFoundError(UpstreamSourceError):
+    """Raised when an upstream source cannot be found."""
+
+    pass
+
+
+class UpstreamSourceLimitError(UpstreamSourceError):
+    """Raised when source limit per target is reached."""
+
+    pass
+
+
+def _lock_user(user_id: int) -> None:
+    """Serialize one user's source additions, so the duplicate check and the
+    limit hold; the row lock lasts until the transaction ends. (PostgreSQL
+    refuses FOR UPDATE on the count itself. SQLite ignores it, so there the
+    checks are best-effort.)
+
+    NO KEY UPDATE conflicts with itself but not with inserts that reference
+    the user, such as activity log rows.
+    """
+    db.session.query(User.id).filter_by(id=user_id).with_for_update(key_share=True).one()
+
+
+MAX_SOURCES_PER_TARGET = 10
+
+
+def _enforce_source_limit(user_id: int, target_playlist_id: str) -> None:
+    """Refuse another source for a playlist already at the limit."""
+    count = UpstreamSource.query.filter_by(
+        user_id=user_id,
+        target_playlist_id=target_playlist_id,
+    ).count()
+    if count >= MAX_SOURCES_PER_TARGET:
+        raise UpstreamSourceLimitError(
+            f"Maximum of {MAX_SOURCES_PER_TARGET} sources per playlist reached"
+        )
+
+
+class UpstreamSourceService:
+    """Service for managing UpstreamSource records.
+
+    Mutators take a keyword-only ``commit``: ``commit=False`` stages the change
+    (it flushes, lets errors propagate and leaves the transaction to the caller),
+    for the one-transaction playlist setup Save. The default commits immediately.
+    """
+
+    MAX_SOURCES_PER_TARGET = MAX_SOURCES_PER_TARGET
+
+    @staticmethod
+    def count_sources(
+        spotify_id: str, target_playlist_id: str
+    ) -> int:
+        """Count upstream sources for a user's target playlist."""
+        user = get_user_or_raise(spotify_id)
+        if not user:
+            return 0
+        return UpstreamSource.query.filter_by(
+            user_id=user.id,
+            target_playlist_id=target_playlist_id,
+        ).count()
+
+    @staticmethod
+    @locked_commit_target("target_playlist_id")
+    def add_source(
+        spotify_id: str,
+        target_playlist_id: str,
+        source_playlist_id: str,
+        source_type: str = "external",
+        source_url: Optional[str] = None,
+        source_name: Optional[str] = None,
+        *,
+        commit: bool = True,
+    ) -> UpstreamSource:
+        """
+        Add an upstream source configuration.
+
+        Args:
+            spotify_id: The Spotify user ID.
+            target_playlist_id: The playlist being built/modified.
+            source_playlist_id: The playlist to pull tracks from.
+            source_type: Either 'own' or 'external'.
+            source_url: The original URL used to find this source.
+            source_name: Display name of the source playlist.
+
+        Returns:
+            The created UpstreamSource instance.
+
+        Raises:
+            UpstreamSourceError: If user not found or creation fails.
+        """
+        if source_type not in (
+            "own", "external", "search_query"
+        ):
+            raise UpstreamSourceError(
+                f"Invalid source_type: {source_type}. "
+                f"Must be 'own', 'external', or "
+                f"'search_query'."
+            )
+
+        user = get_user_or_raise(
+            spotify_id, UpstreamSourceError
+        )
+        _lock_user(user.id)
+
+        # Check for duplicate: same user, target, and source
+        existing = UpstreamSource.query.filter_by(
+            user_id=user.id,
+            target_playlist_id=target_playlist_id,
+            source_playlist_id=source_playlist_id,
+        ).first()
+
+        if existing:
+            logger.info(
+                f"Upstream source already exists: "
+                f"{source_playlist_id} -> "
+                f"{target_playlist_id} for user {spotify_id}"
+            )
+            return existing
+
+        _enforce_source_limit(user.id, target_playlist_id)
+
+        source = UpstreamSource(
+            user_id=user.id,
+            target_playlist_id=target_playlist_id,
+            source_playlist_id=source_playlist_id,
+            source_url=source_url,
+            source_type=source_type,
+            source_name=source_name,
+        )
+        db.session.add(source)
+        commit_or_stage(
+            commit,
+            f"add upstream source: "
+            f"{source_playlist_id} -> "
+            f"{target_playlist_id} for user {spotify_id} "
+            f"(type={source_type})",
+            UpstreamSourceError,
+        )
+        return source
+
+    @staticmethod
+    @locked_commit_target("target_playlist_id")
+    def add_search_source(
+        spotify_id: str,
+        target_playlist_id: str,
+        search_query: str,
+        source_name: Optional[str] = None,
+        *,
+        commit: bool = True,
+    ) -> UpstreamSource:
+        """
+        Add a search-query upstream source.
+
+        Args:
+            spotify_id: The Spotify user ID.
+            target_playlist_id: The target playlist ID.
+            search_query: The Spotify search query string.
+            source_name: Optional display name.
+
+        Returns:
+            The created UpstreamSource instance.
+
+        Raises:
+            UpstreamSourceError: If user not found or creation fails.
+        """
+        user = get_user_or_raise(
+            spotify_id, UpstreamSourceError
+        )
+        _lock_user(user.id)
+
+        # Deduplicate on (user, target, search_query)
+        existing = UpstreamSource.query.filter_by(
+            user_id=user.id,
+            target_playlist_id=target_playlist_id,
+            search_query=search_query,
+        ).first()
+
+        if existing:
+            logger.info(
+                "Search source already exists: "
+                "'%s' -> %s for user %s",
+                search_query,
+                target_playlist_id,
+                spotify_id,
+            )
+            return existing
+
+        _enforce_source_limit(user.id, target_playlist_id)
+
+        source = UpstreamSource(
+            user_id=user.id,
+            target_playlist_id=target_playlist_id,
+            source_playlist_id=None,
+            source_type="search_query",
+            search_query=search_query,
+            source_name=source_name or search_query,
+        )
+        db.session.add(source)
+        commit_or_stage(
+            commit,
+            f"add search source: '{search_query}' -> "
+            f"{target_playlist_id} for user {spotify_id}",
+            UpstreamSourceError,
+        )
+        return source
+
+    @staticmethod
+    def list_sources(
+        spotify_id: str, target_playlist_id: str
+    ) -> List[UpstreamSource]:
+        """
+        List all upstream sources for a user's target playlist.
+
+        Args:
+            spotify_id: The Spotify user ID.
+            target_playlist_id: The target playlist ID.
+
+        Returns:
+            List of UpstreamSource instances.
+        """
+        user = get_user_or_raise(spotify_id)
+        if not user:
+            return []
+
+        return (
+            UpstreamSource.query.filter_by(
+                user_id=user.id,
+                target_playlist_id=target_playlist_id,
+            )
+            .order_by(UpstreamSource.created_at.desc())
+            .all()
+        )
+
+    @staticmethod
+    def get_source(
+        source_id: int,
+        spotify_id: str,
+        target_playlist_id: str = None,
+    ) -> UpstreamSource:
+        """
+        Get a specific upstream source by ID.
+
+        Args:
+            source_id: The upstream source database ID.
+            spotify_id: The Spotify user ID (for ownership check).
+            target_playlist_id: When given, the source must also be
+                configured against this playlist. Callers reached through a
+                ``/playlist/<playlist_id>/`` route must pass it, so the
+                playlist in the URL constrains which source is addressed
+                rather than being decorative.
+
+        Returns:
+            UpstreamSource instance.
+
+        Raises:
+            UpstreamSourceNotFoundError: If not found, not owned, or not
+                configured against ``target_playlist_id``.
+        """
+        user = get_user_or_raise(
+            spotify_id, UpstreamSourceNotFoundError
+        )
+        source = get_owned_entity(
+            UpstreamSource,
+            source_id,
+            user.id,
+            UpstreamSourceNotFoundError,
+        )
+        if (
+            target_playlist_id is not None
+            and source.target_playlist_id != target_playlist_id
+        ):
+            raise UpstreamSourceNotFoundError(
+                f"Source {source_id} not found"
+            )
+        return source
+
+    @staticmethod
+    @locked_commit_target(
+        "target_playlist_id",
+        fallback=lambda args: UpstreamSourceService.get_source(
+            args["source_id"], args["spotify_id"]
+        ).target_playlist_id,
+    )
+    def delete_source(
+        source_id: int,
+        spotify_id: str,
+        target_playlist_id: str = None,
+        *,
+        commit: bool = True,
+    ) -> bool:
+        """
+        Delete an upstream source configuration.
+
+        Args:
+            source_id: The upstream source database ID.
+            spotify_id: The Spotify user ID (for ownership check).
+            target_playlist_id: When given, the source must also be
+                configured against this playlist.
+
+        Returns:
+            True if deleted successfully.
+
+        Raises:
+            UpstreamSourceNotFoundError: If not found, not owned, or not
+                configured against ``target_playlist_id``.
+            UpstreamSourceError: If deletion fails.
+        """
+        user = get_user_or_raise(spotify_id, UpstreamSourceNotFoundError)
+        # Bypass an identity-map copy read before lock acquisition. If the
+        # original row was deleted and its ID reused, this reads the current
+        # row and refuses a replacement on another target.
+        source = db.session.get(UpstreamSource, source_id, populate_existing=True)
+        if (
+            source is None
+            or source.user_id != user.id
+            or (target_playlist_id is not None and source.target_playlist_id != target_playlist_id)
+        ):
+            raise UpstreamSourceNotFoundError(f"Source {source_id} not found")
+
+        db.session.delete(source)
+        commit_or_stage(
+            commit,
+            f"delete upstream source {source_id}",
+            UpstreamSourceError,
+        )
+        return True
+
+    @staticmethod
+    @locked_commit_target("target_playlist_id")
+    def update_raid_count(
+        user_id: int,
+        target_playlist_id: str,
+        source_id: int,
+        raid_count: int,
+        *,
+        commit: bool = True,
+    ) -> UpstreamSource:
+        """Update a source's raid_count.
+
+        Scoped to the target playlist as well as the owner: a source is
+        configured against one playlist, so a request naming a different
+        playlist is not addressing this source.
+
+        Raises UpstreamSourceNotFoundError if not found.
+        """
+        source = UpstreamSource.query.filter_by(
+            id=source_id,
+            user_id=user_id,
+            target_playlist_id=target_playlist_id,
+        ).first()
+        if not source:
+            raise UpstreamSourceNotFoundError(
+                f"Source {source_id} not found"
+            )
+        source.raid_count = raid_count
+        commit_or_stage(
+            commit,
+            f"update raid_count for source {source_id}",
+            UpstreamSourceError,
+        )
+        return source
+
+    @staticmethod
+    def update_track_count(
+        user_id: int,
+        target_playlist_id: str,
+        source_playlist_id: str,
+        track_count: int,
+    ) -> None:
+        """Update a source's last_track_count."""
+        source = UpstreamSource.query.filter_by(
+            user_id=user_id,
+            target_playlist_id=target_playlist_id,
+            source_playlist_id=source_playlist_id,
+        ).first()
+        if source:
+            source.last_track_count = track_count
+            safe_commit(
+                f"update track_count for source "
+                f"{source_playlist_id}",
+                UpstreamSourceError,
+            )
+
+    @staticmethod
+    def list_all_sources_for_user(
+        spotify_id: str,
+    ) -> List[UpstreamSource]:
+        """
+        List ALL upstream sources for a user, across all targets.
+
+        Args:
+            spotify_id: The Spotify user ID.
+
+        Returns:
+            List of UpstreamSource instances.
+        """
+        user = get_user_or_raise(spotify_id)
+        if not user:
+            return []
+
+        return (
+            UpstreamSource.query.filter_by(user_id=user.id)
+            .order_by(UpstreamSource.created_at.desc())
+            .all()
+        )

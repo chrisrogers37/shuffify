@@ -1,0 +1,7 @@
+# Dev override — mounts host source for live-reload.
+# Auto-loaded by `docker-compose up`. Skipped in prod with:
+#   docker-compose -f docker-compose.yml up -d
+services:
+  app:
+    volumes:
+      - .:/app

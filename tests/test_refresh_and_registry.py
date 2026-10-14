@@ -1,0 +1,178 @@
+"""
+Tests for the refresh-playlists route and the algorithm registry.
+
+Covers the POST /refresh-playlists endpoint and the registry's algorithm list.
+"""
+
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
+
+from shuffify.shuffle_algorithms.registry import ShuffleRegistry
+
+
+class TestRegistryHiddenAlgorithms:
+    """Tests for algorithm visibility in the registry."""
+
+    def test_tempo_gradient_is_removed(self):
+        """TempoGradientShuffle is not registered; asking for it is rejected."""
+        with pytest.raises(ValueError, match="Unknown shuffle algorithm"):
+            ShuffleRegistry.get_algorithm("TempoGradientShuffle")
+
+    def test_artist_spacing_is_visible(self):
+        """ArtistSpacingShuffle should appear in list_algorithms."""
+        algorithms = ShuffleRegistry.list_algorithms()
+        class_names = [a["class_name"] for a in algorithms]
+        assert "ArtistSpacingShuffle" in class_names
+
+    def test_album_sequence_is_visible(self):
+        """AlbumSequenceShuffle should appear in list_algorithms."""
+        algorithms = ShuffleRegistry.list_algorithms()
+        class_names = [a["class_name"] for a in algorithms]
+        assert "AlbumSequenceShuffle" in class_names
+
+    def test_algorithm_count(self):
+        """Should have 7 registered algorithms."""
+        all_algos = ShuffleRegistry.get_available_algorithms()
+        assert len(all_algos) == 7
+
+    def test_algorithm_display_order(self):
+        """Algorithms should appear in the defined order."""
+        algorithms = ShuffleRegistry.list_algorithms()
+        names = [a["name"] for a in algorithms]
+        expected = [
+            "Basic",
+            "Percentage",
+            "Balanced",
+            "Stratified",
+            "Artist Spacing",
+            "Album Sequence",
+            "Newest First",
+        ]
+        assert names == expected
+
+
+class TestRefreshPlaylistsRoute:
+    """Tests for POST /refresh-playlists endpoint."""
+
+    @pytest.fixture
+    def app(self):
+        """Create Flask app for testing."""
+        import os
+
+        os.environ["SPOTIFY_CLIENT_ID"] = "test_client_id"
+        os.environ["SPOTIFY_CLIENT_SECRET"] = "test_client_secret"
+        os.environ["SPOTIFY_REDIRECT_URI"] = "http://localhost:5000/callback"
+        os.environ["SECRET_KEY"] = "test-secret-key-for-testing"
+
+        from shuffify import create_app
+
+        app = create_app("development")
+        app.config["TESTING"] = True
+        app.config["WTF_CSRF_ENABLED"] = False
+        return app
+
+    @pytest.fixture
+    def client(self, app):
+        """Flask test client."""
+        return app.test_client()
+
+    def test_refresh_requires_auth(self, client):
+        """Should return 401 when not authenticated."""
+        response = client.post("/refresh-playlists")
+        assert response.status_code == 401
+        data = response.get_json()
+        assert data["success"] is False
+
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
+    @patch("shuffify.routes.playlists.PlaylistService")
+    def test_refresh_returns_playlists(
+        self,
+        mock_playlist_service_cls,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        client,
+    ):
+        """Should return refreshed playlists on success."""
+        mock_client = Mock()
+        mock_auth.return_value = mock_client
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
+
+        mock_service = Mock()
+        mock_service.get_user_playlists.return_value = [
+            {"id": "p1", "name": "Playlist 1"},
+            {"id": "p2", "name": "Playlist 2"},
+        ]
+        mock_playlist_service_cls.return_value = mock_service
+
+        response = client.post("/refresh-playlists")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["success"] is True
+        assert "Playlists refreshed" in data["message"]
+        assert len(data["playlists"]) == 2
+
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
+    @patch("shuffify.routes.playlists.PlaylistService")
+    def test_refresh_calls_skip_cache(
+        self,
+        mock_playlist_service_cls,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        client,
+    ):
+        """Should call get_user_playlists with skip_cache=True."""
+        mock_client = Mock()
+        mock_auth.return_value = mock_client
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
+
+        mock_service = Mock()
+        mock_service.get_user_playlists.return_value = []
+        mock_playlist_service_cls.return_value = mock_service
+
+        client.post("/refresh-playlists")
+
+        mock_service.get_user_playlists.assert_called_once_with(skip_cache=True)
+
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
+    @patch("shuffify.routes.playlists.PlaylistService")
+    def test_refresh_handles_error(
+        self,
+        mock_playlist_service_cls,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        client,
+    ):
+        """Should return 500 on PlaylistError."""
+        from shuffify.services import PlaylistError
+
+        mock_client = Mock()
+        mock_auth.return_value = mock_client
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
+
+        mock_service = Mock()
+        mock_service.get_user_playlists.side_effect = PlaylistError("API error")
+        mock_playlist_service_cls.return_value = mock_service
+
+        response = client.post("/refresh-playlists")
+        assert response.status_code == 500
+        data = response.get_json()
+        assert data["success"] is False

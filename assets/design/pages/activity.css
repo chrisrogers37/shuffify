@@ -1,0 +1,82 @@
+@layer components {
+  .sh-activity-page {
+    padding-block: var(--sh-space-8) var(--sh-space-16);
+  }
+
+  .sh-activity-header { margin-bottom: var(--sh-space-6); }
+  .sh-activity-header p { margin-top: var(--sh-space-2); }
+  .sh-activity-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sh-space-3);
+  }
+  .sh-activity-section { margin-top: var(--sh-space-8); }
+  .sh-activity-panel-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    justify-content: space-between;
+    gap: var(--sh-space-4);
+  }
+  .sh-activity-panel-heading > div { min-width: 0; }
+  .sh-activity-filter {
+    display: grid;
+    gap: var(--sh-space-2);
+    min-width: min(100%, var(--sh-space-22));
+  }
+  .sh-activity-filter label { font-weight: var(--sh-weight-semibold); }
+  .sh-activity-filter select { min-height: var(--sh-space-11); }
+  .sh-activity-panel > .sh-caption {
+    padding: var(--sh-space-3) var(--sh-space-6);
+    border-bottom: 1px solid var(--sh-border);
+  }
+  .sh-activity-list { display: grid; }
+  .sh-activity-list > [hidden] { display: none; }
+  .sh-activity-run, .sh-activity-event {
+    display: grid;
+    gap: var(--sh-space-3);
+    min-width: 0;
+    align-items: start;
+  }
+  .sh-activity-row-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sh-space-3);
+    min-width: 0;
+  }
+  .sh-activity-description,
+  .sh-activity-result,
+  .sh-activity-event-body,
+  .sh-result { min-width: 0; overflow-wrap: anywhere; }
+  .sh-activity-time { margin: 0; }
+  .sh-activity-manual {
+    display: inline-block;
+    margin-top: var(--sh-space-2);
+    color: var(--sh-accent);
+    font-size: var(--sh-type-caption);
+  }
+
+  /* The same result markup appears in Activity and exact routine History. */
+  .sh-result { display: grid; gap: var(--sh-space-2); }
+  .sh-result-heading { font-weight: var(--sh-weight-semibold); color: var(--sh-ink); }
+  .sh-result-time, .sh-result-unavailable { color: var(--sh-muted); font-size: var(--sh-type-caption); }
+  .sh-result-steps { display: grid; gap: var(--sh-space-3); padding-left: var(--sh-space-5); list-style: decimal; }
+  .sh-result-step { padding-left: var(--sh-space-1); }
+  .sh-result-step-heading { font-weight: var(--sh-weight-semibold); }
+  .sh-result-counts, .sh-result-resources, .sh-result-bookkeeping {
+    display: grid;
+    gap: var(--sh-space-1);
+    margin-top: var(--sh-space-1);
+  }
+  .sh-result-counts { color: var(--sh-ink); }
+  .sh-result-resources, .sh-result-bookkeeping { color: var(--sh-muted); font-size: var(--sh-type-caption); }
+  .sh-result-record-warning { color: var(--sh-warning); }
+  .sh-result--compact .sh-result-steps { gap: var(--sh-space-2); }
+
+  @screen md {
+    .sh-activity-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .sh-activity-run { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+    .sh-activity-event { grid-template-columns: minmax(0, 1fr) auto; }
+  }
+}

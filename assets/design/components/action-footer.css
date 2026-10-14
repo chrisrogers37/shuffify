@@ -1,0 +1,47 @@
+/* The sticky action footer: one element holding a page's save actions (the Workshop's draft
+   footer, the setup page's Review and Save). Mark it .sh-action-footer and [data-action-footer].
+   Below the workspace width it sticks to the bottom of the viewport, moved after the content by
+   CSS order; from the workspace width it is in flow, a bordered panel. AppPanels.reserveFooter
+   keeps its measured height in --app-footer-space on the document element. */
+@layer components {
+  .sh-action-footer {
+    order: 1;
+    position: sticky;
+    bottom: 0;
+    z-index: 30;
+    margin-inline: calc(-1 * var(--sh-space-gutter));
+    border-top: 1px solid var(--sh-border);
+    padding: var(--sh-space-3) var(--sh-space-gutter) max(var(--sh-space-3), env(safe-area-inset-bottom));
+    background: var(--sh-base);
+  }
+  /* Focused or scrolled-to content clears the sticky footer by its measured space, with an
+     estimate until it is measured; in flow, the footer never covers the last row. Focus inside
+     the footer is always on screen, so the space lifts while it is there: otherwise focusing
+     its own controls would scroll the page away from the content. A footer hidden with its
+     region (a narrow task covering the page) reserves nothing. */
+  html:has([data-action-footer]:not([hidden], [hidden] *)):not(:has([data-action-footer]:focus-within)) {
+    scroll-padding-bottom: var(--app-footer-space, var(--sh-space-22));
+  }
+
+  @screen md {
+    .sh-action-footer {
+      margin-inline: calc(-1 * var(--sh-space-gutter-wide));
+      padding-inline: var(--sh-space-gutter-wide);
+    }
+  }
+
+  @screen sh-workspace {
+    .sh-action-footer {
+      order: 0;
+      position: static;
+      margin-inline: 0;
+      border: 1px solid var(--sh-border);
+      border-radius: var(--sh-radius-panel);
+      padding: var(--sh-space-4);
+      background: var(--sh-surface);
+    }
+    html:has([data-action-footer]:not([hidden], [hidden] *)):not(:has([data-action-footer]:focus-within)) {
+      scroll-padding-bottom: 0;
+    }
+  }
+}

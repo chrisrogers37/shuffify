@@ -1,0 +1,428 @@
+"""
+Playlist snapshot service for capturing and restoring playlist states.
+
+Handles CRUD operations for PlaylistSnapshot records, enabling users
+to capture point-in-time snapshots of playlist track orderings and
+restore them later.
+"""
+
+import contextvars
+import logging
+from typing import List, Optional
+
+from shuffify.enums import SnapshotType  # noqa: F401
+from shuffify.models.db import PlaylistSnapshot, db
+from shuffify.services.base import get_owned_entity, safe_commit
+
+logger = logging.getLogger(__name__)
+
+# The JobExecution that auto-snapshots created in the current execution context
+# should be tagged with, so rollback restores only that job's snapshots rather
+# than every snapshot in a time window. Set by
+# JobExecutorService._run_job for the duration of a job.
+_current_job_execution_id = contextvars.ContextVar(
+    "shuffify_current_job_execution_id", default=None
+)
+
+
+def set_current_job_execution(execution_id):
+    """Tag auto-snapshots created in this context with ``execution_id``.
+
+    Returns a token to pass to :func:`reset_current_job_execution`.
+    """
+    return _current_job_execution_id.set(execution_id)
+
+
+def reset_current_job_execution(token):
+    """Clear the current-job-execution tag (see set_current_job_execution)."""
+    _current_job_execution_id.reset(token)
+
+
+# Default max snapshots if UserSettings is unavailable
+DEFAULT_MAX_SNAPSHOTS_PER_PLAYLIST = 50
+
+
+class PlaylistSnapshotError(Exception):
+    """Base exception for playlist snapshot operations."""
+
+    pass
+
+
+class PlaylistSnapshotNotFoundError(PlaylistSnapshotError):
+    """Raised when a snapshot cannot be found."""
+
+    pass
+
+
+class PlaylistSnapshotService:
+    """Service for managing playlist snapshots."""
+
+    @staticmethod
+    def auto_snapshot_if_enabled(
+        user_id: int,
+        playlist_id: str,
+        playlist_name: str,
+        track_uris: List[str],
+        snapshot_type: str,
+        trigger_description: Optional[str] = None,
+    ) -> Optional[PlaylistSnapshot]:
+        """Snapshot a playlist before an automated write, if the user wants it.
+
+        Every executor needs the same three guards around create_snapshot:
+        the user's auto-snapshot setting, a non-empty track list (an empty
+        snapshot restores nothing), and never letting a snapshot failure take
+        down the operation it protects.
+
+        Returns the snapshot, or None if it was skipped or failed.
+        """
+        try:
+            if not PlaylistSnapshotService.is_auto_snapshot_enabled(user_id):
+                return None
+            if not track_uris:
+                return None
+            return PlaylistSnapshotService.create_snapshot(
+                user_id=user_id,
+                playlist_id=playlist_id,
+                playlist_name=playlist_name,
+                track_uris=track_uris,
+                snapshot_type=snapshot_type,
+                trigger_description=trigger_description,
+            )
+        except Exception as snap_err:
+            logger.warning(
+                "Auto-snapshot for %s before %s failed: %s",
+                playlist_id,
+                snapshot_type,
+                snap_err,
+            )
+            return None
+
+    @staticmethod
+    def create_snapshot(
+        user_id: int,
+        playlist_id: str,
+        playlist_name: str,
+        track_uris: List[str],
+        snapshot_type: str,
+        trigger_description: Optional[str] = None,
+        job_execution_id: Optional[int] = None,
+    ) -> PlaylistSnapshot:
+        """
+        Create a new playlist snapshot.
+
+        After creation, enforces the max_snapshots_per_playlist limit
+        by deleting the oldest snapshots beyond the cap.
+
+        Args:
+            user_id: The internal database user ID.
+            playlist_id: The Spotify playlist ID.
+            playlist_name: Human-readable playlist name at time
+                of snapshot.
+            track_uris: Ordered list of track URIs.
+            snapshot_type: One of the SnapshotType enum values.
+            trigger_description: Optional description of what
+                triggered the snapshot.
+
+        Returns:
+            The created PlaylistSnapshot instance.
+
+        Raises:
+            PlaylistSnapshotError: If creation fails.
+        """
+        # Tag with the current job's execution id (if any) so rollback can
+        # scope to just this job's snapshots.
+        if job_execution_id is None:
+            job_execution_id = _current_job_execution_id.get()
+
+        snapshot = PlaylistSnapshot(
+            user_id=user_id,
+            playlist_id=playlist_id,
+            playlist_name=playlist_name,
+            track_count=len(track_uris),
+            snapshot_type=snapshot_type,
+            trigger_description=trigger_description,
+            job_execution_id=job_execution_id,
+        )
+        snapshot.track_uris = track_uris
+
+        db.session.add(snapshot)
+        safe_commit(
+            f"create {snapshot_type} snapshot for user "
+            f"{user_id}, playlist {playlist_id} "
+            f"({len(track_uris)} tracks)",
+            PlaylistSnapshotError,
+        )
+
+        # Enforce retention limit
+        max_snapshots = (
+            PlaylistSnapshotService._get_max_snapshots(
+                user_id
+            )
+        )
+        PlaylistSnapshotService.cleanup_old_snapshots(
+            user_id, playlist_id, max_snapshots
+        )
+
+        return snapshot
+
+    @staticmethod
+    def get_snapshots(
+        user_id: int,
+        playlist_id: str,
+        limit: int = 20,
+    ) -> List[PlaylistSnapshot]:
+        """
+        Get snapshots for a playlist, newest first.
+
+        Args:
+            user_id: The internal database user ID.
+            playlist_id: The Spotify playlist ID.
+            limit: Maximum number of snapshots to return.
+
+        Returns:
+            List of PlaylistSnapshot instances, most recent first.
+        """
+        return (
+            PlaylistSnapshot.query.filter_by(
+                user_id=user_id, playlist_id=playlist_id
+            )
+            .order_by(PlaylistSnapshot.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+    @staticmethod
+    def get_snapshot(
+        snapshot_id: int, user_id: int
+    ) -> PlaylistSnapshot:
+        """
+        Get a specific snapshot by ID with ownership check.
+
+        Args:
+            snapshot_id: The snapshot database ID.
+            user_id: The internal database user ID (for ownership).
+
+        Returns:
+            PlaylistSnapshot instance.
+
+        Raises:
+            PlaylistSnapshotNotFoundError: If not found or
+                not owned.
+        """
+        return get_owned_entity(
+            PlaylistSnapshot,
+            snapshot_id,
+            user_id,
+            PlaylistSnapshotNotFoundError,
+        )
+
+    @staticmethod
+    def restore_snapshot(
+        snapshot_id: int, user_id: int
+    ) -> List[str]:
+        """
+        Get the track URIs from a snapshot for restoration.
+
+        The caller (route or service) is responsible for applying
+        the URIs to the Spotify playlist via the Spotify API.
+
+        Args:
+            snapshot_id: The snapshot database ID.
+            user_id: The internal database user ID (for ownership).
+
+        Returns:
+            List of track URIs in the snapshot's order.
+
+        Raises:
+            PlaylistSnapshotNotFoundError: If not found or
+                not owned.
+        """
+        snapshot = PlaylistSnapshotService.get_snapshot(
+            snapshot_id, user_id
+        )
+        logger.info(
+            f"Restoring snapshot {snapshot_id} for user "
+            f"{user_id}, playlist {snapshot.playlist_id} "
+            f"({snapshot.track_count} tracks)"
+        )
+        return snapshot.track_uris
+
+    @staticmethod
+    def restore_to_playlist(
+        snapshot_id: int,
+        user_id: int,
+        api,
+    ) -> "PlaylistSnapshot":
+        """Restore a snapshot to its source playlist via the
+        Spotify API. Used by the executor rollback path.
+
+        Args:
+            snapshot_id: The snapshot database ID.
+            user_id: The internal database user ID (ownership).
+            api: SpotifyAPI client.
+
+        Returns:
+            The PlaylistSnapshot that was applied (caller can
+            read playlist_id, track_uris, track_count).
+
+        Raises:
+            PlaylistSnapshotNotFoundError: If not found or not
+                owned.
+            Whatever the Spotify API raises on write failure.
+        """
+        snapshot = PlaylistSnapshotService.get_snapshot(
+            snapshot_id, user_id
+        )
+        uris = snapshot.track_uris or []
+        api.update_playlist_tracks(
+            snapshot.playlist_id, uris
+        )
+        logger.info(
+            "Restored snapshot %s to playlist %s "
+            "(%d tracks)",
+            snapshot_id, snapshot.playlist_id, len(uris),
+        )
+        return snapshot
+
+    @staticmethod
+    def delete_snapshot(
+        snapshot_id: int, user_id: int
+    ) -> bool:
+        """
+        Delete a snapshot with ownership check.
+
+        Args:
+            snapshot_id: The snapshot database ID.
+            user_id: The internal database user ID (for ownership).
+
+        Returns:
+            True if deleted successfully.
+
+        Raises:
+            PlaylistSnapshotNotFoundError: If not found or
+                not owned.
+            PlaylistSnapshotError: If deletion fails.
+        """
+        snapshot = PlaylistSnapshotService.get_snapshot(
+            snapshot_id, user_id
+        )
+
+        db.session.delete(snapshot)
+        safe_commit(
+            f"delete snapshot {snapshot_id}",
+            PlaylistSnapshotError,
+        )
+        return True
+
+    @staticmethod
+    def cleanup_old_snapshots(
+        user_id: int,
+        playlist_id: str,
+        max_count: int,
+    ) -> int:
+        """
+        Enforce retention limit by deleting oldest snapshots.
+
+        Keeps the most recent `max_count` snapshots and deletes
+        any older ones.
+
+        Args:
+            user_id: The internal database user ID.
+            playlist_id: The Spotify playlist ID.
+            max_count: Maximum number of snapshots to retain.
+
+        Returns:
+            Number of snapshots deleted.
+        """
+        # IDs of snapshots to keep (most recent N)
+        keep_ids_query = (
+            db.session.query(PlaylistSnapshot.id)
+            .filter_by(
+                user_id=user_id, playlist_id=playlist_id
+            )
+            .order_by(PlaylistSnapshot.created_at.desc())
+            .limit(max_count)
+            .subquery()
+        )
+
+        # Bulk delete all snapshots NOT in the keep set
+        deleted_count = (
+            PlaylistSnapshot.query.filter(
+                PlaylistSnapshot.user_id == user_id,
+                PlaylistSnapshot.playlist_id
+                == playlist_id,
+                ~PlaylistSnapshot.id.in_(
+                    db.session.query(keep_ids_query)
+                ),
+            ).delete(synchronize_session="fetch")
+        )
+
+        if deleted_count > 0:
+            try:
+                safe_commit(
+                    f"cleanup {deleted_count} old snapshots "
+                    f"for user {user_id}, "
+                    f"playlist {playlist_id}",
+                    PlaylistSnapshotError,
+                )
+            except PlaylistSnapshotError:
+                return 0
+
+        return deleted_count
+
+    @staticmethod
+    def _get_max_snapshots(user_id: int) -> int:
+        """
+        Get the max snapshots setting for a user.
+
+        Reads from UserSettings if available,
+        otherwise returns the default.
+
+        Args:
+            user_id: The internal database user ID.
+
+        Returns:
+            Maximum number of snapshots per playlist.
+        """
+        try:
+            from shuffify.models.db import UserSettings
+
+            settings = UserSettings.query.filter_by(
+                user_id=user_id
+            ).first()
+            if (
+                settings
+                and settings.max_snapshots_per_playlist
+            ):
+                return settings.max_snapshots_per_playlist
+        except (ImportError, Exception):
+            pass
+
+        return DEFAULT_MAX_SNAPSHOTS_PER_PLAYLIST
+
+    @staticmethod
+    def is_auto_snapshot_enabled(user_id: int) -> bool:
+        """
+        Check if auto-snapshot is enabled for a user.
+
+        Reads from UserSettings if available,
+        otherwise defaults to True.
+
+        Args:
+            user_id: The internal database user ID.
+
+        Returns:
+            True if auto-snapshots are enabled.
+        """
+        try:
+            from shuffify.models.db import UserSettings
+
+            settings = UserSettings.query.filter_by(
+                user_id=user_id
+            ).first()
+            if settings is not None:
+                return settings.auto_snapshot_enabled
+        except (ImportError, Exception):
+            pass
+
+        return True
