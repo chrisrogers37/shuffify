@@ -4,6 +4,7 @@ import { PublicShell } from "../shell/Shell";
 import { ErrorPage } from "../pages/errors/ErrorPage";
 import { Providers } from "./Providers";
 import { publicRoutes } from "./public-routes";
+import { settingsRoutes } from "./settings-routes";
 export function createAppRoutes(services: Services) {
   return [
     {
@@ -19,6 +20,7 @@ export function createAppRoutes(services: Services) {
       ),
       children: [
         ...publicRoutes(),
+        ...settingsRoutes(),
         {
           path: "*",
           element: (

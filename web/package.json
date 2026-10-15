@@ -22,7 +22,9 @@
     "public:check": "node scripts/generate-public-sources.mjs --check",
     "prerender": "vite build --ssr src/prerender.tsx --outDir .prerender && node scripts/prerender.mjs",
     "test:static": "node --test tests/static/*.test.mjs",
-    "test:public-browser": "playwright test --config playwright.public.config.ts"
+    "test:public-browser": "playwright test --config playwright.public.config.ts",
+    "test:settings-browser": "playwright test --config playwright.settings.config.ts",
+    "test:settings-fixtures": "SETTINGS_FIXTURE_BUILD=1 playwright test --config playwright.settings.config.ts"
   },
   "devDependencies": {
     "ajv": "8.20.0",

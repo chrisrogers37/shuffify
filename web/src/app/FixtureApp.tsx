@@ -4,6 +4,7 @@ import type { Services } from "../auth/SessionProvider";
 import { AuthGuard, useServices, useSession } from "../auth/SessionProvider";
 import { Providers } from "./Providers";
 import { publicRoutes } from "./public-routes";
+import { settingsRoutes } from "./settings-routes";
 import { AppShell, PublicShell } from "../shell/Shell";
 import { ErrorPage } from "../pages/errors/ErrorPage";
 import {
@@ -509,6 +510,7 @@ export function createFixtureRouter(services: Services) {
         { path: "/__foundation/guard-handoff", element: <NavigationHandoff /> },
         { path: "/__foundation/task-scroll", element: <AppShell><AuthGuard><TaskScrollHarness /></AuthGuard></AppShell> },
         ...publicRoutes(),
+        ...settingsRoutes(),
         {
           path: "/__foundation/app",
           element: (

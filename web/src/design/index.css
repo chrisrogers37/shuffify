@@ -210,3 +210,21 @@
     }
   }
 }
+
+@layer components {
+  .sh-settings-retry {
+    margin-top: var(--sh-space-4);
+  }
+  .sh-settings-reconnect {
+    padding-bottom: var(--sh-space-10);
+  }
+  .sh-settings-reconnect p {
+    margin-bottom: var(--sh-space-4);
+  }
+  .sh-settings-page .sh-form-error a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--sh-space-control);
+    text-decoration: underline;
+  }
+}

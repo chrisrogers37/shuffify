@@ -1,0 +1,186 @@
+{
+  "success": true,
+  "category": "success",
+  "message": "Settings loaded.",
+  "settings": {
+    "id": 1,
+    "user_id": 1,
+    "default_algorithm": "BasicShuffle",
+    "default_algorithm_params": {
+      "custom_mode": {
+        "enabled": true,
+        "weights": [
+          1,
+          null,
+          2.5
+        ]
+      }
+    },
+    "theme": "system",
+    "notifications_enabled": false,
+    "auto_snapshot_enabled": true,
+    "max_snapshots_per_playlist": 10,
+    "dashboard_show_recent_activity": true,
+    "extra": {
+      "compact": false
+    },
+    "created_at": "2026-01-01T12:00:00+00:00",
+    "updated_at": "2026-01-01T12:00:00+00:00"
+  },
+  "algorithms": [
+    {
+      "class_name": "BasicShuffle",
+      "name": "Basic",
+      "description": "Randomly shuffle your playlist while optionally keeping tracks in place at the top.",
+      "parameters": {
+        "keep_first": {
+          "type": "integer",
+          "description": "Number of tracks to keep at start",
+          "default": 0,
+          "min": 0
+        }
+      }
+    },
+    {
+      "class_name": "PercentageShuffle",
+      "name": "Percentage",
+      "description": "Shuffle a portion of your playlist while keeping the rest in order.",
+      "parameters": {
+        "shuffle_percentage": {
+          "type": "float",
+          "description": "Percentage of tracks to shuffle (0-100)",
+          "default": 50.0,
+          "min": 0.0,
+          "max": 100.0
+        },
+        "shuffle_location": {
+          "type": "string",
+          "description": "Location to shuffle (front or back)",
+          "default": "front",
+          "options": [
+            "front",
+            "back"
+          ]
+        }
+      }
+    },
+    {
+      "class_name": "BalancedShuffle",
+      "name": "Balanced",
+      "description": "Ensures fair representation from all parts of the playlist by dividing it into sections and using a round-robin selection process.",
+      "parameters": {
+        "keep_first": {
+          "type": "integer",
+          "description": "Number of tracks to keep in their original position",
+          "default": 0,
+          "min": 0
+        },
+        "section_count": {
+          "type": "integer",
+          "description": "Number of sections to divide the playlist into",
+          "default": 4,
+          "min": 2,
+          "max": 10
+        }
+      }
+    },
+    {
+      "class_name": "StratifiedShuffle",
+      "name": "Stratified",
+      "description": "Divide the playlist into sections, shuffle each section independently, and reassemble the sections in the original order.",
+      "parameters": {
+        "keep_first": {
+          "type": "integer",
+          "description": "Number of tracks to keep in their original position",
+          "default": 0,
+          "min": 0
+        },
+        "section_count": {
+          "type": "integer",
+          "description": "Number of sections to divide the playlist into",
+          "default": 5,
+          "min": 1,
+          "max": 20
+        }
+      }
+    },
+    {
+      "class_name": "ArtistSpacingShuffle",
+      "name": "Artist Spacing",
+      "description": "Shuffles tracks while ensuring the same artist never appears back-to-back for a more varied listening experience.",
+      "parameters": {
+        "min_spacing": {
+          "type": "integer",
+          "description": "Minimum tracks between same artist",
+          "default": 1,
+          "min": 1,
+          "max": 10
+        }
+      }
+    },
+    {
+      "class_name": "AlbumSequenceShuffle",
+      "name": "Album Sequence",
+      "description": "Keeps tracks from the same album together in their original order, but shuffles which album plays first.",
+      "parameters": {
+        "shuffle_within_albums": {
+          "type": "string",
+          "description": "Also shuffle track order within each album",
+          "default": "no",
+          "options": [
+            "no",
+            "yes"
+          ]
+        }
+      }
+    },
+    {
+      "class_name": "NewestFirstShuffle",
+      "name": "Newest First",
+      "description": "Reorders tracks so the most recently added appear at the top, with adjustable jitter to keep things feeling natural.",
+      "parameters": {
+        "jitter": {
+          "type": "integer",
+          "description": "Window size for local shuffling (1 = exact date sort, higher = more variation)",
+          "default": 5,
+          "min": 1,
+          "max": 50
+        }
+      }
+    }
+  ],
+  "algorithm_options": [
+    {
+      "value": "",
+      "label": "No default (choose each time)"
+    },
+    {
+      "value": "BasicShuffle",
+      "label": "Basic"
+    },
+    {
+      "value": "PercentageShuffle",
+      "label": "Percentage"
+    },
+    {
+      "value": "BalancedShuffle",
+      "label": "Balanced"
+    },
+    {
+      "value": "StratifiedShuffle",
+      "label": "Stratified"
+    },
+    {
+      "value": "ArtistSpacingShuffle",
+      "label": "Artist Spacing"
+    },
+    {
+      "value": "AlbumSequenceShuffle",
+      "label": "Album Sequence"
+    },
+    {
+      "value": "NewestFirstShuffle",
+      "label": "Newest First"
+    }
+  ]
+}

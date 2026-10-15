@@ -9,6 +9,7 @@ import {
 import type { ReactNode } from "react";
 import { useBlocker } from "react-router";
 import { useConfirm } from "../components/tasks/ConfirmDialog";
+import { clearRoutineContinuation } from "../auth/browser-storage";
 import { decideNavigation } from "./decisions";
 import type { NavigationDecision } from "./decisions";
 const Context = createContext<
@@ -67,7 +68,6 @@ export function NavigationGuard({ children }: { children: ReactNode }) {
     }
   }, [blocked, ask]);
   useEffect(() => {
-    if (!dirty) return;
     const unload = (event: BeforeUnloadEvent) => {
       if (approvedDocumentNavigation.current) return;
       event.preventDefault();
@@ -113,21 +113,32 @@ export function NavigationGuard({ children }: { children: ReactNode }) {
     const submit = (event: SubmitEvent) => {
       const form = event.target;
       if (
+        event.defaultPrevented ||
         !(form instanceof HTMLFormElement) ||
         !form.hasAttribute("data-navigation")
       )
         return;
+      const destination = new URL(form.action, location.href);
+      const logout = form.method.toLowerCase() === "post" &&
+        destination.origin === location.origin && destination.pathname === "/logout";
+      if (!dirty) {
+        if (logout) clearRoutineContinuation();
+        return;
+      }
       event.preventDefault();
       void ask().then((leave) => {
         if (leave) {
           approvedDocumentNavigation.current = true;
+          if (logout) clearRoutineContinuation();
           HTMLFormElement.prototype.submit.call(form);
         }
       });
     };
-    window.addEventListener("beforeunload", unload);
-    window.addEventListener("pageshow", pageShown);
-    document.addEventListener("click", click);
+    if (dirty) {
+      window.addEventListener("beforeunload", unload);
+      window.addEventListener("pageshow", pageShown);
+      document.addEventListener("click", click);
+    }
     document.addEventListener("submit", submit);
     return () => {
       window.removeEventListener("beforeunload", unload);

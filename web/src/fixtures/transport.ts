@@ -1,3 +1,4 @@
+import { createSettingsFixtures, settingsScenarios } from "./settings.ts";
 import signedIn from "../../fixtures/valid/session-signed-in.json";
 import signedOut from "../../fixtures/valid/session-signed-out.json";
 import signedOutNotice from "../../fixtures/valid/session-signed-out-notice.json";
@@ -6,6 +7,7 @@ import attention from "../../fixtures/valid/operation-needs-attention.json";
 import library from "../../fixtures/valid/library-context.json";
 import type { Transport } from "../api/transport";
 const scenarios = [
+  ...settingsScenarios,
   "happy",
   "signed-out",
   "signed-out-notice",
@@ -38,6 +40,7 @@ const failure = (message: string, code = "fixture_error") => ({
   retryable: true,
 });
 export function createFixtureTransport(scenario: Scenario): Transport {
+  const settings = createSettingsFixtures(scenario);
   let sessionCalls = 0,
     polls = 0,
     accepted = false;
@@ -45,6 +48,8 @@ export function createFixtureTransport(scenario: Scenario): Transport {
     if (init?.signal?.aborted) throw init.signal.reason;
     const path = String(input),
       method = init?.method ?? "GET";
+    const settingsResponse = await settings(path, method, init);
+    if (settingsResponse) return settingsResponse;
     if (path === "/api/session" && method === "GET") {
       sessionCalls++;
       if (scenario === "session-error")

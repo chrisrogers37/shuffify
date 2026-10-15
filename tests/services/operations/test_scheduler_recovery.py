@@ -3,6 +3,7 @@
 import time
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from threading import Event
 
 import pytest
 from sqlalchemy import select
@@ -35,18 +36,21 @@ def executions(repository):
         return list(storage.scalars(select(JobExecution).order_by(JobExecution.id)))
 
 
-def wait_for_fire(repository):
-    deadline = time.monotonic() + 2
-    while time.monotonic() < deadline:
-        rows = executions(repository)
-        if rows:
-            return rows
-        time.sleep(0.005)
+def wait_for_fire(repository, admitted):
+    # StaticPool sessions share one SQLite connection. Read after commit so
+    # closing a polling session cannot roll back scheduler admission.
+    assert admitted.wait(2), "Scheduler admission did not commit within the bounded wait"
     return executions(repository)
 
 
-def runtime(app, repository, clock, **kwargs):
+def runtime(app, repository, clock, *, admitted=None, **kwargs):
     app.config["SCHEDULER_ENABLED"] = True
+    if admitted is not None:
+        def on_event(name, _value):
+            if name == "admitted":
+                admitted.set()
+
+        kwargs["event_callback"] = on_event
     return WorkerScheduler(app, repository, clock=lambda: clock[0], **kwargs)
 
 
@@ -72,9 +76,10 @@ def test_restart_recovers_one_daily_slot_inside_grace_and_deduplicates(
         assert executions(repository) == []
 
     scheduler_clock[0] = NOW + timedelta(minutes=5)
-    with runtime(db_app, repository, scheduler_clock) as replacement:
+    admitted = Event()
+    with runtime(db_app, repository, scheduler_clock, admitted=admitted) as replacement:
         assert replacement.ready.wait(2)
-        rows = wait_for_fire(repository)
+        rows = wait_for_fire(repository, admitted)
         assert len(rows) == 1
         assert rows[0].kind == "schedule_run"
         assert rows[0].scheduled_for == NOW
@@ -111,9 +116,10 @@ def test_latest_due_is_coalesced_without_changing_the_interval_phase(schedule, d
     db.session.commit()
     scheduler_clock[0] = NOW + timedelta(minutes=5, seconds=23)
     repository = OperationRepository()
-    with runtime(db_app, repository, scheduler_clock) as replacement:
+    admitted = Event()
+    with runtime(db_app, repository, scheduler_clock, admitted=admitted) as replacement:
         assert replacement.ready.wait(2)
-        rows = wait_for_fire(repository)
+        rows = wait_for_fire(repository, admitted)
         assert [row.scheduled_for for row in rows] == [NOW + timedelta(minutes=5)]
 
 
@@ -157,12 +163,10 @@ def test_manual_bookkeeping_during_downtime_does_not_hide_current_cadence_fire(
     schedule.last_run_at, schedule.last_status = scheduler_clock[0], "success"
     db.session.commit()
     assert schedule.updated_at > schedule.definition_changed_at
-    with runtime(db_app, repository, scheduler_clock) as replacement:
+    admitted = Event()
+    with runtime(db_app, repository, scheduler_clock, admitted=admitted) as replacement:
         assert replacement.ready.wait(2)
-        deadline = time.monotonic() + 2
-        while len(executions(repository)) < 2 and time.monotonic() < deadline:
-            time.sleep(0.005)
-        assert [row.scheduled_for for row in executions(repository)] == [prior, NOW]
+        assert [row.scheduled_for for row in wait_for_fire(repository, admitted)] == [prior, NOW]
 
 
 def test_pause_then_resume_after_due_does_not_backfill_even_with_prior_scheduled_history(
@@ -232,9 +236,10 @@ def test_recovery_at_exact_grace_boundary_admits_original_due(schedule, db_app, 
     db.session.commit()
     scheduler_clock[0] = NOW + timedelta(seconds=3600)
     repository = OperationRepository()
-    with runtime(db_app, repository, scheduler_clock) as replacement:
+    admitted = Event()
+    with runtime(db_app, repository, scheduler_clock, admitted=admitted) as replacement:
         assert replacement.ready.wait(2)
-        assert [row.scheduled_for for row in wait_for_fire(repository)] == [NOW]
+        assert [row.scheduled_for for row in wait_for_fire(repository, admitted)] == [NOW]
 
 
 def test_recovery_across_dst_fold_advances_by_utc_instant(schedule):
@@ -270,6 +275,7 @@ def test_new_interval_anchor_is_phase_origin_and_first_period_can_recover(schedu
         registration = replacement.registration_snapshot([schedule.id])["registrations"][str(schedule.id)]
         assert datetime.fromisoformat(registration["next_run_at"]) == NOW + timedelta(days=1)
     scheduler_clock[0] = NOW + timedelta(days=1, minutes=5)
-    with runtime(db_app, repository, scheduler_clock) as restarted:
+    admitted = Event()
+    with runtime(db_app, repository, scheduler_clock, admitted=admitted) as restarted:
         assert restarted.ready.wait(2)
-        assert [row.scheduled_for for row in wait_for_fire(repository)] == [NOW + timedelta(days=1)]
+        assert [row.scheduled_for for row in wait_for_fire(repository, admitted)] == [NOW + timedelta(days=1)]
