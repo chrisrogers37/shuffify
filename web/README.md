@@ -78,3 +78,5 @@ Landing copy, five fictional sample tracks and the Raid/Drip/Rotate/Schedules wa
 `npm run test:public-browser` tests the production build on port 4174 in Chromium at 360/1440px, with a synthetic signed-out session supplied by the test runner. It checks actual raw HTML, no-JavaScript reading/navigation/native validation, hydration, legal copy, consent keyboard submission, exact login fields, route heading/title/current links, preview/undo, reduced motion, branding, artwork tokens, 44px targets and strict CSP. It writes public screenshots to `evidence/`. The separate foundation browser matrix still exercises its fixture build at 4173. Run them sequentially because both build the same `dist/` directory.
 
 The Workshop hub and playlist workspace share one occurrence draft, reviewed save pipeline and retained operation receipt. Named drafts, current-state inspection, snapshot restoration and visibility use the same task and navigation controls.
+
+Workshop tools include algorithm previews, URI locks, catalog and external additions, snapshot history and playlist details. All draft changes return through the shared reviewed save pipeline.

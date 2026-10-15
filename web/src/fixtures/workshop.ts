@@ -179,6 +179,8 @@ export function createWorkshopFixtures(scenario: string) {
           { id: "morning", name: "Morning Collection" },
         ],
       });
+    if (/^\/api\/workshop\/[^/]+\/locks$/u.test(url) && method === "GET")
+      return json({ success: true, locks: [] });
     if (/^\/api\/workshop\/(target|morning)$/u.test(url) && method === "GET") {
       reads++;
       if (scenario === "workshop-auth-loss" && reads > 1)

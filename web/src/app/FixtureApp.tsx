@@ -8,7 +8,7 @@ import { settingsRoutes } from "./settings-routes";
 import { activityRoutes } from "./activity-routes";
 import { libraryRoutes } from "./library-routes";
 import { WorkshopToolsHarness } from "../fixtures/WorkshopToolsHarness";
-import { workshopRoutes } from "./workshop-routes";
+import { workshopToolsRoutes } from "./workshop-tools-routes";
 import { routinesRoutes } from "./routines-routes";
 import { AppShell, PublicShell } from "../shell/Shell";
 import { ErrorPage } from "../pages/errors/ErrorPage";
@@ -518,7 +518,7 @@ export function createFixtureRouter(services: Services) {
         ...activityRoutes(),
         ...libraryRoutes(),
         ...routinesRoutes(),
-        ...workshopRoutes(),
+        ...workshopToolsRoutes(),
         {
           path: "/__foundation/workshop-tools/:playlistId",
           element: (

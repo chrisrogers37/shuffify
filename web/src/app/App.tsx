@@ -7,7 +7,7 @@ import { publicRoutes } from "./public-routes";
 import { settingsRoutes } from "./settings-routes";
 import { activityRoutes } from "./activity-routes";
 import { libraryRoutes } from "./library-routes";
-import { workshopRoutes } from "./workshop-routes";
+import { workshopToolsRoutes } from "./workshop-tools-routes";
 import { routinesRoutes } from "./routines-routes";
 export function createAppRoutes(services: Services) {
   return [
@@ -28,7 +28,7 @@ export function createAppRoutes(services: Services) {
         ...activityRoutes(),
         ...libraryRoutes(),
         ...routinesRoutes(),
-        ...workshopRoutes(),
+        ...workshopToolsRoutes(),
         {
           path: "*",
           element: (

@@ -1,3 +1,4 @@
+import { createWorkshopToolsFixtures, workshopToolsScenarios } from "./workshop-tools";
 import { createWorkshopFixtures, workshopScenarios } from "./workshop";
 import { createRoutinesFixtures, routinesScenarios } from "./routines.ts";
 import { createLibraryFixtures, libraryScenarios } from "./library.ts";
@@ -12,6 +13,7 @@ import library from "../../fixtures/valid/library-context.json";
 import type { Transport } from "../api/transport";
 const scenarios = [
   ...workshopScenarios,
+  ...workshopToolsScenarios,
   ...libraryScenarios,
   ...routinesScenarios,
   ...settingsScenarios,
@@ -49,6 +51,7 @@ const failure = (message: string, code = "fixture_error") => ({
 });
 export function createFixtureTransport(scenario: Scenario): Transport {
   const workshop = createWorkshopFixtures(scenario);
+  const workshopTools = createWorkshopToolsFixtures(scenario, workshop);
   const settings = createSettingsFixtures(scenario);
   const activity = createActivityFixtures(scenario);
   const libraryFixture = createLibraryFixtures(scenario);
@@ -60,6 +63,8 @@ export function createFixtureTransport(scenario: Scenario): Transport {
     if (init?.signal?.aborted) throw init.signal.reason;
     const path = String(input),
       method = init?.method ?? "GET";
+    const toolsResponse = await workshopTools(path, method, init);
+    if (toolsResponse) return toolsResponse;
     const workshopResponse = await workshop(path, method, init);
     if (workshopResponse) return workshopResponse;
     const routinesResponse = await routines(path, method, init);
