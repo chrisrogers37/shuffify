@@ -1,3 +1,5 @@
+import { spotifyResources } from "../../operations/admissions.ts";
+import type { AdmissionRequest } from "../../operations/admissions.ts";
 import type { ApiClient, ApiResult } from "../../api/client.ts";
 import type { JsonRecord, LibraryContext } from "../../api/contracts.ts";
 import { ApiRequestError, ProtocolError } from "../../api/errors.ts";
@@ -224,6 +226,46 @@ export async function loadReview(
     throw new ProtocolError("A live review cannot accept a write.");
   assertReview(result.data.context, id, intent);
   return result.data.context;
+}
+export function libraryAdmission(
+  id: string,
+  intent: Intent,
+  review: Review,
+  key: string,
+): AdmissionRequest {
+  const binding = {
+    reviewed_scope: review.review_binding.scope,
+    ...(intent.kind === "undo"
+      ? {
+          reviewed_before_order: review.review_binding.before_order!,
+          reviewed_history: review.review_binding.history!,
+        }
+      : {}),
+  };
+  return {
+    key,
+    feature: "library",
+    label: `${review.label} · ${review.target.name}`,
+    resources: spotifyResources(id, review.resources),
+    expected: {
+      kind: intent.kind === "privacy" ? "visibility" : intent.kind,
+      target: id,
+    },
+    path:
+      intent.kind === "privacy"
+        ? `/api/playlist/${encodeURIComponent(id)}/toggle-visibility`
+        : `/api/${intent.kind === "shuffle" ? "shuffle" : "undo"}/${encodeURIComponent(id)}`,
+    body:
+      intent.kind === "privacy"
+        ? { encoding: "json", value: { public: intent.public, ...binding } }
+        : {
+            encoding: "form",
+            value: {
+              ...(intent.kind === "shuffle" ? intent.form : {}),
+              ...binding,
+            },
+          },
+  };
 }
 export function sendReviewed(
   api: ApiClient,

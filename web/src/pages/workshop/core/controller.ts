@@ -1,3 +1,9 @@
+import {
+  getAdmissionRegistry,
+  spotifyResources,
+  admissionUnknown,
+} from "../../../operations/admissions.ts";
+import type { AdmissionRequest } from "../../../operations/admissions.ts";
 import type { ApiClient } from "../../../api/client.ts";
 import type { WorkshopTrack } from "../../../api/contracts.ts";
 import type { SessionStore } from "../../../auth/session-store.ts";
@@ -55,6 +61,7 @@ export function createWorkshopController(
 ) {
   const client = createWorkshopClient(api, playlistId),
     operations = options.operations ?? getOperationStore(api, actor),
+    admissions = getAdmissionRegistry(api, actor, operations),
     listeners = new Set<() => void>(),
     tools = new Map<ToolId | "named-drafts", object>();
   let state: WorkshopState = {
@@ -104,8 +111,25 @@ export function createWorkshopController(
       s.status === "ready" && s.session.signed_in && s.session.user.id === actor
     );
   };
-  const permission = (group: PermissionGroup, subject?: string) =>
-    workshopPermission(state, group, playlistId, authenticated(), subject);
+  const permission = (group: PermissionGroup, subject?: string) => {
+    const p = workshopPermission(
+      state,
+      group,
+      playlistId,
+      authenticated(),
+      subject,
+    );
+    const held = ["save", "review", "snapshot", "metadata"].includes(group)
+      ? admissions.conflict(spotifyResources(playlistId))
+      : null;
+    return !p.allowed || !held
+      ? p
+      : {
+          allowed: false,
+          reason: `${held.request.label} is not reconciled. Open its original review before another Spotify change.`,
+        };
+  };
+  admissions.subscribe(() => update({}));
   const refuse = (group: PermissionGroup) => {
     const p = permission(group);
     if (!p.allowed) update({ notice: p.reason });
@@ -397,7 +421,7 @@ export function createWorkshopController(
       update({ reviewing: false });
     }
   }
-  async function dispatch(review: ReviewedAction) {
+  async function dispatch(review: ReviewedAction, exactRetry = false) {
     update({
       receipt: {
         review,
@@ -410,20 +434,54 @@ export function createWorkshopController(
       },
     });
     try {
-      const op =
-        review.kind === "commit"
-          ? await client.commit(review.body, review.key)
-          : review.kind === "snapshot_restore"
-            ? await client.restore(
-                review.snapshotId,
-                review.context.review_binding,
-                review.key,
-              )
-            : await client.visibility(
-                review.public,
-                review.context.review_binding.scope,
-                review.key,
-              );
+      const binding =
+        review.kind !== "commit" ? review.context.review_binding : null;
+      const request: AdmissionRequest = {
+        key: review.key,
+        feature: "workshop",
+        label: `${review.kind === "commit" ? "Save" : review.kind === "snapshot_restore" ? "Restore snapshot to" : "Change visibility of"} ${review.target.name}`,
+        resources: spotifyResources(
+          playlistId,
+          review.kind === "commit" ? [] : review.context.resources,
+          review.staging.map((s) => s.source_playlist_id),
+        ),
+        expected: {
+          kind:
+            review.kind === "commit"
+              ? "workshop_commit"
+              : review.kind === "privacy"
+                ? "visibility"
+                : "snapshot_restore",
+          target: playlistId,
+        },
+        path:
+          review.kind === "commit"
+            ? `/api/workshop/${encodeURIComponent(playlistId)}/commit`
+            : review.kind === "snapshot_restore"
+              ? `/api/snapshots/${review.snapshotId}/restore`
+              : `/api/playlist/${encodeURIComponent(playlistId)}/toggle-visibility`,
+        body: {
+          encoding: "json",
+          value:
+            review.kind === "commit"
+              ? {
+                  baseline_track_uris: [...review.body.baseline_track_uris],
+                  track_uris: [...review.body.track_uris],
+                }
+              : review.kind === "privacy"
+                ? { public: review.public, reviewed_scope: binding!.scope }
+                : {
+                    reviewed_scope: binding!.scope,
+                    reviewed_before_order: binding!.before_order,
+                  },
+        },
+      };
+      const accepted = exactRetry
+        ? await admissions.retry(review.key, authenticated() ? actor : null)
+        : await admissions.submit(request, authenticated() ? actor : null);
+      if (accepted.status !== "accepted")
+        throw new ProtocolError("This write requires an accepted operation.");
+      const op = accepted.operation;
       const expected =
         review.kind === "commit"
           ? "workshop_commit"
@@ -448,15 +506,13 @@ export function createWorkshopController(
       operations.accept(op);
     } catch (e) {
       const error = asError(e),
-        unknown =
-          e instanceof NetworkError ||
-          e instanceof ProtocolError ||
-          (e instanceof ApiRequestError && e.status >= 500),
+        unknown = admissionUnknown(admissions, review.key, e),
         until =
           e instanceof RateLimitError
             ? Date.now() + (e.retryAfterMs ?? 1000)
             : 0;
-      const busy = e instanceof ConflictError ? e.error.operation_id : null;
+      const busy =
+        !unknown && e instanceof ConflictError ? e.error.operation_id : null;
       update({
         retryUntil: until,
         receipt: {
@@ -503,7 +559,7 @@ export function createWorkshopController(
       Date.now() < r.retryUntil
     )
       return false;
-    await dispatch(r.review);
+    await dispatch(r.review, true);
     return true;
   }
   const observeReceipt = () => {
@@ -520,6 +576,22 @@ export function createWorkshopController(
       return;
     const terminal = terminalOperationStates.has(op.state),
       result = targetResult(op.result);
+    const claim = admissions.getSnapshot().get(receipt.review.key);
+    if (claim?.relation === "blocking") {
+      update({
+        receipt: {
+          ...receipt,
+          status: claim.status === "settled" ? "refused" : "accepted",
+          operation: op,
+          result: null,
+          message:
+            claim.status === "settled"
+              ? `Blocking operation ${op.id} is settled. This save was not accepted; review it again before submitting.`
+              : `Blocking operation ${op.id} retains this target. This save was not accepted.`,
+        },
+      });
+      return;
+    }
     let patch: Partial<WorkshopState> = {
       receipt: {
         ...receipt,
@@ -532,7 +604,12 @@ export function createWorkshopController(
             : `Operation ${op.id}: ${op.state.replaceAll("_", " ")}.`,
       },
     };
-    if (terminal && op.state === "succeeded" && op.result?.success === true) {
+    if (
+      terminal &&
+      op.state === "succeeded" &&
+      op.result?.success === true &&
+      admissions.getSnapshot().get(receipt.review.key)?.relation === "original"
+    ) {
       if (
         receipt.review.kind === "privacy" &&
         typeof op.result.public === "boolean" &&

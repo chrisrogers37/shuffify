@@ -1,4 +1,9 @@
 import {
+  getAdmissionRegistry,
+  spotifyResources,
+  admissionUnknown,
+} from "../../operations/admissions";
+import {
   useEffect,
   useMemo,
   useRef,
@@ -90,7 +95,9 @@ export function PlaylistSetupPage() {
     { confirm } = useConfirm(),
     announce = useAnnouncer(),
     store = getOperationStore(api, actor),
+    admissions = getAdmissionRegistry(api, actor, store),
     observed = useSyncExternalStore(store.subscribe, store.getSnapshot);
+  useSyncExternalStore(admissions.subscribe, admissions.getSnapshot);
   const loadedActor = useRef(actor);
   const returnTarget =
       new URLSearchParams(location.search).get("return_target") ?? "playlist",
@@ -182,6 +189,8 @@ export function PlaylistSetupPage() {
       const entry = observed.get(current.operationId),
         result = entry?.operation?.result;
       if (
+        admissions.getSnapshot().get(current.key)?.relation === "original" &&
+        entry?.operation?.kind === "setup_playlist_create" &&
         record(result) &&
         record(result.playlist) &&
         typeof result.playlist.id === "string" &&
@@ -353,7 +362,7 @@ export function PlaylistSetupPage() {
       setBusy(false);
     }
   }
-  async function create(purpose: Purpose, another = false) {
+  async function create(purpose: Purpose, exactRetry = false) {
     if (
       creationLock.current ||
       !context ||
@@ -364,22 +373,12 @@ export function PlaylistSetupPage() {
       return;
     const prior = memory(purpose);
     if (
-      prior &&
-      !another &&
-      (!prior.refused || (prior.retryAt ?? 0) > Date.now())
+      exactRetry
+        ? !prior?.unknown || !!prior.operationId
+        : prior && (!prior.refused || (prior.retryAt ?? 0) > Date.now())
     )
       return;
-    if (
-      another &&
-      !(await confirm({
-        title: "Create another playlist?",
-        message:
-          "The earlier request may have created a playlist. This sends a new creation request. Refresh your playlists first if you want to use an existing one.",
-        confirmLabel: "Create another playlist",
-      }))
-    )
-      return;
-    const name = newNames[purpose].trim();
+    const name = exactRetry ? prior!.name : newNames[purpose].trim();
     if (!name || name.length > 100) {
       setError("Enter a playlist name from 1 to 100 characters.");
       return;
@@ -387,39 +386,50 @@ export function PlaylistSetupPage() {
     creationLock.current = true;
     setCreationBusy(purpose);
     setError("");
-    const value: Creation = {
-      name,
-      key: crypto.randomUUID(),
-      operationId: null,
-      unknown: false,
-      refused: false,
-      retryAt: null,
-      playlist: null,
-      privacy: null,
-      actor,
-    };
+    const value: Creation = exactRetry
+      ? prior!
+      : {
+          name,
+          key: crypto.randomUUID(),
+          operationId: null,
+          unknown: false,
+          refused: false,
+          retryAt: null,
+          playlist: null,
+          privacy: null,
+          actor,
+        };
     remembered.set(`${actor}:${playlistId}:${purpose}`, value);
     renderCreations((n) => n + 1);
     try {
-      const reply = await client.create(playlistId, purpose, name, value.key);
-      if (reply.status === "accepted") {
-        value.operationId = reply.operation.id;
-        store.accept(reply.operation);
-      } else if (
-        record(reply.data.playlist) &&
-        typeof reply.data.playlist.id === "string" &&
-        typeof reply.data.playlist.name === "string" &&
-        reply.data.outcome === "created"
-      ) {
-        value.playlist = {
-          id: reply.data.playlist.id,
-          name: reply.data.playlist.name,
-        };
-        value.privacy = reply.data.privacy_confirmed === true;
-      } else value.unknown = true;
+      const reply = exactRetry
+        ? await admissions.retry(value.key, actor)
+        : await admissions.submit(
+            {
+              key: value.key,
+              feature: "setup",
+              label: `Create ${purpose} “${name}” · ${context.target.name}`,
+              resources: [
+                ...spotifyResources(playlistId),
+                { resource: "collection:spotify-playlists", access: "write" },
+              ],
+              path: `/api${playlistPath(playlistId)}/setup/spotify-playlists`,
+              body: { encoding: "json", value: { purpose, name } },
+              expected: { kind: "setup_playlist_create", target: playlistId },
+            },
+            actor,
+          );
+      if (reply.status !== "accepted")
+        throw Error("Creation did not identify an operation.");
+      value.operationId = reply.operation.id;
+      value.unknown = false;
+      value.refused = false;
+      store.accept(reply.operation);
     } catch (problem) {
-      value.unknown = unconfirmedMutation(problem);
-      value.refused = !value.unknown;
+      value.unknown = admissionUnknown(admissions, value.key, problem);
+      const retained = admissions.getSnapshot().get(value.key);
+      value.operationId = retained?.operationId ?? null;
+      value.refused = !value.unknown && retained?.relation !== "original";
       if (problem instanceof ApiRequestError && problem.retryAfterMs !== null)
         value.retryAt = Date.now() + problem.retryAfterMs;
       setError(
@@ -665,6 +675,10 @@ export function PlaylistSetupPage() {
             {(["collection", "archive"] as const).map((purpose) => {
               const saved = context[purpose],
                 creation = memory(purpose),
+                creationClaim = admissions.conflict([
+                  ...spotifyResources(playlistId),
+                  { resource: "collection:spotify-playlists", access: "write" },
+                ]),
                 entry = creation?.operationId
                   ? observed.get(creation.operationId)
                   : undefined,
@@ -761,6 +775,7 @@ export function PlaylistSetupPage() {
                     variant="secondary"
                     disabled={
                       !!saved ||
+                      !!creationClaim ||
                       (!!creation &&
                         (!creation.refused ||
                           (creation.retryAt ?? 0) > Date.now()))
@@ -770,12 +785,21 @@ export function PlaylistSetupPage() {
                   >
                     Create {purpose} playlist in Spotify
                   </Button>
+                  {creationClaim &&
+                    creationClaim.request.key !== creation?.key && (
+                      <p role="status">
+                        {creationClaim.request.label} is awaiting
+                        reconciliation. Open its original review.
+                      </p>
+                    )}
                   {creation?.refused && (
                     <p role="status">
                       The creation was refused. No playlist was confirmed.{" "}
                       {creation.retryAt && creation.retryAt > Date.now()
                         ? "Wait for Spotify’s retry delay before another request."
-                        : "You can submit another creation request."}
+                        : creationClaim
+                          ? "The pending action must settle before another creation request."
+                          : "You can submit another creation request."}
                     </p>
                   )}
                   {creation?.unknown && (
@@ -791,13 +815,22 @@ export function PlaylistSetupPage() {
                       >
                         Refresh my playlists
                       </Button>
-                      <Button
-                        variant="secondary"
-                        busy={creationBusy === purpose}
-                        onClick={() => void create(purpose, true)}
-                      >
-                        Create another playlist
-                      </Button>
+                      {!creation.operationId && (
+                        <>
+                          <p>
+                            Original creation: {creation.name}. Retry uses the
+                            same name, purpose and request key.
+                          </p>
+                          <Button
+                            variant="secondary"
+                            busy={creationBusy === purpose}
+                            disabled={(creation.retryAt ?? 0) > Date.now()}
+                            onClick={() => void create(purpose, true)}
+                          >
+                            Retry this exact creation request
+                          </Button>
+                        </>
+                      )}
                     </div>
                   )}
                   {creation?.playlist && (

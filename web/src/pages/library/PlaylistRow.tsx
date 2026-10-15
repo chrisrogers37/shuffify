@@ -138,6 +138,12 @@ export function PlaylistRow({
               ? "Public"
               : "Private"}
         </p>
+        {c.pendingAction(row.id) && (
+          <p role="status">
+            {c.pendingAction(row.id)} is awaiting reconciliation. Open its
+            original review.
+          </p>
+        )}
         <Link
           className="sh-library-link"
           to={`/workshop/${encodeURIComponent(row.id)}`}
@@ -154,7 +160,9 @@ export function PlaylistRow({
         </summary>
         <div className="sh-library-action-body">
           <Button
-            aria-disabled={row.track_count === 0 || s.loading || c.blocked()}
+            aria-disabled={
+              row.track_count === 0 || s.loading || c.blocked(row.id)
+            }
             onClick={(e) => choose(e.currentTarget)}
           >
             {draft.algorithm ? "Shuffle now" : "Choose shuffle"}
@@ -269,7 +277,7 @@ export function PlaylistRow({
           {row.can_undo && (
             <Button
               variant="secondary"
-              aria-disabled={s.loading || c.blocked()}
+              aria-disabled={s.loading || c.blocked(row.id)}
               onClick={(e) => begin(row.id, "undo", e.currentTarget)}
             >
               Restore previous saved version now
@@ -277,7 +285,7 @@ export function PlaylistRow({
           )}
           <Button
             variant="secondary"
-            aria-disabled={s.loading || c.blocked()}
+            aria-disabled={s.loading || c.blocked(row.id)}
             onClick={(e) => begin(row.id, "privacy", e.currentTarget)}
           >
             {row.public ? "Make private now" : "Make public now"}

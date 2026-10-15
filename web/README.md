@@ -80,3 +80,5 @@ Landing copy, five fictional sample tracks and the Raid/Drip/Rotate/Schedules wa
 The Workshop hub and playlist workspace share one occurrence draft, reviewed save pipeline and retained operation receipt. Named drafts, current-state inspection, snapshot restoration and visibility use the same task and navigation controls.
 
 Workshop tools include algorithm previews, URI locks, catalog and external additions, snapshot history and playlist details. All draft changes return through the shared reviewed save pipeline.
+
+Spotify requests reserve shared actor and playlist claims before admission. Uncertain replies retain their exact request body and key across page navigation; only an explicit retry resends that request.

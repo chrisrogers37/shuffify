@@ -228,7 +228,11 @@ export function ReviewPanel({
           )}
           {r.rejection && (
             <details>
-              <summary>Exact refusal details</summary>
+              <summary>
+                {r.status === "unknown"
+                  ? "Exact response details"
+                  : "Exact refusal details"}
+              </summary>
               <pre>{JSON.stringify(r.rejection, null, 2)}</pre>
             </details>
           )}
@@ -237,7 +241,9 @@ export function ReviewPanel({
               <Button
                 ref={run}
                 busy={r.status === "sending"}
-                aria-disabled={stale || !signed || s.loading || c.blocked()}
+                aria-disabled={
+                  stale || !signed || s.loading || c.blocked(r.playlistId)
+                }
                 onClick={() => {
                   transitionFocus.current = true;
                   void c.dispatch(r.id);
@@ -294,7 +300,7 @@ export function ReviewPanel({
           {r.status === "refused" && id === null && (
             <Button
               variant="secondary"
-              aria-disabled={seconds > 0 || !signed || c.blocked()}
+              aria-disabled={seconds > 0 || !signed || c.blocked(r.playlistId)}
               onClick={() => {
                 transitionFocus.current = true;
                 void c.reviewAgain(r.id);

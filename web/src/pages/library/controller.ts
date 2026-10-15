@@ -1,8 +1,15 @@
+import {
+  getAdmissionRegistry,
+  spotifyResources,
+  AdmissionBlockedError,
+  admissionUnknown,
+} from "../../operations/admissions.ts";
 import type { ApiClient } from "../../api/client.ts";
 import type { JsonRecord, LibraryContext } from "../../api/contracts.ts";
 import type { SessionStore } from "../../auth/session-store.ts";
 import {
   ApiRequestError,
+  ConflictError,
   MissingCsrfTokenError,
   NetworkError,
   ProtocolError,
@@ -16,7 +23,7 @@ import {
   loadReview,
   preference,
   record,
-  sendReviewed,
+  libraryAdmission,
 } from "./api.ts";
 import type { Intent, Review, Inspection, InspectionIntent } from "./api.ts";
 import {
@@ -81,6 +88,7 @@ export function createLibraryController(
   options: ControllerOptions = {},
 ) {
   const operations = options.operations ?? getOperationStore(api, actor);
+  const admissions = getAdmissionRegistry(api, actor, operations);
   let state: LibraryState = {
     context: null,
     loading: false,
@@ -199,7 +207,8 @@ export function createLibraryController(
         drafts: new Map(state.drafts).set(id, setParameter(draft, name, value)),
       });
   }
-  function blocked(): boolean {
+  function blocked(target?: string): boolean {
+    if (target && admissions.conflict(spotifyResources(target))) return true;
     return [...state.receipts.values()].some((r) => {
       if (r.status === "sending" || r.status === "unknown") return true;
       const id = r.operationId ?? r.busyId;
@@ -227,7 +236,9 @@ export function createLibraryController(
       throw new Error(
         "Wait for the Library refresh before reviewing a new action.",
       );
-    if (blocked())
+    const conflict = admissions.conflict(spotifyResources(id));
+    if (conflict) throw new AdmissionBlockedError(conflict);
+    if (blocked(id))
       throw new Error(
         "Reconcile the retained operation before starting another Spotify change.",
       );
@@ -312,20 +323,19 @@ export function createLibraryController(
     if (
       exactRetry
         ? r.status !== "unknown"
-        : r.status !== "ready" || stale(r) || blocked()
+        : r.status !== "ready" || stale(r) || blocked(r.playlistId)
     )
       return;
     // Freeze intent and key before the first network boundary; never generate a retry key here.
     changeReceipt(id, { status: "sending", error: "" });
     try {
       authorize();
-      const accepted = await sendReviewed(
-        api,
-        r.playlistId,
-        r.intent,
-        r.review,
-        r.key,
-      );
+      const accepted = exactRetry
+        ? await admissions.retry(r.key, sameActor() ? actor : null)
+        : await admissions.submit(
+            libraryAdmission(r.playlistId, r.intent, r.review, r.key),
+            sameActor() ? actor : null,
+          );
       if (accepted.status !== "accepted")
         throw new ProtocolError(
           "A Spotify command completed without an operation receipt.",
@@ -337,10 +347,11 @@ export function createLibraryController(
       });
       operations.accept(accepted.operation);
     } catch (e) {
-      const known =
-        e instanceof ApiRequestError || e instanceof MissingCsrfTokenError;
+      const known = !admissionUnknown(admissions, r.key, e);
       const busy =
-        e instanceof ApiRequestError ? (e.error.operation_id ?? null) : null;
+        known && e instanceof ConflictError
+          ? (e.error.operation_id ?? null)
+          : null;
       changeReceipt(id, {
         status: known ? "refused" : "unknown",
         rejection:
@@ -450,6 +461,7 @@ export function createLibraryController(
       },
     });
   }
+  admissions.subscribe(() => update({}));
   const applied = new Set<number>();
   operations.subscribe(() => {
     for (const r of state.receipts.values()) {
@@ -663,6 +675,8 @@ export function createLibraryController(
     inspect,
     stale,
     blocked,
+    pendingAction: (id: string) =>
+      admissions.conflict(spotifyResources(id))?.request.label ?? "",
     toggle,
     move,
     retryOrder,

@@ -416,6 +416,8 @@ export function createRoutinesFixtures(scenario: string) {
           image_url: null,
         });
         const reply = admit(target, "setup_playlist_create", true, name);
+        if (requestKey)
+          admissionReceipts.set(requestKey, await reply.clone().json());
         if (scenario === "routines-creation-admission-unknown" && created === 1)
           throw Error("Fixture lost creation response.");
         return reply;

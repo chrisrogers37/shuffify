@@ -328,7 +328,7 @@ export function createLibraryFixtures(scenario: string) {
         return json(fail("Request key changed intent."), 409);
       const operation: Operation = old?.operation ?? {
         id: nextId++,
-        kind,
+        kind: kind === "privacy" ? "visibility" : kind,
         state: "queued",
         targets: [id],
         started_at: null,

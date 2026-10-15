@@ -688,19 +688,28 @@ test("unavailable accepted status retains ID and GET-only explicit retry, with n
   ).toHaveLength(5);
   expect(commands(state.calls)).toHaveLength(1);
 });
-test("known queue refusal preserves normalized and nested facts without automatic resubmission", async ({
+test("HTTP503 retains ambiguity and normalized response facts without automatic resubmission", async ({
   page,
 }) => {
   const state = await setup(page, "library-queue-failure");
   const panel = await review(page);
   await panel.getByRole("button", { name: "Run shuffle", exact: true }).click();
   await expect(
-    panel.getByText("Queue admission was refused.", { exact: true }),
+    panel.getByText(/The request may have been accepted/),
   ).toBeVisible();
-  await panel.getByText("Exact refusal details", { exact: true }).click();
+  await panel.getByText("Exact response details", { exact: true }).click();
   await expect(panel.locator("pre")).toContainText(
     '"error_code": "library_error"',
   );
+  await expect(panel.locator("pre")).toContainText(
+    "Queue admission was refused.",
+  );
+  await expect(
+    panel.getByRole("button", {
+      name: "Retry this exact request",
+      exact: true,
+    }),
+  ).toBeVisible();
   expect(commands(state.calls)).toHaveLength(1);
   await panel.getByRole("button", { name: "Close", exact: true }).click();
   await page

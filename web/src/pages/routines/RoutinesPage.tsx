@@ -1,4 +1,9 @@
 import {
+  getAdmissionRegistry,
+  spotifyResources,
+  admissionUnknown,
+} from "../../operations/admissions";
+import {
   useEffect,
   useMemo,
   useRef,
@@ -28,7 +33,6 @@ import {
   playlistPath,
   listDeepLink,
   safeAvailableDetail,
-  unconfirmedMutation,
 } from "./model";
 import type { RunReview } from "./model";
 import { OperationView } from "./OperationView";
@@ -59,6 +63,7 @@ function RunTask({
     session = useSession(),
     client = useMemo(() => createRoutineClient(api), [api]),
     store = getOperationStore(api, actor),
+    admissions = getAdmissionRegistry(api, actor, store),
     entries = useSyncExternalStore(store.subscribe, store.getSnapshot),
     [review, setReview] = useState<RunReview | null>(null),
     [error, setError] = useState(""),
@@ -66,6 +71,7 @@ function RunTask({
     [operationId, setId] = useState<number | null>(null),
     locked = useRef(false),
     read = useRef<Promise<RunReview> | null>(null);
+  useSyncExternalStore(admissions.subscribe, admissions.getSnapshot);
   let records = intents.get(api);
   if (!records) {
     records = new Map();
@@ -98,6 +104,10 @@ function RunTask({
     };
   }, [client, row.schedule_id]);
   const entry = operationId ? entries.get(operationId) : undefined;
+  const claim = admissions.conflict(
+    spotifyResources(row.schedule.target_playlist_id, review?.resources ?? []),
+    recordRef.current?.unknown ? recordRef.current.key : undefined,
+  );
   const submit = async () => {
     if (
       locked.current ||
@@ -122,7 +132,29 @@ function RunTask({
     recordRef.current = intent;
     records.set(key, intent);
     try {
-      const reply = await client.run(row.schedule_id, intent.scope, intent.key);
+      const reply = intent.unknown
+        ? await admissions.retry(intent.key, actor)
+        : await admissions.submit(
+            {
+              key: intent.key,
+              feature: "routines",
+              label: `Run routine #${row.schedule_id} · ${row.schedule.target_playlist_name ?? row.schedule.target_playlist_id}`,
+              resources: spotifyResources(
+                row.schedule.target_playlist_id,
+                intent.review.resources,
+              ),
+              path: `/api/schedules/${row.schedule_id}/run`,
+              body: {
+                encoding: "json",
+                value: { reviewed_scope: intent.scope },
+              },
+              expected: {
+                kind: "schedule_run",
+                target: row.schedule.target_playlist_id,
+              },
+            },
+            actor,
+          );
       if (reply.status !== "accepted")
         throw Error("The run response did not identify an accepted operation.");
       intent.operationId = reply.operation.id;
@@ -130,7 +162,12 @@ function RunTask({
       setId(reply.operation.id);
       store.accept(reply.operation);
     } catch (problem) {
-      intent.unknown = unconfirmedMutation(problem);
+      intent.unknown = admissionUnknown(admissions, intent.key, problem);
+      const retained = admissions.getSnapshot().get(intent.key);
+      if (retained?.operationId) {
+        intent.operationId = retained.operationId;
+        setId(retained.operationId);
+      }
       setError(
         problem instanceof Error
           ? problem.message
@@ -176,7 +213,13 @@ function RunTask({
               </li>
             ))}
           </ul>
-          <Button busy={busy} onClick={() => void submit()}>
+          {claim && (
+            <p role="status">
+              {claim.request.label} is awaiting reconciliation. Open its
+              original review.
+            </p>
+          )}
+          <Button busy={busy} disabled={!!claim} onClick={() => void submit()}>
             {recordRef.current?.unknown
               ? "Check the same run request"
               : "Run reviewed routine"}
@@ -213,11 +256,13 @@ export function RoutinesPage() {
         : "",
     client = useMemo(() => createRoutineClient(api), [api]),
     store = getOperationStore(api, actor),
+    admissions = getAdmissionRegistry(api, actor, store),
     entries = useSyncExternalStore(store.subscribe, store.getSnapshot),
     tasks = useTasks(),
     { confirm } = useConfirm(),
     announce = useAnnouncer(),
     location = useLocation();
+  useSyncExternalStore(admissions.subscribe, admissions.getSnapshot);
   const [, intentsChanged] = useState(0);
   const loadedActor = useRef(actor);
   const [context, setContext] = useState<RoutinesContext | null>(null),
@@ -559,6 +604,14 @@ export function RoutinesPage() {
                         "compensating",
                         "needs_attention",
                       ].includes(current.operation.state),
+                    sharedClaim = admissions.conflict(
+                      spotifyResources(row.schedule.target_playlist_id),
+                      intents.get(api)?.get(`${actor}:${row.schedule_id}`)
+                        ?.unknown
+                        ? intents.get(api)?.get(`${actor}:${row.schedule_id}`)
+                            ?.key
+                        : undefined,
+                    ),
                     ownUnknown = intents
                       .get(api)
                       ?.get(`${actor}:${row.schedule_id}`)?.unknown,
@@ -666,10 +719,20 @@ export function RoutinesPage() {
                         >
                           {row.schedule.is_enabled ? "Pause" : "Resume"}
                         </Button>
+                        {sharedClaim && (
+                          <p role="status">
+                            {sharedClaim.request.label} is awaiting
+                            reconciliation. Open its original review.
+                          </p>
+                        )}
                         <Button
                           variant="secondary"
                           aria-describedby={description}
-                          disabled={!!blocked || (!!uncertain && !ownUnknown)}
+                          disabled={
+                            !!blocked ||
+                            (!!uncertain && !ownUnknown) ||
+                            !!sharedClaim
+                          }
                           onClick={(event) => {
                             const remembered = intents
                               .get(api)

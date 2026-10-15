@@ -346,6 +346,11 @@ export function WorkshopPage({
                       </Button>
                     </div>
                   </header>
+                  {!c.permission("review").allowed && !busy && !attention && (
+                    <p role="status" className="sh-workshop-notice">
+                      {c.permission("review").reason}
+                    </p>
+                  )}
                   {s.notice && (
                     <p className="sh-workshop-notice" role="status">
                       {s.notice}

@@ -611,3 +611,36 @@ test("manual moves preserve legacy source/destination lock checks and permit cro
   const input = c.getPreviewInput();
   assert.equal(c.applyPreview(input, [uri(3), uri(2), uri(1)]), false);
 });
+test("a settled blocking ID cannot adopt another action as this refused Workshop save", async () => {
+  const t = await harness((path) =>
+    path.endsWith("/commit")
+      ? json(
+          {
+            success: false,
+            error_code: "conflict",
+            message: "Another request owns this target",
+            category: "error",
+            operation_id: 9,
+          },
+          409,
+        )
+      : null,
+  );
+  t.c.removeOccurrence(t.c.getSnapshot().working[0].key);
+  const reviewed = await t.c.prepareReview();
+  await t.c.submitReviewed(reviewed.id);
+  t.finish(
+    operation(9, "succeeded", {
+      success: true,
+      target_status: "saved",
+      confirmed_batches: 1,
+      total_batches: 1,
+      requires_refresh: false,
+      retryable: false,
+      saved_track_uris: reviewed.desired.map((r) => r.uri),
+    }),
+  );
+  assert.equal(t.c.getSnapshot().baseline.length, 3);
+  assert.equal(t.c.getSnapshot().receipt.status, "refused");
+  assert.equal(t.c.permission("review").allowed, true);
+});

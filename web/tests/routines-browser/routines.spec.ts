@@ -458,7 +458,7 @@ test("unconfirmed run has no automatic POST replay and explicit Check retains ke
   expect(posts[0]?.key).toBe(posts[1]?.key);
   expect(posts[0]?.body).toEqual(posts[1]?.body);
 });
-test("create another requires explicit confirmation and uses a new key", async ({
+test("unknown creation retries only its immutable original body and key", async ({
   page,
 }) => {
   const state = await setup(
@@ -476,26 +476,32 @@ test("create another requires explicit confirmation and uses a new key", async (
     })
     .click();
   await page
-    .getByRole("button", { name: "Create another playlist", exact: true })
-    .click();
-  await expect(
-    page.getByRole("dialog", { name: "Create another playlist?", exact: true }),
-  ).toBeVisible();
-  expect(
-    state.calls.filter((call) => call.path.endsWith("/spotify-playlists")),
-  ).toHaveLength(1);
+    .getByLabel("Name a new collection playlist", { exact: true })
+    .fill("An unrelated edited name");
   await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Create another playlist", exact: true })
+    .getByRole("button", {
+      name: "Retry this exact creation request",
+      exact: true,
+    })
     .click();
   await expect(
-    page.getByText("Created: The holding room", { exact: true }),
+    page
+      .getByText("Creation could not be confirmed.", { exact: false })
+      .first(),
   ).toBeVisible({ timeout: 7000 });
   const posts = state.calls.filter((call) =>
     call.path.endsWith("/spotify-playlists"),
   );
   expect(posts).toHaveLength(2);
-  expect(posts[0]?.key).not.toBe(posts[1]?.key);
+  expect(posts[0]?.key).toBe(posts[1]?.key);
+  expect(posts[1]?.body).toEqual(posts[0]?.body);
+  expect(posts[1]?.body).toEqual({
+    purpose: "collection",
+    name: "The holding room",
+  });
+  expect(
+    state.calls.filter((call) => call.path.endsWith("/spotify-playlists")),
+  ).toHaveLength(2);
 });
 
 for (const [scenario, state, label] of [
