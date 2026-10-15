@@ -1,5 +1,6 @@
 """Direct actions observed through the app and the isolated Spotify fake."""
 
+import time
 from collections import Counter
 
 import pytest
@@ -27,14 +28,14 @@ def _snapshot(alice, uris):
 
 
 def test_direct_shuffle_reads_external_changes_and_undo_preserves_occurrences(alice, fake):
-    alice.ok("post", f"/shuffle/{LONG_HAUL}", data={"algorithm": "BasicShuffle"})
+    alice.write(f"/shuffle/{LONG_HAUL}", data={"algorithm": "BasicShuffle"})
     stale = fake.uris(LONG_HAUL)
     other = App("alice", fake.display_name("alice"))
     external = [stale[-1]] + stale[1:] + [stale[-1]]
-    other.ok("post", f"/workshop/{LONG_HAUL}/commit", json={
+    other.write(f"/workshop/{LONG_HAUL}/commit", json={
         "baseline_track_uris": stale, "track_uris": external,
     })
-    body = alice.ok("post", f"/shuffle/{LONG_HAUL}", data={
+    body = alice.write(f"/shuffle/{LONG_HAUL}", data={
         "algorithm": "BasicShuffle",
     })
     operation = _direct(body, "shuffle")
@@ -44,7 +45,7 @@ def test_direct_shuffle_reads_external_changes_and_undo_preserves_occurrences(al
     assert resource["current_track_uris"] == resource["desired_track_uris"] == fake.uris(LONG_HAUL)
     assert Counter(fake.uris(LONG_HAUL)) == Counter(external)
     assert fake.uris(LONG_HAUL) != external
-    undo = alice.ok("post", f"/undo/{LONG_HAUL}")
+    undo = alice.write(f"/undo/{LONG_HAUL}")
     assert _direct(undo, "undo")["aggregate_status"] == "complete"
     assert fake.uris(LONG_HAUL) == external
 
@@ -52,38 +53,34 @@ def test_direct_shuffle_reads_external_changes_and_undo_preserves_occurrences(al
 def test_snapshot_restore_records_the_actual_before_order_for_undo(alice, fake):
     saved = fake.uris(TARGET)
     snapshot_id = _snapshot(alice, saved)
-    alice.ok("post", f"/shuffle/{TARGET}", data={"algorithm": "BasicShuffle"})
+    alice.write(f"/shuffle/{TARGET}", data={"algorithm": "BasicShuffle"})
     shuffled = fake.uris(TARGET)
     other = App("alice", fake.display_name("alice"))
     external = [shuffled[-1]] + shuffled[:-2]
-    other.ok("post", f"/workshop/{TARGET}/commit", json={
+    other.write(f"/workshop/{TARGET}/commit", json={
         "baseline_track_uris": shuffled, "track_uris": external,
     })
-    restored = alice.ok("post", f"/snapshots/{snapshot_id}/restore")
+    restored = alice.write(f"/snapshots/{snapshot_id}/restore")
     operation = _direct(restored, "snapshot_restore")
     assert operation["aggregate_status"] == "complete"
     assert operation["resources"][0]["baseline_track_uris"] == external
     assert operation["resources"][0]["current_track_uris"] == saved
     assert restored["playlist_id"] == TARGET and fake.uris(TARGET) == saved
-    alice.ok("post", f"/undo/{TARGET}")
+    alice.write(f"/undo/{TARGET}")
     assert fake.uris(TARGET) == external
 
 
-def test_direct_partial_batch_keeps_exact_intent_and_never_compensates(alice, fake):
+def test_direct_later_batch_rate_limit_resumes_the_same_frozen_operation(alice, fake):
     before = fake.uris(LONG_HAUL)
-    fake.arm(operation="POST /playlists/{playlist_id}/items", kind="quota", playlist_id=LONG_HAUL)
-    response = alice.post(api_path(f"/shuffle/{LONG_HAUL}"), data={"algorithm": "BasicShuffle"})
-    assert response.status_code == 502, response.text
-    operation = _direct(response.json(), "shuffle")
-    assert operation["aggregate_status"] == "unknown" and operation["retryable"] is False
+    fake.arm(operation="POST /playlists/{playlist_id}/items", kind="rate_limit", retry_after=1, playlist_id=LONG_HAUL)
+    completed = alice.queued(f"/shuffle/{LONG_HAUL}", data={"algorithm": "BasicShuffle"})
+    assert completed["state"] == "succeeded", completed
+    operation = _direct(completed["result"], "shuffle")
+    assert operation["aggregate_status"] == "complete"
     resource = operation["resources"][0]
     assert resource["baseline_track_uris"] == before
     assert Counter(resource["desired_track_uris"]) == Counter(before)
-    # Dispatch failed before readback: the service must not label its baseline
-    # as a current observation. The independent fake shows the partial effect.
-    assert "current_track_uris" not in resource
-    assert len(fake.uris(LONG_HAUL)) == 100
-    assert fake.uris(LONG_HAUL) == resource["desired_track_uris"][:100]
+    assert fake.uris(LONG_HAUL) == resource["desired_track_uris"] == resource["current_track_uris"]
     assert [fault["fired"] for fault in fake.faults()] == [1]
 
 
@@ -95,12 +92,12 @@ def test_privacy_uses_strict_boolean_and_changes_only_metadata(alice, fake):
         assert response.status_code == 400
         assert _direct(response.json(), "privacy")["resources"] == []
         assert fake.playlist(TARGET) == before
-    changed = alice.ok("post", f"/playlist/{TARGET}/toggle-visibility", json={"public": desired})
+    changed = alice.write(f"/playlist/{TARGET}/toggle-visibility", json={"public": desired})
     operation = _direct(changed, "privacy")
     assert operation["aggregate_status"] == "complete" and changed["public"] is desired
     assert operation["resources"][0]["current_metadata"]["public"] is desired
     assert fake.playlist(TARGET) == {**before, "public": desired}
-    repeated = alice.ok("post", f"/playlist/{TARGET}/toggle-visibility", json={"public": desired})
+    repeated = alice.write(f"/playlist/{TARGET}/toggle-visibility", json={"public": desired})
     resource = _direct(repeated, "privacy")["resources"][0]
     assert resource["status"] == "not_required" and not resource["dispatched"]
     assert fake.playlist(TARGET) == {**before, "public": desired}
@@ -110,16 +107,23 @@ def test_privacy_uses_strict_boolean_and_changes_only_metadata(alice, fake):
 def test_direct_target_actions_honor_the_shared_postgres_lock(alice, fake, kind):
     baseline = fake.uris(TARGET)
     snapshot_id = _snapshot(alice, baseline)
-    alice.ok("post", f"/shuffle/{TARGET}", data={"algorithm": "BasicShuffle"})
+    alice.write(f"/shuffle/{TARGET}", data={"algorithm": "BasicShuffle"})
     before = fake.playlist(TARGET)
-    path = api_path(f"/snapshots/{snapshot_id}/restore") if kind == "snapshot_restore" else f"/{kind}/{TARGET}"
+    path = api_path(f"/snapshots/{snapshot_id}/restore" if kind == "snapshot_restore" else f"/{kind}/{TARGET}")
     with hold_playlist_lock(TARGET):
         response = alice.post(path, data={"algorithm": "BasicShuffle"} if kind == "shuffle" else None)
-    assert response.status_code == 409, response.text
-    operation = _direct(response.json(), kind)
-    assert operation["error_code"] == "playlist_busy" and operation["retryable"] is True
-    assert operation["resources"] == []
-    assert fake.playlist(TARGET) == before
+        assert response.status_code == 202, response.text
+        operation_id = response.json()["operation_id"]
+        time.sleep(2.1)  # The worker must defer after its bounded target-lock wait.
+        assert fake.playlist(TARGET) == before
+        active = alice.get(response.headers["Location"]).json()["operation"]
+        assert active["id"] == operation_id and active["state"] in {"queued", "running"}
+        busy = alice.post(path, data={"algorithm": "BasicShuffle"} if kind == "shuffle" else None)
+        assert busy.status_code == 409
+        assert busy.json()["operation_id"] == operation_id
+        assert fake.playlist(TARGET) == before
+    completed = alice.wait_operation(response.headers["Location"], operation_id)
+    assert completed["state"] == "succeeded", completed
 
 
 @pytest.fixture(scope="module")
@@ -227,8 +231,11 @@ def _lose_reply(posted):
     def handle(route):
         posted.append(route.request.url)
         response = route.fetch()
-        assert response.status == 200
-        route.fulfill(status=200, content_type="application/json", body="")
+        assert response.status == 202
+        # The oracle can retain the receipt that the browser deliberately loses.
+        handle.operation_id = response.json()["operation_id"]
+        handle.location = response.headers["location"]
+        route.fulfill(status=202, content_type="application/json", body="")
 
     return handle
 
@@ -274,12 +281,14 @@ def test_lost_library_shuffle_response_blocks_random_replay(alice, fake, direct_
     posted = []
     shuffle_url = (APP + api_path(f'/shuffle/{TARGET}'))
 
-    page.route(shuffle_url, _lose_reply(posted))
+    lost = _lose_reply(posted)
+    page.route(shuffle_url, lost)
     try:
         visit.log_in()
         card = _choose_shuffle(page, TARGET)
         _open_review(page, card.locator(".library-quick-shuffle")).click()
         _settled(page, 1)
+        assert alice.wait_operation(lost.location, lost.operation_id)["state"] == "succeeded"
         assert fake.uris(TARGET) != before
         assert page.evaluate("PlaylistOperations.getRecords()[0].aggregate") == "unknown"
         assert page.evaluate("PlaylistOperations.hasAttention()") is True
@@ -392,7 +401,7 @@ def test_snapshot_restore_is_reviewed_against_fresh_spotify_and_refuses_a_later_
         visit.log_in()
         page.goto(f"{APP}/workshop/{TARGET}", wait_until="networkidle")
         # Another session drops a track after this page loaded: the review reads Spotify, not the page.
-        other.ok("post", f"/workshop/{TARGET}/commit", json={
+        other.write(f"/workshop/{TARGET}/commit", json={
             "baseline_track_uris": original, "track_uris": original[1:],
         })
         _open_tool(page, "history")
@@ -400,7 +409,7 @@ def test_snapshot_restore_is_reviewed_against_fresh_spotify_and_refuses_a_later_
         run = _open_review(page, restore, "Restore saved snapshot now")
         assert "Restoring adds 1 track, changes the order." in page.locator("#live-operation-review").inner_text()
         # A change after the review is refused before anything is written.
-        other.ok("post", f"/workshop/{TARGET}/commit", json={
+        other.write(f"/workshop/{TARGET}/commit", json={
             "baseline_track_uris": original[1:], "track_uris": original[2:],
         })
         run.click()
@@ -426,16 +435,16 @@ def test_snapshot_restore_is_reviewed_against_fresh_spotify_and_refuses_a_later_
 
 
 @pytest.mark.parametrize("kind", ["shuffle", "privacy"])
-def test_proven_first_write_rejection_allows_an_explicit_browser_retry(
+def test_first_write_rate_limit_defers_one_browser_operation_until_provider_hint(
     alice, fake, direct_browser, kind,
 ):
     before = fake.playlist(TARGET)
     before_uris = fake.uris(TARGET)
     operation = "PUT /playlists/{playlist_id}/items" if kind == "shuffle" else "PUT /playlists/{playlist_id}"
-    fake.arm(operation=operation, kind="quota", playlist_id=TARGET)
+    fake.arm(operation=operation, kind="rate_limit", retry_after=2, playlist_id=TARGET)
     path = api_path(f"/shuffle/{TARGET}") if kind == "shuffle" else api_path(f"/playlist/{TARGET}/toggle-visibility")
 
-    visit = Visit(direct_browser, "desktop", allowed=[(path, 429)])
+    visit = Visit(direct_browser, "desktop")
     page = visit.page
     responses = []
     page.on("response", lambda response: responses.append(response.status) if response.url == APP + path else None)
@@ -457,18 +466,19 @@ def test_proven_first_write_rejection_allows_an_explicit_browser_retry(
             return _open_review(page, action)
 
         review().click()
-        _settled(page, 1)
-        assert responses == [429]
+        deadline = time.monotonic() + 10
+        while fake.faults()[0]["fired"] == 0 and time.monotonic() < deadline:
+            page.wait_for_timeout(50)
+        assert fake.faults()[0]["fired"] == 1
+        assert responses == [202]
         assert fake.playlist(TARGET) == before
-        assert page.evaluate("PlaylistOperations.getRecords()[0].operation.retryable") is True
-        assert page.evaluate("PlaylistOperations.getRecords()[0].aggregate") == "partial"
+        assert page.evaluate("PlaylistOperations.isBusy()") is True
+        _settled(page, 1)
+        assert responses == [202], "the browser replayed an accepted writer POST"
+        assert page.evaluate("PlaylistOperations.getRecords()[0].complete") is True
+        assert page.evaluate("PlaylistOperations.getRecords().length") == 1
         _close_result(page)
         assert action.is_enabled()
-        # A second dispatch requires a fresh review and an explicit Run.
-        review().click()
-        _settled(page, 2)
-        assert responses == [429, 200]
-        assert page.evaluate("PlaylistOperations.getRecords()[1].complete") is True
         if kind == "shuffle":
             assert fake.uris(TARGET) != before_uris
         else:

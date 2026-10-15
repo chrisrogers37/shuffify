@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from tests.paths import api_path
+from tests.queued_operations import post_and_run
 from tests.services.test_live_metadata_service import MetadataSpotify
 
 
@@ -255,7 +256,7 @@ class TestVisibilityOutcomes:
         with auth_client.session_transaction() as sess:
             sess["playlist_states"] = history
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post(api_path("/playlist/p1/toggle-visibility"), json={"public": public})
+            resp = post_and_run(auth_client, api, api_path("/playlist/p1/toggle-visibility"), json={"public": public})
         data = resp.get_json()
         assert resp.status_code == 200
         assert data["success"] is True
@@ -273,7 +274,7 @@ class TestVisibilityOutcomes:
     def test_strict_validation_precedes_any_spotify_call(self, auth_client, body):
         api = MetadataSpotify()
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post(api_path("/playlist/p1/toggle-visibility"), json=body)
+            resp = post_and_run(auth_client, api, api_path("/playlist/p1/toggle-visibility"), json=body)
         data = resp.get_json()
         assert resp.status_code == 400
         assert data["success"] is False
@@ -283,7 +284,7 @@ class TestVisibilityOutcomes:
     def test_noop_retains_success_with_zero_writes(self, auth_client):
         api = MetadataSpotify(True)
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post(api_path("/playlist/p1/toggle-visibility"), json={"public": True})
+            resp = post_and_run(auth_client, api, api_path("/playlist/p1/toggle-visibility"), json={"public": True})
         data = resp.get_json()
         assert resp.status_code == 200
         assert data["success"] is True
@@ -294,15 +295,16 @@ class TestVisibilityOutcomes:
         api = MetadataSpotify()
         api.owner = "not-the-user"
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post(api_path("/playlist/p1/toggle-visibility"), json={"public": True})
+            resp = post_and_run(auth_client, api, api_path("/playlist/p1/toggle-visibility"), json={"public": True})
         data = resp.get_json()
-        assert resp.status_code == 403
+        assert resp.status_code == 200
+        assert resp.operation["state"] == "failed"
         assert data["success"] is False
         assert data["operation"]["aggregate_status"] == "partial"
         assert data["operation"]["resources"] == []
         assert api.writes == []
 
-    def test_write_loss_retains_actual_intent_and_never_offers_replay(self, auth_client):
+    def test_write_loss_keeps_intent_and_journals_compensation_without_offering_replay(self, auth_client):
         api = MetadataSpotify()
 
         def lose_reply(_api):
@@ -310,17 +312,20 @@ class TestVisibilityOutcomes:
 
         api.after_write = lose_reply
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post(api_path("/playlist/p1/toggle-visibility"), json={"public": True})
+            resp = post_and_run(auth_client, api, api_path("/playlist/p1/toggle-visibility"), json={"public": True})
         data = resp.get_json()
-        assert resp.status_code == 502
+        assert resp.status_code == 200
+        assert resp.operation["state"] == "needs_attention"
         assert data["success"] is False
         assert data["operation"]["aggregate_status"] == "unknown"
         assert data["operation"]["retryable"] is False
         entry = data["operation"]["resources"][0]
         assert entry["desired_metadata"] == {"public": True}
         assert "current_metadata" not in entry
-        assert api.public is True
-        assert api.writes == [("p1", True)]
+        # A worker can reconcile its applied intent and journal a restoration.
+        # This fake loses that response too, so the receipt still requires review.
+        assert api.public is False
+        assert api.writes == [("p1", True), ("p1", False)]
         assert "private Spotify detail" not in str(data)
         assert "public" not in data
         assert not {"execution_id", "started_at", "execution_state"} & data.keys()
@@ -329,12 +334,22 @@ class TestVisibilityOutcomes:
         api = MetadataSpotify()
         api.after_write = lambda fake: setattr(fake, "public", False)
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post(api_path("/playlist/p1/toggle-visibility"), json={"public": True})
+            resp = post_and_run(auth_client, api, api_path("/playlist/p1/toggle-visibility"), json={"public": True})
         data = resp.get_json()
-        assert resp.status_code == 502
+        assert resp.status_code == 200
         assert data["success"] is False
-        assert data["operation"]["resources"][0]["current_metadata"] == {"public": False}
+        assert resp.operation["state"] == "needs_attention"
+        assert resp.operation["recovery"]["reason"] == "external_edit"
+        entry = data["operation"]["resources"][0]
+        assert entry["status"] == "unknown"
+        assert entry["baseline_metadata"] == {"public": False}
+        assert entry["desired_metadata"] == {"public": True}
+        # The changed snapshot cannot prove which writer produced its metadata.
+        # Retain the original intent, then require a fresh explicit observation.
+        assert "current_metadata" not in entry
         assert "public" not in data
+        assert api.public is False
+        assert api.writes == [("p1", True)]
 
     @pytest.mark.parametrize("status,missing_user", [(401, False), (503, False), (401, True)])
     def test_preflight_error_omits_execution_identity(self, auth_client, status, missing_user):
@@ -344,7 +359,7 @@ class TestVisibilityOutcomes:
         ), patch("shuffify.is_db_available", return_value=status != 503), patch(
             "shuffify.routes.get_db_user", return_value=None
         ), patch("shuffify.routes.playlists.LiveMetadataService") as service:
-            resp = auth_client.post(api_path("/playlist/p1/toggle-visibility"), json={"public": True})
+            resp = post_and_run(auth_client, api, api_path("/playlist/p1/toggle-visibility"), json={"public": True})
         service.assert_not_called()
         data = resp.get_json()
         assert resp.status_code == status

@@ -39,6 +39,7 @@ from shuffify.services import (
     UserSettingsService,
 )
 from shuffify.services.auth_notice import auth_notice
+from shuffify.services.operations.history import HistoryStore, get_history_scope
 from shuffify.services.playlist_preference_service import (
     PlaylistPreferenceService,
 )
@@ -138,6 +139,12 @@ def index():
                     logger.warning("Failed to load default shuffle settings: %s", e)
 
             logger.debug(f"User {user.get('display_name', 'Unknown')} loaded dashboard")
+            playlist_history = session.get("playlist_states", {})
+            if db_user:
+                playlist_history = HistoryStore().session_for(
+                    db_user.id, get_history_scope(session), [row["id"] for row in playlists],
+                    legacy=playlist_history,
+                )["playlist_states"]
             return render_template(
                 "dashboard.html",
                 favorite_playlists=favorite_playlists,
@@ -148,6 +155,7 @@ def index():
                 dashboard=dashboard_data,
                 preferences=preferences,
                 shuffle_defaults=shuffle_defaults,
+                playlist_history=playlist_history,
             )
 
         except (AuthenticationError, PlaylistError) as e:

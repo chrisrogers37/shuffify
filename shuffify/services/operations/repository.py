@@ -12,7 +12,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, func, or_, select, text
+from sqlalchemy import and_, event, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from shuffify.models.db import JobExecution, db
@@ -189,8 +189,15 @@ class OperationRepository:
                 == json.dumps(payload, sort_keys=True, separators=(",", ":"))
                 and row.schedule_id == schedule_id and row.scheduled_for == scheduled_for)
 
-    def enqueue(self, *, kind, user_id, targets, payload, request_key=None, schedule_id=None, scheduled_for=None):
-        """Reserve all targets and insert one command, or replay the identical keyed command."""
+    def enqueue(self, *, kind, user_id, targets=None, payload=None, request_key=None, schedule_id=None,
+                scheduled_for=None, intent=None, command_factory=None):
+        """Reserve targets once, replaying keyed intent before capturing volatile local facts.
+
+        A command factory receives this transaction's Session, performs only local reads and returns ``(targets,
+        payload)``. Its immutable request intent identifies retries even after
+        the selected snapshot or browser history has changed. Never perform
+        Spotify I/O or commit database mutations inside this callback.
+        """
         if not isinstance(kind, str) or not kind or len(kind) > 80:
             raise ValueError("Operation kind must contain 1 to 80 characters.")
         if user_id is not None and (type(user_id) is not int or user_id <= 0):
@@ -199,11 +206,18 @@ class OperationRepository:
             not isinstance(request_key, str) or not request_key or len(request_key) > 128
         ):
             raise ValueError("Request key must contain 1 to 128 characters.")
-        if not isinstance(payload, dict):
+        if command_factory is not None and (not callable(command_factory) or not isinstance(intent, dict)
+                                            or targets is not None or payload is not None):
+            raise ValueError("A command factory requires intent and supplies its own targets and payload.")
+        if command_factory is None and not isinstance(payload, dict):
             raise ValueError("An operation payload must be an object.")
-        targets, payload, scheduled_for = _targets(targets), _json_copy(payload), _utc(scheduled_for)
+        scheduled_for = _utc(scheduled_for)
+        if command_factory is None:
+            targets, payload = _targets(targets), _json_copy(payload)
+        else:
+            intent = _json_copy(intent)
         with self._transaction(write=True) as session:
-            self._admission_locks(session, targets=targets, user_id=user_id, request_key=request_key,
+            self._admission_locks(session, targets=targets or [], user_id=user_id, request_key=request_key,
                                   schedule_id=schedule_id, scheduled_for=scheduled_for)
             lookup = []
             if user_id is not None and request_key is not None:
@@ -213,13 +227,29 @@ class OperationRepository:
                                    JobExecution.scheduled_for == scheduled_for))
             existing = session.scalars(select(JobExecution).where(or_(*lookup))).all() if lookup else []
             for row in existing:
-                if not self._same_command(row, kind=kind, user_id=user_id, targets=targets, payload=payload,
-                                          schedule_id=schedule_id, scheduled_for=scheduled_for):
+                if command_factory is None:
+                    same = self._same_command(row, kind=kind, user_id=user_id, targets=targets, payload=payload,
+                                              schedule_id=schedule_id, scheduled_for=scheduled_for)
+                else:
+                    same = (row.kind == kind and row.user_id == user_id
+                            and isinstance(row.payload, dict) and "intent" in row.payload
+                            and json.dumps(row.payload["intent"], sort_keys=True, separators=(",", ":"))
+                            == json.dumps(intent, sort_keys=True, separators=(",", ":"))
+                            and row.schedule_id == schedule_id and row.scheduled_for == scheduled_for)
+                if not same:
                     raise RequestKeyConflict("This request key belongs to different changes.")
             if existing:
                 if len({row.id for row in existing}) != 1:
                     raise RequestKeyConflict("The request and scheduled fire identify different operations.")
                 return self._detach(session, existing[0])
+            if command_factory is not None:
+                targets, payload = command_factory(session)
+                targets, payload = _targets(targets), _json_copy(payload)
+                if not isinstance(payload, dict):
+                    raise ValueError("An operation payload must be an object.")
+                payload["intent"] = intent
+                self._admission_locks(session, targets=targets, user_id=None, request_key=None,
+                                      schedule_id=None, scheduled_for=None)
             if targets:
                 active = session.scalars(select(JobExecution).where(
                     JobExecution.kind.is_not(None), JobExecution.state.in_(ACTIVE_STATES)
@@ -321,6 +351,39 @@ class OperationRepository:
                 row.state = state
             row.journal = journal
             return self._detach(session, row)
+
+    def local_step(self, lease, name, callback):
+        """Commit local effects and their replay receipt in one short fenced transaction.
+
+        The callback receives this transaction's explicit SQLAlchemy Session.
+        It must perform database work only, without committing or external I/O.
+        Its result must be JSON and is replayed without running the callback.
+        """
+        if not isinstance(name, str) or not name or len(name) > 128:
+            raise ValueError("A local step name must contain 1 to 128 characters.")
+        with self._transaction(write=True) as session:
+            row, _now = self._leased_row(session, lease)
+            journal = deepcopy(row.journal or {})
+            receipts = journal.setdefault("runtime", {}).setdefault("local_steps", {})
+            if name in receipts:
+                return deepcopy(receipts[name])
+
+            def prevent_commit(active_session):
+                if not active_session.in_nested_transaction():
+                    raise RuntimeError("A local step callback must not commit its caller's transaction.")
+
+            event.listen(session, "before_commit", prevent_commit)
+            try:
+                result = _json_copy(callback(session))
+            finally:
+                event.remove(session, "before_commit", prevent_commit)
+            # A callback that unexpectedly runs past its lease cannot commit
+            # either its effects or the receipt, even though it held the row lock.
+            self._leased_row(session, lease)
+            receipts[name] = result
+            row.journal = journal
+            session.flush()
+            return deepcopy(result)
 
     def finish(self, lease, state, *, result=None, error_message=None, tracks_added=None, tracks_total=None):
         """Complete a live claim, preserve rich result and maintain execution-history compatibility."""

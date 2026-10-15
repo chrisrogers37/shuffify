@@ -5,7 +5,8 @@
    library-shuffle.js finds every control here by class inside the playlist's .card-tile.
    Choosing a method never writes; Shuffle now and Restore each open a review first. #}
 {% macro _library_shuffle_forms(playlist, algorithms, shuffle_defaults, track_count) %}
-{% set history = session.get('playlist_states', {}).get(playlist.id, {}) %}
+{% set histories = playlist_history if playlist_history is defined else session.get('playlist_states', {}) %}
+{% set history = histories.get(playlist.id, {}) %}
 {% set defaults = shuffle_defaults or {'algorithm': none, 'params': {}} %}
 {% set selected = namespace(name='', algorithm='') %}
 {% for algo in algorithms %}

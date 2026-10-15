@@ -180,7 +180,7 @@ def test_logged_in_pages(visit, alice):
     visit.log_in()
     visit.check(BEFORE)
     # Something on the activity and schedules pages: a shuffle and a schedule.
-    alice.ok("post", f"/shuffle/{pid('alice-morning-mix')}", data={"algorithm": "BasicShuffle"})
+    alice.write(f"/shuffle/{pid('alice-morning-mix')}", data={"algorithm": "BasicShuffle"})
     alice.ok("post", "/schedules/create", json={
         "job_type": "shuffle", "target_playlist_id": pid("alice-long-haul"),
         "target_playlist_name": "Long Haul", "schedule_value": "daily", "algorithm_name": "BasicShuffle",

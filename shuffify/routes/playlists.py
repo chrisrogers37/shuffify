@@ -13,7 +13,9 @@ from shuffify.routes import (
     json_reply,
     no_store,
     require_auth_and_db,
+    require_session_and_db,
 )
+from shuffify.routes.queue import enqueue_command
 from shuffify.schemas import PlaylistQueryParams
 from shuffify.services import PlaylistError, PlaylistService
 from shuffify.services.live_action_context_service import (
@@ -37,11 +39,14 @@ from shuffify.services.live_review_bindings import (
     invalid_binding_result,
     request_binding,
 )
-from shuffify.services.live_review_context import context_unavailable
+from shuffify.services.live_review_context import context_unavailable, failure_rejected, read_failure
+from shuffify.services.operations.commands.schemas import VisibilityCommand
+from shuffify.services.operations.history import HistoryStore, get_history_scope
 from shuffify.services.page_context_service import playlist_row
 from shuffify.services.playlist_preference_service import (
     PlaylistPreferenceService,
 )
+from shuffify.services.state_service import StateError
 
 logger = logging.getLogger(__name__)
 
@@ -128,29 +133,24 @@ def _visibility_preflight(message, status_code):
     "/playlist/<playlist_id>/toggle-visibility",
     methods=["POST"],
 )
-@require_auth_and_db(on_preflight_error=_visibility_preflight)
+@require_session_and_db(on_preflight_error=_visibility_preflight)
 def toggle_visibility(
-    playlist_id, api=None, user=None
+    playlist_id, user=None
 ):
-    """Apply explicit visibility intent and return fresh metadata verification."""
+    """Queue explicit visibility intent for worker authorization and verification."""
     data = request.get_json(silent=True)
     try:
         binding = request_binding(request, "privacy")
     except ReviewBindingError:
         return _visibility_response(invalid_binding_result("privacy"))
     public = data.get("public") if isinstance(data, dict) else None
-    try:
-        result = LiveMetadataService(api).set_visibility(
-            playlist_id, user, public=public,
-            reviewed_scope=binding["reviewed_scope"] if binding else None,
-        )
-    except Exception:
-        logger.exception("Visibility outcome unavailable for %s", playlist_id)
-        result = direct_rejected_result(
-            "privacy", error_code="outcome_unavailable", http_status=502, unknown=True,
-            message="The visibility change could not be verified. Check the playlist before another change.",
-        )
-    return _visibility_response(result)
+    if type(public) is not bool:
+        return _visibility_response(direct_rejected_result(
+            "privacy", error_code="invalid_public", http_status=400,
+            message="The 'public' field must be true or false.",
+        ))
+    command = VisibilityCommand(playlist_id=playlist_id, public=public, reviewed=binding)
+    return enqueue_command(user, "visibility", command.model_dump(mode="json"), lambda _storage: (command, None))
 
 
 @api_bp.route("/playlist/<playlist_id>/live-context", methods=["POST"])
@@ -161,7 +161,13 @@ def live_context(playlist_id, api=None, user=None):
     # Read first: an oversized body must reach the 413 handler, not the fallback below.
     body = request.get_json(silent=True)
     try:
-        reply = LiveActionContextService(api).resolve(playlist_id, user, session, body)
+        history = session
+        if isinstance(body, dict) and body.get("kind") == "undo":
+            history = HistoryStore().session_for(user.id, get_history_scope(session), [playlist_id],
+                                                 legacy=session.get("playlist_states"))
+        reply = LiveActionContextService(api).resolve(playlist_id, user, history, body)
+    except StateError as error:
+        reply = failure_rejected(context_kind(body), read_failure(error))
     except Exception:
         logger.exception("Live action review unavailable for %s", playlist_id)
         reply = context_unavailable(context_kind(body))

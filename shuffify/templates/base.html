@@ -45,6 +45,7 @@
 
     {% if navigation_mode == 'authenticated' %}
     <script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/app-feedback.js') }}"></script>
+    <script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/operation-queue.js') }}"></script>
     {% endif %}
     <script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/base.js') }}"></script>
     {% block scripts %}{% endblock %}

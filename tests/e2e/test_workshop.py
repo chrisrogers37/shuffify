@@ -32,13 +32,13 @@ def test_track_operations_commit_exactly_the_staged_order(alice, fake):
     staged.insert(0, staged.pop(10))  # move one to the top
     staged.append(addition)  # add a search result at the end
 
-    body = alice.ok("post", f"/workshop/{MORNING_MIX}/commit",
+    body = alice.write(f"/workshop/{MORNING_MIX}/commit",
                     json={"baseline_track_uris": current, "track_uris": staged})
     assert fake.uris(MORNING_MIX) == staged
     assert body["playlist_state"]["current_index"] >= 1
 
     # The commit is undoable like a shuffle.
-    alice.ok("post", f"/undo/{MORNING_MIX}")
+    alice.write(f"/undo/{MORNING_MIX}")
     assert fake.uris(MORNING_MIX) == current
 
 
@@ -54,7 +54,7 @@ def test_merging_another_of_her_playlists_in(alice, fake):
 
     # Merge as the Workshop does: new tracks appended, duplicates kept once.
     staged = current + [u for u in dict.fromkeys(merged_in) if u not in current]
-    alice.ok("post", f"/workshop/{MORNING_MIX}/commit", json={"baseline_track_uris": current, "track_uris": staged})
+    alice.write(f"/workshop/{MORNING_MIX}/commit", json={"baseline_track_uris": current, "track_uris": staged})
     assert fake.uris(MORNING_MIX) == staged
     assert fake.uris(ON_REPEAT) == merged_in, "merging must not touch the source"
 

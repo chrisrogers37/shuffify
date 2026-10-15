@@ -420,3 +420,10 @@ export interface Operation {
   recovery: OperationRecovery;
 }
 export interface OperationContext extends SuccessEnvelope { operation: Operation }
+export interface OperationAccepted {
+  success: true;
+  category: 'info';
+  message: string;
+  operation_id: DatabaseId;
+  operation: Operation;
+}

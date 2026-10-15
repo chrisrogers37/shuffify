@@ -37,6 +37,7 @@ class ActivityLogService:
         metadata: Optional[Dict[str, Any]] = None,
         *,
         commit: bool = True,
+        session=None,
     ) -> Optional[ActivityLog]:
         """
         Record a user activity. Non-blocking when it commits: never raises.
@@ -55,6 +56,9 @@ class ActivityLogService:
         Returns:
             The created ActivityLog instance, or None if failed.
         """
+        if session is not None and commit:
+            raise ValueError("An explicit activity session requires commit=False.")
+        storage = session if session is not None else db.session
         try:
             activity = ActivityLog(
                 user_id=user_id,
@@ -64,13 +68,16 @@ class ActivityLogService:
                 playlist_name=playlist_name,
                 metadata_json=metadata,
             )
-            db.session.add(activity)
-            commit_or_stage(
-                commit,
-                f"log activity {activity_type} "
-                f"for user {user_id}",
-                ActivityLogError,
-            )
+            storage.add(activity)
+            if session is not None:
+                storage.flush()
+            else:
+                commit_or_stage(
+                    commit,
+                    f"log activity {activity_type} "
+                    f"for user {user_id}",
+                    ActivityLogError,
+                )
             return activity
         except Exception:
             if not commit:

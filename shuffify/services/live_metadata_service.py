@@ -29,6 +29,12 @@ class LiveMetadataService:
         self.playlists = PlaylistService(api)
 
     @staticmethod
+    def _propagate_control(error):
+        from shuffify.services.operations.control import propagate_control
+
+        propagate_control(error)
+
+    @staticmethod
     def _result(resource, *, message, error_code=None, retryable=False, public=None, http_status=502):
         operation = operation_result(
             "privacy", resources=[resource], error_code=error_code, retryable=retryable
@@ -88,7 +94,7 @@ class LiveMetadataService:
             resource["desired_metadata"] = {"public": desired}
         return resource
 
-    def set_visibility(self, playlist_id, user, *, public, reviewed_scope=None):
+    def set_visibility(self, playlist_id, user, *, public, reviewed_scope=None, runtime=None):
         """Send at most one explicit Boolean update and verify fresh metadata.
 
         A reviewed request is compared after fresh authorization and before
@@ -99,11 +105,14 @@ class LiveMetadataService:
                 "privacy", error_code="invalid_public", http_status=400,
                 message="The 'public' field must be true or false.",
             )
+        if runtime is not None:
+            return self._set_visibility_durable(playlist_id, user, public, reviewed_scope, runtime)
         try:
             before = self.playlists.validate_user_can_edit(
                 playlist_id, user.spotify_id, skip_cache=True
             )
         except Exception as error:
+            self._propagate_control(error)
             return self.read_failure(error)
 
         resource = self._resource(playlist_id, before, public)
@@ -133,6 +142,7 @@ class LiveMetadataService:
         try:
             self.api.update_playlist_details(playlist_id, public=public)
         except Exception as error:
+            self._propagate_control(error)
             rejected = isinstance(error, _REJECTED)
             code = "write_rejected" if rejected else "write_unverified"
             resource.update(
@@ -161,7 +171,8 @@ class LiveMetadataService:
             after = self.playlists.validate_user_can_edit(
                 playlist_id, user.spotify_id, skip_cache=True
             )
-        except Exception:
+        except Exception as error:
+            self._propagate_control(error)
             after = {}
         actual = after.get("public")
         if type(actual) is bool:
@@ -180,6 +191,89 @@ class LiveMetadataService:
             resource, public=actual, message=f"Playlist set to {state}",
         )
 
+    def _set_visibility_durable(self, playlist_id, user, public, reviewed_scope, runtime):
+        """Keep original metadata intent while replaying the journaled update once."""
+        resource = None
+        try:
+            def prepare():
+                before = self.playlists.validate_user_can_edit(playlist_id, user.spotify_id, skip_cache=True)
+                item = self._resource(playlist_id, before, public)
+                if reviewed_scope is not None and reviewed_scope != privacy_scope(playlist_id, public):
+                    item["error_code"] = "review_changed"
+                    return {"failure": self._result(item, error_code="review_changed", http_status=409,
+                                                    message=REVIEW_CHANGED)}
+                if type(before.get("public")) is not bool:
+                    item.update(error_code="metadata_unavailable", retryable=True)
+                    return {"failure": self._result(item, error_code="metadata_unavailable", retryable=True,
+                        message="Playlist visibility could not be read. No changes were sent.")}
+                return {"before": before, "changed": before["public"] is not public}
+
+            prepared = runtime.prepare("visibility.action.v1", prepare)
+            if "failure" in prepared:
+                return prepared["failure"]
+            before, changed = prepared["before"], prepared["changed"]
+            resource = self._resource(playlist_id, before, public)
+            resource["baseline_metadata"] = {"public": before["public"]}
+            state = "public" if public else "private"
+            if not changed:
+                expected = {"scope": "metadata", "snapshot_id": before.get("snapshot_id"),
+                            "metadata": {key: before.get(key) for key in ("name", "public", "description")}}
+                runtime.journal.ensure_details(playlist_id, expected_baseline=expected, public=public)
+                runtime.journal.skip_to(runtime.journal.cursor + 1)
+                checked = runtime.journal.resume()
+                if checked["state"] == "needs_attention":
+                    from shuffify.services.operations.journal import NeedsAttention
+
+                    raise NeedsAttention(checked["recovery"]["reason"])
+                resource["status"] = "not_required"
+                return self._result(resource, public=public, message=f"Playlist is already {state}.")
+            resource.pop("current_metadata", None)
+            resource.pop("loaded_at", None)
+            resource.update(dispatched=True, status="unknown", affected_count=None)
+
+            def apply():
+                expected = {"scope": "metadata", "snapshot_id": before.get("snapshot_id"),
+                            "metadata": {key: before.get(key) for key in ("name", "public", "description")}}
+                runtime.journal.ensure_details(playlist_id, expected_baseline=expected, public=public)
+                self.api.update_playlist_details(playlist_id, public=public)
+                after = self.playlists.validate_user_can_edit(playlist_id, user.spotify_id, skip_cache=True)
+                if type(after.get("public")) is not bool or after["public"] is not public:
+                    from shuffify.spotify.exceptions import SpotifyWriteUnverifiedError
+
+                    raise SpotifyWriteUnverifiedError("Playlist visibility verification failed")
+                return after
+
+            after = runtime.step("visibility.target.v1", apply)
+            resource.update(current_metadata={"public": after["public"]},
+                            loaded_at=datetime.now(timezone.utc).isoformat(), status="complete", affected_count=1)
+            return self._result(resource, public=after["public"], message=f"Playlist set to {state}")
+        except Exception as error:
+            from shuffify.services.operations.journal import NeedsAttention
+
+            if isinstance(error, NeedsAttention) and resource is not None:
+                observed = runtime.journal.doc.get("observations", {}).get(playlist_id, {}).get("metadata", {})
+                if type(observed.get("public")) is bool:
+                    resource.update(current_metadata={"public": observed["public"]},
+                                    loaded_at=datetime.now(timezone.utc).isoformat())
+                else:
+                    resource.pop("current_metadata", None)
+                    resource.pop("loaded_at", None)
+                error.result = self._result(resource, error_code="write_unverified",
+                    message="The visibility change could not be verified. Check the playlist before another change.")
+            self._propagate_control(error)
+            if resource is None:
+                return self.read_failure(error)
+            rejected = isinstance(error, _REJECTED)
+            code = "write_rejected" if rejected else "write_unverified"
+            resource.update(status="failed" if rejected else "unknown", affected_count=0 if rejected else None,
+                            error_code=code, retryable=rejected)
+            status = (401 if isinstance(error, SpotifyAuthError) else
+                      403 if isinstance(error, SpotifyForbiddenError) else
+                      404 if isinstance(error, SpotifyNotFoundError) else
+                      429 if isinstance(error, SpotifyRateLimitError) else 502)
+            return self._result(resource, error_code=code, retryable=rejected, http_status=status,
+                message="The visibility change could not be verified. Check the playlist before another change.")
+
     def inspect_visibility(self, playlist_id, user, *, desired_public=None):
         """Observe retained intent without replaying a write or claiming causation."""
         if desired_public is not None and type(desired_public) is not bool:
@@ -193,6 +287,7 @@ class LiveMetadataService:
                     playlist_id, user.spotify_id, skip_cache=True
                 )
             except Exception as error:
+                self._propagate_control(error)
                 result = self.read_failure(error, inspection=True)
             else:
                 resource = self._resource(playlist_id, current, desired_public)

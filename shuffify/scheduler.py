@@ -510,7 +510,9 @@ def _cleanup_stale_executions(max_age_minutes: int = 30):
     try:
         from shuffify.models.db import JobExecution
 
-        stale = JobExecution.query.filter_by(status="running").all()
+        # Durable operations have leases and recovery. A legacy startup sweep
+        # must never complete a live or recoverable worker execution.
+        stale = JobExecution.query.filter_by(status="running").filter(JobExecution.kind.is_(None)).all()
 
         if not stale:
             return

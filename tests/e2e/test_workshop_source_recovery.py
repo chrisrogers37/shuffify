@@ -28,7 +28,7 @@ def _pair(alice, archive=ARCHIVE):
 
 
 def _save(alice, playlist, baseline, desired):
-    return alice.ok("post", f"/workshop/{playlist}/commit", json={
+    return alice.write(f"/workshop/{playlist}/commit", json={
         "baseline_track_uris": baseline, "track_uris": desired,
     })
 
@@ -84,6 +84,9 @@ def test_lost_archive_response_is_inspected_without_replaying_duplicates(alice, 
     response = alice.post(api_path(f"/playlist/{TARGET}/pair/archive"), json=payload)
     assert response.status_code == 502, response.text
     assert (response.json()["status"], response.json()["retryable"]) == ("unknown", False)
+    # The API's bounded request deadline can expire before the transport's
+    # timeout. Settle the original late call without sending another write.
+    fake.release()
     deadline = time.monotonic() + 5
     while fake.uris(ARCHIVE) != payload["track_uris"] and time.monotonic() < deadline:
         time.sleep(0.1)

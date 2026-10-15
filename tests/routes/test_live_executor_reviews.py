@@ -36,6 +36,7 @@ from shuffify.services.upstream_source_service import UpstreamSourceService
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 from shuffify.spotify.exceptions import SpotifyAPIError, SpotifyNotFoundError
 from tests.paths import api_path
+from tests.queued_operations import post_and_run, scoped_history
 from tests.routes.live_review_helpers import binding_bundle, history, post_context, seed_history, serving
 from tests.routes.test_live_raid_outcomes import MutableSpotify, uri
 
@@ -1296,11 +1297,13 @@ def test_reviewed_snapshot_restore_runs_against_the_reviewed_order(workshop):
         workshop.user.id, "target", "Saved", [uri(2), uri(1)], SnapshotType.MANUAL,
     )
     context = workshop.client.get(api_path(f"/snapshots/{snapshot.id}/restore-context")).get_json()["context"]
-    response = workshop.client.post(api_path(f"/snapshots/{snapshot.id}/restore"), json=binding_bundle(context))
+    response = post_and_run(
+        workshop.client, workshop.api, api_path(f"/snapshots/{snapshot.id}/restore"), json=binding_bundle(context),
+    )
     data = response.get_json()
     assert response.status_code == 200, data
     assert workshop.api.writes == [("replace", "target", [uri(2), uri(1)])]
-    assert history(workshop.client, "target")["current_index"] == 2
+    assert scoped_history(workshop.client, "target")["current_index"] == 2
 
 
 @pytest.mark.parametrize("change,code", [("snapshot", "review_changed"), ("target", "resource_changed")])
@@ -1316,14 +1319,17 @@ def test_stale_snapshot_review_never_snapshots_writes_or_moves_history(workshop,
         restored = other  # The reviewed bundle names a different saved snapshot.
     else:
         workshop.api.playlists["target"] = [uri(1), uri(4)]  # Changed on Spotify after the review.
-    response = workshop.client.post(api_path(f"/snapshots/{restored.id}/restore"), json=binding_bundle(context))
+    response = post_and_run(
+        workshop.client, workshop.api, api_path(f"/snapshots/{restored.id}/restore"), json=binding_bundle(context),
+    )
     body = response.get_json()
-    assert response.status_code == 409, body
+    assert response.status_code == 200, body
+    assert response.operation["state"] == "failed"
     assert (body["operation"]["error_code"], body["operation"]["retryable"]) == (code, False)
     assert not {"execution_id", "started_at", "execution_state"} & body.keys()
     assert workshop.api.writes == []
     workshop.auto_snapshot.assert_not_called()
-    assert history(workshop.client, "target") == SAVED_HISTORY
+    assert scoped_history(workshop.client, "target") == SAVED_HISTORY
     assert ActivityLog.query.count() == 0
 
 

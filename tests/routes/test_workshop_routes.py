@@ -471,6 +471,14 @@ class TestWorkshopCommit:
     """The routes validate input and retain structured target outcomes."""
 
     @pytest.fixture
+    def provider(self):
+        from types import SimpleNamespace
+
+        from tests.services.test_live_executor_outcomes import MutableSpotify, uri
+
+        return MutableSpotify(SimpleNamespace(spotify_id="user123"), playlist123=[uri(1), uri(1), uri(2)])
+
+    @pytest.fixture
     def authorized(self):
         with (
             patch("shuffify.is_db_available", return_value=True),
@@ -519,24 +527,33 @@ class TestWorkshopCommit:
 
     @pytest.mark.parametrize("status", ["saved", "already_applied"])
     def test_commit_serializes_confirmed_revision(
-        self, authenticated_client, authorized, status
+        self, auth_client, provider, status
     ):
-        from shuffify.services.workshop_commit_service import WorkshopTargetResult
+        from tests.queued_operations import post_and_run, scoped_history
+        from tests.services.test_live_executor_outcomes import uri
 
-        service, _ = authorized
-        uris = ["spotify:track:" + "a" * 22]
-        service.return_value.commit.return_value = WorkshopTargetResult(
-            status,
-            "Confirmed",
-            extra={"saved_track_uris": uris},
-        )
-        response = authenticated_client.post(
-            api_path("/workshop/playlist123/commit"),
-            json={"baseline_track_uris": [], "track_uris": uris},
-        )
+        before, uris = [uri(1), uri(1), uri(2)], [uri(2), uri(1), uri(1)]
+        baseline = before
+        if status == "already_applied":
+            provider.playlists["playlist123"] = list(uris)
+            baseline = [uri(3)]  # Already-applied takes precedence over stale baseline.
+        with patch("shuffify.routes.require_auth", autospec=True, side_effect=AssertionError("Admission used Spotify")):
+            response = post_and_run(
+                auth_client, provider, api_path("/workshop/playlist123/commit"),
+                json={"baseline_track_uris": baseline, "track_uris": uris},
+            )
+        assert response.accepted.status_code == 202
         assert response.status_code == 200
-        assert response.get_json()["saved_track_uris"] == uris
-        assert service.return_value.commit.call_args.args[3:] == ([], uris)
+        assert response.operation["state"] == "succeeded"
+        body = response.get_json()
+        assert body["target_status"] == status
+        assert body["saved_track_uris"] == body["current_track_uris"] == uris
+        assert [track["uri"] for track in body["current_tracks"]] == uris
+        assert body["confirmed_batches"] == body["total_batches"] == (1 if status == "saved" else 0)
+        assert body["representable"] is True
+        assert body["loaded_at"]
+        assert scoped_history(auth_client, "playlist123")["states"] == ([before, uris] if status == "saved" else [uris])
+        assert provider.writes == ([("update", "playlist123", uris)] if status == "saved" else [])
 
     def test_missing_baseline_is_explicit_and_never_calls_service(
         self, authenticated_client, authorized
@@ -596,36 +613,102 @@ class TestWorkshopCommit:
         assert body["retryable"] is True
         service.assert_not_called()
 
-    @pytest.mark.parametrize(
-        "status,code,http",
-        [
-            ("not_written", "stale_draft", 409),
-            ("not_written", "operation_in_progress", 409),
-            ("partial", "partial_write", 502),
-            ("unknown", "write_unverified", 502),
-        ],
-    )
-    def test_failure_outcomes_are_not_flattened(
-        self, authenticated_client, authorized, status, code, http
-    ):
-        from shuffify.services.workshop_commit_service import WorkshopTargetResult
+    def test_stale_draft_outcome_is_not_flattened(self, auth_client, provider):
+        from tests.queued_operations import post_and_run
+        from tests.services.test_live_executor_outcomes import uri
 
-        service, _ = authorized
-        service.return_value.commit.return_value = WorkshopTargetResult(
-            status,
-            "Draft retained",
-            http,
-            code,
-            True,
+        response = post_and_run(
+            auth_client, provider, api_path("/workshop/playlist123/commit"),
+            json={"baseline_track_uris": [uri(3)], "track_uris": [uri(2), uri(1)]},
         )
-        response = authenticated_client.post(
+        assert response.accepted.status_code == 202
+        assert response.operation["state"] == "failed"
+        body = response.get_json()
+        assert body["error_code"] == "stale_draft"
+        assert body["target_status"] == "not_written"
+        assert body["requires_refresh"] is True
+        assert body["current_track_uris"] == [uri(1), uri(1), uri(2)]
+        assert "saved_track_uris" not in body
+        assert provider.writes == []
+
+    def test_active_target_is_rejected_with_its_existing_operation_id(self, auth_client, provider):
+        from tests.services.test_live_executor_outcomes import uri
+
+        body = {"baseline_track_uris": [uri(1), uri(1), uri(2)], "track_uris": []}
+        first = auth_client.post(api_path("/workshop/playlist123/commit"), json=body)
+        second = auth_client.post(api_path("/workshop/playlist123/commit"), json=body)
+        assert first.status_code == 202
+        assert second.status_code == 409
+        assert second.get_json()["error_code"] == "playlist_busy"
+        assert second.get_json()["operation_id"] == first.get_json()["operation"]["id"]
+        assert provider.writes == []
+
+    def test_partial_target_result_retains_counts_after_worker_rollback(self, auth_client, provider):
+        from shuffify.spotify.exceptions import SpotifyWriteRejectedError
+        from tests.queued_operations import post_and_run, scoped_history
+        from tests.services.test_live_executor_outcomes import uri
+
+        before, desired = [uri(1), uri(1), uri(2)], [uri(3)] * 101
+
+        def reject(*args):
+            raise SpotifyWriteRejectedError("Fictional second-batch rejection")
+
+        provider.faults[("add", "playlist123")] = reject
+        response = post_and_run(
+            auth_client, provider, api_path("/workshop/playlist123/commit"),
+            json={"baseline_track_uris": before, "track_uris": desired},
+        )
+        assert response.accepted.status_code == 202
+        assert response.operation["state"] == "rolled_back"
+        body = response.get_json()
+        assert body["target_status"] == "partial"
+        assert body["error_code"] == "partial_write"
+        assert body["confirmed_batches"] == 1
+        assert body["total_batches"] == 2
+        assert "saved_track_uris" not in body
+        assert provider.playlists["playlist123"] == before
+        assert provider.writes == [("update", "playlist123", desired[:100]), ("add", "playlist123", desired[100:]),
+                                   ("update", "playlist123", before)]
+        assert scoped_history(auth_client, "playlist123") is None
+
+    def test_unknown_target_outcome_requires_review_without_replaying_write(self, auth_client, provider):
+        from shuffify.spotify.exceptions import SpotifyWriteUnverifiedError
+        from tests.queued_operations import post_and_run, scoped_history
+        from tests.services.test_live_executor_outcomes import uri
+
+        def unknown(*args):
+            raise SpotifyWriteUnverifiedError("Fictional missing acknowledgment")
+
+        provider.faults[("update", "playlist123")] = unknown
+        response = post_and_run(
+            auth_client, provider, api_path("/workshop/playlist123/commit"),
+            json={"baseline_track_uris": [uri(1), uri(1), uri(2)], "track_uris": []},
+        )
+        assert response.accepted.status_code == 202
+        assert response.operation["state"] == "needs_attention"
+        body = response.get_json()
+        assert body["target_status"] == "unknown"
+        assert body["error_code"] == "needs_attention"
+        assert body["confirmed_batches"] == 0
+        assert body["total_batches"] == 1
+        assert "saved_track_uris" not in body
+        assert len(provider.writes) == 1
+        assert scoped_history(auth_client, "playlist123") is None
+
+    def test_empty_draft_dispatches_a_real_put_in_worker(self, auth_client, provider):
+        from tests.queued_operations import post_and_run
+        from tests.services.test_live_executor_outcomes import uri
+
+        response = post_and_run(
+            auth_client, provider,
             api_path("/workshop/playlist123/commit"),
-            json={"baseline_track_uris": [], "track_uris": []},
+            json={"baseline_track_uris": [uri(1), uri(1), uri(2)], "track_uris": []},
         )
-        assert response.status_code == http
-        assert response.get_json()["error_code"] == code
-        assert response.get_json()["target_status"] == status
-        assert "saved_track_uris" not in response.get_json()
+        assert response.accepted.status_code == 202
+        assert response.get_json()["target_status"] == "saved"
+        assert response.get_json()["saved_track_uris"] == []
+        assert response.get_json()["confirmed_batches"] == 1
+        assert provider.writes == [("update", "playlist123", [])]
 
     @pytest.mark.parametrize(
         "error,status",
@@ -636,16 +719,31 @@ class TestWorkshopCommit:
         ],
     )
     def test_existing_permission_and_auth_handling(
-        self, authenticated_client, authorized, error, status
+        self, auth_client, provider, error, status
     ):
-        service, _ = authorized
-        service.return_value.commit.side_effect = error
-        response = authenticated_client.post(
+        from tests.queued_operations import post_and_run
+        from tests.services.test_live_executor_outcomes import uri
+
+        if status == 403:
+            provider.owner = "another-user"
+        else:
+            provider.read_failure = error
+        response = post_and_run(
+            auth_client, provider,
             api_path("/workshop/playlist123/commit"),
-            json={"baseline_track_uris": [], "track_uris": []},
+            json={"baseline_track_uris": [uri(1), uri(1), uri(2)], "track_uris": []},
         )
-        assert response.status_code == status
-        assert "target_status" not in (response.get_json() or {})
+        assert response.accepted.status_code == 202
+        assert response.operation["state"] == "failed"
+        body = response.get_json()
+        assert body["success"] is False
+        assert "saved_track_uris" not in body
+        if status == 503:
+            assert body["error_code"] == "upstream_read_failed"
+            assert body["target_status"] == "not_written"
+        else:
+            assert "target_status" not in body
+        assert provider.writes == []
 
     def test_current_state_serializes_read_only_result(
         self, authenticated_client, authorized

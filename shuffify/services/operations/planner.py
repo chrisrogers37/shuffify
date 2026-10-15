@@ -11,10 +11,13 @@ DETAIL_FIELDS = frozenset(("name", "public", "description"))
 def content(observed):
     tracks = observed.get("track_uris")
     metadata = observed.get("metadata", {})
-    if not isinstance(tracks, (list, tuple)) or any(not isinstance(uri, str) for uri in tracks):
-        raise ValueError("A complete ordered track list is required")
     if not isinstance(metadata, dict):
         raise ValueError("Playlist metadata must be an object")
+    if observed.get("scope") == "metadata":
+        return {"scope": "metadata", "metadata": {key: deepcopy(value) for key, value in metadata.items()
+                                                   if key in DETAIL_FIELDS}}
+    if not isinstance(tracks, (list, tuple)) or any(not isinstance(uri, str) for uri in tracks):
+        raise ValueError("A complete ordered track list is required")
     return {"track_uris": list(tracks), "metadata": {key: deepcopy(value) for key, value in metadata.items()
                                                    if key in DETAIL_FIELDS}}
 

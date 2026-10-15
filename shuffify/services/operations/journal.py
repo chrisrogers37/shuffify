@@ -25,8 +25,8 @@ class JournalError(RuntimeError):
 
 
 class NeedsAttention(SpotifyWriteUnverifiedError):
-    def __init__(self, reason):
-        self.reason = reason
+    def __init__(self, reason, result=None):
+        self.reason, self.result = reason, deepcopy(result)
         super().__init__(f"The operation needs review: {reason}")
 
 
@@ -39,15 +39,24 @@ class OperationDeferred(SpotifyRateLimitError):
         super().__init__("Spotify asked this operation to retry later", retry_after=retry_after)
 
 
+class OperationAborted(SpotifyWriteUnverifiedError):
+    """A durable service failure forbids any further forward execution."""
+
+    def __init__(self, reason, result=None):
+        self.reason, self.result = reason, deepcopy(result)
+        super().__init__(f"The operation was stopped: {reason}")
+
+
 class DurableJournal:
     """Persist through injected fenced checkpoints; never hold a transaction over I/O."""
 
-    def __init__(self, get_journal, checkpoint, read_resource, dispatch, settle_resource=None):
+    def __init__(self, get_journal, checkpoint, read_resource, dispatch, settle_resource=None, read_metadata=None):
         self.get_journal = get_journal
         self.checkpoint = checkpoint
         self.read_resource = read_resource
         self.dispatch = dispatch
         self.settle_resource = settle_resource
+        self.read_metadata = read_metadata
         self.active_batch = None
         self.cursor = 0
         self._observation_depth = 0
@@ -83,6 +92,16 @@ class DurableJournal:
     def _plans(self):
         return self.doc["compensation"] if self.doc["phase"] == "compensating" else self.doc["plans"]
 
+    def check_pending_control(self):
+        self._defer_if_needed()
+        if self.doc.get("abort") and self.doc["phase"] == "forward":
+            raise OperationAborted(**self.doc["abort"])
+
+    def request_abort(self, reason, result=None):
+        self.doc.setdefault("abort", {"reason": reason, "result": deepcopy(result)})
+        self._save()
+        raise OperationAborted(**self.doc["abort"])
+
     def _defer_if_needed(self):
         now = datetime.now(timezone.utc)
         deadlines = []
@@ -109,7 +128,7 @@ class DurableJournal:
     def _save(self):
         self._progress()
         owned = {"version", "phase", "status", "resources", "plans", "compensation", "compensation_resources",
-                 "choices", "recovery", "observations", "progress"}
+                 "choices", "recovery", "observations", "progress", "abort"}
         for key, value in (self.get_journal() or {}).items():
             if key not in owned:
                 self.doc[key] = deepcopy(value)
@@ -119,24 +138,45 @@ class DurableJournal:
     @staticmethod
     def _observed(raw):
         observed = {**deepcopy(raw), **content(raw)}
-        if not isinstance(observed.get("snapshot_id"), str) or not observed["snapshot_id"]:
+        if observed.get("scope") != "metadata" and (
+                not isinstance(observed.get("snapshot_id"), str) or not observed["snapshot_id"]):
             raise JournalError("A complete observation requires a playlist snapshot")
         return observed
 
-    def _base(self, resource):
-        self._defer_if_needed()
+    def _read(self, resource, *, scope=None):
+        scope = scope or self.doc["resources"].get(resource, {}).get("scope", "tracks")
+        if scope == "metadata":
+            if self.read_metadata is None:
+                raise JournalError("No authorized metadata reader is configured")
+            return self._observed({**self.read_metadata(resource), "scope": "metadata"})
+        return self._observed(self.read_resource(resource))
+
+    def _base(self, resource, *, scope="tracks", expected_baseline=None):
+        self.check_pending_control()
         if self.doc["status"] == "needs_attention" or self.doc["phase"] != "forward":
             raise NeedsAttention(self.doc["recovery"].get("reason") or "operation_blocked")
         if any(item["state"] == "dispatched" for step in self.doc["plans"] for item in step["batches"]):
             raise NeedsAttention("unfinished_dispatch")
+        stored = self.doc["resources"].get(resource)
+        if stored and stored.get("scope") == "metadata" and scope != "metadata":
+            raise NeedsAttention("metadata_scope_cannot_change_tracks")
         if resource not in self.doc["resources"]:
-            observed = self._observed(self.read_resource(resource))
-            self.doc["resources"][resource] = {"baseline": content(observed), "snapshot_id": observed["snapshot_id"]}
+            observed = self._read(resource, scope=scope)
+            if expected_baseline is not None and (content(observed) != content(expected_baseline)
+                    or scope != "metadata" and expected_baseline.get("snapshot_id") != observed.get("snapshot_id")):
+                self._attention("prepared_baseline_changed", {resource: observed})
+                raise NeedsAttention("prepared_baseline_changed")
+            self.doc["resources"][resource] = {
+                "baseline": content(observed), "snapshot_id": observed.get("snapshot_id"), "scope": scope,
+            }
         previous = [step for step in self.doc["plans"] if step["resource"] == resource]
         return deepcopy(previous[-1]["desired"] if previous else self.doc["resources"][resource]["baseline"])
 
-    def _freeze(self, kind, resource, **options):
-        baseline = self._base(resource)
+    def _freeze(self, kind, resource, *, expected_baseline=None, **options):
+        scope = "metadata" if kind == "details" and self.read_metadata and resource not in self.doc["resources"] else (
+            self.doc["resources"].get(resource, {}).get("scope", "tracks"))
+        baseline = self._base(resource, scope=scope if kind == "details" else "tracks",
+                              expected_baseline=expected_baseline)
         desired, batches = plan(kind, resource, baseline, **options)
         plan_id = len(self.doc["plans"])
         self.doc["plans"].append({
@@ -149,8 +189,8 @@ class DurableJournal:
         self._save()
         return plan_id
 
-    def freeze_replace(self, resource, track_uris):
-        return self._freeze("replace", resource, uris=deepcopy(list(track_uris)))
+    def freeze_replace(self, resource, track_uris, *, expected_baseline=None):
+        return self._freeze("replace", resource, uris=deepcopy(list(track_uris)), expected_baseline=expected_baseline)
 
     def freeze_add(self, resource, track_uris, position=None):
         return self._freeze("add", resource, uris=deepcopy(list(track_uris)), position=position)
@@ -158,11 +198,29 @@ class DurableJournal:
     def freeze_remove(self, resource, track_uris):
         return self._freeze("remove", resource, uris=deepcopy(list(track_uris)))
 
-    def freeze_details(self, resource, **details):
-        return self._freeze("details", resource, details=details)
+    def freeze_details(self, resource, *, expected_baseline=None, **details):
+        return self._freeze("details", resource, details=details, expected_baseline=expected_baseline)
+
+    def ensure_replace(self, resource, track_uris, *, expected_baseline):
+        return self._ensure("replace", resource, expected_baseline, track_uris=track_uris)
+
+    def ensure_details(self, resource, *, expected_baseline, **details):
+        return self._ensure("details", resource, expected_baseline, details=details)
+
+    def _ensure(self, kind, resource, expected_baseline, **values):
+        self.check_pending_control()
+        if self.cursor < len(self.doc["plans"]):
+            stored = self.doc["plans"][self.cursor]
+            intent = self._intent(kind, {"resource": resource, **values})
+            if stored.get("intent") != intent or stored["baseline"] != content(expected_baseline):
+                self._attention("prepared_intent_changed")
+                raise NeedsAttention("prepared_intent_changed")
+            return self.cursor
+        return self._freeze(kind, resource, expected_baseline=expected_baseline,
+                            **({"uris": values["track_uris"]} if kind == "replace" else values))
 
     def freeze_create(self, name, public=False, description=""):
-        self._defer_if_needed()
+        self.check_pending_control()
         if self.doc["status"] == "needs_attention" or self.doc["phase"] != "forward":
             raise NeedsAttention("operation_blocked")
         if any(item["state"] == "dispatched" for step in self.doc["plans"] for item in step["batches"]):
@@ -204,8 +262,10 @@ class DurableJournal:
         for resource, stored in sorted(self.doc["resources"].items()):
             batches = self._resource_batches(resource)
             ambiguous = any(item["state"] == "dispatched" for item in batches)
-            read = self.settle_resource if ambiguous and self.settle_resource else self.read_resource
-            observed = self._observed(read(resource))
+            if ambiguous and self.settle_resource and stored.get("scope", "tracks") == "tracks":
+                observed = self._observed(self.settle_resource(resource))
+            else:
+                observed = self._read(resource)
             observations[resource] = observed
             base = stored if self.doc["phase"] == "forward" else self.doc["compensation_resources"][resource]
             acknowledgements, reason = reconcile_resource(base, batches, observed)
@@ -214,18 +274,20 @@ class DurableJournal:
             updates.append((resource, acknowledgements, reason))
         for resource, acknowledgements, reason in updates:
             for item in acknowledgements:
-                item.update(state="acknowledged", snapshot_id=observations[resource]["snapshot_id"], inferred=True)
+                item.update(state="acknowledged", snapshot_id=observations[resource].get("snapshot_id"), inferred=True)
             if reason == "replay_settled":
                 pending = next(item for item in self._resource_batches(resource) if item["state"] != "acknowledged")
                 pending["state"] = "prepared"
             acknowledged = [item for item in self._resource_batches(resource) if item["state"] == "acknowledged"]
             if acknowledged and acknowledged[-1].get("snapshot_id") is None:
-                acknowledged[-1]["snapshot_id"] = observations[resource]["snapshot_id"]
+                acknowledged[-1]["snapshot_id"] = observations[resource].get("snapshot_id")
         if updates:
             self._save()
         return None
 
     def _expected_snapshot(self, resource):
+        if self.doc["resources"][resource].get("scope") == "metadata":
+            return None
         resources = self.doc["resources"] if self.doc["phase"] == "forward" else self.doc["compensation_resources"]
         base = resources[resource]
         snapshot = base["snapshot_id"]
@@ -254,7 +316,7 @@ class DurableJournal:
     def resume(self):
         if self.doc["status"] == "needs_attention":
             return self.outcome()
-        self._defer_if_needed()
+        self.check_pending_control()
         conflict = self._reconcile()
         if conflict:
             return conflict
@@ -265,12 +327,12 @@ class DurableJournal:
                     continue
                 resource = step["resource"]
                 if resource is not None:
-                    observed = self._observed(self.read_resource(resource))
+                    observed = self._read(resource)
                     matches = content(observed) == item["before"]
                     expected_snapshot = self._expected_snapshot(resource)
-                    if not matches or expected_snapshot and observed["snapshot_id"] != expected_snapshot:
+                    if not matches or expected_snapshot and observed.get("snapshot_id") != expected_snapshot:
                         return self._attention("external_edit", {resource: observed})
-                    item["snapshot_before"] = observed["snapshot_id"]
+                    item["snapshot_before"] = observed.get("snapshot_id")
                 item.update(state="dispatched", dispatched_at=datetime.now(timezone.utc).isoformat())
                 self._save()
                 self.active_batch = (step, item)
@@ -305,7 +367,7 @@ class DurableJournal:
             return conflict
         resources, plans = {}, []
         for resource, original in sorted(self.doc["resources"].items()):
-            observed = self._observed(self.read_resource(resource))
+            observed = self._read(resource)
             # The second observation protects compensation from an edit after reconciliation.
             batches = self._resource_batches(resource)
             _, reason = reconcile_resource(original, batches, observed)
@@ -316,8 +378,11 @@ class DurableJournal:
                 prior = original["baseline"]["metadata"].get(name)
                 if value != prior and prior is None:
                     return self._attention("baseline_metadata_unavailable", {resource: observed})
-            resources[resource] = {"baseline": baseline, "snapshot_id": observed["snapshot_id"]}
-            desired, replacement = plan("replace", resource, baseline, uris=original["baseline"]["track_uris"])
+            resources[resource] = {"baseline": baseline, "snapshot_id": observed.get("snapshot_id")}
+            if original.get("scope") == "metadata":
+                desired, replacement = baseline, []
+            else:
+                desired, replacement = plan("replace", resource, baseline, uris=original["baseline"]["track_uris"])
             desired, metadata = plan("details", resource, desired, details=original["baseline"]["metadata"])
             plans.append({"id": len(plans), "kind": "compensate", "resource": resource, "baseline": baseline,
                           "desired": desired, "batches": replacement + metadata, "batches_done": 0})
@@ -351,7 +416,7 @@ class DurableJournal:
         return intent
 
     def mutate(self, api, kind, *args, **kwargs):
-        self._defer_if_needed()
+        self.check_pending_control()
         if self.doc["phase"] != "forward":
             raise NeedsAttention("operation_compensating")
         if "playlist_id" in kwargs:
@@ -393,8 +458,10 @@ class DurableJournal:
         if (method, path, body) != (item["method"], item["path"], item["body"]):
             raise JournalError("The HTTP mutation differs from its frozen batch")
         if item["attempts"] and step["resource"] is not None:
-            observed = self._observed(self.read_resource(step["resource"]))
-            if content(observed) != item["before"] or observed["snapshot_id"] != item["snapshot_before"]:
+            observed = self._read(step["resource"])
+            metadata_only = self.doc["resources"][step["resource"]].get("scope") == "metadata"
+            if content(observed) != item["before"] or (
+                    not metadata_only and observed.get("snapshot_id") != item["snapshot_before"]):
                 self._attention("external_edit", {step["resource"]: observed})
                 raise NeedsAttention("external_edit")
         item["state"] = "dispatched"

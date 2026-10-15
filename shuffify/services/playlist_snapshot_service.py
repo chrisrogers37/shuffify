@@ -106,6 +106,9 @@ class PlaylistSnapshotService:
         snapshot_type: str,
         trigger_description: Optional[str] = None,
         job_execution_id: Optional[int] = None,
+        *,
+        session=None,
+        commit=True,
     ) -> PlaylistSnapshot:
         """
         Create a new playlist snapshot.
@@ -129,6 +132,9 @@ class PlaylistSnapshotService:
         Raises:
             PlaylistSnapshotError: If creation fails.
         """
+        if session is not None and commit:
+            raise ValueError("An explicit snapshot session requires commit=False.")
+        storage = session if session is not None else db.session
         # Tag with the current job's execution id (if any) so rollback can
         # scope to just this job's snapshots.
         if job_execution_id is None:
@@ -145,23 +151,28 @@ class PlaylistSnapshotService:
         )
         snapshot.track_uris = track_uris
 
-        db.session.add(snapshot)
-        safe_commit(
-            f"create {snapshot_type} snapshot for user "
-            f"{user_id}, playlist {playlist_id} "
-            f"({len(track_uris)} tracks)",
-            PlaylistSnapshotError,
-        )
+        storage.add(snapshot)
+        if commit:
+            safe_commit(
+                f"create {snapshot_type} snapshot for user "
+                f"{user_id}, playlist {playlist_id} "
+                f"({len(track_uris)} tracks)",
+                PlaylistSnapshotError,
+            )
+        else:
+            storage.flush()
 
         # Enforce retention limit
         max_snapshots = (
-            PlaylistSnapshotService._get_max_snapshots(
-                user_id
+            PlaylistSnapshotService._get_max_snapshots(user_id, session=storage) if session is not None
+            else PlaylistSnapshotService._get_max_snapshots(user_id)
+        )
+        if not commit:
+            PlaylistSnapshotService.cleanup_old_snapshots(
+                user_id, playlist_id, max_snapshots, session=storage, commit=False,
             )
-        )
-        PlaylistSnapshotService.cleanup_old_snapshots(
-            user_id, playlist_id, max_snapshots
-        )
+        else:
+            PlaylistSnapshotService.cleanup_old_snapshots(user_id, playlist_id, max_snapshots)
 
         return snapshot
 
@@ -193,7 +204,7 @@ class PlaylistSnapshotService:
 
     @staticmethod
     def get_snapshot(
-        snapshot_id: int, user_id: int
+        snapshot_id: int, user_id: int, *, session=None,
     ) -> PlaylistSnapshot:
         """
         Get a specific snapshot by ID with ownership check.
@@ -209,6 +220,11 @@ class PlaylistSnapshotService:
             PlaylistSnapshotNotFoundError: If not found or
                 not owned.
         """
+        if session is not None:
+            snapshot = session.query(PlaylistSnapshot).filter_by(id=snapshot_id, user_id=user_id).first()
+            if snapshot is None:
+                raise PlaylistSnapshotNotFoundError(f"PlaylistSnapshot {snapshot_id} not found")
+            return snapshot
         return get_owned_entity(
             PlaylistSnapshot,
             snapshot_id,
@@ -319,6 +335,9 @@ class PlaylistSnapshotService:
         user_id: int,
         playlist_id: str,
         max_count: int,
+        *,
+        session=None,
+        commit=True,
     ) -> int:
         """
         Enforce retention limit by deleting oldest snapshots.
@@ -334,9 +353,12 @@ class PlaylistSnapshotService:
         Returns:
             Number of snapshots deleted.
         """
+        if session is not None and commit:
+            raise ValueError("An explicit snapshot session requires commit=False.")
+        storage = session if session is not None else db.session
         # IDs of snapshots to keep (most recent N)
         keep_ids_query = (
-            db.session.query(PlaylistSnapshot.id)
+            storage.query(PlaylistSnapshot.id)
             .filter_by(
                 user_id=user_id, playlist_id=playlist_id
             )
@@ -347,17 +369,22 @@ class PlaylistSnapshotService:
 
         # Bulk delete all snapshots NOT in the keep set
         deleted_count = (
-            PlaylistSnapshot.query.filter(
+            storage.query(PlaylistSnapshot).filter(
                 PlaylistSnapshot.user_id == user_id,
                 PlaylistSnapshot.playlist_id
                 == playlist_id,
                 ~PlaylistSnapshot.id.in_(
-                    db.session.query(keep_ids_query)
+                    storage.query(keep_ids_query)
                 ),
             ).delete(synchronize_session="fetch")
         )
 
-        if deleted_count > 0:
+        if not commit:
+            storage.flush()
+        else:
+            # DELETE starts a physical transaction even when it matches no
+            # snapshots. Always finish it before another independent queue
+            # transaction borrows this connection (notably SQLite StaticPool).
             try:
                 safe_commit(
                     f"cleanup {deleted_count} old snapshots "
@@ -371,7 +398,7 @@ class PlaylistSnapshotService:
         return deleted_count
 
     @staticmethod
-    def _get_max_snapshots(user_id: int) -> int:
+    def _get_max_snapshots(user_id: int, *, session=None) -> int:
         """
         Get the max snapshots setting for a user.
 
@@ -387,7 +414,8 @@ class PlaylistSnapshotService:
         try:
             from shuffify.models.db import UserSettings
 
-            settings = UserSettings.query.filter_by(
+            storage = session if session is not None else db.session
+            settings = storage.query(UserSettings).filter_by(
                 user_id=user_id
             ).first()
             if (
@@ -396,12 +424,13 @@ class PlaylistSnapshotService:
             ):
                 return settings.max_snapshots_per_playlist
         except (ImportError, Exception):
-            pass
+            if session is not None:
+                raise
 
         return DEFAULT_MAX_SNAPSHOTS_PER_PLAYLIST
 
     @staticmethod
-    def is_auto_snapshot_enabled(user_id: int) -> bool:
+    def is_auto_snapshot_enabled(user_id: int, *, session=None) -> bool:
         """
         Check if auto-snapshot is enabled for a user.
 
@@ -417,12 +446,14 @@ class PlaylistSnapshotService:
         try:
             from shuffify.models.db import UserSettings
 
-            settings = UserSettings.query.filter_by(
+            storage = session if session is not None else db.session
+            settings = storage.query(UserSettings).filter_by(
                 user_id=user_id
             ).first()
             if settings is not None:
                 return settings.auto_snapshot_enabled
         except (ImportError, Exception):
-            pass
+            if session is not None:
+                raise
 
         return True

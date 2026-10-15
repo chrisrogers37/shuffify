@@ -798,13 +798,16 @@
             });
         });
     }
-    async function send(spec, limitMs) {
+    async function send(spec, limitMs, onAccepted) {
         var controller = new AbortController(), timer;
         try {
             return await Promise.race([
                 (async function () {
                     var options = {method: spec.method || 'POST', signal: controller.signal,
                         headers: {'X-Requested-With': 'XMLHttpRequest'}};
+                    if (options.method !== 'GET' && global.OperationQueue) {
+                        options.headers['Idempotency-Key'] = global.OperationQueue.requestKey();
+                    }
                     if (options.method === 'GET') options.cache = 'no-store';
                     else if (spec.encoding === 'form') {
                         options.body = new FormData();
@@ -814,7 +817,14 @@
                         options.body = JSON.stringify(spec.body);
                     }
                     var response = await global.fetch(spec.url, options);
-                    return {data: await response.json(), ok: response.ok};
+                    var data = await response.json();
+                    if (response.status === 202) {
+                        if (onAccepted) onAccepted(data.operation_id);
+                        clearTimeout(timer);
+                        if (!global.OperationQueue) throw new Error('Operation polling is unavailable');
+                        return global.OperationQueue.poll(data, {signal: controller.signal});
+                    }
+                    return {data: data, ok: response.ok};
                 })(),
                 new Promise(function (_, reject) {
                     timer = setTimeout(function () { controller.abort(); reject(new Error('Timed out')); }, limitMs);
@@ -1202,9 +1212,12 @@
             var list = byId('live-operation-results');
             if (list && list.parentElement) list.parentElement.scrollTop = 0;
             try {
-                var reply = await send(spec, timeoutMs);
+                var reply = await send(spec, timeoutMs, function (id) { record.acceptedOperationId = id; });
                 classify(record, reply.data, reply.ok);
-            } catch (_) { lost(record); }
+            } catch (_) {
+                lost(record);
+                if (record.acceptedOperationId) record.message += ' Accepted operation: ' + record.acceptedOperationId + '.';
+            }
             record.state = 'finished';
             derive(record);
             if (record.complete && config.afterComplete) {

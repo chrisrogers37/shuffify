@@ -17,6 +17,7 @@ from shuffify.services.playlist_snapshot_service import (
 from shuffify.services.user_service import UserService
 from shuffify.spotify.api import SpotifyAPI
 from tests.paths import api_path
+from tests.queued_operations import post_and_run, scoped_history
 from tests.services.test_live_executor_outcomes import MutableSpotify, uri
 
 
@@ -340,7 +341,7 @@ class TestRestoreSnapshot:
         snap_id = self.create_snapshot(desired)
         api = self.spotify(before)
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post(api_path(f"/snapshots/{snap_id}/restore"))
+            resp = post_and_run(auth_client, api, api_path(f"/snapshots/{snap_id}/restore"))
         data = resp.get_json()
         assert resp.status_code == 200
         assert data["success"] is True
@@ -352,8 +353,9 @@ class TestRestoreSnapshot:
         assert api.writes == [("update", "p1", desired)]
         assert data["operation"]["aggregate_status"] == "complete"
         assert not {"execution_id", "started_at", "execution_state"} & data.keys()
+        assert scoped_history(auth_client, "p1") == {"states": [before, desired], "current_index": 1}
         with auth_client.session_transaction() as sess:
-            assert sess["playlist_states"]["p1"] == {"states": [before, desired], "current_index": 1}
+            assert "playlist_states" not in sess
         snapshots = PlaylistSnapshotService.get_snapshots(
             UserService.get_by_spotify_id("user123").id, "p1"
         )
@@ -367,7 +369,7 @@ class TestRestoreSnapshot:
         api = self.spotify([uri(2)])
         api.playlists["other"] = [uri(9)]
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post(
+            resp = post_and_run(auth_client, api,
                 api_path(f"/snapshots/{snap_id}/restore"),
                 json={"playlist_id": "other", "track_uris": [uri(8)]},
             )
@@ -380,7 +382,7 @@ class TestRestoreSnapshot:
         snap_id = self.create_snapshot(desired)
         api = self.spotify(desired)
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post(api_path(f"/snapshots/{snap_id}/restore"))
+            resp = post_and_run(auth_client, api, api_path(f"/snapshots/{snap_id}/restore"))
         data = resp.get_json()
         assert resp.status_code == 200
         assert data["success"] is True
@@ -397,7 +399,7 @@ class TestRestoreSnapshot:
         snap_id = self.create_snapshot([uri(1)], user=other)
         api = self.spotify([uri(2)])
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post(api_path(f"/snapshots/{snap_id}/restore"))
+            resp = post_and_run(auth_client, api, api_path(f"/snapshots/{snap_id}/restore"))
         data = resp.get_json()
         assert resp.status_code == 404
         assert data["operation"]["error_code"] == "snapshot_not_found"
@@ -408,13 +410,13 @@ class TestRestoreSnapshot:
         snap_id = self.create_snapshot([])
         api = MagicMock(spec=SpotifyAPI)
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post(api_path(f"/snapshots/{snap_id}/restore"))
+            resp = post_and_run(auth_client, api, api_path(f"/snapshots/{snap_id}/restore"))
         assert resp.status_code == 400
         assert resp.get_json()["operation"]["error_code"] == "empty_snapshot"
         api.get_playlist.assert_not_called()
         api.update_playlist_tracks.assert_not_called()
 
-    def test_lost_reply_retains_desired_order_without_advancing_history(self, auth_client):
+    def test_lost_reply_retains_intent_and_journals_compensation_without_advancing_history(self, auth_client):
         before, desired = [uri(3)], [uri(1), uri(2), uri(1)]
         snap_id = self.create_snapshot(desired)
         api = self.spotify(before)
@@ -426,9 +428,10 @@ class TestRestoreSnapshot:
 
         api.faults[("update", "p1")] = apply_then_lose
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post(api_path(f"/snapshots/{snap_id}/restore"))
+            resp = post_and_run(auth_client, api, api_path(f"/snapshots/{snap_id}/restore"))
         data = resp.get_json()
-        assert resp.status_code == 502
+        assert resp.status_code == 200
+        assert resp.operation["state"] == "needs_attention"
         assert data["success"] is False
         assert data["snapshot"]["id"] == snap_id
         assert data["operation"]["aggregate_status"] == "unknown"
@@ -437,8 +440,10 @@ class TestRestoreSnapshot:
         assert entry["desired_track_uris"] == desired
         assert entry["baseline_track_uris"] == before
         assert "current_track_uris" not in entry
-        assert api.playlists["p1"] == desired
-        assert api.writes == [("update", "p1", desired)]
+        # Both responses are lost: the journal authorizes compensation only
+        # after recognizing its own desired order, then requires review.
+        assert api.playlists["p1"] == before
+        assert api.writes == [("update", "p1", desired), ("update", "p1", before)]
         assert "private Spotify detail" not in str(data)
         with auth_client.session_transaction() as sess:
             assert "playlist_states" not in sess
@@ -451,9 +456,10 @@ class TestRestoreSnapshot:
             "shuffify.services.state_service.StateService.record_verified_change",
             side_effect=RuntimeError("private session detail"),
         ):
-            resp = auth_client.post(api_path(f"/snapshots/{snap_id}/restore"))
+            resp = post_and_run(auth_client, api, api_path(f"/snapshots/{snap_id}/restore"))
         data = resp.get_json()
-        assert resp.status_code == 502
+        assert resp.status_code == 200
+        assert resp.operation["state"] == "needs_attention"
         assert data["success"] is False
         assert data["operation"]["aggregate_status"] == "partial"
         assert data["operation"]["resources"][0]["status"] == "complete"
@@ -471,9 +477,9 @@ class TestRestoreSnapshot:
         ), patch("shuffify.is_db_available", return_value=status != 503), patch(
             "shuffify.routes.get_db_user", return_value=None
         ), patch("shuffify.routes.snapshots.PlaylistSnapshotService.get_snapshot") as lookup, patch(
-            "shuffify.routes.snapshots.LivePlaylistService"
+            "shuffify.services.live_playlist_service.LivePlaylistService"
         ) as service:
-            resp = auth_client.post(api_path("/snapshots/123/restore"))
+            resp = post_and_run(auth_client, api, api_path("/snapshots/123/restore"))
         lookup.assert_not_called()
         service.assert_not_called()
         data = resp.get_json()

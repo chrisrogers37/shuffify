@@ -194,19 +194,23 @@ def require_auth_and_db(f=None, *, on_preflight_error=None):
     return decorated_function
 
 
-def require_session_and_db(view):
+def require_session_and_db(view=None, *, on_preflight_error=None):
     """Authorize queue requests from the session and database without Spotify I/O."""
+    if view is None:
+        return functools.partial(require_session_and_db, on_preflight_error=on_preflight_error)
+    preflight_error = on_preflight_error or json_error
+
     @functools.wraps(view)
     def authorized(*args, **kwargs):
         if not is_authenticated():
-            return json_error("Please log in first.", 401)
+            return preflight_error("Please log in first.", 401)
         from shuffify import is_db_available
 
         if not is_db_available():
-            return json_error("Database is unavailable.", 503)
+            return preflight_error("Database is unavailable.", 503)
         user = get_db_user()
         if user is None:
-            return json_error("User not found.", 401)
+            return preflight_error("User not found.", 401)
         return view(*args, user=user, **kwargs)
 
     return authorized

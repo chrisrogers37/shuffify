@@ -15,6 +15,7 @@ export const schemaTypes = Object.freeze({
   'user-playlists-context': 'UserPlaylistsContext',
   'return-target': 'ReturnTarget',
   'operation-context': 'OperationContext',
+  'operation-accepted': 'OperationAccepted',
 });
 
 const root = fileURLToPath(new URL('../', import.meta.url));

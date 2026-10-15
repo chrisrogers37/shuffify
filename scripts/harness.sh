@@ -439,11 +439,31 @@ start_app() {
   stop_proc app
   log "starting the app on ${APP_URL}"
   require_netguard "${py}"
-  harness_cmd "${py}" FLASK_HOST=127.0.0.1 FLASK_PORT="${APP_PORT}" FLASK_USE_RELOADER=false -- \
-    "${py}" run.py
+  harness_cmd "${py}" -- "${py}" -m gunicorn --worker-class gthread \
+    --workers 1 --threads 8 --timeout 30 --bind "127.0.0.1:${APP_PORT}" run:app
   # The schema check runs here for real: MIGRATE_ON_STARTUP is off, so the
   # app refuses to start unless migrate() left the schema at head.
   launch_proc app "${APP_URL}/health"
+}
+
+start_worker() {
+  local py="$1"
+  stop_proc worker
+  log "starting the operation worker"
+  harness_cmd "${py}" -- "${py}" -m shuffify.worker
+  : > "${STATE}/worker.log"
+  rm -f "${STATE}/worker.pid"
+  setsid nohup bash -c 'echo $$ > "$0"; exec "$@"' "${STATE}/worker.pid" "${HARNESS_CMD[@]}" \
+    >>"${STATE}/worker.log" 2>&1 < /dev/null &
+  for _ in $(seq 60); do
+    if [[ -f "${STATE}/worker.pid" ]] && ! proc_pid worker >/dev/null; then
+      tail -40 "${STATE}/worker.log" >&2
+      die "the worker exited during startup; see ${STATE}/worker.log"
+    fi
+    grep -q "Operation worker started" "${STATE}/worker.log" && return
+    sleep 0.5
+  done
+  die "the worker did not initialize within 30s; see ${STATE}/worker.log"
 }
 
 # A whole login through the fake: the app's /login, the fake's consent page
@@ -541,14 +561,16 @@ cmd_setup() {
   fi
   start_fake_spotify "${py}"
   start_app "${py}"
+  start_worker "${py}"
   check_app "${py}"
-  log "logs: .harness/app.log, .harness/fake-spotify.log; stop: scripts/harness.sh down"
+  log "logs: .harness/app.log, .harness/worker.log, .harness/fake-spotify.log; stop: scripts/harness.sh down"
   # The one line on stdout.
   echo "harness: ready at ${APP_URL} (schema ${SCHEMA_REVISION} at head, network guard active)"
 }
 
 cmd_down() {
   stop_proc app
+  stop_proc worker
   stop_proc fake-spotify
   if [[ "${SERVICES}" == local ]]; then
     stop_redis
@@ -559,6 +581,7 @@ cmd_down() {
 cmd_status() {
   local bin pid
   if pid="$(proc_pid app)"; then echo "app:        running (pid ${pid}) ${APP_URL}"; else echo "app:        stopped"; fi
+  if pid="$(proc_pid worker)"; then echo "worker:     running (pid ${pid})"; else echo "worker:     stopped"; fi
   if pid="$(proc_pid fake-spotify)"; then echo "spotify:    fake, running (pid ${pid}) ${FAKE_SPOTIFY_URL}"; else echo "spotify:    fake, stopped"; fi
   if [[ "${SERVICES}" == local ]]; then
     bin="$(pg_bin)"

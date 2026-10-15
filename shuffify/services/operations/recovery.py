@@ -6,6 +6,7 @@ from .planner import content
 def reconcile_resource(resource, batches, observed):
     """Return proposed acknowledgements or a conflict; never dispatch Spotify writes."""
     current = content(observed)
+    metadata_only = current.get("scope") == "metadata"
     expected = resource["baseline"]
     snapshot = resource.get("snapshot_id")
     pending = None
@@ -16,7 +17,7 @@ def reconcile_resource(resource, batches, observed):
         else:
             pending = item
             break
-    compatible = not snapshot or observed.get("snapshot_id") == snapshot
+    compatible = metadata_only or not snapshot or observed.get("snapshot_id") == snapshot
     if pending is None:
         return ([], None) if current == expected and compatible else ([], "external_edit")
     if pending["state"] in ("prepared", "rejected"):

@@ -23,6 +23,7 @@ from shuffify.services import (
     UserSettingsService,
 )
 from shuffify.services.auth_notice import auth_notice
+from shuffify.services.operations.history import HistoryStore, get_history_scope
 from shuffify.services.page_context_service import (
     activity_row,
     dashboard_context,
@@ -99,10 +100,14 @@ def library_context(api=None, user=None):
         return json_error("Could not load your library. Please try again.", 500)
     dashboard = dashboard_context(DashboardService.get_dashboard_data(user.id, last_login_at=_previous_login(user)))
     profile = session.get("user_data") or {}
+    history = HistoryStore().session_for(
+        user.id, get_history_scope(session), [row["id"] for row in favorites + visible + hidden],
+        legacy=session.get("playlist_states"),
+    )
     return json_success(
         "Library loaded.",
         sections={name: [playlist_row(row, projection="library", preference=preferences.get(row["id"]),
-                                      session_state=session) for row in rows]
+                                      session_state=history) for row in rows]
                   for name, rows in (("favorites", favorites), ("playlists", visible), ("hidden", hidden))},
         algorithms=ShuffleService.list_algorithms(),
         shuffle_defaults=UserSettingsService.get_default_shuffle_settings(user.id),

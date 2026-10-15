@@ -304,6 +304,9 @@ class TrackLockService:
         user_id: int,
         playlist_id: str,
         new_uri_order: List[str],
+        *,
+        session=None,
+        commit=True,
     ) -> int:
         """
         Reconcile lock positions after a playlist reorder.
@@ -318,7 +321,10 @@ class TrackLockService:
         Returns:
             Number of locks updated (not deleted).
         """
-        locks = TrackLock.query.filter_by(
+        if session is not None and commit:
+            raise ValueError("An explicit track-lock session requires commit=False.")
+        storage = session if session is not None else db.session
+        locks = storage.query(TrackLock).filter_by(
             user_id=user_id,
             spotify_playlist_id=playlist_id,
         ).all()
@@ -335,7 +341,7 @@ class TrackLockService:
         for lock in locks:
             new_pos = uri_to_position.get(lock.track_uri)
             if new_pos is None:
-                db.session.delete(lock)
+                storage.delete(lock)
                 logger.info(
                     "Deleted orphaned lock for %s in %s",
                     lock.track_uri, playlist_id,
@@ -345,11 +351,14 @@ class TrackLockService:
                     lock.position = new_pos
                 updated += 1
 
-        safe_commit(
-            f"reconcile lock positions in {playlist_id} "
-            f"({updated} updated)",
-            TrackLockError,
-        )
+        if commit:
+            safe_commit(
+                f"reconcile lock positions in {playlist_id} "
+                f"({updated} updated)",
+                TrackLockError,
+            )
+        else:
+            storage.flush()
         return updated
 
     # ---------------------------------------------------------

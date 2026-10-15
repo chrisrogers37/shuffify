@@ -19,9 +19,11 @@ from shuffify.routes import (
     log_activity,
     require_auth_and_db,
     require_auth_page,
+    require_session_and_db,
     site_bp,
     validate_json,
 )
+from shuffify.routes.queue import capture_direct_history, enqueue_command
 from shuffify.schemas import (
     ExternalPlaylistRequest,
     WorkshopCommitRequest,
@@ -40,6 +42,7 @@ from shuffify.services import (
     WorkshopSessionNotFoundError,
     WorkshopSessionService,
 )
+from shuffify.services.operations.commands.schemas import WorkshopCommitCommand
 from shuffify.services.playlist_preference_service import (
     PlaylistPreferenceService,
 )
@@ -242,8 +245,8 @@ def _commit_preflight_error(message, status_code):
 
 
 @api_bp.route("/workshop/<playlist_id>/commit", methods=["POST"])
-@require_auth_and_db(on_preflight_error=_commit_preflight_error)
-def workshop_commit(playlist_id, api=None, user=None):
+@require_session_and_db(on_preflight_error=_commit_preflight_error)
+def workshop_commit(playlist_id, user=None):
     """Validate and serialize a target-only Workshop commit."""
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
@@ -263,14 +266,15 @@ def workshop_commit(playlist_id, api=None, user=None):
         return _commit_preflight_error(
             f"Validation error: {format_validation_error(error)}", 400
         )
-    result = WorkshopCommitService(api).commit(
-        playlist_id,
-        user,
-        session,
-        commit_request.baseline_track_uris,
-        commit_request.track_uris,
-    )
-    return jsonify(result.to_dict()), result.http_status
+    command = WorkshopCommitCommand(playlist_id=playlist_id,
+                                     baseline_track_uris=commit_request.baseline_track_uris,
+                                     track_uris=commit_request.track_uris)
+
+    def build(storage):
+        binding, _mapping = capture_direct_history(user, playlist_id, "workshop_commit", storage=storage)
+        return command, binding
+
+    return enqueue_command(user, "workshop_commit", command.model_dump(mode="json"), build)
 
 
 @api_bp.route("/workshop/<playlist_id>/current-state")

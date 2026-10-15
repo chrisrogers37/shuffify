@@ -3023,5 +3023,69 @@
         }
       }
     }
+  },
+  {
+    "name": "operation-accepted",
+    "schema": "operation-accepted",
+    "valid": true,
+    "fixture": "valid/operation-accepted.json"
+  },
+  {
+    "name": "operation-accepted-requires-id",
+    "schema": "operation-accepted",
+    "valid": false,
+    "data": {
+      "success": true,
+      "operation": {
+        "id": 1,
+        "kind": "shuffle",
+        "state": "queued",
+        "targets": [
+          "alice-mix"
+        ],
+        "started_at": null,
+        "completed_at": null,
+        "progress": {},
+        "result": null,
+        "recovery": {
+          "available": false,
+          "action": null,
+          "reason": null
+        }
+      },
+      "message": "Operation accepted.",
+      "category": "info"
+    }
+  },
+  {
+    "name": "operation-accepted-rejects-private-payload",
+    "schema": "operation-accepted",
+    "valid": false,
+    "data": {
+      "success": true,
+      "operation": {
+        "id": 1,
+        "kind": "shuffle",
+        "state": "queued",
+        "targets": [
+          "alice-mix"
+        ],
+        "started_at": null,
+        "completed_at": null,
+        "progress": {},
+        "result": null,
+        "recovery": {
+          "available": false,
+          "action": null,
+          "reason": null
+        }
+      },
+      "operation_id": 1,
+      "message": "Operation accepted.",
+      "category": "info",
+      "payload": {
+        "private": "command"
+      }
+    }
   }
 ]

@@ -13,6 +13,7 @@ the fake's own state (``/_fake/playlists/{id}``), not in what the app reports.
 import os
 import re
 import socket
+import time
 from contextlib import contextmanager
 from urllib.parse import urljoin
 
@@ -160,6 +161,43 @@ class App:
         body = resp.json()
         assert body.get("success") is not False, f"{method.upper()} {path}: {body}"
         return body
+
+    def wait_operation(self, location: str, operation_id: int, *, timeout=150) -> dict:
+        """Poll one accepted receipt through terminal completion without replaying its POST."""
+        assert location.endswith(f"/api/operations/{operation_id}"), location
+        deadline = time.monotonic() + timeout
+        while True:
+            response = self.get(location)
+            assert response.status_code == 200, f"GET {location}: {response.status_code} {response.text[:500]}"
+            body = response.json()
+            assert body["success"] is True
+            operation = body["operation"]
+            assert operation["id"] == operation_id
+            if operation["state"] in {"succeeded", "failed", "rolled_back", "needs_attention"}:
+                return operation
+            assert time.monotonic() < deadline, f"Operation {operation_id} did not finish: {operation}"
+            time.sleep(0.05)
+
+    def queued(self, path: str, **kwargs) -> dict:
+        """Accept a writer exactly once, then return its authoritative final operation DTO."""
+        from tests.paths import api_path
+
+        response = self.post(api_path(path), **kwargs)
+        assert response.status_code == 202, f"POST {path}: {response.status_code} {response.text[:500]}"
+        body = response.json()
+        assert body["success"] is True
+        operation_id = body["operation"]["id"]
+        assert body["operation_id"] == operation_id
+        assert "Location" in response.headers
+        return self.wait_operation(response.headers["Location"], operation_id)
+
+    def write(self, path: str, **kwargs) -> dict:
+        """Run a successful queued writer and retain the existing rich service result."""
+        operation = self.queued(path, **kwargs)
+        assert operation["state"] == "succeeded", operation
+        result = operation["result"]
+        assert isinstance(result, dict) and result.get("success") is not False, operation
+        return result
 
 
 @pytest.fixture

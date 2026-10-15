@@ -219,7 +219,7 @@ class SchedulerService:
         schedule_id: int, user_id: int
     ) -> None:
         """
-        Delete a schedule and its execution history, retaining snapshots.
+        Delete a schedule and legacy history, retaining durable receipts and snapshots.
 
         Raises:
             ScheduleNotFoundError: If not found.
@@ -230,12 +230,17 @@ class SchedulerService:
                 # Saved playlists outlive the execution history. Clear only links
                 # to this schedule's executions before deleting those rows.
                 execution_ids = db.select(JobExecution.id).where(
-                    JobExecution.schedule_id == schedule_id
+                    JobExecution.schedule_id == schedule_id, JobExecution.kind.is_(None),
                 )
                 PlaylistSnapshot.query.filter(
                     PlaylistSnapshot.job_execution_id.in_(execution_ids)
                 ).update({PlaylistSnapshot.job_execution_id: None}, synchronize_session="fetch")
-                JobExecution.query.filter_by(schedule_id=schedule_id).delete()
+                JobExecution.query.filter_by(schedule_id=schedule_id).filter(
+                    JobExecution.kind.is_not(None),
+                ).update({JobExecution.schedule_id: None}, synchronize_session="fetch")
+                JobExecution.query.filter_by(schedule_id=schedule_id).filter(
+                    JobExecution.kind.is_(None),
+                ).delete(synchronize_session="fetch")
                 db.session.delete(schedule)
                 # Bulk UPDATE/DELETE execute immediately, so the transaction guard
                 # must include them as well as the final commit.

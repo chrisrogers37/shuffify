@@ -21,18 +21,34 @@
         var controller = new AbortController();
         var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
         try {
+            if (isWrite && global.OperationQueue) {
+                options = Object.assign({}, options, {headers: Object.assign({}, options.headers, {
+                    'Idempotency-Key': global.OperationQueue.requestKey(),
+                })});
+            }
             var response = await global.fetch(path, Object.assign({}, options, {
                 signal: controller.signal,
                 headers: Object.assign({'X-Requested-With': 'XMLHttpRequest'}, options.headers),
             }));
             var data = await response.json();
             if (!data || typeof data !== 'object') throw new Error('Invalid response');
+            if (response.status === 202) {
+                clearTimeout(timer);
+                if (!global.OperationQueue) throw new Error('Operation polling is unavailable');
+                var settled = await global.OperationQueue.poll(data, {signal: controller.signal});
+                data = settled.data;
+                data.http_status = settled.status;
+                data.http_ok = settled.ok;
+                if (!settled.ok) data.success = false;
+                return data;
+            }
             data.http_status = response.status;
             data.http_ok = response.ok;
             if (!response.ok) data.success = false;
             return data;
-        } catch (_) {
-            return isWrite ? uncertain() : {
+        } catch (error) {
+            return isWrite ? uncertain(error.operationId ?
+                'Operation ' + error.operationId + ' was accepted. Its result is unavailable; keep this draft and check before another save.' : null) : {
                 success: false, target_status: 'not_written', error_code: 'upstream_read_failed',
                 requires_refresh: true, retryable: false,
                 message: 'Could not check Spotify. Your draft is still here. Check again when ready.',

@@ -33,6 +33,67 @@ class OperationRuntime:
         self._api = None
         self._journal = None
         self._lease_lost = lease_lost
+        self._history = None
+        self._history_loaded = False
+
+    @property
+    def history(self):
+        """Load this browser scope's authoritative history without authenticating Spotify."""
+        self.ensure_lease()
+        if not self._history_loaded:
+            from shuffify.services.operations.history import HistoryError, HistoryStore
+
+            binding = (self.operation.payload or {}).get("history")
+            if binding is not None:
+                if not isinstance(binding, dict) or not isinstance(binding.get("revisions"), dict):
+                    raise HistoryError("The command's saved history binding is unavailable.")
+                self._history = HistoryStore(self.repository.engine).session_for(
+                    self.user.id, binding.get("scope"), self.operation.targets or [],
+                    legacy=binding.get("imports"), expected_revisions=binding["revisions"],
+                )
+                working = self.get_journal().get("runtime", {}).get("history_working")
+                if working is not None:
+                    self._history.restore(working)
+            self._history_loaded = True
+        return self._history
+
+    def assert_history_revision(self, playlist_id):
+        """Revalidate the captured Undo revision while the command holds all target locks."""
+        from shuffify.services.operations.history import HistoryError, HistoryStore
+
+        mapping = self.history
+        if mapping is None or playlist_id not in mapping.revisions:
+            raise HistoryError("The command's saved history revision is unavailable.")
+        HistoryStore(self.repository.engine).assert_revision(
+            self.user.id, mapping.scope, playlist_id, mapping.revisions[playlist_id],
+        )
+
+    def history_working(self, document):
+        """Checkpoint the working mapping with its command step's output, preserving frozen before-state."""
+        document = deepcopy(document)
+        if self._history is not None:
+            document.setdefault("runtime", {})["history_working"] = deepcopy(dict(self._history))
+        return document
+
+    def stage_history(self, state, *, confirmed=True):
+        """Stage verified history for the same fenced transaction that completes this operation."""
+        from shuffify.services.operations.history import HistoryError, HistoryStore
+
+        document = self.get_journal()
+        if document.get("runtime", {}).get("history_unconfirmed"):
+            raise HistoryError("The verified playlist's saved history could not be confirmed.")
+        if state not in {"succeeded", "rolled_back"} or self.history is None:
+            return None
+        document = HistoryStore(self.repository.engine).stage(
+            document, self.history, state=state, confirmed=confirmed,
+        )
+        return self.checkpoint(document)
+
+    def mark_history_unconfirmed(self):
+        """Keep a history failure durable without reversing verified Spotify changes."""
+        document = self.get_journal()
+        document.setdefault("runtime", {})["history_unconfirmed"] = True
+        return self.checkpoint(document)
 
     def ensure_lease(self):
         """Stop before another effect when an independent heartbeat lost ownership."""
@@ -74,8 +135,19 @@ class OperationRuntime:
             self.checkpoint(document)
         return deepcopy(prepared[name])
 
+    def check_pending_control(self):
+        """Propagate a deferred or aborted service action before caching an outcome."""
+        self.ensure_lease()
+        self.journal.check_pending_control()
+
+    def local_step(self, name, callback):
+        """Commit local database effects and their receipt in one fenced transaction."""
+        self.check_pending_control()
+        return self.repository.local_step(self.lease, name, callback)
+
     def step(self, name, execute):
         """Persist a command step's output for an idempotent continuation."""
+        self.check_pending_control()
         document = self.get_journal()
         runtime = document.setdefault("runtime", {})
         outputs = runtime.setdefault("steps", {})
@@ -90,13 +162,27 @@ class OperationRuntime:
             return deepcopy(outputs[name])
         start = self.journal.cursor
         value = execute()
+        self.check_pending_control()
         # The step can checkpoint its own mutations, so re-read before adding its output.
         document = self.get_journal()
         runtime = document.setdefault("runtime", {})
         runtime.setdefault("steps", {})[name] = json.loads(json.dumps(value, allow_nan=False))
         runtime.setdefault("step_plan_ranges", {})[name] = {"start": start, "end": self.journal.cursor}
-        self.checkpoint(document)
+        self.checkpoint(self.history_working(document))
         return deepcopy(value)
+
+    def read_metadata_resource(self, playlist_id):
+        """Authorize stable uncached metadata without reading any playlist items."""
+        from shuffify.services.playlist_service import PlaylistService
+        from shuffify.services.workshop_commit_service import IncompletePlaylistRead
+
+        reader = PlaylistService(self.api)
+        first = reader.validate_user_can_edit(playlist_id, self.user.spotify_id, skip_cache=True)
+        second = reader.validate_user_can_edit(playlist_id, self.user.spotify_id, skip_cache=True)
+        fields = ("name", "public", "description")
+        if any(first.get(name) != second.get(name) for name in fields):
+            raise IncompletePlaylistRead("Playlist metadata changed during reconciliation")
+        return {"snapshot_id": second.get("snapshot_id"), "metadata": {name: second.get(name) for name in fields}}
 
     def read_resource(self, playlist_id):
         """Authorize two complete uncached reads with a stable snapshot and order."""
@@ -127,6 +213,7 @@ class OperationRuntime:
 
             self._journal = DurableJournal(
                 self.get_journal, self.checkpoint, self.read_resource, self.dispatch,
+                read_metadata=self.read_metadata_resource,
             )
         return self._journal
 

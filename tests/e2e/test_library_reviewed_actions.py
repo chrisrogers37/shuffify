@@ -141,8 +141,7 @@ def test_undo_review_refuses_a_changed_playlist_then_restores_the_reviewed_versi
         )
         # Another client changes the playlist after the review was shown.
         external = shuffled[1:] + shuffled[:1]
-        App("alice", fake.display_name("alice")).ok(
-            "post",
+        App("alice", fake.display_name("alice")).write(
             f"/workshop/{TARGET}/commit",
             json={"baseline_track_uris": shuffled, "track_uris": external},
         )
@@ -218,8 +217,7 @@ def test_privacy_review_runs_a_verified_noop_and_check_resolves_only_a_lost_visi
         visit.log_in()
         start = fake.playlist(TARGET)["public"]
         # Another client changes visibility after the Library rendered it.
-        App("alice", fake.display_name("alice")).ok(
-            "post",
+        App("alice", fake.display_name("alice")).write(
             f"/playlist/{TARGET}/toggle-visibility",
             json={"public": not start},
         )
@@ -241,11 +239,13 @@ def test_privacy_review_runs_a_verified_noop_and_check_resolves_only_a_lost_visi
         assert button.locator(".visibility-label").text_content().strip() == _visibility_words(not start)
         _close_result(page)
         posted = []
-        page.route(toggle, _lose_reply(posted))
+        lost = _lose_reply(posted)
+        page.route(toggle, lost)
         _open_more(card)
         label = "Make playlist public now" if start else "Make playlist private now"
         _open_review(page, button, label).click()
         _settled(page, 2)
+        assert alice.wait_operation(lost.location, lost.operation_id)["state"] == "succeeded"
         assert posted == [toggle] and fake.playlist(TARGET)["public"] is start
         assert (
             page.evaluate(
@@ -289,7 +289,8 @@ def test_lost_random_reply_keeps_attention_and_leaving_needs_an_explicit_decisio
     dialogs = []
     page.on("dialog", lambda dialog: (dialogs.append(dialog.type), dialog.dismiss()))
     posted = []
-    page.route(shuffle, _lose_reply(posted))
+    lost = _lose_reply(posted)
+    page.route(shuffle, lost)
     try:
         visit.log_in()
         card = _choose_shuffle(page, TARGET)
@@ -297,6 +298,7 @@ def test_lost_random_reply_keeps_attention_and_leaving_needs_an_explicit_decisio
             page, card.locator(".library-quick-shuffle"), "Shuffle now"
         ).click()
         _settled(page, 1)
+        assert alice.wait_operation(lost.location, lost.operation_id)["state"] == "succeeded"
         assert (
             page.evaluate("PlaylistOperations.getRecords()[0].aggregate") == "unknown"
         )

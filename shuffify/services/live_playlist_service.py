@@ -3,6 +3,7 @@
 import logging
 from collections import Counter
 from copy import deepcopy
+from dataclasses import asdict
 
 from shuffify.enums import ActivityType, SnapshotType
 from shuffify.models.playlist import Playlist
@@ -12,6 +13,7 @@ from shuffify.services.live_operation_service import (
     LiveOperation,
     book_not_required,
     direct_rejected_result,
+    direct_response_payload,
 )
 from shuffify.services.live_review_bindings import (
     require_bindings,
@@ -53,7 +55,7 @@ class LivePlaylistService:
     def __init__(self, api):
         self.api = api
 
-    def shuffle(self, playlist_id, user, session, *, algorithm, params, reviewed=None):
+    def shuffle(self, playlist_id, user, session, *, algorithm, params, reviewed=None, runtime=None):
         def select(before):
             # A reviewed run compares inside the lock, before any algorithm or write.
             if reviewed is not None:
@@ -66,19 +68,21 @@ class LivePlaylistService:
                 raise DirectFailure(502, "invalid_shuffle_result", "The shuffle could not be safely applied.")
             return desired, None
 
-        return self._execute("shuffle", playlist_id, user, session, select, algorithm=algorithm)
+        return self._execute("shuffle", playlist_id, user, session, select, algorithm=algorithm, runtime=runtime)
 
-    def undo(self, playlist_id, user, session, *, reviewed=None):
+    def undo(self, playlist_id, user, session, *, reviewed=None, runtime=None, selected=None):
         def select(before):
             selection = StateService.peek_undo(session, playlist_id)
             if reviewed is not None:
                 # The server still selects the order; these only prove it is the reviewed one.
                 require_bindings(reviewed, undo_bindings(playlist_id, selection, before.track_uris))
+            if selected is not None:
+                StateService.assert_undo_selection(session, playlist_id, selected)
             return list(selection.desired_uris), selection
 
-        return self._execute("undo", playlist_id, user, session, select)
+        return self._execute("undo", playlist_id, user, session, select, runtime=runtime)
 
-    def restore_snapshot(self, snapshot, user, session, *, reviewed=None):
+    def restore_snapshot(self, snapshot, user, session, *, reviewed=None, runtime=None):
         if snapshot.user_id != user.id:
             return direct_rejected_result(
                 "snapshot_restore", error_code="snapshot_not_found", http_status=404, message="Snapshot not found."
@@ -97,11 +101,13 @@ class LivePlaylistService:
                 require_bindings(reviewed, snapshot_bindings(playlist_id, snapshot_id, desired, before.track_uris))
             return desired, None
 
-        result = self._execute("snapshot_restore", playlist_id, user, session, select)
+        result = self._execute("snapshot_restore", playlist_id, user, session, select, runtime=runtime)
         result.update(playlist_id=playlist_id, snapshot=snapshot_data)
         return result
 
-    def _execute(self, kind, playlist_id, user, session, select, *, algorithm=None):
+    def _execute(self, kind, playlist_id, user, session, select, *, algorithm=None, runtime=None):
+        if runtime is not None:
+            return self._execute_durable(kind, playlist_id, user, session, select, algorithm, runtime)
         operation = LiveOperation(kind, self.api, user)
         metadata, result = None, {}
         lock_entered = False
@@ -165,8 +171,10 @@ class LivePlaylistService:
                         "operation": outcome,
                     }
                 except Exception as error:
+                    self._propagate_control(error)
                     return self._failure(operation, playlist_id, metadata, error)
-        except Exception:
+        except Exception as error:
+            self._propagate_control(error)
             if not lock_entered:
                 return direct_rejected_result(
                     kind,
@@ -188,6 +196,140 @@ class LivePlaylistService:
             }
 
     @staticmethod
+    def _propagate_control(error):
+        from shuffify.services.operations.control import propagate_control
+
+        propagate_control(error)
+
+    def _execute_durable(self, kind, playlist_id, user, session, select, algorithm, runtime):
+        """Freeze original observations once; replay only the journaled target effect."""
+        from shuffify.services.state_service import UndoSelection
+        from shuffify.services.workshop_commit_service import IncompletePlaylistRead, ObservedPlaylist
+
+        operation = LiveOperation(kind, self.api, user)
+        metadata = None
+        try:
+            def prepare():
+                before = operation.read(playlist_id)
+                fresh = PlaylistService(self.api).validate_user_can_edit(playlist_id, user.spotify_id, skip_cache=True)
+                if fresh.get("snapshot_id") != before.snapshot_id:
+                    raise IncompletePlaylistRead("Playlist changed during preparation")
+                desired, selection = select(before)
+                desired = list(desired)
+                self.validate_order(desired)
+                return {"before": asdict(before), "metadata": fresh, "desired": desired,
+                        "selection": selection.state_dict() if selection is not None else None,
+                        "changed": desired != list(before.track_uris)}
+
+            prepared = runtime.prepare("direct.action.v1", prepare)
+            metadata, desired = prepared["metadata"], prepared["desired"]
+            raw = prepared["before"]
+            before = ObservedPlaylist(raw["name"], tuple(raw["track_uris"]), tuple(raw["tracks"]),
+                                      raw["loaded_at"], raw["snapshot_id"])
+            chosen = prepared["selection"]
+            selection = (UndoSelection(tuple(tuple(uris) for uris in chosen["states"]), chosen["current_index"])
+                         if chosen else None)
+            operation.observed[playlist_id] = before
+            resource = operation.plan(playlist_id, desired, kind,
+                                      mutation_type=track_mutation_type(desired, before.track_uris))
+            changed = prepared["changed"]
+            if changed and kind != "undo":
+                def snapshot(db_session):
+                    from shuffify.services.operations.bookkeeping import OperationBookkeeping
+
+                    bookkeeping = OperationBookkeeping(db_session, user.id, runtime.operation.id)
+                    return bookkeeping.optional(lambda: bookkeeping.snapshot(
+                        playlist_id, before.name, list(before.track_uris),
+                        SnapshotType.AUTO_PRE_SHUFFLE if kind == "shuffle" else SnapshotType.AUTO_PRE_COMMIT,
+                        f"Before {algorithm or 'snapshot restore'}", auto=True,
+                    ))
+
+                runtime.local_step("direct.snapshot.v1", snapshot)
+            if changed:
+                resource.pop("current_track_uris", None)
+                resource.pop("loaded_at", None)
+                resource.update(dispatched=True, status="unknown", affected_count=None)
+
+            def apply():
+                if changed:
+                    expected = {"track_uris": list(before.track_uris), "snapshot_id": before.snapshot_id,
+                                "metadata": {key: metadata.get(key) for key in ("name", "public", "description")}}
+                    runtime.journal.ensure_replace(playlist_id, desired, expected_baseline=expected)
+                    self.api.update_playlist_tracks(playlist_id, desired)
+                after = operation.reader.read_complete(playlist_id, user.spotify_id)
+                if list(after.track_uris) != desired:
+                    from shuffify.services.executors.base_executor import PlaylistVerificationError
+
+                    raise PlaylistVerificationError(playlist_id, desired, list(after.track_uris), None, kind)
+                return asdict(after)
+
+            after_raw = runtime.step("direct.target.v1", apply)
+            after = ObservedPlaylist(after_raw["name"], tuple(after_raw["track_uris"]), tuple(after_raw["tracks"]),
+                                     after_raw["loaded_at"], after_raw["snapshot_id"])
+            operation.observed[playlist_id] = after
+            count = (sum(a != b for a, b in zip(before.track_uris, after.track_uris))
+                     + abs(len(before.track_uris) - len(after.track_uris))) if kind == "shuffle" else (
+                         sum((Counter(after.track_uris) - Counter(before.track_uris)).values())
+                         + sum((Counter(before.track_uris) - Counter(after.track_uris)).values()))
+            resource.update(status="complete" if changed else "not_required", affected_count=count,
+                            current_track_uris=list(after.track_uris), loaded_at=after.loaded_at,
+                            error_code=None, retryable=False)
+            result = {"playlist": self._playlist(playlist_id, metadata, after)}
+
+            def confirm():
+                self._confirm_history(operation, playlist_id, session, before, after, selection, changed, result,
+                                      runtime=runtime)
+                return {"playlist_state": result.get("playlist_state"), "bookkeeping": operation.bookkeeping,
+                        "error_code": operation.error_code}
+
+            history = runtime.step("direct.history.v1", confirm)
+            operation.bookkeeping, operation.error_code = history["bookkeeping"], history["error_code"]
+            if history["error_code"] is None:
+                result["playlist_state"] = history["playlist_state"]
+            else:
+                result.pop("playlist_state", None)
+            if history["playlist_state"] is not None and any(
+                    item["kind"] == "session_history" and item["status"] == "complete"
+                    for item in operation.bookkeeping):
+                histories = dict(session.get("playlist_states", {}))
+                histories[playlist_id] = deepcopy(history["playlist_state"])
+                session["playlist_states"], session.modified = histories, True
+            if changed and kind != "undo":
+                def activity(db_session):
+                    from shuffify.services.operations.bookkeeping import OperationBookkeeping
+
+                    bookkeeping = OperationBookkeeping(db_session, user.id, runtime.operation.id)
+                    return bookkeeping.optional(lambda: bookkeeping.activity(
+                        ActivityType.SHUFFLE if kind == "shuffle" else ActivityType.SNAPSHOT_RESTORE,
+                        f"{kind.replace('_', ' ').capitalize()} completed on '{after.name}'",
+                        playlist_id=playlist_id, playlist_name=after.name,
+                        metadata={"action": kind, "algorithm": algorithm, "track_count": len(after.track_uris)},
+                    ))
+
+                runtime.local_step("direct.activity.v1", activity)
+            outcome = operation.outcome()
+            complete = outcome["aggregate_status"] == "complete"
+            return {**result, "status": "success" if complete else "failed", "success": complete,
+                    "http_status": 200 if complete else 502,
+                    "message": self._success_message(kind, changed, selection) if complete else
+                    "Playlist contents are verified; saved history needs attention.",
+                    "category": "success" if changed else "info", "operation": outcome}
+        except Exception as error:
+            from shuffify.services.operations.journal import NeedsAttention
+
+            if isinstance(error, NeedsAttention) and operation.resources:
+                error.result = direct_response_payload(self._failure(operation, playlist_id, metadata, error), kind)[0]
+            self._propagate_control(error)
+            batches = [item for step in runtime.journal.doc["plans"] for item in step["batches"]]
+            if (self._write_rejection(error) is not None and batches
+                    and not any(item["state"] == "acknowledged" for item in batches)
+                    and any(item["state"] == "rejected" for item in batches)):
+                operation.error_code, operation.retryable = "write_rejected", True
+                for item in operation.resources:
+                    item.update(status="failed", affected_count=0, retryable=True, error_code="write_rejected")
+            return self._failure(operation, playlist_id, metadata, error)
+
+    @staticmethod
     def _success_message(kind, changed, selection):
         if kind == "shuffle":
             return "Playlist shuffled successfully." if changed else "Shuffle did not change the playlist order."
@@ -196,7 +338,7 @@ class LivePlaylistService:
         return "This order is already on Spotify."
 
     @staticmethod
-    def _confirm_history(operation, playlist_id, session, before, after, selection, changed, result):
+    def _confirm_history(operation, playlist_id, session, before, after, selection, changed, result, runtime=None):
         initial = deepcopy(session.get("playlist_states", {}).get(playlist_id))
         if not changed and selection is None:
             book_not_required("session_history", playlist_id, operation)
@@ -212,7 +354,10 @@ class LivePlaylistService:
             )
             result["playlist_state"] = deepcopy(state.to_dict())
             operation.book("session_history", "complete", resource=playlist_id, affected_count=1)
-        except Exception:
+        except Exception as error:
+            LivePlaylistService._propagate_control(error)
+            if runtime is not None:
+                runtime.mark_history_unconfirmed()
             logger.warning("Direct action history confirmation failed", exc_info=True)
             unchanged = session.get("playlist_states", {}).get(playlist_id) == initial
             operation.book(
