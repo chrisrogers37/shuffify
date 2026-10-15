@@ -406,6 +406,8 @@ export interface OperationRecovery {
   available: boolean;
   action: 'restore' | null;
   reason: string | null;
+  resolved_operation_id?: DatabaseId;
+  restoration_operation_id?: DatabaseId;
 }
 /** Private commands, credentials, baselines, and lease tokens never cross this boundary. */
 export interface Operation {
@@ -426,4 +428,54 @@ export interface OperationAccepted {
   message: string;
   operation_id: DatabaseId;
   operation: Operation;
+}
+
+/** @pattern ^[0-9a-f]{64}$ */
+export type RestoreDigest = string;
+/** @maxLength 1024 */
+export type RestoreMetadataText = string;
+export interface RestoreResourceDigest { playlist_id: string; digest: RestoreDigest }
+export interface OperationRestoreReview {
+  version: 1;
+  reviewed_scope: RestoreDigest;
+  /** @minItems 1 @maxItems 100 */
+  reviewed_resources: RestoreResourceDigest[];
+}
+export interface OperationRestoreRequest { reviewed: OperationRestoreReview }
+export interface RestoreCurrentMetadata {
+  name?: RestoreMetadataText | null;
+  description?: RestoreMetadataText | null;
+  public?: boolean | null;
+}
+export interface RestoreDesiredMetadata {
+  name?: RestoreMetadataText;
+  description?: RestoreMetadataText;
+  public?: boolean;
+}
+export interface OperationRestoreResource {
+  playlist_id: string;
+  name: string | null;
+  role: 'restore' | 'guard';
+  scope: 'tracks' | 'metadata';
+  /** @maxItems 4 */
+  write_fields: ('tracks' | 'name' | 'description' | 'public')[];
+  current_count: Count | null;
+  desired_count: Count | null;
+  /** @maxItems 20 */
+  current_preview: string[];
+  /** @maxItems 20 */
+  desired_preview: string[];
+  current_metadata: RestoreCurrentMetadata;
+  desired_metadata: RestoreDesiredMetadata;
+  metadata_truncated: boolean;
+}
+export interface OperationRestoreContext extends SuccessEnvelope {
+  context: {
+    kind: 'operation_restore';
+    operation_id: DatabaseId;
+    available: true;
+    reviewed: OperationRestoreReview;
+    /** @minItems 1 @maxItems 100 */
+    resources: OperationRestoreResource[];
+  };
 }

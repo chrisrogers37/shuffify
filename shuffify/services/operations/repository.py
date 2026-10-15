@@ -111,7 +111,7 @@ def _public_value(value):
     return deepcopy(value)
 
 
-def public_operation(row):
+def public_operation(row, *, restoration_attempt=None):
     """Expose result and bounded progress, never command payloads or private journals."""
     journal = row.journal if isinstance(row.journal, dict) else {}
     source_progress = journal.get("progress")
@@ -126,12 +126,23 @@ def public_operation(row):
     source_recovery = journal.get("recovery")
     recovery = {"available": False, "action": None, "reason": None}
     if isinstance(source_recovery, dict):
-        recovery["available"] = source_recovery.get("available") is True
-        if recovery["available"] and source_recovery.get("action") == "restore":
-            recovery["action"] = "restore"
         reason = source_recovery.get("reason")
         if isinstance(reason, str) and _CODE.fullmatch(reason):
             recovery["reason"] = reason
+    if row.state == "needs_attention":
+        from .restoration import RestoreUnavailable, capture_restore
+
+        try:
+            capture_restore(row, row.user_id)
+            if restoration_attempt is None:
+                recovery.update(available=True, action="restore")
+            else:
+                recovery.update(available=False, action=None, reason="restoration_attempt_unresolved",
+                                restoration_operation_id=restoration_attempt)
+        except RestoreUnavailable as error:
+            recovery.update(available=False, action=None, reason=error.code)
+            if error.operation_id is not None:
+                recovery["resolved_operation_id"] = error.operation_id
     return {
         "id": row.id, "kind": row.kind, "state": row.state, "targets": list(row.targets or []),
         "started_at": row.started_at.isoformat() if row.state != "queued" and row.started_at else None,
@@ -282,7 +293,14 @@ class OperationRepository:
                 JobExecution.id == operation_id, JobExecution.user_id == user_id, JobExecution.kind.is_not(None),
                 JobExecution.state.is_not(None),
             ))
-            return public_operation(row) if row is not None else None
+            if row is None:
+                return None
+            child = None
+            if row.state == "needs_attention":
+                from .restore_attempts import blocking_attempt
+
+                child = blocking_attempt(session, user_id, row.id)
+            return public_operation(row, restoration_attempt=child.id if child is not None else None)
 
     def next_ready_at(self):
         """Return the earliest known active deadline so an idle worker needs no database polling."""

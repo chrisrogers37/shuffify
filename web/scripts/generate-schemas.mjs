@@ -16,6 +16,8 @@ export const schemaTypes = Object.freeze({
   'return-target': 'ReturnTarget',
   'operation-context': 'OperationContext',
   'operation-accepted': 'OperationAccepted',
+  'operation-restore-context': 'OperationRestoreContext',
+  'operation-restore-request': 'OperationRestoreRequest',
 });
 
 const root = fileURLToPath(new URL('../', import.meta.url));

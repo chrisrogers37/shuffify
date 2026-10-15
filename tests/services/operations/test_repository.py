@@ -165,7 +165,7 @@ def test_public_lookup_never_exposes_private_journal_payload_or_claim(repository
                                                "baseline": ["private-order"]}})
     public = repository.get_owned(1, operation.id)
     assert public["progress"] == {"batches_done": 1, "total_batches": 2, "phase": "forward"}
-    assert public["recovery"] == {"available": True, "action": "restore", "reason": "external_edit"}
+    assert public["recovery"] == {"available": False, "action": None, "reason": "external_edit"}
     assert "private" not in json.dumps(public)
     repository.finish(lease, "failed", result={"message": "Example", "access_token": "private-token",
                                               "nested": {"lease_owner": "private-claim"}})

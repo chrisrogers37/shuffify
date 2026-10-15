@@ -200,6 +200,12 @@
             "string",
             "null"
           ]
+        },
+        "resolved_operation_id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "restoration_operation_id": {
+          "$ref": "#/definitions/DatabaseId"
         }
       },
       "required": [

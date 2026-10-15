@@ -162,7 +162,9 @@ def test_unwritten_external_conflict_retains_needs_attention(db_app, queue):
 
     assert worker(db_app, repository, {"example": execute}).run_once() is True
     assert repository.get(accepted.id).state == "needs_attention"
-    assert repository.get_owned(user_id, accepted.id)["recovery"]["available"] is True
+    recovery = repository.get_owned(user_id, accepted.id)["recovery"]
+    assert recovery["available"] is False
+    assert recovery["reason"] == "operation_not_restorable"
 
 
 def test_lease_loss_while_reporting_failure_never_completes_the_fenced_row(db_app, queue):

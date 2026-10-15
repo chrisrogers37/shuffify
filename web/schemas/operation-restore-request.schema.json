@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/OperationRestoreRequest",
+  "definitions": {
+    "OperationRestoreRequest": {
+      "type": "object",
+      "properties": {
+        "reviewed": {
+          "$ref": "#/definitions/OperationRestoreReview"
+        }
+      },
+      "required": [
+        "reviewed"
+      ],
+      "additionalProperties": false
+    },
+    "OperationRestoreReview": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "number",
+          "const": 1
+        },
+        "reviewed_scope": {
+          "$ref": "#/definitions/RestoreDigest"
+        },
+        "reviewed_resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RestoreResourceDigest"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "version",
+        "reviewed_scope",
+        "reviewed_resources"
+      ],
+      "additionalProperties": false
+    },
+    "RestoreDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "RestoreResourceDigest": {
+      "type": "object",
+      "properties": {
+        "playlist_id": {
+          "type": "string"
+        },
+        "digest": {
+          "$ref": "#/definitions/RestoreDigest"
+        }
+      },
+      "required": [
+        "playlist_id",
+        "digest"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

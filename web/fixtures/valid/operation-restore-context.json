@@ -1,0 +1,45 @@
+{
+  "success": true,
+  "category": "success",
+  "message": "Restoration review loaded.",
+  "context": {
+    "kind": "operation_restore",
+    "operation_id": 7,
+    "available": true,
+    "reviewed": {
+      "version": 1,
+      "reviewed_scope": "1a1a618556ed4dc8c8134813fb02f4eae75a6303721a2663370f2ca69883ccc6",
+      "reviewed_resources": [
+        {
+          "playlist_id": "target",
+          "digest": "e01278282ffaaa50475679eea0e84d69d4a9b5c0afecbf318b6f3f11bd60bca2"
+        }
+      ]
+    },
+    "resources": [
+      {
+        "playlist_id": "target",
+        "name": "Target",
+        "role": "restore",
+        "scope": "tracks",
+        "write_fields": [
+          "tracks"
+        ],
+        "current_count": 2,
+        "desired_count": 3,
+        "current_preview": [
+          "spotify:track:0000000000000000000003",
+          "spotify:track:0000000000000000000003"
+        ],
+        "desired_preview": [
+          "spotify:track:0000000000000000000001",
+          "spotify:track:0000000000000000000001",
+          "spotify:track:0000000000000000000002"
+        ],
+        "current_metadata": {},
+        "desired_metadata": {},
+        "metadata_truncated": false
+      }
+    ]
+  }
+}

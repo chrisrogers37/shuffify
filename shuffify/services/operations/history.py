@@ -316,4 +316,25 @@ class HistoryStore:
                     protected.update(change["parent_revision"] for change in changes.values()
                                      if isinstance(change, dict) and type(change.get("parent_revision")) is int
                                      and change["parent_revision"] > 0)
+            # An unresolved child must keep both its original authority and its
+            # own intent receipt; otherwise cleanup could permit a racing child.
+            from shuffify.services.operations.restore_attempts import conclusively_no_dispatch
+
+            children = session.scalars(select(JobExecution).where(JobExecution.kind == "operation_restore"))
+            for child in children:
+                try:
+                    parent_id = child.payload["command"]["capture"]["operation_id"]
+                except (KeyError, TypeError):
+                    continue
+                if type(parent_id) is not int or parent_id <= 0 or conclusively_no_dispatch(child):
+                    continue
+                parent = session.get(JobExecution, parent_id)
+                if parent is None or parent.user_id != child.user_id:
+                    continue
+                document = parent.journal if isinstance(parent.journal, dict) else {}
+                runtime = document.get("runtime", {})
+                marker = runtime.get("restoration", {}) if isinstance(runtime, dict) else {}
+                if child.state == "succeeded" and isinstance(marker, dict) and marker.get("operation_id") == child.id:
+                    continue
+                protected.update((parent.id, child.id))
         return protected

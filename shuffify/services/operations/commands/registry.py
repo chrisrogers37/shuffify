@@ -8,6 +8,7 @@ from .dismiss_schemas import PendingDismissCommand
 from .dismissal import pending_dismiss
 from .finalizer_schemas import ArchiveAppendCommand, FinalizeRaidsCommand, FinalizeRestoreCommand
 from .finalizers import archive_append, finalize_raids, finalize_restore
+from .restore import OperationRestoreCommand, operation_restore
 from .routine_schemas import DripNowCommand, RaidAndDripCommand, RaidNowCommand, ScheduleRunCommand
 from .routines import drip_now, raid_and_drip, raid_now, schedule_run
 from .schemas import (
@@ -20,6 +21,7 @@ from .schemas import (
 from .workshop import workshop_commit
 
 COMMAND_SCHEMAS = {
+    "operation_restore": OperationRestoreCommand,
     "pending_dismiss": PendingDismissCommand,
     **{kind: AssetCommand for kind in ASSET_HANDLERS},
     'unarchive': UnarchiveCommand,
@@ -37,6 +39,7 @@ COMMAND_SCHEMAS = {
     'workshop_finalize_restore': FinalizeRestoreCommand,
 }
 COMMAND_HANDLERS = {
+    "operation_restore": operation_restore,
     "pending_dismiss": pending_dismiss,
     **ASSET_HANDLERS,
     'unarchive': unarchive,
