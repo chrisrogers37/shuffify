@@ -1,3 +1,8 @@
+import { validateSourceReview, continuationRequests } from "./source-review.ts";
+import type {
+  ManualDraftMutation,
+  SourceTargetConfirmation,
+} from "./source-types.ts";
 import {
   getAdmissionRegistry,
   spotifyResources,
@@ -77,6 +82,9 @@ export function createWorkshopController(
     locks: {},
     staging: [],
     claims: [],
+    retainedSourceWork: [],
+    sourceHandoff: null,
+    sourceError: "",
     reviewing: false,
     review: null,
     receipt: null,
@@ -101,17 +109,46 @@ export function createWorkshopController(
     uris: string[];
     beforeIds: number[];
   } | null = null;
+  let atomicDepth = 0,
+    notificationPending = false;
   const update = (patch: Partial<WorkshopState>) => {
     state = freeze({ ...state, ...patch }) as WorkshopState;
-    listeners.forEach((fn) => fn());
+    if (atomicDepth) notificationPending = true;
+    else listeners.forEach((fn) => fn());
   };
+  function atomic<T>(run: () => T): T {
+    atomicDepth++;
+    try {
+      return run();
+    } finally {
+      atomicDepth--;
+      if (!atomicDepth && notificationPending) {
+        notificationPending = false;
+        listeners.forEach((fn) => fn());
+      }
+    }
+  }
   const authenticated = () => {
     const s = session.getSnapshot();
     return (
       s.status === "ready" && s.session.signed_in && s.session.user.id === actor
     );
   };
+  const hasRetainedSourceWork = () =>
+    !!state.sourceHandoff ||
+    !!state.sourceError ||
+    state.retainedSourceWork.some((x) => x.status !== "complete");
   const permission = (group: PermissionGroup, subject?: string) => {
+    if (
+      ["save", "review", "snapshot", "metadata"].includes(group) &&
+      hasRetainedSourceWork()
+    )
+      return {
+        allowed: false,
+        reason:
+          state.sourceError ||
+          "Finish or reconcile the retained source work before another Spotify change.",
+      };
     const p = workshopPermission(
       state,
       group,
@@ -129,7 +166,27 @@ export function createWorkshopController(
           reason: `${held.request.label} is not reconciled. Open its original review before another Spotify change.`,
         };
   };
-  admissions.subscribe(() => update({}));
+  admissions.subscribe(() => {
+    const receipt = state.receipt;
+    const claim = receipt
+      ? admissions.getSnapshot().get(receipt.review.key)
+      : null;
+    const resolution = claim?.resolution;
+    if (
+      receipt &&
+      resolution?.kind === "restored" &&
+      receipt.restoredBy !== resolution.operationId
+    )
+      update({
+        receipt: {
+          ...receipt,
+          restoredBy: resolution.operationId,
+          status: claim?.relation === "blocking" ? "refused" : "settled",
+          message: `Operation ${receipt.operationId} was restored by operation ${resolution.operationId}. Original result facts are retained; review the current draft before another change.`,
+        },
+      });
+    else update({});
+  });
   const refuse = (group: PermissionGroup) => {
     const p = permission(group);
     if (!p.allowed) update({ notice: p.reason });
@@ -154,9 +211,32 @@ export function createWorkshopController(
       notice: "Draft changes are local until you review and save.",
     });
   function refreshStaging() {
+    const staging = source
+      ? structuredClone(source.snapshot())
+      : [...state.staging];
     update({
-      staging: source ? structuredClone(source.snapshot()) : [],
-      sourceRevision: state.sourceRevision + 1,
+      staging,
+      sourceRevision:
+        state.sourceRevision +
+        +(JSON.stringify(staging) !== JSON.stringify(state.staging)),
+      retainedSourceWork: source?.retainedWork
+        ? structuredClone(source.retainedWork())
+        : [...state.retainedSourceWork],
+    });
+  }
+  function manualChange(
+    rows: readonly Occurrence[],
+    event: ManualDraftMutation,
+  ) {
+    atomic(() => {
+      changed(rows);
+      try {
+        source?.manualDraftMutation?.(freeze(event));
+      } catch (error) {
+        update({
+          sourceError: `The draft changed but its source staging needs review: ${asError(error).message}`,
+        });
+      }
     });
   }
   function discardStaging() {
@@ -209,7 +289,19 @@ export function createWorkshopController(
   function remove(key: string) {
     if (refuse("draft") || !state.working.some((r) => r.key === key))
       return false;
-    changed(removeOccurrence(state.working, key));
+    const removed = state.working.find((r) => r.key === key)!;
+    const beforeCount = state.working.filter(
+      (r) => r.uri === removed.uri,
+    ).length;
+    manualChange(removeOccurrence(state.working, key), {
+      kind: "remove",
+      occurrence: removed,
+      beforeCount,
+      afterCount: beforeCount - 1,
+      baselineCount: state.baseline.filter((r) => r.uri === removed.uri).length,
+      beforeRevision: state.revision,
+      afterRevision: state.revision + 1,
+    });
     return true;
   }
   function replace(
@@ -256,7 +348,24 @@ export function createWorkshopController(
       next.push(...occurrences([track]));
       seen.add(track.uri);
     }
-    changed(next);
+    const added = next.slice(state.working.length);
+    if (!added.length) return true;
+    const counts = (rows: readonly Occurrence[]) =>
+      Object.fromEntries(
+        [...new Set(added.map((r) => r.uri))].map((uri) => [
+          uri,
+          rows.filter((r) => r.uri === uri).length,
+        ]),
+      );
+    manualChange(next, {
+      kind: "append",
+      occurrences: added,
+      origin: args.origin,
+      afterCounts: counts(next),
+      baselineCounts: counts(state.baseline),
+      beforeRevision: state.revision,
+      afterRevision: state.revision + 1,
+    });
     return true;
   }
   function getPreviewInput(): PreviewInput {
@@ -330,15 +439,18 @@ export function createWorkshopController(
       summary: summarize(uris(state.baseline), uris(state.working)),
     };
   }
+  const reviewCoordinators = new Map<number, SourceCoordinator>();
+  const handedOff = new Set<number>();
   async function prepareReview() {
     if (refuse("review")) throw Error(state.notice);
     if (state.reviewing) throw Error("A review is already being prepared.");
+    const coordinator = source;
+    const staged = state.staging.some((s) =>
+      s.kind === "raid_promotion" ? s.pending_rows.length : s.track_uris.length,
+    );
     if (
-      state.staging.some((s) =>
-        s.kind === "raid_promotion"
-          ? s.pending_rows.length > 0
-          : s.track_uris.length > 0,
-      )
+      staged &&
+      (!coordinator?.prepareReview || !coordinator.targetConfirmed)
     ) {
       const message =
         "Source staging needs its source coordinator review before it can be saved.";
@@ -348,6 +460,7 @@ export function createWorkshopController(
     const captured = freeze({
       ...snapshotReviewBase(),
       kind: "commit" as const,
+      sourceReview: { tasks: [] },
       body: {
         baseline_track_uris: uris(state.baseline),
         track_uris: uris(state.working),
@@ -355,10 +468,52 @@ export function createWorkshopController(
     });
     update({ reviewing: true, notice: "" });
     try {
-      const scope = await client.sourceContext(false, false);
-      if (!authenticated() || !validateReview(captured))
+      const scope = await client.sourceContext(
+        captured.staging.some(
+          (s) => s.kind === "raid_promotion" && s.pending_rows.length > 0,
+        ),
+        captured.staging.some(
+          (s) => s.kind !== "raid_promotion" && s.track_uris.length > 0,
+        ),
+      );
+      if (
+        !authenticated() ||
+        !validateReview(captured) ||
+        coordinator !== source
+      )
         throw Error("The draft or configuration changed. Review it again.");
-      const reviewed = freeze({ ...captured, target: scope.target });
+      const input = freeze({
+        actor,
+        target: scope.target,
+        reviewId: captured.id,
+        draftRevision: captured.revision,
+        configRevision: captured.configRevision,
+        lockRevision: captured.lockRevision,
+        sourceRevision: captured.sourceRevision,
+        baseline: captured.body.baseline_track_uris,
+        desired: captured.body.track_uris,
+        staging: captured.staging,
+        sourceContext: scope,
+      });
+      const sourceReview = coordinator?.prepareReview
+        ? validateSourceReview(input, await coordinator.prepareReview(input))
+        : { tasks: [] };
+      if (
+        !authenticated() ||
+        !validateReview(captured) ||
+        coordinator !== source
+      )
+        throw Error("The draft or configuration changed. Review it again.");
+      if (sourceReview.tasks.some((task) => task.key === captured.key))
+        throw new ProtocolError(
+          "The target and source tasks need distinct reviewed request identities.",
+        );
+      const reviewed = freeze({
+        ...captured,
+        target: scope.target,
+        sourceReview,
+      });
+      if (coordinator) reviewCoordinators.set(reviewed.id, coordinator);
       update({ review: reviewed });
       return reviewed;
     } catch (error) {
@@ -478,7 +633,15 @@ export function createWorkshopController(
       };
       const accepted = exactRetry
         ? await admissions.retry(review.key, authenticated() ? actor : null)
-        : await admissions.submit(request, authenticated() ? actor : null);
+        : review.kind === "commit" && review.sourceReview.tasks.length
+          ? await admissions
+              .reserveReviewedContinuations(
+                request,
+                continuationRequests(playlistId, review.sourceReview),
+                authenticated() ? actor : null,
+              )
+              .submitTarget(authenticated() ? actor : null)
+          : await admissions.submit(request, authenticated() ? actor : null);
       if (accepted.status !== "accepted")
         throw new ProtocolError("This write requires an accepted operation.");
       const op = accepted.operation;
@@ -506,7 +669,9 @@ export function createWorkshopController(
       operations.accept(op);
     } catch (e) {
       const error = asError(e),
-        unknown = admissionUnknown(admissions, review.key, e),
+        unknown =
+          admissions.getSnapshot().has(review.key) &&
+          admissionUnknown(admissions, review.key, e),
         until =
           e instanceof RateLimitError
             ? Date.now() + (e.retryAfterMs ?? 1000)
@@ -566,6 +731,43 @@ export function createWorkshopController(
     const id = state.receipt?.operationId;
     if (id) operations.observe(id);
   };
+  function deliverSourceHandoff(proof: SourceTargetConfirmation) {
+    const coordinator = reviewCoordinators.get(proof.reviewId);
+    if (!coordinator?.targetConfirmed) {
+      update({
+        sourceHandoff: proof,
+        sourceError:
+          "The target was saved. Reopen its original source tools to finish the retained source work.",
+      });
+      return false;
+    }
+    try {
+      coordinator.targetConfirmed(proof);
+      handedOff.add(proof.operationId);
+      refreshStaging();
+      update({ sourceHandoff: null, sourceError: "" });
+      return true;
+    } catch (error) {
+      update({
+        sourceHandoff: proof,
+        sourceError: `The target was saved; source work is retained: ${asError(error).message}`,
+      });
+      return false;
+    }
+  }
+  function retrySourceHandoff() {
+    if (!authenticated() || !state.sourceHandoff) return false;
+    const proof = state.sourceHandoff;
+    const operation = operations
+      .getSnapshot()
+      .get(proof.operationId)?.operation;
+    if (
+      !operation ||
+      !admissions.activateReviewedContinuations(proof.key, operation, actor)
+    )
+      return false;
+    return atomic(() => deliverSourceHandoff(proof));
+  }
   operations.subscribe(() => {
     const receipt = state.receipt;
     if (!receipt?.operationId) return;
@@ -662,7 +864,49 @@ export function createWorkshopController(
         };
       }
     }
-    update(patch);
+    atomic(() => {
+      update(patch);
+      if (
+        receipt.review.kind === "commit" &&
+        receipt.review.sourceReview.tasks.length &&
+        !handedOff.has(op.id) &&
+        !state.sourceHandoff &&
+        op.state === "succeeded" &&
+        op.result?.success === true &&
+        result &&
+        ["saved", "already_applied"].includes(result.target_status) &&
+        result.saved_track_uris &&
+        sameOrder(result.saved_track_uris, uris(receipt.review.desired)) &&
+        admissions.getSnapshot().get(receipt.review.key)?.relation ===
+          "original"
+      ) {
+        const proof = freeze({
+          actor,
+          target: receipt.review.target,
+          reviewId: receipt.review.id,
+          operationId: op.id,
+          key: receipt.review.key,
+          savedTrackUris: [...result.saved_track_uris],
+          sourceReview: structuredClone(receipt.review.sourceReview),
+          staging: structuredClone(receipt.review.staging),
+          sourceRevision: receipt.review.sourceRevision,
+        });
+        if (
+          admissions.activateReviewedContinuations(
+            receipt.review.key,
+            op,
+            authenticated() ? actor : null,
+          )
+        )
+          deliverSourceHandoff(proof);
+        else
+          update({
+            sourceHandoff: proof,
+            sourceError:
+              "The target was saved. Confirm the original account and finish its reviewed source changes.",
+          });
+      }
+    });
   });
   async function checkCurrent() {
     if (state.checking || !authenticated() || cooling()) return false;
@@ -721,6 +965,7 @@ export function createWorkshopController(
       revision: state.revision + 1,
       review: null,
       notice: "Local draft changes discarded.",
+      sourceError: state.sourceHandoff ? state.sourceError : "",
     });
     return true;
   }
@@ -922,6 +1167,8 @@ export function createWorkshopController(
     load,
     permission,
     hasDraft,
+    hasRetainedSourceWork,
+    retrySourceHandoff,
     moveOccurrence: move,
     removeOccurrence: remove,
     appendTracks: append,

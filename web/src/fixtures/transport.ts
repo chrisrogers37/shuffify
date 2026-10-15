@@ -18,6 +18,7 @@ const scenarios = [
   ...routinesScenarios,
   ...settingsScenarios,
   ...activityScenarios,
+  "workshop-source-http",
   "happy",
   "signed-out",
   "signed-out-notice",
@@ -50,6 +51,7 @@ const failure = (message: string, code = "fixture_error") => ({
   retryable: true,
 });
 export function createFixtureTransport(scenario: Scenario): Transport {
+  if (scenario === "workshop-source-http") return (input, init) => fetch(input, init);
   const workshop = createWorkshopFixtures(scenario);
   const workshopTools = createWorkshopToolsFixtures(scenario, workshop);
   const settings = createSettingsFixtures(scenario);

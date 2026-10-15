@@ -1,4 +1,11 @@
 import type {
+  SourcePrepareInput,
+  SourceReviewedWork,
+  SourceTargetConfirmation,
+  SourceRetainedWork,
+  ManualDraftMutation,
+} from "./source-types.ts";
+import type {
   JsonRecord,
   Operation,
   PlaylistRef,
@@ -41,6 +48,12 @@ export interface SourceCoordinator {
   /** Return uncommitted staging; this must never discard saved/uncertain effects. */
   discard(): void;
   subscribe(invalidate: () => void): () => void;
+  prepareReview?(
+    input: SourcePrepareInput,
+  ): SourceReviewedWork | Promise<SourceReviewedWork>;
+  targetConfirmed?(proof: SourceTargetConfirmation): void;
+  retainedWork?(): readonly SourceRetainedWork[];
+  manualDraftMutation?(event: ManualDraftMutation): void;
 }
 export type PermissionGroup =
   | "draft"
@@ -146,7 +159,7 @@ export type ReviewedAction = DeepReadonly<
     staging: SourceStagingSnapshot[];
     summary: OrderSummary;
   } & (
-    | { kind: "commit"; body: CommitBody }
+    | { kind: "commit"; body: CommitBody; sourceReview: SourceReviewedWork }
     | {
         kind: "snapshot_restore";
         snapshotId: number;
@@ -164,7 +177,11 @@ export interface CurrentObservation {
 }
 export interface TargetResult {
   target_status:
-    "saved" | "already_applied" | "not_written" | "partial" | "unknown";
+    | "saved"
+    | "already_applied"
+    | "not_written"
+    | "partial"
+    | "unknown";
   message: string;
   error_code: string | null;
   requires_refresh: boolean;
@@ -177,9 +194,15 @@ export interface TargetResult {
   facts: JsonRecord;
 }
 export interface Receipt {
+  /** Proved child plus fresh parent resolution; original result facts stay intact. */
+  readonly restoredBy?: number;
   readonly review: ReviewedAction;
   readonly status:
-    "submitting" | "unknown" | "accepted" | "settled" | "refused";
+    | "submitting"
+    | "unknown"
+    | "accepted"
+    | "settled"
+    | "refused";
   readonly operationId: number | null;
   readonly operation: Operation | null;
   readonly result: TargetResult | null;
@@ -219,6 +242,9 @@ export interface WorkshopState {
   readonly locks: Readonly<Record<string, boolean>>;
   readonly staging: readonly SourceStagingSnapshot[];
   readonly claims: readonly ResourceClaim[];
+  readonly retainedSourceWork: readonly SourceRetainedWork[];
+  readonly sourceHandoff: SourceTargetConfirmation | null;
+  readonly sourceError: string;
   readonly reviewing: boolean;
   readonly review: ReviewedAction | null;
   readonly receipt: Receipt | null;

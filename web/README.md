@@ -82,3 +82,5 @@ The Workshop hub and playlist workspace share one occurrence draft, reviewed sav
 Workshop tools include algorithm previews, URI locks, catalog and external additions, snapshot history and playlist details. All draft changes return through the shared reviewed save pipeline.
 
 Spotify requests reserve shared actor and playlist claims before admission. Uncertain replies retain their exact request body and key across page navigation; only an explicit retry resends that request.
+
+Workshop Save freezes its target order and source continuations in one review. Verified target completion permits that initial continuation chain; uncertainty retains its original identities and requires an explicit follow-up review.

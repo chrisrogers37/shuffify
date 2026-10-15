@@ -1,3 +1,4 @@
+import { WorkshopSourceHarness } from "../fixtures/WorkshopSourceHarness";
 import { useEffect, useRef, useState } from "react";
 import { createBrowserRouter, Link, Outlet, useParams } from "react-router";
 import type { Services } from "../auth/SessionProvider";
@@ -519,6 +520,10 @@ export function createFixtureRouter(services: Services) {
         ...libraryRoutes(),
         ...routinesRoutes(),
         ...workshopToolsRoutes(),
+        {
+          path: "/__foundation/workshop-sources/:playlistId",
+          element: <AppShell><AuthGuard><WorkshopSourceHarness /></AuthGuard></AppShell>,
+        },
         {
           path: "/__foundation/workshop-tools/:playlistId",
           element: (

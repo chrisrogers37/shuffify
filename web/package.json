@@ -33,7 +33,8 @@
     "test:routines-fixtures": "ROUTINES_FIXTURE_BUILD=1 playwright test --config playwright.routines.config.ts",
     "test:workshop-browser": "playwright test --config playwright.workshop.config.ts",
     "test:workshop-fixtures": "WORKSHOP_FIXTURE_BUILD=1 playwright test --config playwright.workshop.config.ts",
-    "test:admissions-browser": "playwright test --config playwright.admissions.config.ts"
+    "test:admissions-browser": "playwright test --config playwright.admissions.config.ts",
+    "test:source-lifecycle-browser": "playwright test --config playwright.source-lifecycle.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",

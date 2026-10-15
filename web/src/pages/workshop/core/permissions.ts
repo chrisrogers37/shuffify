@@ -6,7 +6,7 @@ import type {
   Receipt,
 } from "./types.ts";
 export function receiptNeedsAttention(receipt: Receipt | null): boolean {
-  if (!receipt) return false;
+  if (!receipt || receipt.restoredBy) return false;
   if (
     receipt.status === "unknown" ||
     receipt.operation?.state === "needs_attention" ||

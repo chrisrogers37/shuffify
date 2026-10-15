@@ -178,6 +178,46 @@ export function ReviewPanel({
                 <OrderView title="Reviewed desired order" rows={r.desired} />
               </div>
             )}
+            {r.kind === "commit" && r.sourceReview.tasks.length > 0 && (
+              <section aria-labelledby="workshop-source-review-heading">
+                <h3 id="workshop-source-review-heading">
+                  Source changes after target save
+                </h3>
+                <p>
+                  Saving authorizes these exact source changes after this target
+                  order is verified. A failed or uncertain step remains
+                  available for review.
+                </p>
+                <ol>
+                  {r.sourceReview.tasks.map((task) => (
+                    <li key={task.id}>
+                      <strong>{task.label}</strong>
+                      <p>
+                        {task.selectedCount} selected{" "}
+                        {task.selectedCount === 1 ? "track" : "tracks"} ·{" "}
+                        {task.source?.name ?? "Pending inbox only"}
+                      </p>
+                      {task.dependsOn.length > 0 && (
+                        <p>
+                          After:{" "}
+                          {task.dependsOn
+                            .map(
+                              (id) =>
+                                r.sourceReview.tasks.find((t) => t.id === id)!
+                                  .label,
+                            )
+                            .join(", ")}
+                        </p>
+                      )}
+                      <details className="sh-workshop-details">
+                        <summary>Reviewed source request details</summary>
+                        <pre>{JSON.stringify(task.body, null, 2)}</pre>
+                      </details>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            )}
             {!c.reviewIsCurrent() && (
               <p role="status">
                 The draft or configuration changed. This review cannot be sent.
@@ -305,6 +345,38 @@ export function ReviewPanel({
                   </p>
                 )}
               </>
+            )}
+          </section>
+        )}
+        {(s.sourceError ||
+          s.retainedSourceWork.some((x) => x.status !== "complete")) && (
+          <section aria-labelledby="workshop-retained-sources-heading">
+            <h3 id="workshop-retained-sources-heading">Retained source work</h3>
+            {s.sourceError && <p role="status">{s.sourceError}</p>}
+            <ul aria-live="polite" aria-atomic="true">
+              {s.retainedSourceWork
+                .filter((x) => x.status !== "complete")
+                .map((x) => (
+                  <li key={x.id}>
+                    {x.label} · {x.source?.name ?? "This playlist"} ·{" "}
+                    {x.status.replaceAll("_", " ")}
+                    {x.operationId ? ` · Operation ${x.operationId}` : ""}
+                  </li>
+                ))}
+            </ul>
+            <p>
+              Open the original source tools to inspect or finish this work.
+              Discarding a local draft does not cancel saved or uncertain
+              changes.
+            </p>
+            {s.sourceHandoff && (
+              <Button
+                variant="secondary"
+                disabled={!c.permission("pause").allowed}
+                onClick={() => c.retrySourceHandoff()}
+              >
+                Finish reviewed source changes
+              </Button>
             )}
           </section>
         )}

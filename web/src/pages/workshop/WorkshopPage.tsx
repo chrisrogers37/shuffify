@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef } from "react";
 import { Link, useParams } from "react-router";
 import { ApiRequestError } from "../../api/errors";
@@ -59,9 +60,11 @@ export function WorkshopHub() {
 export function WorkshopPage({
   controller: c,
   tools = noTools,
+  children,
 }: {
   controller: WorkshopController;
   tools?: readonly WorkshopTool[];
+  children?: ReactNode;
 }) {
   const s = useWorkshop(c),
     now = useClock(s.retryUntil),
@@ -130,7 +133,7 @@ export function WorkshopPage({
       receipt &&
       (["submitting", "accepted"].includes(receipt.status) ||
         receiptNeedsAttention(receipt));
-    if (attention) {
+    if (attention || c.hasRetainedSourceWork()) {
       const choice = await handlers.current.ask("leave this playlist", true);
       if (choice === "review") handlers.current.openReview();
       return choice === "discard";
@@ -139,6 +142,7 @@ export function WorkshopPage({
   }, [c, resolveDraft]);
   const retained =
     c.hasDraft() ||
+    c.hasRetainedSourceWork() ||
     (!!s.receipt &&
       (["submitting", "accepted"].includes(s.receipt.status) ||
         receiptNeedsAttention(s.receipt)));
@@ -439,6 +443,7 @@ export function WorkshopPage({
           </div>
         </Workspace>
         {decision.element}
+        {children}
       </div>
     </WorkshopWorkspaceContext>
   );
