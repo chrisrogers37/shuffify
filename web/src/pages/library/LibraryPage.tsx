@@ -13,6 +13,7 @@ import { findRow, greeting, rowSection, sectionNames } from "./model";
 import { useLibrary, useClock } from "./hooks";
 import { ReviewPanel } from "./ReviewPanel";
 import { PlaylistRow, OrderList } from "./PlaylistRow";
+import { RetainedRestorationTasks } from "../../components/results/OperationRestoration";
 import "./library.css";
 export function LibraryEntry() {
   const session = useSession(),
@@ -175,6 +176,7 @@ export function LibraryPage({
     <div className="sh-library-page">
       <Workspace>
         <div className="sh-container">
+          <RetainedRestorationTasks />
           <header className="sh-library-header">
             <div className="sh-library-title-row">
               <h1 className="sh-heading" tabIndex={-1} ref={heading}>

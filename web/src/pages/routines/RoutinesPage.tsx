@@ -36,6 +36,11 @@ import {
 } from "./model";
 import type { RunReview } from "./model";
 import { OperationView } from "./OperationView";
+import {
+  HistoricalOperationRestoration,
+  OperationRestoration,
+  RetainedRestorationTasks,
+} from "../../components/results/OperationRestoration";
 import "./routines.css";
 const intents = new WeakMap<
   object,
@@ -232,7 +237,14 @@ function RunTask({
           key; do not start another run.
         </p>
       )}
-      {entry?.operation && <OperationView operation={entry.operation} />}{" "}
+      {entry?.operation && <OperationView operation={entry.operation} />}
+      {entry?.operation && recordRef.current?.key && (
+        <OperationRestoration
+          operation={entry.operation}
+          requestKey={recordRef.current.key}
+          actor={actor}
+        />
+      )}{" "}
       {entry?.observation === "unavailable" && (
         <>
           <p>
@@ -484,6 +496,7 @@ export function RoutinesPage() {
         </Button>
       </header>
       <Workspace>
+        <RetainedRestorationTasks />
         {error && (
           <State kind="error" title="Routines need attention">
             {error}
@@ -596,8 +609,18 @@ export function RoutinesPage() {
                         ),
                       )
                       .sort((a, b) => b.id - a.id)[0],
+                    restoredCurrent =
+                      current &&
+                      [...admissions.getSnapshot().values()].some(
+                        (entry) =>
+                          entry.operationId === current.id &&
+                          entry.resolution?.kind === "restored" &&
+                          Number.isSafeInteger(entry.resolution.operationId) &&
+                          entry.resolution.operationId > 0,
+                      ),
                     blocked =
                       current?.operation &&
+                      !restoredCurrent &&
                       [
                         "queued",
                         "running",
@@ -784,7 +807,28 @@ export function RoutinesPage() {
                         </Button>
                       </div>
                       {current?.operation && (
-                        <OperationView operation={current.operation} />
+                        <>
+                          <OperationView operation={current.operation} />
+                          {[
+                            ...getAdmissionRegistry(api, actor, store)
+                              .getSnapshot()
+                              .values(),
+                          ]
+                            .filter(
+                              (a) =>
+                                a.relation === "original" &&
+                                a.operationId === current.id,
+                            )
+                            .slice(0, 1)
+                            .map((a) => (
+                              <OperationRestoration
+                                key={a.request.key}
+                                operation={current.operation!}
+                                requestKey={a.request.key}
+                                actor={actor}
+                              />
+                            ))}
+                        </>
                       )}
                       <div
                         id={`routine-${row.schedule_id}-history`}
@@ -831,6 +875,10 @@ export function RoutinesPage() {
                                     is inferred.
                                   </p>
                                 )}
+                                <HistoricalOperationRestoration
+                                  operationId={run.id}
+                                  actor={actor}
+                                />
                               </section>
                             );
                           })

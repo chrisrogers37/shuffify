@@ -8,6 +8,7 @@ import { useWorkshop } from "./workspace";
 import type { WorkshopController } from "./core/controller";
 import type { Occurrence } from "./core/types";
 import { sameOrder, uris } from "./core/occurrences";
+import { OperationRestoration } from "../../components/results/OperationRestoration";
 import { useClock } from "../library/hooks";
 export function ActorTask({
   actor,
@@ -338,12 +339,11 @@ export function ReviewPanel({
                     {JSON.stringify(relevant.operation.result, null, 2)}
                   </pre>
                 </details>
-                {relevant.operation.recovery.available && (
-                  <p>
-                    Recovery is available. Keep this operation ID and its
-                    resource details for the recovery workflow.
-                  </p>
-                )}
+                <OperationRestoration
+                  operation={relevant.operation}
+                  requestKey={relevant.review.key}
+                  actor={c.actor}
+                />
               </>
             )}
           </section>

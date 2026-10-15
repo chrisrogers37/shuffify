@@ -84,3 +84,5 @@ Workshop tools include algorithm previews, URI locks, catalog and external addit
 Spotify requests reserve shared actor and playlist claims before admission. Uncertain replies retain their exact request body and key across page navigation; only an explicit retry resends that request.
 
 Workshop Save freezes its target order and source continuations in one review. Verified target completion permits that initial continuation chain; uncertainty retains its original identities and requires an explicit follow-up review.
+
+Owned operations with known unresolved effects can open a fresh restoration comparison. Confirmation queues the exact server-issued review and retains the same request key until admission is known; original receipts and drafts remain available throughout.

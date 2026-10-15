@@ -7,6 +7,7 @@ import { State } from "../../components/ui/States";
 import { useTasks } from "../../components/tasks/TaskPanel";
 import type { LibraryController } from "./controller";
 import { resultFacts, record } from "./api";
+import { OperationRestoration } from "../../components/results/OperationRestoration";
 import { useLibrary, useClock } from "./hooks";
 function Facts({ operation }: { operation: Operation }) {
   const facts = resultFacts(operation.result);
@@ -46,12 +47,6 @@ function Facts({ operation }: { operation: Operation }) {
         </>
       )}
       {operation.recovery.reason && <p>{operation.recovery.reason}</p>}
-      {operation.recovery.available && (
-        <p>
-          A restore is available for review. Open Workshop to inspect the
-          playlist before taking further action.
-        </p>
-      )}
       <details>
         <summary>Exact retained operation details</summary>
         <pre>{JSON.stringify(operation, null, 2)}</pre>
@@ -407,6 +402,13 @@ export function ReviewPanel({
                 </Button>
               )}
               {op?.result && <Facts operation={op} />}
+              {op && r.operationId === op.id && (
+                <OperationRestoration
+                  operation={op}
+                  requestKey={r.key}
+                  actor={c.actor}
+                />
+              )}
               <Link
                 className="sh-library-link"
                 to={`/workshop/${encodeURIComponent(r.playlistId)}`}

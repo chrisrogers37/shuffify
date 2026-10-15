@@ -210,6 +210,13 @@ export function createLibraryController(
   function blocked(target?: string): boolean {
     if (target && admissions.conflict(spotifyResources(target))) return true;
     return [...state.receipts.values()].some((r) => {
+      const resolution = admissions.getSnapshot().get(r.key)?.resolution;
+      if (
+        resolution?.kind === "restored" &&
+        Number.isSafeInteger(resolution.operationId) &&
+        resolution.operationId > 0
+      )
+        return false;
       if (r.status === "sending" || r.status === "unknown") return true;
       const id = r.operationId ?? r.busyId;
       if (id === null) return false;

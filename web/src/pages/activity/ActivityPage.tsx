@@ -2,7 +2,11 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 import type { ActivityContext } from "../../api/contracts";
 import { ApiRequestError, RateLimitError } from "../../api/errors";
-import { useServices } from "../../auth/SessionProvider";
+import { useServices, useSession } from "../../auth/SessionProvider";
+import {
+  HistoricalOperationRestoration,
+  RetainedRestorationTasks,
+} from "../../components/results/OperationRestoration";
 import { useAnnouncer } from "../../a11y/Announcer";
 import { Button, Select } from "../../components/ui/controls";
 import { State } from "../../components/ui/States";
@@ -33,6 +37,11 @@ const categories = [
 ] as const;
 export function ActivityPage() {
   const { api } = useServices(),
+    session = useSession(),
+    actor =
+      session.status === "ready" && session.session.signed_in
+        ? session.session.user.id
+        : "",
     announce = useAnnouncer(),
     identity = useId(),
     location = useLocation();
@@ -146,6 +155,7 @@ export function ActivityPage() {
   }
   return (
     <div className="sh-activity-page">
+      <RetainedRestorationTasks />
       <header className="sh-container sh-activity-header">
         <h1 className="sh-heading" tabIndex={-1}>
           Activity
@@ -375,6 +385,10 @@ export function ActivityPage() {
                                   Step details unavailable
                                 </p>
                               )}
+                              <HistoricalOperationRestoration
+                                operationId={run.id}
+                                actor={actor}
+                              />
                             </div>
                           </article>
                         );

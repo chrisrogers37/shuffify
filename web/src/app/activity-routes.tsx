@@ -1,5 +1,6 @@
 import { AuthGuard } from "../auth/SessionProvider";
 import { AppShell } from "../shell/Shell";
+import { Workspace } from "../components/tasks/TaskPanel";
 import { ActivityPage } from "../pages/activity/ActivityPage";
 export function activityRoutes() {
   return [
@@ -8,7 +9,9 @@ export function activityRoutes() {
       element: (
         <AppShell>
           <AuthGuard>
-            <ActivityPage />
+            <Workspace>
+              <ActivityPage />
+            </Workspace>
           </AuthGuard>
         </AppShell>
       ),
