@@ -379,35 +379,17 @@ The two font files total 61,556 bytes. The variable subset URLs come from the
 
 ## Review and checks
 
-The guarded local fake Spotify harness is available through
-`scripts/harness.sh setup` and `scripts/harness.sh status`; follow
-[the testing guide](../../guides/testing-harness.md). It supplies fixture accounts,
-playlists and OAuth for authenticated browser review while its network guard
-keeps requests local. Use it for interaction checks and for screenshots of every
-affected page at 360 px and a desktop width; do not run the bare development app
-or use real Spotify credentials. Check the fake's
-`/_fake/violations` response for request/response contract violations, and use
-request interception separately when asserting that navigation made no writes.
+Templates and public HTML have no inline style or event-handler attributes.
+Template style and script blocks carry a nonce; presentation CSS and event
+listeners live in static assets. Shell components keep accessible names, visible
+focus, focus return, inert backgrounds for open panels, and keyboard navigation.
+Layouts support a 360 px viewport and desktop widths.
 
-Preserve `tests/test_template_csp_contract.py`, `tests/test_template_escaping.py`,
-and `tests/test_page_auth_contract.py`. Templates and public HTML have no inline
-style or event-handler attributes. Any template style/script blocks retain their
-nonce; new presentation CSS and event listeners live in static assets. Rebuild
-the committed stylesheet with `./scripts/build-css.sh` after changes and verify
-it with `./scripts/build-css.sh --check`. When editing the shell macros or legal
-sources, also run `python scripts/build-public-pages.py` and its `--check` mode.
-
-Generate legal HTML **before** rebuilding CSS. Edit `assets/legal/*.html`,
-`assets/design/templates/legal.html.j2`, and the shared shell macros; never edit
-generated `static/public/*.html` or `static/css/tailwind.css` directly. The legal
-generator's `COPYRIGHT_YEAR` is a deliberate maintenance value so output remains
-deterministic across calendar years. Whole-tree `ruff check .`, non-integration
-pytest, public-page generation check and CSS check are required gates. Node VM
-tests exercise the shipped consent/CSRF scripts when Node is available.
-Panel/navigation and Settings runtime checks, rendered Settings submission
-tests, and shared-feedback escaping checks also run. Browser review must
-exercise real focus/inert behavior, Menu disclosure, viewport changes, native
-Settings submission and logout; the VM fixtures alone do not establish that proof.
+Legal copy lives in `assets/legal/*.html`; the legal shell lives in
+`assets/design/templates/legal.html.j2` and the shared shell macros. Public HTML
+and `static/css/tailwind.css` are generated artifacts. The legal generator's
+`COPYRIGHT_YEAR` is an explicit maintenance value, keeping output deterministic
+across calendar years.
 
 ## Public pages
 

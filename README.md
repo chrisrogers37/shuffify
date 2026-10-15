@@ -89,6 +89,13 @@ editing shared shell macros or legal sources, also run
 `python scripts/build-public-pages.py`. Commit the generated CSS and legal HTML;
 `./scripts/build-css.sh --check` and pytest verify they match their sources.
 
+Legal pages receive their contact email from the `CONTACT_ADDRESS` build
+environment variable. Run `python scripts/build-public-pages.py` with that
+variable set to generate the public pages; `--check` uses the same variable.
+Without it, generated pages retain the literal `CONTACT_ADDRESS` placeholder.
+TODO: the owner must supply `CONTACT_ADDRESS` and regenerate the legal pages
+before publishing them.
+
 ## License
 
-This project is licensed under the MIT License - see the `LICENSE` file for details. 
+This project is licensed under the MIT License - see the `LICENSE` file for details.

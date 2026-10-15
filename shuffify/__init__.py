@@ -302,7 +302,8 @@ def _verify_schema_at_head(migrations_dir):
     message = (
         "Database schema is not at Alembic head: current=%s, head=%s. "
         "The app does not apply migrations at startup; apply them "
-        "with 'flask db upgrade', or set %s=true to start anyway and serve "
+        "with 'SCHEDULER_ENABLED=false SHUFFIFY_MIGRATION_STEP=1 flask db upgrade', "
+        "or set %s=true to start anyway and serve "
         "against the current schema."
         % (
             current or "none (database never migrated)",

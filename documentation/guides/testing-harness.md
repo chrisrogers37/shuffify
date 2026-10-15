@@ -325,13 +325,14 @@ private playlist). `tests/test_scenarios.py` replays every scenario against
 the fake, fails if the fake recorded anything, and keeps the labels and the
 scenarios in step.
 
-The canary is to replay the same files against real Spotify,
-signed in to a real account. The runner, not each scenario, holds the
-rule that makes that safe: `validate` refuses, before any call, a write to
-anything but an `own` playlist and any call that would create a playlist.
-A live target binds `own` roles only to allowlisted canary playlists. A
-scenario that passes there makes its behaviours `checked-live`; one that
-fails has found the fake, or the documentation, wrong about Spotify.
+Live replay compares these same scenarios with real Spotify through a target
+that supplies authentication and playlist bindings. The runner's `validate`
+check rejects writes to playlists without an `own` role and calls that create
+playlists before making any request. A live target must bind `own` roles only
+to explicitly allowlisted test playlists. Mark a behaviour `checked-live` only
+when a live replay confirms it; a fake-only replay does not establish Spotify's
+response. This repository supplies the fake target; a live target must be
+provided separately.
 
 ## Behaviour tests
 

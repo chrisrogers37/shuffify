@@ -168,6 +168,11 @@ class TestVerifySchemaAtHead:
             _verify_schema_at_head(MIGRATIONS_DIR)
         assert SCHEMA_DRIFT_OVERRIDE_VAR in str(exc.value)
 
+    def test_message_includes_the_production_migration_marker(self, schema_app):
+        with pytest.raises(SchemaOutOfDateError) as exc:
+            _verify_schema_at_head(MIGRATIONS_DIR)
+        assert "SCHEDULER_ENABLED=false SHUFFIFY_MIGRATION_STEP=1 flask db upgrade" in str(exc.value)
+
 
 class TestBreakGlassOverride:
     """The guard must be clearable without a code change."""

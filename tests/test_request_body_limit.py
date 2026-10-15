@@ -14,13 +14,13 @@ from werkzeug.exceptions import RequestEntityTooLarge
 
 # One track as the Workshop's preview shuffle sends it, with long metadata.
 TRACK = {
-    "id": "4uLU6hMCjMI75M1A2tKUQC",
-    "name": "Symphony No. 9 in D Minor, Op. 125 'Choral': IV. Presto - Allegro assai (Live at the Royal Albert Hall)",
-    "artists": ["Ludwig van Beethoven", "Berliner Philharmoniker", "Herbert von Karajan", "Wiener Singverein"],
-    "album_name": "Beethoven: The Complete Symphonies (Remastered Deluxe Edition with Bonus Rehearsals)",
+    "id": "0000000000000000000001",
+    "name": "Fictional Symphony No. 9: IV. Evening Lights - Extended Finale (Live at the Example Concert Hall)",
+    "artists": ["Alice Example", "Example Philharmonic", "Bob Example", "Example Concert Choir"],
+    "album_name": "Example Orchestra: The Complete Symphonies (Remastered Deluxe Edition with Bonus Rehearsals)",
     "album_image_url": "https://i.scdn.co/image/ab67616d0000b273" + "0" * 24,
     "duration_ms": 1_440_000,
-    "uri": "spotify:track:4uLU6hMCjMI75M1A2tKUQC",
+    "uri": "spotify:track:0000000000000000000001",
 }
 
 

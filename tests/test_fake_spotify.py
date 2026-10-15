@@ -714,15 +714,14 @@ class TestFaults:
         arm(client, operation="GET /me", kind="rate_limit")
         assert "Retry-After" not in client.get("/v1/me", headers=alice).headers
 
-    def test_a_spent_quota_is_the_july_2026_body_and_matches_the_corrected_schema(self, client, alice):
+    def test_a_spent_quota_returns_a_reason_only_accepted_by_the_429_schema(self, client, alice):
         arm(client, operation="GET /me", kind="quota")
         resp = client.get("/v1/me", headers=alice)
         assert resp.status_code == 429 and "Retry-After" not in resp.headers
         assert resp.get_json() == {"error": {"status": 429, "message": "Too many requests", "reason": "QUOTA_EXCEEDED"}}
-        # The client fixture fails the test unless the fake recorded nothing,
-        # so the corrected 429 schema accepts the reason ...
+        # The 429 error schema accepts the optional quota reason.
         assert response_problems("GET /me", 429, resp.get_json(), has_body=True) == []
-        # ... on a 429 only.
+        # Other error statuses do not accept the quota reason.
         unauthorized = {"error": {"status": 401, "message": "x", "reason": "QUOTA_EXCEEDED"}}
         assert response_problems("GET /me", 401, unauthorized, has_body=True) != []
 

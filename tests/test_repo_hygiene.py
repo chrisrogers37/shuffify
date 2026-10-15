@@ -1,4 +1,4 @@
-"""Guards against local environment artefacts reaching this public repo.
+"""Check tracked files and ignore rules for local environment artifacts.
 
 These assert against `git ls-files` -- what is *tracked* -- not the working
 tree. An ignored-but-present venv is fine and expected; a tracked one is not.
@@ -49,7 +49,7 @@ def test_no_virtualenv_is_tracked():
     offenders = [p for p in tracked if p.name in VENV_MARKER_FILES or any(part in ENV_DIR_MARKERS for part in p.parts)]
 
     assert not offenders, (
-        "Local environment artefacts are tracked in a public repo:\n  "
+        "Tracked files include local environment artifacts:\n  "
         + "\n  ".join(str(p) for p in sorted(offenders)[:20])
         + "\nRemove with `git rm -r --cached <dir>` and confirm .gitignore "
         "covers the name."
@@ -57,12 +57,7 @@ def test_no_virtualenv_is_tracked():
 
 
 def test_no_tracked_file_is_an_activate_script():
-    """`bin/activate` and friends embed the absolute path of the build host.
-
-    That makes a tracked venv a disclosure rather than merely untidy: every
-    console-script shebang and every activate variant carries the full path of
-    the machine that created it.
-    """
+    """Tracked files must exclude virtualenv activation scripts and host paths."""
     tracked = _tracked_files()
 
     offenders = [p for p in tracked if p.stem == "activate" and p.parent.name in {"bin", "Scripts"}]

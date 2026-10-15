@@ -10,11 +10,12 @@ or runtime template rendering is needed for generation or verification.
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
-from markupsafe import Markup
+from markupsafe import Markup, escape
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PAGE_TITLES = {
@@ -42,11 +43,13 @@ def render_public_pages(repo_root: Path | None = None) -> dict[str, str]:
     template = environment.get_template("legal.html.j2")
     pages = {}
     for name, title in PAGE_TITLES.items():
-        # These repository-owned fragments are literal HTML, not templates.
-        # Only their markup is trusted; shell parameters remain autoescaped.
+        # Repository-owned markup is literal; the build-time address is escaped
+        # before it enters the trusted fragment.
         legal_copy = (repo_root / "assets" / "legal" / f"{name}.html").read_text(
             encoding="utf-8"
         )
+        contact_address = os.environ.get("CONTACT_ADDRESS") or "CONTACT_ADDRESS"
+        legal_copy = legal_copy.replace("CONTACT_ADDRESS", str(escape(contact_address)))
         pages[name] = template.render(
             title=title,
             current_page=name,

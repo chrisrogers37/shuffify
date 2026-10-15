@@ -31,7 +31,7 @@ assert.equal(page.calls.filter(call => call.method !== 'GET').length, 0);
 """)
 
 
-def test_archive_inbox_cache_still_initializes_after_routine_controls_move(node, db_app):
+def test_archive_inbox_initializes_cache_and_loads_tracks(node, db_app):
     run_workspace(node, workspace_page(db_app), r"""
 await openWorkshop('/workshop/target', {
     '/playlist/target/pair/archive-tracks': {success: true, tracks: [], total: 0},

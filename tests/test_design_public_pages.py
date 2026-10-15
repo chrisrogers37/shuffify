@@ -1,6 +1,7 @@
 """Shared public shell, preserved legal copy, and committed artifact contracts."""
 
 import importlib.util
+import os
 import shutil
 import subprocess
 import sys
@@ -9,6 +10,7 @@ from pathlib import Path
 
 import pytest
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
+from markupsafe import escape
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PUBLIC_DIR = REPO_ROOT / "shuffify" / "static" / "public"
@@ -17,8 +19,8 @@ BUILD_SCRIPT = REPO_ROOT / "scripts" / "build-public-pages.py"
 # Independent baselines of the legal-copy regions: updating the generator
 # cannot bless a legal-text change by merely rebuilding its outputs.
 LEGAL_COPY_SHA256 = {
-    "terms": "9f6afc24adeb83886365c5c3a7dce18125493f28f6d534590f5e6b8022224b14",
-    "privacy": "f7c3f3e0c978c23f374b2d65e097af793352cf8769649aebdc70b1c0474c10a4",
+    "terms": "217948dfc8ffee6847f59b340620a0b9ee9f94153cc11804c324c826f8d9f831",
+    "privacy": "102a9df0bcd9024f3408697b9f2476be5fc71f28e052ca4e97b1bebe05636123",
 }
 
 
@@ -67,13 +69,39 @@ def test_committed_public_pages_match_shared_sources():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def _assert_preserved_legal_copy(name, source_dir, public_dir):
+    expected = LEGAL_COPY_SHA256[name]
+    source = (source_dir / f"{name}.html").read_bytes()
+    generated = (public_dir / f"{name}.html").read_bytes()
+    assert sha256(source).hexdigest() == expected
+    contact_address = os.environ.get("CONTACT_ADDRESS") or "CONTACT_ADDRESS"
+    rendered_address = str(escape(contact_address)).encode("utf-8")
+    assert _legal_copy(generated) == source.replace(b"CONTACT_ADDRESS", rendered_address)
+
+
 @pytest.mark.parametrize("name", LEGAL_COPY_SHA256)
 def test_legal_copy_remains_byte_for_byte_identical(name):
-    expected = LEGAL_COPY_SHA256[name]
-    source = (COPY_DIR / f"{name}.html").read_bytes()
-    generated = (PUBLIC_DIR / f"{name}.html").read_bytes()
-    assert sha256(source).hexdigest() == expected
-    assert sha256(_legal_copy(generated)).hexdigest() == expected
+    _assert_preserved_legal_copy(name, COPY_DIR, PUBLIC_DIR)
+
+
+@pytest.mark.parametrize("contact_address", [
+    "support@example.invalid", 'support@example.invalid\"><script>alert(1)</script>',
+])
+def test_contact_build_and_check_preserve_legal_copy(
+    public_page_builder, public_source_tree, monkeypatch, contact_address
+):
+    monkeypatch.setenv("CONTACT_ADDRESS", contact_address)
+    monkeypatch.setattr(public_page_builder, "REPO_ROOT", public_source_tree)
+
+    assert public_page_builder.main([]) == 0
+    assert public_page_builder.main(["--check"]) == 0
+
+    for name in LEGAL_COPY_SHA256:
+        _assert_preserved_legal_copy(
+            name,
+            public_source_tree / "assets" / "legal",
+            public_source_tree / "shuffify" / "static" / "public",
+        )
 
 
 @pytest.mark.parametrize("name", LEGAL_COPY_SHA256)
@@ -131,6 +159,29 @@ def test_legal_copy_is_literal_markup_not_a_jinja_template(
     )
     page = public_page_builder.render_public_pages(public_source_tree)["terms"]
     assert '<p>{{ title }} {% include "unavailable.html" %}</p>' in page
+
+
+def test_legal_pages_use_the_contact_address_environment(public_page_builder, monkeypatch):
+    monkeypatch.setenv("CONTACT_ADDRESS", "support@example.invalid")
+
+    for page in public_page_builder.render_public_pages().values():
+        assert 'href="mailto:support@example.invalid">support@example.invalid</a>' in page
+        assert "CONTACT_ADDRESS" not in page
+
+
+def test_legal_pages_escape_the_contact_address(public_page_builder, monkeypatch):
+    monkeypatch.setenv("CONTACT_ADDRESS", 'support@example.invalid\"><script>alert(1)</script>')
+
+    for page in public_page_builder.render_public_pages().values():
+        assert "<script>" not in page
+        assert "&lt;script&gt;" in page
+
+
+def test_legal_pages_leave_a_clear_placeholder_without_contact_address(public_page_builder, monkeypatch):
+    monkeypatch.delenv("CONTACT_ADDRESS", raising=False)
+
+    for page in public_page_builder.render_public_pages().values():
+        assert 'href="mailto:CONTACT_ADDRESS">CONTACT_ADDRESS</a>' in page
 
 
 def test_check_detects_drift_without_rewriting_artifacts(

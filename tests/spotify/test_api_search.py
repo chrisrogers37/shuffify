@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from shuffify.schemas.requests import WorkshopSearchRequest
 from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.auth import SpotifyAuthManager, TokenInfo
 from shuffify.spotify.cache import SpotifyCache
@@ -224,7 +225,7 @@ class TestSearchPlaylists:
         )
 
     def test_search_clamps_limit_max(self, api, mock_http):
-        """Limit above 50 should be clamped to 50."""
+        """Playlist search honors the workshop schema's maximum limit."""
         mock_http.get.return_value = {"playlists": {"items": []}}
 
         api.search_playlists("test", limit=100)
@@ -234,9 +235,23 @@ class TestSearchPlaylists:
             params={
                 "q": "test",
                 "type": "playlist",
-                "limit": 50,
+                "limit": 10,
             },
         )
+
+    @pytest.mark.parametrize("method,result_type", [
+        ("search_playlists", "playlists"),
+        ("search_tracks", "tracks"),
+    ])
+    @pytest.mark.parametrize("requested,expected", [(0, 1), (1, 1), (10, 10), (11, 10), (100, 10)])
+    def test_search_clamp_matches_request_schema(self, api, mock_http, method, result_type, requested, expected):
+        mock_http.get.return_value = {result_type: {"items": []}}
+
+        getattr(api, method)("test", limit=requested)
+
+        forwarded_limit = mock_http.get.call_args.kwargs["params"]["limit"]
+        assert forwarded_limit == expected
+        assert WorkshopSearchRequest(query="test", limit=forwarded_limit).limit == expected
 
     def test_search_calls_http_client(self, api, mock_http):
         """Search should call HTTP client with params."""
