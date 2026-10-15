@@ -1322,6 +1322,20 @@ async function workshopRequest(url, options, {read = false, group = null} = {}) 
             return {ok: reply.ok, status: reply.status, headers: {get: () => 'application/json'},
                 json: async () => data};
         }
+        const dismissalWrite = !read && (options.method || '').toUpperCase() === 'POST' &&
+            /\/pending-raids\/dismiss(?:-all)?$/.test(url);
+        if (dismissalWrite && window.OperationQueue && typeof window.OperationQueue.dismiss === 'function') {
+            const reply = await window.OperationQueue.dismiss(url, options, {timeoutMs: 300000});
+            if (!reply.answered) {
+                const error = new Error(reply.operationId ?
+                    'Dismissal operation ' + reply.operationId + ' was accepted. Its result is not available yet; check it again.' :
+                    'The dismissal result is not available. Refresh the inbox before staging these tracks.');
+                error.code = 'dismissal_unknown'; error.operationId = reply.operationId;
+                throw error;
+            }
+            return {ok: reply.ok, status: reply.status, headers: {get: () => 'application/json'},
+                json: async () => reply.data, operationId: reply.operationId};
+        }
         const response = await fetch(url, options);
         // Keep the boundary until the body arrives, not just response headers.
         await response.clone().arrayBuffer();
@@ -3158,20 +3172,34 @@ function promotePendingRaid(trackId, trackData, trigger) {
 // server is dismissing. Resolves with how many rows the server confirmed dismissed.
 async function sendPendingDismissal(ids) {
     ids.forEach(id => pendingRaidsState.dismissing.add(id));
+    let release = true;
     try {
         const response = await workshopRequest('/api/playlist/' + workshopState.playlistId + '/pending-raids/dismiss', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: JSON.stringify({ track_ids: ids }),
         }, {group: 'dismiss'});
-        const data = response.ok ? await response.json() : null;
-        if (!data || !data.success) throw new Error('Dismiss failed');
-        const done = new Set(ids);
+        const data = await response.json();
+        if (data && data.database_status === 'unknown') {
+            const error = new Error(data.message || 'The inbox dismissal could not be confirmed.');
+            error.code = 'dismissal_unknown'; error.operationId = response.operationId;
+            throw error;
+        }
+        if (!data || data.database_status !== 'complete' || !Array.isArray(data.dismissed_ids) ||
+                !Number.isSafeInteger(data.dismissed_count) || data.dismissed_count < 0 ||
+                !data.dismissed_ids.every(id => Number.isSafeInteger(id) && ids.includes(id))) {
+            throw new Error(data && data.message || 'The inbox dismissal could not be confirmed.');
+        }
+        const done = new Set(data.dismissed_ids);
         pendingRaidsState.revision += 1;
         pendingRaidsState.tracks = pendingRaidsState.tracks.filter(track => !done.has(track.id));
-        return typeof data.dismissed_count === 'number' ? data.dismissed_count : ids.length;
+        return {count: data.dismissed_count, warning: data.success ? null : data.message ||
+            'The inbox dismissal is confirmed, but collection cleanup needs review.'};
+    } catch (error) {
+        if (error.code === 'dismissal_unknown') release = false;
+        throw error;
     } finally {
-        ids.forEach(id => pendingRaidsState.dismissing.delete(id));
+        if (release) ids.forEach(id => pendingRaidsState.dismissing.delete(id));
     }
 }
 
@@ -3180,11 +3208,11 @@ async function sendPendingDismissal(ids) {
 function dismissPendingRaid(trackId, trigger) {
     if (!pendingRaidsState.tracks.some(track => track.id === trackId)) return;
     const refocus = holdRowFocus(trigger && trigger.closest('[data-track-id]'), '.inbox-dismiss-btn', 'data-track-id');
-    return sendPendingDismissal([trackId]).then(function() {
+    return sendPendingDismissal([trackId]).then(function(result) {
         renderPendingRaids();
         updatePendingBadge();
         refocus();
-        showNotification('Track dismissed.', 'info');
+        showNotification(result.warning || 'Track dismissed.', result.warning ? 'error' : 'info');
     }, function(err) { showNotification(err.message, 'error'); });
 }
 
@@ -3240,7 +3268,7 @@ async function dismissAllPendingRaids(trigger) {
         confirmLabel: 'Dismiss ' + count, trigger: trigger});
     if (!confirmed) return;
     const refocus = holdWorkshopFocus(trigger);
-    let remaining = shown, dismissed = 0;
+    let remaining = shown, dismissed = 0, warnings = [];
     try {
         // Each batch is taken again from the rows still shown, so a row staged, held by
         // recovery or dismissed on its own meanwhile is never sent.
@@ -3248,11 +3276,15 @@ async function dismissAllPendingRaids(trigger) {
             const still = new Set(visiblePendingTracks(pendingRaidsState.tracks).map(track => track.id));
             remaining = remaining.filter(id => still.has(id) && !pendingRaidsState.dismissing.has(id));
             if (!remaining.length) break;
-            dismissed += await sendPendingDismissal(remaining.slice(0, DISMISS_BATCH));
+            const result = await sendPendingDismissal(remaining.slice(0, DISMISS_BATCH));
+            dismissed += result.count;
+            if (result.warning) warnings.push(result.warning);
             remaining = remaining.slice(DISMISS_BATCH);
         }
         // Only what the server confirmed is reported; nothing sent says nothing.
-        if (dismissed) showNotification('Dismissed ' + dismissed + ' pending track' + (dismissed === 1 ? '' : 's') + '.', 'info');
+        if (dismissed || warnings.length) showNotification('Dismissed ' + dismissed + ' pending track' +
+            (dismissed === 1 ? '' : 's') + '.' + (warnings.length ? ' ' + warnings.join(' ') : ''),
+            warnings.length ? 'error' : 'info');
     } catch (_) {
         showNotification((dismissed ? 'Some pending tracks were dismissed, but not all. ' : 'Could not dismiss the pending tracks. ') +
             'The review inbox is read again to show what remains.', 'error');

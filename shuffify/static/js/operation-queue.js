@@ -103,7 +103,8 @@
             }
             var result = await poll(record.accepted, {signal: controller.signal,
                 timeoutMs: Math.max(1, timeout - (Date.now() - started)), pollMs: limits.pollMs});
-            var retained = !result.ok && ['created', 'unknown'].includes(result.data.outcome);
+            var retained = !result.ok && ['created', 'unknown'].includes(result.data.outcome) ||
+                limits.retainDismissed && ['complete', 'unknown'].includes(result.data.database_status);
             if (!retained) uncertainAssets = uncertainAssets.filter(function (item) { return item !== record; });
             return Object.assign(result, {answered: true, operationId: record.accepted.operation_id,
                 requestKey: record.key, retryAfter: Number(result.data.retry_after) || null});
@@ -115,5 +116,8 @@
         }
     }
 
-    global.OperationQueue = Object.freeze({poll: poll, asset: asset, requestKey: requestKey});
+    function dismiss(url, options, limits) {
+        return asset(url, options, Object.assign({}, limits, {retainDismissed: true}));
+    }
+    global.OperationQueue = Object.freeze({poll: poll, asset: asset, dismiss: dismiss, requestKey: requestKey});
 })(window);

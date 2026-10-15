@@ -1845,11 +1845,11 @@ def test_per_row_actions_keep_focus_on_the_same_control_in_their_list(node, db_a
     let control = inRow('inbox-raids-list', '1', '.inbox-add-btn'); control.focus(); control.click(); await settle();
     assert.deepEqual(rowsOf('inbox-raids-list'), ['2', '3']);
     assert.equal(focused(), inRow('inbox-raids-list', '2', '.inbox-add-btn'));
-    page.replies.push(page.reply({success: true, dismissed_count: 1}));
+    page.replies.push(page.reply({success: true, database_status: "complete", dismissed_count: 1, dismissed_ids: [3]}));
     control = inRow('inbox-raids-list', '3', '.inbox-dismiss-btn'); control.focus(); control.click(); await settle();
     assert.deepEqual(rowsOf('inbox-raids-list'), ['2']);
     assert.equal(focused(), inRow('inbox-raids-list', '2', '.inbox-dismiss-btn'));
-    page.replies.push(page.reply({success: true, dismissed_count: 1}));
+    page.replies.push(page.reply({success: true, database_status: "complete", dismissed_count: 1, dismissed_ids: [2]}));
     control = inRow('inbox-raids-list', '2', '.inbox-dismiss-btn'); control.click(); await settle();
     assert.equal(focused(), page.$('[aria-labelledby="inbox-raids-heading"]'));
     assert.equal(page.text(page.byId('workshop-inbox-count')), '0');

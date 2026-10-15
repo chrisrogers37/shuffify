@@ -1005,53 +1005,15 @@ def pending_raids_unpromote(
     "/playlist/<playlist_id>/pending-raids/dismiss",
     methods=["POST"],
 )
-@require_auth_and_db
-def pending_raids_dismiss(
-    playlist_id, api=None, user=None
-):
-    """Dismiss selected pending tracks."""
+@require_session_and_db
+def pending_raids_dismiss(playlist_id, user=None):
+    """Accept the owned pending intersection without Spotify authentication."""
     req, err = validate_json(DismissTracksRequest)
     if err:
         return err
+    from shuffify.routes.pending_dismiss_queue import admit_pending_dismiss
 
-    # Get tracks before dismissing for raid playlist sync
-    from shuffify.enums import PendingRaidStatus
-    from shuffify.models.db import PendingRaidTrack
-
-    tracks = PendingRaidTrack.query.filter(
-        PendingRaidTrack.id.in_(req.track_ids),
-        PendingRaidTrack.user_id == user.id,
-        PendingRaidTrack.target_playlist_id
-        == playlist_id,
-        PendingRaidTrack.status
-        == PendingRaidStatus.PENDING,
-    ).all()
-    uris_to_remove = [t.track_uri for t in tracks]
-
-    count = PendingRaidService.dismiss_tracks(
-        user.id, playlist_id, req.track_ids
-    )
-
-    # Remove from raid playlist
-    if uris_to_remove:
-        RaidLinkService.remove_tracks_from_raid_playlist(
-            api, user.id,
-            playlist_id, uris_to_remove,
-        )
-
-    log_activity(
-        user_id=user.id,
-        activity_type=ActivityType.RAID_DISMISS,
-        description=(
-            "Dismissed {} raided tracks".format(count)
-        ),
-        playlist_id=playlist_id,
-    )
-
-    return json_success(
-        "{} tracks dismissed.".format(count),
-        dismissed_count=count,
-    )
+    return admit_pending_dismiss(user, playlist_id, track_ids=req.track_ids)
 
 
 @api_bp.route(
@@ -1093,41 +1055,12 @@ def pending_raids_promote_all(
     "/playlist/<playlist_id>/pending-raids/dismiss-all",
     methods=["POST"],
 )
-@require_auth_and_db
-def pending_raids_dismiss_all(
-    playlist_id, api=None, user=None
-):
-    """Dismiss all pending tracks."""
-    # Get URIs before dismissing for raid playlist sync
-    pending = PendingRaidService.list_pending(
-        user.id, playlist_id
-    )
-    uris_to_remove = [t.track_uri for t in pending]
+@require_session_and_db
+def pending_raids_dismiss_all(playlist_id, user=None):
+    """Accept all currently owned pending IDs, including an explicit empty set."""
+    from shuffify.routes.pending_dismiss_queue import admit_pending_dismiss
 
-    count = PendingRaidService.dismiss_all(
-        user.id, playlist_id
-    )
-
-    # Remove from raid playlist
-    if uris_to_remove:
-        RaidLinkService.remove_tracks_from_raid_playlist(
-            api, user.id,
-            playlist_id, uris_to_remove,
-        )
-
-    log_activity(
-        user_id=user.id,
-        activity_type=ActivityType.RAID_DISMISS,
-        description=(
-            "Dismissed all {} raided tracks".format(count)
-        ),
-        playlist_id=playlist_id,
-    )
-
-    return json_success(
-        "{} tracks dismissed.".format(count),
-        dismissed_count=count,
-    )
+    return admit_pending_dismiss(user, playlist_id)
 
 
 def _raid_finalize_preflight_error(message, status_code):

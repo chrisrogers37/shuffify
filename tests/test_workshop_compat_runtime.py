@@ -707,7 +707,9 @@ def test_dismiss_all_sends_only_the_shown_rows_through_dismiss_after_asking(node
         pendingRaidsState.stagedPromotions.push(rows[0]); pendingRaidsState.tracks = pendingRaidsState.tracks.slice(1);
         return true;
     };
-    replies.push(response({success: true, dismissed_count: 200}), response({success: true, dismissed_count: 4}));
+    replies.push(response({success: true, database_status: "complete", dismissed_count: 200,
+        dismissed_ids: rows.slice(1, 201).map(row => row.id)}), response({success: true, database_status: "complete",
+        dismissed_count: 4, dismissed_ids: rows.slice(201).map(row => row.id)}));
     await context.dismissAllPendingRaids(trigger);
     // Shown rows only, in batches the route accepts, never the dismiss-all route.
     assert.equal(dismissals().length, 2);
@@ -761,7 +763,8 @@ def test_dismissals_keep_rows_staged_meanwhile_and_report_what_the_server_dismis
     // While a batch is in flight its rows cannot be staged; a later batch's row can, and that
     // batch is taken again from the rows still shown, so the staged row is never dismissed.
     let first;
-    replies.push(() => new Promise(resolve => {first = resolve;}), response({success: true, dismissed_count: 4}));
+    replies.push(() => new Promise(resolve => {first = resolve;}), response({success: true, database_status: "complete",
+        dismissed_count: 4, dismissed_ids: [201, 202, 204, 205]}));
     const dismissing = context.dismissAllPendingRaids(trigger); await settle();
     assert.deepEqual(dismissals(), [rows.slice(0, 200).map(row => row.id)]);
     context.promotePendingRaid(7, rows[6]);
@@ -769,7 +772,8 @@ def test_dismissals_keep_rows_staged_meanwhile_and_report_what_the_server_dismis
     assert.equal(lastNotice(), 'This track is being dismissed, so it was not added.');
     context.promotePendingRaid(203, rows[202]);
     assert.deepEqual(staged(), [203]);
-    first(response({success: true, dismissed_count: 200})); await dismissing;
+    first(response({success: true, database_status: "complete", dismissed_count: 200,
+        dismissed_ids: rows.slice(0, 200).map(row => row.id)})); await dismissing;
     assert.equal(dismissals().length, 2); assert.deepEqual(dismissals()[1], [201, 202, 204, 205]);
     assert.deepEqual(staged(), [203]); assert.deepEqual(plain(pendingRaidsState.tracks), []);
     assert.equal(pendingRaidsState.dismissing.size, 0);
@@ -782,7 +786,7 @@ def test_dismissals_keep_rows_staged_meanwhile_and_report_what_the_server_dismis
     window.AppConfirm.ask = async options => {
         confirms.push(options); context.promotePendingRaid(301, three[0]); return true;
     };
-    replies.push(response({success: true, dismissed_count: 1}));
+    replies.push(response({success: true, database_status: "complete", dismissed_count: 1, dismissed_ids: [302, 303]}));
     await context.dismissAllPendingRaids(trigger);
     assert.deepEqual(dismissals()[2], [302, 303]); assert.equal(lastNotice(), 'Dismissed 1 pending track.');
     // When every shown row left during the question, nothing is sent and nothing is reported.
@@ -805,7 +809,7 @@ def test_dismissals_keep_rows_staged_meanwhile_and_report_what_the_server_dismis
     context.promoteAllPendingRaids();
     assert.deepEqual(staged(), [502]); assert.deepEqual(pendingRaidsState.tracks.map(track => track.id), [501]);
     assert.equal(lastNotice(), 'Staged 1 of 2 tracks for save; the rest are being dismissed.');
-    single(response({success: true, dismissed_count: 1})); await one;
+    single(response({success: true, database_status: "complete", dismissed_count: 1, dismissed_ids: [501]})); await one;
     assert.deepEqual(dismissals()[3], [501]);
     assert.deepEqual(plain(pendingRaidsState.tracks), []); assert.equal(pendingRaidsState.dismissing.size, 0);
     assert.equal(lastNotice(), 'Track dismissed.');
@@ -1127,11 +1131,11 @@ def test_confirmed_actions_return_focus_near_their_trigger_after_the_re_render(n
     };
     document.activeElement = dismissAll;
     const moves = focusMoves.length;
-    replies.push(response({success: true, dismissed_count: 2}));
+    replies.push(response({success: true, database_status: "complete", dismissed_count: 2, dismissed_ids: [1, 2]}));
     await context.dismissAllPendingRaids(dismissAll);
     assert.equal(document.activeElement, dismissAll); assert.equal(focusMoves.length, moves);
     window.AppConfirm.ask = async options => {confirms.push(options); return confirmAnswer;};
-    replies.push(response({success: true, dismissed_count: 1}));
+    replies.push(response({success: true, database_status: "complete", dismissed_count: 1, dismissed_ids: [3]}));
     await context.dismissAllPendingRaids(dismissAll);
     assert.deepEqual(plain(pendingRaidsState.tracks), []); assert.equal(document.activeElement, inboxArea);
     // Snapshot delete: the timeline rebuilt while the question was open replaces the trigger,
