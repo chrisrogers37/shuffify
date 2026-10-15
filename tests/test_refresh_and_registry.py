@@ -1,10 +1,10 @@
 """
-Tests for the refresh-playlists route and the algorithm registry.
+Tests for Library refresh and the algorithm registry.
 
-Covers the POST /refresh-playlists endpoint and the registry's algorithm list.
+Covers GET /api/library refresh and the registry's algorithm list.
 """
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -53,127 +53,62 @@ class TestRegistryHiddenAlgorithms:
         assert names == expected
 
 
-class TestRefreshPlaylistsRoute:
-    """Tests for POST /refresh-playlists endpoint."""
+class TestLibraryRefreshRoute:
+    """Library refresh bypasses Spotify's cache while retaining undo history."""
 
     @pytest.fixture
-    def app(self):
-        """Create Flask app for testing."""
-        import os
+    def spotify(self):
+        from shuffify.spotify.api import SpotifyAPI
 
-        os.environ["SPOTIFY_CLIENT_ID"] = "test_client_id"
-        os.environ["SPOTIFY_CLIENT_SECRET"] = "test_client_secret"
-        os.environ["SPOTIFY_REDIRECT_URI"] = "http://localhost:5000/callback"
-        os.environ["SECRET_KEY"] = "test-secret-key-for-testing"
-
-        from shuffify import create_app
-
-        app = create_app("development")
-        app.config["TESTING"] = True
-        app.config["WTF_CSRF_ENABLED"] = False
-        return app
+        with patch("shuffify.routes.require_auth", return_value=Mock(spec=SpotifyAPI)) as auth:
+            yield auth.return_value
 
     @pytest.fixture
-    def client(self, app):
-        """Flask test client."""
-        return app.test_client()
+    def playlists(self):
+        with patch("shuffify.services.PlaylistService.get_user_playlists", autospec=True) as read:
+            read.return_value = [
+                {"id": "p1", "name": "Playlist 1", "images": [], "public": True, "items": {"total": 2}},
+                {"id": "p2", "name": "Playlist 2", "images": [], "public": False, "items": {"total": 3}},
+            ]
+            yield read
 
-    def test_refresh_requires_auth(self, client):
-        """Should return 401 when not authenticated."""
-        response = client.post(api_path("/refresh-playlists"))
+    def test_refresh_requires_auth(self, db_app):
+        with db_app.test_client() as client:
+            response = client.get(api_path("/library?refresh=1"))
         assert response.status_code == 401
-        data = response.get_json()
-        assert data["success"] is False
+        assert response.get_json()["success"] is False
 
-    @patch("shuffify.is_db_available")
-    @patch("shuffify.routes.get_db_user")
-    @patch("shuffify.routes.require_auth")
-    @patch("shuffify.routes.playlists.PlaylistService")
-    def test_refresh_returns_playlists(
-        self,
-        mock_playlist_service_cls,
-        mock_auth,
-        mock_get_db_user,
-        mock_db_available,
-        client,
-    ):
-        """Should return refreshed playlists on success."""
-        mock_client = Mock()
-        mock_auth.return_value = mock_client
-        mock_db_available.return_value = True
-        mock_user = MagicMock()
-        mock_user.id = 1
-        mock_get_db_user.return_value = mock_user
-
-        mock_service = Mock()
-        mock_service.get_user_playlists.return_value = [
-            {"id": "p1", "name": "Playlist 1"},
-            {"id": "p2", "name": "Playlist 2"},
-        ]
-        mock_playlist_service_cls.return_value = mock_service
-
-        response = client.post(api_path("/refresh-playlists"))
+    def test_refresh_returns_library_sections(self, auth_client, spotify, playlists):
+        response = auth_client.get(api_path("/library?refresh=1"))
         assert response.status_code == 200
         data = response.get_json()
         assert data["success"] is True
-        assert "Playlists refreshed" in data["message"]
-        assert len(data["playlists"]) == 2
+        assert set(data["sections"]) == {"favorites", "playlists", "hidden"}
+        assert [row["id"] for row in data["sections"]["playlists"]] == ["p1", "p2"]
 
-    @patch("shuffify.is_db_available")
-    @patch("shuffify.routes.get_db_user")
-    @patch("shuffify.routes.require_auth")
-    @patch("shuffify.routes.playlists.PlaylistService")
-    def test_refresh_calls_skip_cache(
-        self,
-        mock_playlist_service_cls,
-        mock_auth,
-        mock_get_db_user,
-        mock_db_available,
-        client,
-    ):
-        """Should call get_user_playlists with skip_cache=True."""
-        mock_client = Mock()
-        mock_auth.return_value = mock_client
-        mock_db_available.return_value = True
-        mock_user = MagicMock()
-        mock_user.id = 1
-        mock_get_db_user.return_value = mock_user
+    @pytest.mark.parametrize("query,skip_cache", [("?refresh=1", True), ("?refresh=0", False), ("", False)])
+    def test_refresh_bypasses_cache_only_when_requested(self, auth_client, spotify, playlists, query, skip_cache):
+        response = auth_client.get(api_path(f"/library{query}"))
+        assert response.status_code == 200
+        assert playlists.call_args.kwargs == {"skip_cache": skip_cache}
 
-        mock_service = Mock()
-        mock_service.get_user_playlists.return_value = []
-        mock_playlist_service_cls.return_value = mock_service
-
-        client.post(api_path("/refresh-playlists"))
-
-        mock_service.get_user_playlists.assert_called_once_with(skip_cache=True)
-
-    @patch("shuffify.is_db_available")
-    @patch("shuffify.routes.get_db_user")
-    @patch("shuffify.routes.require_auth")
-    @patch("shuffify.routes.playlists.PlaylistService")
-    def test_refresh_handles_error(
-        self,
-        mock_playlist_service_cls,
-        mock_auth,
-        mock_get_db_user,
-        mock_db_available,
-        client,
-    ):
-        """Should return 500 on PlaylistError."""
+    def test_refresh_handles_playlist_error(self, auth_client, spotify, playlists):
         from shuffify.services import PlaylistError
 
-        mock_client = Mock()
-        mock_auth.return_value = mock_client
-        mock_db_available.return_value = True
-        mock_user = MagicMock()
-        mock_user.id = 1
-        mock_get_db_user.return_value = mock_user
-
-        mock_service = Mock()
-        mock_service.get_user_playlists.side_effect = PlaylistError("API error")
-        mock_playlist_service_cls.return_value = mock_service
-
-        response = client.post(api_path("/refresh-playlists"))
+        playlists.side_effect = PlaylistError("API unavailable")
+        response = auth_client.get(api_path("/library?refresh=1"))
         assert response.status_code == 500
-        data = response.get_json()
-        assert data["success"] is False
+        assert response.get_json()["success"] is False
+
+    def test_refresh_preserves_saved_undo_history(self, auth_client, spotify, playlists):
+        history = {"p1": {"states": [["spotify:track:first"], ["spotify:track:second"]], "current_index": 1}}
+        with auth_client.session_transaction() as session:
+            session["playlist_states"] = history
+
+        response = auth_client.get(api_path("/library?refresh=1"))
+
+        assert response.status_code == 200
+        rows = response.get_json()["sections"]["playlists"]
+        assert next(row for row in rows if row["id"] == "p1")["can_undo"] is True
+        with auth_client.session_transaction() as session:
+            assert session["playlist_states"] == history

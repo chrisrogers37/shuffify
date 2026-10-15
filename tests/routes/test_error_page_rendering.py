@@ -368,7 +368,7 @@ class TestSettingsErrorHandling:
 class TestRefreshErrorHandling:
     """Tests for refresh endpoint general exception fallback."""
 
-    @patch("shuffify.routes.playlists.PlaylistService")
+    @patch("shuffify.routes.contexts.PlaylistService")
     @patch("shuffify.routes.get_db_user")
     @patch("shuffify.routes.require_auth")
     def test_unexpected_error_returns_json(
@@ -386,13 +386,13 @@ class TestRefreshErrorHandling:
 
         mock_instance = MagicMock()
         mock_instance.get_user_playlists.side_effect = (
-            RuntimeError("Unexpected")
+            RuntimeError("internal-only-fixture-detail")
         )
         mock_playlist_svc.return_value = mock_instance
 
         with db_app.test_client() as client:
-            resp = client.post(
-                api_path("/refresh-playlists"),
+            resp = client.get(
+                api_path("/library?refresh=1"),
                 headers={
                     "X-Requested-With": "XMLHttpRequest",
                 },
@@ -400,6 +400,7 @@ class TestRefreshErrorHandling:
             assert resp.status_code == 500
             data = resp.get_json()
             assert data["success"] is False
-            assert (
-                "unexpected error" in data["message"].lower()
-            )
+            assert data["error_code"] == "internal_error"
+            assert data["category"] == "error"
+            assert data["message"]
+            assert "internal-only-fixture-detail" not in data["message"]

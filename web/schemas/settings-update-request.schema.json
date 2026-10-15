@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/SettingsUpdateRequest",
+  "definitions": {
+    "SettingsUpdateRequest": {
+      "type": "object",
+      "properties": {
+        "default_algorithm": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "default_algorithm_params": {
+          "$ref": "#/definitions/JsonRecord"
+        },
+        "theme": {
+          "$ref": "#/definitions/Theme"
+        },
+        "notifications_enabled": {
+          "type": "boolean"
+        },
+        "auto_snapshot_enabled": {
+          "type": "boolean"
+        },
+        "max_snapshots_per_playlist": {
+          "$ref": "#/definitions/SnapshotLimit"
+        },
+        "dashboard_show_recent_activity": {
+          "type": "boolean"
+        },
+        "extra": {
+          "$ref": "#/definitions/JsonRecord"
+        }
+      },
+      "additionalProperties": false
+    },
+    "JsonRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/JsonValue"
+      },
+      "description": "Extensible metadata and preferences intentionally retain arbitrary JSON values."
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        }
+      ]
+    },
+    "Theme": {
+      "type": "string",
+      "enum": [
+        "light",
+        "dark",
+        "system"
+      ]
+    },
+    "SnapshotLimit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50
+    }
+  }
+}

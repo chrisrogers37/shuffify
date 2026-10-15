@@ -1,0 +1,15 @@
+{
+  "success": false,
+  "error_code": "playlist_busy",
+  "message": "A routine is using this playlist. Try again.",
+  "category": "error",
+  "retryable": true,
+  "retry_after": 3,
+  "operation_id": 1,
+  "field_errors": [
+    {
+      "path": "playlist_id",
+      "message": "This playlist is busy."
+    }
+  ]
+}

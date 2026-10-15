@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/UserPlaylistsContext",
+  "definitions": {
+    "UserPlaylistsContext": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "message": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "const": "success"
+        },
+        "playlists": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PlaylistSummary"
+          }
+        }
+      },
+      "required": [
+        "playlists",
+        "success"
+      ],
+      "additionalProperties": false
+    },
+    "PlaylistSummary": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "image_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "track_count": {
+          "$ref": "#/definitions/Count"
+        },
+        "spotify_url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "image_url",
+        "track_count",
+        "spotify_url"
+      ],
+      "additionalProperties": false,
+      "description": "Shared playlist projection used by the library and user-playlist picker."
+    },
+    "Count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

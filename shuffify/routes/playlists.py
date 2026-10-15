@@ -11,7 +11,6 @@ from shuffify.routes import (
     context_preflight,
     json_error,
     json_reply,
-    json_success,
     no_store,
     require_auth_and_db,
 )
@@ -39,50 +38,12 @@ from shuffify.services.live_review_bindings import (
     request_binding,
 )
 from shuffify.services.live_review_context import context_unavailable
+from shuffify.services.page_context_service import playlist_row
 from shuffify.services.playlist_preference_service import (
     PlaylistPreferenceService,
 )
-from shuffify.spotify.api import playlist_item_count
 
 logger = logging.getLogger(__name__)
-
-
-@api_bp.route("/refresh-playlists", methods=["POST"])
-@require_auth_and_db
-def refresh_playlists(api=None, user=None):
-    """Refresh playlists from Spotify without losing undo state."""
-    try:
-        playlist_service = PlaylistService(api)
-        playlists = playlist_service.get_user_playlists(
-            skip_cache=True
-        )
-
-        logger.info(
-            f"Refreshed {len(playlists)} playlists from Spotify"
-        )
-        return json_success(
-            "Playlists refreshed successfully.",
-            playlists=playlists,
-        )
-    except PlaylistError as e:
-        logger.error("Failed to refresh playlists: %s", e)
-        return json_error(
-            "Failed to refresh playlists. Please try again.",
-            500,
-        )
-    except Exception as e:
-        logger.error(
-            "Unexpected error refreshing playlists: %s "
-            "[type=%s]",
-            e,
-            type(e).__name__,
-            exc_info=True,
-        )
-        return json_error(
-            "An unexpected error occurred while refreshing "
-            "playlists. Please try again.",
-            500,
-        )
 
 
 @api_bp.route("/playlist/<playlist_id>")
@@ -138,18 +99,7 @@ def api_user_playlists(api=None, user=None):
         except Exception:
             pass  # Fall back to default order
 
-        result = []
-        for p in playlists:
-            result.append({
-                "id": p["id"],
-                "name": p["name"],
-                "track_count": playlist_item_count(p),
-                "image_url": (
-                    p["images"][0]["url"]
-                    if p.get("images")
-                    else None
-                ),
-            })
+        result = [playlist_row(playlist) for playlist in playlists]
 
         logger.debug(f"API returned {len(result)} playlists")
         return jsonify({"success": True, "playlists": result})

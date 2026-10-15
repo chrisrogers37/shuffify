@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "category": "success",
+  "signed_in": true,
+  "user": {
+    "id": "alice",
+    "display_name": "Alice",
+    "image_url": null
+  },
+  "csrf_token": "fixture-only-csrf-token",
+  "notice": null
+}

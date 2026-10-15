@@ -8,7 +8,7 @@ Neither starts, pauses or changes a routine.
 
 import logging
 
-from flask import flash, redirect, render_template, request, url_for
+from flask import abort, flash, redirect, render_template, request, url_for
 from pydantic import ValidationError
 
 from shuffify.error_handlers import format_validation_error
@@ -25,6 +25,7 @@ from shuffify.routes.workshop import _unloadable_playlist_message
 from shuffify.schemas import CreateSetupPlaylistRequest, SetupImpactRequest, SetupSaveRequest
 from shuffify.services import AuthenticationError, PlaylistError
 from shuffify.services.live_operation_service import preflight_error_code
+from shuffify.services.page_context_service import RETURN_TARGETS
 from shuffify.services.playlist_setup_service import PlaylistSetupService, refusal
 from shuffify.spotify.exceptions import SpotifyAuthError, SpotifyError
 
@@ -58,6 +59,11 @@ def return_link(target_id, value):
         url_for("site.routine_setup", playlist_id=target_id): "Back to routine",
         url_for("site.index"): "Back to Library",
     }
+    destinations = {
+        "playlist": playlist, "routines": url_for("site.schedules"),
+        "routine": url_for("site.routine_setup", playlist_id=target_id), "library": url_for("site.index"),
+    }
+    value = destinations.get(value, value) if isinstance(value, str) else None
     href = value if isinstance(value, str) and value in labels else playlist
     return {"href": href, "label": labels[href]}
 
@@ -107,7 +113,13 @@ def playlist_setup_page(playlist_id, api=None, user=None, spotify_profile=None):
 @require_auth_and_db(on_preflight_error=_preflight)
 def playlist_setup_context(playlist_id, api=None, user=None):
     """The shared setup context and its configuration revision. Writes nothing."""
-    return json_reply(PlaylistSetupService.context_reply(api, user, playlist_id))
+    return_target = request.args.get("return_target", request.args.get("return", "playlist"))
+    if return_target not in RETURN_TARGETS:
+        abort(404)
+    payload, status, *headers = PlaylistSetupService.context_reply(api, user, playlist_id)
+    if status < 400:
+        payload = {**payload, "return_target": return_target}
+    return json_reply((payload, status, *headers))
 
 
 @api_bp.route("/playlist/<playlist_id>/setup/impact", methods=["POST"])

@@ -26,18 +26,11 @@ from shuffify.services.routine_activation_service import RoutineActivationServic
 @require_auth_page
 def routine_setup(playlist_id, api=None, user=None, spotify_profile=None):
     """Render the guided task; context and exact-row selection are fetched read-only."""
-    requested = request.args.get("schedule_id")
-    if requested is not None and (
-        not requested.isascii() or not requested.isdecimal() or len(requested) > 18 or int(requested) < 1
-    ):
-        abort(404)
-    origin = request.args.get("from", "playlist")
-    if origin not in ("playlist", "routines"):
-        abort(404)
+    requested, origin = _navigation()
     page = {
         "ownerId": user.id,
         "targetId": playlist_id,
-        "requestedScheduleId": int(requested) if requested is not None else None,
+        "requestedScheduleId": requested,
         "origin": origin,
         "urls": {
             "context": url_for("api.routine_context", playlist_id=playlist_id),
@@ -51,6 +44,19 @@ def routine_setup(playlist_id, api=None, user=None, spotify_profile=None):
         },
     }
     return render_template("routine_setup.html", routine_page=page, user=spotify_profile)
+
+
+def _navigation():
+    """Validate routine deep-link identity and origin before loading playlist context."""
+    requested = request.args.get("schedule_id")
+    if requested is not None and (
+        not requested.isascii() or not requested.isdecimal() or len(requested) > 18 or int(requested) < 1
+    ):
+        abort(404)
+    origin = request.args.get("origin", request.args.get("from", "playlist"))
+    if origin not in ("playlist", "routines"):
+        abort(404)
+    return int(requested) if requested is not None else None, origin
 
 
 def _body(schema):
@@ -71,7 +77,13 @@ def _body(schema):
 @no_store
 @require_auth_and_db(on_preflight_error=context_preflight("routine_context"))
 def routine_context(playlist_id, api=None, user=None):
-    return json_reply(RoutineActivationService.context(api, user, playlist_id))
+    requested, origin = _navigation()
+    payload, status, *headers = RoutineActivationService.context(api, user, playlist_id)
+    if status < 400:
+        if requested is not None and not any(row["schedule_id"] == requested for row in payload["routines"]):
+            abort(404)
+        payload = {**payload, "requested_schedule_id": requested, "origin": origin}
+    return json_reply((payload, status, *headers))
 
 
 @api_bp.route("/playlist/<playlist_id>/routines/review", methods=["POST"])

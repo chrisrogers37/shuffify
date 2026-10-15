@@ -20,6 +20,10 @@ wheels/
 .installed.cfg
 *.egg
 
+# Node build dependencies
+node_modules/
+*.tsbuildinfo
+
 # Virtual environments, whatever they are named
 venv/
 venv-*/

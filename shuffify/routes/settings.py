@@ -95,16 +95,19 @@ def settings(api=None, user=None, spotify_profile=None):
 @require_auth_and_db
 def get_settings(api=None, user=None):
     """Read saved settings and the algorithms available to the settings form."""
-    user_settings = UserSettingsService.get_or_create(user.id)
+    return json_success("Settings loaded.", **_settings_context(user))
+
+
+def _settings_context(user, settings=None):
+    """The complete settings context returned after both reads and updates."""
     algorithms = ShuffleService.list_algorithms()
-    return json_success(
-        "Settings loaded.",
-        settings=user_settings.to_dict(),
-        algorithm_options=[{"value": "", "label": "No default (choose each time)"}] + [
-            {"value": algorithm["class_name"], "label": algorithm["name"]}
-            for algorithm in algorithms
+    return {
+        "settings": settings if settings is not None else UserSettingsService.get_or_create(user.id).to_dict(),
+        "algorithms": algorithms,
+        "algorithm_options": [{"value": "", "label": "No default (choose each time)"}] + [
+            {"value": algorithm["class_name"], "label": algorithm["name"]} for algorithm in algorithms
         ],
-    )
+    }
 
 
 @site_bp.route("/settings", methods=["POST"])
@@ -123,7 +126,7 @@ def update_settings(api=None, user=None):
     updated, error = _save_settings(user)
     if error:
         return json_error(error, 400)
-    return json_success("Settings saved successfully.", settings=updated)
+    return json_success("Settings saved successfully.", **_settings_context(user, updated))
 
 
 def _save_settings(user):
@@ -131,6 +134,8 @@ def _save_settings(user):
     # Handle both JSON and form-encoded data
     if request.is_json:
         data = request.get_json()
+        if not isinstance(data, dict):
+            return None, "Request body must be a JSON object."
     else:
         data = request.form.to_dict()
 

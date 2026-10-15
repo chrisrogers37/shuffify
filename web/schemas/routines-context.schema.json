@@ -1,0 +1,645 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/RoutinesContext",
+  "definitions": {
+    "RoutinesContext": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "message": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "const": "success"
+        },
+        "routines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RoutineRow"
+          }
+        },
+        "playlists": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PlaylistRef"
+          }
+        }
+      },
+      "required": [
+        "playlists",
+        "routines",
+        "success"
+      ],
+      "additionalProperties": false
+    },
+    "RoutineRow": {
+      "type": "object",
+      "properties": {
+        "schedule_id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "schedule": {
+          "$ref": "#/definitions/Schedule"
+        },
+        "definition": {
+          "$ref": "#/definitions/RoutineDefinition"
+        },
+        "schedule_revision": {
+          "type": "string"
+        },
+        "timing": {
+          "$ref": "#/definitions/RoutineTiming"
+        },
+        "registration": {
+          "$ref": "#/definitions/RoutineRegistration"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "active",
+            "paused",
+            "needs_attention"
+          ]
+        },
+        "state_label": {
+          "type": "string",
+          "enum": [
+            "Active",
+            "Paused",
+            "Saved—registration needs attention"
+          ]
+        }
+      },
+      "required": [
+        "schedule_id",
+        "schedule",
+        "definition",
+        "schedule_revision",
+        "timing",
+        "registration",
+        "state",
+        "state_label"
+      ],
+      "additionalProperties": false
+    },
+    "DatabaseId": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "Schedule": {
+      "type": "object",
+      "properties": {
+        "job_type": {
+          "$ref": "#/definitions/JobType"
+        },
+        "target_playlist_id": {
+          "type": "string"
+        },
+        "target_playlist_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_playlist_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "algorithm_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "algorithm_params": {
+          "$ref": "#/definitions/JsonRecord",
+          "description": "Persisted routines retain parameters from custom or unavailable algorithms."
+        },
+        "schedule_type": {
+          "type": "string",
+          "enum": [
+            "interval",
+            "cron"
+          ]
+        },
+        "schedule_value": {
+          "type": "string"
+        },
+        "timezone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "user_id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "is_enabled": {
+          "type": "boolean"
+        },
+        "last_run_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "last_status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "algorithm_name",
+        "algorithm_params",
+        "created_at",
+        "id",
+        "is_enabled",
+        "job_type",
+        "last_error",
+        "last_run_at",
+        "last_status",
+        "schedule_type",
+        "schedule_value",
+        "source_playlist_ids",
+        "target_playlist_id",
+        "target_playlist_name",
+        "timezone",
+        "updated_at",
+        "user_id"
+      ],
+      "additionalProperties": false
+    },
+    "JobType": {
+      "type": "string",
+      "enum": [
+        "raid",
+        "shuffle",
+        "raid_and_shuffle",
+        "raid_and_drip",
+        "rotate",
+        "drip"
+      ]
+    },
+    "JsonRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/JsonValue"
+      },
+      "description": "Extensible metadata and preferences intentionally retain arbitrary JSON values."
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        }
+      ]
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "An ISO 8601 timestamp supplied by the server."
+    },
+    "RoutineDefinition": {
+      "type": "object",
+      "properties": {
+        "job_type": {
+          "$ref": "#/definitions/JobType"
+        },
+        "target_playlist_id": {
+          "type": "string"
+        },
+        "target_playlist_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_playlist_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "algorithm_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "algorithm_params": {
+          "$ref": "#/definitions/JsonRecord",
+          "description": "Persisted routines retain parameters from custom or unavailable algorithms."
+        },
+        "schedule_type": {
+          "type": "string",
+          "enum": [
+            "interval",
+            "cron"
+          ]
+        },
+        "schedule_value": {
+          "type": "string"
+        },
+        "timezone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "job_type",
+        "target_playlist_id",
+        "target_playlist_name",
+        "source_playlist_ids",
+        "algorithm_name",
+        "algorithm_params",
+        "schedule_type",
+        "schedule_value",
+        "timezone"
+      ],
+      "additionalProperties": false
+    },
+    "RoutineTiming": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/IntervalTiming"
+        },
+        {
+          "$ref": "#/definitions/DailyTiming"
+        },
+        {
+          "$ref": "#/definitions/WeeklyTiming"
+        },
+        {
+          "$ref": "#/definitions/AdvancedTiming"
+        }
+      ]
+    },
+    "IntervalTiming": {
+      "type": "object",
+      "properties": {
+        "timezone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "schedule_type": {
+          "type": "string",
+          "enum": [
+            "interval",
+            "cron"
+          ]
+        },
+        "schedule_value": {
+          "type": "string"
+        },
+        "effective_timezone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "legacy": {
+          "type": "boolean"
+        },
+        "explanation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "const": "interval"
+        },
+        "interval": {
+          "type": "string",
+          "enum": [
+            "every_6h",
+            "every_12h",
+            "daily",
+            "every_3d",
+            "weekly"
+          ]
+        }
+      },
+      "required": [
+        "effective_timezone",
+        "explanation",
+        "interval",
+        "kind",
+        "legacy",
+        "schedule_type",
+        "schedule_value",
+        "text",
+        "timezone"
+      ],
+      "additionalProperties": false
+    },
+    "DailyTiming": {
+      "type": "object",
+      "properties": {
+        "timezone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "schedule_type": {
+          "type": "string",
+          "enum": [
+            "interval",
+            "cron"
+          ]
+        },
+        "schedule_value": {
+          "type": "string"
+        },
+        "effective_timezone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "legacy": {
+          "type": "boolean"
+        },
+        "explanation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "const": "daily"
+        },
+        "time": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "effective_timezone",
+        "explanation",
+        "kind",
+        "legacy",
+        "schedule_type",
+        "schedule_value",
+        "text",
+        "time",
+        "timezone"
+      ],
+      "additionalProperties": false
+    },
+    "WeeklyTiming": {
+      "type": "object",
+      "properties": {
+        "timezone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "schedule_type": {
+          "type": "string",
+          "enum": [
+            "interval",
+            "cron"
+          ]
+        },
+        "schedule_value": {
+          "type": "string"
+        },
+        "effective_timezone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "legacy": {
+          "type": "boolean"
+        },
+        "explanation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "const": "weekly"
+        },
+        "time": {
+          "type": "string"
+        },
+        "weekday": {
+          "type": "string",
+          "enum": [
+            "mon",
+            "tue",
+            "wed",
+            "thu",
+            "fri",
+            "sat",
+            "sun"
+          ]
+        }
+      },
+      "required": [
+        "effective_timezone",
+        "explanation",
+        "kind",
+        "legacy",
+        "schedule_type",
+        "schedule_value",
+        "text",
+        "time",
+        "timezone",
+        "weekday"
+      ],
+      "additionalProperties": false
+    },
+    "AdvancedTiming": {
+      "type": "object",
+      "properties": {
+        "timezone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "schedule_type": {
+          "type": "string",
+          "enum": [
+            "interval",
+            "cron"
+          ]
+        },
+        "schedule_value": {
+          "type": "string"
+        },
+        "effective_timezone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "legacy": {
+          "type": "boolean"
+        },
+        "explanation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "const": "advanced"
+        },
+        "expression": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "effective_timezone",
+        "explanation",
+        "expression",
+        "kind",
+        "legacy",
+        "schedule_type",
+        "schedule_value",
+        "text",
+        "timezone"
+      ],
+      "additionalProperties": false
+    },
+    "RoutineRegistration": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "unavailable",
+            "paused",
+            "registered",
+            "needs_attention"
+          ]
+        },
+        "next_run_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effective_timezone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "next_run_at",
+        "effective_timezone"
+      ],
+      "additionalProperties": false
+    },
+    "PlaylistRef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -11,6 +11,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.paths import api_path
+
 
 class TestIndexRoute:
     """Tests for GET /."""
@@ -177,14 +179,21 @@ class TestCallbackRoute:
         ],
         ids=["error-description", "unknown-error-code"],
     )
-    def test_oauth_error_flashes_only_app_authored_text(self, db_app, query, marker):
-        """Callback query text never reaches the page; a known code picks a fixed message."""
+    def test_oauth_error_notice_is_authored_and_consumed_once(self, db_app, query, marker):
+        """The signed-out session reads one fixed notice without echoing callback query text."""
         with db_app.test_client() as client:
             client.get("/callback", query_string=query)
             with client.session_transaction() as sess:
                 messages = [message for _, message in sess.get("_flashes", [])]
+            first = client.get(api_path("/session")).get_json()
+            second = client.get(api_path("/session")).get_json()
         assert messages, "expected a flashed message for the OAuth error"
         assert not any(marker in m for m in messages)
+        assert first["signed_in"] is False
+        assert first["notice"]["code"] == ("access_denied" if query["error"] == "access_denied" else "oauth_failed")
+        assert first["notice"]["message"] in messages
+        assert marker not in first["notice"]["message"]
+        assert second["notice"] is None
 
     def test_missing_code_redirects(self, db_app):
         """No authorization code should redirect to index."""

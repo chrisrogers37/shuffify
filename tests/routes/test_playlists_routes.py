@@ -1,7 +1,7 @@
 """
 Tests for playlist routes.
 
-Tests cover refresh-playlists, get-playlist, get-stats,
+Tests cover Library refresh, get-playlist, get-stats,
 and user-playlists API.
 """
 
@@ -13,53 +13,44 @@ from tests.paths import api_path
 from tests.services.test_live_metadata_service import MetadataSpotify
 
 
-class TestRefreshPlaylists:
-    """Tests for POST /refresh-playlists."""
+class TestLibraryRefresh:
+    """GET /api/library?refresh=1 refreshes the Library's ordered sections."""
 
-    @patch("shuffify.routes.require_auth")
+    @patch("shuffify.routes.require_auth", return_value=None)
     def test_unauth_returns_401(self, mock_auth, db_app):
-        mock_auth.return_value = None
         with db_app.test_client() as client:
-            resp = client.post(api_path("/refresh-playlists"))
-            assert resp.status_code == 401
+            response = client.get(api_path("/library?refresh=1"))
+        assert response.status_code == 401
 
-    @patch("shuffify.routes.playlists.PlaylistService")
+    @patch("shuffify.services.PlaylistService.get_user_playlists", autospec=True)
     @patch("shuffify.routes.require_auth")
-    def test_success_returns_playlists(
-        self, mock_auth, mock_ps_class, auth_client
-    ):
-        mock_auth.return_value = MagicMock()
-        mock_ps = MagicMock()
-        mock_ps.get_user_playlists.return_value = [
-            {"id": "p1", "name": "Playlist 1"}
-        ]
-        mock_ps_class.return_value = mock_ps
+    def test_success_returns_playlist_sections(self, mock_auth, read_playlists, auth_client):
+        from shuffify.spotify.api import SpotifyAPI
 
-        resp = auth_client.post(api_path("/refresh-playlists"))
-        assert resp.status_code == 200
-        data = resp.get_json()
+        mock_auth.return_value = MagicMock(spec=SpotifyAPI)
+        read_playlists.return_value = [{"id": "p1", "name": "Playlist 1", "images": [], "public": True}]
+
+        response = auth_client.get(api_path("/library?refresh=1"))
+
+        assert response.status_code == 200
+        data = response.get_json()
         assert data["success"] is True
-        assert len(data["playlists"]) == 1
-        mock_ps.get_user_playlists.assert_called_once_with(
-            skip_cache=True
-        )
+        assert [row["id"] for row in data["sections"]["playlists"]] == ["p1"]
+        assert read_playlists.call_args.kwargs == {"skip_cache": True}
 
-    @patch("shuffify.routes.playlists.PlaylistService")
+    @patch("shuffify.services.PlaylistService.get_user_playlists", autospec=True)
     @patch("shuffify.routes.require_auth")
-    def test_playlist_error_returns_500(
-        self, mock_auth, mock_ps_class, auth_client
-    ):
+    def test_playlist_error_returns_500(self, mock_auth, read_playlists, auth_client):
         from shuffify.services import PlaylistError
+        from shuffify.spotify.api import SpotifyAPI
 
-        mock_auth.return_value = MagicMock()
-        mock_ps = MagicMock()
-        mock_ps.get_user_playlists.side_effect = (
-            PlaylistError("fail")
-        )
-        mock_ps_class.return_value = mock_ps
+        mock_auth.return_value = MagicMock(spec=SpotifyAPI)
+        read_playlists.side_effect = PlaylistError("API unavailable")
 
-        resp = auth_client.post(api_path("/refresh-playlists"))
-        assert resp.status_code == 500
+        response = auth_client.get(api_path("/library?refresh=1"))
+
+        assert response.status_code == 500
+        assert response.get_json()["success"] is False
 
 
 class TestGetPlaylist:

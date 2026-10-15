@@ -1,0 +1,19 @@
+{
+  "name": "shuffify-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24 <25" },
+  "scripts": {
+    "schemas:generate": "node scripts/generate-schemas.mjs",
+    "schemas:check": "node scripts/generate-schemas.mjs --check",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs",
+    "build": "tsc --emitDeclarationOnly"
+  },
+  "devDependencies": {
+    "ajv": "8.20.0",
+    "ts-json-schema-generator": "2.9.0",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/ApiError",
+  "definitions": {
+    "ApiError": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": false
+        },
+        "error_code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "retry_after": {
+          "type": "number"
+        },
+        "field_errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FieldError"
+          }
+        },
+        "operation_id": {
+          "$ref": "#/definitions/DatabaseId"
+        }
+      },
+      "required": [
+        "success",
+        "error_code",
+        "message",
+        "category"
+      ],
+      "additionalProperties": false
+    },
+    "FieldError": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "DatabaseId": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

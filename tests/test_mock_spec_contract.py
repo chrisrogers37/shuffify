@@ -59,7 +59,6 @@ BASELINE = {
     "templates/test_dashboard_overlay.py": 2,
     "test_integration.py": 4,
     "test_rate_limiting.py": 1,
-    "test_refresh_and_registry.py": 3,
 }
 
 

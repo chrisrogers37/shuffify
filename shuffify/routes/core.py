@@ -38,19 +38,19 @@ from shuffify.services import (
     UserService,
     UserSettingsService,
 )
+from shuffify.services.auth_notice import auth_notice
 from shuffify.services.playlist_preference_service import (
     PlaylistPreferenceService,
 )
 
 logger = logging.getLogger(__name__)
 
-# Messages for the ``error`` code Spotify appends to the OAuth callback. Only
-# these app-authored strings are displayed; the query string's free-text
-# ``error_description`` is not.
-_OAUTH_ERROR_MESSAGES = {
-    "access_denied": "Spotify access was not granted, so you have not been logged in.",
-}
-_OAUTH_ERROR_DEFAULT = "Spotify sign-in did not complete. Please try again."
+
+def _auth_notice(code):
+    """Keep one safe notice for the API and flash its authored message for HTML pages."""
+    notice = auth_notice(code)
+    session["auth_notice"] = code
+    flash(notice["message"], notice["category"])
 
 
 # =============================================================================
@@ -205,11 +205,7 @@ def login():
     try:
         # Check for legal consent
         if not request.args.get("legal_consent"):
-            flash(
-                "You must agree to the Terms of Service and "
-                "Privacy Policy to use Shuffify.",
-                "error",
-            )
+            _auth_notice("consent_required")
             return redirect("/")
 
         # Clear any existing session data
@@ -226,10 +222,7 @@ def login():
 
     except AuthenticationError as e:
         logger.error(f"Login error: {e}")
-        flash(
-            "An error occurred during login. Please try again.",
-            "error",
-        )
+        _auth_notice("login_failed")
         return redirect("/")
 
 
@@ -247,17 +240,14 @@ def callback():
     error = request.args.get("error")
     if error:
         logger.error("OAuth error: %r", error[:100])
-        flash(_OAUTH_ERROR_MESSAGES.get(error, _OAUTH_ERROR_DEFAULT), "error")
+        _auth_notice("access_denied" if error == "access_denied" else "oauth_failed")
         return redirect("/")
 
     # Get authorization code
     code = request.args.get("code")
     if not code:
         logger.error("No authorization code in callback")
-        flash(
-            "No authorization code received from Spotify. Please try again.",
-            "error",
-        )
+        _auth_notice("missing_code")
         return redirect("/")
 
     # Validate CSRF state parameter
@@ -265,10 +255,7 @@ def callback():
     stored_state = session.pop("oauth_state", None)
     if not stored_state or not hmac.compare_digest(stored_state, callback_state or ""):
         logger.error("OAuth state mismatch: possible CSRF attack")
-        flash(
-            "Authentication failed due to a security check. Please try again.",
-            "error",
-        )
+        _auth_notice("invalid_state")
         return redirect("/")
 
     try:
@@ -362,10 +349,7 @@ def callback():
             logger.error(f"Authentication failed: {e}")
         session.pop("spotify_token", None)
         session.pop("user_data", None)
-        flash(
-            "Error connecting to Spotify. Please try again.",
-            "error",
-        )
+        _auth_notice("authentication_failed")
         return redirect("/")
 
 

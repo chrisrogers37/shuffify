@@ -412,6 +412,7 @@ def load_schedule_context(db_user):
 
 from shuffify.routes import (  # noqa: E402, F401
     activity,
+    contexts,
     core,
     playlist_pairs,
     playlist_preferences,

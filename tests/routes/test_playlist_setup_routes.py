@@ -120,7 +120,9 @@ def test_the_context_answers_the_service_context(auth_client, api, user, schedul
     with as_user(api):
         response = auth_client.get(CONTEXT)
     body = response.get_json()
-    assert response.status_code == 200 and set(body) == {"success", "context"} and body["success"] is True
+    assert response.status_code == 200 and set(body) == {"success", "context", "return_target"}
+    assert body["success"] is True
+    assert body["return_target"] == "playlist"
     assert body["context"]["target"] == {"id": TARGET, "name": "Morning Mix"}
     assert body["context"]["sources"][0]["name"] == "Indie Finds"
     assert api.writes == [] and ActivityLog.query.count() == 0

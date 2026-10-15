@@ -37,7 +37,7 @@
         icon.classList.add('sh-spinner');
         let reply;
         try {
-            reply = await window.AppRequest.send(btn.dataset.refreshUrl, {method: 'POST'});
+            reply = await window.AppRequest.send(btn.dataset.refreshUrl, {method: 'GET', cache: 'no-store'});
         } finally {
             refreshingPlaylists = false;
             btn.removeAttribute('aria-disabled');

@@ -15,7 +15,7 @@
             <div class="sh-library-header-actions">
                 <button id="refresh-playlists-btn"
                         data-action-click="dash-002"
-                        data-refresh-url="{{ url_for('api.refresh_playlists') }}"
+                        data-refresh-url="{{ url_for('api.library_context', refresh=1) }}"
                         class="sh-button-secondary"
                         title="Refresh playlists from Spotify">
                     <svg id="refresh-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">

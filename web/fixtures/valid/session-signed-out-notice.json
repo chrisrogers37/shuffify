@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "category": "success",
+  "signed_in": false,
+  "user": null,
+  "notice": {
+    "code": "access_denied",
+    "category": "error",
+    "message": "Sign-in was cancelled. Please try again."
+  }
+}
