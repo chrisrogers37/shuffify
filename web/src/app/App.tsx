@@ -6,6 +6,7 @@ import { Providers } from "./Providers";
 import { publicRoutes } from "./public-routes";
 import { settingsRoutes } from "./settings-routes";
 import { activityRoutes } from "./activity-routes";
+import { libraryRoutes } from "./library-routes";
 export function createAppRoutes(services: Services) {
   return [
     {
@@ -23,6 +24,7 @@ export function createAppRoutes(services: Services) {
         ...publicRoutes(),
         ...settingsRoutes(),
         ...activityRoutes(),
+        ...libraryRoutes(),
         {
           path: "*",
           element: (

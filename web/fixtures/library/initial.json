@@ -1,0 +1,345 @@
+{
+  "success": true,
+  "category": "success",
+  "sections": {
+    "favorites": [
+      {
+        "id": "alice-mix",
+        "name": "Evening rotation",
+        "image_url": null,
+        "track_count": 12,
+        "spotify_url": "https://open.spotify.com/playlist/alice-mix",
+        "public": true,
+        "pinned": true,
+        "hidden": false,
+        "can_undo": true
+      }
+    ],
+    "playlists": [
+      {
+        "id": "bob-mix",
+        "name": "Weekend discoveries",
+        "image_url": null,
+        "track_count": 12,
+        "spotify_url": "https://open.spotify.com/playlist/bob-mix",
+        "public": false,
+        "pinned": false,
+        "hidden": false,
+        "can_undo": true
+      },
+      {
+        "id": "claire-mix",
+        "name": "Quiet corners",
+        "image_url": null,
+        "track_count": 12,
+        "spotify_url": "https://open.spotify.com/playlist/claire-mix",
+        "public": false,
+        "pinned": false,
+        "hidden": false,
+        "can_undo": true
+      },
+      {
+        "id": "empty-mix",
+        "name": "An empty playlist",
+        "image_url": null,
+        "track_count": 0,
+        "spotify_url": "https://open.spotify.com/playlist/empty-mix",
+        "public": null,
+        "pinned": false,
+        "hidden": false,
+        "can_undo": false
+      }
+    ],
+    "hidden": [
+      {
+        "id": "hidden-mix",
+        "name": "Saved for later",
+        "image_url": null,
+        "track_count": 12,
+        "spotify_url": "https://open.spotify.com/playlist/hidden-mix",
+        "public": false,
+        "pinned": false,
+        "hidden": true,
+        "can_undo": false
+      }
+    ]
+  },
+  "algorithms": [
+    {
+      "class_name": "BasicShuffle",
+      "name": "Basic",
+      "description": "Randomly shuffle your playlist while optionally keeping tracks in place at the top.",
+      "parameters": {
+        "keep_first": {
+          "type": "integer",
+          "description": "Number of tracks to keep at start",
+          "default": 0,
+          "min": 0
+        }
+      }
+    },
+    {
+      "class_name": "PercentageShuffle",
+      "name": "Percentage",
+      "description": "Shuffle a portion of your playlist while keeping the rest in order.",
+      "parameters": {
+        "shuffle_percentage": {
+          "type": "float",
+          "description": "Percentage of tracks to shuffle (0-100)",
+          "default": 50.0,
+          "min": 0.0,
+          "max": 100.0
+        },
+        "shuffle_location": {
+          "type": "string",
+          "description": "Location to shuffle (front or back)",
+          "default": "front",
+          "options": [
+            "front",
+            "back"
+          ]
+        }
+      }
+    },
+    {
+      "class_name": "BalancedShuffle",
+      "name": "Balanced",
+      "description": "Ensures fair representation from all parts of the playlist by dividing it into sections and using a round-robin selection process.",
+      "parameters": {
+        "keep_first": {
+          "type": "integer",
+          "description": "Number of tracks to keep in their original position",
+          "default": 0,
+          "min": 0
+        },
+        "section_count": {
+          "type": "integer",
+          "description": "Number of sections to divide the playlist into",
+          "default": 4,
+          "min": 2,
+          "max": 10
+        }
+      }
+    },
+    {
+      "class_name": "StratifiedShuffle",
+      "name": "Stratified",
+      "description": "Divide the playlist into sections, shuffle each section independently, and reassemble the sections in the original order.",
+      "parameters": {
+        "keep_first": {
+          "type": "integer",
+          "description": "Number of tracks to keep in their original position",
+          "default": 0,
+          "min": 0
+        },
+        "section_count": {
+          "type": "integer",
+          "description": "Number of sections to divide the playlist into",
+          "default": 5,
+          "min": 1,
+          "max": 20
+        }
+      }
+    },
+    {
+      "class_name": "ArtistSpacingShuffle",
+      "name": "Artist Spacing",
+      "description": "Shuffles tracks while ensuring the same artist never appears back-to-back for a more varied listening experience.",
+      "parameters": {
+        "min_spacing": {
+          "type": "integer",
+          "description": "Minimum tracks between same artist",
+          "default": 1,
+          "min": 1,
+          "max": 10
+        }
+      }
+    },
+    {
+      "class_name": "AlbumSequenceShuffle",
+      "name": "Album Sequence",
+      "description": "Keeps tracks from the same album together in their original order, but shuffles which album plays first.",
+      "parameters": {
+        "shuffle_within_albums": {
+          "type": "string",
+          "description": "Also shuffle track order within each album",
+          "default": "no",
+          "options": [
+            "no",
+            "yes"
+          ]
+        }
+      }
+    },
+    {
+      "class_name": "NewestFirstShuffle",
+      "name": "Newest First",
+      "description": "Reorders tracks so the most recently added appear at the top, with adjustable jitter to keep things feeling natural.",
+      "parameters": {
+        "jitter": {
+          "type": "integer",
+          "description": "Window size for local shuffling (1 = exact date sort, higher = more variation)",
+          "default": 5,
+          "min": 1,
+          "max": 50
+        }
+      }
+    }
+  ],
+  "shuffle_defaults": {
+    "algorithm": "BasicShuffle",
+    "params": {
+      "keep_first": 1
+    }
+  },
+  "greeting": {
+    "is_new_user": false,
+    "is_returning_user": true,
+    "display_name": "Alice",
+    "activity_since_last_login_count": 1
+  },
+  "dashboard": {
+    "is_returning_user": true,
+    "recent_activity": [
+      {
+        "id": 1,
+        "user_id": 1,
+        "activity_type": "schedule_run",
+        "description": "Collected tracks for Alice mix",
+        "playlist_id": "alice-mix",
+        "playlist_name": "Alice mix",
+        "metadata": {
+          "triggered_by": "scheduler",
+          "result": {
+            "tracks_added": 2
+          }
+        },
+        "created_at": "2026-01-01T12:00:00+00:00",
+        "triggered_by": "scheduler"
+      }
+    ],
+    "activity_since_last_login": [
+      {
+        "id": 1,
+        "user_id": 1,
+        "activity_type": "schedule_run",
+        "description": "Collected tracks for Alice mix",
+        "playlist_id": "alice-mix",
+        "playlist_name": "Alice mix",
+        "metadata": {
+          "triggered_by": "scheduler",
+          "result": {
+            "tracks_added": 2
+          }
+        },
+        "created_at": "2026-01-01T12:00:00+00:00",
+        "triggered_by": "scheduler"
+      }
+    ],
+    "activity_since_last_login_count": 1,
+    "quick_stats": {
+      "total_shuffles": 4,
+      "total_scheduled_runs": 2,
+      "total_snapshots": 5,
+      "active_schedule_count": 1
+    },
+    "active_schedules": [
+      {
+        "job_type": "shuffle",
+        "target_playlist_id": "alice-mix",
+        "target_playlist_name": "Alice mix",
+        "source_playlist_ids": [],
+        "algorithm_name": "BasicShuffle",
+        "algorithm_params": {
+          "keep_first": 1
+        },
+        "schedule_type": "interval",
+        "schedule_value": "daily",
+        "timezone": "UTC",
+        "id": 1,
+        "user_id": 1,
+        "is_enabled": true,
+        "last_run_at": "2026-01-01T12:00:00+00:00",
+        "last_status": "success",
+        "last_error": null,
+        "created_at": "2026-01-01T12:00:00+00:00",
+        "updated_at": "2026-01-01T12:00:00+00:00"
+      }
+    ],
+    "recent_job_executions": [
+      {
+        "id": 1,
+        "schedule_id": 1,
+        "started_at": "2026-01-01T12:00:00+00:00",
+        "completed_at": "2026-01-01T12:00:00+00:00",
+        "status": "success",
+        "tracks_added": 2,
+        "tracks_total": 3,
+        "error_message": null,
+        "result_detail": {
+          "detail_status": "available",
+          "version": 1,
+          "operation": "raid_and_drip",
+          "execution_id": 1,
+          "outcome": "complete",
+          "steps": [
+            {
+              "step": "raid",
+              "status": "complete",
+              "counts": {
+                "tracks_collected": 2
+              },
+              "resources": [],
+              "bookkeeping": [
+                {
+                  "kind": "pending_stage",
+                  "status": "complete",
+                  "resource": "alice-mix",
+                  "affected_count": 2
+                }
+              ]
+            },
+            {
+              "step": "drip",
+              "status": "complete",
+              "counts": {
+                "tracks_moved_to_target": 2,
+                "tracks_removed_from_collection": 2
+              },
+              "resources": [
+                {
+                  "resource": "alice-mix",
+                  "status": "complete",
+                  "phase": "drip",
+                  "kind": "target",
+                  "mutation_type": "track_membership",
+                  "affected_count": 2,
+                  "dispatched": true
+                },
+                {
+                  "resource": "alice-collection",
+                  "status": "complete",
+                  "phase": "drip",
+                  "kind": "collection",
+                  "mutation_type": "track_membership",
+                  "affected_count": 2,
+                  "dispatched": true
+                }
+              ],
+              "bookkeeping": []
+            }
+          ],
+          "resource_ids": {
+            "target": "alice-mix",
+            "collection": "alice-collection"
+          },
+          "execution_record": "complete",
+          "run_state": "finished"
+        },
+        "schedule_name": "Alice mix",
+        "job_type": "raid_and_drip",
+        "triggered_by": null
+      }
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 # Shuffify web frontend
 
-The React/Vite application uses the existing After Hours design. It provides public landing and legal pages, shared app controls, session and API clients, an authenticated Settings form, and Activity run and event views.
+The React/Vite application uses the existing After Hours design. It provides public landing and legal pages, shared app controls, session and API clients, an authenticated Settings form, Activity run and event views, and the playlist Library.
 
 Node 24 is required. Install and verify from `web/`:
 

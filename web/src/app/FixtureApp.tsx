@@ -6,6 +6,7 @@ import { Providers } from "./Providers";
 import { publicRoutes } from "./public-routes";
 import { settingsRoutes } from "./settings-routes";
 import { activityRoutes } from "./activity-routes";
+import { libraryRoutes } from "./library-routes";
 import { AppShell, PublicShell } from "../shell/Shell";
 import { ErrorPage } from "../pages/errors/ErrorPage";
 import {
@@ -513,6 +514,7 @@ export function createFixtureRouter(services: Services) {
         ...publicRoutes(),
         ...settingsRoutes(),
         ...activityRoutes(),
+        ...libraryRoutes(),
         {
           path: "/__foundation/app",
           element: (
