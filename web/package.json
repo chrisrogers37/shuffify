@@ -28,7 +28,9 @@
     "test:activity-browser": "playwright test --config playwright.activity.config.ts",
     "test:activity-fixtures": "ACTIVITY_FIXTURE_BUILD=1 playwright test --config playwright.activity.config.ts",
     "test:library-browser": "playwright test --config playwright.library.config.ts",
-    "test:library-fixtures": "LIBRARY_FIXTURE_BUILD=1 playwright test --config playwright.library.config.ts"
+    "test:library-fixtures": "LIBRARY_FIXTURE_BUILD=1 playwright test --config playwright.library.config.ts",
+    "test:routines-browser": "playwright test --config playwright.routines.config.ts",
+    "test:routines-fixtures": "ROUTINES_FIXTURE_BUILD=1 playwright test --config playwright.routines.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",

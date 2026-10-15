@@ -1,3 +1,4 @@
+import { createRoutinesFixtures, routinesScenarios } from "./routines.ts";
 import { createLibraryFixtures, libraryScenarios } from "./library.ts";
 import { createActivityFixtures, activityScenarios } from "./activity.ts";
 import { createSettingsFixtures, settingsScenarios } from "./settings.ts";
@@ -10,6 +11,7 @@ import library from "../../fixtures/valid/library-context.json";
 import type { Transport } from "../api/transport";
 const scenarios = [
   ...libraryScenarios,
+  ...routinesScenarios,
   ...settingsScenarios,
   ...activityScenarios,
   "happy",
@@ -47,6 +49,7 @@ export function createFixtureTransport(scenario: Scenario): Transport {
   const settings = createSettingsFixtures(scenario);
   const activity = createActivityFixtures(scenario);
   const libraryFixture = createLibraryFixtures(scenario);
+  const routines = createRoutinesFixtures(scenario);
   let sessionCalls = 0,
     polls = 0,
     accepted = false;
@@ -54,6 +57,8 @@ export function createFixtureTransport(scenario: Scenario): Transport {
     if (init?.signal?.aborted) throw init.signal.reason;
     const path = String(input),
       method = init?.method ?? "GET";
+    const routinesResponse = await routines(path, method, init);
+    if (routinesResponse) return routinesResponse;
     const libraryResponse = await libraryFixture(path, method, init);
     if (libraryResponse) return libraryResponse;
     const activityResponse = await activity(path, method);
