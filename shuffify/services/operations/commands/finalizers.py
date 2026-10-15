@@ -333,6 +333,7 @@ class FinalizerHandler:
         elif state == "rolled_back":
             result.update(
                 status="failed",
+                source_status="restored" if command.source_playlist_id else "not_required",
                 aggregate_status="partial",
                 affected_count=0,
                 success=False,
@@ -340,6 +341,8 @@ class FinalizerHandler:
                 **{self.count_key: 0},
                 message="The source changes were verified as restored. The saved target is unchanged.",
             )
+            if isinstance(command, FinalizeRaidsCommand):
+                result["database_status"] = "complete" if accepted else "not_started"
         return OperationResult(state, result)
 
 

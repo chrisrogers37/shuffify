@@ -112,6 +112,78 @@ def test_owned_binding_change_after_admission_refuses_before_authentication(clea
     assert PendingRaidTrack.query.filter_by(status="pending").count() == 2
 
 
+@pytest.mark.parametrize(
+    "kind,count_key",
+    [
+        ("raids", "promoted_count"),
+        ("restore", "restored_count"),
+        ("append", "archived_count"),
+    ],
+)
+def test_confirmed_finalizer_rollback_reports_restored_source_and_no_database_transition(cleanup, kind, count_key):
+    from shuffify.spotify.exceptions import SpotifyWriteRejectedError
+
+    PendingRaidTrack.query.delete()
+    selected = [uri(index) for index in range(101)]
+    pending = [
+        PendingRaidTrack(
+            user_id=cleanup.user.id,
+            target_playlist_id="target",
+            track_uri=value,
+            track_name="Example track",
+            status="pending",
+        )
+        for value in selected
+    ]
+    db.session.add_all(pending)
+    db.session.commit()
+    cleanup.pending_ids = [item.id for item in pending]
+    cleanup.world.playlists["target"]["track_uris"] = list(selected)
+    source_id = "collection" if kind == "raids" else "archive"
+    cleanup.world.playlists[source_id]["track_uris"] = [uri(999)] if kind == "append" else selected + [uri(999)]
+    target = deepcopy(cleanup.world.playlists["target"])
+    source = deepcopy(cleanup.world.playlists[source_id])
+    original, calls = cleanup.world.dispatch, []
+
+    def dispatch(method, path, body):
+        if method == ("POST" if kind == "append" else "DELETE"):
+            calls.append(path)
+            if len(calls) == 2:
+                raise SpotifyWriteRejectedError("Example batch refused")
+        return original(method, path, body)
+
+    cleanup.world.dispatch = dispatch
+
+    def factory(user):
+        api = cleanup.factory(user)
+        original_page = api.get_playlist_items_raw
+
+        def page(resource, limit=100, offset=0):
+            value = original_page(resource, limit=limit, offset=offset)
+            end = offset + len(value["items"])
+            value["next"] = f"https://fixture.invalid/?offset={end}" if end < value["total"] else None
+            return value
+
+        api.get_playlist_items_raw = page
+        return api
+
+    selection = {} if kind == "raids" else {"track_uris": selected}
+    completed = cleanup.run_cleanup(
+        cleanup.enqueue_cleanup(kind, target_track_uris=selected, **selection), factory=factory
+    )
+    assert completed.state == "rolled_back", completed.journal["result"]
+    result = completed.journal["result"]
+    assert result["source_status"] == "restored"
+    if kind == "raids":
+        assert result["database_status"] == "not_started"
+    assert result[count_key] == result["affected_count"] == 0
+    assert cleanup.world.playlists[source_id]["track_uris"] == source["track_uris"]
+    assert cleanup.world.playlists["target"] == target
+    assert PendingRaidTrack.query.filter_by(status="pending").count() == 101
+    assert ActivityLog.query.count() == 0
+    assert completed.journal["boundaries"]["accepted"] == []
+
+
 @pytest.mark.parametrize("change", ["status", "uri", "owner", "deleted"])
 def test_changed_selected_identity_refuses_before_authentication(cleanup, change):
     row = cleanup.enqueue_cleanup()
