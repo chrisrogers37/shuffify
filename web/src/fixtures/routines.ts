@@ -112,8 +112,8 @@ export function createRoutinesFixtures(scenario: string) {
   ): Promise<Response | null> => {
     const url = new URL(path, "https://fixture.invalid"),
       route = url.pathname,
-      body = init?.body
-        ? (JSON.parse(String(init.body)) as Record<string, unknown>)
+      body = typeof init?.body === "string"
+        ? (JSON.parse(init.body) as Record<string, unknown>)
         : {};
     const requestKey = new Headers(init?.headers).get("Idempotency-Key");
     if (method === "POST" && requestKey && admissionReceipts.has(requestKey))

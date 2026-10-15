@@ -7,6 +7,8 @@ import { publicRoutes } from "./public-routes";
 import { settingsRoutes } from "./settings-routes";
 import { activityRoutes } from "./activity-routes";
 import { libraryRoutes } from "./library-routes";
+import { WorkshopToolsHarness } from "../fixtures/WorkshopToolsHarness";
+import { workshopRoutes } from "./workshop-routes";
 import { routinesRoutes } from "./routines-routes";
 import { AppShell, PublicShell } from "../shell/Shell";
 import { ErrorPage } from "../pages/errors/ErrorPage";
@@ -27,8 +29,8 @@ import { useAnnouncer } from "../a11y/Announcer";
 import { pollOperation } from "../api/operations";
 import { ConflictError, RateLimitError } from "../api/errors";
 import type { Operation } from "../api/contracts";
-import { NavigationHandoff } from "../fixtures/NavigationHandoff";
 import { TaskScrollHarness } from "../fixtures/TaskScrollHarness";
+import { NavigationHandoff } from "../fixtures/NavigationHandoff";
 function TaskContents({
   guard,
   delay,
@@ -511,12 +513,32 @@ export function createFixtureRouter(services: Services) {
       ),
       children: [
         { path: "/__foundation/guard-handoff", element: <NavigationHandoff /> },
-        { path: "/__foundation/task-scroll", element: <AppShell><AuthGuard><TaskScrollHarness /></AuthGuard></AppShell> },
         ...publicRoutes(),
         ...settingsRoutes(),
         ...activityRoutes(),
         ...libraryRoutes(),
         ...routinesRoutes(),
+        ...workshopRoutes(),
+        {
+          path: "/__foundation/workshop-tools/:playlistId",
+          element: (
+            <AppShell>
+              <AuthGuard>
+                <WorkshopToolsHarness />
+              </AuthGuard>
+            </AppShell>
+          ),
+        },
+        {
+          path: "/__foundation/task-scroll",
+          element: (
+            <AppShell>
+              <AuthGuard>
+                <TaskScrollHarness />
+              </AuthGuard>
+            </AppShell>
+          ),
+        },
         {
           path: "/__foundation/app",
           element: (

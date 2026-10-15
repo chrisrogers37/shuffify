@@ -13,6 +13,8 @@ import {
   unconfirmedMutation,
 } from "../src/pages/routines/model.ts";
 import { createRoutinesFixtures } from "../src/fixtures/routines.ts";
+import { createLibraryFixtures } from "../src/fixtures/library.ts";
+import signedIn from "../fixtures/valid/session-signed-in.json" with { type: "json" };
 import { createApiClient } from "../src/api/client.ts";
 import { createRoutineClient } from "../src/pages/routines/client.ts";
 
@@ -185,4 +187,42 @@ test("authored refusal stays distinct from unconfirmed transport or protocol fai
     unconfirmedMutation(new ProtocolError("Invalid reply", 202)),
     true,
   );
+});
+
+
+test("composed fixture dispatch preserves a foreign FormData admission and exact replay", async () => {
+  const routines = createRoutinesFixtures("library-unknown");
+  const library = createLibraryFixtures("library-unknown");
+  const transport = async (path, method, init) => {
+    const reply = await routines(path, method, init) ?? await library(path, method, init);
+    if (!reply) throw Error(`Unhandled fixture request: ${method} ${path}`);
+    return reply;
+  };
+  const form = new FormData();
+  form.set("algorithm", "BasicShuffle");
+  form.set("keep_first", "1");
+  const fields = [...form.entries()];
+  const request = {
+    body: form,
+    headers: {
+      "X-CSRFToken": signedIn.csrf_token,
+      "Idempotency-Key": "retained-library-request",
+    },
+  };
+  await assert.rejects(transport("/api/shuffle/alice-mix", "POST", request), /Lost admission response/);
+  const accepted = await transport("/api/shuffle/alice-mix", "POST", request);
+  assert.equal(accepted.status, 202);
+  const receipt = await accepted.json();
+  assert.equal(receipt.operation.id, 101);
+  assert.equal(receipt.operation.kind, "shuffle");
+  assert.deepEqual(receipt.operation.targets, ["alice-mix"]);
+  assert.deepEqual([...form.entries()], fields);
+  let observed;
+  for (let index = 0; index < 3; index++) {
+    observed = await (await transport("/api/operations/101", "GET", {})).json();
+  }
+  assert.equal(observed.operation.id, receipt.operation.id);
+  assert.equal(observed.operation.state, "succeeded");
+  await assert.rejects(transport("/api/not-a-route", "POST", request), /Unhandled fixture request/);
+  await assert.rejects(routines("/api/playlist/target/routines/review", "POST", { body: "{" }), SyntaxError);
 });
