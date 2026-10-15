@@ -87,7 +87,7 @@ def test_actual_csrf_rejection_preserves_source_contract(
 
 
 @pytest.mark.parametrize("path,count_key,module,method", FINALIZERS)
-def test_valid_csrf_still_allows_the_existing_finalizer_dispatch(
+def test_valid_csrf_allows_readonly_finalizer_inspection(
     csrf_client,
     csrf_headers,
     path,
@@ -99,6 +99,7 @@ def test_valid_csrf_still_allows_the_existing_finalizer_dispatch(
         "source123", "Source", "not_required", "Already verified", extra={count_key: 1}
     )
     with (
+        patch("shuffify.routes.is_authenticated", return_value=True),
         patch("shuffify.routes.require_auth", return_value=Mock()),
         patch("shuffify.routes.get_db_user", return_value=Mock(id=1)),
         patch(f"shuffify.routes.{module}.WorkshopFinalizeService") as service,
@@ -107,7 +108,7 @@ def test_valid_csrf_still_allows_the_existing_finalizer_dispatch(
         finalize.return_value = expected
         response = csrf_client.post(
             api_path(f"/playlist/target/{path}"),
-            json=captured_payload(False),
+            json=captured_payload(True),
             headers=csrf_headers("valid"),
         )
     assert response.status_code == 200

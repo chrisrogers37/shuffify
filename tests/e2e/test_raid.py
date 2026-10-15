@@ -43,7 +43,7 @@ def test_raid_review_keep_and_dismiss(alice, fake):
     kept, dismissed, left = pending[:2], pending[2:3], pending[3:]
     staged = before + [t["track_uri"] for t in kept]
     alice.write(f"/workshop/{MORNING_MIX}/commit", json={"baseline_track_uris": before, "track_uris": staged})
-    alice.ok("post", f"/playlist/{MORNING_MIX}/pending-raids/finalize", json={"track_ids": [t["id"] for t in kept],
+    alice.write(f"/playlist/{MORNING_MIX}/pending-raids/finalize", json={"track_ids": [t["id"] for t in kept],
               "source_playlist_id": link["raid_playlist_id"], "target_track_uris": staged})
     alice.ok("post", f"/playlist/{MORNING_MIX}/pending-raids/dismiss",
              json={"track_ids": [t["id"] for t in dismissed]})

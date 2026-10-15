@@ -81,7 +81,10 @@ def worker_api(provider, token):
             elif method == "POST":
                 assert len(json["uris"]) <= 100
                 if hasattr(provider, "_write"):
-                    provider._write("add", playlist_id, json["uris"], json.get("position"))
+                    if json.get("position") is None:
+                        provider._write("add", playlist_id, json["uris"])
+                    else:
+                        provider._write("add", playlist_id, json["uris"], json["position"])
                 else:
                     provider.playlist_add_items(playlist_id, json["uris"], json.get("position"))
             else:

@@ -7,6 +7,19 @@ from dataclasses import dataclass
 from shuffify.models.db import User, db
 
 
+class VerifiedStepError(RuntimeError):
+    """Verified provider effects have no confirmed local acceptance receipt.
+
+    ``applied`` is detached private data for a domain-specific projection. It is
+    deliberately not exposed as a public ``result`` attribute.
+    """
+
+    def __init__(self, step_name, applied):
+        self.step_name = step_name
+        self.applied = deepcopy(applied)
+        super().__init__("Verified playlist changes require local record review.")
+
+
 @dataclass(frozen=True)
 class OperationResult:
     """A command's explicit terminal state and existing public service result."""
@@ -35,6 +48,14 @@ class OperationRuntime:
         self._lease_lost = lease_lost
         self._history = None
         self._history_loaded = False
+        self._verified_step = None
+
+    @property
+    def verified_step_failure(self):
+        """Inspect an unaccepted verified boundary without another database read."""
+        if self._verified_step is None:
+            return None
+        return VerifiedStepError(self._verified_step["name"], self._verified_step["applied"])
 
     @property
     def history(self):
@@ -152,15 +173,19 @@ class OperationRuntime:
             self._journal.reload_latest()
         return result
 
-    def composite_step(self, name, apply, commit):
+    def composite_step(self, name, apply, commit, *, after_verify=None):
         """Accept a verified child and its local effects before a later child begins.
 
         ``apply`` may use prepared choices and journaled Spotify steps. The final
         ``commit(storage, applied)`` performs only local database work and returns
         its rich JSON outcome. Its receipt and accepted boundary commit together.
+        Optional ``after_verify(applied)`` prepares local/history state only after
+        the fresh proof, using a separate copy from the original commit facts.
         """
         if not isinstance(name, str) or not name or len(name) > 120:
             raise ValueError("A composite step name must contain 1 to 120 characters.")
+        if self.verified_step_failure is not None:
+            raise self.verified_step_failure
         self.check_pending_control()
         accepted = self.journal.accepted_step(name)
         if accepted is not None:
@@ -170,7 +195,9 @@ class OperationRuntime:
         self.journal.begin_step(name)
         applied = json.loads(json.dumps(apply(), allow_nan=False))
         self.check_pending_control()
-        proof = self.journal.verify_step(name)
+
+        def retain_verified():
+            self._verified_step = {"name": name, "applied": deepcopy(applied)}
 
         def accept(document, value):
             document = self.history_working(document)
@@ -180,10 +207,41 @@ class OperationRuntime:
                 document, name, proof=proof, result=value,
             )
 
-        result = self.local_step("accept." + name, lambda storage: commit(storage, deepcopy(applied)),
-                                 journal_update=accept)
-        if self.journal.accepted_step(name) is None:
-            raise ValueError("The child step's local receipt has no accepted boundary.")
+        try:
+            proof = self.journal.verify_step(name, on_verified=retain_verified)
+            if after_verify is not None:
+                after_verify(deepcopy(applied))
+            result = self.local_step("accept." + name, lambda storage: commit(storage, deepcopy(applied)),
+                                     journal_update=accept)
+            if self.journal.accepted_step(name) is None:
+                raise ValueError("The child step's local receipt has no accepted boundary.")
+        except Exception as error:
+            from shuffify.services.operations.control import propagate_control
+            from shuffify.spotify.observation import observe_mutations
+
+            # Inspect causes without a second observer DB read masking the failure.
+            with observe_mutations(None):
+                propagate_control(error)
+            if self._verified_step is None:
+                raise
+            try:
+                latest = self.journal.reload_latest().doc
+                accepted = self.journal.accepted_step(name)
+                receipts = latest.get("runtime", {}).get("local_steps", {})
+                key = "accept." + name
+                if (accepted is not None and key in receipts
+                        and json.dumps(accepted.get("result"), sort_keys=True, allow_nan=False)
+                        == json.dumps(receipts[key], sort_keys=True, allow_nan=False)):
+                    self.journal.skip_to(accepted["end"])
+                    self._verified_step = None
+                    return deepcopy(receipts[key])
+            except Exception as read_error:
+                with observe_mutations(None):
+                    propagate_control(read_error)
+            # An absent proof or unreadable acknowledgement retains the sticky
+            # boundary. The worker must not compensate merely for local failure.
+            raise VerifiedStepError(name, applied) from error
+        self._verified_step = None
         return result
 
     def step(self, name, execute):

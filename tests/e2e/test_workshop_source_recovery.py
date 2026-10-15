@@ -56,14 +56,14 @@ def test_saved_target_survives_rejected_archive_step_and_source_only_retry(alice
     payload = _archive_intent(alice, fake)
     confirmed_target = fake.playlist(TARGET)
     fake.arm(operation="POST /playlists/{playlist_id}/items", kind="quota", playlist_id=ARCHIVE)
-    rejected = alice.post(api_path(f"/playlist/{TARGET}/pair/archive"), json=payload)
-    assert rejected.status_code == 502, rejected.text
-    result = rejected.json()
+    rejected = alice.queued(f"/playlist/{TARGET}/pair/archive", json=payload)
+    assert rejected["state"] == "failed", rejected
+    result = rejected["result"]
     assert (result["status"], result["retryable"]) == ("failed", True)
     assert fake.uris(ARCHIVE) == []
     assert fake.playlist(TARGET) == confirmed_target
 
-    completed = alice.ok("post", f"/playlist/{TARGET}/pair/archive", json=payload)
+    completed = alice.write(f"/playlist/{TARGET}/pair/archive", json=payload)
     assert completed["status"] == "complete"
     assert completed["affected_count"] == 2
     assert fake.uris(ARCHIVE) == payload["track_uris"]
@@ -81,9 +81,9 @@ def test_lost_archive_response_is_inspected_without_replaying_duplicates(alice, 
     # The client times out at 30s; the fake still applies this exact write.
     fake.arm(operation="POST /playlists/{playlist_id}/items", kind="slow",
              playlist_id=ARCHIVE, delay=31)
-    response = alice.post(api_path(f"/playlist/{TARGET}/pair/archive"), json=payload)
-    assert response.status_code == 502, response.text
-    assert (response.json()["status"], response.json()["retryable"]) == ("unknown", False)
+    response = alice.queued(f"/playlist/{TARGET}/pair/archive", json=payload)
+    assert response["state"] == "needs_attention", response
+    assert (response["result"]["status"], response["result"]["retryable"]) == ("unknown", False)
     # The API's bounded request deadline can expire before the transport's
     # timeout. Settle the original late call without sending another write.
     fake.release()
@@ -106,12 +106,12 @@ def test_restore_removes_all_occurrences_and_already_absent_retry_does_not_write
     repeated = target[0]
     _save(alice, ARCHIVE, [], [repeated, repeated, target[1]])
     payload = {"source_playlist_id": ARCHIVE, "target_track_uris": target, "track_uris": [repeated]}
-    result = alice.ok("post", f"/playlist/{TARGET}/pair/finalize-restore", json=payload)
+    result = alice.write(f"/playlist/{TARGET}/pair/finalize-restore", json=payload)
     assert result["status"] == "complete"
     assert result["affected_count"] == 2
     assert fake.uris(ARCHIVE) == [target[1]]
     before = fake.playlist(ARCHIVE)
-    repeated_result = alice.ok("post", f"/playlist/{TARGET}/pair/finalize-restore", json=payload)
+    repeated_result = alice.write(f"/playlist/{TARGET}/pair/finalize-restore", json=payload)
     assert repeated_result["status"] in ("complete", "not_required")
     assert fake.playlist(ARCHIVE) == before
 
@@ -244,7 +244,10 @@ def test_unknown_archive_browser_result_only_inspects_actual_saved_occurrence(
         # A local test proxy loses the acknowledgement after the real app
         # actually applies the source write. Redirects cannot escape the fake.
         actual = route.fetch(max_redirects=0)
-        assert actual.status == 200
+        assert actual.status == 202
+        accepted = actual.json()
+        settled = alice.wait_operation(actual.headers["location"], accepted["operation_id"])
+        assert settled["state"] == "succeeded", settled
         route.fulfill(status=502, content_type="text/plain", body="Test-only lost acknowledgement")
 
     page.route(archive_url, lose_first_acknowledgement)
@@ -396,7 +399,7 @@ def test_bulk_captured_inbox_above_two_hundred_finalizes_without_target_replay(a
     desired = baseline + [track["track_uri"] for track in pending]
     _save(alice, TARGET, baseline, desired)
     saved_target = fake.playlist(TARGET)
-    result = alice.ok("post", f"/playlist/{TARGET}/pending-raids/finalize-all", json={
+    result = alice.write(f"/playlist/{TARGET}/pending-raids/finalize-all", json={
         "source_playlist_id": ARCHIVE, "target_track_uris": desired,
         "track_ids": [track["id"] for track in pending],
     })

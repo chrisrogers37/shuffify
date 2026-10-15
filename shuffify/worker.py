@@ -9,10 +9,12 @@ from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timezone
 
-from shuffify.services.operations.journal import OperationDeferred
+from shuffify.services.operations.control import propagate_control
+from shuffify.services.operations.journal import NeedsAttention, OperationAborted, OperationDeferred
 from shuffify.services.operations.repository import LeaseLost, OperationRepository
 from shuffify.services.operations.runtime import OperationResult, OperationRuntime
 from shuffify.spotify.deadline import spotify_deadline
+from shuffify.spotify.observation import observe_mutations
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +129,11 @@ class OperationWorker:
                         })
                         return True
                 outcome = handler(runtime)
+                if runtime.verified_step_failure is not None:
+                    if isinstance(outcome, OperationResult) and outcome.state == "needs_attention":
+                        self._finish(lease, runtime, "needs_attention", result=outcome.result)
+                        return True
+                    return self._record_failure(lease, runtime)
                 runtime.check_pending_control()
                 if isinstance(outcome, OperationResult):
                     state, result = outcome.state, outcome.result
@@ -156,8 +163,16 @@ class OperationWorker:
         except Exception as error:
             logger.exception("Operation %s did not complete", lease.operation_id)
             try:
+                verified_abort = False
+                try:
+                    with observe_mutations(None):
+                        propagate_control(error)
+                except OperationAborted:
+                    verified_abort = True
+                except NeedsAttention:
+                    pass
                 result = getattr(error, "result", None)
-                return self._record_failure(lease, runtime, result=result)
+                return self._record_failure(lease, runtime, result=result, verified_abort=verified_abort)
             except TerminalPending:
                 logger.warning("Operation %s awaits terminal database publication", lease.operation_id)
                 return False
@@ -175,7 +190,15 @@ class OperationWorker:
             if runtime is not None:
                 runtime.close()
 
-    def _record_failure(self, lease, runtime, *, result=None):
+    def _record_failure(self, lease, runtime, *, result=None, verified_abort=False):
+        if runtime is not None and runtime.verified_step_failure is not None and not verified_abort:
+            self._finish(lease, runtime, "needs_attention", result={
+                "success": False, "error_code": "verified_step_publication_failed", "category": "error",
+                "message": "Playlist changes were verified, but their local records could not be confirmed. "
+                           "Review the result before another operation.",
+                "retryable": False,
+            })
+            return True
         journal = runtime.get_journal() if runtime is not None else {}
         if result is None:
             result = journal.get("runtime", {}).get("failure", {}).get("result")
@@ -264,8 +287,15 @@ class OperationWorker:
             # leaves the candidate recoverable instead of authorizing a write.
             recovered = runtime.journal.verify_terminal()
             state, result = terminal["state"], terminal["result"]
-            if recovered["state"] == "needs_attention" and state != "needs_attention":
-                state, result = "needs_attention", self._attention(result)
+            if recovered["state"] == "needs_attention":
+                changed = self._attention(result)
+                if state != "needs_attention" or changed != result:
+                    # Fresh reconciliation can invalidate resource facts even
+                    # when the candidate already required local-record review.
+                    # Domain receipts remain idempotent; the public projection
+                    # must be finalized from this newly verified uncertainty.
+                    self._save_terminal(runtime, "needs_attention", changed, done=False)
+                state, result = "needs_attention", changed
             self._finish(lease, runtime, state, result=result)
         except (LeaseLost, OperationDeferred, TerminalPending):
             raise

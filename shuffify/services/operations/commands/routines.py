@@ -24,7 +24,7 @@ from shuffify.services.operations.executors.raid import RaidConfig, RaidSource, 
 from shuffify.services.operations.executors.resources import observe_resources
 from shuffify.services.operations.executors.rotate import RotateConfig, execute_rotate, prepare_rotate
 from shuffify.services.operations.executors.shuffle import ShuffleConfig, execute_shuffle, prepare_shuffle
-from shuffify.services.operations.runtime import OperationResult
+from shuffify.services.operations.runtime import OperationResult, VerifiedStepError
 from shuffify.services.state_service import StateService
 from shuffify.spotify.exceptions import (
     SpotifyAuthError,
@@ -226,6 +226,11 @@ def _apply(runtime, command, name):
     reported = applied["result"]
     if reported.get("status") in {"failed", "failed_rolled_back", "skipped"} and reported.get("success") is not False:
         reported.update(success=False, error_code="producer_result_inconsistent")
+    return applied
+
+
+def _record_history(runtime, applied):
+    """Prepare history only after the journal has proved this child's effects."""
     history = runtime.history
     if history is not None:
         try:
@@ -236,10 +241,23 @@ def _apply(runtime, command, name):
                         history, resource, before_uris=before, after_uris=after["track_uris"]
                     )
         except Exception as error:
-            propagate_control(error)
-            runtime.mark_history_unconfirmed()
+            _terminal_control(error)
+            try:
+                runtime.mark_history_unconfirmed()
+            except Exception as marker_error:
+                _terminal_control(marker_error)
+                raise VerifiedHistoryError("The verified playlist history could not be saved") from marker_error
             raise VerifiedHistoryError("The verified playlist history could not be saved") from error
-    return applied
+
+
+def _history_failure(error):
+    seen = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        if isinstance(error, VerifiedHistoryError):
+            return True
+        error = error.__cause__ or error.__context__
+    return False
 
 
 def _commit(runtime, name, storage, applied):
@@ -271,7 +289,7 @@ def _commit(runtime, name, storage, applied):
             receipt = {"lock_reconcile": {"status": "complete", "affected_count": updated}}
         return {**applied, "receipt": receipt}
     except Exception as error:
-        propagate_control(error)
+        _terminal_control(error)
         raise RequiredCommitError("The verified playlist bookkeeping could not be committed") from error
 
 
@@ -310,6 +328,7 @@ class RoutineHandler:
                     name,
                     lambda name=name: _apply(runtime, command, name),
                     lambda storage, applied, name=name: _commit(runtime, name, storage, applied),
+                    after_verify=lambda applied: _record_history(runtime, applied),
                 )
                 code = child["result"].get("error_code")
                 if child["result"].get("success") is False or child["result"].get("skipped_reason") == "drip_disabled":
@@ -319,12 +338,8 @@ class RoutineHandler:
                         build_result(runtime, command, "failed", error_code=code, retryable=code == "drip_disabled"),
                     )
             return OperationResult("succeeded", build_result(runtime, command, "succeeded"))
-        except (RequiredCommitError, VerifiedHistoryError) as error:
-            code = (
-                "history_confirmation_failed"
-                if isinstance(error, VerifiedHistoryError)
-                else "required_bookkeeping_failed"
-            )
+        except (RequiredCommitError, VerifiedHistoryError, VerifiedStepError) as error:
+            code = "history_confirmation_failed" if _history_failure(error) else "required_bookkeeping_failed"
             document = runtime.get_journal()
             document.setdefault("runtime", {})["routine_db_failure"] = {
                 "step": document.get("boundaries", {}).get("current", {}).get("name"),

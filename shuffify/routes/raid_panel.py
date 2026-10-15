@@ -22,6 +22,7 @@ from shuffify.routes import (
     require_session_and_db,
     validate_json,
 )
+from shuffify.routes.finalizer_queue import admit_finalizer
 from shuffify.routes.routine_queue import admit_direct
 from shuffify.schemas.pending_raid_requests import (
     DismissTracksRequest,
@@ -1221,8 +1222,8 @@ def _raid_finalize_preflight_error(message, status_code):
     "/playlist/<playlist_id>/pending-raids/finalize-all",
     methods=["POST"],
 )
-@require_auth_and_db(on_preflight_error=_raid_finalize_preflight_error)
-def pending_raids_finalize(playlist_id, api=None, user=None):
+@require_session_and_db(on_preflight_error=_raid_finalize_preflight_error)
+def pending_raids_finalize(playlist_id, user=None):
     """Finalize exactly the captured IDs after verified target/source checks.
 
     The legacy finalize-all URL accepts the same explicit ID payload; tracks
@@ -1237,17 +1238,12 @@ def pending_raids_finalize(playlist_id, api=None, user=None):
         return _raid_finalize_preflight_error(
             "Review the source changes again; the captured task is incomplete or invalid.", 400
         )
-    result = WorkshopFinalizeService(api).finalize_raids(
-        playlist_id, user, **req.model_dump()
-    )
-    if (
-        result.status == "complete"
-        and (result.affected_count or 0) > 0
-        and not req.inspect_only
-    ):
-        log_activity(
-            user_id=user.id, activity_type=ActivityType.RAID_PROMOTE,
-            description=f"Finalized {result.affected_count} raided tracks",
-            playlist_id=playlist_id,
-        )
+    if not req.inspect_only:
+        return admit_finalizer(user, playlist_id, "workshop_finalize_raids", req)
+    from shuffify.routes import require_auth
+
+    api = require_auth()
+    if api is None:
+        return _raid_finalize_preflight_error("Please log in first.", 401)
+    result = WorkshopFinalizeService(api).finalize_raids(playlist_id, user, **req.model_dump())
     return jsonify(result.to_dict()), result.http_status

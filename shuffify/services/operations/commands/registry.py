@@ -1,6 +1,8 @@
 """Closed command schemas and worker handlers for queued playlist actions."""
 
 from .direct import shuffle, snapshot_restore, undo, visibility
+from .finalizer_schemas import ArchiveAppendCommand, FinalizeRaidsCommand, FinalizeRestoreCommand
+from .finalizers import archive_append, finalize_raids, finalize_restore
 from .routine_schemas import DripNowCommand, RaidAndDripCommand, RaidNowCommand, ScheduleRunCommand
 from .routines import drip_now, raid_and_drip, raid_now, schedule_run
 from .schemas import (
@@ -22,6 +24,9 @@ COMMAND_SCHEMAS = {
     'raid_now': RaidNowCommand,
     'drip_now': DripNowCommand,
     'raid_and_drip': RaidAndDripCommand,
+    'workshop_finalize_raids': FinalizeRaidsCommand,
+    'workshop_archive_append': ArchiveAppendCommand,
+    'workshop_finalize_restore': FinalizeRestoreCommand,
 }
 COMMAND_HANDLERS = {
     'shuffle': shuffle,
@@ -33,4 +38,7 @@ COMMAND_HANDLERS = {
     'raid_now': raid_now,
     'drip_now': drip_now,
     'raid_and_drip': raid_and_drip,
+    'workshop_finalize_raids': finalize_raids,
+    'workshop_archive_append': archive_append,
+    'workshop_finalize_restore': finalize_restore,
 }

@@ -23,6 +23,7 @@ from shuffify.spotify.exceptions import (
     SpotifyWriteUnverifiedError,
 )
 from tests.paths import api_path
+from tests.queued_operations import post_and_run
 
 A, B, C = ["spotify:track:" + char * 22 for char in "abc"]
 MODULE = "shuffify.services.workshop_finalize_service"
@@ -67,14 +68,14 @@ class SourceAPI:
     def playlist_add_items(self, playlist_id, uris):
         self._write("append", playlist_id, uris)
 
-    def _write(self, action, playlist_id, uris):
+    def _write(self, action, playlist_id, uris, position=None):
         self.writes.append((action, playlist_id, list(uris)))
         if self.write_hook:
             return self.write_hook(action, playlist_id, uris)
         self.apply(action, playlist_id, uris)
 
     def apply(self, action, playlist_id, uris):
-        if action == "append":
+        if action in ("append", "add"):
             self.playlists[playlist_id].extend(uris)
         else:
             self.playlists[playlist_id] = [
@@ -455,7 +456,7 @@ def test_complete_reader_checks_every_source_page_before_removal(ctx):
 
 @pytest.mark.parametrize("endpoint", ["finalize", "finalize-all"])
 def test_real_finalizer_route_handles_201_captured_records_without_target_rewrite(
-    ctx, db_app, endpoint
+    ctx, db_app, sample_token, endpoint
 ):
     uris = [f"spotify:track:{index:022d}" for index in range(200)] + [A]
     PendingRaidService.stage_tracks(
@@ -470,7 +471,9 @@ def test_real_finalizer_route_handles_201_captured_records_without_target_rewrit
         patch("shuffify.routes.get_db_user", return_value=ctx.user),
         db_app.test_client() as client,
     ):
-        response = client.post(
+        with client.session_transaction() as session:
+            session.update(spotify_token=sample_token, user_data={"id": ctx.user.spotify_id})
+        response = post_and_run(client, ctx.api,
             api_path(f"/playlist/target/pending-raids/{endpoint}"),
             json={
                 "source_playlist_id": "raid",
@@ -479,12 +482,13 @@ def test_real_finalizer_route_handles_201_captured_records_without_target_rewrit
             },
         )
     assert response.status_code == 200
-    assert response.json["success"] is True
-    assert response.json["promoted_count"] == 201
+    assert response.get_json()["success"] is True
+    assert response.get_json()["promoted_count"] == 201
+    db.session.expire_all()
     assert all(record.status == PendingRaidStatus.PROMOTED for record in records)
     assert ctx.api.playlists["target"] == uris
     assert ctx.api.playlists["raid"] == []
-    assert len(ctx.api.writes) == 1
+    assert len(ctx.api.writes) == 3
     assert ctx.api.writes[0][:2] == ("remove", "raid")
 
 
@@ -574,6 +578,7 @@ def test_real_route_rejection_respects_inspection_and_immutable_payload(
             return_value=None if gate == "auth" else ctx.api,
         ),
         patch("shuffify.is_db_available", return_value=gate != "database"),
+        patch("shuffify.routes.is_authenticated", return_value=gate != "auth"),
         patch("shuffify.routes.get_db_user", return_value=ctx.user),
         db_app.test_client() as client,
     ):
@@ -603,7 +608,7 @@ def test_real_route_rejection_respects_inspection_and_immutable_payload(
     ],
 )
 def test_verified_noop_retry_does_not_duplicate_actual_activity(
-    ctx, db_app, kind, path, count_key
+    ctx, db_app, sample_token, kind, path, count_key
 ):
     payload = {
         "source_playlist_id": "raid" if kind == "raid" else "archive",
@@ -624,27 +629,29 @@ def test_verified_noop_retry_does_not_duplicate_actual_activity(
         patch("shuffify.routes.get_db_user", return_value=ctx.user),
         db_app.test_client() as client,
     ):
-        initial = client.post(api_path(f"/playlist/target/{path}"), json=payload)
+        with client.session_transaction() as session:
+            session.update(spotify_token=sample_token, user_data={"id": ctx.user.spotify_id})
+        initial = post_and_run(client, ctx.api, api_path(f"/playlist/target/{path}"), json=payload)
         assert initial.status_code == 200
-        assert initial.json["status"] == "complete"
-        assert initial.json["affected_count"] > 0
+        assert initial.get_json()["status"] == "complete"
+        assert initial.get_json()["affected_count"] > 0
         assert activities.count() == before + 1
-        replay = client.post(api_path(f"/playlist/target/{path}"), json=payload)
+        replay = post_and_run(client, ctx.api, api_path(f"/playlist/target/{path}"), json=payload)
     assert replay.status_code == 200
-    assert replay.json["success"] is True
-    assert replay.json["status"] == "not_required"
-    assert replay.json["affected_count"] == 0
-    assert replay.json[count_key] == 1
+    assert replay.get_json()["success"] is True
+    assert replay.get_json()["status"] == "not_required"
+    assert replay.get_json()["affected_count"] == 0
+    assert replay.get_json()[count_key] == 1
     assert activities.count() == before + 1
     assert (
-        str(initial.json["affected_count"])
+        str(initial.get_json()["affected_count"])
         in activities.order_by(ActivityLog.id.desc()).first().description
     )
     assert len(ctx.api.writes) == 1
     assert ctx.api.playlists["target"] == [A, B]
 
 
-def test_already_absent_raid_source_db_completion_still_logs_once(ctx, db_app):
+def test_already_absent_raid_source_db_completion_still_logs_once(ctx, db_app, sample_token):
     ctx.api.playlists["raid"] = [C]
     payload = {
         "source_playlist_id": "raid",
@@ -658,14 +665,17 @@ def test_already_absent_raid_source_db_completion_still_logs_once(ctx, db_app):
         patch("shuffify.routes.get_db_user", return_value=ctx.user),
         db_app.test_client() as client,
     ):
-        completed = client.post(api_path("/playlist/target/pending-raids/finalize"), json=payload)
-        assert completed.json["status"] == "complete"
-        assert completed.json["affected_count"] == 1
+        with client.session_transaction() as session:
+            session.update(spotify_token=sample_token, user_data={"id": ctx.user.spotify_id})
+        completed = post_and_run(client, ctx.api, api_path("/playlist/target/pending-raids/finalize"), json=payload)
+        assert completed.get_json()["status"] == "complete"
+        assert completed.get_json()["affected_count"] == 1
+        db.session.refresh(ctx.record)
         assert ctx.record.status == PendingRaidStatus.PROMOTED
         assert activities.count() == before + 1
-        replay = client.post(api_path("/playlist/target/pending-raids/finalize"), json=payload)
-    assert replay.json["status"] == "not_required"
-    assert replay.json["affected_count"] == 0
+        replay = post_and_run(client, ctx.api, api_path("/playlist/target/pending-raids/finalize"), json=payload)
+    assert replay.get_json()["status"] == "not_required"
+    assert replay.get_json()["affected_count"] == 0
     assert activities.count() == before + 1
     assert ctx.api.writes == []
 

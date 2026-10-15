@@ -149,7 +149,7 @@
         var result = await request('/api/playlist/' + encodeURIComponent(task.targetId) + task.path, {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(Object.assign({}, task.body, inspectOnly ? {inspect_only: true} : {})),
-        }, true);
+        }, !inspectOnly);
         var valid = result.http_ok !== undefined && result.resource === task.resource &&
             ['complete', 'not_required', 'failed', 'unknown'].includes(result.status);
         var complete = valid && result.http_ok && result.success === true &&

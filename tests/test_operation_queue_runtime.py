@@ -90,3 +90,42 @@ window.OperationQueue = {requestKey: () => 'example-key',
     assert(calls.slice(1).every(call => call.url === '/api/operations/17'));
 })().catch(error => {console.error(error); process.exit(1);});
 """, ROOT)
+
+
+@pytest.mark.parametrize("state,status,success", [
+    ("succeeded", "complete", True), ("failed", "failed", False),
+    ("needs_attention", "unknown", False),
+])
+def test_workshop_source_waits_for_one_accepted_cleanup_and_inspection_never_gets_a_write_key(
+    node, state, status, success,
+):
+    run_scenario(node, WORKSHOP_CLIENT + """
+vm.runInContext(fs.readFileSync('shuffify/static/js/operation-queue.js', 'utf8'), context);
+const polling = window.OperationQueue;
+window.OperationQueue = {requestKey: () => 'source-key',
+    poll: (body, options) => polling.poll(body, {...options, pollMs: 0})};
+""" + f"""
+(async () => {{
+    const task = {{targetId: 'playlist', resource: 'archive', kind: 'archive', path: '/pair/archive',
+        body: {{source_playlist_id: 'archive', target_track_uris: ['a'],
+            baseline_track_uris: [], track_uris: ['b', 'b']}}}};
+    const op = (state, result = null) => ({{id: 29, state, result}});
+    replies.push(response({{success: true, operation_id: 29, operation: op('queued')}}, 202),
+        response({{success: true, operation: op('running')}}),
+        response({{success: true, operation: op('{state}',
+            {{success: {str(success).lower()}, resource: 'archive', status: '{status}',
+                affected_count: {2 if success else 'null'}, retryable: false}})}}));
+    const result = await client.runSource(task, false);
+    assert.equal(result.status, '{status}');
+    assert.equal(result.success, {str(success).lower()});
+    assert.equal(calls.filter(call => call.options.method === 'POST').length, 1);
+    assert.equal(calls[0].options.headers['Idempotency-Key'], 'source-key');
+    assert.deepEqual(JSON.parse(calls[0].options.body).track_uris, ['b', 'b']);
+    assert(calls.slice(1).every(call => call.url === '/api/operations/29'));
+    replies.push(response({{success: true, resource: 'archive', status: 'not_required'}}));
+    const inspected = await client.runSource(task, true);
+    assert.equal(inspected.success, true);
+    assert.equal(calls.at(-1).options.headers['Idempotency-Key'], undefined);
+    assert.equal(JSON.parse(calls.at(-1).options.body).inspect_only, true);
+}})().catch(error => {{console.error(error); process.exit(1);}});
+""", ROOT)

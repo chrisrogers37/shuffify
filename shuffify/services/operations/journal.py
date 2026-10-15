@@ -126,7 +126,7 @@ class DurableJournal:
                            "baselines": current["baselines"],
                            "local_before": current["local_before"]})
 
-    def verify_step(self, name):
+    def verify_step(self, name, *, on_verified=None):
         """Freshly reconcile the complete ledger without dispatching forward work."""
         self.check_pending_control()
         current = self.doc.get("boundaries", {}).get("current")
@@ -135,7 +135,7 @@ class DurableJournal:
         if any(item["state"] != "acknowledged" for step in self.doc["plans"][current["start"]:]
                for item in step["batches"]):
             raise JournalError("Unfinished mutation plans cannot be accepted")
-        if self._reconcile():
+        if self._reconcile(on_verified=on_verified):
             raise NeedsAttention(self.doc["recovery"]["reason"])
         proof = self._step_proof(self.doc, current)
         current["verified"] = {"end": len(self.doc["plans"]), "proof": proof}
@@ -468,7 +468,7 @@ class DurableJournal:
                 expected, snapshot = item["after"], item.get("snapshot_id")
         return {"baseline": expected, "snapshot_id": snapshot}, []
 
-    def _reconcile(self):
+    def _reconcile(self, *, on_verified=None):
         observations, updates = {}, []
         for step in self._plans():
             if step["kind"] == "create" and step["batches"][0]["state"] == "dispatched":
@@ -497,6 +497,10 @@ class DurableJournal:
             acknowledged = [item for item in batches if item["state"] == "acknowledged"]
             if acknowledged and acknowledged[-1].get("snapshot_id") is None:
                 acknowledged[-1]["snapshot_id"] = observations[resource].get("snapshot_id")
+        # Local publication can fail after every resource was freshly proved.
+        # Let the runtime retain that boundary before the first checkpoint.
+        if on_verified is not None:
+            on_verified()
         if updates:
             self._save()
         return None
@@ -579,13 +583,13 @@ class DurableJournal:
         self._save()
         return self.outcome()
 
-    def verify_terminal(self):
+    def verify_terminal(self, *, on_verified=None):
         """Reconcile terminal candidates without forward execution or compensation."""
         self._check_publication(self.get_journal() or {})
         self._defer_if_needed()
         if self.doc['status'] == 'needs_attention':
             return self.outcome()
-        conflict = self._reconcile()
+        conflict = self._reconcile(on_verified=on_verified)
         return conflict or self.outcome()
 
     def compensate(self):

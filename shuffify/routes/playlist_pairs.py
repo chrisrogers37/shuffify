@@ -17,8 +17,10 @@ from shuffify.routes import (
     json_success,
     log_activity,
     require_auth_and_db,
+    require_session_and_db,
     validate_json,
 )
+from shuffify.routes.finalizer_queue import admit_finalizer
 from shuffify.schemas.playlist_pair_requests import (
     CreatePairRequest,
     UnarchiveTracksRequest,
@@ -222,7 +224,7 @@ _archive_rejected = _rejected("archived_count")
 _restore_rejected = _rejected("restored_count")
 
 
-def _finalize_archive_task(playlist_id, api, user, *, restore):
+def _finalize_archive_task(playlist_id, user, *, restore):
     rejected = _restore_rejected if restore else _archive_rejected
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
@@ -234,29 +236,25 @@ def _finalize_archive_task(playlist_id, api, user, *, restore):
         return rejected(
             "Review the source changes again; the captured task is incomplete or invalid.", 400
         )
+    if not req.inspect_only:
+        return admit_finalizer(user, playlist_id,
+                               "workshop_finalize_restore" if restore else "workshop_archive_append", req)
+    from shuffify.routes import require_auth
+
+    api = require_auth()
+    if api is None:
+        return rejected("Please log in first.", 401)
     service = WorkshopFinalizeService(api)
     finalize = service.finalize_restore if restore else service.append_archive
     result = finalize(playlist_id, user, **req.model_dump())
-    if (
-        result.status == "complete"
-        and (result.affected_count or 0) > 0
-        and not req.inspect_only
-    ):
-        count = result.affected_count
-        log_activity(
-            user_id=user.id,
-            activity_type=ActivityType.UNARCHIVE_TRACKS if restore else ActivityType.ARCHIVE_TRACKS,
-            description=f"Verified {count} archive {'restorations' if restore else 'additions'}",
-            playlist_id=playlist_id, metadata={"track_count": count},
-        )
     return jsonify(result.to_dict()), result.http_status
 
 
 @api_bp.route("/playlist/<playlist_id>/pair/archive", methods=["POST"])
-@require_auth_and_db(on_preflight_error=_archive_rejected)
-def archive_tracks(playlist_id, api=None, user=None):
+@require_session_and_db(on_preflight_error=_archive_rejected)
+def archive_tracks(playlist_id, user=None):
     """Append the captured occurrences and verify the complete archive order."""
-    return _finalize_archive_task(playlist_id, api, user, restore=False)
+    return _finalize_archive_task(playlist_id, user, restore=False)
 
 
 @api_bp.route(
@@ -308,10 +306,10 @@ def unarchive_tracks(
 
 
 @api_bp.route("/playlist/<playlist_id>/pair/finalize-restore", methods=["POST"])
-@require_auth_and_db(on_preflight_error=_restore_rejected)
-def finalize_restore(playlist_id, api=None, user=None):
+@require_session_and_db(on_preflight_error=_restore_rejected)
+def finalize_restore(playlist_id, user=None):
     """Verify target membership before removing all source URI occurrences."""
-    return _finalize_archive_task(playlist_id, api, user, restore=True)
+    return _finalize_archive_task(playlist_id, user, restore=True)
 
 
 @api_bp.route(

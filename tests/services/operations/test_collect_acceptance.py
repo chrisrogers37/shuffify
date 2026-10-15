@@ -12,7 +12,7 @@ from shuffify.models.db import JobExecution, PendingRaidTrack, ScrapedPlaylistCa
 from shuffify.services.operations.executors.collect_storage import apply_raid_local
 from shuffify.services.operations.executors.raid import RaidConfig, RaidSource, execute_raid, prepare_raid
 from shuffify.services.operations.repository import OperationRepository
-from shuffify.services.operations.runtime import OperationRuntime
+from shuffify.services.operations.runtime import OperationRuntime, VerifiedStepError
 from shuffify.services.source_resolver.base import ResolveResult
 from shuffify.services.source_resolver.public_scraper_pathway import ScrapeOutcome
 from shuffify.spotify.api import SpotifyAPI
@@ -140,8 +140,10 @@ def test_required_stage_failure_keeps_verified_spotify_facts_for_orchestrator_at
 
     monkeypatch.setattr('shuffify.services.operations.executors.collect_storage.stage_pending', fail)
     runtime = build()
-    with runtime.journal.observe(), pytest.raises(ValueError, match='mandatory staging unavailable'):
+    with runtime.journal.observe(), pytest.raises(VerifiedStepError) as caught:
         collect(runtime, config)
+    assert isinstance(caught.value.__cause__, ValueError)
+    assert str(caught.value.__cause__) == 'mandatory staging unavailable'
     document = repository.get(operation_id).journal
     assert document['boundaries']['current']['verified']['proof']
     assert document['boundaries']['accepted'] == []
@@ -197,11 +199,13 @@ def test_required_promotion_failure_keeps_both_verified_drip_orders(accepted_run
 
     monkeypatch.setattr('shuffify.services.operations.executors.collect_storage.promote_pending', fail)
     runtime = build()
-    with runtime.journal.observe(), pytest.raises(ValueError, match='mandatory promotion unavailable'):
+    with runtime.journal.observe(), pytest.raises(VerifiedStepError) as caught:
         runtime.composite_step(
             'drip', lambda: execute_drip(runtime, captured, prepare_key='drip.v1'),
             lambda storage, applied: apply_drip_local(storage, config.user_id, 'target', applied['local_actions']),
         )
+    assert isinstance(caught.value.__cause__, ValueError)
+    assert str(caught.value.__cause__) == 'mandatory promotion unavailable'
     document = repository.get(operation_id).journal
     assert document['boundaries']['current']['verified']['proof']
     assert world.playlists['target']['track_uris'] == [uri(2), uri(2), uri(1)]
