@@ -232,25 +232,27 @@ def test_reads_never_wait_while_writes_follow_their_group(node):
     element('search-input').value = 'night drive';
     replies.push(results(10));
     context.searchSpotify(); await settle();
-    assert.equal(reads('/workshop/search').length, 1);
+    assert.equal(reads('/api/workshop/search').length, 1);
     replies.push(results(2));
     context.searchSpotifyMore(); await settle();
-    assert.equal(reads('/workshop/search').length, 2);
-    assert.equal(JSON.parse(reads('/workshop/search')[1].options.body).offset, 10);
+    assert.equal(reads('/api/workshop/search').length, 2);
+    assert.equal(JSON.parse(reads('/api/workshop/search')[1].options.body).offset, 10);
     element('external-playlist-input').value = 'chill';
     replies.push(response({success: true, mode: 'search', playlists: []}));
     context.loadExternalPlaylist(); await settle();
-    assert.equal(reads('/workshop/load-external-playlist').length, 1);
+    assert.equal(reads('/api/workshop/load-external-playlist').length, 1);
     await drip.end(fresh());
     // During a target commit too, while a grouped write waits and a pause write does not.
     state.isSaving = true;
     replies.push(results(1));
     context.searchSpotify(); await settle();
-    assert.equal(reads('/workshop/search').length, 3);
-    await assert.rejects(context.workshopRequest('/workshop/target/locks/toggle', {method: 'POST'}, {group: 'locks'}),
+    assert.equal(reads('/api/workshop/search').length, 3);
+    await assert.rejects(context.workshopRequest(
+        '/api/workshop/target/locks/toggle', {method: 'POST'}, {group: 'locks'}),
         /Unavailable while your draft saves to Spotify/);
     replies.push(response({success: true}));
-    assert.equal((await context.workshopRequest('/schedules/5/toggle', {method: 'POST'}, {group: 'pause'})).ok, true);
+    assert.equal((await context.workshopRequest(
+        '/api/schedules/5/toggle', {method: 'POST'}, {group: 'pause'})).ok, true);
     state.isSaving = false;
 })().catch(e => {console.error(e); process.exitCode = 1;});
 """),
@@ -442,7 +444,7 @@ def test_a_confirmation_for_allowed_work_can_suspend_the_save_panel_while_save_r
     replies.push(response({success: true}));
     await context.deleteSnapshot(18, element('delete-18'));
     assert.deepEqual(asked, ['app-confirm']); assert.equal(open.suspended, true);
-    assert.equal(calls.filter(call => call.url === '/snapshots/18' && call.options.method === 'DELETE').length, 1);
+    assert.equal(calls.filter(call => call.url === '/api/snapshots/18' && call.options.method === 'DELETE').length, 1);
     // Closing the panel itself still waits for Save.
     assert.equal(open.options.beforeClose('close'), false); assert.equal(open.options.beforeClose('escape'), false);
     state.isFinalizing = false;
@@ -823,7 +825,7 @@ def test_archive_unlink_stays_blocked_while_archive_work_exists_and_never_clears
         archiveInboxLoaded: true});
     slice('async function deleteArchivePair(', 'function populateArchiveLinkSelect(');
     const unlink = grouped('archive-unlink-btn', 'pair-unlink');
-    const deletes = () => calls.filter(call => call.url === '/playlist/target/pair' &&
+    const deletes = () => calls.filter(call => call.url === '/api/playlist/target/pair' &&
         call.options.method === 'DELETE');
     // Staged restorations and queued archive tracks block it with one reason, and stay put.
     state.stagedRestorations = [{uri: uri(4)}]; state.workingUris = [uri(1), uri(2), uri(4)]; context.markDirty();
@@ -940,7 +942,7 @@ def test_snapshot_delete_asks_waits_for_its_restore_and_defers_timeline_rebuilds
         toggle(name, force) {if (name === 'hidden') this.hidden = force;}, add() {}, remove() {}}});
     const empty = shown('snapshot-empty'), timeline = shown('snapshot-timeline');
     const list = element('snapshot-list');
-    const deletes = id => calls.filter(call => call.url === '/snapshots/' + id && call.options.method === 'DELETE');
+    const deletes = id => calls.filter(call => call.url === '/api/snapshots/' + id && call.options.method === 'DELETE');
     // While the question is open the timeline waits, so the trigger keeps its place.
     let answer;
     window.AppConfirm.ask = options => {confirms.push(options); return new Promise(resolve => {answer = resolve;});};
@@ -1408,14 +1410,14 @@ def test_an_unconfirmed_playlist_creation_reloads_a_fresh_list_of_playlists_to_l
     assert.equal(raidPanel._playlistsPopulated, true);
     replies.push(refused());
     raidPanel.createRaidLink(); await settle();
-    assert.deepEqual(urls().slice(1), ['/playlist/target/raid-link']);
+    assert.deepEqual(urls().slice(1), ['/api/playlist/target/raid-link']);
     assert.equal(lastNotice(), 'Failed to create it'); assert.equal(raidPanel._playlistsPopulated, true);
     // A playlist was chosen to link before Create was pressed.
     raidSelect.value = 'other'; context.setWorkshopControlDisabled(linkRaid, false);
     let reloadRaid;
     replies.push(unconfirmed(), () => new Promise(resolve => {reloadRaid = resolve;}));
     raidPanel.createRaidLink(create); await settle();
-    assert.deepEqual(urls().slice(2), ['/playlist/target/raid-link', '/api/user-playlists?refresh=1']);
+    assert.deepEqual(urls().slice(2), ['/api/playlist/target/raid-link', '/api/user-playlists?refresh=1']);
     assert.equal(lastNotice(), 'We could not confirm whether the playlist was created.');
     assert.equal(create.getAttribute('aria-disabled'), 'true');  // the list has not loaded yet
     reloadRaid(listed()); await settle();
@@ -1446,14 +1448,14 @@ def test_an_unconfirmed_playlist_creation_reloads_a_fresh_list_of_playlists_to_l
     assert.equal(context.archiveState.playlistsPopulated, true);
     replies.push(refused());
     context.createArchivePair(archive); await settle();
-    assert.deepEqual(urls().slice(1), ['/playlist/target/pair']);
+    assert.deepEqual(urls().slice(1), ['/api/playlist/target/pair']);
     assert.equal(lastNotice(), 'Failed to create it'); assert.equal(context.archiveState.playlistsPopulated, true);
     // A playlist was chosen to link before Create was pressed.
     select.value = 'other'; context.setWorkshopControlDisabled(archiveLink, false);
     let reloadArchive;
     replies.push(unconfirmed(), () => new Promise(resolve => {reloadArchive = resolve;}));
     context.createArchivePair(archive); await settle();
-    assert.deepEqual(urls().slice(2), ['/playlist/target/pair', '/api/user-playlists?refresh=1']);
+    assert.deepEqual(urls().slice(2), ['/api/playlist/target/pair', '/api/user-playlists?refresh=1']);
     assert.equal(lastNotice(), 'We could not confirm whether the playlist was created.');
     assert.equal(archive.getAttribute('aria-disabled'), 'true');  // the list has not loaded yet
     reloadArchive(listed()); await settle();
@@ -1888,7 +1890,7 @@ def test_duplicate_collect_routines_have_distinct_management_and_write_targets(n
     run_page(node, html, r"""
 const reply = data => ({ok: true, status: 200, json: async () => data});
 const page = loadPage(TREE, {path: '/schedules', route(url) {
-    if (url.startsWith('/schedules/latest-results')) return reply({success: true, results: {}});
+    if (url.startsWith('/api/schedules/latest-results')) return reply({success: true, results: {}});
     if (url.endsWith('/routines/context')) return reply({success: true, capabilities: {}});
 }});
 await settle();
@@ -1906,17 +1908,17 @@ page.replies.push(page.reply({success: true, schedule_id: 8, schedule_revision: 
     registration: {status: 'paused'}, state: 'Paused'}));
 card(8).querySelector('.routine-toggle').click(); await settle();
 const states = page.calls.filter(call => call.url.includes('/state'));
-assert.deepEqual(states.map(call => call.url), ['/routines/8/state']);
+assert.deepEqual(states.map(call => call.url), ['/api/routines/8/state']);
 assert.deepEqual(JSON.parse(states[0].body), {desired_enabled: false, expected_revision: 'revision-8'});
 assert.match(page.text(card(8)), /Paused/);
 assert.match(page.text(card(5)), /Active/);
 page.answer = false;
 card(5).querySelector('.routine-delete').click(); await settle();
-assert.equal(page.calls.filter(call => call.url === '/schedules/5').length, 0);
+assert.equal(page.calls.filter(call => call.url === '/api/schedules/5').length, 0);
 page.answer = true;
 page.replies.push(page.reply({success: true}));
 card(5).querySelector('.routine-delete').click(); await settle();
-assert.equal(page.calls.filter(call => call.url === '/schedules/5').length, 1);
+assert.equal(page.calls.filter(call => call.url === '/api/schedules/5').length, 1);
 assert.equal(card(5), null);
 assert.ok(card(8));
 """)
@@ -1953,7 +1955,7 @@ def test_workshop_exact_routine_adapter_holds_navigation_and_keeps_pause_availab
     const revision = state.configRevision;
     let finish;
     replies.push(() => new Promise(resolve => {finish = resolve;}));
-    const pending = context.workshopRequest('/schedules/8', {method: 'DELETE'}, {group: 'routine:8'});
+    const pending = context.workshopRequest('/api/schedules/8', {method: 'DELETE'}, {group: 'routine:8'});
     await tick();
     assert.equal(state.pendingWrites, 1);
     assert.equal(await context.navigatePlaylist('next'), false);
@@ -1963,20 +1965,20 @@ def test_workshop_exact_routine_adapter_holds_navigation_and_keeps_pause_availab
     assert.ok(state.configRevision > revision);
     raidPanel.status.schedule = {id: 5, job_type: 'raid'};
     const held = await holdRun(routineContext(5, 'raid'), () => startExactRoutine(5));
-    await assert.rejects(context.workshopRequest('/schedules/5', {method: 'DELETE'},
+    await assert.rejects(context.workshopRequest('/api/schedules/5', {method: 'DELETE'},
         {group: 'routine:5'}), /Unavailable while this routine runs/);
     replies.push(response({success: true}));
-    assert.equal((await context.workshopRequest('/routines/5/state', {method: 'PUT'},
+    assert.equal((await context.workshopRequest('/api/routines/5/state', {method: 'PUT'},
         {group: 'pause'})).ok, true);
     replies.push(response({success: true}));
-    assert.equal((await context.workshopRequest('/schedules/8', {method: 'DELETE'},
+    assert.equal((await context.workshopRequest('/api/schedules/8', {method: 'DELETE'},
         {group: 'routine:8'})).ok, true);
     await held.end();
     state.isSaving = true;
-    await assert.rejects(context.workshopRequest('/schedules/8', {method: 'DELETE'},
+    await assert.rejects(context.workshopRequest('/api/schedules/8', {method: 'DELETE'},
         {group: 'routine:8'}), /while your draft saves to Spotify/);
     replies.push(response({success: true}));
-    assert.equal((await context.workshopRequest('/routines/8/state', {method: 'PUT'},
+    assert.equal((await context.workshopRequest('/api/routines/8/state', {method: 'PUT'},
         {group: 'pause'})).ok, true);
     state.isSaving = false;
 })().catch(e => {console.error(e); process.exitCode = 1;});

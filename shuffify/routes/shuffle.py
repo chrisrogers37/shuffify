@@ -3,7 +3,7 @@
 from flask import jsonify, request, session
 from pydantic import ValidationError
 
-from shuffify.routes import main, require_auth_and_db
+from shuffify.routes import api_bp, require_auth_and_db
 from shuffify.schemas import parse_shuffle_request
 from shuffify.services.live_operation_service import (
     DIRECT_ENDPOINT_KINDS,
@@ -39,7 +39,7 @@ def _preflight(message, status_code):
     )
 
 
-@main.route("/shuffle/<playlist_id>", methods=["POST"])
+@api_bp.route("/shuffle/<playlist_id>", methods=["POST"])
 @require_auth_and_db(on_preflight_error=_preflight)
 def shuffle(playlist_id, api=None, user=None):
     # Optional reviewed binding: absent leaves the request unbound; a malformed one never reads Spotify.
@@ -70,7 +70,7 @@ def shuffle(playlist_id, api=None, user=None):
     )
 
 
-@main.route("/undo/<playlist_id>", methods=["POST"])
+@api_bp.route("/undo/<playlist_id>", methods=["POST"])
 @require_auth_and_db(on_preflight_error=_preflight)
 def undo(playlist_id, api=None, user=None):
     try:

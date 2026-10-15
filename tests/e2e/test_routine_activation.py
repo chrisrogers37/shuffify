@@ -13,6 +13,7 @@ from sqlalchemy.pool import NullPool
 from config import HarnessConfig
 from tests.e2e.conftest import APP, hold_playlist_lock, pid
 from tests.e2e.test_live_operation_outcomes import _registration
+from tests.paths import api_path
 
 TARGET = pid("alice-morning-mix")
 OTHER = pid("alice-long-haul")
@@ -105,7 +106,7 @@ def _parallel_activations(alice, submissions):
             http.cookies.update(alice.http.cookies)
             http.headers.update(alice.http.headers)
             barrier.wait(timeout=10)
-            response = http.post(f"{APP}/playlist/{target}/routines/activate", json=body, timeout=30)
+            response = http.post((APP + api_path(f'/playlist/{target}/routines/activate')), json=body, timeout=30)
             return response.status_code, response.json()
 
     with ThreadPoolExecutor(max_workers=len(submissions)) as pool:
@@ -143,7 +144,7 @@ def test_stale_dependencies_and_changed_key_payload_do_not_write(alice, fake):
         "source_playlist_id": SOURCE, "source_playlist_name": "Bob's Finds", "auto_schedule": False,
     })
     baseline = _counts()
-    response = alice.post(f"/playlist/{TARGET}/routines/activate", json=body)
+    response = alice.post(api_path(f"/playlist/{TARGET}/routines/activate"), json=body)
     assert response.status_code == 409
     assert response.json()["error_code"] == "prerequisites_changed"
     assert _counts() == baseline
@@ -151,7 +152,7 @@ def test_stale_dependencies_and_changed_key_payload_do_not_write(alice, fake):
     accepted = _activate(alice, body)
     changed = deepcopy(body)
     changed["definition"]["algorithm_params"]["keep_first"] = 1
-    response = alice.post(f"/playlist/{TARGET}/routines/activate", json=changed)
+    response = alice.post(api_path(f"/playlist/{TARGET}/routines/activate"), json=changed)
     assert response.status_code == 409
     assert response.json()["error_code"] == "request_key_conflict"
     assert _counts() == tuple(n + 1 for n in baseline)
@@ -169,7 +170,7 @@ def test_legacy_mutators_share_the_activation_target_lock(alice, fake, method, s
     registered = _registration(sid)
     try:
         with _hold_configuration_lock(TARGET):
-            response = alice.request(method.upper(), f"/schedules/{sid}{suffix}", json=body)
+            response = alice.request(method.upper(), api_path(f"/schedules/{sid}{suffix}"), json=body)
         assert response.status_code == 409, response.text
         assert response.json()["error_code"] == "playlist_busy"
         current = alice.ok("get", f"/playlist/{TARGET}/routines/context")["routines"]
@@ -194,7 +195,7 @@ def test_legacy_prerequisite_writes_wait_for_activation_lock(alice, fake, suffix
     spotify = fake.playlist(TARGET)
     playlist_ids = {item["id"] for item in fake.playlists()}
     with _hold_configuration_lock(TARGET):
-        response = alice.post(f"/playlist/{TARGET}/{suffix}", json=body)
+        response = alice.post(api_path(f"/playlist/{TARGET}/{suffix}"), json=body)
     assert response.status_code == 409, response.text
     assert response.json()["error_code"] == "playlist_busy"
     after = alice.ok("get", f"/playlist/{TARGET}/routines/context")

@@ -25,7 +25,7 @@ const reviewContext = {version: 1, kind: 'schedule', label: 'Run routine now',
     current: {}, action: {job_type: 'shuffle', algorithm: {id: 'BasicShuffle', name: 'Basic'},
         params: {}, rotation: null, drip: null}};
 const page = loadPage(TREE, {path: '/schedules', route(url) {
-    if (url.startsWith('/schedules/latest-results')) return reply({success: true, results: {}});
+    if (url.startsWith('/api/schedules/latest-results')) return reply({success: true, results: {}});
     if (url.endsWith('/routines/context')) return reply({success: true, capabilities: {}});
 }});
 await settle();
@@ -38,7 +38,7 @@ def test_run_reviews_exact_saved_routine_and_dispatches_once(node, db_app):
 page.replies.push(page.reply({success: true, context: reviewContext}));
 card(5).querySelector('.routine-run').click();
 await settle();
-assert.equal(page.calls.find(call => call.url === '/schedules/5/run-context').method, 'GET');
+assert.equal(page.calls.find(call => call.url === '/api/schedules/5/run-context').method, 'GET');
 assert.match(page.text(page.byId('live-operation-review')), /Shuffle playlist/);
 assert.equal(page.calls.filter(call => call.method !== 'GET').length, 0);
 page.replies.push(page.reply({success: true, result: {status: 'success', execution_id: 44,
@@ -51,9 +51,9 @@ page.replies.push(page.reply({success: true, result: {status: 'success', executi
 page.byId('live-operation-run').click();
 await settle();
 const writes = page.calls.filter(call => call.method !== 'GET');
-assert.equal(writes.length, 1); assert.equal(writes[0].url, '/schedules/5/run');
+assert.equal(writes.length, 1); assert.equal(writes[0].url, '/api/schedules/5/run');
 assert.deepEqual(JSON.parse(writes[0].body), {reviewed_scope: SCOPE});
-assert.equal(page.calls.filter(call => call.url === '/schedules/latest-results').length, 2);
+assert.equal(page.calls.filter(call => call.url === '/api/schedules/latest-results').length, 2);
 assert.match(page.text(card(4)), /Paused/);
 """)
 
@@ -78,7 +78,7 @@ page.replies.push(page.reply({success: true, schedule_id: 4, schedule_revision: 
         job_type: 'rotate', is_enabled: true}, timing: {text: 'Every day'},
     registration: {status: 'registered'}, state: 'Active'}));
 card(4).querySelector('.routine-toggle').click(); await settle();
-const state = page.calls.find(call => call.url === '/routines/4/state');
+const state = page.calls.find(call => call.url === '/api/routines/4/state');
 assert.ok(state); assert.deepEqual(JSON.parse(state.body),
     {desired_enabled: true, expected_revision: 'revision-4'});
 assert.match(page.text(card(4).querySelector('.routine-status')), /Active/);
@@ -89,7 +89,7 @@ def test_unknown_or_unowned_deep_link_never_falls_back_to_first_card(node, db_ap
     run_page(node, page(db_app), r"""
 const reply = data => ({ok: true, status: 200, json: async () => data});
 const page = loadPage(TREE, {path: '/schedules?routine_id=999&view=run', route(url) {
-    if (url.startsWith('/schedules/latest-results')) return reply({success: true, results: {}});
+    if (url.startsWith('/api/schedules/latest-results')) return reply({success: true, results: {}});
     if (url.endsWith('/routines/context')) return reply({success: true, capabilities: {}});
 }});
 await settle();

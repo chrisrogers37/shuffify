@@ -35,6 +35,7 @@ from shuffify.services.source_resolver.direct_api_pathway import DirectAPIPathwa
 from shuffify.services.upstream_source_service import UpstreamSourceService
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 from shuffify.spotify.exceptions import SpotifyAPIError, SpotifyNotFoundError
+from tests.paths import api_path
 from tests.routes.live_review_helpers import binding_bundle, history, post_context, seed_history, serving
 from tests.routes.test_live_raid_outcomes import MutableSpotify, uri
 
@@ -98,7 +99,7 @@ def routine(user, job_type, **fields):
 
 
 def routine_review(client, schedule_id):
-    response = client.get(f"/schedules/{schedule_id}/run-context")
+    response = client.get(api_path(f"/schedules/{schedule_id}/run-context"))
     assert response.headers["Cache-Control"] == "no-store"
     return response
 
@@ -285,7 +286,7 @@ def test_snapshot_review_reads_the_complete_target_and_binds_its_order(workshop)
     snapshot = PlaylistSnapshotService.create_snapshot(
         workshop.user.id, "target", "Saved name", [uri(2), uri(1), uri(2)], SnapshotType.MANUAL,
     )
-    response = workshop.client.get(f"/snapshots/{snapshot.id}/restore-context")
+    response = workshop.client.get(api_path(f"/snapshots/{snapshot.id}/restore-context"))
     assert response.headers["Cache-Control"] == "no-store"
     assert response.status_code == 200
     context = response.get_json()["context"]
@@ -314,7 +315,7 @@ def test_snapshot_review_uses_track_order_when_occurrences_agree(workshop):
     snapshot = PlaylistSnapshotService.create_snapshot(
         workshop.user.id, "target", "Saved", [uri(2), uri(1)], SnapshotType.MANUAL,
     )
-    context = workshop.client.get(f"/snapshots/{snapshot.id}/restore-context").get_json()["context"]
+    context = workshop.client.get(api_path(f"/snapshots/{snapshot.id}/restore-context")).get_json()["context"]
     assert context["resources"] == [TARGET_ORDER]
     assert context["action"]["summary"] == {"added_count": 0, "removed_count": 0, "order_changed": True}
 
@@ -471,13 +472,13 @@ def test_snapshot_review_owned_lookup_matches_its_restore(workshop):
     empty = PlaylistSnapshotService.create_snapshot(workshop.user.id, "target", "Empty", [], SnapshotType.MANUAL)
     for snapshot_id, status, code in ((foreign.id, 404, "snapshot_not_found"), (9999, 404, "snapshot_not_found"),
                                       (empty.id, 400, "empty_snapshot")):
-        response = workshop.client.get(f"/snapshots/{snapshot_id}/restore-context")
+        response = workshop.client.get(api_path(f"/snapshots/{snapshot_id}/restore-context"))
         assert (response.status_code, response.get_json()["operation"]["error_code"]) == (status, code)
     with patch(
         "shuffify.services.live_action_context_service.PlaylistSnapshotService.get_snapshot",
         side_effect=OperationalError("SELECT", {}, Exception("private")),
     ):
-        response = workshop.client.get(f"/snapshots/{foreign.id}/restore-context")
+        response = workshop.client.get(api_path(f"/snapshots/{foreign.id}/restore-context"))
     assert response.status_code == 503
     operation = response.get_json()["operation"]
     assert (operation["kind"], operation["error_code"], operation["retryable"]) == (
@@ -486,8 +487,8 @@ def test_snapshot_review_owned_lookup_matches_its_restore(workshop):
     assert workshop.api.metadata_reads == []
 
 
-@pytest.mark.parametrize("path,kind", [("/schedules/1/run-context", "schedule"),
-                                       ("/snapshots/1/restore-context", "snapshot_restore")])
+@pytest.mark.parametrize("path,kind", [(api_path("/schedules/1/run-context"), "schedule"),
+                                       (api_path("/snapshots/1/restore-context"), "snapshot_restore")])
 @pytest.mark.parametrize("status", [401, 503])
 def test_review_preflight_matches_the_mutation_and_is_never_cached(auth_client, path, kind, status):
     with (
@@ -503,8 +504,8 @@ def test_review_preflight_matches_the_mutation_and_is_never_cached(auth_client, 
     assert not {"execution_id", "started_at", "execution_state", "http_status"} & body.keys()
 
 
-@pytest.mark.parametrize("path,kind", [("/schedules/1/run-context", "schedule"),
-                                       ("/snapshots/1/restore-context", "snapshot_restore")])
+@pytest.mark.parametrize("path,kind", [(api_path("/schedules/1/run-context"), "schedule"),
+                                       (api_path("/snapshots/1/restore-context"), "snapshot_restore")])
 def test_root_handlers_classify_review_failures_as_no_mutation(db_app, path, kind):
     from werkzeug.exceptions import RequestEntityTooLarge
 
@@ -523,7 +524,8 @@ def test_root_handlers_classify_review_failures_as_no_mutation(db_app, path, kin
 
 
 def run_url(kind, row=None):
-    return f"/schedules/{row.id}/run" if kind == "schedule" else f"/playlist/target/{MUTATIONS[kind]}"
+    path = f"/schedules/{row.id}/run" if kind == "schedule" else f"/playlist/target/{MUTATIONS[kind]}"
+    return api_path(path)
 
 
 @pytest.mark.parametrize("kind", ["raid", "drip", "raid_and_drip", "schedule"])
@@ -568,7 +570,7 @@ def test_executor_binding_shapes_are_refused_before_any_read(workshop, kind, sen
 ])
 def test_snapshot_binding_shapes_are_refused_before_any_read(workshop, send):
     with patch("shuffify.routes.snapshots.PlaylistSnapshotService.get_snapshot") as lookup:
-        response = workshop.client.post("/snapshots/1/restore", **send)
+        response = workshop.client.post(api_path("/snapshots/1/restore"), **send)
     assert response.status_code == 400
     body = response.get_json()
     assert (body["operation"]["kind"], body["operation"]["error_code"]) == (
@@ -585,7 +587,7 @@ def test_snapshot_binding_shapes_are_refused_before_any_read(workshop, send):
 def test_reviewed_collect_runs_once_with_only_its_reviewed_inputs(workshop):
     reviewed = scope(post_context(workshop.client, "target", {"kind": "raid", "source_playlist_ids": ["extra"]}))
     response = workshop.client.post(
-        "/playlist/target/raid-now", json={"source_playlist_ids": ["extra"], "reviewed_scope": reviewed},
+        api_path("/playlist/target/raid-now"), json={"source_playlist_ids": ["extra"], "reviewed_scope": reviewed},
     )
     data = response.get_json()
     assert response.status_code == 200, data
@@ -601,7 +603,7 @@ def test_reviewed_collect_runs_once_with_only_its_reviewed_inputs(workshop):
 def test_reviewed_drip_runs_once_past_the_saved_setting(workshop):
     workshop.api.playlists["collection"] = [uri(2)]
     reviewed = scope(post_context(workshop.client, "target", {"kind": "drip"}))
-    response = workshop.client.post("/playlist/target/drip-now", json={"reviewed_scope": reviewed})
+    response = workshop.client.post(api_path("/playlist/target/drip-now"), json={"reviewed_scope": reviewed})
     data = response.get_json()
     assert response.status_code == 200, data
     assert workshop.api.playlists == {**workshop.api.playlists, "target": [uri(2), uri(1)], "collection": []}
@@ -611,7 +613,7 @@ def test_reviewed_drip_runs_once_past_the_saved_setting(workshop):
 
 def test_reviewed_raid_and_drip_runs_both_children(workshop):
     reviewed = scope(post_context(workshop.client, "target", {"kind": "raid_and_drip"}))
-    response = workshop.client.post("/playlist/target/raid-and-drip", json={"reviewed_scope": reviewed})
+    response = workshop.client.post(api_path("/playlist/target/raid-and-drip"), json={"reviewed_scope": reviewed})
     data = response.get_json()
     assert response.status_code == 200, data
     assert [step["aggregate_status"] for step in data["operation"]["steps"]] == ["complete", "complete"]
@@ -632,7 +634,7 @@ def test_reviewed_routine_runs_once_and_stays_paused(workshop, job_type, params)
     workshop.api.playlists["collection"] = [uri(4)]
     row = routine(workshop.user, job_type, algorithm_params=params)
     reviewed = scope(routine_review(workshop.client, row.id))
-    response = workshop.client.post(f"/schedules/{row.id}/run", json={"reviewed_scope": reviewed})
+    response = workshop.client.post(api_path(f"/schedules/{row.id}/run"), json={"reviewed_scope": reviewed})
     data = response.get_json()
     assert response.status_code == 200, data
     assert data["operation"]["aggregate_status"] == "complete"
@@ -649,16 +651,16 @@ def test_names_timing_status_and_pause_are_not_review_inputs(workshop):
     workshop.link.raid_playlist_name = workshop.pair.archive_playlist_name = "Renamed"
     workshop.source.source_name, workshop.source.last_resolve_status = "Renamed", "failed"
     db.session.commit()
-    response = workshop.client.post(f"/schedules/{row.id}/run", json={"reviewed_scope": reviewed})
+    response = workshop.client.post(api_path(f"/schedules/{row.id}/run"), json={"reviewed_scope": reviewed})
     assert response.status_code == 200, response.get_json()
 
 
 def test_reviewed_no_op_runs_report_their_inbox_outcome(workshop):
     workshop.api.playlists["target"] = [uri(1), uri(2)]  # The only discovery is already there.
     reviewed = scope(post_context(workshop.client, "target", {"kind": "raid"}))
-    collect = workshop.client.post("/playlist/target/raid-now", json={"reviewed_scope": reviewed})
+    collect = workshop.client.post(api_path("/playlist/target/raid-now"), json={"reviewed_scope": reviewed})
     reviewed = scope(post_context(workshop.client, "target", {"kind": "drip"}))
-    drip = workshop.client.post("/playlist/target/drip-now", json={"reviewed_scope": reviewed})
+    drip = workshop.client.post(api_path("/playlist/target/drip-now"), json={"reviewed_scope": reviewed})
     for response, kind in ((collect, "pending_stage"), (drip, "pending_promotion")):
         data = response.get_json()
         assert response.status_code == 200, data
@@ -745,7 +747,7 @@ def test_changed_workshop_inputs_dispatch_nothing(workshop, kind, change):
         body["source_playlist_ids"] = ["extra"]
     else:
         edit(workshop, None, change)
-    response = workshop.client.post(f"/playlist/target/{MUTATIONS[kind]}", json=body)
+    response = workshop.client.post(api_path(f"/playlist/target/{MUTATIONS[kind]}"), json=body)
     if kind == "raid_and_drip":
         assert response.status_code == 409
         assert response.get_json()["operation"]["error_code"] == "review_changed"
@@ -774,7 +776,7 @@ def test_changed_routine_inputs_record_and_dispatch_nothing(workshop, job_type, 
     reviewed = scope(routine_review(workshop.client, row.id))
     edit(workshop, row, change)
     before = state(row)
-    response = workshop.client.post(f"/schedules/{row.id}/run", json={"reviewed_scope": reviewed})
+    response = workshop.client.post(api_path(f"/schedules/{row.id}/run"), json={"reviewed_scope": reviewed})
     assert_review_changed(response, "schedule")
     assert state(row) == before
     assert_nothing_ran(workshop.api)
@@ -828,7 +830,9 @@ def test_a_relink_by_another_process_during_the_drip_lock_wait_is_refused_in_the
         )
 
     with lock_wait(relink_elsewhere, on=1 if kind == "drip" else 2):
-        response = workshop.client.post(f"/playlist/target/{MUTATIONS[kind]}", json={"reviewed_scope": reviewed})
+        response = workshop.client.post(
+            api_path(f"/playlist/target/{MUTATIONS[kind]}"), json={"reviewed_scope": reviewed},
+        )
     if kind == "drip":
         assert_review_changed(response, "drip")
         assert_nothing_ran(workshop.api)
@@ -851,7 +855,7 @@ def test_a_routine_deleted_during_the_lock_wait_is_a_changed_review(workshop):
         db.session.commit()
 
     with lock_wait(delete):
-        response = workshop.client.post(f"/schedules/{row.id}/run", json={"reviewed_scope": reviewed})
+        response = workshop.client.post(api_path(f"/schedules/{row.id}/run"), json={"reviewed_scope": reviewed})
     assert_review_changed(response, "schedule")
     assert_nothing_ran(workshop.api)
 
@@ -864,7 +868,7 @@ def test_an_unreadable_lock_comparison_is_retryable_and_runs_nothing(workshop):
         raise OperationalError("SELECT", {}, Exception("private database detail"))
 
     with patch.dict("shuffify.services.live_review_scope._READERS", {"locks": unavailable}):
-        response = workshop.client.post(f"/schedules/{row.id}/run", json={"reviewed_scope": reviewed})
+        response = workshop.client.post(api_path(f"/schedules/{row.id}/run"), json={"reviewed_scope": reviewed})
     body = response.get_json()
     assert response.status_code == 502
     assert (body["operation"]["error_code"], body["operation"]["retryable"]) == ("database_read_failed", True)
@@ -886,7 +890,7 @@ def test_relink_during_collection_fails_the_step_before_its_write(workshop):
         return read_source(playlist_id, **kwargs)
 
     workshop.api.get_playlist_tracks = relink_while_resolving
-    response = workshop.client.post("/playlist/target/raid-now", json={"reviewed_scope": reviewed})
+    response = workshop.client.post(api_path("/playlist/target/raid-now"), json={"reviewed_scope": reviewed})
     data = response.get_json()
     assert response.status_code == 502, data
     assert (data["operation"]["error_code"], data["operation"]["aggregate_status"]) == ("resource_changed", "partial")
@@ -919,7 +923,7 @@ def test_executors_recheck_the_link_pair_and_count_they_consume(workshop, job_ty
     row = routine(workshop.user, job_type, algorithm_params={"target_size": 2} if job_type == JobType.ROTATE else {})
     reviewed = scope(routine_review(workshop.client, row.id))
     with after_check(step, lambda: edit(workshop, row, change)):
-        response = workshop.client.post(f"/schedules/{row.id}/run", json={"reviewed_scope": reviewed})
+        response = workshop.client.post(api_path(f"/schedules/{row.id}/run"), json={"reviewed_scope": reviewed})
     data = response.get_json()
     assert response.status_code == 502, data
     assert data["operation"]["error_code"] == "resource_changed"
@@ -937,7 +941,7 @@ def test_every_routine_run_refuses_a_target_changed_while_it_waited(workshop):
     workshop.api.playlists["target"] = [uri(1), uri(2)]
     row = routine(workshop.user, JobType.SHUFFLE)
     with lock_wait(lambda: edit(workshop, row, "target")):
-        response = workshop.client.post(f"/schedules/{row.id}/run")  # an unreviewed run
+        response = workshop.client.post(api_path(f"/schedules/{row.id}/run"))  # an unreviewed run
     data = response.get_json()
     assert response.status_code == 502, data
     assert data["operation"]["error_code"] == "resource_changed"
@@ -969,7 +973,7 @@ def test_reviewed_steps_recompare_after_the_record_commit(workshop, job_type, st
         return execution
 
     with patch.object(JobExecutorService, "_create_execution_record", side_effect=record_then_edit):
-        response = workshop.client.post(f"/schedules/{row.id}/run", json={"reviewed_scope": reviewed})
+        response = workshop.client.post(api_path(f"/schedules/{row.id}/run"), json={"reviewed_scope": reviewed})
     data = response.get_json()
     assert response.status_code == 502, data
     assert data["operation"]["error_code"] == "review_changed"
@@ -991,7 +995,7 @@ def test_a_step_refused_by_its_check_reports_its_inbox_fact_as_not_started(works
         return execution
 
     with patch.object(JobExecutorService, "_create_execution_record", side_effect=record_then_edit):
-        response = workshop.client.post(f"/schedules/{row.id}/run", json={"reviewed_scope": reviewed})
+        response = workshop.client.post(api_path(f"/schedules/{row.id}/run"), json={"reviewed_scope": reviewed})
     data = response.get_json()
     assert response.status_code == 502, data
     assert [entry["status"] for entry in data["operation"]["steps"]] == ["complete", "not_started"]
@@ -1012,7 +1016,7 @@ def test_reviewed_collect_never_raids_a_source_unwatched_during_its_lock_wait(wo
 
     with lock_wait(unwatch):
         response = workshop.client.post(
-            "/playlist/target/raid-now", json={"reviewed_scope": scope_digest} if reviewed else {},
+            api_path("/playlist/target/raid-now"), json={"reviewed_scope": scope_digest} if reviewed else {},
         )
     assert response.status_code == 200, response.get_json()
     if reviewed:
@@ -1033,7 +1037,7 @@ def test_raid_and_drip_child_compares_its_own_part_in_its_own_lock(workshop, cha
         return real_drip(**kwargs)
 
     with patch.object(RaidSyncService, "drip_now", side_effect=change_then_drip):
-        response = workshop.client.post("/playlist/target/raid-and-drip", json={"reviewed_scope": reviewed})
+        response = workshop.client.post(api_path("/playlist/target/raid-and-drip"), json={"reviewed_scope": reviewed})
     data = response.get_json()
     assert response.status_code == 502, data
     operation = data["operation"]
@@ -1062,7 +1066,7 @@ def test_raid_and_drip_child_compares_its_own_part_in_its_own_lock(workshop, cha
 def test_a_closed_drip_gate_after_a_collect_reports_the_target_as_not_started(workshop):
     row = routine(workshop.user, JobType.RAID_AND_DRIP)  # The saved Drip setting is off.
     reviewed = scope(routine_review(workshop.client, row.id))
-    response = workshop.client.post(f"/schedules/{row.id}/run", json={"reviewed_scope": reviewed})
+    response = workshop.client.post(api_path(f"/schedules/{row.id}/run"), json={"reviewed_scope": reviewed})
     data = response.get_json()
     assert response.status_code == 502, data
     operation = data["operation"]
@@ -1092,7 +1096,9 @@ def test_a_skipped_raid_and_drip_child_reports_the_target_as_not_started(worksho
     workshop.api.get_playlist_tracks = read  # One requested source can no longer be read.
     body = {"source_playlist_ids": ["gone"]}
     reviewed = scope(post_context(workshop.client, "target", {"kind": "raid_and_drip", **body}))
-    response = workshop.client.post("/playlist/target/raid-and-drip", json={**body, "reviewed_scope": reviewed})
+    response = workshop.client.post(
+        api_path("/playlist/target/raid-and-drip"), json={**body, "reviewed_scope": reviewed},
+    )
     data = response.get_json()
     assert response.status_code == 502, data
     operation = data["operation"]
@@ -1126,7 +1132,7 @@ def test_a_raid_and_drip_child_skipped_for_a_busy_lock_reports_the_target_as_not
 
     reviewed = scope(post_context(workshop.client, "target", {"kind": "raid_and_drip"}))
     with patch.object(base_executor, "playlist_lock", busy_for_the_drip):
-        response = workshop.client.post("/playlist/target/raid-and-drip", json={"reviewed_scope": reviewed})
+        response = workshop.client.post(api_path("/playlist/target/raid-and-drip"), json={"reviewed_scope": reviewed})
     data = response.get_json()
     assert response.status_code == 502, data
     operation = data["operation"]
@@ -1150,7 +1156,7 @@ def test_a_step_refused_by_a_reviewed_input_it_consumes_never_started(workshop, 
     row = routine(workshop.user, job_type, algorithm_params={"target_size": 2} if job_type == JobType.ROTATE else {})
     reviewed = scope(routine_review(workshop.client, row.id))
     with after_check(step, lambda: edit(workshop, row, change)):
-        response = workshop.client.post(f"/schedules/{row.id}/run", json={"reviewed_scope": reviewed})
+        response = workshop.client.post(api_path(f"/schedules/{row.id}/run"), json={"reviewed_scope": reviewed})
     data = response.get_json()
     assert response.status_code == 502, data
     operation = data["operation"]
@@ -1193,7 +1199,7 @@ def test_a_drip_that_fails_before_touching_the_target_reports_it_failed_and_uncl
 
     with patch.object(RaidSyncService, "drip_now", side_effect=collection_unreadable_then_drip):
         response = workshop.client.post(
-            "/playlist/target/raid-and-drip", json={"reviewed_scope": context["review_binding"]["scope"]},
+            api_path("/playlist/target/raid-and-drip"), json={"reviewed_scope": context["review_binding"]["scope"]},
         )
     data = response.get_json()
     assert response.status_code == 502, data
@@ -1221,7 +1227,7 @@ def test_a_drip_whose_target_fails_verification_never_attempted_promotion(worksh
 
     workshop.api.playlist_add_items = add_one_extra
     reviewed = scope(post_context(workshop.client, "target", {"kind": "drip"}))
-    response = workshop.client.post("/playlist/target/drip-now", json={"reviewed_scope": reviewed})
+    response = workshop.client.post(api_path("/playlist/target/drip-now"), json={"reviewed_scope": reviewed})
     data = response.get_json()
     assert response.status_code == 502, data
     operation = data["operation"]
@@ -1258,7 +1264,7 @@ def test_a_saved_value_that_no_longer_fingerprints_is_a_changed_review(workshop,
         corrupt()
         after_record = nullcontext()
     with after_record:
-        response = workshop.client.post(f"/schedules/{row.id}/run", json={"reviewed_scope": reviewed})
+        response = workshop.client.post(api_path(f"/schedules/{row.id}/run"), json={"reviewed_scope": reviewed})
     data = response.get_json()
     assert data["operation"]["error_code"] == "review_changed", data
     assert response.status_code == (409 if when == "lock" else 502)
@@ -1274,7 +1280,7 @@ def test_a_programming_error_in_a_comparison_is_never_a_changed_review(workshop,
         "shuffify.services.executors.base_executor.step_part", side_effect=ValueError("bug"),
     )
     with broken:
-        response = workshop.client.post(f"/schedules/{row.id}/run", json={"reviewed_scope": reviewed})
+        response = workshop.client.post(api_path(f"/schedules/{row.id}/run"), json={"reviewed_scope": reviewed})
     data = response.get_json()
     assert response.status_code == 502, data
     assert data["operation"]["error_code"] == code
@@ -1289,8 +1295,8 @@ def test_reviewed_snapshot_restore_runs_against_the_reviewed_order(workshop):
     snapshot = PlaylistSnapshotService.create_snapshot(
         workshop.user.id, "target", "Saved", [uri(2), uri(1)], SnapshotType.MANUAL,
     )
-    context = workshop.client.get(f"/snapshots/{snapshot.id}/restore-context").get_json()["context"]
-    response = workshop.client.post(f"/snapshots/{snapshot.id}/restore", json=binding_bundle(context))
+    context = workshop.client.get(api_path(f"/snapshots/{snapshot.id}/restore-context")).get_json()["context"]
+    response = workshop.client.post(api_path(f"/snapshots/{snapshot.id}/restore"), json=binding_bundle(context))
     data = response.get_json()
     assert response.status_code == 200, data
     assert workshop.api.writes == [("replace", "target", [uri(2), uri(1)])]
@@ -1304,13 +1310,13 @@ def test_stale_snapshot_review_never_snapshots_writes_or_moves_history(workshop,
         PlaylistSnapshotService.create_snapshot(workshop.user.id, "target", "Saved", order, SnapshotType.MANUAL)
         for order in ([uri(2), uri(1)], [uri(3)])
     )
-    context = workshop.client.get(f"/snapshots/{reviewed.id}/restore-context").get_json()["context"]
+    context = workshop.client.get(api_path(f"/snapshots/{reviewed.id}/restore-context")).get_json()["context"]
     restored = reviewed
     if change == "snapshot":
         restored = other  # The reviewed bundle names a different saved snapshot.
     else:
         workshop.api.playlists["target"] = [uri(1), uri(4)]  # Changed on Spotify after the review.
-    response = workshop.client.post(f"/snapshots/{restored.id}/restore", json=binding_bundle(context))
+    response = workshop.client.post(api_path(f"/snapshots/{restored.id}/restore"), json=binding_bundle(context))
     body = response.get_json()
     assert response.status_code == 409, body
     assert (body["operation"]["error_code"], body["operation"]["retryable"]) == (code, False)

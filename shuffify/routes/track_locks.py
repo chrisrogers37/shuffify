@@ -12,10 +12,10 @@ from flask import jsonify
 
 from shuffify.enums import ActivityType
 from shuffify.routes import (
+    api_bp,
     json_error,
     json_success,
     log_activity,
-    main,
     require_auth_and_db,
     validate_json,
 )
@@ -31,7 +31,7 @@ from shuffify.services.track_lock_service import (
 logger = logging.getLogger(__name__)
 
 
-@main.route(
+@api_bp.route(
     "/workshop/<playlist_id>/locks",
     methods=["GET"],
 )
@@ -60,7 +60,7 @@ def get_track_locks(
         )
 
 
-@main.route(
+@api_bp.route(
     "/workshop/<playlist_id>/locks/toggle",
     methods=["POST"],
 )
@@ -128,7 +128,7 @@ def toggle_track_lock(
         )
 
 
-@main.route(
+@api_bp.route(
     "/workshop/<playlist_id>/locks/unlock-all",
     methods=["POST"],
 )

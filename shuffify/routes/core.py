@@ -16,16 +16,16 @@ from flask import (
     request,
     send_from_directory,
     session,
-    url_for,
 )
 
 from shuffify.enums import ActivityType
 from shuffify.routes import (
+    auth_bp,
     clear_session_and_show_login,
     get_db_user,
     is_authenticated,
     log_activity,
-    main,
+    site_bp,
 )
 from shuffify.services import (
     AuthenticationError,
@@ -70,7 +70,7 @@ def _previous_login_at(db_user):
     return getattr(db_user, "last_login_at", None)
 
 
-@main.route("/")
+@site_bp.route("/")
 def index():
     """Home page - shows login or dashboard based on auth state."""
     try:
@@ -164,19 +164,19 @@ def index():
         return clear_session_and_show_login()
 
 
-@main.route("/terms")
+@site_bp.route("/terms")
 def terms():
     """Terms of Service page."""
     return send_from_directory("static/public", "terms.html")
 
 
-@main.route("/privacy")
+@site_bp.route("/privacy")
 def privacy():
     """Privacy Policy page."""
     return send_from_directory("static/public", "privacy.html")
 
 
-@main.route("/health")
+@site_bp.route("/health")
 def health():
     """Health check endpoint for Docker and monitoring."""
     from shuffify import is_db_available
@@ -199,7 +199,7 @@ def health():
 # =============================================================================
 
 
-@main.route("/login")
+@auth_bp.route("/login")
 def login():
     """Initiate Spotify OAuth flow."""
     try:
@@ -210,7 +210,7 @@ def login():
                 "Privacy Policy to use Shuffify.",
                 "error",
             )
-            return redirect(url_for("main.index"))
+            return redirect("/")
 
         # Clear any existing session data
         session.pop("spotify_token", None)
@@ -230,10 +230,10 @@ def login():
             "An error occurred during login. Please try again.",
             "error",
         )
-        return redirect(url_for("main.index"))
+        return redirect("/")
 
 
-@main.route("/callback")
+@auth_bp.route("/callback")
 def callback():
     """Handle OAuth callback from Spotify."""
     logger.debug(
@@ -248,7 +248,7 @@ def callback():
     if error:
         logger.error("OAuth error: %r", error[:100])
         flash(_OAUTH_ERROR_MESSAGES.get(error, _OAUTH_ERROR_DEFAULT), "error")
-        return redirect(url_for("main.index"))
+        return redirect("/")
 
     # Get authorization code
     code = request.args.get("code")
@@ -258,7 +258,7 @@ def callback():
             "No authorization code received from Spotify. Please try again.",
             "error",
         )
-        return redirect(url_for("main.index"))
+        return redirect("/")
 
     # Validate CSRF state parameter
     callback_state = request.args.get("state")
@@ -269,7 +269,7 @@ def callback():
             "Authentication failed due to a security check. Please try again.",
             "error",
         )
-        return redirect(url_for("main.index"))
+        return redirect("/")
 
     try:
         # Exchange code for token
@@ -353,7 +353,7 @@ def callback():
             f"{user_data.get('display_name', 'Unknown')} "
             f"authenticated successfully"
         )
-        return redirect(url_for("main.index"))
+        return redirect("/")
 
     except AuthenticationError as e:
         if "not registered" in str(e):
@@ -366,10 +366,10 @@ def callback():
             "Error connecting to Spotify. Please try again.",
             "error",
         )
-        return redirect(url_for("main.index"))
+        return redirect("/")
 
 
-@main.route("/logout", methods=["POST"])
+@auth_bp.route("/logout", methods=["POST"])
 def logout():
     """Clear session and log out.
 
@@ -405,4 +405,4 @@ def logout():
         logger.warning("Failed to record logout: %s", e)
 
     session.clear()
-    return redirect(url_for("main.index"))
+    return redirect("/")

@@ -115,7 +115,7 @@ def test_prepare_reads_context_only_and_final_run_dispatches_once_with_bindings(
 (async () => {
     replies.push(contextReply('shuffle'));
     const pending = client.prepare(describe('shuffle')); await tick(); await tick();
-    assert.equal(calls.length, 1); assert.equal(calls[0].url, '/playlist/target/live-context');
+    assert.equal(calls.length, 1); assert.equal(calls[0].url, '/api/playlist/target/live-context');
     assert.deepEqual(JSON.parse(calls[0].options.body),
         {kind: 'shuffle', form: {algorithm: 'BasicShuffle', keep_first: '2'}});
     assert.equal(calls[0].options.body.includes('csrf'), false);
@@ -128,7 +128,7 @@ def test_prepare_reads_context_only_and_final_run_dispatches_once_with_bindings(
     replies.push(response(tracks()));
     const record = await client.run(handle);
     assert.equal(await client.run(handle), null); assert.equal(await client.run(copy(handle)), null);
-    assert.equal(calls.length, 2); assert.equal(calls[1].url, '/shuffle/target');
+    assert.equal(calls.length, 2); assert.equal(calls[1].url, '/api/shuffle/target');
     assert.deepEqual(Object.fromEntries(calls[1].options.body), {csrf_token: 'test-csrf', algorithm: 'BasicShuffle',
         keep_first: '2', reviewed_scope: SCOPE});
     assert.equal(record.complete, true); assert.equal(record.attention, false); assert.equal(completed.length, 1);
@@ -157,7 +157,7 @@ def test_undo_and_privacy_bind_reviewed_facts_without_client_selected_order(node
     const privacy = await reviewed('privacy');
     replies.push(response(privacyResult()));
     const record = await client.run(privacy);
-    assert.equal(calls[3].url, '/playlist/target/toggle-visibility');
+    assert.equal(calls[3].url, '/api/playlist/target/toggle-visibility');
     assert.deepEqual(JSON.parse(calls[3].options.body), {public: false, reviewed_scope: SCOPE});
     assert.equal(record.complete, true); assert.equal(record.intent.action.public, false);
 })().catch(e => {console.error(e); process.exitCode = 1;});
@@ -234,7 +234,7 @@ def test_malformed_context_blocks_run_and_load_again_rereads_only(node, bad):
     assert.equal(element('live-operation-heading').textContent, 'Review unavailable');
     assert.equal(element('live-operation-run').textContent, 'Load review again');
     runReview(); await tick(); await tick();
-    assert.equal(calls.length, 2); assert.equal(calls[1].url, '/playlist/target/live-context');
+    assert.equal(calls.length, 2); assert.equal(calls[1].url, '/api/playlist/target/live-context');
     assert.match(element('live-operation-heading').textContent, /^Review: /);
     runReview(); assert.notEqual(await pending, null); assert.equal(client.getRecords().length, 0);
 }})().catch(e => {{console.error(e); process.exitCode = 1;}});
@@ -328,7 +328,7 @@ def test_proven_no_effect_rejection_needs_a_fresh_review_not_a_permanent_block(
     if ('{code}' !== 'playlist_busy') assert.match(record.message, /Review it again/);
     replies.push(contextReply('undo'));
     const again = await reviewed('undo'); assert.notEqual(again, null);
-    assert.equal(calls.filter(call => call.url === '/playlist/target/live-context').length, 2);
+    assert.equal(calls.filter(call => call.url === '/api/playlist/target/live-context').length, 2);
 }})().catch(e => {{console.error(e); process.exitCode = 1;}});
 """,
     )
@@ -378,7 +378,7 @@ def test_privacy_check_clears_only_its_own_conflict_and_a_newer_failure_restores
             verification: 'metadata', current_metadata: {public: false}, desired_metadata: {public: false}})]}};
     replies.push(response(match));
     const checked = await client.reconcile(record.operationId);
-    assert.equal(calls[2].url, '/playlist/target/inspect-live');
+    assert.equal(calls[2].url, '/api/playlist/target/inspect-live');
     assert.deepEqual(JSON.parse(calls[2].options.body), {kind: 'privacy', desired_public: false});
     assert.equal(checked.blocked, false); assert.equal(checked.attention, false);
     assert.equal(observed.length, 1); assert.equal(observed[0].observations[0].status, 'match');
@@ -391,7 +391,7 @@ def test_privacy_check_clears_only_its_own_conflict_and_a_newer_failure_restores
     assert.equal(failed.blocked, true); assert.equal(failed.observations.length, 2);
     assert.equal(failed.observations[0].status, 'match'); assert.equal(failed.observations[1].status, 'failed');
     assert.equal(calls.filter(call => call.options.method === 'POST' &&
-        call.url === '/playlist/target/toggle-visibility').length, 1);
+        call.url === '/api/playlist/target/toggle-visibility').length, 1);
 })().catch(e => {console.error(e); process.exitCode = 1;});
 """,
     )
@@ -439,7 +439,7 @@ def test_lost_random_shuffle_check_sends_no_desired_order_and_stays_unavailable(
     assert.deepEqual(JSON.parse(calls[2].options.body), {kind: 'tracks'});
     assert.equal(checked.observations[0].status, 'unavailable'); assert.equal(checked.blocked, true);
     assert.equal(await client.reconcile(999), null);
-    assert.equal(calls.filter(call => call.url.startsWith('/shuffle/')).length, 1);
+    assert.equal(calls.filter(call => call.url.startsWith('/api/shuffle/')).length, 1);
 })().catch(e => {console.error(e); process.exitCode = 1;});
 """,
     )
@@ -500,7 +500,7 @@ def test_navigation_ready_busy_and_attention_decisions(node, choice):
     unload(); assert.equal(warned, choice !== 'leave');
     warned = false; unload(); assert.equal(warned, true);
     if (choice === 'review') {{await tick(); assert.equal(panels[panels.length - 1].id, 'live-operation-panel');}}
-    assert.equal(calls.filter(call => call.url.startsWith('/shuffle/')).length, 1);
+    assert.equal(calls.filter(call => call.url.startsWith('/api/shuffle/')).length, 1);
 }})().catch(e => {{console.error(e); process.exitCode = 1;}});
 """,
     )
@@ -655,6 +655,6 @@ def test_real_panels_reuse_open_results_for_review_and_escape_cancels_to_the_tri
     assert.equal(await pending, null); assert.equal(panel.hidden, true);
     assert.equal(f.document.activeElement, card);
     assert.equal(heading.textContent, 'Live action results'); assert.equal(close.textContent, 'Back to Library');
-    assert.deepEqual(calls, ['/playlist/target/live-context']);
+    assert.deepEqual(calls, ['/api/playlist/target/live-context']);
 })().catch(e => {console.error(e); process.exitCode = 1;});
 """, ROOT)

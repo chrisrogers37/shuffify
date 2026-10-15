@@ -239,8 +239,8 @@ the routine overview).
 
 ### Authenticated navigation and Settings
 
-The five destinations are Library (`main.index`), Workshop
-(`main.workshop_hub`), Routines (`main.schedules`), Activity, and Settings.
+The five destinations are Library (`site.index`), Workshop
+(`site.workshop_hub`), Routines (`site.schedules`), Activity, and Settings.
 Endpoint-based `aria-current="page"` identifies the current destination without
 changing route URLs. At 1024 px and wider, the links appear alongside the brand.
 Below that width, a native `details`/`summary` Menu opens the labelled links in

@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from shuffify.services.workshop_finalize_service import WorkshopFinalizeResult
+from tests.paths import api_path
 
 # =============================================================
 # Authentication Tests
@@ -24,7 +25,7 @@ class TestPendingRaidsAuth:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.get(
-                "/playlist/p1/pending-raids"
+                api_path("/playlist/p1/pending-raids")
             )
             assert resp.status_code == 401
 
@@ -33,7 +34,7 @@ class TestPendingRaidsAuth:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/playlist/p1/pending-raids/promote",
+                api_path("/playlist/p1/pending-raids/promote"),
                 json={"track_ids": [1]},
             )
             assert resp.status_code == 401
@@ -43,7 +44,7 @@ class TestPendingRaidsAuth:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/playlist/p1/pending-raids/dismiss",
+                api_path("/playlist/p1/pending-raids/dismiss"),
                 json={"track_ids": [1]},
             )
             assert resp.status_code == 401
@@ -55,7 +56,7 @@ class TestPendingRaidsAuth:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/playlist/p1/pending-raids/promote-all"
+                api_path("/playlist/p1/pending-raids/promote-all")
             )
             assert resp.status_code == 401
 
@@ -66,7 +67,7 @@ class TestPendingRaidsAuth:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/playlist/p1/pending-raids/dismiss-all"
+                api_path("/playlist/p1/pending-raids/dismiss-all")
             )
             assert resp.status_code == 401
 
@@ -75,7 +76,7 @@ class TestPendingRaidsAuth:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/playlist/p1/pending-raids/unpromote",
+                api_path("/playlist/p1/pending-raids/unpromote"),
                 json={
                     "track_uris": [
                         "spotify:track:1",
@@ -99,7 +100,7 @@ class TestPendingRaidsValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/pending-raids/promote",
+            api_path("/playlist/p1/pending-raids/promote"),
             json={},
         )
         assert resp.status_code == 400
@@ -110,7 +111,7 @@ class TestPendingRaidsValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/pending-raids/dismiss",
+            api_path("/playlist/p1/pending-raids/dismiss"),
             json={},
         )
         assert resp.status_code == 400
@@ -121,7 +122,7 @@ class TestPendingRaidsValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/pending-raids/promote",
+            api_path("/playlist/p1/pending-raids/promote"),
             json={"track_ids": []},
         )
         assert resp.status_code == 400
@@ -132,7 +133,7 @@ class TestPendingRaidsValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/pending-raids/dismiss",
+            api_path("/playlist/p1/pending-raids/dismiss"),
             json={"track_ids": []},
         )
         assert resp.status_code == 400
@@ -143,7 +144,7 @@ class TestPendingRaidsValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/pending-raids/finalize",
+            api_path("/playlist/p1/pending-raids/finalize"),
             json={},
         )
         assert resp.status_code == 400
@@ -154,7 +155,7 @@ class TestPendingRaidsValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/pending-raids/finalize",
+            api_path("/playlist/p1/pending-raids/finalize"),
             json={"track_ids": []},
         )
         assert resp.status_code == 400
@@ -165,7 +166,7 @@ class TestPendingRaidsValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/pending-raids/unpromote",
+            api_path("/playlist/p1/pending-raids/unpromote"),
             json={},
         )
         assert resp.status_code == 400
@@ -176,7 +177,7 @@ class TestPendingRaidsValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/pending-raids/unpromote",
+            api_path("/playlist/p1/pending-raids/unpromote"),
             json={"track_uris": []},
         )
         assert resp.status_code == 400
@@ -193,7 +194,7 @@ class TestPendingRaidsFinalize:
     def test_unauth(self, mock_auth, db_app, endpoint):
         mock_auth.return_value = None
         with db_app.test_client() as client:
-            response = client.post(f"/playlist/p1/pending-raids/{endpoint}")
+            response = client.post(api_path(f"/playlist/p1/pending-raids/{endpoint}"))
         assert response.status_code == 401
         assert response.json["status"] == "failed"
         assert response.json["promoted_count"] == 0
@@ -220,9 +221,12 @@ class TestPendingRaidsFinalize:
         )
         service.return_value.finalize_raids.return_value = result
         with patch("shuffify.routes.raid_panel.log_activity") as activity:
-            response = auth_client.post(f"/playlist/p1/pending-raids/{endpoint}", json=payload)
+            response = auth_client.post(api_path(f"/playlist/p1/pending-raids/{endpoint}"), json=payload)
         assert response.status_code == http_status
-        assert response.json == result.to_dict()
+        expected = result.to_dict()
+        if not expected["success"]:
+            expected["category"] = "error"
+        assert response.json == expected
         service.assert_called_once_with(api)
         call = service.return_value.finalize_raids.call_args
         assert call.args[0] == "p1"
@@ -238,7 +242,7 @@ class TestPendingRaidsFinalize:
     @patch("shuffify.routes.raid_panel.WorkshopFinalizeService")
     @patch("shuffify.routes.require_auth")
     def test_incomplete_captured_task_rejected(self, auth, service, auth_client, endpoint, payload):
-        response = auth_client.post(f"/playlist/p1/pending-raids/{endpoint}", json=payload)
+        response = auth_client.post(api_path(f"/playlist/p1/pending-raids/{endpoint}"), json=payload)
         assert response.status_code == 400
         assert response.json["status"] == "failed"
         assert response.json["promoted_count"] == 0

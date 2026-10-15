@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, Mock, patch
 from shuffify.models.playlist import Playlist
 from shuffify.services import PlaylistAccessError
 from shuffify.spotify.api import SpotifyAPI
+from tests.paths import api_path
 
 # =============================================================================
 # Helpers
@@ -82,7 +83,7 @@ class TestLoadExternalPlaylistByUrl:
         mock_playlist_svc.return_value = mock_ps
 
         response = authenticated_client.post(
-            "/workshop/load-external-playlist",
+            api_path("/workshop/load-external-playlist"),
             data=json.dumps({
                 "url": (
                     "https://open.spotify.com/playlist/ext_playlist_abc"
@@ -121,7 +122,7 @@ class TestLoadExternalPlaylistByUrl:
         mock_parse_url.return_value = None
 
         response = authenticated_client.post(
-            "/workshop/load-external-playlist",
+            api_path("/workshop/load-external-playlist"),
             data=json.dumps({"url": "not-a-spotify-url"}),
             content_type="application/json",
         )
@@ -161,7 +162,7 @@ class TestLoadExternalPlaylistByUrl:
         mock_playlist_svc.return_value = mock_ps
 
         response = authenticated_client.post(
-            "/workshop/load-external-playlist",
+            api_path("/workshop/load-external-playlist"),
             data=json.dumps({"url": "private_playlist_id"}),
             content_type="application/json",
         )
@@ -171,7 +172,7 @@ class TestLoadExternalPlaylistByUrl:
     def test_load_external_requires_auth(self, client):
         """Unauthenticated request should return 401."""
         response = client.post(
-            "/workshop/load-external-playlist",
+            api_path("/workshop/load-external-playlist"),
             data=json.dumps({"url": "some_id"}),
             content_type="application/json",
         )
@@ -195,7 +196,7 @@ class TestLoadExternalPlaylistByUrl:
         mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
-            "/workshop/load-external-playlist",
+            api_path("/workshop/load-external-playlist"),
             data="not valid json",
             content_type="application/json",
         )
@@ -219,7 +220,7 @@ class TestLoadExternalPlaylistByUrl:
         mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
-            "/workshop/load-external-playlist",
+            api_path("/workshop/load-external-playlist"),
             data=json.dumps({}),
             content_type="application/json",
         )
@@ -262,7 +263,7 @@ class TestLoadExternalPlaylistBySearch:
         mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
-            "/workshop/load-external-playlist",
+            api_path("/workshop/load-external-playlist"),
             data=json.dumps({"query": "jazz"}),
             content_type="application/json",
         )
@@ -311,7 +312,7 @@ class TestSearchPlaylistsRoute:
         mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
-            "/workshop/search-playlists",
+            api_path("/workshop/search-playlists"),
             data=json.dumps({"query": "test"}),
             content_type="application/json",
         )
@@ -339,7 +340,7 @@ class TestSearchPlaylistsRoute:
         mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
-            "/workshop/search-playlists",
+            api_path("/workshop/search-playlists"),
             data=json.dumps({"query": ""}),
             content_type="application/json",
         )
@@ -364,7 +365,7 @@ class TestSearchPlaylistsRoute:
         mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
-            "/workshop/search-playlists",
+            api_path("/workshop/search-playlists"),
             data=json.dumps({"query": "x" * 201}),
             content_type="application/json",
         )
@@ -374,7 +375,7 @@ class TestSearchPlaylistsRoute:
     def test_search_requires_auth(self, client):
         """Unauthenticated search should return 401."""
         response = client.post(
-            "/workshop/search-playlists",
+            api_path("/workshop/search-playlists"),
             data=json.dumps({"query": "test"}),
             content_type="application/json",
         )
@@ -491,7 +492,7 @@ class TestRestrictedPlaylistDetection:
         mock_playlist_svc.return_value = mock_ps
 
         response = authenticated_client.post(
-            "/workshop/load-external-playlist",
+            api_path("/workshop/load-external-playlist"),
             data=json.dumps({
                 "url": "restricted_pl_123"
             }),
@@ -541,7 +542,7 @@ class TestRestrictedPlaylistDetection:
         )
 
         response = authenticated_client.post(
-            "/workshop/load-external-playlist",
+            api_path("/workshop/load-external-playlist"),
             data=json.dumps({"url": "https://open.spotify.com/playlist/0123456789abcdefghijkl"}),
             content_type="application/json",
         )
@@ -591,7 +592,7 @@ class TestRestrictedPlaylistDetection:
         mock_playlist_svc.return_value = mock_ps
 
         response = authenticated_client.post(
-            "/workshop/load-external-playlist",
+            api_path("/workshop/load-external-playlist"),
             data=json.dumps({
                 "url": "empty_pl_456"
             }),
@@ -637,7 +638,7 @@ class TestRestrictedPlaylistDetection:
         mock_playlist_svc.return_value = mock_ps
 
         response = authenticated_client.post(
-            "/workshop/load-external-playlist",
+            api_path("/workshop/load-external-playlist"),
             data=json.dumps({
                 "url": "owned_pl_789"
             }),
@@ -684,7 +685,7 @@ class TestRestrictedPlaylistDetection:
         mock_playlist_svc.return_value = mock_ps
 
         response = authenticated_client.post(
-            "/workshop/load-external-playlist",
+            api_path("/workshop/load-external-playlist"),
             data=json.dumps({
                 "url": "owned_empty_pl"
             }),
@@ -731,7 +732,7 @@ class TestSearchPlaylistsOwnerIdField:
         mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
-            "/workshop/search-playlists",
+            api_path("/workshop/search-playlists"),
             data=json.dumps({"query": "jazz"}),
             content_type="application/json",
         )

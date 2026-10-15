@@ -11,6 +11,7 @@ from playwright.sync_api import sync_playwright
 from tests.e2e.conftest import APP, pid
 from tests.e2e.test_direct_live_actions import _close_tool, _open_inbox, _remove_row
 from tests.e2e.test_pages import CHROMIUM_ARGS, Visit
+from tests.paths import api_path
 
 TARGET = pid("alice-morning-mix")
 ARCHIVE = pid("alice-morning-archive")
@@ -55,7 +56,7 @@ def test_saved_target_survives_rejected_archive_step_and_source_only_retry(alice
     payload = _archive_intent(alice, fake)
     confirmed_target = fake.playlist(TARGET)
     fake.arm(operation="POST /playlists/{playlist_id}/items", kind="quota", playlist_id=ARCHIVE)
-    rejected = alice.post(f"/playlist/{TARGET}/pair/archive", json=payload)
+    rejected = alice.post(api_path(f"/playlist/{TARGET}/pair/archive"), json=payload)
     assert rejected.status_code == 502, rejected.text
     result = rejected.json()
     assert (result["status"], result["retryable"]) == ("failed", True)
@@ -80,7 +81,7 @@ def test_lost_archive_response_is_inspected_without_replaying_duplicates(alice, 
     # The client times out at 30s; the fake still applies this exact write.
     fake.arm(operation="POST /playlists/{playlist_id}/items", kind="slow",
              playlist_id=ARCHIVE, delay=31)
-    response = alice.post(f"/playlist/{TARGET}/pair/archive", json=payload)
+    response = alice.post(api_path(f"/playlist/{TARGET}/pair/archive"), json=payload)
     assert response.status_code == 502, response.text
     assert (response.json()["status"], response.json()["retryable"]) == ("unknown", False)
     deadline = time.monotonic() + 5
@@ -117,7 +118,7 @@ def test_captured_archive_never_follows_a_relinked_pair(alice, fake):
     before = {playlist: fake.playlist(playlist) for playlist in (TARGET, ARCHIVE, OTHER)}
     alice.ok("delete", f"/playlist/{TARGET}/pair")
     _pair(alice, OTHER)
-    response = alice.post(f"/playlist/{TARGET}/pair/archive", json=payload)
+    response = alice.post(api_path(f"/playlist/{TARGET}/pair/archive"), json=payload)
     assert response.status_code == 409, response.text
     assert response.json()["error_code"] == "source_changed"
     assert response.json()["retryable"] is False
@@ -139,8 +140,8 @@ class RecoveryVisit(Visit):
 
     expected_source_statuses = (502,)
     source_urls = {
-        f"{APP}/playlist/{TARGET}/pair/archive",
-        f"{APP}/playlist/{TARGET}/pending-raids/finalize",
+        (APP + api_path(f'/playlist/{TARGET}/pair/archive')),
+        (APP + api_path(f'/playlist/{TARGET}/pending-raids/finalize')),
     }
 
     def _check_response(self, response):
@@ -208,8 +209,8 @@ def test_named_source_recovery_is_reviewed_and_retried_in_browser(
         page.wait_for_function("() => !workshopBusy() && workshopState.sourceRecovery.length === 0")
         assert fake.uris(ARCHIVE) == [original[0]]
         assert fake.playlist(TARGET) == confirmed_target
-        assert posts.count(f"{APP}/workshop/{TARGET}/commit") == 1
-        assert posts.count(f"{APP}/playlist/{TARGET}/pair/archive") == 2
+        assert posts.count((APP + api_path(f'/workshop/{TARGET}/commit'))) == 1
+        assert posts.count((APP + api_path(f'/playlist/{TARGET}/pair/archive'))) == 2
         assert not any("/unpromote" in path for path in posts)
         assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
         page.screenshot(path=tmp_path / f"verified-{width}.png", full_page=True)
@@ -229,7 +230,7 @@ def test_unknown_archive_browser_result_only_inspects_actual_saved_occurrence(
     page = visit.page
     page.set_viewport_size({"width": width, "height": {1440: 900, 768: 1024, 375: 812}[width]})
     dispatched = []
-    archive_url = f"{APP}/playlist/{TARGET}/pair/archive"
+    archive_url = (APP + api_path(f'/playlist/{TARGET}/pair/archive'))
 
     def lose_first_acknowledgement(route):
         payload = route.request.post_data_json
@@ -354,7 +355,7 @@ def test_shared_collection_archive_browser_orders_all_source_effects(
         if reject_removal:
             assert page.evaluate("workshopState.sourceRecovery.length") == 2
             assert fake.playlist(ARCHIVE) == shared_baseline
-            assert posts.count(f"{APP}/playlist/{TARGET}/pair/archive") == 0
+            assert posts.count((APP + api_path(f'/playlist/{TARGET}/pair/archive'))) == 0
             assert page.locator('[data-source-retry="archive"]').count() == 0
             page.click('[data-source-retry="raids"]')
             page.wait_for_function("() => !workshopBusy() && workshopState.sourceRecovery.length === 1")
@@ -365,8 +366,8 @@ def test_shared_collection_archive_browser_orders_all_source_effects(
             assert page.evaluate("workshopState.sourceRecovery.length") == 0
         assert fake.uris(ARCHIVE) == [original[0]]
         assert fake.playlist(TARGET) == target_saved
-        assert posts.count(f"{APP}/workshop/{TARGET}/commit") == 1
-        assert posts.count(f"{APP}/playlist/{TARGET}/pair/archive") == 1
+        assert posts.count((APP + api_path(f'/workshop/{TARGET}/commit'))) == 1
+        assert posts.count((APP + api_path(f'/playlist/{TARGET}/pair/archive'))) == 1
         assert alice.ok("get", f"/playlist/{TARGET}/pending-raids")["tracks"] == []
         assert visit.problems == []
     finally:
@@ -414,7 +415,7 @@ def test_security_rejection_keeps_archive_retry_known_unchanged(
     original = fake.uris(TARGET)
     visit = CsrfRecoveryVisit(recovery_browser, "desktop")
     page = visit.page
-    archive_url = f"{APP}/playlist/{TARGET}/pair/archive"
+    archive_url = (APP + api_path(f'/playlist/{TARGET}/pair/archive'))
     requests = []
     page.on("request", lambda req: requests.append(req.url) if req.method == "POST" else None)
     try:
@@ -452,7 +453,7 @@ def test_security_rejection_keeps_archive_retry_known_unchanged(
         assert "this attempt" in message and "reload" in message
         assert fake.uris(ARCHIVE) == []
         assert fake.playlist(TARGET) == confirmed_target
-        assert requests.count(f"{APP}/workshop/{TARGET}/commit") == 1
+        assert requests.count((APP + api_path(f'/workshop/{TARGET}/commit'))) == 1
         assert requests.count(archive_url) == 2
         assert visit.problems == []
     finally:

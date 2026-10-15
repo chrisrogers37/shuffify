@@ -14,6 +14,7 @@ from tests.e2e.test_direct_live_actions import (
     _remove_row,
     _settled,
 )
+from tests.paths import api_path
 
 TARGET = pid("alice-morning-mix")
 LONG_HAUL = pid("alice-long-haul")
@@ -135,7 +136,7 @@ def test_drip_reports_verified_compensation_when_collection_removal_is_rejected(
     before = fake.uris(TARGET)
     collected = fake.uris(collection)
     fake.arm(operation="DELETE /playlists/{playlist_id}/items", kind="quota", playlist_id=collection)
-    response = alice.post(f"/playlist/{TARGET}/drip-now", json={})
+    response = alice.post(api_path(f"/playlist/{TARGET}/drip-now"), json={})
     assert response.status_code == 502, response.text
     body = response.json()
     assert body["success"] is False
@@ -182,8 +183,8 @@ def test_workshop_collect_keeps_a_draft_and_drip_saves_it_before_a_fresh_review(
     page.set_viewport_size({"width": width, "height": height})
     posts = []
     page.on("request", lambda req: posts.append(req.url) if req.method == "POST" else None)
-    drip_url = f"{APP}/playlist/{TARGET}/drip-now"
-    commit_url = f"{APP}/workshop/{TARGET}/commit"
+    drip_url = (APP + api_path(f'/playlist/{TARGET}/drip-now'))
+    commit_url = (APP + api_path(f'/workshop/{TARGET}/commit'))
     try:
         visit.log_in()
         page.goto(f"{APP}/workshop/{TARGET}", wait_until="networkidle")
@@ -237,7 +238,7 @@ def test_collect_refuses_a_source_unwatched_after_review_and_collects_nothing(
 
     collection = _collection(alice)
     source_id = alice.ok("get", f"/playlist/{TARGET}/raid-status")["raid_status"]["sources"][0]["id"]
-    raid_path = f"/playlist/{TARGET}/raid-now"
+    raid_path = api_path(f"/playlist/{TARGET}/raid-now")
     visit = Visit(live_browser, "desktop", allowed=[(raid_path, 409)])
     page = visit.page
     try:
@@ -361,7 +362,7 @@ def test_lost_manual_run_response_retains_unknown_and_blocks_repeat(
     page = visit.page
     page.set_viewport_size({"width": width, "height": height})
     posted = []
-    run_url = f"{APP}/schedules/{sid}/run"
+    run_url = (APP + api_path(f'/schedules/{sid}/run'))
 
     def lose_response_body(route):
         posted.append(route.request.url)
@@ -434,7 +435,7 @@ def test_composite_restoration_retains_completed_collection_and_named_results(
     assert alice.ok("get", f"/playlist/{TARGET}/pending-raids")["tracks"] == []
     fake.arm(operation="DELETE /playlists/{playlist_id}/items", kind="quota", playlist_id=collection)
     visit = RecoveryVisit(live_browser, "desktop")
-    visit.source_urls = {f"{APP}/schedules/{sid}/run"}
+    visit.source_urls = {(APP + api_path(f'/schedules/{sid}/run'))}
     page = visit.page
     page.set_viewport_size({"width": 375, "height": 812})
     try:
@@ -490,7 +491,7 @@ def test_saved_drip_gate_and_direct_one_off_are_separate(alice, fake):
     collected = fake.uris(collection)
     try:
         registration = _registration(sid)
-        run = alice.post(f"/schedules/{sid}/run")
+        run = alice.post(api_path(f"/schedules/{sid}/run"))
         assert run.status_code == 409, run.text
         body = run.json()
         assert body["success"] is False
@@ -530,7 +531,7 @@ def test_missing_source_retains_healthy_collection_and_stops_composite(alice, fa
     alice.ok("post", f"/schedules/{sid}/toggle")
     before = fake.playlist(TARGET)
     try:
-        response = alice.post(f"/schedules/{sid}/run")
+        response = alice.post(api_path(f"/schedules/{sid}/run"))
         assert response.status_code == 502, response.text
         body = response.json()
         assert body["success"] is False
@@ -559,7 +560,7 @@ def test_completed_collection_before_disabled_drip_is_recorded_as_partial(alice,
     alice.ok("post", f"/schedules/{sid}/toggle")
     target_before = fake.playlist(TARGET)
     try:
-        response = alice.post(f"/schedules/{sid}/run")
+        response = alice.post(api_path(f"/schedules/{sid}/run"))
         assert response.status_code == 502, response.text
         body = response.json()
         operation = body["operation"]

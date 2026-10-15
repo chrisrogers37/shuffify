@@ -99,7 +99,7 @@ def test_executor_kinds_review_then_run_once_with_only_the_binding(node, kind, p
     replies.push(replyWith(executorContext(kind)));
     const review = await prepared({{kind, targetId: 'target', trigger: element('trigger')}});
     assert.deepEqual(JSON.parse(calls[0].options.body), {{kind}});
-    assert.equal(calls[0].url, '/playlist/target/live-context');
+    assert.equal(calls[0].url, '/api/playlist/target/live-context');
     const text = rendered(element('live-operation-review'));
     if (kind === 'raid') {{
         assert.match(text, new RegExp('Collects new tracks from Saved source, 1 playlist chosen for this run ' +
@@ -111,7 +111,7 @@ def test_executor_kinds_review_then_run_once_with_only_the_binding(node, kind, p
     runReview(); const handle = await review.done;
     replies.push(response(executorResult(kind)));
     const record = await client.run(handle);
-    assert.equal(calls[1].url, '/playlist/target/{path}');
+    assert.equal(calls[1].url, '/api/playlist/target/{path}');
     assert.deepEqual(JSON.parse(calls[1].options.body), {{reviewed_scope: SCOPE}});
     assert.equal(record.complete, true); assert.equal(await client.run(handle), null); assert.equal(calls.length, 2);
 }})().catch(e => {{console.error(e); process.exitCode = 1;}});
@@ -130,8 +130,8 @@ def test_snapshot_restore_reads_its_own_context_and_binds_scope_and_before_order
         bookkeeping: [{kind: 'session_history', status: 'complete'}]}};
     const record = await reviewedRun({kind: 'snapshot_restore', snapshotId: 17, targetId: 'target',
         trigger: element('trigger')}, snapshotContext(), response(result));
-    assert.equal(calls[0].url, '/snapshots/17/restore-context'); assert.equal(calls[0].options.method, 'GET');
-    assert.equal(calls[1].url, '/snapshots/17/restore');
+    assert.equal(calls[0].url, '/api/snapshots/17/restore-context'); assert.equal(calls[0].options.method, 'GET');
+    assert.equal(calls[1].url, '/api/snapshots/17/restore');
     assert.deepEqual(JSON.parse(calls[1].options.body), {reviewed_scope: SCOPE, reviewed_before_order: BEFORE});
     assert.equal(record.complete, true); assert.equal(record.intent.key, 'snapshot_restore:17');
 })().catch(e => {console.error(e); process.exitCode = 1;});
@@ -438,7 +438,7 @@ def test_check_reads_only_unresolved_playlists_and_a_match_resolves_only_that_pl
     replies.push(match('target'));
     const checked = await client.reconcile(drip.operationId);
     // Only the unresolved playlist is read again, against its own retained order.
-    assert.deepEqual(inspections().map(call => call.url), ['/playlist/target/inspect-live']);
+    assert.deepEqual(inspections().map(call => call.url), ['/api/playlist/target/inspect-live']);
     assert.deepEqual(JSON.parse(inspections()[0].options.body), {kind: 'tracks', desired_track_uris: [uri(3)]});
     assert.deepEqual(plain(checked.observations[0].resources), [{id: 'target', status: 'match'}]);
     // The match resolves only that playlist; the unknown run-history receipt keeps Attention.
@@ -460,7 +460,7 @@ def test_check_reads_only_unresolved_playlists_and_a_match_resolves_only_that_pl
         /target name: Current tracks match the retained order\\. collection name: Current tracks do not match/);
     replies.push(match('collection'));
     const settled = await client.reconcile(both.operationId);
-    assert.equal(inspections()[inspections().length - 1].url, '/playlist/collection/inspect-live');
+    assert.equal(inspections()[inspections().length - 1].url, '/api/playlist/collection/inspect-live');
     assert.equal(inspections().length, 4);
     assert.equal(settled.settled, true); assert.equal(settled.attention, false);
     assert.deepEqual(plain(settled.claims), []);

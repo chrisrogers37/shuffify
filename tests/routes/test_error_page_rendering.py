@@ -15,6 +15,7 @@ from shuffify.services import (
     ScheduleError,
     UserSettingsError,
 )
+from tests.paths import api_path
 
 
 @pytest.fixture
@@ -391,7 +392,7 @@ class TestRefreshErrorHandling:
 
         with db_app.test_client() as client:
             resp = client.post(
-                "/refresh-playlists",
+                api_path("/refresh-playlists"),
                 headers={
                     "X-Requested-With": "XMLHttpRequest",
                 },

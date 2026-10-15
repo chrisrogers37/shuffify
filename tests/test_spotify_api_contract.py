@@ -15,6 +15,7 @@ import pytest
 
 from shuffify.routes import require_auth
 from shuffify.spotify.api import SpotifyAPI
+from tests.paths import api_path
 
 SOURCE_DIRS = [
     pathlib.Path("shuffify/routes"),
@@ -115,15 +116,15 @@ class TestInjectedClient:
 
 
 AUTHENTICATED_GET_ROUTES = [
-    "/api/user-playlists",
-    "/playlist/playlist123",
-    "/playlist/playlist123/stats",
+    api_path("/api/user-playlists"),
+    api_path("/playlist/playlist123"),
+    api_path("/playlist/playlist123/stats"),
     "/activity",
     "/schedules",
     "/settings",
     "/workshop",
     "/workshop/playlist123",
-    "/playlist/playlist123/pair",
+    api_path("/playlist/playlist123/pair"),
 ]
 
 

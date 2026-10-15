@@ -1066,7 +1066,7 @@ def test_declined_reloads_after_refresh_and_reset_leave_one_persistent_control(
     assert.equal(refresh.getAttribute('aria-disabled'), 'true'); assert.equal(refresh.disabled, false);
     assert.equal(page.document.activeElement, refresh);
     press(refresh); await tick();
-    assert.equal(calls.filter(call => call.url === '/refresh-playlists').length, 1);
+    assert.equal(calls.filter(call => call.url === '/api/refresh-playlists').length, 1);
     release(page.reply({success: true, message: 'Playlists refreshed successfully.'})); await settle();
     assert.equal(refresh.hasAttribute('aria-disabled'), false);
     assert.equal(page.byId('live-operation-leave').hidden, false);

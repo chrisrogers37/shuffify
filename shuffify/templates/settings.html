@@ -12,7 +12,7 @@
             <p class="sh-text-muted">Your preferences for shuffling, saved history, and your library.</p>
         </header>
 
-        <form id="settings-form" method="POST" action="{{ url_for('main.update_settings') }}">
+        <form id="settings-form" method="POST" action="{{ url_for('site.update_settings_page') }}" data-api-url="{{ url_for('api.update_settings') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             {# Preserve unavailable preferences when the other settings are saved. #}
             <input type="hidden" id="theme" name="theme" value="{{ settings.theme }}">
@@ -85,7 +85,7 @@
                     <dd class="sh-field-help">Notifications are not available yet. Your saved preference is preserved.</dd>
                 </div>
             </dl>
-            <form id="settings-logout-form" method="POST" action="{{ url_for('main.logout') }}" data-app-logout>
+            <form id="settings-logout-form" method="POST" action="{{ url_for('auth.logout') }}" data-app-logout>
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="sh-button-secondary">Log out</button>
             </form>

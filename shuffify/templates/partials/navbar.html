@@ -1,21 +1,21 @@
 {# Named authenticated destinations; native disclosure works without JavaScript. #}
 {% from 'macros/design.html' import brand %}
 {% set endpoint_map = {
-    'main.index': 'library',
-    'main.workshop': 'workshop',
-    'main.workshop_hub': 'workshop',
-    'main.schedules': 'routines',
-    'main.activity': 'activity',
-    'main.settings': 'settings',
-    'main.update_settings': 'settings',
+    'site.index': 'library',
+    'site.workshop': 'workshop',
+    'site.workshop_hub': 'workshop',
+    'site.schedules': 'routines',
+    'site.activity': 'activity',
+    'site.settings': 'settings',
+    'api.update_settings': 'settings',
 } %}
 {% set active_nav = endpoint_map.get(request.endpoint, '') %}
 {% set destinations = [
-    ('library', 'Library', 'main.index'),
-    ('workshop', 'Workshop', 'main.workshop_hub'),
-    ('routines', 'Routines', 'main.schedules'),
-    ('activity', 'Activity', 'main.activity'),
-    ('settings', 'Settings', 'main.settings'),
+    ('library', 'Library', 'site.index'),
+    ('workshop', 'Workshop', 'site.workshop_hub'),
+    ('routines', 'Routines', 'site.schedules'),
+    ('activity', 'Activity', 'site.activity'),
+    ('settings', 'Settings', 'site.settings'),
 ] %}
 {% macro app_links() %}
 <ul class="sh-app-links">
@@ -27,7 +27,7 @@
 <nav class="sh-app-nav" aria-label="Main navigation">
     <div class="sh-container">
         <div class="sh-app-nav-desktop">
-            {{ brand(url_for('main.index')) }}
+            {{ brand(url_for('site.index')) }}
             {{ app_links() }}
         </div>
         <details class="sh-app-menu">

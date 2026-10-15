@@ -7,7 +7,7 @@ from tests.test_workshop_live_runtime import run_workspace, workspace_page
 def test_workshop_shows_all_exact_rows_and_batched_latest(node, db_app):
     run_workspace(node, workspace_page(db_app), r"""
 await openWorkshop('/workshop/target', {
-    '/playlist/target/routines/context': {success: true, routines: [
+    '/api/playlist/target/routines/context': {success: true, routines: [
         {schedule_id: 5, schedule_revision: 'five', schedule: {id: 5,
             target_playlist_id: 'target', target_playlist_name: 'Morning Mix',
             job_type: 'raid', is_enabled: true}, timing: {text: 'Every day'},
@@ -17,12 +17,12 @@ await openWorkshop('/workshop/target', {
             job_type: 'shuffle', is_enabled: false}, timing: {text: 'Every week'},
             registration: {status: 'paused'}, state: 'Paused'}],
         capabilities: {raid: {available: false, reason: 'Add a source.'}}},
-    '/schedules/latest-results': {success: true, results: {'5': null, '6': null}},
+    '/api/schedules/latest-results': {success: true, results: {'5': null, '6': null}},
 });
 await evaluate('playlistSchedules.loadSchedules()');
 await settle();
 assert.deepEqual(page.$$('#schedules-list .schedule-card').map(card => card.dataset.scheduleId), ['5', '6']);
-assert.equal(reads('/schedules/latest-results'), 1);
+assert.equal(reads('/api/schedules/latest-results'), 1);
 assert.match(page.text(page.$('#schedules-list .schedule-card[data-schedule-id="5"]')),
     /Missing prerequisite: Add a source/);
 assert.equal(page.$('#schedules-list .schedule-card[data-schedule-id="6"] .routine-edit').getAttribute('href'),
@@ -34,11 +34,11 @@ assert.equal(page.calls.filter(call => call.method !== 'GET').length, 0);
 def test_archive_inbox_initializes_cache_and_loads_tracks(node, db_app):
     run_workspace(node, workspace_page(db_app), r"""
 await openWorkshop('/workshop/target', {
-    '/playlist/target/pair/archive-tracks': {success: true, tracks: [], total: 0},
+    '/api/playlist/target/pair/archive-tracks': {success: true, tracks: [], total: 0},
 });
 evaluate("workshopState.archivePair = {archive_playlist_id: 'archive', archive_playlist_name: 'Archive'}");
 evaluate('loadArchiveTracksForInbox()'); await settle();
-assert.equal(reads('/playlist/target/pair/archive-tracks'), 1);
+assert.equal(reads('/api/playlist/target/pair/archive-tracks'), 1);
 assert.equal(evaluate('archiveInboxLoaded'), true);
 assert.deepEqual(page.errors, []);
 """)
@@ -51,8 +51,8 @@ const context = {success: true, routines: [{schedule_id: 5, schedule_revision: '
         job_type: 'raid', is_enabled: true}, timing: {text: 'Every day'},
     registration: {status: 'registered'}, state: 'Active'}], capabilities: {}};
 await openWorkshop('/workshop/target', {
-    '/playlist/target/routines/context': context,
-    '/schedules/latest-results': {success: true, results: {'5': null}},
+    '/api/playlist/target/routines/context': context,
+    '/api/schedules/latest-results': {success: true, results: {'5': null}},
 });
 await evaluate('playlistSchedules.loadSchedules()');
 assert.ok(page.$('#schedules-list .schedule-card[data-schedule-id="5"] .routine-toggle'));
@@ -76,12 +76,12 @@ assert.equal(page.byId('schedules-error').hidden, true);
 def test_latest_result_generation_ignores_older_success_and_failure(node, db_app):
     run_workspace(node, workspace_page(db_app), r"""
 await openWorkshop('/workshop/target', {
-    '/playlist/target/routines/context': {success: true, routines: [{schedule_id: 5,
+    '/api/playlist/target/routines/context': {success: true, routines: [{schedule_id: 5,
         schedule_revision: 'five', schedule: {id: 5, target_playlist_id: 'target',
             target_playlist_name: 'Morning Mix', job_type: 'raid', is_enabled: true},
         timing: {text: 'Every day'}, registration: {status: 'registered'}, state: 'Active'}],
         capabilities: {}},
-    '/schedules/latest-results': {success: true, results: {'5': null}},
+    '/api/schedules/latest-results': {success: true, results: {'5': null}},
 });
 await evaluate('playlistSchedules.loadSchedules()');
 const card = () => page.$('#schedules-list .schedule-card[data-schedule-id="5"]');

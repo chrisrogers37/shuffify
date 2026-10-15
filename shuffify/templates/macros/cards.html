@@ -15,7 +15,7 @@
     {% endif %}
 {% endfor %}
     <form class="shuffle-form library-shuffle-form sh-library-quick-shuffle"
-          action="{{ url_for('main.shuffle', playlist_id=playlist.id) }}" method="POST"
+          action="{{ url_for('api.shuffle', playlist_id=playlist.id) }}" method="POST"
           data-playlist-id="{{ playlist.id }}" data-track-count="{{ track_count }}"
           data-shuffle-defaults='{{ defaults|tojson }}'>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -58,7 +58,7 @@
         <p class="library-shuffle-feedback sh-caption sh-text-muted" hidden></p>
         <noscript><p class="sh-caption sh-text-muted">Enable JavaScript to use quick shuffle.</p></noscript>
     </form>
-    <form class="undo-form hidden" action="{{ url_for('main.undo', playlist_id=playlist.id) }}" method="POST"
+    <form class="undo-form hidden" action="{{ url_for('api.undo', playlist_id=playlist.id) }}" method="POST"
           data-playlist-id="{{ playlist.id }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     </form>
@@ -80,7 +80,7 @@
 {% set is_fav = true if pref and pref.is_pinned else false %}
 {% set is_hidden = section == 'hidden' %}
 {% set track_count = playlist|item_count %}
-{% set workshop_url = url_for('main.workshop', playlist_id=playlist.id) %}
+{% set workshop_url = url_for('site.workshop', playlist_id=playlist.id) %}
 <li class="card-tile sh-library-row sh-surface" data-panel-return
     aria-labelledby="card-title-{{ playlist.id }}"
     data-playlist-id="{{ playlist.id }}"

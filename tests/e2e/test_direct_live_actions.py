@@ -6,6 +6,7 @@ import pytest
 
 from tests.e2e.conftest import APP, App, hold_playlist_lock, pid
 from tests.e2e.test_pages import CHROMIUM_ARGS, Visit
+from tests.paths import api_path
 
 TARGET = pid("alice-morning-mix")
 LONG_HAUL = pid("alice-long-haul")
@@ -71,7 +72,7 @@ def test_snapshot_restore_records_the_actual_before_order_for_undo(alice, fake):
 def test_direct_partial_batch_keeps_exact_intent_and_never_compensates(alice, fake):
     before = fake.uris(LONG_HAUL)
     fake.arm(operation="POST /playlists/{playlist_id}/items", kind="quota", playlist_id=LONG_HAUL)
-    response = alice.post(f"/shuffle/{LONG_HAUL}", data={"algorithm": "BasicShuffle"})
+    response = alice.post(api_path(f"/shuffle/{LONG_HAUL}"), data={"algorithm": "BasicShuffle"})
     assert response.status_code == 502, response.text
     operation = _direct(response.json(), "shuffle")
     assert operation["aggregate_status"] == "unknown" and operation["retryable"] is False
@@ -90,7 +91,7 @@ def test_privacy_uses_strict_boolean_and_changes_only_metadata(alice, fake):
     before = fake.playlist(TARGET)
     desired = not before["public"]
     for invalid in ("false", 0, None, [], {}):
-        response = alice.post(f"/playlist/{TARGET}/toggle-visibility", json={"public": invalid})
+        response = alice.post(api_path(f"/playlist/{TARGET}/toggle-visibility"), json={"public": invalid})
         assert response.status_code == 400
         assert _direct(response.json(), "privacy")["resources"] == []
         assert fake.playlist(TARGET) == before
@@ -111,7 +112,7 @@ def test_direct_target_actions_honor_the_shared_postgres_lock(alice, fake, kind)
     snapshot_id = _snapshot(alice, baseline)
     alice.ok("post", f"/shuffle/{TARGET}", data={"algorithm": "BasicShuffle"})
     before = fake.playlist(TARGET)
-    path = f"/snapshots/{snapshot_id}/restore" if kind == "snapshot_restore" else f"/{kind}/{TARGET}"
+    path = api_path(f"/snapshots/{snapshot_id}/restore") if kind == "snapshot_restore" else f"/{kind}/{TARGET}"
     with hold_playlist_lock(TARGET):
         response = alice.post(path, data={"algorithm": "BasicShuffle"} if kind == "shuffle" else None)
     assert response.status_code == 409, response.text
@@ -257,8 +258,8 @@ def test_library_shuffle_and_undo_show_verified_results_without_navigation(
         _settled(page, 2)
         assert page.evaluate("PlaylistOperations.getRecords()[1].complete") is True
         assert fake.uris(TARGET) == before
-        context = f"{APP}/playlist/{TARGET}/live-context"
-        assert posts == [context, f"{APP}/shuffle/{TARGET}", context, f"{APP}/undo/{TARGET}"]
+        context = (APP + api_path(f'/playlist/{TARGET}/live-context'))
+        assert posts == [context, (APP + api_path(f'/shuffle/{TARGET}')), context, (APP + api_path(f'/undo/{TARGET}'))]
         assert card.locator(".library-shuffle-method").input_value() == "BasicShuffle"
         assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
         assert visit.problems == []
@@ -271,7 +272,7 @@ def test_lost_library_shuffle_response_blocks_random_replay(alice, fake, direct_
     visit = Visit(direct_browser, "desktop")
     page = visit.page
     posted = []
-    shuffle_url = f"{APP}/shuffle/{TARGET}"
+    shuffle_url = (APP + api_path(f'/shuffle/{TARGET}'))
 
     page.route(shuffle_url, _lose_reply(posted))
     try:
@@ -305,7 +306,7 @@ def test_workshop_privacy_preserves_draft_and_snapshot_requires_resolution(
     page.set_viewport_size({"width": width, "height": height})
     posts = []
     page.on("request", lambda req: posts.append(req.url) if req.method == "POST" else None)
-    restore_url = f"{APP}/snapshots/{snapshot_id}/restore"
+    restore_url = (APP + api_path(f'/snapshots/{snapshot_id}/restore'))
     draft_state = (
         "({working:workshopState.workingUris,saved:workshopState.savedUris,"
         "recovery:workshopState.sourceRecovery})"
@@ -367,7 +368,7 @@ def test_workshop_privacy_preserves_draft_and_snapshot_requires_resolution(
             "document.getElementById('live-operation-panel').contains(document.activeElement)"
         ), page.evaluate("({id:document.activeElement.id,tag:document.activeElement.tagName})")
         assert posts.count(restore_url) == 1
-        assert f"{APP}/workshop/{TARGET}/commit" not in posts
+        assert (APP + api_path(f'/workshop/{TARGET}/commit')) not in posts
         assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
         page.screenshot(path=tmp_path / f"direct-workshop-{width}.png", full_page=True)
         assert visit.problems == []
@@ -381,7 +382,7 @@ def test_snapshot_restore_is_reviewed_against_fresh_spotify_and_refuses_a_later_
     original = fake.uris(TARGET)
     desired = list(reversed(original))
     snapshot_id = _snapshot(alice, desired)
-    restore_path = f"/snapshots/{snapshot_id}/restore"
+    restore_path = api_path(f"/snapshots/{snapshot_id}/restore")
     other = App("alice", fake.display_name("alice"))
     visit = Visit(direct_browser, "desktop", allowed=[(restore_path, 409)])
     page = visit.page
@@ -432,7 +433,7 @@ def test_proven_first_write_rejection_allows_an_explicit_browser_retry(
     before_uris = fake.uris(TARGET)
     operation = "PUT /playlists/{playlist_id}/items" if kind == "shuffle" else "PUT /playlists/{playlist_id}"
     fake.arm(operation=operation, kind="quota", playlist_id=TARGET)
-    path = f"/shuffle/{TARGET}" if kind == "shuffle" else f"/playlist/{TARGET}/toggle-visibility"
+    path = api_path(f"/shuffle/{TARGET}") if kind == "shuffle" else api_path(f"/playlist/{TARGET}/toggle-visibility")
 
     visit = Visit(direct_browser, "desktop", allowed=[(path, 429)])
     page = visit.page

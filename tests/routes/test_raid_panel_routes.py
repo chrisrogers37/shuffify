@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 from shuffify.models.db import UpstreamSource
 from shuffify.services.playlist_lock import playlist_configuration_lock
+from tests.paths import api_path
 
 # =============================================================================
 # Authentication Tests
@@ -25,7 +26,7 @@ class TestRaidAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.get(
-                "/playlist/p1/raid-status"
+                api_path("/playlist/p1/raid-status")
             )
             assert resp.status_code == 401
 
@@ -34,7 +35,7 @@ class TestRaidAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/playlist/p1/raid-watch",
+                api_path("/playlist/p1/raid-watch"),
                 json={"source_playlist_id": "s1"},
             )
             assert resp.status_code == 401
@@ -44,7 +45,7 @@ class TestRaidAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/playlist/p1/raid-now",
+                api_path("/playlist/p1/raid-now"),
                 json={},
             )
             assert resp.status_code == 401
@@ -64,7 +65,7 @@ class TestRaidValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/raid-watch",
+            api_path("/playlist/p1/raid-watch"),
             json={"source_playlist_id": ""},
         )
         assert resp.status_code == 400
@@ -75,7 +76,7 @@ class TestRaidValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/raid-unwatch",
+            api_path("/playlist/p1/raid-unwatch"),
             json={},
         )
         assert resp.status_code == 400
@@ -86,7 +87,7 @@ class TestRaidValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/raid-now",
+            api_path("/playlist/p1/raid-now"),
             json={"source_playlist_ids": []},
         )
         assert resp.status_code == 400
@@ -115,7 +116,7 @@ class TestRaidDbUnavailable:
                 }
                 sess["user_data"] = {"id": "user123"}
             resp = client.get(
-                "/playlist/p1/raid-status"
+                api_path("/playlist/p1/raid-status")
             )
             assert resp.status_code == 503
 
@@ -134,7 +135,7 @@ class TestRaidDbUnavailable:
                 }
                 sess["user_data"] = {"id": "user123"}
             resp = client.post(
-                "/playlist/p1/raid-watch",
+                api_path("/playlist/p1/raid-watch"),
                 json={"source_playlist_id": "s1"},
             )
             assert resp.status_code == 503
@@ -154,7 +155,7 @@ class TestRaidSuccessPaths:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.get(
-            "/playlist/p1/raid-status"
+            api_path("/playlist/p1/raid-status")
         )
         assert resp.status_code == 200
         data = resp.get_json()
@@ -182,7 +183,7 @@ class TestRaidWatchAtLimit:
         mock_auth.return_value = MagicMock()
         self._fill(db_app)
         resp = auth_client.post(
-            "/playlist/p1/raid-watch",
+            api_path("/playlist/p1/raid-watch"),
             json={"source_playlist_id": "one_more", "auto_schedule": False},
         )
         assert resp.status_code == 400
@@ -193,7 +194,7 @@ class TestRaidWatchAtLimit:
         mock_auth.return_value = MagicMock()
         self._fill(db_app)
         resp = auth_client.post(
-            "/playlist/p1/raid-watch-search",
+            api_path("/playlist/p1/raid-watch-search"),
             json={"search_query": "one more", "auto_schedule": False},
         )
         assert resp.status_code == 400
@@ -219,7 +220,7 @@ class TestRaidWatchBusy:
         assert held.wait(timeout=2)
         try:
             response = auth_client.post(
-                "/playlist/p1/raid-watch",
+                api_path("/playlist/p1/raid-watch"),
                 json={"source_playlist_id": "source_busy", "auto_schedule": False},
             )
             assert response.status_code == 409
@@ -246,7 +247,7 @@ class TestRaidAddUrlAuth:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/playlist/p1/raid-add-url",
+                api_path("/playlist/p1/raid-add-url"),
                 json={
                     "url": "https://open.spotify.com"
                     "/playlist/abc",
@@ -264,7 +265,7 @@ class TestRaidAddUrlValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/raid-add-url",
+            api_path("/playlist/p1/raid-add-url"),
             json={},
         )
         assert resp.status_code == 400
@@ -275,7 +276,7 @@ class TestRaidAddUrlValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/raid-add-url",
+            api_path("/playlist/p1/raid-add-url"),
             json={"url": "  "},
         )
         assert resp.status_code == 400
@@ -291,7 +292,7 @@ class TestRaidAddUrlValidation:
         mock_auth.return_value = MagicMock()
         mock_parse.return_value = None
         resp = auth_client.post(
-            "/playlist/p1/raid-add-url",
+            api_path("/playlist/p1/raid-add-url"),
             json={"url": "not-a-spotify-url"},
         )
         assert resp.status_code == 400
@@ -310,7 +311,7 @@ class TestRaidAddUrlValidation:
         mock_auth.return_value = MagicMock()
         mock_parse.return_value = "p1"
         resp = auth_client.post(
-            "/playlist/p1/raid-add-url",
+            api_path("/playlist/p1/raid-add-url"),
             json={
                 "url": (
                     "https://open.spotify.com/playlist/"
@@ -349,7 +350,7 @@ class TestRaidAddUrlValidation:
         }
 
         resp = auth_client.post(
-            "/playlist/p1/raid-add-url",
+            api_path("/playlist/p1/raid-add-url"),
             json={
                 "url": (
                     "https://open.spotify.com/playlist/"
@@ -387,7 +388,7 @@ class TestRaidAddUrlValidation:
         )
 
         resp = auth_client.post(
-            "/playlist/p1/raid-add-url",
+            api_path("/playlist/p1/raid-add-url"),
             json={
                 "url": (
                     "https://open.spotify.com/playlist/"
@@ -412,7 +413,7 @@ class TestRaidScheduleUpdate:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.put(
-            "/playlist/p1/raid-schedule",
+            api_path("/playlist/p1/raid-schedule"),
             json={},
         )
         assert resp.status_code == 400
@@ -423,7 +424,7 @@ class TestRaidScheduleUpdate:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.put(
-            "/playlist/p1/raid-schedule",
+            api_path("/playlist/p1/raid-schedule"),
             json={"schedule_value": "every_minute"},
         )
         assert resp.status_code == 400
@@ -433,7 +434,7 @@ class TestRaidScheduleUpdate:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.put(
-                "/playlist/p1/raid-schedule",
+                api_path("/playlist/p1/raid-schedule"),
                 json={"schedule_value": "daily"},
             )
             assert resp.status_code == 401
@@ -452,7 +453,7 @@ class TestRaidScheduleHistory:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.get(
-                "/playlist/p1/raid-schedule/history",
+                api_path("/playlist/p1/raid-schedule/history"),
             )
             assert resp.status_code == 401
 
@@ -462,6 +463,6 @@ class TestRaidScheduleHistory:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.get(
-            "/playlist/p1/raid-schedule/history",
+            api_path("/playlist/p1/raid-schedule/history"),
         )
         assert resp.status_code == 404

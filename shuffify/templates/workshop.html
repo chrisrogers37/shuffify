@@ -106,7 +106,7 @@ function createDisclosure(popup, options = {}) {
         <div class="sh-workspace-identity-row">
             {% if prev_playlist_id %}
             {% set previous_label = 'Previous playlist' ~ (': ' ~ prev_playlist_name if prev_playlist_name else '') %}
-            <a id="workshop-prev-playlist" href="{{ url_for('main.workshop', playlist_id=prev_playlist_id) }}"
+            <a id="workshop-prev-playlist" href="{{ url_for('site.workshop', playlist_id=prev_playlist_id) }}"
                data-workshop-compat="view"
                class="sh-icon-button" aria-label="{{ previous_label }}" title="{{ previous_label }}">
                 <svg class="w-5 h-5" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -147,7 +147,7 @@ function createDisclosure(popup, options = {}) {
             </div>
             {% if next_playlist_id %}
             {% set next_label = 'Next playlist' ~ (': ' ~ next_playlist_name if next_playlist_name else '') %}
-            <a id="workshop-next-playlist" href="{{ url_for('main.workshop', playlist_id=next_playlist_id) }}"
+            <a id="workshop-next-playlist" href="{{ url_for('site.workshop', playlist_id=next_playlist_id) }}"
                data-workshop-compat="view"
                class="sh-icon-button" aria-label="{{ next_label }}" title="{{ next_label }}">
                 <svg class="w-5 h-5" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -231,7 +231,7 @@ function createDisclosure(popup, options = {}) {
         <h2 id="workshop-tracks-heading" class="sh-workshop-subheading" tabindex="-1" data-panel-focus-fallback>Tracks</h2>
         <p id="workshop-tracks-empty" class="sh-text-muted sh-detail"{% if playlist.tracks %} hidden{% endif %}>
             This playlist has no tracks.
-            <a href="{{ url_for('main.index') }}" data-workshop-compat="view" class="underline">Back to Library</a>
+            <a href="{{ url_for('site.index') }}" data-workshop-compat="view" class="underline">Back to Library</a>
         </p>
         <ol id="track-list" class="sh-workspace-tracks"></ol>
         {# One row's actions, shown inside the row whose actions button opened them, so a moved row
@@ -694,7 +694,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // =============================================================================
 
 function loadTrackLocks() {
-    workshopRequest('/workshop/' + workshopState.playlistId + '/locks', {
+    workshopRequest('/api/workshop/' + workshopState.playlistId + '/locks', {
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
     })
     .then(function(r) { return r.json(); })
@@ -729,7 +729,7 @@ function toggleTrackLock(key) {
     if (index === -1) return;
     var uri = list[index].uri;
 
-    workshopRequest('/workshop/' + workshopState.playlistId + '/locks/toggle', {
+    workshopRequest('/api/workshop/' + workshopState.playlistId + '/locks/toggle', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -775,7 +775,7 @@ function unlockAllTracks(trigger) {
     if (Object.keys(workshopState.locks).length === 0 || workshopRefused('locks')) return;
     const refocus = holdWorkshopFocus(trigger);
 
-    workshopRequest('/workshop/' + workshopState.playlistId + '/locks/unlock-all', {
+    workshopRequest('/api/workshop/' + workshopState.playlistId + '/locks/unlock-all', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -939,7 +939,7 @@ function previewShuffle() {
     workshopState.isShuffling = true;
     markDirty();
 
-    workshopRequest(`/workshop/${workshopState.playlistId}/preview-shuffle`, {
+    workshopRequest(`/api/workshop/${workshopState.playlistId}/preview-shuffle`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -2608,7 +2608,7 @@ function executeSearch(query, offset, append) {
         markWorkshopControlBusy(loadMoreBtn, true);
     }
 
-    workshopRequest('/workshop/search', {
+    workshopRequest('/api/workshop/search', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -2838,7 +2838,7 @@ function loadExternalPlaylist() {
         ? { url: value }
         : { query: value };
 
-    workshopRequest('/workshop/load-external-playlist', {
+    workshopRequest('/api/workshop/load-external-playlist', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -3037,7 +3037,7 @@ function loadPendingRaids() {
     list.innerHTML = '';
     actions.classList.add('hidden');
 
-    workshopRequest('/playlist/' + workshopState.playlistId + '/pending-raids')
+    workshopRequest('/api/playlist/' + workshopState.playlistId + '/pending-raids')
     .then(function(r) {
         if (!r.ok) throw new Error('Failed to load pending raids');
         return r.json();
@@ -3140,7 +3140,7 @@ function promotePendingRaid(trackId, trackData, trigger) {
 async function sendPendingDismissal(ids) {
     ids.forEach(id => pendingRaidsState.dismissing.add(id));
     try {
-        const response = await workshopRequest('/playlist/' + workshopState.playlistId + '/pending-raids/dismiss', {
+        const response = await workshopRequest('/api/playlist/' + workshopState.playlistId + '/pending-raids/dismiss', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: JSON.stringify({ track_ids: ids }),
@@ -3266,7 +3266,7 @@ function updatePendingBadge() {
 document.addEventListener('DOMContentLoaded', function() {
     // Fetch pending raid count for badge (lightweight). It filters like the list, and a
     // list read that has started since wins.
-    workshopRequest('/playlist/' + workshopState.playlistId + '/pending-raids')
+    workshopRequest('/api/playlist/' + workshopState.playlistId + '/pending-raids')
     .then(function(r) { return r.ok ? r.json() : { tracks: [] }; })
     .then(function(data) {
         if (pendingRaidsState.loaded || pendingRaidsState.isLoading) return;
@@ -3364,7 +3364,7 @@ function loadSnapshots() {
     }
     errorEl.classList.add('hidden');
 
-    return settlesWithLatest('snapshots', workshopRequest('/playlist/' + workshopState.playlistId + '/snapshots?limit=50', {
+    return settlesWithLatest('snapshots', workshopRequest('/api/playlist/' + workshopState.playlistId + '/snapshots?limit=50', {
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
     })
     .then(function(response) {
@@ -3547,7 +3547,7 @@ async function toggleSnapshotView(snapshotId) {
     }
     var reason = null;
     try {
-        var reply = await workshopReply(await workshopRequest('/snapshots/' + snapshotId, {
+        var reply = await workshopReply(await workshopRequest('/api/snapshots/' + snapshotId, {
             headers: {'X-Requested-With': 'XMLHttpRequest'},
         }));
         if (reply.ok && reply.data.snapshot) Object.assign(view, {status: 'shown', uris: reply.data.snapshot.track_uris || []});
@@ -3596,7 +3596,7 @@ function confirmManualSnapshot() {
 
     var desc = document.getElementById('snapshot-description-input').value.trim();
 
-    workshopRequest('/playlist/' + workshopState.playlistId + '/snapshots', {
+    workshopRequest('/api/playlist/' + workshopState.playlistId + '/snapshots', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -3654,7 +3654,7 @@ async function deleteSnapshot(snapshotId, trigger) {
     refocus();
     if (!confirmed) return;
     try {
-        const response = await workshopRequest('/snapshots/' + snapshotId, {
+        const response = await workshopRequest('/api/snapshots/' + snapshotId, {
             method: 'DELETE',
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
         }, {group: 'create:' + snapshotId});
@@ -3700,7 +3700,7 @@ function loadSavedDrafts() {
     // A reload keeps the shown list in place; only the first load says it is loading.
     if (!savedDraftsState.isLoaded) loading.classList.remove('hidden');
     errorEl.classList.add('hidden');
-    return settlesWithLatest('drafts', workshopRequest('/workshop/' + workshopState.playlistId + '/sessions', {
+    return settlesWithLatest('drafts', workshopRequest('/api/workshop/' + workshopState.playlistId + '/sessions', {
         headers: {'X-Requested-With': 'XMLHttpRequest'},
     })
     .then(workshopReply)
@@ -3841,7 +3841,7 @@ async function saveNamedDraft() {
     if (savedDraftsState.saving || savedDraftWriteRefused()) return false;
     savedDraftsState.saving = true;
     try {
-        const reply = await writeSavedDraft('/workshop/' + workshopState.playlistId + '/sessions', 'POST',
+        const reply = await writeSavedDraft('/api/workshop/' + workshopState.playlistId + '/sessions', 'POST',
             {session_name: name, track_uris: workshopState.workingUris.slice()});
         input.value = '';
         listSavedDraft(reply.session);
@@ -3863,7 +3863,7 @@ async function updateSavedDraft(draftId, trigger) {
     const refocus = holdWorkshopFocus(trigger, savedDraftControl('wk-draft-update', draftId));
     let reply;
     try {
-        reply = await writeSavedDraft('/workshop/sessions/' + draftId, 'PUT',
+        reply = await writeSavedDraft('/api/workshop/sessions/' + draftId, 'PUT',
             {track_uris: workshopState.workingUris.slice(), session_name: draft.session_name});
     } catch (error) {
         tellSavedDrafts(error.message, true);
@@ -3892,7 +3892,7 @@ async function deleteSavedDraft(draftId, trigger) {
     back();
     if (!confirmed || savedDraftWriteRefused()) return false;
     try {
-        await writeSavedDraft('/workshop/sessions/' + draftId, 'DELETE');
+        await writeSavedDraft('/api/workshop/sessions/' + draftId, 'DELETE');
     } catch (error) {
         tellSavedDrafts(error.message, true);
         return false;
@@ -3933,7 +3933,7 @@ async function loadSavedDraft(draftId, trigger) {
     const current = latestRead('saved-draft-load');
     let saved = null, reason = null;
     try {
-        const reply = await workshopReply(await workshopRequest('/workshop/sessions/' + draftId, {
+        const reply = await workshopReply(await workshopRequest('/api/workshop/sessions/' + draftId, {
             headers: {'X-Requested-With': 'XMLHttpRequest'},
         }));
         if (reply.ok && reply.data.session) saved = reply.data.session;
@@ -4011,7 +4011,7 @@ function loadArchivePairInfo() {
     errorEl.classList.add('hidden');
     archiveState.isLoading = true;
 
-    workshopRequest('/playlist/' + workshopState.playlistId + '/pair')
+    workshopRequest('/api/playlist/' + workshopState.playlistId + '/pair')
     .then(function(response) {
         if (!response.ok) throw new Error('Failed to load pair info');
         return response.json();
@@ -4135,7 +4135,7 @@ function createArchivePair(button) {
     markWorkshopControlBusy(btn, true);
     btn.textContent = 'Creating...';
 
-    workshopRequest('/playlist/' + workshopState.playlistId + '/pair', {
+    workshopRequest('/api/playlist/' + workshopState.playlistId + '/pair', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -4188,7 +4188,7 @@ async function deleteArchivePair(trigger) {
         confirmLabel: 'Unlink archive', trigger: trigger});
     if (!confirmed || !workshopState.archivePair) return;
 
-    return workshopRequest('/playlist/' + workshopState.playlistId + '/pair', {
+    return workshopRequest('/api/playlist/' + workshopState.playlistId + '/pair', {
         method: 'DELETE',
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
     }, {group: 'pair-unlink'})
@@ -4274,7 +4274,7 @@ function linkExistingArchive() {
     markWorkshopControlBusy(btn, true);
     btn.textContent = 'Linking...';
 
-    workshopRequest('/playlist/' + workshopState.playlistId + '/pair', {
+    workshopRequest('/api/playlist/' + workshopState.playlistId + '/pair', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -4317,7 +4317,7 @@ function toggleAutoArchive() {
     var current = workshopState.archivePair.auto_archive_on_remove;
     var newVal = !current;
 
-    workshopRequest('/playlist/' + workshopState.playlistId + '/pair', {
+    workshopRequest('/api/playlist/' + workshopState.playlistId + '/pair', {
         method: 'PATCH',
         headers: {
             'Content-Type': 'application/json',
@@ -4354,7 +4354,7 @@ function fetchArchiveTracks(force) {
     }
 
     var current = latestRead('archive-tracks');
-    return settlesWithLatest('archive-tracks', workshopRequest('/playlist/' + workshopState.playlistId + '/pair/archive-tracks')
+    return settlesWithLatest('archive-tracks', workshopRequest('/api/playlist/' + workshopState.playlistId + '/pair/archive-tracks')
     .then(function(response) {
         if (!response.ok) throw new Error('Failed to load archive tracks');
         return response.json();
@@ -4552,7 +4552,7 @@ var raidPanel = {
         errorEl.classList.add('hidden');
         self.isLoading = true;
 
-        return settlesWithLatest('raid-status', workshopRequest('/playlist/' + workshopState.playlistId + '/raid-status')
+        return settlesWithLatest('raid-status', workshopRequest('/api/playlist/' + workshopState.playlistId + '/raid-status')
         .then(function(response) {
             if (!response.ok) throw new Error('Failed to load raid status');
             var ct = response.headers.get('content-type') || '';
@@ -4730,7 +4730,7 @@ var raidPanel = {
         feedback.className = 'mt-2 sh-text-muted sh-caption';
         feedback.classList.remove('hidden');
 
-        workshopRequest('/playlist/' + workshopState.playlistId + '/raid-add-url', {
+        workshopRequest('/api/playlist/' + workshopState.playlistId + '/raid-add-url', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -4776,7 +4776,7 @@ var raidPanel = {
             confirmLabel: 'Remove source', trigger: trigger});
         return asked.then(function(confirmed) {
             if (!confirmed) return null;
-            return workshopRequest('/playlist/' + workshopState.playlistId + '/raid-unwatch', {
+            return workshopRequest('/api/playlist/' + workshopState.playlistId + '/raid-unwatch', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -4893,7 +4893,7 @@ var raidPanel = {
         var release = holdWorkshopControls(trigger,
             Array.from(document.getElementById('raid-link-no-pair').querySelectorAll('button, select')));
 
-        workshopRequest('/playlist/' + workshopState.playlistId + '/raid-link', {
+        workshopRequest('/api/playlist/' + workshopState.playlistId + '/raid-link', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: JSON.stringify({
@@ -4958,7 +4958,7 @@ var raidPanel = {
         var release = holdWorkshopControls(trigger,
             Array.from(document.getElementById('raid-link-no-pair').querySelectorAll('button, select')));
 
-        workshopRequest('/playlist/' + workshopState.playlistId + '/raid-link', {
+        workshopRequest('/api/playlist/' + workshopState.playlistId + '/raid-link', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: JSON.stringify({
@@ -5007,7 +5007,7 @@ var raidPanel = {
             confirmLabel: 'Unlink raid playlist', trigger: trigger})
         .then(function(confirmed) {
             if (!confirmed) return null;
-            return workshopRequest('/playlist/' + workshopState.playlistId + '/raid-link', {
+            return workshopRequest('/api/playlist/' + workshopState.playlistId + '/raid-link', {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             }, {group: 'link:' + link.raid_playlist_id})
@@ -5034,7 +5034,7 @@ var raidPanel = {
         var newState = !raidLink.drip_enabled;
         var self = this;
 
-        workshopRequest('/playlist/' + workshopState.playlistId + '/raid-link', {
+        workshopRequest('/api/playlist/' + workshopState.playlistId + '/raid-link', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: JSON.stringify({ drip_enabled: newState }),
@@ -5078,7 +5078,7 @@ var raidPanel = {
         var self = this;
         // Save hides once the count is saved: focus that fell goes back to the count.
         var refocus = holdWorkshopFocus(input);
-        workshopRequest('/playlist/' + workshopState.playlistId + '/raid-link', {
+        workshopRequest('/api/playlist/' + workshopState.playlistId + '/raid-link', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: JSON.stringify({ drip_count: val }),
@@ -5129,7 +5129,7 @@ var raidPanel = {
         if (String(val) === inputEl.dataset.original || String(val) === inputEl.dataset.saving) return;
         inputEl.dataset.saving = String(val);
 
-        workshopRequest('/playlist/' + workshopState.playlistId + '/raid-source-count', {
+        workshopRequest('/api/playlist/' + workshopState.playlistId + '/raid-source-count', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: JSON.stringify({ source_id: sourceId, raid_count: val }),
@@ -5193,7 +5193,7 @@ var playlistSchedules = {
         this.manager.showLoading(true);
         this.manager.showError(false);
         this.pendingRead = (async () => { try {
-            const response = await workshopRequest('/playlist/' + encodeURIComponent(workshopState.playlistId) +
+            const response = await workshopRequest('/api/playlist/' + encodeURIComponent(workshopState.playlistId) +
                 '/routines/context');
             const data = await response.json();
             if (!response.ok || !data.success || !Array.isArray(data.routines)) {

@@ -13,11 +13,11 @@ from pydantic import ValidationError
 
 from shuffify.enums import ActivityType, JobType
 from shuffify.routes import (
+    api_bp,
     json_error,
     json_reply,
     json_success,
     log_activity,
-    main,
     require_auth_and_db,
     validate_json,
 )
@@ -41,6 +41,7 @@ from shuffify.schemas.raid_requests import (
     WatchSearchQueryRequest,
 )
 from shuffify.schemas.workshop_finalize_requests import FinalizeRaidRequest
+from shuffify.services.api_response import busy_error
 from shuffify.services.live_operation_service import (
     LIVE_ENDPOINT_KINDS,
     error_status,
@@ -99,21 +100,12 @@ from shuffify.spotify.url_parser import (
 logger = logging.getLogger(__name__)
 
 
-def _playlist_busy_response():
-    return jsonify({
-        "success": False,
-        "category": "error",
-        "error_code": "playlist_busy",
-        "message": "A routine is using this playlist. Try again.",
-    }), 409
-
-
 # =============================================================
 # Raid Status
 # =============================================================
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-status",
     methods=["GET"],
 )
@@ -133,7 +125,7 @@ def raid_status(playlist_id, api=None, user=None):
 # =============================================================
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-link",
     methods=["POST"],
 )
@@ -218,7 +210,7 @@ def raid_link_create(
     except RaidLinkExistsError as e:
         return json_error(str(e), 409)
     except PlaylistBusyError:
-        return _playlist_busy_response()
+        return json_reply(busy_error())
     except RaidLinkError as e:
         return json_error(str(e), 400)
     except Exception as e:
@@ -230,7 +222,7 @@ def raid_link_create(
         )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-link",
     methods=["PUT"],
 )
@@ -265,7 +257,7 @@ def raid_link_update(
             "No raid link found", 404
         )
     except PlaylistBusyError:
-        return _playlist_busy_response()
+        return json_reply(busy_error())
     except RaidLinkError as e:
         return json_error(str(e), 400)
     except Exception as e:
@@ -277,7 +269,7 @@ def raid_link_update(
         )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-link",
     methods=["DELETE"],
 )
@@ -304,7 +296,7 @@ def raid_link_delete(
             "No raid link found", 404
         )
     except PlaylistBusyError:
-        return _playlist_busy_response()
+        return json_reply(busy_error())
     except RaidLinkError as e:
         return json_error(str(e), 400)
     except Exception as e:
@@ -321,7 +313,7 @@ def raid_link_delete(
 # =============================================================
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-source-count",
     methods=["PUT"],
 )
@@ -350,7 +342,7 @@ def raid_source_count_update(
     except UpstreamSourceNotFoundError:
         return json_error("Source not found", 404)
     except PlaylistBusyError:
-        return _playlist_busy_response()
+        return json_reply(busy_error())
 
 
 # =============================================================
@@ -358,7 +350,7 @@ def raid_source_count_update(
 # =============================================================
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-watch",
     methods=["POST"],
 )
@@ -408,7 +400,7 @@ def raid_watch(playlist_id, api=None, user=None):
     except (UpstreamSourceLimitError, RaidSyncError) as e:
         return json_error(str(e), 400)
     except (PlaylistBusyError, ScheduleBusyError):
-        return _playlist_busy_response()
+        return json_reply(busy_error())
     except Exception as e:
         logger.error("Failed to watch playlist: %s", e)
         return json_error(
@@ -416,7 +408,7 @@ def raid_watch(playlist_id, api=None, user=None):
         )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-watch-search",
     methods=["POST"],
 )
@@ -463,7 +455,7 @@ def raid_watch_search(
     except (UpstreamSourceLimitError, RaidSyncError) as e:
         return json_error(str(e), 400)
     except (PlaylistBusyError, ScheduleBusyError):
-        return _playlist_busy_response()
+        return json_reply(busy_error())
     except Exception as e:
         logger.error(
             "Failed to watch search query: %s", e
@@ -473,7 +465,7 @@ def raid_watch_search(
         )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-add-url",
     methods=["POST"],
 )
@@ -589,7 +581,7 @@ def raid_add_url(playlist_id, api=None, user=None):
     except (UpstreamSourceLimitError, RaidSyncError) as e:
         return json_error(str(e), 400)
     except (PlaylistBusyError, ScheduleBusyError):
-        return _playlist_busy_response()
+        return json_reply(busy_error())
     except Exception as e:
         logger.error(
             "Failed to add external source: %s", e
@@ -599,7 +591,7 @@ def raid_add_url(playlist_id, api=None, user=None):
         )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-unwatch",
     methods=["POST"],
 )
@@ -631,7 +623,7 @@ def raid_unwatch(playlist_id, api=None, user=None):
     except RaidSyncError as e:
         return json_error(str(e), 400)
     except (PlaylistBusyError, ScheduleBusyError):
-        return _playlist_busy_response()
+        return json_reply(busy_error())
     except Exception as e:
         logger.error("Failed to unwatch: %s", e)
         return json_error(
@@ -711,7 +703,7 @@ def _live_raid_request(kind):
         )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-now",
     methods=["POST"],
 )
@@ -743,7 +735,7 @@ def raid_now(playlist_id, api=None, user=None):
     )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/drip-now",
     methods=["POST"],
 )
@@ -774,7 +766,7 @@ def drip_now(playlist_id, api=None, user=None):
     )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-and-drip",
     methods=["POST"],
 )
@@ -832,7 +824,7 @@ def _toggle_schedule(schedule, user_id, playlist_id, label):
             schedule=schedule.to_dict(),
         )
     except (PlaylistBusyError, ScheduleBusyError):
-        return _playlist_busy_response()
+        return json_reply(busy_error())
     except Exception as e:
         logger.error(
             "Failed to toggle %s schedule: %s",
@@ -846,7 +838,7 @@ def _toggle_schedule(schedule, user_id, playlist_id, label):
         )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-schedule-toggle",
     methods=["POST"],
 )
@@ -865,7 +857,7 @@ def raid_schedule_toggle(
     )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/drip-schedule-toggle",
     methods=["POST"],
 )
@@ -884,7 +876,7 @@ def drip_schedule_toggle(
     )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-schedule-create",
     methods=["POST"],
 )
@@ -956,7 +948,7 @@ def raid_schedule_create(
             schedule=schedule.to_dict(),
         )
     except (PlaylistBusyError, ScheduleBusyError):
-        return _playlist_busy_response()
+        return json_reply(busy_error())
     except Exception as e:
         logger.error(
             "Failed to create raid schedule: %s", e
@@ -966,7 +958,7 @@ def raid_schedule_create(
         )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-schedule",
     methods=["PUT"],
 )
@@ -1003,7 +995,7 @@ def raid_schedule_update(
     except RaidSyncError as e:
         return json_error(str(e), 400)
     except (PlaylistBusyError, ScheduleBusyError):
-        return _playlist_busy_response()
+        return json_reply(busy_error())
     except Exception as e:
         logger.error(
             "Failed to update raid schedule: %s", e
@@ -1013,7 +1005,7 @@ def raid_schedule_update(
         )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-schedule/history",
     methods=["GET"],
 )
@@ -1050,7 +1042,7 @@ def raid_schedule_history(
 # =============================================================
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/pending-raids",
     methods=["GET"],
 )
@@ -1068,7 +1060,7 @@ def pending_raids_list(
     )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/pending-raids/promote",
     methods=["POST"],
 )
@@ -1108,7 +1100,7 @@ def pending_raids_promote(
     )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/pending-raids/unpromote",
     methods=["POST"],
 )
@@ -1131,7 +1123,7 @@ def pending_raids_unpromote(
     )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/pending-raids/dismiss",
     methods=["POST"],
 )
@@ -1184,7 +1176,7 @@ def pending_raids_dismiss(
     )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/pending-raids/promote-all",
     methods=["POST"],
 )
@@ -1219,7 +1211,7 @@ def pending_raids_promote_all(
     )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/pending-raids/dismiss-all",
     methods=["POST"],
 )
@@ -1267,11 +1259,11 @@ def _raid_finalize_preflight_error(message, status_code):
     return jsonify(result.to_dict()), result.http_status
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/pending-raids/finalize",
     methods=["POST"],
 )
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/pending-raids/finalize-all",
     methods=["POST"],
 )

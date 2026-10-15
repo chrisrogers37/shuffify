@@ -153,7 +153,9 @@ class App:
 
     def ok(self, method: str, path: str, **kwargs) -> dict:
         """A JSON call that must succeed; its body."""
-        resp = self.request(method.upper(), path, **kwargs)
+        from tests.paths import api_path
+
+        resp = self.request(method.upper(), api_path(path), **kwargs)
         assert resp.status_code == 200, f"{method.upper()} {path}: {resp.status_code} {resp.text[:500]}"
         body = resp.json()
         assert body.get("success") is not False, f"{method.upper()} {path}: {body}"

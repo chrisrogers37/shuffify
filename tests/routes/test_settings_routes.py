@@ -12,6 +12,7 @@ from werkzeug.datastructures import MultiDict
 
 from shuffify.models.db import User, UserSettings, db
 from shuffify.spotify.api import SpotifyAPI
+from tests.paths import api_path
 
 
 @pytest.fixture
@@ -98,7 +99,7 @@ class TestSettingsGetRoute:
         )
 
         response = auth_client.get(
-            "/settings",
+            api_path("/settings"),
             headers={
                 "X-Requested-With": "XMLHttpRequest"
             },
@@ -122,7 +123,7 @@ class TestSettingsPostRoute:
 
         with db_app.app_context():
             response = auth_client.post(
-                "/settings",
+                api_path("/settings"),
                 data={
                     "theme": "dark",
                     "auto_snapshot_enabled": "true",
@@ -145,7 +146,7 @@ class TestSettingsPostRoute:
         """Should reject unauthenticated settings updates."""
         with db_app.test_client() as client:
             response = client.post(
-                "/settings",
+                api_path("/settings"),
                 data={"theme": "dark"},
                 headers={
                     "X-Requested-With": "XMLHttpRequest"
@@ -175,7 +176,7 @@ class TestSettingsHiddenInputRegression:
 
         with db_app.app_context():
             response = auth_client.post(
-                "/settings",
+                api_path("/settings"),
                 data={
                     "theme": "dark",
                     # Hidden ``false`` (first) + checkbox ``true``.
@@ -217,7 +218,7 @@ class TestSettingsHiddenInputRegression:
             db.session.commit()
 
             response = auth_client.post(
-                "/settings",
+                api_path("/settings"),
                 data={
                     "theme": "dark",
                     "auto_snapshot_enabled": "false",
@@ -253,7 +254,7 @@ class TestSettingsHiddenInputRegression:
             db.session.commit()
 
             response = auth_client.post(
-                "/settings",
+                api_path("/settings"),
                 # No auto_snapshot_enabled field at all.
                 data={"theme": "dark"},
                 headers={
@@ -340,6 +341,7 @@ class TestDedicatedSettings:
         form = markup.forms["settings-form"]
         assert form["attrs"]["method"].lower() == "post"
         assert form["attrs"]["action"] == "/settings"
+        assert form["attrs"]["data-api-url"] == api_path("/settings")
         for name in ("theme", "notifications_enabled"):
             assert markup.nodes[name][1]["type"] == "hidden"
         assert len(form["data"].getlist("notifications_enabled")) == 1
@@ -353,7 +355,9 @@ class TestDedicatedSettings:
         form["data"]["default_algorithm"] = ""
         headers = {"X-Requested-With": "XMLHttpRequest"} if ajax else {}
         with patch("shuffify.routes.require_auth", return_value=MagicMock(spec=SpotifyAPI)):
-            response = auth_client.post("/settings", data=form["data"], headers=headers)
+            response = auth_client.post(
+                api_path("/settings") if ajax else "/settings", data=form["data"], headers=headers,
+            )
         if ajax:
             assert response.status_code == 200
             assert response.get_json()["success"] is True
@@ -414,7 +418,7 @@ class TestDedicatedSettings:
             user_id = user.id
             db.session.add(UserSettings(user_id=user_id, default_algorithm="BasicShuffle"))
             db.session.commit()
-        response = auth_client.post("/settings", json=payload)
+        response = auth_client.post(api_path("/settings"), json=payload)
         assert response.status_code == 200
         with db_app.app_context():
             saved = UserSettings.query.filter_by(user_id=user_id).one()

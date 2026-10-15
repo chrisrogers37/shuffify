@@ -18,14 +18,14 @@
             </p>
 
             {% if not session.get('spotify_token') %}
-            <form action="{{ url_for('main.login') }}" method="GET" class="sh-landing-connect">
+            <form action="{{ url_for('auth.login') }}" method="GET" class="sh-landing-connect">
                 <label for="legal-consent" class="sh-landing-consent">
                     <input type="checkbox" id="legal-consent" name="legal_consent" required>
                     <span>
                         I agree to the
-                        <a href="{{ url_for('main.terms') }}" target="_blank" rel="noopener">Terms of Service</a>
+                        <a href="{{ url_for('site.terms') }}" target="_blank" rel="noopener">Terms of Service</a>
                         and
-                        <a href="{{ url_for('main.privacy') }}" target="_blank" rel="noopener">Privacy Policy</a>.
+                        <a href="{{ url_for('site.privacy') }}" target="_blank" rel="noopener">Privacy Policy</a>.
                     </span>
                 </label>
                 <button type="submit" id="login-button" class="sh-button sh-landing-connect-button"

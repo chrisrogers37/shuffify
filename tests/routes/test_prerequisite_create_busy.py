@@ -8,6 +8,7 @@ import pytest
 
 from shuffify.models.db import PlaylistPair, RaidPlaylistLink, User, db
 from shuffify.services.playlist_lock import playlist_configuration_lock, playlist_lock
+from tests.paths import api_path
 
 
 @contextmanager
@@ -43,7 +44,7 @@ def test_busy_create_new_does_not_dispatch_spotify(
     with patch("shuffify.routes.require_auth", return_value=MagicMock()), patch(creator) as create:
         with held_target(db_app, "p1"):
             response = auth_client.post(
-                f"/playlist/p1/{path}", json={"create_new": True},
+                api_path(f"/playlist/p1/{path}"), json={"create_new": True},
             )
 
     assert response.status_code == 409
@@ -64,7 +65,7 @@ def test_create_new_can_associate_during_execution_lock(
     ) as create:
         with held_target(db_app, "p1", lock=playlist_lock):
             response = auth_client.post(
-                f"/playlist/p1/{path}", json={"create_new": True},
+                api_path(f"/playlist/p1/{path}"), json={"create_new": True},
             )
 
     assert response.status_code == 200, response.get_json()
@@ -83,7 +84,7 @@ def test_existing_raid_link_keeps_idempotent_response_without_spotify(auth_clien
     with patch("shuffify.routes.require_auth", return_value=MagicMock()), patch(
         "shuffify.routes.raid_panel.RaidLinkService.create_raid_playlist"
     ) as create:
-        response = auth_client.post("/playlist/p1/raid-link", json={"create_new": True})
+        response = auth_client.post(api_path("/playlist/p1/raid-link"), json={"create_new": True})
 
     assert response.status_code == 200
     assert response.get_json()["raid_link"]["raid_playlist_id"] == "existing"
@@ -102,7 +103,7 @@ def test_existing_pair_rejects_before_spotify_creation(auth_client):
     with patch("shuffify.routes.require_auth", return_value=MagicMock()), patch(
         "shuffify.routes.playlist_pairs.PlaylistPairService.create_archive_playlist"
     ) as create:
-        response = auth_client.post("/playlist/p1/pair", json={"create_new": True})
+        response = auth_client.post(api_path("/playlist/p1/pair"), json={"create_new": True})
 
     assert response.status_code == 409
     create.assert_not_called()

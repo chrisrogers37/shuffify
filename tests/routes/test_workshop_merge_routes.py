@@ -8,6 +8,7 @@ source playlists and the existing /playlist/<id> endpoint.
 from unittest.mock import MagicMock, Mock, patch
 
 from shuffify.models.playlist import Playlist
+from tests.paths import api_path
 
 # =============================================================================
 # Helpers
@@ -54,7 +55,7 @@ class TestApiUserPlaylists:
 
     def test_returns_401_when_not_authenticated(self, client):
         """Unauthenticated request should return 401."""
-        response = client.get("/api/user-playlists")
+        response = client.get(api_path("/api/user-playlists"))
         assert response.status_code == 401
         data = response.get_json()
         assert data["success"] is False
@@ -82,7 +83,7 @@ class TestApiUserPlaylists:
         mock_ps_instance.get_user_playlists.return_value = _sample_playlists()
         mock_playlist_svc.return_value = mock_ps_instance
 
-        response = authenticated_client.get("/api/user-playlists")
+        response = authenticated_client.get(api_path("/api/user-playlists"))
         assert response.status_code == 200
 
         data = response.get_json()
@@ -124,7 +125,7 @@ class TestApiUserPlaylists:
         mock_ps_instance.get_user_playlists.return_value = _sample_playlists()
         mock_playlist_svc.return_value = mock_ps_instance
 
-        response = authenticated_client.get("/api/user-playlists")
+        response = authenticated_client.get(api_path("/api/user-playlists"))
         data = response.get_json()
 
         source = next(
@@ -155,7 +156,7 @@ class TestApiUserPlaylists:
         mock_ps_instance.get_user_playlists.return_value = []
         mock_playlist_svc.return_value = mock_ps_instance
 
-        response = authenticated_client.get("/api/user-playlists")
+        response = authenticated_client.get(api_path("/api/user-playlists"))
         data = response.get_json()
         assert data["success"] is True
         assert data["playlists"] == []
@@ -187,7 +188,7 @@ class TestApiUserPlaylists:
         )
         mock_playlist_svc.return_value = mock_ps_instance
 
-        response = authenticated_client.get("/api/user-playlists")
+        response = authenticated_client.get(api_path("/api/user-playlists"))
         assert response.status_code == 500
         data = response.get_json()
         assert data["success"] is False
@@ -249,7 +250,7 @@ class TestSourcePlaylistLoading:
         mock_ps_instance.get_playlist.return_value = mock_playlist
         mock_playlist_svc.return_value = mock_ps_instance
 
-        response = authenticated_client.get("/playlist/source_pl")
+        response = authenticated_client.get(api_path("/playlist/source_pl"))
         assert response.status_code == 200
 
         data = response.get_json()

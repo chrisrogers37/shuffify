@@ -7,7 +7,7 @@
 
 {% block content %}
 {% from 'macros/design_states.html' import error_panel %}
-{{ error_panel(500, 'Something went wrong', "We hit an unexpected error. This has been logged and we'll look into it.", url_for('main.index'), icon='server', retry=true) }}
+{{ error_panel(500, 'Something went wrong', "We hit an unexpected error. This has been logged and we'll look into it.", url_for('site.index'), icon='server', retry=true) }}
 
 <script nonce="{{ csp_nonce }}">
 // ---------------------------------------------------------------------------

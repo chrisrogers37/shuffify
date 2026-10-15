@@ -5,6 +5,8 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.paths import api_path
+
 
 def _csrf_post(client, path, body, headers, untouched_targets):
     """Post with a refused token; none of the named services may run."""
@@ -17,10 +19,10 @@ def _csrf_post(client, path, body, headers, untouched_targets):
 
 
 @pytest.mark.parametrize("path,kind", [
-    ("/shuffle/untrusted-target", "shuffle"),
-    ("/undo/untrusted-target", "undo"),
-    ("/snapshots/98765/restore", "snapshot_restore"),
-    ("/playlist/untrusted-target/toggle-visibility", "privacy"),
+    (api_path("/shuffle/untrusted-target"), "shuffle"),
+    (api_path("/undo/untrusted-target"), "undo"),
+    (api_path("/snapshots/98765/restore"), "snapshot_restore"),
+    (api_path("/playlist/untrusted-target/toggle-visibility"), "privacy"),
 ])
 @pytest.mark.parametrize("token_state", ["missing", "expired"])
 def test_direct_csrf_precedes_authorization_and_has_no_execution_receipt(
@@ -64,7 +66,7 @@ def test_direct_csrf_precedes_authorization_and_has_no_execution_receipt(
 @pytest.mark.parametrize("token_state", ["missing", "expired"])
 def test_review_csrf_failure_changes_and_claims_nothing(csrf_client, csrf_headers, token_state):
     response = _csrf_post(
-        csrf_client, "/playlist/untrusted-target/live-context", {"kind": "undo"}, csrf_headers(token_state), (
+        csrf_client, api_path("/playlist/untrusted-target/live-context"), {"kind": "undo"}, csrf_headers(token_state), (
             "shuffify.routes.require_auth",
             "shuffify.routes.get_db_user",
             "shuffify.services.live_action_context_service.LiveActionContextService.resolve",
@@ -89,12 +91,14 @@ def test_review_csrf_failure_changes_and_claims_nothing(csrf_client, csrf_header
 ])
 @pytest.mark.parametrize("token_state", ["missing", "expired"])
 def test_check_csrf_failure_is_unknown_never_a_known_no_effect(csrf_client, csrf_headers, body, kind, token_state):
-    response = _csrf_post(csrf_client, "/playlist/untrusted-target/inspect-live", body, csrf_headers(token_state), (
+    response = _csrf_post(
+        csrf_client, api_path("/playlist/untrusted-target/inspect-live"), body, csrf_headers(token_state), (
         "shuffify.routes.require_auth",
         "shuffify.routes.get_db_user",
         "shuffify.services.live_playlist_service.LivePlaylistService.inspect_tracks",
         "shuffify.services.live_metadata_service.LiveMetadataService.inspect_visibility",
-    ))
+        ),
+    )
     assert response.status_code == 400
     assert response.headers["Cache-Control"] == "no-store"
     response_body = response.get_json()
@@ -119,7 +123,7 @@ def test_oversized_review_and_check_bodies_keep_their_contract(auth_client, db_a
     api = MutableSpotify(SimpleNamespace(spotify_id="user123"), target=[uri(1)])
     db_app.config["MAX_CONTENT_LENGTH"] = 64
     with patch("shuffify.routes.require_auth", return_value=api):
-        response = auth_client.post(f"/playlist/target/{path}", json={
+        response = auth_client.post(api_path(f"/playlist/target/{path}"), json={
             "kind": "tracks", "desired_track_uris": [uri(1)] * 10,
         })
     assert response.status_code == 413

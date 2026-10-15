@@ -20,8 +20,9 @@ from tests.e2e.conftest import APP
 from tests.e2e.test_compatibility_and_dialogs import SIZES, _sections
 from tests.e2e.test_compatibility_and_dialogs import open_session as open_session
 from tests.e2e.test_direct_live_actions import direct_browser as direct_browser
+from tests.paths import api_path
 
-ORDER = "/api/playlist-preferences/order"
+ORDER = api_path("/api/playlist-preferences/order")
 ALL, FAVORITES = "#playlist-grid", "#favorites-grid"
 # For each row of a list: Move up and Move down (aria-disabled at the ends) and the position field.
 PLACES = """rows => rows.map(row => [
@@ -139,7 +140,7 @@ def test_organize_moves_rows_by_their_controls_saves_each_order_once_and_favorit
     assert favorite.get_attribute("aria-label").startswith("Unfavorite: ")
     expect(favorite).to_be_focused()
     assert (
-        len(s.writes("POST", f"/api/playlist-preferences/{liked}/toggle-pinned")) == 1
+        len(s.writes("POST", api_path(f"/api/playlist-preferences/{liked}/toggle-pinned"))) == 1
     )
     assert len(s.writes("POST", ORDER)) == 2
     assert page.url == f"{APP}/" and s.navigations == navigations
@@ -213,7 +214,7 @@ def test_keyboard_moves_persist_and_reset_returns_the_library_to_spotify_order(
     page.keyboard.press("Escape")
     expect(dialog).to_be_hidden()
     expect(reset).to_be_focused()
-    assert s.writes("POST", "/api/playlist-preferences/reset") == []
+    assert s.writes("POST", api_path("/api/playlist-preferences/reset")) == []
     assert _sections(alice)[second] == "favorites"
 
     # Confirming resets once and reloads: Spotify's order again, and no favorites, here and on the server.
@@ -221,7 +222,7 @@ def test_keyboard_moves_persist_and_reset_returns_the_library_to_spotify_order(
     expect(dialog).to_be_visible()
     with page.expect_navigation(wait_until="networkidle"):
         page.locator("#app-confirm-ok").click()
-    assert len(s.writes("POST", "/api/playlist-preferences/reset")) == 1
+    assert len(s.writes("POST", api_path("/api/playlist-preferences/reset"))) == 1
     assert _ids(page, ALL) == original and _ids(page, FAVORITES) == []
     assert _sections(alice) == {playlist: "regular" for playlist in original}
     assert list(_sections(alice)) == original

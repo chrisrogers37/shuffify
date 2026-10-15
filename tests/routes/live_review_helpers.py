@@ -5,6 +5,7 @@ from copy import deepcopy
 from unittest.mock import patch
 
 from shuffify.services.executors import JobExecutorService
+from tests.paths import api_path
 
 
 @contextmanager
@@ -20,7 +21,7 @@ def serving(api):
 
 def post_context(client, target, body):
     """POST one review request for ``target``; a review reply is never cached."""
-    response = client.post(f"/playlist/{target}/live-context", json=body)
+    response = client.post(api_path(f"/playlist/{target}/live-context"), json=body)
     assert response.headers["Cache-Control"] == "no-store"
     return response
 

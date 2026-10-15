@@ -10,6 +10,7 @@ from shuffify.models.db import RoutineActivationReceipt, Schedule, db
 from shuffify.schemas.playlist_setup_requests import is_playlist_id
 from shuffify.services import signed_digest
 from shuffify.services.activity_log_service import ActivityLogService
+from shuffify.services.api_response import busy_error
 from shuffify.services.live_review_bindings import fingerprint
 from shuffify.services.playlist_lock import playlist_configuration_lock, playlist_lock
 from shuffify.services.playlist_service import PlaylistAccessError, PlaylistNotFoundError, PlaylistService
@@ -408,9 +409,9 @@ class RoutineActivationService:
             # cannot race the executor or invert the setup lock order.
             if request.get("schedule_id") is not None:
                 if not locks.enter_context(playlist_lock(target_id, timeout_s=LOCK_WAIT_S)):
-                    return _error("playlist_busy", 409, "A routine is using this playlist. Try again.")
+                    return busy_error()
             if not locks.enter_context(playlist_configuration_lock(target_id, timeout_s=LOCK_WAIT_S)):
-                return _error("playlist_busy", 409, "A routine is using this playlist. Try again.")
+                return busy_error()
             return RoutineActivationService._activate_locked(api, user, target_id, request, payload_hash)
 
     @staticmethod
@@ -519,7 +520,7 @@ class RoutineActivationService:
         target_id = schedule.target_playlist_id
         with playlist_configuration_lock(target_id, timeout_s=LOCK_WAIT_S) as acquired:
             if not acquired:
-                return _error("playlist_busy", 409, "A routine is using this playlist. Try again.")
+                return busy_error()
             db.session.expire_all()
             schedule = Schedule.query.filter_by(id=schedule_id, user_id=user.id).first()
             if schedule is None:

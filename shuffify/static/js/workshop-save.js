@@ -87,7 +87,7 @@
             message: 'Some staged tracks are missing from your draft. Add them back or discard draft staging, then review again.'};
         var raid = captured.sources.some(function (task) { return task.kind === 'raids'; });
         var archive = captured.sources.some(function (task) { return task.kind !== 'raids'; });
-        var context = await request('/workshop/' + encodeURIComponent(playlistId) +
+        var context = await request('/api/workshop/' + encodeURIComponent(playlistId) +
             '/source-context?raid=' + Number(raid) + '&archive=' + Number(archive),
             {method: 'GET', cache: 'no-store'}, false);
         if (context.success !== true || !context.target || context.target.id !== playlistId ||
@@ -130,7 +130,7 @@
     }
 
     async function runSource(task, inspectOnly) {
-        var result = await request('/playlist/' + encodeURIComponent(task.targetId) + task.path, {
+        var result = await request('/api/playlist/' + encodeURIComponent(task.targetId) + task.path, {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(Object.assign({}, task.body, inspectOnly ? {inspect_only: true} : {})),
         }, true);
@@ -168,7 +168,7 @@
             var desired = Object.freeze(revision.trackUris.slice());
             inFlight = true;
             try {
-                var result = await request('/workshop/' + encodeURIComponent(playlistId) + '/commit', {
+                var result = await request('/api/workshop/' + encodeURIComponent(playlistId) + '/commit', {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({baseline_track_uris: baseline, track_uris: desired}),
                 }, true);
@@ -187,7 +187,7 @@
             }
         },
         readCurrent: async function (id) {
-            var result = await request('/workshop/' + encodeURIComponent(id || playlistId) + '/current-state',
+            var result = await request('/api/workshop/' + encodeURIComponent(id || playlistId) + '/current-state',
                 {method: 'GET', cache: 'no-store'}, false);
             if (result.success && (!Array.isArray(result.current_track_uris) || result.representable !== true)) {
                 return {success: false, requires_refresh: true, retryable: false,

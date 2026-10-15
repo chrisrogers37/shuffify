@@ -117,7 +117,7 @@ def test_structured_failure_and_read_only_reconciliation(node):
     assert.deepEqual(plain(stale.current_track_uris), ['c']);
     replies.push(response({success: true, current_track_uris: ['b'], representable: true}));
     assert.equal((await client.readCurrent('playlist')).success, true);
-    assert.equal(calls.at(-1).url, '/workshop/playlist/current-state');
+    assert.equal(calls.at(-1).url, '/api/workshop/playlist/current-state');
     assert.equal(calls.at(-1).options.method, 'GET');
     assert.equal(calls.at(-1).options.cache, 'no-store');
     replies.push(response({success: false, error_code: 'operation_in_progress'}, 409));
@@ -373,9 +373,10 @@ def test_target_commit_serializes_all_but_view_and_pause_and_final_save_dispatch
     await assert.rejects(context.workshopRequest('/locks/toggle', {method: 'POST'}, {group: 'locks'}),
         /Unavailable while your draft saves to Spotify/);
     replies.push(response({success: true}));
-    assert.equal((await context.workshopRequest('/schedules/5/toggle', {method: 'POST'}, {group: 'pause'})).ok, true);
+    assert.equal((await context.workshopRequest(
+        '/api/schedules/5/toggle', {method: 'POST'}, {group: 'pause'})).ok, true);
     replies.push(response({success: true, tracks: []}));
-    assert.equal((await context.workshopRequest('/workshop/search', {method: 'POST'}, {read: true})).ok, true);
+    assert.equal((await context.workshopRequest('/api/workshop/search', {method: 'POST'}, {read: true})).ok, true);
     await context.saveReviewedWorkshop();
     assert.equal(calls.filter(call => call.url.endsWith('/commit')).length, 1);
     assert.equal(context.panelOpen.options.beforeClose(), false);
@@ -694,7 +695,7 @@ def test_pending_live_action_body_blocks_save_until_settled(node):
 (async () => {
     let finishBody;
     replies.push({ok: true, clone: () => ({arrayBuffer: () => new Promise(resolve => {finishBody = resolve;})})});
-    const live = context.workshopRequest('/playlist/playlist/drip-now', {method: 'POST'});
+    const live = context.workshopRequest('/api/playlist/playlist/drip-now', {method: 'POST'});
     await Promise.resolve(); await Promise.resolve();
     assert.equal(state.pendingMutations, 1);
     await context.commitToSpotify();

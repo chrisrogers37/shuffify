@@ -105,10 +105,10 @@ def rejected_result(
 
 # Immediate executor endpoints and the live-operation kind each reports.
 LIVE_ENDPOINT_KINDS = {
-    "main.raid_now": "raid",
-    "main.drip_now": "drip",
-    "main.raid_and_drip": "raid_and_drip",
-    "main.run_schedule_now": "schedule",
+    "api.raid_now": "raid",
+    "api.drip_now": "drip",
+    "api.raid_and_drip": "raid_and_drip",
+    "api.run_schedule_now": "schedule",
 }
 
 
@@ -520,10 +520,10 @@ class LiveOperation:
 
 
 DIRECT_ENDPOINT_KINDS = {
-    "main.shuffle": "shuffle",
-    "main.undo": "undo",
-    "main.restore_snapshot": "snapshot_restore",
-    "main.toggle_visibility": "privacy",
+    "api.shuffle": "shuffle",
+    "api.undo": "undo",
+    "api.restore_snapshot": "snapshot_restore",
+    "api.toggle_visibility": "privacy",
 }
 
 

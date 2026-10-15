@@ -40,7 +40,7 @@ def test_page_is_read_only_and_bootstraps_exact_id_and_same_origin_urls(auth_cli
     assert 'id="routine-close" href="/schedules"' in html
     assert '"requestedScheduleId": 17' in html
     assert f'"ownerId": {owner.id}' in html
-    assert '"context": "/playlist/target/routines/context"' in html
+    assert '"context": "/api/playlist/target/routines/context"' in html
     assert 'src="/static/js/routines.js" defer' in html
     assert "onclick=" not in html and "onchange=" not in html
     assert response.headers.get("Content-Security-Policy")

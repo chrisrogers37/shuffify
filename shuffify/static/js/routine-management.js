@@ -182,7 +182,7 @@
             const read = ++latestRead;
             try {
                 const suffix = targetId ? '?playlist_id=' + encodeURIComponent(targetId) : '';
-                const reply = await fetch('/schedules/latest-results' + suffix, {cache: 'no-store'});
+                const reply = await fetch('/api/schedules/latest-results' + suffix, {cache: 'no-store'});
                 const data = await reply.json();
                 if (!reply.ok || !data.success || !data.results) throw new Error('Latest results unavailable');
                 if (read !== latestRead) return;
@@ -201,7 +201,7 @@
             trigger.setAttribute('aria-expanded', 'true');
             slot.textContent = 'Loading recent history…';
             try {
-                const reply = await fetch('/schedules/' + row.schedule_id + '/history', {cache: 'no-store'});
+                const reply = await fetch('/api/schedules/' + row.schedule_id + '/history', {cache: 'no-store'});
                 const data = await reply.json();
                 if (!reply.ok || !data.success || !Array.isArray(data.history)) throw new Error('History unavailable');
                 slot.replaceChildren();
@@ -226,7 +226,7 @@
             let refresh = false;
             try {
                 const desired = !row.schedule.is_enabled;
-                const reply = await send('/routines/' + row.schedule_id + '/state', {
+                const reply = await send('/api/routines/' + row.schedule_id + '/state', {
                     method: 'PUT', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({desired_enabled: desired, expected_revision: row.schedule_revision}),
                 }, {kind: 'state', scheduleId: row.schedule_id});
@@ -253,7 +253,7 @@
             pending.add('delete:' + row.schedule_id);
             let refresh = false;
             try {
-                const reply = await send('/schedules/' + row.schedule_id, {method: 'DELETE'},
+                const reply = await send('/api/schedules/' + row.schedule_id, {method: 'DELETE'},
                     {kind: 'delete', scheduleId: row.schedule_id});
                 const data = await reply.json();
                 if (!reply.ok || !data.success) throw new Error(data.message || 'Could not delete this routine.');

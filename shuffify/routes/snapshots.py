@@ -9,11 +9,11 @@ from flask import jsonify, request, session
 
 from shuffify.enums import SnapshotType
 from shuffify.routes import (
+    api_bp,
     context_preflight,
     json_error,
     json_reply,
     json_success,
-    main,
     no_store,
     require_auth_and_db,
     validate_json,
@@ -41,7 +41,7 @@ from shuffify.services.live_review_context import context_unavailable
 logger = logging.getLogger(__name__)
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/snapshots", methods=["GET"]
 )
 @require_auth_and_db
@@ -59,7 +59,7 @@ def list_snapshots(playlist_id, api=None, user=None):
     })
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/snapshots", methods=["POST"]
 )
 @require_auth_and_db
@@ -96,7 +96,7 @@ def create_manual_snapshot(
         return json_error(str(e), 500)
 
 
-@main.route(
+@api_bp.route(
     "/snapshots/<int:snapshot_id>", methods=["GET"]
 )
 @require_auth_and_db
@@ -126,7 +126,7 @@ def _snapshot_restore_preflight(message, status_code):
     ))
 
 
-@main.route("/snapshots/<int:snapshot_id>/restore", methods=["POST"])
+@api_bp.route("/snapshots/<int:snapshot_id>/restore", methods=["POST"])
 @require_auth_and_db(on_preflight_error=_snapshot_restore_preflight)
 def restore_snapshot(snapshot_id, api=None, user=None):
     """Restore the owned snapshot through the verified direct target service."""
@@ -160,7 +160,7 @@ def restore_snapshot(snapshot_id, api=None, user=None):
     return _snapshot_restore_response(result)
 
 
-@main.route("/snapshots/<int:snapshot_id>/restore-context", methods=["GET"])
+@api_bp.route("/snapshots/<int:snapshot_id>/restore-context", methods=["GET"])
 @no_store
 @require_auth_and_db(on_preflight_error=context_preflight("snapshot_restore"))
 def snapshot_restore_context(snapshot_id, api=None, user=None):
@@ -173,7 +173,7 @@ def snapshot_restore_context(snapshot_id, api=None, user=None):
     return json_reply(reply)
 
 
-@main.route(
+@api_bp.route(
     "/snapshots/<int:snapshot_id>", methods=["DELETE"]
 )
 @require_auth_and_db

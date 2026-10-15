@@ -19,6 +19,7 @@ from tests.e2e.test_compatibility_and_dialogs import open_session as open_sessio
 from tests.e2e.test_direct_live_actions import _close_tool, _open_inbox, _open_row_actions, _open_tool
 from tests.e2e.test_direct_live_actions import direct_browser as direct_browser
 from tests.e2e.test_live_operation_outcomes import _nav_to_settings
+from tests.paths import api_path
 
 MORNING_MIX = pid("alice-morning-mix")
 ON_REPEAT = pid("alice-on-repeat")
@@ -33,7 +34,7 @@ DRAFT_NAME = "Weekday order"
 
 
 def _commit(playlist_id):
-    return f"/workshop/{playlist_id}/commit"
+    return api_path(f"/workshop/{playlist_id}/commit")
 
 
 def _rows(page):
@@ -150,7 +151,7 @@ def test_morning_mix_previews_keeps_options_adds_a_track_and_saves_once_after_re
     previewed = _uris(page)
     assert previewed != before and Counter(previewed) == Counter(before)
     assert previewed == _working(page)
-    assert len(s.writes("POST", f"/workshop/{MORNING_MIX}/preview-shuffle")) == 1
+    assert len(s.writes("POST", api_path(f"/workshop/{MORNING_MIX}/preview-shuffle"))) == 1
 
     # Shuffle options keep a changed value through a close and a reopening.
     _open_tool(page, "options")
@@ -172,7 +173,7 @@ def test_morning_mix_previews_keeps_options_adds_a_track_and_saves_once_after_re
     assert results.evaluate_all("buttons => buttons.every(b => b.getAttribute('aria-disabled') === 'true')")
     page.click("#search-load-more")
     expect(results).to_have_count(20)
-    assert [json.loads(body)["offset"] for body in s.writes("POST", "/workshop/search")] == [0, 10]
+    assert [json.loads(body)["offset"] for body in s.writes("POST", api_path("/workshop/search"))] == [0, 10]
     found = results.evaluate_all("buttons => buttons.map(b => b.closest('[data-uri]').dataset.uri)")
     assert len(set(found)) == 20 and set(found[:10]) <= set(before) and not set(found[10:]) & set(before)
     add, added = results.nth(10), found[10]
@@ -540,7 +541,9 @@ def test_snapshot_view_lists_its_tracks_and_closes_without_writing(alice, fake, 
     expect(page.locator(f"#snapshot-view-{snapshot['id']}")).to_be_hidden()
     expect(view).to_have_attribute("aria-expanded", "false")
 
-    assert [(method, path) for method, path, _ in s.sent[sent:]] == [("POST", f"/playlist/{MORNING_MIX}/snapshots")]
+    assert [(method, path) for method, path, _ in s.sent[sent:]] == [
+        ("POST", api_path(f"/playlist/{MORNING_MIX}/snapshots")),
+    ]
     assert fake.playlist(MORNING_MIX) == before
     s.assert_clean()
 

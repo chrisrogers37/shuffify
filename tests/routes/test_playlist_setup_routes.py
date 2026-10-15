@@ -19,6 +19,7 @@ from shuffify.spotify.exceptions import (
     SpotifyWriteRejectedError,
     SpotifyWriteUnverifiedError,
 )
+from tests.paths import api_path
 from tests.playlist_setup_fixtures import (
     TARGET,
     SetupSpotify,
@@ -32,8 +33,8 @@ from tests.playlist_setup_fixtures import (
 pytestmark = pytest.mark.usefixtures("no_scraping")
 
 BASE = f"/playlist/{TARGET}/setup"
-CONTEXT, IMPACT, SETTINGS = f"{BASE}/context", f"{BASE}/impact", f"{BASE}/settings"
-CREATE, PLAYLISTS = f"{BASE}/spotify-playlists", f"{BASE}/playlists"
+CONTEXT, IMPACT, SETTINGS = api_path(f"{BASE}/context"), api_path(f"{BASE}/impact"), api_path(f"{BASE}/settings")
+CREATE, PLAYLISTS = api_path(f"{BASE}/spotify-playlists"), api_path(f"{BASE}/playlists")
 
 
 @pytest.fixture
@@ -89,6 +90,7 @@ def test_every_endpoint_refuses_a_signed_out_request_with_an_error_code(db_app, 
     assert response.status_code == 401
     assert response.get_json() == {
         "success": False, "error_code": "authentication_required", "message": "Please log in first.",
+        "category": "error",
     }
 
 
@@ -130,18 +132,20 @@ def test_the_context_answers_the_service_context(auth_client, api, user, schedul
     ("foreign", 403, "access_denied", "You can only set up your own or collaborative playlists."),
 ])
 def test_a_target_the_user_cannot_edit_is_refused_everywhere(auth_client, api, target, status, code, message):
-    expected = {"success": False, "error_code": code, "message": message}
+    expected = {"success": False, "error_code": code, "message": message, "category": "error"}
     revision = "a" * 64
     with as_user(api):
         responses = [
-            auth_client.get(f"/playlist/{target}/setup/context"),
-            auth_client.post(f"/playlist/{target}/setup/impact", json={
+            auth_client.get(api_path(f"/playlist/{target}/setup/context")),
+            auth_client.post(api_path(f"/playlist/{target}/setup/impact"), json={
                 "configuration_revision": revision, "changes": [{"op": "unlink_collection"}],
             }),
-            auth_client.put(f"/playlist/{target}/setup/settings", json={
+            auth_client.put(api_path(f"/playlist/{target}/setup/settings"), json={
                 "configuration_revision": revision, "changes": [{"op": "unlink_collection"}], "acknowledgment": {},
             }),
-            auth_client.post(f"/playlist/{target}/setup/spotify-playlists", json={"purpose": "archive", "name": "A"}),
+            auth_client.post(
+                api_path(f"/playlist/{target}/setup/spotify-playlists"), json={"purpose": "archive", "name": "A"},
+            ),
         ]
     for response in responses:
         assert (response.status_code, response.get_json()) == (status, expected)
@@ -189,6 +193,7 @@ def test_a_body_that_is_not_a_json_object_is_an_invalid_request(auth_client, api
     assert response.status_code == 400
     assert response.get_json() == {
         "success": False, "error_code": "invalid_request", "message": "Request body must be a JSON object.",
+        "category": "error",
     }
     assert api.writes == []
 
@@ -219,6 +224,7 @@ def test_field_errors_answer_invalid_changes(auth_client, api, user):
     assert response.status_code == 400
     assert response.get_json() == {
         "success": False, "error_code": "invalid_changes", "message": "Some changes need attention. Nothing was saved.",
+        "category": "error",
         "errors": [
             {"index": 0, "field": "playlist_id", "message": "Already a source"},
             {"index": 1, "field": "playlist_id", "message": "You can only use your own or collaborative playlists"},
@@ -335,7 +341,7 @@ def test_a_save_while_the_target_is_locked_is_busy(auth_client, api, monkeypatch
         owner.result()
     assert response.status_code == 409
     assert response.get_json() == {
-        "success": False, "error_code": "playlist_busy", "retryable": True,
+        "success": False, "error_code": "playlist_busy", "retryable": True, "category": "error",
         "message": "A routine or save is running on this playlist. Try again when it finishes.",
     }
     assert UpstreamSource.query.count() == 0

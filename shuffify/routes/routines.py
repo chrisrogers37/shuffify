@@ -4,7 +4,15 @@ from flask import abort, render_template, request, url_for
 from pydantic import ValidationError
 
 from shuffify.error_handlers import format_validation_error
-from shuffify.routes import context_preflight, json_reply, main, no_store, require_auth_and_db, require_auth_page
+from shuffify.routes import (
+    api_bp,
+    context_preflight,
+    json_reply,
+    no_store,
+    require_auth_and_db,
+    require_auth_page,
+    site_bp,
+)
 from shuffify.schemas.routine_requests import (
     RoutineActivateRequest,
     RoutineReviewRequest,
@@ -13,7 +21,7 @@ from shuffify.schemas.routine_requests import (
 from shuffify.services.routine_activation_service import RoutineActivationService
 
 
-@main.route("/playlist/<playlist_id>/routines/new", methods=["GET"])
+@site_bp.route("/playlist/<playlist_id>/routines/new", methods=["GET"])
 @no_store
 @require_auth_page
 def routine_setup(playlist_id, api=None, user=None, spotify_profile=None):
@@ -32,14 +40,14 @@ def routine_setup(playlist_id, api=None, user=None, spotify_profile=None):
         "requestedScheduleId": int(requested) if requested is not None else None,
         "origin": origin,
         "urls": {
-            "context": url_for("main.routine_context", playlist_id=playlist_id),
-            "review": url_for("main.routine_review", playlist_id=playlist_id),
-            "activate": url_for("main.routine_activate", playlist_id=playlist_id),
-            "state": url_for("main.routine_state", schedule_id=0).removesuffix("/0/state"),
-            "setup": url_for("main.playlist_setup_page", playlist_id=playlist_id),
-            "self": url_for("main.routine_setup", playlist_id=playlist_id),
-            "workshop": url_for("main.workshop", playlist_id=playlist_id),
-            "management": url_for("main.schedules"),
+            "context": url_for("api.routine_context", playlist_id=playlist_id),
+            "review": url_for("api.routine_review", playlist_id=playlist_id),
+            "activate": url_for("api.routine_activate", playlist_id=playlist_id),
+            "state": url_for("api.routine_state", schedule_id=0).removesuffix("/0/state"),
+            "setup": url_for("site.playlist_setup_page", playlist_id=playlist_id),
+            "self": url_for("site.routine_setup", playlist_id=playlist_id),
+            "workshop": url_for("site.workshop", playlist_id=playlist_id),
+            "management": url_for("site.schedules"),
         },
     }
     return render_template("routine_setup.html", routine_page=page, user=spotify_profile)
@@ -59,14 +67,14 @@ def _body(schema):
                        "message": format_validation_error(error), "field_errors": fields}, 400)
 
 
-@main.route("/playlist/<playlist_id>/routines/context", methods=["GET"])
+@api_bp.route("/playlist/<playlist_id>/routines/context", methods=["GET"])
 @no_store
 @require_auth_and_db(on_preflight_error=context_preflight("routine_context"))
 def routine_context(playlist_id, api=None, user=None):
     return json_reply(RoutineActivationService.context(api, user, playlist_id))
 
 
-@main.route("/playlist/<playlist_id>/routines/review", methods=["POST"])
+@api_bp.route("/playlist/<playlist_id>/routines/review", methods=["POST"])
 @no_store
 @require_auth_and_db(on_preflight_error=context_preflight("routine_review"))
 def routine_review(playlist_id, api=None, user=None):
@@ -76,7 +84,7 @@ def routine_review(playlist_id, api=None, user=None):
     return json_reply(RoutineActivationService.review(api, user, playlist_id, body))
 
 
-@main.route("/playlist/<playlist_id>/routines/activate", methods=["POST"])
+@api_bp.route("/playlist/<playlist_id>/routines/activate", methods=["POST"])
 @no_store
 @require_auth_and_db
 def routine_activate(playlist_id, api=None, user=None):
@@ -86,7 +94,7 @@ def routine_activate(playlist_id, api=None, user=None):
     return json_reply(RoutineActivationService.activate(api, user, playlist_id, body))
 
 
-@main.route("/routines/<int:schedule_id>/state", methods=["PUT"])
+@api_bp.route("/routines/<int:schedule_id>/state", methods=["PUT"])
 @no_store
 @require_auth_and_db
 def routine_state(schedule_id, api=None, user=None):

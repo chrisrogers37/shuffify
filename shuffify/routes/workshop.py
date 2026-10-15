@@ -11,14 +11,15 @@ from pydantic import ValidationError
 from shuffify.enums import ActivityType
 from shuffify.error_handlers import format_validation_error
 from shuffify.routes import (
+    api_bp,
     clear_session_and_show_login,
     json_error,
     json_success,
     load_schedule_context,
     log_activity,
-    main,
     require_auth_and_db,
     require_auth_page,
+    site_bp,
     validate_json,
 )
 from shuffify.schemas import (
@@ -55,7 +56,7 @@ from shuffify.spotify.url_parser import (
 logger = logging.getLogger(__name__)
 
 
-@main.route("/workshop")
+@site_bp.route("/workshop")
 @require_auth_page
 def workshop_hub(api=None, user=None, spotify_profile=None):
     """Render the Workshop hub with no playlist selected."""
@@ -72,7 +73,7 @@ def workshop_hub(api=None, user=None, spotify_profile=None):
     )
 
 
-@main.route("/workshop/<playlist_id>")
+@site_bp.route("/workshop/<playlist_id>")
 @require_auth_page
 def workshop(playlist_id, api=None, user=None, spotify_profile=None):
     """Render the Playlist Workshop page."""
@@ -170,7 +171,7 @@ def workshop(playlist_id, api=None, user=None, spotify_profile=None):
         # session is fine, so the user stays logged in.
         logger.warning(f"Could not open playlist {playlist_id} in the workshop: {e}")
         flash(_unloadable_playlist_message(e), "error")
-        return redirect(url_for("main.workshop_hub"))
+        return redirect(url_for("site.workshop_hub"))
 
 
 def _unloadable_playlist_message(error: PlaylistError) -> str:
@@ -182,7 +183,7 @@ def _unloadable_playlist_message(error: PlaylistError) -> str:
     return "Couldn't load that playlist from Spotify. Please try again."
 
 
-@main.route(
+@api_bp.route(
     "/workshop/<playlist_id>/preview-shuffle",
     methods=["POST"],
 )
@@ -240,7 +241,7 @@ def _commit_preflight_error(message, status_code):
     return jsonify(result.to_dict()), result.http_status
 
 
-@main.route("/workshop/<playlist_id>/commit", methods=["POST"])
+@api_bp.route("/workshop/<playlist_id>/commit", methods=["POST"])
 @require_auth_and_db(on_preflight_error=_commit_preflight_error)
 def workshop_commit(playlist_id, api=None, user=None):
     """Validate and serialize a target-only Workshop commit."""
@@ -272,7 +273,7 @@ def workshop_commit(playlist_id, api=None, user=None):
     return jsonify(result.to_dict()), result.http_status
 
 
-@main.route("/workshop/<playlist_id>/current-state")
+@api_bp.route("/workshop/<playlist_id>/current-state")
 @require_auth_and_db
 def workshop_current_state(playlist_id, api=None, user=None):
     """Read a complete current order without altering the draft or its history."""
@@ -280,7 +281,7 @@ def workshop_current_state(playlist_id, api=None, user=None):
     return jsonify(result.to_dict()), result.http_status
 
 
-@main.route("/workshop/<playlist_id>/source-context")
+@api_bp.route("/workshop/<playlist_id>/source-context")
 @require_auth_and_db
 def workshop_source_context(playlist_id, api=None, user=None):
     """Read named source scope before review without changing Spotify or the DB."""
@@ -293,7 +294,7 @@ def workshop_source_context(playlist_id, api=None, user=None):
     return jsonify(body), status
 
 
-@main.route("/workshop/search", methods=["POST"])
+@api_bp.route("/workshop/search", methods=["POST"])
 @require_auth_and_db
 def workshop_search(api=None, user=None):
     """Search Spotify's catalog for tracks."""
@@ -351,7 +352,7 @@ def workshop_search(api=None, user=None):
 # =============================================================================
 
 
-@main.route(
+@api_bp.route(
     "/workshop/search-playlists", methods=["POST"]
 )
 @require_auth_and_db
@@ -536,7 +537,7 @@ def _search_playlists_by_query(api, ext_request):
         )
 
 
-@main.route(
+@api_bp.route(
     "/workshop/load-external-playlist", methods=["POST"]
 )
 @require_auth_and_db
@@ -568,7 +569,7 @@ def workshop_load_external_playlist(
 # =============================================================================
 
 
-@main.route(
+@api_bp.route(
     "/workshop/<playlist_id>/sessions", methods=["GET"]
 )
 @require_auth_and_db
@@ -585,7 +586,7 @@ def list_workshop_sessions(
     })
 
 
-@main.route(
+@api_bp.route(
     "/workshop/<playlist_id>/sessions", methods=["POST"]
 )
 @require_auth_and_db
@@ -647,7 +648,7 @@ def save_workshop_session(
         return json_error(str(e), 500)
 
 
-@main.route(
+@api_bp.route(
     "/workshop/sessions/<int:session_id>", methods=["GET"]
 )
 @require_auth_and_db
@@ -667,7 +668,7 @@ def load_workshop_session(
         return json_error("Saved session not found.", 404)
 
 
-@main.route(
+@api_bp.route(
     "/workshop/sessions/<int:session_id>",
     methods=["PUT"],
 )
@@ -711,7 +712,7 @@ def update_workshop_session(
         return json_error(str(e), 500)
 
 
-@main.route(
+@api_bp.route(
     "/workshop/sessions/<int:session_id>",
     methods=["DELETE"],
 )

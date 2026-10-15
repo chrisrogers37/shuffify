@@ -6,7 +6,6 @@ import logging
 
 from flask import (
     flash,
-    jsonify,
     redirect,
     render_template,
     request,
@@ -18,12 +17,13 @@ from shuffify.error_handlers import (
     format_validation_error,
 )
 from shuffify.routes import (
+    api_bp,
     clear_session_and_show_login,
     json_error,
     json_success,
-    main,
     require_auth_and_db,
     require_auth_page,
+    site_bp,
 )
 from shuffify.schemas import UserSettingsUpdateRequest
 from shuffify.services import (
@@ -36,7 +36,7 @@ from shuffify.services import (
 logger = logging.getLogger(__name__)
 
 
-@main.route("/settings")
+@site_bp.route("/settings")
 @require_auth_page
 def settings(api=None, user=None, spotify_profile=None):
     """Render the user settings page."""
@@ -49,17 +49,6 @@ def settings(api=None, user=None, spotify_profile=None):
             {"value": a["class_name"], "label": a["name"]}
             for a in algorithms
         ]
-
-        # AJAX request from sidebar — return JSON
-        is_ajax = (
-            request.headers.get("X-Requested-With")
-            == "XMLHttpRequest"
-        )
-        if is_ajax:
-            return jsonify({
-                "settings": user_settings.to_dict(),
-                "algorithm_options": algorithm_options,
-            })
 
         return render_template(
             "settings.html",
@@ -85,7 +74,7 @@ def settings(api=None, user=None, spotify_profile=None):
             "Please try again.",
             "error",
         )
-        return redirect(url_for("main.index"))
+        return redirect(url_for("site.index"))
     except Exception as e:
         logger.error(
             "Unexpected error loading settings page: %s "
@@ -99,13 +88,46 @@ def settings(api=None, user=None, spotify_profile=None):
             "Please try again.",
             "error",
         )
-        return redirect(url_for("main.index"))
+        return redirect(url_for("site.index"))
 
 
-@main.route("/settings", methods=["POST"])
+@api_bp.route("/settings", methods=["GET"])
+@require_auth_and_db
+def get_settings(api=None, user=None):
+    """Read saved settings and the algorithms available to the settings form."""
+    user_settings = UserSettingsService.get_or_create(user.id)
+    algorithms = ShuffleService.list_algorithms()
+    return json_success(
+        "Settings loaded.",
+        settings=user_settings.to_dict(),
+        algorithm_options=[{"value": "", "label": "No default (choose each time)"}] + [
+            {"value": algorithm["class_name"], "label": algorithm["name"]}
+            for algorithm in algorithms
+        ],
+    )
+
+
+@site_bp.route("/settings", methods=["POST"])
+@require_auth_page
+def update_settings_page(api=None, user=None, spotify_profile=None):
+    """Save a native settings form and return to its HTML page with feedback."""
+    _updated, error = _save_settings(user)
+    flash(error or "Settings saved successfully.", "error" if error else "success")
+    return redirect(url_for("site.settings"))
+
+
+@api_bp.route("/settings", methods=["POST"])
 @require_auth_and_db
 def update_settings(api=None, user=None):
-    """Update user settings from form submission."""
+    """Update user settings and return the saved values."""
+    updated, error = _save_settings(user)
+    if error:
+        return json_error(error, 400)
+    return json_success("Settings saved successfully.", settings=updated)
+
+
+def _save_settings(user):
+    """Parse JSON or native form values and persist one validated settings update."""
     # Handle both JSON and form-encoded data
     if request.is_json:
         data = request.get_json()
@@ -150,9 +172,7 @@ def update_settings(api=None, user=None):
                 data["max_snapshots_per_playlist"]
             )
         except (ValueError, TypeError):
-            return json_error(
-                "Invalid value for max snapshots.", 400
-            )
+            return None, "Invalid value for max snapshots."
 
     # Handle empty algorithm as None (no default)
     if data.get("default_algorithm") == "":
@@ -161,11 +181,7 @@ def update_settings(api=None, user=None):
     try:
         update_request = UserSettingsUpdateRequest(**data)
     except ValidationError as e:
-        return json_error(
-            f"Validation error: "
-            f"{format_validation_error(e)}",
-            400,
-        )
+        return None, f"Validation error: {format_validation_error(e)}"
 
     # Leave omitted values unchanged, but an explicitly cleared algorithm
     # means "choose each time" and must clear the stored default.
@@ -182,19 +198,6 @@ def update_settings(api=None, user=None):
             user.id, **update_kwargs
         )
     except UserSettingsError as e:
-        return json_error(str(e), 400)
+        return None, str(e)
 
-    # For AJAX requests, return JSON
-    is_ajax = (
-        request.headers.get("X-Requested-With")
-        == "XMLHttpRequest"
-    )
-    if is_ajax or request.is_json:
-        return json_success(
-            "Settings saved successfully.",
-            settings=updated.to_dict(),
-        )
-
-    # For regular form submission, redirect with flash
-    flash("Settings saved successfully.", "success")
-    return redirect(url_for("main.settings"))
+    return updated.to_dict(), None

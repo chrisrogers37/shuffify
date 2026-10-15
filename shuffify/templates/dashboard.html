@@ -15,7 +15,7 @@
             <div class="sh-library-header-actions">
                 <button id="refresh-playlists-btn"
                         data-action-click="dash-002"
-                        data-refresh-url="{{ url_for('main.refresh_playlists') }}"
+                        data-refresh-url="{{ url_for('api.refresh_playlists') }}"
                         class="sh-button-secondary"
                         title="Refresh playlists from Spotify">
                     <svg id="refresh-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -41,7 +41,7 @@
             {% elif dashboard %}
             <span class="sh-library-greeting">{% if user.display_name %}Welcome to Shuffify, {{ user.display_name }}!{% else %}Welcome to Shuffify!{% endif %}</span>
             Open a playlist to arrange its tracks, or use its Playlist actions for a quick shuffle.
-            Set up <a href="{{ url_for('main.schedules') }}" class="sh-library-inline-link">routines</a> to keep your playlists fresh automatically.
+            Set up <a href="{{ url_for('site.schedules') }}" class="sh-library-inline-link">routines</a> to keep your playlists fresh automatically.
             {% else %}
             <span class="sh-library-greeting">{% if user.display_name %}Welcome, {{ user.display_name }}!{% else %}Welcome!{% endif %}</span>
             Open a playlist to arrange its tracks, or use its Playlist actions for a quick shuffle.

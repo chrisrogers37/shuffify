@@ -42,7 +42,7 @@
         errorRegion.textContent = '';
 
         try {
-            const response = await fetch(form.action, {
+            const response = await fetch(form.dataset.apiUrl, {
                 method: 'POST',
                 body: body,
                 headers: {'X-Requested-With': 'XMLHttpRequest'}

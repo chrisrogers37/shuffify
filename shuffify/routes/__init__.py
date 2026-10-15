@@ -4,9 +4,8 @@ Flask routes package for Shuffify.
 This module handles HTTP requests and responses only.
 All business logic is delegated to the services layer.
 
-The single `main` Blueprint is split across feature modules for
-navigability. All modules import `main` from this package and
-register routes on it.
+Feature modules register JSON endpoints on ``api_bp``, OAuth endpoints
+on ``auth_bp``, and temporary server-rendered pages on ``site_bp``.
 """
 
 import functools
@@ -39,7 +38,9 @@ from shuffify.services.live_review_context import context_rejected
 from shuffify.spotify.exceptions import SpotifyError
 
 logger = logging.getLogger(__name__)
-main = Blueprint("main", __name__)
+api_bp = Blueprint("api", __name__, url_prefix="/api")
+auth_bp = Blueprint("auth", __name__)
+site_bp = Blueprint("site", __name__)
 
 
 # =============================================================================
@@ -47,7 +48,7 @@ main = Blueprint("main", __name__)
 # =============================================================================
 
 
-@main.context_processor
+@site_bp.app_context_processor
 def inject_current_year():
     """Make current year available to all templates."""
     return {"current_year": datetime.now(timezone.utc).year}
@@ -158,7 +159,7 @@ def require_auth_and_db(f=None, *, on_preflight_error=None):
 
     Usage::
 
-        @main.route("/endpoint")
+        @api_bp.route("/endpoint")
         @require_auth_and_db
         def my_route(api=None, user=None):
             # api and user are guaranteed non-None here
@@ -216,7 +217,7 @@ def no_store(view):
 
     The app's after_request hook sends ``Cache-Control: no-store`` for marked
     views, so CSRF, oversize, preflight and unexpected failures are covered too.
-    Apply it between ``@main.route`` and the view's other decorators.
+    Apply it between ``@api_bp.route`` and the view's other decorators.
     """
     view.no_store = True
     return view
@@ -246,7 +247,7 @@ def require_auth_page(f):
 
     Usage::
 
-        @main.route("/page")
+        @site_bp.route("/page")
         @require_auth_page
         def my_page(api=None, user=None, spotify_profile=None):
             return render_template("page.html", user=spotify_profile)
@@ -256,7 +257,7 @@ def require_auth_page(f):
     def decorated_function(*args, **kwargs):
         api = require_auth()
         if not api:
-            return redirect(url_for("main.index"))
+            return redirect(url_for("site.index"))
 
         from shuffify import is_db_available
 
@@ -265,12 +266,12 @@ def require_auth_page(f):
                 "The database is temporarily unavailable. Please try again shortly.",
                 "error",
             )
-            return redirect(url_for("main.index"))
+            return redirect(url_for("site.index"))
 
         user = get_db_user()
         if not user:
             flash("Please log in again to continue.", "error")
-            return redirect(url_for("main.index"))
+            return redirect(url_for("site.index"))
 
         try:
             spotify_profile = AuthService.get_user_data(api)

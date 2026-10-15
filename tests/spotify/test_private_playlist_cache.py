@@ -13,7 +13,7 @@ import requests
 from flask import Flask
 
 from shuffify.error_handlers import register_error_handlers
-from shuffify.routes import main
+from shuffify.routes import api_bp
 from shuffify.spotify import (
     SpotifyAPI,
     SpotifyAPIError,
@@ -21,6 +21,7 @@ from shuffify.spotify import (
     SpotifyNotFoundError,
     TokenInfo,
 )
+from tests.paths import api_path
 
 
 class MemoryRedis:
@@ -158,13 +159,13 @@ def test_private_playlist_route_honors_upstream_denial(private_playlist, monkeyp
     other = fixture.api("account-B")
     app = Flask("private-cache-regression")
     app.config.update(TESTING=True, SECRET_KEY="dummy")
-    app.register_blueprint(main)
+    app.register_blueprint(api_bp)
     register_error_handlers(app)
     monkeypatch.setattr("shuffify.routes.require_auth", lambda: other)
     monkeypatch.setattr("shuffify.is_db_available", lambda: True)
     monkeypatch.setattr("shuffify.routes.get_db_user", lambda: SimpleNamespace(id=2))
 
-    response = app.test_client().get(f"/playlist/{fixture.playlist_id}")
+    response = app.test_client().get(api_path(f"/playlist/{fixture.playlist_id}"))
 
     assert response.status_code == 404
     assert "Owner private playlist" not in response.get_data(as_text=True)

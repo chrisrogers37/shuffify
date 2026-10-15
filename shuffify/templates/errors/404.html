@@ -7,6 +7,6 @@
 
 {% block content %}
 {% from 'macros/design_states.html' import error_panel %}
-{{ error_panel(404, 'Page not found', "That page doesn't exist, or it moved. Nothing is broken on our end.", url_for('main.index'), icon='missing') }}
+{{ error_panel(404, 'Page not found', "That page doesn't exist, or it moved. Nothing is broken on our end.", url_for('site.index'), icon='missing') }}
 
 {% endblock %}

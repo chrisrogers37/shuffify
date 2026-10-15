@@ -11,6 +11,7 @@ import pytest
 
 from shuffify.models.db import db
 from shuffify.services.user_service import UserService
+from tests.paths import api_path
 
 
 @pytest.fixture(autouse=True)
@@ -52,7 +53,7 @@ class TestSchedulesAuth:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/schedules/create",
+                api_path("/schedules/create"),
                 json={"job_type": "shuffle"},
             )
             assert resp.status_code == 401
@@ -64,7 +65,7 @@ class TestSchedulesAuth:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.put(
-                "/schedules/1", json={}
+                api_path("/schedules/1"), json={}
             )
             assert resp.status_code == 401
 
@@ -74,7 +75,7 @@ class TestSchedulesAuth:
     ):
         mock_auth.return_value = None
         with db_app.test_client() as client:
-            resp = client.delete("/schedules/1")
+            resp = client.delete(api_path("/schedules/1"))
             assert resp.status_code == 401
 
     @patch("shuffify.routes.require_auth")
@@ -83,7 +84,7 @@ class TestSchedulesAuth:
     ):
         mock_auth.return_value = None
         with db_app.test_client() as client:
-            resp = client.post("/schedules/1/toggle")
+            resp = client.post(api_path("/schedules/1/toggle"))
             assert resp.status_code == 401
 
     @patch("shuffify.routes.require_auth")
@@ -92,7 +93,7 @@ class TestSchedulesAuth:
     ):
         mock_auth.return_value = None
         with db_app.test_client() as client:
-            resp = client.post("/schedules/1/run")
+            resp = client.post(api_path("/schedules/1/run"))
             assert resp.status_code == 401
 
     @patch("shuffify.routes.require_auth")
@@ -101,7 +102,7 @@ class TestSchedulesAuth:
     ):
         mock_auth.return_value = None
         with db_app.test_client() as client:
-            resp = client.get("/schedules/1/history")
+            resp = client.get(api_path("/schedules/1/history"))
             assert resp.status_code == 401
 
     @patch("shuffify.routes.require_auth")
@@ -111,7 +112,7 @@ class TestSchedulesAuth:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.get(
-                "/playlist/p1/rotation-status"
+                api_path("/playlist/p1/rotation-status")
             )
             assert resp.status_code == 401
 
@@ -220,7 +221,7 @@ class TestCreateSchedule:
         )
 
         resp = auth_client.post(
-            "/schedules/create",
+            api_path("/schedules/create"),
             json={
                 "job_type": "shuffle",
                 "target_playlist_id": "p1",
@@ -241,7 +242,7 @@ class TestCreateSchedule:
         # The real db_user from db_app fixture has
         # no encrypted_refresh_token set
         resp = auth_client.post(
-            "/schedules/create",
+            api_path("/schedules/create"),
             json={
                 "job_type": "shuffle",
                 "target_playlist_id": "p1",
@@ -264,7 +265,7 @@ class TestCreateSchedule:
         db.session.commit()
 
         resp = auth_client.post(
-            "/schedules/create",
+            api_path("/schedules/create"),
             json={},
         )
         assert resp.status_code == 400
@@ -311,7 +312,7 @@ class TestAPSchedulerErrorHandling:
             side_effect=KeyError("ConflictingId"),
         ):
             resp = auth_client.post(
-                "/schedules/create",
+                api_path("/schedules/create"),
                 json={
                     "job_type": "shuffle",
                     "target_playlist_id": "p1",
@@ -349,7 +350,7 @@ class TestAPSchedulerErrorHandling:
             side_effect=RuntimeError("Scheduler not init"),
         ):
             resp = auth_client.post(
-                "/schedules/create",
+                api_path("/schedules/create"),
                 json={
                     "job_type": "shuffle",
                     "target_playlist_id": "p1",
@@ -382,7 +383,7 @@ class TestAPSchedulerErrorHandling:
             side_effect=TypeError("bad trigger"),
         ):
             resp = auth_client.put(
-                "/schedules/1",
+                api_path("/schedules/1"),
                 json={"schedule_value": "weekly"},
             )
             assert resp.status_code == 200
@@ -412,7 +413,7 @@ class TestAPSchedulerErrorHandling:
             side_effect=KeyError("ConflictingId"),
         ):
             resp = auth_client.post(
-                "/schedules/1/toggle"
+                api_path("/schedules/1/toggle")
             )
             assert resp.status_code == 200
 
@@ -446,7 +447,7 @@ class TestAPSchedulerErrorHandling:
             side_effect=KeyError("ConflictingId"),
         ):
             resp = auth_client.post(
-                "/schedules/create",
+                api_path("/schedules/create"),
                 json={
                     "job_type": "shuffle",
                     "target_playlist_id": "p1",
@@ -484,7 +485,7 @@ class TestUpdateSchedule:
         )
 
         resp = auth_client.put(
-            "/schedules/1",
+            api_path("/schedules/1"),
             json={"schedule_value": "weekly"},
         )
         assert resp.status_code == 200
@@ -498,7 +499,7 @@ class TestUpdateSchedule:
         mock_auth.return_value = MagicMock()
 
         resp = auth_client.put(
-            "/schedules/1", json={}
+            api_path("/schedules/1"), json={}
         )
         assert resp.status_code == 400
 
@@ -520,7 +521,7 @@ class TestDeleteSchedule:
     ):
         mock_auth.return_value = MagicMock()
 
-        resp = auth_client.delete("/schedules/1")
+        resp = auth_client.delete(api_path("/schedules/1"))
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["success"] is True
@@ -544,7 +545,7 @@ class TestDeleteSchedule:
             ScheduleNotFoundError("not found")
         )
 
-        resp = auth_client.delete("/schedules/99")
+        resp = auth_client.delete(api_path("/schedules/99"))
         assert resp.status_code == 404
 
 
@@ -577,7 +578,7 @@ class TestToggleSchedule:
             mock_schedule
         )
 
-        resp = auth_client.post("/schedules/1/toggle")
+        resp = auth_client.post(api_path("/schedules/1/toggle"))
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["success"] is True
@@ -609,7 +610,7 @@ class TestToggleSchedule:
             mock_schedule
         )
 
-        resp = auth_client.post("/schedules/1/toggle")
+        resp = auth_client.post(api_path("/schedules/1/toggle"))
         assert resp.status_code == 200
         data = resp.get_json()
         assert "disabled" in data["message"]
@@ -637,7 +638,7 @@ class TestRunScheduleNow:
                           "resources": [], "bookkeeping": []},
         }
 
-        resp = auth_client.post("/schedules/1/run")
+        resp = auth_client.post(api_path("/schedules/1/run"))
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["success"] is True
@@ -662,7 +663,7 @@ class TestRunScheduleNow:
             JobExecutionError("private execution detail")
         )
 
-        resp = auth_client.post("/schedules/1/run")
+        resp = auth_client.post(api_path("/schedules/1/run"))
         assert resp.status_code == 502
         data = resp.get_json()
         assert data["success"] is False
@@ -691,7 +692,7 @@ class TestScheduleHistory:
             {"id": 1, "status": "success"}
         ]
 
-        resp = auth_client.get("/schedules/1/history")
+        resp = auth_client.get(api_path("/schedules/1/history"))
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["success"] is True
@@ -757,7 +758,7 @@ class TestBackendValidation:
         mock_upstream_svc.list_sources.return_value = []
 
         resp = auth_client.post(
-            "/schedules/create",
+            api_path("/schedules/create"),
             json={
                 "job_type": "raid",
                 "target_playlist_id": "p1",
@@ -808,7 +809,7 @@ class TestBackendValidation:
         )
 
         resp = auth_client.post(
-            "/schedules/create",
+            api_path("/schedules/create"),
             json={
                 "job_type": "raid",
                 "target_playlist_id": "p1",
@@ -840,7 +841,7 @@ class TestBackendValidation:
         )
 
         resp = auth_client.post(
-            "/schedules/create",
+            api_path("/schedules/create"),
             json={
                 "job_type": "rotate",
                 "target_playlist_id": "p1",
@@ -874,7 +875,7 @@ class TestRotationStatus:
         mock_sched_svc.get_user_schedules.return_value = []
 
         resp = auth_client.get(
-            "/playlist/p1/rotation-status"
+            api_path("/playlist/p1/rotation-status")
         )
         assert resp.status_code == 200
         data = resp.get_json()

@@ -129,7 +129,7 @@ def test_library_review_then_run_serializes_cards_and_updates_only_verified_hist
 (async () => {
     replies.push(contextReply('shuffle', {}, 'first'));
     const pending = await review(() => first.quick.click());
-    assert.equal(calls.length, 1); assert.equal(calls[0].url, '/playlist/first/live-context');
+    assert.equal(calls.length, 1); assert.equal(calls[0].url, '/api/playlist/first/live-context');
     assert.deepEqual(JSON.parse(calls[0].options.body),
         {kind: 'shuffle', form: {algorithm: 'BasicShuffle', keep_first: '2'}});
     // Reviewing is not dispatch: the card keeps its label until the final Run.
@@ -151,7 +151,7 @@ def test_library_review_then_run_serializes_cards_and_updates_only_verified_hist
     replies.push(contextReply('undo', {}, 'first'), response(direct(0)));
     const focused = document.activeElement;
     const undo = await review(() => first.undo.click()); runReview(); await undo.done;
-    assert.equal(calls[3].url, '/undo/first');
+    assert.equal(calls[3].url, '/api/undo/first');
     assert.deepEqual(Object.fromEntries(calls[3].options.body), {csrf_token: 'test-csrf', reviewed_scope: SCOPE,
         reviewed_before_order: BEFORE, reviewed_history: HISTORY});
     // Undo hides when no earlier version remains; focus stays where the run left it.

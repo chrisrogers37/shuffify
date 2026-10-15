@@ -8,13 +8,14 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from tests.e2e.conftest import hold_playlist_lock, pid
+from tests.paths import api_path
 
 MORNING_MIX = pid("alice-morning-mix")
 LONG_HAUL = pid("alice-long-haul")
 
 
 def _commit(alice, playlist_id, baseline, desired):
-    return alice.post(f"/workshop/{playlist_id}/commit", json={
+    return alice.post(api_path(f"/workshop/{playlist_id}/commit"), json={
         "baseline_track_uris": baseline, "track_uris": desired,
     })
 
@@ -127,7 +128,7 @@ def test_executor_lock_bounds_commit_and_current_state(alice, fake):
     with hold_playlist_lock(MORNING_MIX), ThreadPoolExecutor(max_workers=1) as pool:
         for request in (
             lambda: _commit(alice, MORNING_MIX, baseline, list(reversed(baseline))),
-            lambda: alice.get(f"/workshop/{MORNING_MIX}/current-state"),
+            lambda: alice.get(api_path(f"/workshop/{MORNING_MIX}/current-state")),
         ):
             started = time.monotonic()
             response = pool.submit(request).result(timeout=8)

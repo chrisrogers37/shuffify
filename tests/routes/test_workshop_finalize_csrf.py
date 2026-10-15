@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from shuffify.services.workshop_finalize_service import WorkshopFinalizeResult
+from tests.paths import api_path
 
 A = "spotify:track:" + "a" * 22
 FINALIZERS = [
@@ -51,7 +52,7 @@ def test_actual_csrf_rejection_preserves_source_contract(
         ) as transition,
     ):
         response = csrf_client.post(
-            f"/playlist/target/{path}",
+            api_path(f"/playlist/target/{path}"),
             json=captured_payload(inspect_only),
             headers=csrf_headers(token_state),
         )
@@ -105,7 +106,7 @@ def test_valid_csrf_still_allows_the_existing_finalizer_dispatch(
         finalize = getattr(service.return_value, method)
         finalize.return_value = expected
         response = csrf_client.post(
-            f"/playlist/target/{path}",
+            api_path(f"/playlist/target/{path}"),
             json=captured_payload(False),
             headers=csrf_headers("valid"),
         )
@@ -117,9 +118,9 @@ def test_valid_csrf_still_allows_the_existing_finalizer_dispatch(
 @pytest.mark.parametrize(
     "path",
     [
-        "/workshop/target/commit",
-        "/playlist/target/pending-raids/dismiss",
-        "/playlist/target/pair/unarchive",
+        api_path("/workshop/target/commit"),
+        api_path("/playlist/target/pending-raids/dismiss"),
+        api_path("/playlist/target/pair/unarchive"),
     ],
 )
 @pytest.mark.parametrize("token_state", ["missing", "expired"])
@@ -133,6 +134,7 @@ def test_other_json_routes_keep_generic_csrf_response(
     assert response.get_json() == {
         "success": False,
         "category": "error",
+        "error_code": "invalid_request",
         "message": "Your request could not be verified. Please refresh the page and try again.",
     }
 

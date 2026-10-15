@@ -15,6 +15,7 @@ from shuffify.enums import JobType
 from shuffify.models.playlist import Playlist
 from tests.node_runtime import run_scenario
 from tests.page_runtime import PAGE_DOM, page_tree, render_page
+from tests.paths import api_path
 from tests.test_playlist_operations_runtime import CLIENT, ROOT, run_node
 from tests.test_playlist_operations_runtime import node as node
 from tests.test_reviewed_live_actions_runtime import REVIEW_FIXTURE
@@ -185,29 +186,29 @@ const saved = uris => response({success: true, target_status: 'saved', saved_tra
 const urls = () => calls.map(call => call.url.split('?')[0]);
 const KINDS = {
     drip: {start: () => raidPanel.dripNow(), context: () => liveContext('drip'),
-        contextUrl: '/playlist/target/live-context', runUrl: '/playlist/target/drip-now',
+        contextUrl: '/api/playlist/target/live-context', runUrl: '/api/playlist/target/drip-now',
         heading: 'Review: Add collected tracks now', body: {reviewed_scope: SCOPE}, writesTarget: true},
     raid_and_drip: {start: () => raidPanel.raidAndDrip(), context: () => liveContext('raid_and_drip'),
-        contextUrl: '/playlist/target/live-context', runUrl: '/playlist/target/raid-and-drip',
+        contextUrl: '/api/playlist/target/live-context', runUrl: '/api/playlist/target/raid-and-drip',
         heading: 'Review: Collect and add tracks now', body: {reviewed_scope: SCOPE}, writesTarget: true},
     routine: {start: () => startExactRoutine(5), context: () => routineContext(5, 'raid_and_drip'),
-        contextUrl: '/schedules/5/run-context', runUrl: '/schedules/5/run', heading: 'Review: Run routine now',
+        contextUrl: '/api/schedules/5/run-context', runUrl: '/api/schedules/5/run', heading: 'Review: Run routine now',
         body: {reviewed_scope: SCOPE}, writesTarget: true},
     rotate: {start: () => startExactRoutine(7), context: () => routineContext(7, 'rotate'),
-        contextUrl: '/schedules/7/run-context', runUrl: '/schedules/7/run', heading: 'Review: Run routine now',
+        contextUrl: '/api/schedules/7/run-context', runUrl: '/api/schedules/7/run', heading: 'Review: Run routine now',
         body: {reviewed_scope: SCOPE}, writesTarget: true},
     restore: {start: () => context.restoreSnapshot(17, element('snapshot-17')), context: () => snapshotContext(17),
-        contextUrl: '/snapshots/17/restore-context', runUrl: '/snapshots/17/restore',
+        contextUrl: '/api/snapshots/17/restore-context', runUrl: '/api/snapshots/17/restore',
         heading: 'Review: Restore saved snapshot now',
         body: {reviewed_scope: SCOPE, reviewed_before_order: BEFORE}, writesTarget: true},
     collect: {start: () => raidPanel.raidNow(), context: () => liveContext('raid'),
-        contextUrl: '/playlist/target/live-context', runUrl: '/playlist/target/raid-now',
+        contextUrl: '/api/playlist/target/live-context', runUrl: '/api/playlist/target/raid-now',
         heading: 'Review: Collect for review', body: {reviewed_scope: SCOPE}, writesTarget: false},
     raid_routine: {start: () => {
             raidPanel.status.schedule = {id: 5, job_type: 'raid'}; return startExactRoutine(5);
         },
-        context: () => routineContext(5, 'raid'), contextUrl: '/schedules/5/run-context',
-        runUrl: '/schedules/5/run', heading: 'Review: Run routine now', body: {reviewed_scope: SCOPE},
+        context: () => routineContext(5, 'raid'), contextUrl: '/api/schedules/5/run-context',
+        runUrl: '/api/schedules/5/run', heading: 'Review: Run routine now', body: {reviewed_scope: SCOPE},
         writesTarget: false},
 };
 // Open a kind's review (its context is the only request). The pending run is wrapped so
@@ -360,13 +361,13 @@ def test_collect_with_a_track_draft_is_reviewed_and_run_without_touching_the_dra
 (async () => {
     state.workingUris = [uri(2), uri(1)];
     const running = (await openReview(KINDS.collect)).running;
-    assert.equal(calls[0].url, '/playlist/target/live-context');
+    assert.equal(calls[0].url, '/api/playlist/target/live-context');
     assert.deepEqual(JSON.parse(calls[0].options.body), {kind: 'raid'});
     assert.equal(element('live-operation-heading').textContent, 'Review: Collect for review');
     replies.push(response(verified(liveContext('raid'))));
     runReview(); const record = await running;
     assert.equal(record.complete, true);
-    assert.deepEqual(urls(), ['/playlist/target/live-context', '/playlist/target/raid-now']);
+    assert.deepEqual(urls(), ['/api/playlist/target/live-context', '/api/playlist/target/raid-now']);
     assert.deepEqual(JSON.parse(calls[1].options.body), {reviewed_scope: SCOPE});
     assert.deepEqual(plain(state.workingUris), [uri(2), uri(1)]);
     assert.deepEqual(plain(state.savedUris), [uri(1), uri(2)]);
@@ -435,12 +436,12 @@ def test_target_action_with_a_draft_continues_only_after_the_real_save_then_need
     assert.equal(panels[panels.length - 1].id, 'workshop-save-panel');
     assert.equal(state.reviewMode, 'review');
     assert.equal(element('live-operation-heading').textContent, 'Finishing your draft…');
-    assert.deepEqual(urls(), [spec.contextUrl, '/workshop/target/source-context']);
+    assert.deepEqual(urls(), [spec.contextUrl, '/api/workshop/target/source-context']);
     // Only the real Save continues the action, and only to a fresh review.
     replies.push(saved([uri(2), uri(1)]), replyWith(spec.context()));
     await context.saveReviewedWorkshop(); await tick(); await tick();
     assert.equal(element('live-operation-heading').textContent, spec.heading);
-    assert.deepEqual(urls(), [spec.contextUrl, '/workshop/target/source-context', '/workshop/target/commit',
+    assert.deepEqual(urls(), [spec.contextUrl, '/api/workshop/target/source-context', '/api/workshop/target/commit',
         spec.contextUrl]);
     // Its Run is still a separate choice, sent once with the server's bindings only.
     const keyOf = track => context.draftOccurrences().find(item => item.uri === track).key;
@@ -616,8 +617,8 @@ def test_discard_is_local_keeps_source_recovery_and_still_needs_a_fresh_review_a
     assert.equal(calls.filter(call => call.url.endsWith('/raid-now')).length, 0);
     replies.push(response(verified(liveContext('raid'))));
     runReview(); assert.equal((await running).complete, true);
-    assert.deepEqual(urls(), ['/playlist/target/live-context', '/playlist/target/live-context',
-        '/playlist/target/raid-now']);
+    assert.deepEqual(urls(), ['/api/playlist/target/live-context', '/api/playlist/target/live-context',
+        '/api/playlist/target/raid-now']);
 })().catch(e => {console.error(e); process.exitCode = 1;});
 """),
     )
@@ -675,7 +676,7 @@ def test_privacy_keeps_draft_staging_and_recovery_and_patches_only_visibility(no
     assert.equal(record.complete, true);
     // The controller announces the outcome and its results show it; the page adds no toast.
     assert.equal(notices.some(notice => notice.startsWith('Playlist set to')), false);
-    assert.equal(calls[1].url, '/playlist/target/toggle-visibility');
+    assert.equal(calls[1].url, '/api/playlist/target/toggle-visibility');
     assert.deepEqual(JSON.parse(calls[1].options.body), {public: false, reviewed_scope: SCOPE});
     assert.equal(button.dataset.public, 'false'); assert.equal(button.textContent, 'Make public now');
     assert.equal(element('workshop-visibility-state').textContent, 'This playlist is private on Spotify.');
@@ -1250,16 +1251,17 @@ const PLAYLISTS = [{id: 'previous', name: 'Earlier Mix', track_count: 3, image_u
 const pending = count => Array.from({length: count}, (_, i) => ({id: i + 1, track_uri: 'spotify:track:p' + (i + 1),
     track_name: 'Pending ' + (i + 1), track_artists: 'Artist', source_name: 'Source'}));
 const ROUTES = {
-    '/workshop/target/locks': {success: true, locks: []},
-    '/playlist/target/pending-raids': {tracks: pending(3)},
+    '/api/workshop/target/locks': {success: true, locks: []},
+    '/api/playlist/target/pending-raids': {tracks: pending(3)},
     '/api/user-playlists': {success: true, playlists: PLAYLISTS},
-    '/playlist/target/raid-status': {raid_status: {raid_link: null, sources: [], schedule: null, drip_schedule: null,
+    '/api/playlist/target/raid-status': {raid_status: {
+        raid_link: null, sources: [], schedule: null, drip_schedule: null,
         source_count: 0, max_sources: 10}},
-    '/playlist/target/pair': {success: true, paired: false, pair: null},
-    '/playlist/target/routines/context': {success: true, routines: [], capabilities: {}},
-    '/schedules/latest-results': {success: true, results: {}},
-    '/playlist/target/snapshots': {success: true, snapshots: []},
-    '/workshop/target/sessions': {success: true, sessions: []},
+    '/api/playlist/target/pair': {success: true, paired: false, pair: null},
+    '/api/playlist/target/routines/context': {success: true, routines: [], capabilities: {}},
+    '/api/schedules/latest-results': {success: true, results: {}},
+    '/api/playlist/target/snapshots': {success: true, snapshots: []},
+    '/api/workshop/target/sessions': {success: true, sessions: []},
 };
 const unrouted = [];
 // Loads the page. Its own reads are answered from ROUTES, or a scenario's own table; a request
@@ -1329,12 +1331,13 @@ def test_each_tool_opens_beside_the_playlist_loads_once_and_returns_focus(node, 
     assert.equal(page.byId('workshop-inbox-count').hidden, false);
     assert.equal(page.byId('workshop-tool-inbox').getAttribute('aria-label'), 'Inbox, 3 pending');
     // Nothing a tool shows is read until the tool opens.
-    for (const path of ['/playlist/target/raid-status', '/playlist/target/pair', '/playlist/target/routines/context',
-            '/playlist/target/snapshots', '/workshop/target/sessions']) assert.equal(reads(path), 0, path);
-    const tools = [['workshop-tool-inbox', 'workshop-inbox-panel', '/playlist/target/raid-status'],
-        ['workshop-tool-archive', 'workshop-archive-panel', '/playlist/target/pair'],
-        ['workshop-tool-routines', 'workshop-routines-panel', '/playlist/target/routines/context'],
-        ['workshop-tool-history', 'workshop-history-panel', '/playlist/target/snapshots']];
+    for (const path of ['/api/playlist/target/raid-status', '/api/playlist/target/pair',
+            '/api/playlist/target/routines/context',
+            '/api/playlist/target/snapshots', '/api/workshop/target/sessions']) assert.equal(reads(path), 0, path);
+    const tools = [['workshop-tool-inbox', 'workshop-inbox-panel', '/api/playlist/target/raid-status'],
+        ['workshop-tool-archive', 'workshop-archive-panel', '/api/playlist/target/pair'],
+        ['workshop-tool-routines', 'workshop-routines-panel', '/api/playlist/target/routines/context'],
+        ['workshop-tool-history', 'workshop-history-panel', '/api/playlist/target/snapshots']];
     for (const [button, panel, path] of tools) {
         const trigger = page.byId(button);
         for (const round of [1, 2]) {
@@ -1351,9 +1354,9 @@ def test_each_tool_opens_beside_the_playlist_loads_once_and_returns_focus(node, 
         }
     }
     // History's first opening also read the saved drafts, once.
-    assert.equal(reads('/workshop/target/sessions'), 1);
+    assert.equal(reads('/api/workshop/target/sessions'), 1);
     // The badge read the inbox on load; the Inbox's first opening read its list once more.
-    assert.equal(reads('/playlist/target/pending-raids'), 2);
+    assert.equal(reads('/api/playlist/target/pending-raids'), 2);
     // With no archive linked, Archive says so and leads to its setup.
     assert.equal(page.text(page.byId('archive-pair-summary')),
         'No archive playlist is linked. Archive setup creates or links one; tracks you remove are then kept there.');
@@ -1472,7 +1475,7 @@ def test_preview_from_shuffle_options_shows_the_reordered_list(node, db_app, wid
         shuffled_uris: ['spotify:track:t3', 'spotify:track:t2', 'spotify:track:t1']}));
     page.$('#workshop-options-panel [data-action-click="wk-015"]').click(); await settle();
     // One activation previews with the current options.
-    const previews = page.calls.filter(call => call.url === '/workshop/target/preview-shuffle');
+    const previews = page.calls.filter(call => call.url === '/api/workshop/target/preview-shuffle');
     assert.equal(previews.length, 1); assert.equal(JSON.parse(previews[0].body).keep_first, '1');
     assert.deepEqual(page.$$('#track-list .track-item').map(row => row.dataset.uri),
         ['spotify:track:t3', 'spotify:track:t2', 'spotify:track:t1']);
@@ -1484,7 +1487,7 @@ def test_preview_from_shuffle_options_shows_the_reordered_list(node, db_app, wid
     page.replies.push(page.reply({success: true, algorithm_name: 'Basic',
         shuffled_uris: ['spotify:track:t1', 'spotify:track:t3', 'spotify:track:t2']}));
     page.byId('preview-shuffle-btn').click(); await settle();
-    assert.equal(page.calls.filter(call => call.url === '/workshop/target/preview-shuffle').length, 2);
+    assert.equal(page.calls.filter(call => call.url === '/api/workshop/target/preview-shuffle').length, 2);
     assert.equal(page.text(page.byId('workshop-save-state')), 'Draft');
     clean();
 """.replace("__WIDTH__", str(width)),
@@ -1498,19 +1501,19 @@ def test_preview_from_shuffle_options_shows_the_reordered_list(node, db_app, wid
             "raids",
             "workshop-sources-panel",
             "workshop-tool-inbox",
-            "/playlist/target/raid-status",
+            api_path("/playlist/target/raid-status"),
         ),
         (
             "archive",
             "workshop-archive-setup-panel",
             "workshop-tool-archive",
-            "/playlist/target/pair",
+            api_path("/playlist/target/pair"),
         ),
         (
             "rotation",
             "workshop-archive-setup-panel",
             "workshop-tool-archive",
-            "/playlist/target/pair",
+            api_path("/playlist/target/pair"),
         ),
         ("unknown", None, None, None),
     ],
@@ -1798,7 +1801,7 @@ def test_the_draft_controls_are_one_group_that_a_narrow_task_hides(node, db_app)
 
 def test_per_row_actions_keep_focus_on_the_same_control_in_their_list(node, db_app):
     archive = {
-        "/playlist/target/pair": {
+        api_path("/playlist/target/pair"): {
             "success": True,
             "paired": True,
             "pair": {
@@ -1807,7 +1810,7 @@ def test_per_row_actions_keep_focus_on_the_same_control_in_their_list(node, db_a
                 "auto_archive_on_remove": True,
             },
         },
-        "/playlist/target/pair/archive-tracks": {
+        api_path("/playlist/target/pair/archive-tracks"): {
             "success": True,
             "total": 3,
             "tracks": [
@@ -1819,7 +1822,7 @@ def test_per_row_actions_keep_focus_on_the_same_control_in_their_list(node, db_a
                 for n in (3, 2, 1)
             ],
         },
-        "/playlist/target/rotation-status": {
+        api_path("/playlist/target/rotation-status"): {
             "success": True,
             "has_pair": True,
             "pair": {"archive_playlist_id": "archive"},
@@ -1879,7 +1882,7 @@ def test_per_row_actions_keep_focus_on_the_same_control_in_their_list(node, db_a
 
 def test_details_report_locks_visibility_and_a_refused_unlock(node, db_app):
     locks = {
-        "/workshop/target/locks": {
+        api_path("/workshop/target/locks"): {
             "success": True,
             "locks": [
                 {
@@ -1936,7 +1939,7 @@ def test_a_restricted_playlist_suggestion_searches_the_catalog(node, db_app):
     page.replies.push(page.reply({success: true,
         tracks: [{uri: 'spotify:track:x', id: 'x', name: 'Found', artists: []}]}));
     suggestion.click(); await settle();
-    const search = page.calls.filter(call => call.url === '/workshop/search');
+    const search = page.calls.filter(call => call.url === '/api/workshop/search');
     assert.equal(search.length, 1); assert.equal(JSON.parse(search[0].body).query, 'Locked list');
     assert.equal(page.byId('search-input').value, 'Locked list'); assert.equal(focused(), page.byId('search-input'));
     assert.equal(page.$$('#search-results .add-track-btn').length, 1);
@@ -1947,7 +1950,7 @@ def test_a_restricted_playlist_suggestion_searches_the_catalog(node, db_app):
 
 def test_snapshot_copy_and_routine_cards_name_their_effects(node, db_app):
     routes = {
-        "/playlist/target/snapshots": {
+        api_path("/playlist/target/snapshots"): {
             "success": True,
             "snapshots": [
                 {
@@ -1960,7 +1963,7 @@ def test_snapshot_copy_and_routine_cards_name_their_effects(node, db_app):
             ],
         },
         # One exact normalized routine of every kind, the shuffle first.
-        "/playlist/target/routines/context": {
+        api_path("/playlist/target/routines/context"): {
             "success": True,
             "capabilities": {},
             "routines": [
@@ -2003,7 +2006,7 @@ def test_snapshot_copy_and_routine_cards_name_their_effects(node, db_app):
     assert.equal(card.querySelector('.routine-history').dataset.workshopCompat, 'view');
     page.replies.push(page.reply({success: false, error_code: 'schedule_unavailable', message: 'Unavailable.'}, 503));
     run.click(); await settle();
-    assert.equal(page.calls.at(-1).url, '/schedules/5/run-context');
+    assert.equal(page.calls.at(-1).url, '/api/schedules/5/run-context');
     clean();
 """.replace("__ROUTES__", json.dumps(routes)).replace("__KINDS__", str(len(JobType))),
     )
@@ -2048,7 +2051,7 @@ def test_an_empty_playlist_offers_its_way_back_to_the_library(node, db_app):
 def test_a_live_review_from_a_tool_hands_focus_back_to_the_list(node, db_app):
     """A reviewed live action replaces the tool it was started from; once its review closes,
     its trigger is gone with that tool, so focus lands on the track list's heading."""
-    status = {"/playlist/target/raid-status": {"raid_status": {
+    status = {api_path("/playlist/target/raid-status"): {"raid_status": {
         "raid_link": None, "sources": [{"id": 1, "source_name": "One", "raid_count": 5}],
         "schedule": None, "drip_schedule": None, "source_count": 1, "max_sources": 10}}}
     run_workspace(node, workspace_page(db_app), r"""
@@ -2058,7 +2061,7 @@ def test_a_live_review_from_a_tool_hands_focus_back_to_the_list(node, db_app):
         message: 'The review could not be loaded. Nothing was changed.'}, 503));
     const collect = page.byId('raid-now-btn');
     collect.focus(); collect.click(); await settle();
-    assert.equal(page.calls.at(-1).url, '/playlist/target/live-context');
+    assert.equal(page.calls.at(-1).url, '/api/playlist/target/live-context');
     assert.equal(page.byId('live-operation-panel').hidden, false);
     assert.equal(page.byId('workshop-inbox-panel').hidden, true);
     page.key(page.byId('live-operation-heading'), 'Escape'); await settle();
@@ -2074,7 +2077,7 @@ def test_a_live_review_from_a_tool_hands_focus_back_to_the_list(node, db_app):
 
 
 def test_rows_are_the_drafts_occurrences_and_say_their_lock(node, db_app):
-    locks = {"/workshop/target/locks": {"success": True, "locks": [
+    locks = {api_path("/workshop/target/locks"): {"success": True, "locks": [
         {"track_uri": "spotify:track:t2", "lock_tier": "standard", "position": 1,
          "expires_at": "2026-11-11T10:00:00+00:00"},
         {"track_uri": "spotify:track:t3", "lock_tier": "super", "position": 3, "expires_at": None}]}}
@@ -2257,7 +2260,7 @@ def test_the_position_field_follows_every_move(node, db_app):
 
 
 def test_locked_rows_stay_put_and_no_row_moves_onto_one(node, db_app):
-    locks = {"/workshop/target/locks": {"success": True, "locks": [
+    locks = {api_path("/workshop/target/locks"): {"success": True, "locks": [
         {"track_uri": "spotify:track:t2", "lock_tier": "standard", "position": 1, "expires_at": None}]}}
     run_workspace(node, workspace_page(db_app, tracks=[1, 2, 3]), r"""
     await openWorkshop('/workshop/target', __LOCKS__);
@@ -2378,7 +2381,7 @@ def test_row_actions_follow_their_groups_while_the_draft_is_blocked(node, db_app
 def test_a_lock_is_toggled_at_its_occurrences_place_in_the_draft(node, db_app):
     run_workspace(node, workspace_page(db_app, tracks=[1, 2, 1]), r"""
     await openWorkshop();
-    const toggles = () => page.calls.filter(call => call.url === '/workshop/target/locks/toggle');
+    const toggles = () => page.calls.filter(call => call.url === '/api/workshop/target/locks/toggle');
     // The second copy of Track 1 (the third row) locks with its own place in the draft.
     openActions(2);
     assert.equal(page.text(page.byId('track-actions-lock-state')), 'Not locked.');
@@ -2491,7 +2494,7 @@ def test_add_tracks_inbox_and_archive_rows_share_one_recipe(node, db_app):
     track; each button acts on its own row's track."""
     image = "https://i.scdn.co/image/one"
     routes = {
-        "/playlist/target/pending-raids": {
+        api_path("/playlist/target/pending-raids"): {
             "tracks": [
                 {"id": 1, "track_uri": "spotify:track:p1", "track_name": "Pending 1", "track_artists": "Artist",
                  "source_name": "Source", "track_image_url": image},
@@ -2499,13 +2502,13 @@ def test_add_tracks_inbox_and_archive_rows_share_one_recipe(node, db_app):
                  "source_name": "Source", "track_image_url": "javascript:alert(1)"},
             ]
         },
-        "/playlist/target/pair": {
+        api_path("/playlist/target/pair"): {
             "success": True,
             "paired": True,
             "pair": {"archive_playlist_id": "archive", "archive_playlist_name": "Archive",
                      "auto_archive_on_remove": True},
         },
-        "/playlist/target/pair/archive-tracks": {
+        api_path("/playlist/target/pair/archive-tracks"): {
             "success": True,
             "total": 2,
             # The Archive lists its tracks most recently archived first.
@@ -2515,7 +2518,7 @@ def test_add_tracks_inbox_and_archive_rows_share_one_recipe(node, db_app):
                 {"uri": "spotify:track:a1", "name": "Archived 1", "artists": ["A", "B"], "album_image_url": image},
             ],
         },
-        "/playlist/target/rotation-status": {"success": True, "has_pair": True,
+        api_path("/playlist/target/rotation-status"): {"success": True, "has_pair": True,
                                              "pair": {"archive_playlist_id": "archive"},
                                              "has_rotation_schedule": False},
     }
@@ -2629,7 +2632,7 @@ def test_archive_and_archive_setup_opened_together_read_the_pairing_once(node, d
     const held = new Promise(resolve => { release = resolve; });
     const plainFetch = page.window.fetch;
     page.window.fetch = (url, init) => {
-        if (url !== '/playlist/target/pair') return plainFetch(url, init);
+        if (url !== '/api/playlist/target/pair') return plainFetch(url, init);
         pairReads += 1;
         return held.then(() => plainFetch(url, init));
     };
@@ -2640,7 +2643,7 @@ def test_archive_and_archive_setup_opened_together_read_the_pairing_once(node, d
     assert.equal(page.byId('workshop-archive-setup-panel').hidden, false);
     assert.equal(pairReads, 1);
     release(); await settle();
-    assert.equal(pairReads, 1); assert.equal(reads('/playlist/target/pair'), 1);
+    assert.equal(pairReads, 1); assert.equal(reads('/api/playlist/target/pair'), 1);
     assert.equal(page.byId('archive-no-pair').classList.contains('hidden'), false);
     clean();
 """,
@@ -2692,7 +2695,7 @@ function held() {
     return hold;
 }
 const busy = button => button.getAttribute('aria-disabled') === 'true' && button.disabled === false;
-const searches = () => page.calls.filter(call => call.url === '/workshop/search').length;
+const searches = () => page.calls.filter(call => call.url === '/api/workshop/search').length;
 const found = n => ({success: true, tracks: Array.from({length: n}, (_, i) => ({id: 's' + i,
     uri: 'spotify:track:s' + i, name: 'S' + i, artists: ['A'], duration_ms: 1000}))});
 """
@@ -2710,7 +2713,7 @@ def test_preview_search_and_load_more_keep_focus_while_busy_and_refuse_a_second_
     assert.equal(focused(), preview);
     assert.ok(busy(preview) && busy(fromOptions));
     preview.click(); fromOptions.click(); await settle();
-    assert.equal(reads('/workshop/target/preview-shuffle'), 1);
+    assert.equal(reads('/api/workshop/target/preview-shuffle'), 1);
     shuffle.answer({success: true, shuffled_uris: ['spotify:track:t3', 'spotify:track:t1', 'spotify:track:t2'],
         algorithm_name: 'Basic'}); await settle();
     assert.equal(focused(), preview);
@@ -2763,14 +2766,14 @@ def test_review_and_save_keeps_focus_while_preparing_and_closing_returns_to_it(n
     while it prepares. Review save results returns to its own button."""
     run_workspace(node, workspace_page(db_app), HELD + r"""
     const context = {success: true, target: {id: 'target', name: 'Morning Mix'}};
-    await openWorkshop('/workshop/target', {'/workshop/target/source-context': context});
+    await openWorkshop('/workshop/target', {'/api/workshop/target/source-context': context});
     await removeRow(1);
     const save = page.byId('save-btn'), heading = page.byId('workshop-review-heading');
     let reply = held();
     save.focus(); save.click(); await settle();
     assert.equal(focused(), save); assert.ok(busy(save));
     save.click(); await settle();
-    assert.equal(reads('/workshop/target/source-context'), 1);
+    assert.equal(reads('/api/workshop/target/source-context'), 1);
     // The opener is taken when the review starts, wherever focus goes meanwhile.
     page.byId('workshop-tracks-heading').focus();
     reply.answer(context); await settle();
@@ -2782,7 +2785,7 @@ def test_review_and_save_keeps_focus_while_preparing_and_closing_returns_to_it(n
     again.focus(); again.click(); await settle();
     assert.equal(focused(), again); assert.ok(busy(again));
     again.click(); await settle();
-    assert.equal(reads('/workshop/target/source-context'), 2);
+    assert.equal(reads('/api/workshop/target/source-context'), 2);
     reply.answer(context); await settle();
     assert.equal(focused(), again); assert.equal(again.hasAttribute('aria-disabled'), false);
     page.byId('workshop-review-back').click(); await settle();
@@ -2815,11 +2818,11 @@ def test_create_and_link_controls_keep_focus_while_busy_and_send_once(node, db_a
     """Each create, link and add control keeps focus while its request runs: marked busy, never
     disabled, with a second press (or Enter) refused. A refusal leaves it in place, focused and
     available again."""
-    status = {"/playlist/target/raid-status": {"raid_status": {
+    status = {api_path("/playlist/target/raid-status"): {"raid_status": {
         "raid_link": None, "sources": [{"id": 1, "source_name": "One", "raid_count": 5}],
         "schedule": None, "drip_schedule": None, "source_count": 1, "max_sources": 10}},
-        "/playlist/target/rotation-status": {"success": True, "schedule": None},
-        "/playlist/target/pair/archive-tracks": {"success": True, "tracks": [], "total": 0}}
+        api_path("/playlist/target/rotation-status"): {"success": True, "schedule": None},
+        api_path("/playlist/target/pair/archive-tracks"): {"success": True, "tracks": [], "total": 0}}
     page = workspace_page(db_app)
     flows = HELD + r"""
     const posts = path => page.calls.filter(call => call.method !== 'GET' && call.url === path).length;
@@ -2836,10 +2839,10 @@ def test_create_and_link_controls_keep_focus_while_busy_and_send_once(node, db_a
     """
     run_workspace(node, page, flows + r"""
     await openWorkshop('/workshop/target?setup=archive', __STATUS__);
-    await pressWhileBusy(page.$('[data-action-click="wk-050"]'), '/playlist/target/pair');
+    await pressWhileBusy(page.$('[data-action-click="wk-050"]'), '/api/playlist/target/pair');
     const select = page.byId('archive-link-select');
     select.value = select.options[1].value; page.change(select); await settle();
-    await pressWhileBusy(page.byId('archive-link-btn'), '/playlist/target/pair');
+    await pressWhileBusy(page.byId('archive-link-btn'), '/api/playlist/target/pair');
     // A link that succeeds gives its button its label back for when the form shows again.
     const link = page.byId('archive-link-btn');
     page.replies.push(page.reply({success: true, pair: {archive_playlist_id: 'next',
@@ -2853,19 +2856,19 @@ def test_create_and_link_controls_keep_focus_while_busy_and_send_once(node, db_a
     await openWorkshop('/workshop/target?setup=raids', __STATUS__);
     const create = page.$('[data-action-click="wk-025"]'), raidSelect = page.byId('raid-link-select');
     // The playlist choice is held too: picking one would enable a second, linking request.
-    await pressWhileBusy(create, '/playlist/target/raid-link', undefined,
+    await pressWhileBusy(create, '/api/playlist/target/raid-link', undefined,
         () => assert.equal(raidSelect.disabled, true));
     assert.equal(raidSelect.disabled, false);
     // Linking an existing playlist follows the same rule, with Create held meanwhile.
     evaluate('raidPanel.populateRaidLinkSelect()'); await settle();
     raidSelect.value = raidSelect.options[1].value; page.change(raidSelect); await settle();
-    await pressWhileBusy(page.byId('raid-link-btn'), '/playlist/target/raid-link', undefined,
+    await pressWhileBusy(page.byId('raid-link-btn'), '/api/playlist/target/raid-link', undefined,
         () => { assert.equal(create.disabled, true); assert.equal(raidSelect.disabled, true); });
     assert.equal(create.disabled, false); assert.equal(raidSelect.disabled, false);
     const field = page.byId('raid-url-input');
     field.value = 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M';
     const enter = () => page.key(field, 'Enter');
-    await pressWhileBusy(page.byId('raid-add-url-btn'), '/playlist/target/raid-add-url', enter);
+    await pressWhileBusy(page.byId('raid-add-url-btn'), '/api/playlist/target/raid-add-url', enter);
     clean();
 """.replace("__STATUS__", json.dumps(status)))
 
@@ -2873,11 +2876,11 @@ def test_create_and_link_controls_keep_focus_while_busy_and_send_once(node, db_a
 def test_controls_that_hide_themselves_hand_focus_to_a_status_or_their_section(node, db_app):
     """Discard draft changes and each tool's Add all to draft hide once they act: focus goes to
     the save status or the tool's section, never to a control that writes."""
-    routes = {"/playlist/target/pair": {"success": True, "paired": True, "pair": {
+    routes = {api_path("/playlist/target/pair"): {"success": True, "paired": True, "pair": {
         "archive_playlist_id": "arch", "archive_playlist_name": "Arch", "auto_archive_on_remove": False}},
-        "/playlist/target/pair/archive-tracks": {"success": True, "total": 1, "tracks": [
+        api_path("/playlist/target/pair/archive-tracks"): {"success": True, "total": 1, "tracks": [
             {"uri": "spotify:track:a1", "name": "Archived 1", "artists": ["X"]}]},
-        "/playlist/target/rotation-status": {"success": True, "schedule": None}}
+        api_path("/playlist/target/rotation-status"): {"success": True, "schedule": None}}
     run_workspace(node, workspace_page(db_app), r"""
     await openWorkshop('/workshop/target', __ROUTES__);
     await removeRow(0);
@@ -2906,7 +2909,7 @@ def test_forms_and_lists_that_close_hand_focus_to_their_opener_or_section(node, 
     ends the results, and a chosen external playlist, return it to their section; a saved
     Drip count returns it to the count."""
     link = {"raid_playlist_id": "coll", "raid_playlist_name": "Coll", "drip_enabled": True, "drip_count": 3}
-    routes = {"/playlist/target/raid-status": {"raid_status": {
+    routes = {api_path("/playlist/target/raid-status"): {"raid_status": {
         "raid_link": link, "sources": [], "schedule": None, "drip_schedule": None,
         "source_count": 0, "max_sources": 10}}}
     run_workspace(node, workspace_page(db_app), HELD + r"""
@@ -2961,11 +2964,12 @@ def test_save_panel_steps_keep_focus_in_the_panel(node, db_app):
     """Check current keeps focus while it checks and, once the check resolves the attention it
     belonged to, hands it to the panel heading; a step's retry, rebuilt as it starts, does the
     same. Keep reviewing my draft lands on the save status."""
-    pair = {"/playlist/target/pair": {"success": True, "paired": True, "pair": {
+    pair = {api_path("/playlist/target/pair"): {"success": True, "paired": True, "pair": {
         "archive_playlist_id": "arch", "archive_playlist_name": "Arch", "auto_archive_on_remove": True}},
-        "/playlist/target/pair/archive-tracks": {"success": True, "tracks": [], "total": 0},
-        "/playlist/target/rotation-status": {"success": True, "schedule": None},
-        "/workshop/target/source-context": {"success": True, "target": {"id": "target", "name": "Morning Mix"},
+        api_path("/playlist/target/pair/archive-tracks"): {"success": True, "tracks": [], "total": 0},
+        api_path("/playlist/target/rotation-status"): {"success": True, "schedule": None},
+        api_path("/workshop/target/source-context"): {"success": True,
+            "target": {"id": "target", "name": "Morning Mix"},
             "archive": {"id": "arch", "name": "Arch", "baseline_track_uris": []}}}
     run_workspace(node, workspace_page(db_app), HELD + r"""
     await openWorkshop('/workshop/target', __PAIR__);
@@ -2983,7 +2987,7 @@ def test_save_panel_steps_keep_focus_in_the_panel(node, db_app):
     check.focus(); check.click(); await settle();
     assert.equal(focused(), check); assert.ok(busy(check));
     check.click(); await settle();
-    assert.equal(reads('/workshop/target/current-state'), 1);
+    assert.equal(reads('/api/workshop/target/current-state'), 1);
     reply.answer({success: true, representable: true, current_track_uris: ['spotify:track:t1', 'spotify:track:t3'],
         current_tracks: [], loaded_at: '2026-10-12T09:00:00Z'}); await settle();
     assert.equal(page.byId('workshop-save-recovery').classList.contains('hidden'), true);
@@ -3006,7 +3010,7 @@ def test_save_panel_steps_keep_focus_in_the_panel(node, db_app):
     assert.equal(retry.isConnected, false); assert.equal(focused(), heading);
     step.answer({success: true, resource: 'arch', status: 'complete', retryable: false}); await settle();
     assert.equal(focused(), heading);
-    assert.equal(page.calls.filter(call => call.url === '/playlist/target/pair/archive').length, 2);
+    assert.equal(page.calls.filter(call => call.url === '/api/playlist/target/pair/archive').length, 2);
     clean();
 """.replace("__PAIR__", json.dumps(pair)))
 
@@ -3024,8 +3028,9 @@ def test_removing_a_staged_inbox_tracks_last_copy_returns_it_to_the_inbox(node, 
         {"id": 1, "track_uri": "spotify:track:p1", "track_name": "Pending 1", "track_artists": "A", "source_name": "S"},
         {"id": 2, "track_uri": "spotify:track:p1", "track_name": "Pending 1", "track_artists": "A", "source_name": "T"},
         {"id": 3, "track_uri": "spotify:track:t1", "track_name": "Track 1", "track_artists": "A", "source_name": "S"}]}
-    routes = {"/playlist/target/pending-raids": pending,
-        "/workshop/target/source-context": {"success": True, "target": {"id": "target", "name": "Morning Mix"},
+    routes = {api_path("/playlist/target/pending-raids"): pending,
+        api_path("/workshop/target/source-context"): {"success": True,
+            "target": {"id": "target", "name": "Morning Mix"},
             "raid": {"id": "coll", "name": "Coll"}}}
     run_workspace(node, workspace_page(db_app, tracks=[1, 1, 2]), r"""
     await openWorkshop('/workshop/target', __ROUTES__);
@@ -3064,10 +3069,10 @@ def test_only_a_copy_the_saved_playlist_had_queues_for_archiving(node, db_app):
     """With auto-archive on, removing a track the draft added queues nothing, so Save never
     appends a track that was never in the playlist; removing a saved copy queues one per copy,
     and adding a track back takes its queued archiving back."""
-    routes = {"/playlist/target/pair": {"success": True, "paired": True, "pair": {
+    routes = {api_path("/playlist/target/pair"): {"success": True, "paired": True, "pair": {
         "archive_playlist_id": "arch", "archive_playlist_name": "Arch", "auto_archive_on_remove": True}},
-        "/playlist/target/pair/archive-tracks": {"success": True, "tracks": [], "total": 0},
-        "/playlist/target/rotation-status": {"success": True, "schedule": None}}
+        api_path("/playlist/target/pair/archive-tracks"): {"success": True, "tracks": [], "total": 0},
+        api_path("/playlist/target/rotation-status"): {"success": True, "schedule": None}}
     run_workspace(node, workspace_page(db_app, tracks=[1, 1, 2]), r"""
     await openWorkshop('/workshop/target', __ROUTES__);
     const queue = () => plain(evaluate('workshopState.archiveQueue'));
@@ -3100,10 +3105,10 @@ def test_a_preview_applies_only_to_the_draft_it_was_asked_for(node, db_app):
     """An edit made while Preview shuffle waits keeps the user's draft (and what it queued for
     archiving) and says the preview was not applied; a lock changed meanwhile counts as an edit,
     so a stale order never moves a row locked since. An unchanged draft takes the reply."""
-    routes = {"/playlist/target/pair": {"success": True, "paired": True, "pair": {
+    routes = {api_path("/playlist/target/pair"): {"success": True, "paired": True, "pair": {
         "archive_playlist_id": "arch", "archive_playlist_name": "Arch", "auto_archive_on_remove": True}},
-        "/playlist/target/pair/archive-tracks": {"success": True, "tracks": [], "total": 0},
-        "/playlist/target/rotation-status": {"success": True, "schedule": None}}
+        api_path("/playlist/target/pair/archive-tracks"): {"success": True, "tracks": [], "total": 0},
+        api_path("/playlist/target/rotation-status"): {"success": True, "schedule": None}}
     run_workspace(node, workspace_page(db_app), HELD + r"""
     await openWorkshop('/workshop/target', __ROUTES__);
     page.byId('workshop-tool-archive').click(); await settle(); closeTask('workshop-archive-panel'); await settle();
@@ -3188,7 +3193,7 @@ def test_closing_a_review_with_nothing_left_to_save_keeps_focus_in_the_draft_foo
     return focus to the draft footer, a named section that stays in place, never by way of
     the Tracks heading (which would scroll the list away). Keep reviewing my draft, in the
     Attention state, reaches the save status the same way."""
-    context = {"/workshop/target/source-context": {"success": True,
+    context = {api_path("/workshop/target/source-context"): {"success": True,
         "target": {"id": "target", "name": "Morning Mix"}}}
     run_workspace(node, workspace_page(db_app), SEEN + r"""
     await openWorkshop('/workshop/target', __CONTEXT__);
@@ -3234,7 +3239,7 @@ def test_add_source_at_the_limit_hands_focus_to_its_section(node, db_app):
     run_workspace(node, workspace_page(db_app), r"""
     const status = {raid_status: {raid_link: null, sources: __SOURCES__, schedule: null, drip_schedule: null,
         source_count: 9, max_sources: 10}};
-    await openWorkshop('/workshop/target?setup=raids', {'/playlist/target/raid-status': status});
+    await openWorkshop('/workshop/target?setup=raids', {'/api/playlist/target/raid-status': status});
     const add = page.byId('raid-add-url-btn');
     assert.equal(add.disabled, false);
     page.byId('raid-url-input').value = 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M';
@@ -3258,7 +3263,7 @@ def test_a_tool_set_aside_keeps_its_view_when_the_step_over_it_is_replaced(node,
         "schedule": {"id": 5, "job_type": "raid", "schedule_type": "interval", "schedule_value": "daily",
             "is_enabled": True}, "drip_schedule": None, "source_count": 1, "max_sources": 10}}
     run_workspace(node, workspace_page(db_app), r"""
-    await openWorkshop('/workshop/target', {'/playlist/target/raid-status': __STATUS__});
+    await openWorkshop('/workshop/target', {'/api/playlist/target/raid-status': __STATUS__});
     const remembered = evaluate(`(() => {
         const calls = [], remember = PlaylistWorkspace.rememberView;
         PlaylistWorkspace.rememberView = function (name, body) {

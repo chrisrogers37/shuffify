@@ -15,6 +15,7 @@ from shuffify.models.playlist import Playlist
 from shuffify.services import PlaylistAccessError, PlaylistError, PlaylistNotFoundError
 from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.exceptions import SpotifyError, SpotifyTokenExpiredError
+from tests.paths import api_path
 
 # =============================================================================
 # Fixtures
@@ -412,7 +413,7 @@ class TestWorkshopPreviewShuffle:
 
         # Send tracks from client (no API call)
         response = authenticated_client.post(
-            "/workshop/playlist123/preview-shuffle",
+            api_path("/workshop/playlist123/preview-shuffle"),
             data=json.dumps(
                 {
                     "algorithm": "BasicShuffle",
@@ -430,7 +431,7 @@ class TestWorkshopPreviewShuffle:
     def test_preview_shuffle_requires_auth(self, client):
         """Unauthenticated preview should return 401."""
         response = client.post(
-            "/workshop/playlist123/preview-shuffle",
+            api_path("/workshop/playlist123/preview-shuffle"),
             data=json.dumps({"algorithm": "BasicShuffle"}),
             content_type="application/json",
         )
@@ -454,7 +455,7 @@ class TestWorkshopPreviewShuffle:
         mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
-            "/workshop/playlist123/preview-shuffle",
+            api_path("/workshop/playlist123/preview-shuffle"),
             data="not valid json",
             content_type="application/json",
         )
@@ -504,7 +505,7 @@ class TestWorkshopCommit:
             ) as service,
         ):
             response = authenticated_client.post(
-                "/workshop/playlist123/commit",
+                api_path("/workshop/playlist123/commit"),
                 json={"baseline_track_uris": [], "track_uris": []},
             )
         assert response.status_code == status
@@ -530,7 +531,7 @@ class TestWorkshopCommit:
             extra={"saved_track_uris": uris},
         )
         response = authenticated_client.post(
-            "/workshop/playlist123/commit",
+            api_path("/workshop/playlist123/commit"),
             json={"baseline_track_uris": [], "track_uris": uris},
         )
         assert response.status_code == 200
@@ -542,7 +543,7 @@ class TestWorkshopCommit:
     ):
         service, _ = authorized
         response = authenticated_client.post(
-            "/workshop/playlist123/commit", json={"track_uris": []}
+            api_path("/workshop/playlist123/commit"), json={"track_uris": []}
         )
         assert response.status_code == 400
         body = response.get_json()
@@ -568,7 +569,7 @@ class TestWorkshopCommit:
     ):
         service, _ = authorized
         response = authenticated_client.post(
-            "/workshop/playlist123/commit", json=payload
+            api_path("/workshop/playlist123/commit"), json=payload
         )
         assert response.status_code == 400
         body = response.get_json()
@@ -583,7 +584,7 @@ class TestWorkshopCommit:
     ):
         service, _ = authorized
         response = authenticated_client.post(
-            "/workshop/playlist123/commit",
+            api_path("/workshop/playlist123/commit"),
             data="{invalid",
             content_type="application/json",
         )
@@ -618,7 +619,7 @@ class TestWorkshopCommit:
             True,
         )
         response = authenticated_client.post(
-            "/workshop/playlist123/commit",
+            api_path("/workshop/playlist123/commit"),
             json={"baseline_track_uris": [], "track_uris": []},
         )
         assert response.status_code == http
@@ -640,7 +641,7 @@ class TestWorkshopCommit:
         service, _ = authorized
         service.return_value.commit.side_effect = error
         response = authenticated_client.post(
-            "/workshop/playlist123/commit",
+            api_path("/workshop/playlist123/commit"),
             json={"baseline_track_uris": [], "track_uris": []},
         )
         assert response.status_code == status
@@ -659,7 +660,7 @@ class TestWorkshopCommit:
         )
         with authenticated_client.session_transaction() as session:
             session["retained_draft"] = ["draft"]
-        response = authenticated_client.get("/workshop/playlist123/current-state")
+        response = authenticated_client.get(api_path("/workshop/playlist123/current-state"))
         assert response.status_code == 200
         assert response.get_json()["current_track_uris"] == []
         service.return_value.commit.assert_not_called()
@@ -669,8 +670,8 @@ class TestWorkshopCommit:
     @pytest.mark.parametrize(
         "method,path",
         [
-            ("post", "/workshop/playlist123/commit"),
-            ("get", "/workshop/playlist123/current-state"),
+            ("post", api_path("/workshop/playlist123/commit")),
+            ("get", api_path("/workshop/playlist123/current-state")),
         ],
     )
     def test_requires_auth(self, client, method, path):

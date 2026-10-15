@@ -129,7 +129,7 @@ class TestCreateApp:
             assert app.config["SESSION_TYPE"] == "filesystem"
 
     def test_create_app_registers_blueprints(self):
-        """Should register main blueprint."""
+        """Register authentication, site, and API blueprints."""
         with patch.dict(
             "os.environ",
             {
@@ -142,6 +142,7 @@ class TestCreateApp:
 
             app = create_app("development")
 
+            assert {"auth", "site", "api"} <= app.blueprints.keys()
             # Check that routes are registered
             rules = [rule.rule for rule in app.url_map.iter_rules()]
             assert "/" in rules

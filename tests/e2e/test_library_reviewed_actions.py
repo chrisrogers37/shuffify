@@ -14,6 +14,7 @@ from tests.e2e.test_direct_live_actions import (
 )
 from tests.e2e.test_direct_live_actions import direct_browser as direct_browser
 from tests.e2e.test_pages import Visit
+from tests.paths import api_path
 
 TARGET = pid("alice-morning-mix")
 OTHER = pid("alice-long-haul")
@@ -71,7 +72,7 @@ def test_shuffle_review_reads_only_then_one_named_run_dispatches_once(
             and "Current tracks: 40." in review
         )
         assert (
-            posts == [f"/playlist/{TARGET}/live-context"]
+            posts == [api_path(f"/playlist/{TARGET}/live-context")]
             and fake.uris(TARGET) == before
         )
         assert page.evaluate("document.activeElement.id") == "live-operation-heading"
@@ -96,13 +97,13 @@ def test_shuffle_review_reads_only_then_one_named_run_dispatches_once(
             TARGET,
         )
         assert (
-            posts == [f"/playlist/{TARGET}/live-context"]
+            posts == [api_path(f"/playlist/{TARGET}/live-context")]
             and fake.uris(TARGET) == before
         )
         run = _open_review(page, quick, "Shuffle now")
         run.dblclick()
         _settled(page, 1)
-        assert posts.count(f"/shuffle/{TARGET}") == 1
+        assert posts.count(api_path(f"/shuffle/{TARGET}")) == 1
         assert page.evaluate("PlaylistOperations.getRecords()[0].complete") is True
         after = fake.uris(TARGET)
         assert after != before and Counter(after) == Counter(before)
@@ -120,7 +121,7 @@ def test_undo_review_refuses_a_changed_playlist_then_restores_the_reviewed_versi
     direct_browser,
 ):
     original = fake.uris(TARGET)
-    visit = Visit(direct_browser, "desktop", allowed=[(f"/undo/{TARGET}", 409)])
+    visit = Visit(direct_browser, "desktop", allowed=[(api_path(f"/undo/{TARGET}"), 409)])
     page = visit.page
     try:
         visit.log_in()
@@ -171,7 +172,7 @@ def test_undo_review_refuses_history_changed_by_another_tab_in_the_same_session(
     fake,
     direct_browser,
 ):
-    visit = Visit(direct_browser, "desktop", allowed=[(f"/undo/{TARGET}", 409)])
+    visit = Visit(direct_browser, "desktop", allowed=[(api_path(f"/undo/{TARGET}"), 409)])
     page = visit.page
     try:
         visit.log_in()
@@ -210,7 +211,7 @@ def test_privacy_review_runs_a_verified_noop_and_check_resolves_only_a_lost_visi
     fake,
     direct_browser,
 ):
-    toggle = f"{APP}/playlist/{TARGET}/toggle-visibility"
+    toggle = (APP + api_path(f'/playlist/{TARGET}/toggle-visibility'))
     visit = Visit(direct_browser, "desktop")
     page = visit.page
     try:
@@ -281,9 +282,9 @@ def test_lost_random_reply_keeps_attention_and_leaving_needs_an_explicit_decisio
     fake,
     direct_browser,
 ):
-    shuffle = f"{APP}/shuffle/{TARGET}"
+    shuffle = (APP + api_path(f'/shuffle/{TARGET}'))
     # The check reports the lost random order as unavailable: an expected 502.
-    visit = Visit(direct_browser, "desktop", allowed=[(f"/playlist/{TARGET}/inspect-live", 502)])
+    visit = Visit(direct_browser, "desktop", allowed=[(api_path(f"/playlist/{TARGET}/inspect-live"), 502)])
     page = visit.page
     dialogs = []
     page.on("dialog", lambda dialog: (dialogs.append(dialog.type), dialog.dismiss()))

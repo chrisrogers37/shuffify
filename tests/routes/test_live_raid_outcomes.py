@@ -16,6 +16,7 @@ from shuffify.spotify.exceptions import (
     SpotifyAPIError,
     SpotifyWriteRejectedError,
 )
+from tests.paths import api_path
 from tests.routes.live_review_helpers import serving
 
 
@@ -104,7 +105,7 @@ def test_collect_keeps_saved_composite_paused_and_target_untouched(live_raid):
     db.session.add(routine)
     db.session.commit()
     with patch("shuffify.scheduler.add_job_for_schedule") as register:
-        response = client.post("/playlist/target/raid-now", json={"source_playlist_ids": ["extra"]})
+        response = client.post(api_path("/playlist/target/raid-now"), json={"source_playlist_ids": ["extra"]})
     data = response.get_json()
     assert response.status_code == 200, data
     assert data["success"] is True
@@ -134,7 +135,7 @@ def test_combined_retains_collection_when_drip_first_write_rejected(live_raid):
     ))
     db.session.commit()
     api.reject_target = True
-    response = client.post("/playlist/target/raid-and-drip", json={})
+    response = client.post(api_path("/playlist/target/raid-and-drip"), json={})
     data = response.get_json()
     assert response.status_code == 502, data
     assert data["success"] is False
@@ -165,7 +166,7 @@ def test_collection_db_failure_keeps_verified_spotify_effect(live_raid):
         "shuffify.services.pending_raid_service.PendingRaidService.stage_tracks",
         side_effect=RuntimeError("private staging detail"),
     ):
-        response = client.post("/playlist/target/raid-now", json={})
+        response = client.post(api_path("/playlist/target/raid-now"), json={})
     data = response.get_json()
     assert response.status_code == 502, data
     assert data["success"] is False
@@ -188,7 +189,7 @@ def test_drip_retains_target_success_and_unknown_collection(live_raid, failure):
     client, api, _user, _link = live_raid
     api.playlists["collection"] = [uri(2)]
     setattr(api, failure, True)
-    response = client.post("/playlist/target/drip-now")  # legacy empty body
+    response = client.post(api_path("/playlist/target/drip-now"))  # legacy empty body
     data = response.get_json()
     assert response.status_code == 502, data
     assert data["success"] is False
@@ -208,7 +209,7 @@ def test_drip_retains_target_success_and_unknown_collection(live_raid, failure):
 def test_combined_unknown_collection_does_not_dispatch_drip(live_raid):
     client, api, _user, _link = live_raid
     api.lose_collection_add = True
-    response = client.post("/playlist/target/raid-and-drip")
+    response = client.post(api_path("/playlist/target/raid-and-drip"))
     data = response.get_json()
     assert response.status_code == 502, data
     assert data["operation"]["aggregate_status"] == "unknown"
@@ -239,7 +240,7 @@ def test_direct_drip_runs_once_without_changing_saved_routine(live_raid, enabled
     db.session.add(routine)
     db.session.commit()
     with patch("shuffify.scheduler.add_job_for_schedule") as register:
-        response = client.post("/playlist/target/drip-now", json={})
+        response = client.post(api_path("/playlist/target/drip-now"), json={})
     data = response.get_json()
     assert response.status_code == 200, data
     assert data["tracks_added"] == 1
@@ -279,7 +280,7 @@ def test_schedule_run_returns_exact_failed_child_in_legacy_envelope(live_raid):
     )
     db.session.add(unrelated)
     db.session.commit()
-    response = client.post(f"/schedules/{routine.id}/run")
+    response = client.post(api_path(f"/schedules/{routine.id}/run"))
     data = response.get_json()
     assert response.status_code == 502, data
     assert data["success"] is False
@@ -295,7 +296,7 @@ def test_schedule_run_returns_exact_failed_child_in_legacy_envelope(live_raid):
 
 def test_schedule_missing_is_preflight_and_makes_no_writes(live_raid):
     client, api, _user, _link = live_raid
-    response = client.post("/schedules/999/run")
+    response = client.post(api_path("/schedules/999/run"))
     data = response.get_json()
     assert response.status_code == 404, data
     assert data["success"] is False
@@ -310,7 +311,7 @@ def test_schedule_missing_is_preflight_and_makes_no_writes(live_raid):
 @pytest.mark.parametrize("body", [[], {"source_playlist_ids": []}, {"source_playlist_ids": [""]}])
 def test_invalid_legacy_body_is_structured_preflight_without_execution(live_raid, endpoint, body):
     client, api, _user, _link = live_raid
-    response = client.post(f"/playlist/target/{endpoint}", json=body)
+    response = client.post(api_path(f"/playlist/target/{endpoint}"), json=body)
     data = response.get_json()
     assert response.status_code == 400
     assert data["success"] is False
@@ -340,9 +341,9 @@ def test_contradictory_legacy_label_cannot_report_success_or_start_drip(
         else "shuffify.services.raid_sync_service.RaidSyncService.raid_now"
     )
     endpoint = {
-        "raid": "/playlist/target/raid-now",
-        "schedule": "/schedules/1/run",
-        "combined": "/playlist/target/raid-and-drip",
+        "raid": api_path("/playlist/target/raid-now"),
+        "schedule": api_path("/schedules/1/run"),
+        "combined": api_path("/playlist/target/raid-and-drip"),
     }[action]
     with patch(target, return_value=result), patch(
         "shuffify.services.raid_sync_service.RaidSyncService.drip_now",

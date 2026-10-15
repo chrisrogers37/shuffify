@@ -15,12 +15,13 @@ from tests.e2e.test_playlist_setup import _review as _review_setup
 from tests.e2e.test_playlist_setup import _save as _save_setup
 from tests.e2e.test_playlist_setup import _use_existing
 from tests.e2e.test_playlist_workspace import _no_sideways_scroll, _scroll_settled
+from tests.paths import api_path
 
 TARGET = pid("alice-morning-mix")
 TASK_PATH = f"/playlist/{TARGET}/routines/new"
 TASK = f"{APP}{TASK_PATH}"
-ACTIVATE = f"/playlist/{TARGET}/routines/activate"
-REVIEW = f"/playlist/{TARGET}/routines/review"
+ACTIVATE = api_path(f"/playlist/{TARGET}/routines/activate")
+REVIEW = api_path(f"/playlist/{TARGET}/routines/review")
 CONTINUATION = "shuffify:routine-continuation:v1"
 
 
@@ -98,7 +99,7 @@ def test_guided_create_keeps_choices_and_activates_once_after_read_only_review(
     expect(page.locator("#routine-param-keep_first")).to_have_value("2")
     assert _rows(alice) == []
     assert session.writes("POST", ACTIVATE) == []
-    assert not session.writes("POST", "/schedules/create")
+    assert not session.writes("POST", api_path("/schedules/create"))
     _review(page)
     payload = json.loads(session.writes("POST", REVIEW)[0])
     assert payload["definition"]["timing"] == {
@@ -251,7 +252,7 @@ def test_setup_return_preserves_local_choices_and_cancel_keeps_explicit_shared_s
     expect(page.locator("#setup-back")).to_have_text("Back to routine")
     name = "Guided routine collection"
     page.fill("#setup-collection-create-name", name)
-    create_path = f"/playlist/{TARGET}/setup/spotify-playlists"
+    create_path = api_path(f"/playlist/{TARGET}/setup/spotify-playlists")
     with page.expect_response(f"{APP}{create_path}") as response:
         page.click("#setup-collection-create")
     assert response.value.status == 201
@@ -280,7 +281,7 @@ def test_setup_return_preserves_local_choices_and_cancel_keeps_explicit_shared_s
     assert context["collection"]["playlist_id"] == created[0]["id"]
     assert fake.playlist(created[0]["id"])["name"] == name
     assert len(session.writes("POST", create_path)) == 1
-    assert len(session.writes("PUT", f"/playlist/{TARGET}/setup/settings")) == 1
+    assert len(session.writes("PUT", api_path(f"/playlist/{TARGET}/setup/settings"))) == 1
     assert page.evaluate("key => sessionStorage.getItem(key)", CONTINUATION) is None
     session.assert_clean()
 
@@ -293,7 +294,7 @@ def test_activity_and_exact_history_share_composite_results_and_keep_manual_even
     alice.ok("put", f"/playlist/{TARGET}/raid-link", json={"drip_enabled": True, "drip_count": 2})
     sid = _create_schedule(alice, "raid_and_drip", TARGET)["id"]
     fake.arm(operation="DELETE /playlists/{playlist_id}/items", kind="quota", playlist_id=collection)
-    response = alice.post(f"/schedules/{sid}/run")
+    response = alice.post(api_path(f"/schedules/{sid}/run"))
     assert response.status_code == 502, response.text
     execution_id = response.json()["result"]["execution_id"]
     # A separate manual collection event has no saved routine association.
@@ -327,7 +328,7 @@ def test_activity_and_exact_history_share_composite_results_and_keep_manual_even
     assert history.locator(".sh-result").inner_text() == result_text
     _no_sideways_scroll(page)
     _capture(page, tmp_path / f"routine-history-{width}.png")
-    assert session.writes("POST", f"/schedules/{sid}/run") == []
+    assert session.writes("POST", api_path(f"/schedules/{sid}/run")) == []
     session.assert_clean()
 
 
@@ -360,7 +361,7 @@ def test_registration_attention_retries_only_the_exact_saved_routine(
     expect(page.locator("#routine-result-details")).to_contain_text("Active")
     expect(page.locator("#routine-try-registration")).to_be_hidden()
     assert len(session.writes("POST", ACTIVATE)) == 1
-    state = session.writes("PUT", f"/routines/{sid}/state")
+    state = session.writes("PUT", api_path(f"/routines/{sid}/state"))
     assert len(state) == 1 and json.loads(state[0]) == {
         "desired_enabled": True, "expected_revision": accepted["schedule_revision"],
     }

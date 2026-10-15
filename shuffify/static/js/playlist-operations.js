@@ -36,24 +36,24 @@
     // server); and its fixed mutation route and, for GET reviews, its context route.
     var reviewedKinds = {
         shuffle: {subject: 'target', family: 'library', body: 'shuffle', writes: ['tracks', 'history'],
-            encoding: 'form', url: function (id) { return '/shuffle/' + id; }},
+            encoding: 'form', url: function (id) { return '/api/shuffle/' + id; }},
         undo: {subject: 'target', family: 'library', body: 'form', writes: ['tracks', 'history'],
-            encoding: 'form', url: function (id) { return '/undo/' + id; }},
+            encoding: 'form', url: function (id) { return '/api/undo/' + id; }},
         privacy: {subject: 'target', family: 'library', body: 'visibility', writes: ['metadata'],
-            encoding: 'json', url: function (id) { return '/playlist/' + id + '/toggle-visibility'; }},
+            encoding: 'json', url: function (id) { return '/api/playlist/' + id + '/toggle-visibility'; }},
         raid: {subject: 'target', family: 'executor', body: 'sources', steps: ['raid'], writes: ['inbox'],
-            encoding: 'json', url: function (id) { return '/playlist/' + id + '/raid-now'; }},
+            encoding: 'json', url: function (id) { return '/api/playlist/' + id + '/raid-now'; }},
         drip: {subject: 'target', family: 'executor', body: 'none', steps: ['drip'], writes: ['tracks', 'inbox'],
-            encoding: 'json', url: function (id) { return '/playlist/' + id + '/drip-now'; }},
+            encoding: 'json', url: function (id) { return '/api/playlist/' + id + '/drip-now'; }},
         raid_and_drip: {subject: 'target', family: 'executor', body: 'sources', steps: ['raid', 'drip'],
             writes: ['tracks', 'inbox'], encoding: 'json',
-            url: function (id) { return '/playlist/' + id + '/raid-and-drip'; }},
+            url: function (id) { return '/api/playlist/' + id + '/raid-and-drip'; }},
         schedule: {subject: 'schedule', family: 'executor', body: 'none', writes: [], encoding: 'json',
-            url: function (id) { return '/schedules/' + id + '/run'; },
-            context: function (id) { return '/schedules/' + id + '/run-context'; }},
+            url: function (id) { return '/api/schedules/' + id + '/run'; },
+            context: function (id) { return '/api/schedules/' + id + '/run-context'; }},
         snapshot_restore: {subject: 'snapshot', family: 'snapshot', body: 'none', writes: ['tracks', 'history'],
-            encoding: 'json', url: function (id) { return '/snapshots/' + id + '/restore'; },
-            context: function (id) { return '/snapshots/' + id + '/restore-context'; }},
+            encoding: 'json', url: function (id) { return '/api/snapshots/' + id + '/restore'; },
+            context: function (id) { return '/api/snapshots/' + id + '/restore-context'; }},
     };
     var changedReview = ['review_changed', 'history_changed', 'resource_changed'];
     var busyNotice = 'This action is still running. Closing this view cannot cancel a dispatched change.';
@@ -905,7 +905,7 @@
                 if (Object.prototype.hasOwnProperty.call(current.body, name)) body.form[name] = current.body[name];
             });
         } else if (current.body.source_playlist_ids) body.source_playlist_ids = current.body.source_playlist_ids.slice();
-        return {url: '/playlist/' + encodeURIComponent(current.subject) + '/live-context', encoding: 'json', body: body};
+        return {url: '/api/playlist/' + encodeURIComponent(current.subject) + '/live-context', encoding: 'json', body: body};
     }
     function uriList(value) {
         return Array.isArray(value) && value.every(function (uri) { return typeof uri === 'string' && trackUri.test(uri); });
@@ -1262,7 +1262,7 @@
     }
     async function inspect(record, resourceId, body, desired) {
         try {
-            var reply = await send({url: '/playlist/' + encodeURIComponent(resourceId) + '/inspect-live',
+            var reply = await send({url: '/api/playlist/' + encodeURIComponent(resourceId) + '/inspect-live',
                 encoding: 'json', body: body}, readTimeoutMs);
             var status = observe(record, reply.data, desired, resourceId);
             return {id: resourceId, status: status === 'match' && !reply.ok ? 'failed' : status};

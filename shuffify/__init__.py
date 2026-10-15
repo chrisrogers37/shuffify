@@ -959,9 +959,11 @@ def create_app(config_name=None):
     _init_database(app)
 
     # Register blueprints
-    from shuffify.routes import main as main_blueprint
+    from shuffify.routes import api_bp, auth_bp, site_bp
 
-    app.register_blueprint(main_blueprint)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(site_bp)
+    app.register_blueprint(api_bp)
 
     # Apply rate limits to auth endpoints.
     # Traditional account lockout does not apply: this is an
@@ -970,32 +972,32 @@ def create_app(config_name=None):
     # appropriate brute-force protection for OAuth flows.
     if _limiter is not None:
         try:
-            app.view_functions["main.login"] = _limiter.limit("10/minute")(
-                app.view_functions["main.login"]
+            app.view_functions["auth.login"] = _limiter.limit("10/minute")(
+                app.view_functions["auth.login"]
             )
-            app.view_functions["main.callback"] = _limiter.limit("10/minute")(
-                app.view_functions["main.callback"]
+            app.view_functions["auth.callback"] = _limiter.limit("10/minute")(
+                app.view_functions["auth.callback"]
             )
             # Resource-intensive endpoints
-            app.view_functions["main.shuffle"] = _limiter.limit("5/minute")(
-                app.view_functions["main.shuffle"]
+            app.view_functions["api.shuffle"] = _limiter.limit("5/minute")(
+                app.view_functions["api.shuffle"]
             )
-            app.view_functions["main.workshop_commit"] = _limiter.limit("10/minute")(
-                app.view_functions["main.workshop_commit"]
+            app.view_functions["api.workshop_commit"] = _limiter.limit("10/minute")(
+                app.view_functions["api.workshop_commit"]
             )
-            app.view_functions["main.run_schedule_now"] = _limiter.limit("5/minute")(
-                app.view_functions["main.run_schedule_now"]
+            app.view_functions["api.run_schedule_now"] = _limiter.limit("5/minute")(
+                app.view_functions["api.run_schedule_now"]
             )
             # Each call creates a playlist in the user's Spotify library.
-            app.view_functions["main.playlist_setup_create_playlist"] = _limiter.limit("10/minute")(
-                app.view_functions["main.playlist_setup_create_playlist"]
+            app.view_functions["api.playlist_setup_create_playlist"] = _limiter.limit("10/minute")(
+                app.view_functions["api.playlist_setup_create_playlist"]
             )
             logger.info(
                 "Rate limits applied: /login=10/min, "
-                "/callback=10/min, /shuffle=5/min, "
-                "/workshop/commit=10/min, "
-                "/schedules/*/run=5/min, "
-                "/playlist/*/setup/spotify-playlists=10/min"
+                "/callback=10/min, /api/shuffle=5/min, "
+                "/api/workshop/commit=10/min, "
+                "/api/schedules/*/run=5/min, "
+                "/api/playlist/*/setup/spotify-playlists=10/min"
             )
         except Exception as e:
             logger.warning("Failed to apply rate limits: %s", e)

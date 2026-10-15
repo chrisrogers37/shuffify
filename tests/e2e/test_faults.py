@@ -10,6 +10,7 @@ fake's playlist.
 import time
 
 from tests.e2e.conftest import pid
+from tests.paths import api_path
 
 LONG_HAUL = pid("alice-long-haul")  # 250 tracks: a PUT of 100, then two POSTs
 
@@ -46,7 +47,7 @@ def test_a_scheduled_shuffle_refused_partway_is_rolled_back(alice, fake):
     schedule_id = _daily_shuffle(alice)
     fake.arm(operation="POST /playlists/{playlist_id}/items", kind="quota", playlist_id=LONG_HAUL)
 
-    resp = alice.post(f"/schedules/{schedule_id}/run")
+    resp = alice.post(api_path(f"/schedules/{schedule_id}/run"))
 
     assert resp.status_code == 502, resp.text
     outcome = resp.json()
@@ -72,7 +73,7 @@ def test_a_write_that_lands_after_the_rollback_is_restored_again(alice, fake):
              playlist_id=LONG_HAUL, delay=33)
     sent = time.monotonic()
 
-    resp = alice.post(f"/schedules/{schedule_id}/run")
+    resp = alice.post(api_path(f"/schedules/{schedule_id}/run"))
 
     # Judge the playlist only after the held write has landed: 33 s after the PUT goes out, which is after `sent`.
     time.sleep(max(0.0, sent + 40 - time.monotonic()))

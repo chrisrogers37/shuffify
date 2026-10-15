@@ -16,16 +16,17 @@ from flask import (
 from shuffify.enums import ActivityType, JobType
 from shuffify.models.db import Schedule
 from shuffify.routes import (
+    api_bp,
     clear_session_and_show_login,
     context_preflight,
     json_error,
     json_reply,
     json_success,
     log_activity,
-    main,
     no_store,
     require_auth_and_db,
     require_auth_page,
+    site_bp,
     validate_json,
 )
 from shuffify.schemas import (
@@ -40,6 +41,7 @@ from shuffify.services import (
     ScheduleError,
     UpstreamSourceService,
 )
+from shuffify.services.api_response import busy_error
 from shuffify.services.executors import (
     JobExecutorService,
 )
@@ -69,13 +71,7 @@ from shuffify.services.scheduler_service import (
 logger = logging.getLogger(__name__)
 
 
-def _busy_schedule_reply(error):
-    return jsonify({
-        "success": False, "error_code": "playlist_busy", "category": "error", "message": str(error),
-    }), 409
-
-
-@main.route("/schedules/latest-results", methods=["GET"])
+@api_bp.route("/schedules/latest-results", methods=["GET"])
 @no_store
 @require_auth_and_db
 def latest_schedule_results(api=None, user=None):
@@ -86,7 +82,7 @@ def latest_schedule_results(api=None, user=None):
     )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/schedules",
     methods=["GET"],
 )
@@ -106,7 +102,7 @@ def playlist_schedules(
     )
 
 
-@main.route("/schedules")
+@site_bp.route("/schedules")
 @require_auth_page
 def schedules(api=None, user=None, spotify_profile=None):
     """Render the Schedules management page."""
@@ -147,7 +143,7 @@ def schedules(api=None, user=None, spotify_profile=None):
             "Please try again.",
             "error",
         )
-        return redirect(url_for("main.index"))
+        return redirect(url_for("site.index"))
     except Exception as e:
         logger.error(
             "Unexpected error loading schedules page: %s "
@@ -161,10 +157,10 @@ def schedules(api=None, user=None, spotify_profile=None):
             "Please try again.",
             "error",
         )
-        return redirect(url_for("main.index"))
+        return redirect(url_for("site.index"))
 
 
-@main.route("/schedules/create", methods=["POST"])
+@api_bp.route("/schedules/create", methods=["POST"])
 @require_auth_and_db
 def create_schedule(api=None, user=None):
     """Create a new scheduled operation."""
@@ -249,7 +245,7 @@ def create_schedule(api=None, user=None):
             algorithm_params=create_request.algorithm_params,
         )
     except ScheduleBusyError as error:
-        return _busy_schedule_reply(error)
+        return json_reply(busy_error(str(error)))
 
     # APScheduler registration is handled inside create_schedule.
 
@@ -281,7 +277,7 @@ def create_schedule(api=None, user=None):
     )
 
 
-@main.route(
+@api_bp.route(
     "/schedules/<int:schedule_id>", methods=["PUT"]
 )
 @require_auth_and_db
@@ -308,7 +304,7 @@ def update_schedule(
             **update_fields,
         )
     except ScheduleBusyError as error:
-        return _busy_schedule_reply(error)
+        return json_reply(busy_error(str(error)))
 
     # APScheduler sync is handled inside update_schedule.
 
@@ -336,7 +332,7 @@ def update_schedule(
     )
 
 
-@main.route(
+@api_bp.route(
     "/schedules/<int:schedule_id>", methods=["DELETE"]
 )
 @require_auth_and_db
@@ -351,7 +347,7 @@ def delete_schedule(
             schedule_id, user.id
         )
     except ScheduleBusyError as error:
-        return _busy_schedule_reply(error)
+        return json_reply(busy_error(str(error)))
 
     logger.info(f"Deleted schedule {schedule_id}")
 
@@ -367,7 +363,7 @@ def delete_schedule(
     return json_success("Schedule deleted successfully.")
 
 
-@main.route(
+@api_bp.route(
     "/schedules/<int:schedule_id>/toggle",
     methods=["POST"],
 )
@@ -381,7 +377,7 @@ def toggle_schedule(
             schedule_id, user.id
         )
     except ScheduleBusyError as error:
-        return _busy_schedule_reply(error)
+        return json_reply(busy_error(str(error)))
 
     # APScheduler sync is handled inside toggle_schedule.
 
@@ -449,7 +445,7 @@ def _run_preflight_error(message, status_code):
     )
 
 
-@main.route(
+@api_bp.route(
     "/schedules/<int:schedule_id>/run", methods=["POST"]
 )
 @require_auth_and_db(on_preflight_error=_run_preflight_error)
@@ -475,7 +471,7 @@ def run_schedule_now(schedule_id, api=None, user=None):
     return _run_result_response(result)
 
 
-@main.route(
+@api_bp.route(
     "/schedules/<int:schedule_id>/run-context", methods=["GET"]
 )
 @no_store
@@ -490,7 +486,7 @@ def run_schedule_context(schedule_id, api=None, user=None):
     return json_reply(reply)
 
 
-@main.route("/schedules/<int:schedule_id>/history")
+@api_bp.route("/schedules/<int:schedule_id>/history")
 @require_auth_and_db
 def schedule_history(
     schedule_id, api=None, user=None
@@ -503,7 +499,7 @@ def schedule_history(
     return jsonify({"success": True, "history": history})
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/rotation-status"
 )
 @require_auth_and_db

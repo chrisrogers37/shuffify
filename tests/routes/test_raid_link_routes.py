@@ -7,6 +7,8 @@ for raid playlist link CRUD and drip endpoints.
 
 from unittest.mock import MagicMock, patch
 
+from tests.paths import api_path
+
 # =============================================================
 # Authentication Tests
 # =============================================================
@@ -20,7 +22,7 @@ class TestRaidLinkAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/playlist/p1/raid-link",
+                api_path("/playlist/p1/raid-link"),
                 json={"create_new": True},
             )
             assert resp.status_code == 401
@@ -30,7 +32,7 @@ class TestRaidLinkAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.put(
-                "/playlist/p1/raid-link",
+                api_path("/playlist/p1/raid-link"),
                 json={"drip_count": 5},
             )
             assert resp.status_code == 401
@@ -40,7 +42,7 @@ class TestRaidLinkAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.delete(
-                "/playlist/p1/raid-link"
+                api_path("/playlist/p1/raid-link")
             )
             assert resp.status_code == 401
 
@@ -49,7 +51,7 @@ class TestRaidLinkAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/playlist/p1/drip-now",
+                api_path("/playlist/p1/drip-now"),
                 json={},
             )
             assert resp.status_code == 401
@@ -61,7 +63,7 @@ class TestRaidLinkAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/playlist/p1/drip-schedule-toggle"
+                api_path("/playlist/p1/drip-schedule-toggle")
             )
             assert resp.status_code == 401
 
@@ -72,7 +74,7 @@ class TestRaidLinkAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.put(
-                "/playlist/p1/raid-source-count",
+                api_path("/playlist/p1/raid-source-count"),
                 json={
                     "source_id": 1,
                     "raid_count": 5,
@@ -95,7 +97,7 @@ class TestRaidLinkValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/raid-link",
+            api_path("/playlist/p1/raid-link"),
             data="not json",
             content_type="text/plain",
         )
@@ -107,7 +109,7 @@ class TestRaidLinkValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.put(
-            "/playlist/p1/raid-link",
+            api_path("/playlist/p1/raid-link"),
             json={},
         )
         assert resp.status_code == 400
@@ -118,7 +120,7 @@ class TestRaidLinkValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.put(
-            "/playlist/p1/raid-link",
+            api_path("/playlist/p1/raid-link"),
             json={"drip_count": 0},
         )
         assert resp.status_code == 400
@@ -129,7 +131,7 @@ class TestRaidLinkValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.put(
-            "/playlist/p1/raid-source-count",
+            api_path("/playlist/p1/raid-source-count"),
             json={"source_id": 1, "raid_count": 0},
         )
         assert resp.status_code == 400
@@ -140,7 +142,7 @@ class TestRaidLinkValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/raid-link",
+            api_path("/playlist/p1/raid-link"),
             json={
                 "create_new": False,
                 # Missing raid_playlist_id
@@ -179,7 +181,7 @@ class TestRaidLinkSuccess:
         mock_svc.create_link.return_value = mock_link
 
         resp = auth_client.post(
-            "/playlist/p1/raid-link",
+            api_path("/playlist/p1/raid-link"),
             json={
                 "create_new": True,
                 "target_playlist_name": "My Playlist",
@@ -207,7 +209,7 @@ class TestRaidLinkSuccess:
         }
 
         resp = auth_client.post(
-            "/playlist/p1/drip-now",
+            api_path("/playlist/p1/drip-now"),
             json={},
         )
         assert resp.status_code == 200
@@ -232,7 +234,7 @@ class TestRaidLinkCreationUnknown:
         mock_auth.return_value = api
 
         resp = auth_client.post(
-            "/playlist/p1/raid-link",
+            api_path("/playlist/p1/raid-link"),
             json={"create_new": True, "target_playlist_name": "Mix"},
         )
 
@@ -303,7 +305,7 @@ class TestRaidSourceCountPlaylistScope:
         source_id = _seed_source(db_app, "user123", "playlist-A")
 
         resp = auth_client.put(
-            "/playlist/playlist-A/raid-source-count",
+            api_path("/playlist/playlist-A/raid-source-count"),
             json={"source_id": source_id, "raid_count": 9},
         )
 
@@ -319,7 +321,7 @@ class TestRaidSourceCountPlaylistScope:
         source_id = _seed_source(db_app, "user123", "playlist-A")
 
         resp = auth_client.put(
-            "/playlist/playlist-B/raid-source-count",
+            api_path("/playlist/playlist-B/raid-source-count"),
             json={"source_id": source_id, "raid_count": 99},
         )
 
@@ -335,7 +337,7 @@ class TestRaidSourceCountPlaylistScope:
         source_id = _seed_source(db_app, "user123", "playlist-A")
 
         resp = auth_client.put(
-            "/playlist/not-my-playlist/raid-source-count",
+            api_path("/playlist/not-my-playlist/raid-source-count"),
             json={"source_id": source_id, "raid_count": 77},
         )
 
@@ -351,7 +353,7 @@ class TestRaidSourceCountPlaylistScope:
         victim_source_id = _seed_source(db_app, "victim456", "playlist-A")
 
         resp = auth_client.put(
-            "/playlist/playlist-A/raid-source-count",
+            api_path("/playlist/playlist-A/raid-source-count"),
             json={"source_id": victim_source_id, "raid_count": 99},
         )
 
@@ -376,7 +378,7 @@ class TestRaidUnwatchPlaylistScope:
         source_id = _seed_source(db_app, "user123", "playlist-A")
 
         resp = auth_client.post(
-            "/playlist/playlist-A/raid-unwatch",
+            api_path("/playlist/playlist-A/raid-unwatch"),
             json={"source_id": source_id},
         )
 
@@ -392,7 +394,7 @@ class TestRaidUnwatchPlaylistScope:
         source_id = _seed_source(db_app, "user123", "playlist-A")
 
         resp = auth_client.post(
-            "/playlist/playlist-B/raid-unwatch",
+            api_path("/playlist/playlist-B/raid-unwatch"),
             json={"source_id": source_id},
         )
 
@@ -408,7 +410,7 @@ class TestRaidUnwatchPlaylistScope:
         victim_source_id = _seed_source(db_app, "victim456", "playlist-A")
 
         resp = auth_client.post(
-            "/playlist/playlist-A/raid-unwatch",
+            api_path("/playlist/playlist-A/raid-unwatch"),
             json={"source_id": victim_source_id},
         )
 

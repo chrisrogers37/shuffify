@@ -4,6 +4,7 @@ import pytest
 
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 from tests.e2e.conftest import pid
+from tests.paths import api_path
 
 LONG_HAUL = pid("alice-long-haul")  # 250 tracks: three pages to read, three batches to write
 
@@ -45,6 +46,6 @@ def test_undo_walks_back_through_several_shuffles(alice, fake):
 def test_a_playlist_alice_cannot_edit_is_refused_and_left_alone(alice, fake):
     bobs = pid("bob-finds")
     before = fake.uris(bobs)
-    resp = alice.post(f"/shuffle/{bobs}", data={"algorithm": "BasicShuffle"})
+    resp = alice.post(api_path(f"/shuffle/{bobs}"), data={"algorithm": "BasicShuffle"})
     assert resp.status_code == 403 and resp.json().get("success") is False
     assert fake.uris(bobs) == before

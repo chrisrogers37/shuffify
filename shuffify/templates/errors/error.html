@@ -12,6 +12,6 @@
 
 {% block content %}
 {% from 'macros/design_states.html' import error_panel %}
-{{ error_panel(error_code, error_title, error_message, url_for('main.index')) }}
+{{ error_panel(error_code, error_title, error_message, url_for('site.index')) }}
 
 {% endblock %}

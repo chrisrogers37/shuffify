@@ -14,6 +14,7 @@ import redis
 from shuffify.schemas.requests import WorkshopSearchRequest
 from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.cache import SpotifyCache
+from tests.paths import api_path
 
 # =============================================================================
 # Schema Validation Tests
@@ -158,7 +159,7 @@ class TestWorkshopSearchRoute:
     def test_search_requires_auth(self, client):
         """Unauthenticated search should return 401."""
         response = client.post(
-            "/workshop/search",
+            api_path("/workshop/search"),
             data=json.dumps({"query": "test"}),
             content_type="application/json",
         )
@@ -182,7 +183,7 @@ class TestWorkshopSearchRoute:
         mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
-            "/workshop/search",
+            api_path("/workshop/search"),
             data="not valid json",
             content_type="application/json",
         )
@@ -206,7 +207,7 @@ class TestWorkshopSearchRoute:
         mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
-            "/workshop/search",
+            api_path("/workshop/search"),
             data=json.dumps({"query": ""}),
             content_type="application/json",
         )
@@ -251,7 +252,7 @@ class TestWorkshopSearchRoute:
         mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
-            "/workshop/search",
+            api_path("/workshop/search"),
             data=json.dumps({"query": "yesterday beatles"}),
             content_type="application/json",
         )
@@ -287,7 +288,7 @@ class TestWorkshopSearchRoute:
         mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
-            "/workshop/search",
+            api_path("/workshop/search"),
             data=json.dumps({"query": "xyznonexistent123"}),
             content_type="application/json",
         )

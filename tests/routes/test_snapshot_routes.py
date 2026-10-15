@@ -16,6 +16,7 @@ from shuffify.services.playlist_snapshot_service import (
 )
 from shuffify.services.user_service import UserService
 from shuffify.spotify.api import SpotifyAPI
+from tests.paths import api_path
 from tests.services.test_live_executor_outcomes import MutableSpotify, uri
 
 
@@ -29,7 +30,7 @@ class TestListSnapshots:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.get(
-                "/playlist/p1/snapshots"
+                api_path("/playlist/p1/snapshots")
             )
             assert resp.status_code == 401
 
@@ -48,7 +49,7 @@ class TestListSnapshots:
                 }
                 sess["user_data"] = {"id": "user123"}
             resp = client.get(
-                "/playlist/p1/snapshots"
+                api_path("/playlist/p1/snapshots")
             )
             assert resp.status_code == 503
 
@@ -58,7 +59,7 @@ class TestListSnapshots:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.get(
-            "/playlist/p1/snapshots"
+            api_path("/playlist/p1/snapshots")
         )
         assert resp.status_code == 200
         data = resp.get_json()
@@ -85,7 +86,7 @@ class TestListSnapshots:
             )
 
         resp = auth_client.get(
-            "/playlist/p1/snapshots"
+            api_path("/playlist/p1/snapshots")
         )
         assert resp.status_code == 200
         data = resp.get_json()
@@ -111,7 +112,7 @@ class TestListSnapshots:
                 )
 
         resp = auth_client.get(
-            "/playlist/p1/snapshots?limit=2"
+            api_path("/playlist/p1/snapshots?limit=2")
         )
         data = resp.get_json()
         assert len(data["snapshots"]) == 2
@@ -127,7 +128,7 @@ class TestCreateManualSnapshot:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/playlist/p1/snapshots",
+                api_path("/playlist/p1/snapshots"),
                 json={},
             )
             assert resp.status_code == 401
@@ -138,7 +139,7 @@ class TestCreateManualSnapshot:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/snapshots",
+            api_path("/playlist/p1/snapshots"),
             content_type="application/json",
         )
         assert resp.status_code == 400
@@ -149,7 +150,7 @@ class TestCreateManualSnapshot:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/snapshots",
+            api_path("/playlist/p1/snapshots"),
             json={"track_uris": ["invalid_uri"]},
         )
         assert resp.status_code == 400
@@ -160,7 +161,7 @@ class TestCreateManualSnapshot:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/snapshots",
+            api_path("/playlist/p1/snapshots"),
             json={
                 "playlist_name": "My Playlist",
                 "track_uris": [
@@ -185,7 +186,7 @@ class TestCreateManualSnapshot:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/snapshots",
+            api_path("/playlist/p1/snapshots"),
             json={
                 "playlist_name": "Empty",
                 "track_uris": [],
@@ -205,7 +206,7 @@ class TestViewSnapshot:
     ):
         mock_auth.return_value = None
         with db_app.test_client() as client:
-            resp = client.get("/snapshots/1")
+            resp = client.get(api_path("/snapshots/1"))
             assert resp.status_code == 401
 
     @patch("shuffify.routes.require_auth")
@@ -213,7 +214,7 @@ class TestViewSnapshot:
         self, mock_auth, auth_client
     ):
         mock_auth.return_value = MagicMock()
-        resp = auth_client.get("/snapshots/99999")
+        resp = auth_client.get(api_path("/snapshots/99999"))
         assert resp.status_code == 404
 
     @patch("shuffify.routes.require_auth")
@@ -237,7 +238,7 @@ class TestViewSnapshot:
             )
             snap_id = snap.id
 
-        resp = auth_client.get(f"/snapshots/{snap_id}")
+        resp = auth_client.get(api_path(f"/snapshots/{snap_id}"))
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["success"] is True
@@ -253,7 +254,7 @@ class TestDeleteSnapshot:
     ):
         mock_auth.return_value = None
         with db_app.test_client() as client:
-            resp = client.delete("/snapshots/1")
+            resp = client.delete(api_path("/snapshots/1"))
             assert resp.status_code == 401
 
     @patch("shuffify.routes.require_auth")
@@ -261,7 +262,7 @@ class TestDeleteSnapshot:
         self, mock_auth, auth_client
     ):
         mock_auth.return_value = MagicMock()
-        resp = auth_client.delete("/snapshots/99999")
+        resp = auth_client.delete(api_path("/snapshots/99999"))
         assert resp.status_code == 404
 
     @patch("shuffify.routes.require_auth")
@@ -286,7 +287,7 @@ class TestDeleteSnapshot:
             snap_id = snap.id
 
         resp = auth_client.delete(
-            f"/snapshots/{snap_id}"
+            api_path(f"/snapshots/{snap_id}")
         )
         assert resp.status_code == 200
         data = resp.get_json()
@@ -294,7 +295,7 @@ class TestDeleteSnapshot:
 
         # Verify deleted
         resp2 = auth_client.get(
-            f"/snapshots/{snap_id}"
+            api_path(f"/snapshots/{snap_id}")
         )
         assert resp2.status_code == 404
 
@@ -309,7 +310,7 @@ class TestRestoreSnapshot:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/snapshots/1/restore"
+                api_path("/snapshots/1/restore")
             )
             assert resp.status_code == 401
 
@@ -319,7 +320,7 @@ class TestRestoreSnapshot:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/snapshots/99999/restore"
+            api_path("/snapshots/99999/restore")
         )
         assert resp.status_code == 404
 
@@ -339,7 +340,7 @@ class TestRestoreSnapshot:
         snap_id = self.create_snapshot(desired)
         api = self.spotify(before)
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post(f"/snapshots/{snap_id}/restore")
+            resp = auth_client.post(api_path(f"/snapshots/{snap_id}/restore"))
         data = resp.get_json()
         assert resp.status_code == 200
         assert data["success"] is True
@@ -367,7 +368,7 @@ class TestRestoreSnapshot:
         api.playlists["other"] = [uri(9)]
         with patch("shuffify.routes.require_auth", return_value=api):
             resp = auth_client.post(
-                f"/snapshots/{snap_id}/restore",
+                api_path(f"/snapshots/{snap_id}/restore"),
                 json={"playlist_id": "other", "track_uris": [uri(8)]},
             )
         assert resp.status_code == 200
@@ -379,7 +380,7 @@ class TestRestoreSnapshot:
         snap_id = self.create_snapshot(desired)
         api = self.spotify(desired)
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post(f"/snapshots/{snap_id}/restore")
+            resp = auth_client.post(api_path(f"/snapshots/{snap_id}/restore"))
         data = resp.get_json()
         assert resp.status_code == 200
         assert data["success"] is True
@@ -396,7 +397,7 @@ class TestRestoreSnapshot:
         snap_id = self.create_snapshot([uri(1)], user=other)
         api = self.spotify([uri(2)])
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post(f"/snapshots/{snap_id}/restore")
+            resp = auth_client.post(api_path(f"/snapshots/{snap_id}/restore"))
         data = resp.get_json()
         assert resp.status_code == 404
         assert data["operation"]["error_code"] == "snapshot_not_found"
@@ -407,7 +408,7 @@ class TestRestoreSnapshot:
         snap_id = self.create_snapshot([])
         api = MagicMock(spec=SpotifyAPI)
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post(f"/snapshots/{snap_id}/restore")
+            resp = auth_client.post(api_path(f"/snapshots/{snap_id}/restore"))
         assert resp.status_code == 400
         assert resp.get_json()["operation"]["error_code"] == "empty_snapshot"
         api.get_playlist.assert_not_called()
@@ -425,7 +426,7 @@ class TestRestoreSnapshot:
 
         api.faults[("update", "p1")] = apply_then_lose
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post(f"/snapshots/{snap_id}/restore")
+            resp = auth_client.post(api_path(f"/snapshots/{snap_id}/restore"))
         data = resp.get_json()
         assert resp.status_code == 502
         assert data["success"] is False
@@ -450,7 +451,7 @@ class TestRestoreSnapshot:
             "shuffify.services.state_service.StateService.record_verified_change",
             side_effect=RuntimeError("private session detail"),
         ):
-            resp = auth_client.post(f"/snapshots/{snap_id}/restore")
+            resp = auth_client.post(api_path(f"/snapshots/{snap_id}/restore"))
         data = resp.get_json()
         assert resp.status_code == 502
         assert data["success"] is False
@@ -472,7 +473,7 @@ class TestRestoreSnapshot:
         ), patch("shuffify.routes.snapshots.PlaylistSnapshotService.get_snapshot") as lookup, patch(
             "shuffify.routes.snapshots.LivePlaylistService"
         ) as service:
-            resp = auth_client.post("/snapshots/123/restore")
+            resp = auth_client.post(api_path("/snapshots/123/restore"))
         lookup.assert_not_called()
         service.assert_not_called()
         data = resp.get_json()

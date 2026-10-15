@@ -10,13 +10,14 @@ from werkzeug.exceptions import InternalServerError
 from shuffify.models.db import ActivityLog, JobExecution
 from shuffify.services.live_review_bindings import scope_fingerprint
 from shuffify.spotify.exceptions import SpotifyError
+from tests.paths import api_path
 from tests.routes.live_review_helpers import binding_bundle, history, post_context, seed_history
 from tests.services.test_live_executor_outcomes import MutableSpotify, uri
 from tests.services.test_live_metadata_service import MetadataSpotify
 
 TARGET = "playlist123"
-CONTEXT = f"/playlist/{TARGET}/live-context"
-INSPECT = f"/playlist/{TARGET}/inspect-live"
+CONTEXT = api_path(f"/playlist/{TARGET}/live-context")
+INSPECT = api_path(f"/playlist/{TARGET}/inspect-live")
 DIGEST = "a" * 64
 SHUFFLE_FORM = {"algorithm": "BalancedShuffle", "keep_first": "0", "section_count": "4"}
 
@@ -127,7 +128,7 @@ def test_reviewed_shuffle_runs_the_reviewed_options_once(auth_client, api):
             "shuffify.services.live_playlist_service.ShuffleService.execute",
             return_value=[uri(2), uri(2), uri(1)],
         ) as execute:
-            response = auth_client.post(f"/shuffle/{TARGET}", data={
+            response = auth_client.post(api_path(f"/shuffle/{TARGET}"), data={
                 **SHUFFLE_FORM, "csrf_token": "copied form field", "reviewed_scope": scope,
             })
     assert response.status_code == 200
@@ -142,7 +143,7 @@ def test_options_changed_after_review_dispatch_nothing(auth_client, api, snapsho
         scope = post_context(auth_client, TARGET, {"kind": "shuffle", "form": SHUFFLE_FORM}).get_json()[
             "context"]["review_binding"]["scope"]
         with patch("shuffify.services.live_playlist_service.ShuffleService.execute") as execute:
-            response = auth_client.post(f"/shuffle/{TARGET}", data={
+            response = auth_client.post(api_path(f"/shuffle/{TARGET}"), data={
                 **SHUFFLE_FORM, "section_count": "5", "reviewed_scope": scope,
             })
     assert response.status_code == 409
@@ -178,7 +179,7 @@ def test_malformed_bindings_never_fall_back_or_read_spotify(auth_client, api, pa
     ))
     seed_history(auth_client, TARGET, [[uri(2)], [uri(1)]])
     with as_user(api):
-        response = auth_client.post(f"/{path}/{TARGET}", data=data)
+        response = auth_client.post(api_path(f"/{path}/{TARGET}"), data=data)
     assert response.status_code == 400
     operation = response.get_json()["operation"]
     assert (operation["kind"], operation["error_code"], operation["retryable"]) == (
@@ -199,10 +200,10 @@ def test_reviewed_undo_restores_the_reviewed_version_exactly_once(auth_client, a
         context = post_context(auth_client, TARGET, {"kind": "undo"}).get_json()["context"]
         bundle = binding_bundle(context)
         # A client-supplied order is not an Undo input; the server selects from its history.
-        response = auth_client.post(f"/undo/{TARGET}", data={**bundle, "track_uris": uri(7)})
+        response = auth_client.post(api_path(f"/undo/{TARGET}"), data={**bundle, "track_uris": uri(7)})
         assert response.status_code == 200
         assert history(auth_client, TARGET)["current_index"] == 1
-        again = auth_client.post(f"/undo/{TARGET}", data=bundle)
+        again = auth_client.post(api_path(f"/undo/{TARGET}"), data=bundle)
     assert api.writes == [("update", TARGET, context["action"]["desired_track_uris"])]
     assert context["action"]["desired_track_uris"] == states[1]
     assert again.status_code == 409
@@ -228,7 +229,7 @@ def test_stale_undo_review_never_writes_or_moves_history(auth_client, api, chang
         else:
             bundle["reviewed_scope"] = scope_fingerprint("undo", "another-playlist", {})
         expected = history(auth_client, TARGET)
-        response = auth_client.post(f"/undo/{TARGET}", data=bundle)
+        response = auth_client.post(api_path(f"/undo/{TARGET}"), data=bundle)
     assert response.status_code == 409
     assert response.get_json()["operation"]["error_code"] == code
     assert response.get_json()["operation"]["retryable"] is False
@@ -242,7 +243,7 @@ def test_reviewed_undo_after_history_expiry_is_its_specific_400(auth_client, api
         bundle = binding_bundle(post_context(auth_client, TARGET, {"kind": "undo"}).get_json()["context"])
         with auth_client.session_transaction() as session:
             session.pop("playlist_states")
-        response = auth_client.post(f"/undo/{TARGET}", data=bundle)
+        response = auth_client.post(api_path(f"/undo/{TARGET}"), data=bundle)
     assert response.status_code == 400
     assert response.get_json()["operation"]["error_code"] == "history_unavailable"
     assert api.writes == []
@@ -256,12 +257,14 @@ def test_reviewed_privacy_runs_and_a_different_boolean_never_writes(auth_client,
         scope = post_context(auth_client, TARGET, {"kind": "privacy", "public": True}).get_json()[
             "context"]["review_binding"]["scope"]
         changed = auth_client.post(
-            f"/playlist/{TARGET}/toggle-visibility", json={"public": False, "reviewed_scope": scope}
+            api_path(f"/playlist/{TARGET}/toggle-visibility"), json={"public": False, "reviewed_scope": scope}
         )
         assert changed.status_code == 409
         assert changed.get_json()["operation"]["error_code"] == "review_changed"
         assert metadata.writes == []
-        ran = auth_client.post(f"/playlist/{TARGET}/toggle-visibility", json={"public": True, "reviewed_scope": scope})
+        ran = auth_client.post(
+            api_path(f"/playlist/{TARGET}/toggle-visibility"), json={"public": True, "reviewed_scope": scope},
+        )
     assert ran.status_code == 200
     assert ran.get_json()["public"] is True
     assert metadata.writes == [(TARGET, True)]
@@ -276,7 +279,7 @@ def test_reviewed_privacy_runs_and_a_different_boolean_never_writes(auth_client,
 ])
 def test_privacy_binding_shape_is_checked_before_any_read(auth_client, metadata, body):
     with as_user(metadata):
-        response = auth_client.post(f"/playlist/{TARGET}/toggle-visibility", json=body)
+        response = auth_client.post(api_path(f"/playlist/{TARGET}/toggle-visibility"), json=body)
     assert response.status_code == 400
     operation = response.get_json()["operation"]
     assert (operation["kind"], operation["error_code"]) == ("privacy", "invalid_review_binding")
@@ -295,13 +298,13 @@ def test_a_copied_matching_hash_never_authorizes(auth_client, api, metadata, kin
         context = post_context(auth_client, TARGET, body).get_json()["context"]
         spotify.owner = "someone-else"
         if kind == "shuffle":
-            response = auth_client.post(f"/shuffle/{TARGET}", data={
+            response = auth_client.post(api_path(f"/shuffle/{TARGET}"), data={
                 **SHUFFLE_FORM, "reviewed_scope": context["review_binding"]["scope"],
             })
         elif kind == "undo":
-            response = auth_client.post(f"/undo/{TARGET}", data=binding_bundle(context))
+            response = auth_client.post(api_path(f"/undo/{TARGET}"), data=binding_bundle(context))
         else:
-            response = auth_client.post(f"/playlist/{TARGET}/toggle-visibility", json={
+            response = auth_client.post(api_path(f"/playlist/{TARGET}/toggle-visibility"), json={
                 "public": True, "reviewed_scope": context["review_binding"]["scope"],
             })
     assert response.status_code == 403
@@ -435,11 +438,11 @@ def test_failures_outside_the_route_body_are_never_cached(auth_client, path, bod
     assert response.headers["Cache-Control"] == "no-store"
 
 
-def test_no_store_is_scoped_to_reviews_and_checks(auth_client):
+def test_api_authentication_errors_are_not_cached(auth_client):
     with patch("shuffify.routes.require_auth", return_value=None):
-        response = auth_client.post(f"/shuffle/{TARGET}", data={"algorithm": "BasicShuffle"})
+        response = auth_client.post(api_path(f"/shuffle/{TARGET}"), data={"algorithm": "BasicShuffle"})
     assert response.status_code == 401
-    assert "no-store" not in response.headers.get("Cache-Control", "")
+    assert response.headers["Cache-Control"] == "no-store"
 
 
 @pytest.mark.parametrize("path,send", [
@@ -451,7 +454,7 @@ def test_no_store_is_scoped_to_reviews_and_checks(auth_client):
 def test_bindings_outside_the_form_are_malformed_never_legacy(auth_client, api, path, send):
     seed_history(auth_client, TARGET, [[uri(2)], [uri(1)]])
     with as_user(api):
-        response = auth_client.post(f"/{path}/{TARGET}", **send)
+        response = auth_client.post(api_path(f"/{path}/{TARGET}"), **send)
     assert response.status_code == 400
     operation = response.get_json()["operation"]
     assert (operation["kind"], operation["error_code"]) == (path, "invalid_review_binding")
@@ -463,7 +466,8 @@ def test_bindings_outside_the_form_are_malformed_never_legacy(auth_client, api, 
 def test_privacy_binding_in_the_query_is_malformed_never_legacy(auth_client, metadata):
     with as_user(metadata):
         response = auth_client.post(
-            f"/playlist/{TARGET}/toggle-visibility", json={"public": True}, query_string={"reviewed_scope": DIGEST},
+            api_path(f"/playlist/{TARGET}/toggle-visibility"),
+            json={"public": True}, query_string={"reviewed_scope": DIGEST},
         )
     assert response.status_code == 400
     operation = response.get_json()["operation"]

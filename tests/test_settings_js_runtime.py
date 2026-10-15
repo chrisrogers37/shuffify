@@ -48,7 +48,7 @@ function fixture({valid = true, absent = false, supported = true} = {}) {
     const limit = {validity: {valid}, attributes: {},
         setAttribute(name, value) { this.attributes[name] = value; },
         addEventListener(name, callback) { limitEvents[name] = callback; }};
-    const form = {action: '/settings', valid,
+    const form = {action: '/settings', dataset: {apiUrl: '/api/settings'}, valid,
         querySelector: () => button,
         reportValidity() { return this.valid; },
         addEventListener(name, callback) { events[name] = callback; },
@@ -100,7 +100,7 @@ def test_success_has_one_request_and_restores_editable_fields(node):
     assert.equal(f.attributes['aria-busy'], 'true');
     await f.submit();
     assert.equal(f.calls.length, 1);
-    assert.equal(f.calls[0].url, '/settings');
+    assert.equal(f.calls[0].url, '/api/settings');
     assert.equal(f.calls[0].options.method, 'POST');
     assert.equal(f.calls[0].options.headers['X-Requested-With'], 'XMLHttpRequest');
     assert.equal(f.calls[0].options.body.csrf, 'fixture-csrf');

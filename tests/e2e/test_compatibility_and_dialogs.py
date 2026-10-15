@@ -33,6 +33,7 @@ from tests.e2e.test_direct_live_actions import direct_browser as direct_browser
 from tests.e2e.test_live_operation_outcomes import _collection, _create_schedule
 from tests.e2e.test_pages import Visit
 from tests.e2e.test_workshop_source_recovery import _pair, _save
+from tests.paths import api_path
 
 TARGET = pid("alice-morning-mix")
 ARCHIVE = pid("alice-morning-archive")
@@ -158,7 +159,7 @@ def test_a_lock_is_saved_while_collect_runs_but_refused_while_drip_runs(
     before = fake.uris(TARGET)
     s = open_session(width, height)
     page = s.page
-    toggle_path = f"/workshop/{TARGET}/locks/toggle"
+    toggle_path = api_path(f"/workshop/{TARGET}/locks/toggle")
     page.goto(WORKSHOP, wait_until="networkidle")
     first = page.locator("#track-list .track-item").first
     # A row has no lock button of its own: Row actions has one Lock control, shown in the row that opened it.
@@ -221,7 +222,7 @@ def test_a_lock_is_saved_while_collect_runs_but_refused_while_drip_runs(
     unlock_all.dispatch_event("click")
     assert (
         len(s.writes("POST", toggle_path)) == 1
-        and s.writes("POST", f"/workshop/{TARGET}/locks/unlock-all") == []
+        and s.writes("POST", api_path(f"/workshop/{TARGET}/locks/unlock-all")) == []
     )
     assert _locks(alice) == [uri] and page.evaluate(
         "Object.keys(workshopState.locks)"
@@ -296,9 +297,9 @@ def test_raid_routine_pauses_and_resumes_while_collect_runs(
         assert page.evaluate("PlaylistOperations.getRecords()[0].complete") is True
         assert len(fake.uris(collection)) == 5
         assert [fault["fired"] for fault in fake.faults()] == [1]
-        assert len(s.writes("PUT", f"/routines/{sid}/state")) == 2
+        assert len(s.writes("PUT", api_path(f"/routines/{sid}/state"))) == 2
         assert [json.loads(body)["desired_enabled"] for body in s.writes(
-            "PUT", f"/routines/{sid}/state"
+            "PUT", api_path(f"/routines/{sid}/state")
         )] == [False, True]
         s.assert_clean()
     finally:
@@ -322,7 +323,7 @@ def test_archive_unlink_waits_for_staged_tracks_and_then_asks_before_it_unlinks(
     s = open_session(width, height)
     page = s.page
     unlink, confirm = page.locator("#archive-unlink-btn"), page.locator("#app-confirm")
-    pair_path = f"/playlist/{TARGET}/pair"
+    pair_path = api_path(f"/playlist/{TARGET}/pair")
 
     def open_setup():
         # Unlink is in Archive setup, which Archive opens; closing the setup returns to Archive.
@@ -424,7 +425,7 @@ def test_dismiss_all_asks_first_and_dismisses_only_the_unstaged_rows(
     s = open_session(width, height)
     page = s.page
     confirm = page.locator("#app-confirm")
-    dismiss_path = f"/playlist/{TARGET}/pending-raids/dismiss"
+    dismiss_path = api_path(f"/playlist/{TARGET}/pending-raids/dismiss")
     page.goto(WORKSHOP, wait_until="networkidle")
     _open_tool(page, "inbox")
     page.wait_for_function("() => pendingRaidsState.tracks.length === 5")
@@ -467,7 +468,7 @@ def test_dismiss_all_asks_first_and_dismisses_only_the_unstaged_rows(
     page.wait_for_function("() => pendingRaidsState.tracks.length === 0")
     sent = s.writes("POST", dismiss_path)
     assert len(sent) == 1 and sorted(json.loads(sent[0])["track_ids"]) == others
-    assert s.writes("POST", f"/playlist/{TARGET}/pending-raids/dismiss-all") == []
+    assert s.writes("POST", api_path(f"/playlist/{TARGET}/pending-raids/dismiss-all")) == []
     assert [
         track["id"]
         for track in alice.ok("get", f"/playlist/{TARGET}/pending-raids")["tracks"]
@@ -495,7 +496,7 @@ def test_library_favorite_and_hide_update_in_place_beside_a_lost_reply_result(
     height,
 ):
     """Favorite and hide save app preferences only, so tiles move without a reload and the result stays."""
-    shuffle = f"{APP}/shuffle/{TARGET}"
+    shuffle = (APP + api_path(f'/shuffle/{TARGET}'))
     s = open_session(width, height)
     page = s.page
     posted = []
@@ -579,7 +580,7 @@ def test_routines_state_stays_in_place_and_edit_guards_a_lost_run_reply(
     # The first routine's Run loses its reply; the second can still be paused and resumed.
     first = _create_schedule(alice)["id"]
     second = _create_schedule(alice, "shuffle", TARGET)["id"]
-    run_url = f"{APP}/schedules/{first}/run"
+    run_url = (APP + api_path(f'/schedules/{first}/run'))
     s = open_session(width, height)
     page = s.page
     posted = []
@@ -615,7 +616,7 @@ def test_routines_state_stays_in_place_and_edit_guards_a_lost_run_reply(
             )
             assert toggle.inner_text().strip() == label
             assert _routine(alice, TARGET, second)["is_enabled"] is (badge == "Active")
-        states = s.writes("PUT", f"/routines/{second}/state")
+        states = s.writes("PUT", api_path(f"/routines/{second}/state"))
         assert len(states) == 2
         assert [json.loads(body)["desired_enabled"] for body in states] == [False, True]
 
@@ -638,7 +639,7 @@ def test_routines_state_stays_in_place_and_edit_guards_a_lost_run_reply(
         assert page.evaluate("window.__sameDocument") is True
         assert page.evaluate("PlaylistOperations.hasAttention()") is True
         assert page.evaluate("PlaylistOperations.getRecords()[0].aggregate") == "unknown"
-        assert s.writes("PUT", f"/schedules/{second}") == []
+        assert s.writes("PUT", api_path(f"/schedules/{second}")) == []
         assert page.evaluate(
             "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
         )
@@ -674,7 +675,7 @@ def test_routines_state_stays_in_place_and_edit_guards_a_lost_run_reply(
         page.wait_for_url(f"{APP}{expected_edit}")
         assert page.locator("#routine-task").is_visible()
         assert page.locator("#routine-heading").inner_text() == "Edit routine"
-        assert posted == [run_url] and s.writes("PUT", f"/schedules/{second}") == []
+        assert posted == [run_url] and s.writes("PUT", api_path(f"/schedules/{second}")) == []
         s.assert_clean()
     finally:
         for sid in (first, second):
@@ -720,7 +721,7 @@ def test_routine_delete_asks_first_and_moves_focus_to_what_remains(
     page.click("#app-confirm-cancel")
     confirm.wait_for(state="hidden")
     assert remove(first).evaluate("el => document.activeElement === el") is True
-    assert s.writes("DELETE", f"/schedules/{first}") == []
+    assert s.writes("DELETE", api_path(f"/schedules/{first}")) == []
     assert count.inner_text() == "2 routines" and listed(LONG_HAUL) == [
         first
     ]
@@ -735,7 +736,7 @@ def test_routine_delete_asks_first_and_moves_focus_to_what_remains(
         "document.activeElement.closest('.schedule-card').dataset.scheduleId"
     ) == str(second)
     assert listed(LONG_HAUL) == [] and listed(TARGET) == [second]
-    assert len(s.writes("DELETE", f"/schedules/{first}")) == 1
+    assert len(s.writes("DELETE", api_path(f"/schedules/{first}"))) == 1
 
     # Deleting the last routine leaves the empty state and puts focus on the page heading.
     remove(second).click()

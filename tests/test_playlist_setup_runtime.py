@@ -19,17 +19,18 @@ import pytest
 from flask import render_template, session
 
 from tests.page_runtime import page_tree, render_page, run_page
+from tests.paths import api_path
 from tests.test_playlist_operations_runtime import node as node  # noqa: F401
 
 ROOT = Path(__file__).resolve().parent.parent
 TARGET = {"id": "target", "name": "Morning Mix"}
 BASE = "/playlist/target/setup"
 URLS = {
-    "context": BASE + "/context",
-    "impact": BASE + "/impact",
-    "settings": BASE + "/settings",
-    "create": BASE + "/spotify-playlists",
-    "playlists": BASE + "/playlists",
+    "context": api_path(BASE + "/context"),
+    "impact": api_path(BASE + "/impact"),
+    "settings": api_path(BASE + "/settings"),
+    "create": api_path(BASE + "/spotify-playlists"),
+    "playlists": api_path(BASE + "/playlists"),
 }
 REVISION = "a" * 64
 INDIE = "4uLU6hMCjMI75M1A2tKUQC"

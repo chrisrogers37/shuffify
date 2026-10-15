@@ -1,6 +1,7 @@
 """Persisted routine step details agree with the fake's observed Spotify state."""
 
 from tests.e2e.test_live_operation_outcomes import SOURCE, TARGET, _collection, _create_schedule
+from tests.paths import api_path
 
 
 def test_composite_late_failure_keeps_collected_step_in_exact_history(alice, fake):
@@ -11,7 +12,7 @@ def test_composite_late_failure_keeps_collected_step_in_exact_history(alice, fak
     original = fake.uris(TARGET)
     try:
         fake.arm(operation="DELETE /playlists/{playlist_id}/items", kind="quota", playlist_id=collection)
-        response = alice.post(f"/schedules/{sid}/run")
+        response = alice.post(api_path(f"/schedules/{sid}/run"))
         assert response.status_code == 502, response.text
         body = response.json()
         detail = body["result"]["result_detail"]
@@ -41,7 +42,7 @@ def test_closed_drip_gate_is_saved_as_not_started(alice, fake):
     sid = schedule["id"]
     before = (fake.playlist(TARGET), fake.playlist(collection))
     try:
-        response = alice.post(f"/schedules/{sid}/run")
+        response = alice.post(api_path(f"/schedules/{sid}/run"))
         # The legacy manual-run envelope refuses the closed gate with 409;
         # its exact execution record must still describe a skipped step.
         assert response.status_code == 409, response.text

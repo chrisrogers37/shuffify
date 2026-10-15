@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from tests.page_runtime import render_page, run_page
+from tests.paths import api_path
 from tests.test_playlist_operations_runtime import node as node  # noqa: F401
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -44,8 +45,9 @@ def exact_row():
 
 def page_html(db_app, *, schedule_id=None):
     urls = {
-        "context": "/playlist/target/routines/context", "review": "/playlist/target/routines/review",
-        "activate": "/playlist/target/routines/activate", "state": "/routines",
+        "context": api_path("/playlist/target/routines/context"),
+        "review": api_path("/playlist/target/routines/review"),
+        "activate": api_path("/playlist/target/routines/activate"), "state": api_path("/routines"),
         "setup": "/playlist/target/setup", "self": BASE, "workshop": "/workshop/target",
         "management": "/schedules",
     }
@@ -272,7 +274,7 @@ page.replies.push(page.reply({success:true,schedule_id:7,schedule_revision:REV,s
 page.byId('routine-state').click(); await settle();
 const writes = page.calls.filter(call => call.method !== 'GET');
 assert.equal(writes.length,1);
-assert.equal(writes[0].url,'/routines/7/state');
+assert.equal(writes[0].url,'/api/routines/7/state');
 assert.equal(JSON.parse(writes[0].body).desired_enabled,false);
 assert.equal(page.byId('routine-state').textContent,'Resume routine #7');
 """

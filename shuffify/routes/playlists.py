@@ -7,11 +7,11 @@ import logging
 from flask import jsonify, request, session
 
 from shuffify.routes import (
+    api_bp,
     context_preflight,
     json_error,
     json_reply,
     json_success,
-    main,
     no_store,
     require_auth_and_db,
 )
@@ -47,7 +47,7 @@ from shuffify.spotify.api import playlist_item_count
 logger = logging.getLogger(__name__)
 
 
-@main.route("/refresh-playlists", methods=["POST"])
+@api_bp.route("/refresh-playlists", methods=["POST"])
 @require_auth_and_db
 def refresh_playlists(api=None, user=None):
     """Refresh playlists from Spotify without losing undo state."""
@@ -85,7 +85,7 @@ def refresh_playlists(api=None, user=None):
         )
 
 
-@main.route("/playlist/<playlist_id>")
+@api_bp.route("/playlist/<playlist_id>")
 @require_auth_and_db
 def get_playlist(playlist_id, api=None, user=None):
     """Get playlist data with optional audio features."""
@@ -100,7 +100,7 @@ def get_playlist(playlist_id, api=None, user=None):
     return jsonify(playlist.to_dict())
 
 
-@main.route("/playlist/<playlist_id>/stats")
+@api_bp.route("/playlist/<playlist_id>/stats")
 @require_auth_and_db
 def get_playlist_stats(
     playlist_id, api=None, user=None
@@ -111,7 +111,7 @@ def get_playlist_stats(
     return jsonify(stats)
 
 
-@main.route("/api/user-playlists")
+@api_bp.route("/user-playlists")
 @require_auth_and_db
 def api_user_playlists(api=None, user=None):
     """Return the user's editable playlists as JSON; ``?refresh=1`` skips the cache."""
@@ -174,7 +174,7 @@ def _visibility_preflight(message, status_code):
     ))
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/toggle-visibility",
     methods=["POST"],
 )
@@ -203,7 +203,7 @@ def toggle_visibility(
     return _visibility_response(result)
 
 
-@main.route("/playlist/<playlist_id>/live-context", methods=["POST"])
+@api_bp.route("/playlist/<playlist_id>/live-context", methods=["POST"])
 @no_store
 @require_auth_and_db(on_preflight_error=context_preflight())
 def live_context(playlist_id, api=None, user=None):
@@ -225,7 +225,7 @@ def _inspection_preflight(message, status_code):
     ))
 
 
-@main.route("/playlist/<playlist_id>/inspect-live", methods=["POST"])
+@api_bp.route("/playlist/<playlist_id>/inspect-live", methods=["POST"])
 @no_store
 @require_auth_and_db(on_preflight_error=_inspection_preflight)
 def inspect_live(playlist_id, api=None, user=None):

@@ -8,7 +8,7 @@
 {#- Playlist setup: a native link to the dedicated setup
     page, which returns here. As a view link it runs the Workshop's own leave guard. -#}
 {% macro shared_settings_link(section) -%}
-<a href="{{ url_for('main.playlist_setup_page', playlist_id=playlist.id) }}?section={{ section }}&amp;return={{ url_for('main.workshop', playlist_id=playlist.id) | urlencode }}"
+<a href="{{ url_for('site.playlist_setup_page', playlist_id=playlist.id) }}?section={{ section }}&amp;return={{ url_for('site.workshop', playlist_id=playlist.id) | urlencode }}"
    data-workshop-compat="view" class="sh-button-secondary">Playlist setup</a>
 {%- endmacro %}
 
@@ -505,8 +505,8 @@
     <h3 id="history-activity-heading" class="sh-workshop-subheading">Activity</h3>
     <p class="sh-detail sh-text-muted">Everything Shuffify changed for you, and each time a routine ran.</p>
     <ul class="flex flex-wrap gap-2">
-        <li><a href="{{ url_for('main.activity') }}" data-workshop-compat="view" class="sh-button-secondary">Activity log</a></li>
-        <li><a href="{{ url_for('main.schedules') }}" data-workshop-compat="view" class="sh-button-secondary">Routine overview</a></li>
+        <li><a href="{{ url_for('site.activity') }}" data-workshop-compat="view" class="sh-button-secondary">Activity log</a></li>
+        <li><a href="{{ url_for('site.schedules') }}" data-workshop-compat="view" class="sh-button-secondary">Routine overview</a></li>
     </ul>
 </div>
 </div>
@@ -543,14 +543,14 @@
         <h3 id="workshop-neighbours-heading" class="sh-workshop-subheading">Other playlists</h3>
         <ul class="space-y-2">
             {% if prev_playlist_id %}
-            <li><a href="{{ url_for('main.workshop', playlist_id=prev_playlist_id) }}"
+            <li><a href="{{ url_for('site.workshop', playlist_id=prev_playlist_id) }}"
                    data-workshop-compat="view" class="sh-button-secondary">Previous playlist{% if prev_playlist_name %}: {{ prev_playlist_name }}{% endif %}</a></li>
             {% endif %}
             {% if next_playlist_id %}
-            <li><a href="{{ url_for('main.workshop', playlist_id=next_playlist_id) }}"
+            <li><a href="{{ url_for('site.workshop', playlist_id=next_playlist_id) }}"
                    data-workshop-compat="view" class="sh-button-secondary">Next playlist{% if next_playlist_name %}: {{ next_playlist_name }}{% endif %}</a></li>
             {% endif %}
-            <li><a href="{{ url_for('main.workshop_hub') }}" data-workshop-compat="view" class="sh-button-secondary">Choose another playlist</a></li>
+            <li><a href="{{ url_for('site.workshop_hub') }}" data-workshop-compat="view" class="sh-button-secondary">Choose another playlist</a></li>
         </ul>
     </nav>
 </div>

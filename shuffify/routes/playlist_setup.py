@@ -13,12 +13,13 @@ from pydantic import ValidationError
 
 from shuffify.error_handlers import format_validation_error
 from shuffify.routes import (
+    api_bp,
     clear_session_and_show_login,
     json_reply,
-    main,
     no_store,
     require_auth_and_db,
     require_auth_page,
+    site_bp,
 )
 from shuffify.routes.workshop import _unloadable_playlist_message
 from shuffify.schemas import CreateSetupPlaylistRequest, SetupImpactRequest, SetupSaveRequest
@@ -50,12 +51,12 @@ def _body(schema):
 
 def return_link(target_id, value):
     """The page's "Back to …" link: an allowlisted internal path, else back to the playlist."""
-    playlist = url_for("main.workshop", playlist_id=target_id)
+    playlist = url_for("site.workshop", playlist_id=target_id)
     labels = {
         playlist: "Back to playlist",
-        url_for("main.schedules"): "Back to routines",
-        url_for("main.routine_setup", playlist_id=target_id): "Back to routine",
-        url_for("main.index"): "Back to Library",
+        url_for("site.schedules"): "Back to routines",
+        url_for("site.routine_setup", playlist_id=target_id): "Back to routine",
+        url_for("site.index"): "Back to Library",
     }
     href = value if isinstance(value, str) and value in labels else playlist
     return {"href": href, "label": labels[href]}
@@ -67,18 +68,18 @@ def page_variables(target_id, context, *, section=None, return_to=None):
         "target": dict(context["target"]),
         "setup_context": context,
         "setup_urls": {
-            "context": url_for("main.playlist_setup_context", playlist_id=target_id),
-            "impact": url_for("main.playlist_setup_impact", playlist_id=target_id),
-            "settings": url_for("main.playlist_setup_settings", playlist_id=target_id),
-            "create": url_for("main.playlist_setup_create_playlist", playlist_id=target_id),
-            "playlists": url_for("main.playlist_setup_playlists", playlist_id=target_id),
+            "context": url_for("api.playlist_setup_context", playlist_id=target_id),
+            "impact": url_for("api.playlist_setup_impact", playlist_id=target_id),
+            "settings": url_for("api.playlist_setup_settings", playlist_id=target_id),
+            "create": url_for("api.playlist_setup_create_playlist", playlist_id=target_id),
+            "playlists": url_for("api.playlist_setup_playlists", playlist_id=target_id),
         },
         "return_link": return_link(target_id, return_to),
         "section": section if section in SECTIONS else "sources",
     }
 
 
-@main.route("/playlist/<playlist_id>/setup")
+@site_bp.route("/playlist/<playlist_id>/setup")
 @require_auth_page
 def playlist_setup_page(playlist_id, api=None, user=None, spotify_profile=None):
     """Set up a playlist's shared sources, collection and archive."""
@@ -90,18 +91,18 @@ def playlist_setup_page(playlist_id, api=None, user=None, spotify_profile=None):
     except PlaylistError as error:
         logger.warning("Could not open setup for playlist %s: %s", playlist_id, error)
         flash(_unloadable_playlist_message(error), "error")
-        return redirect(url_for("main.workshop_hub"))
+        return redirect(url_for("site.workshop_hub"))
     except SpotifyError as error:
         logger.warning("Could not read playlist %s for setup: %s", playlist_id, error)
         flash(_unloadable_playlist_message(PlaylistError(str(error))), "error")
-        return redirect(url_for("main.workshop_hub"))
+        return redirect(url_for("site.workshop_hub"))
     variables = page_variables(
         playlist_id, context, section=request.args.get("section"), return_to=request.args.get("return")
     )
     return render_template("playlist_setup.html", **variables)
 
 
-@main.route("/playlist/<playlist_id>/setup/context")
+@api_bp.route("/playlist/<playlist_id>/setup/context")
 @no_store
 @require_auth_and_db(on_preflight_error=_preflight)
 def playlist_setup_context(playlist_id, api=None, user=None):
@@ -109,7 +110,7 @@ def playlist_setup_context(playlist_id, api=None, user=None):
     return json_reply(PlaylistSetupService.context_reply(api, user, playlist_id))
 
 
-@main.route("/playlist/<playlist_id>/setup/impact", methods=["POST"])
+@api_bp.route("/playlist/<playlist_id>/setup/impact", methods=["POST"])
 @no_store
 @require_auth_and_db(on_preflight_error=_preflight)
 def playlist_setup_impact(playlist_id, api=None, user=None):
@@ -120,7 +121,7 @@ def playlist_setup_impact(playlist_id, api=None, user=None):
     return json_reply(PlaylistSetupService.impact(api, user, playlist_id, body))
 
 
-@main.route("/playlist/<playlist_id>/setup/settings", methods=["PUT"])
+@api_bp.route("/playlist/<playlist_id>/setup/settings", methods=["PUT"])
 @require_auth_and_db(on_preflight_error=_preflight)
 def playlist_setup_settings(playlist_id, api=None, user=None):
     """Save acknowledged shared settings. Never starts, pauses or schedules a routine."""
@@ -130,7 +131,7 @@ def playlist_setup_settings(playlist_id, api=None, user=None):
     return json_reply(PlaylistSetupService.save(api, user, playlist_id, body))
 
 
-@main.route("/playlist/<playlist_id>/setup/spotify-playlists", methods=["POST"])
+@api_bp.route("/playlist/<playlist_id>/setup/spotify-playlists", methods=["POST"])
 @require_auth_and_db(on_preflight_error=_preflight)
 def playlist_setup_create_playlist(playlist_id, api=None, user=None):
     """Create one private playlist in Spotify. It is not linked until settings are saved."""
@@ -140,7 +141,7 @@ def playlist_setup_create_playlist(playlist_id, api=None, user=None):
     return json_reply(PlaylistSetupService.create_playlist(api, user, playlist_id, body))
 
 
-@main.route("/playlist/<playlist_id>/setup/playlists")
+@api_bp.route("/playlist/<playlist_id>/setup/playlists")
 @no_store
 @require_auth_and_db(on_preflight_error=_preflight)
 def playlist_setup_playlists(playlist_id, api=None, user=None):

@@ -32,7 +32,7 @@
     {% if navigation_mode == 'authenticated' %}
         {% include 'partials/navbar.html' %}
     {% else %}
-        {{ public_header(url_for('main.index'), url_for('main.terms'), url_for('main.privacy')) }}
+        {{ public_header(url_for('site.index'), url_for('site.terms'), url_for('site.privacy')) }}
     {% endif %}
     <main id="main-content" class="flex-grow {% block main_classes %}{% endblock %}">
         {% block content %}{% endblock %}
@@ -41,7 +41,7 @@
     {{ app_confirm() }}
     {{ live_operation_announcer() }}
     {% endif %}
-    {{ public_footer(current_year, url_for('main.terms'), url_for('main.privacy')) }}
+    {{ public_footer(current_year, url_for('site.terms'), url_for('site.privacy')) }}
 
     {% if navigation_mode == 'authenticated' %}
     <script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='js/app-feedback.js') }}"></script>

@@ -7,8 +7,9 @@ service-layer exceptions and Pydantic validation errors.
 
 import logging
 
-from flask import jsonify, render_template, request
+from flask import current_app, jsonify, render_template, request
 from pydantic import ValidationError
+from werkzeug.exceptions import HTTPException
 
 from shuffify.services import (
     AlreadyAtOriginalError,
@@ -35,6 +36,7 @@ from shuffify.services import (
     WorkshopSessionLimitError,
     WorkshopSessionNotFoundError,
 )
+from shuffify.services.api_response import ERROR_CODES, error_payload
 from shuffify.services.live_action_context_service import inspection_rejected
 from shuffify.services.live_operation_service import (
     DIRECT_ENDPOINT_KINDS,
@@ -57,12 +59,40 @@ from shuffify.spotify.exceptions import (
 logger = logging.getLogger(__name__)
 
 
-def json_error_response(message: str, status_code: int, category: str = "error"):
+def json_error_response(message: str, status_code: int, category: str = "error", **extra):
     """Create a standardized JSON error response."""
-    return (
-        jsonify({"success": False, "message": message, "category": category}),
-        status_code,
-    )
+    return jsonify(error_payload(message, status_code, category=category, **extra)), status_code
+
+
+def is_api_request():
+    """Include unresolved API URLs, whose request has no Blueprint or endpoint."""
+    return request.path == "/api" or request.path.startswith("/api/")
+
+
+def normalize_api_response(response):
+    """Apply the API envelope and cache policy to normal and early responses."""
+    if not is_api_request():
+        return response
+    payload = response.get_json(silent=True)
+    if isinstance(payload, list):
+        payload = {"data": payload}
+    elif not isinstance(payload, dict):
+        if request.method == "OPTIONS" and response.status_code < 400:
+            payload = {}
+        else:
+            if response.status_code < 400:
+                logger.error("API endpoint returned a non-JSON body: %s", request.endpoint)
+                response.status_code = 500
+            payload = error_payload("The request could not be completed.", response.status_code)
+    payload.setdefault("success", response.status_code < 400)
+    if not payload["success"]:
+        payload.setdefault("error_code", ERROR_CODES.get(response.status_code, "request_failed"))
+        payload.setdefault("message", "The request could not be completed.")
+        payload.setdefault("category", "error")
+    response.set_data(current_app.json.dumps(payload))
+    response.mimetype = "application/json"
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 # =============================================================================
@@ -380,7 +410,7 @@ def wants_json() -> bool:
     expresses no preference and gets a page. Only a client that ranks
     `application/json` strictly above `text/html` is asking for JSON.
     """
-    if request.path.startswith("/api/"):
+    if is_api_request():
         return True
     if request.is_json:
         return True
@@ -406,9 +436,9 @@ def _html_error(title: str, message: str, status_code: int):
 
 # Review endpoints and the kind each reports before its body can be read.
 _REVIEW_ENDPOINT_KINDS = {
-    "main.live_context": "live_context",
-    "main.run_schedule_context": "schedule",
-    "main.snapshot_restore_context": "snapshot_restore",
+    "api.live_context": "live_context",
+    "api.run_schedule_context": "schedule",
+    "api.snapshot_restore_context": "snapshot_restore",
 }
 
 
@@ -422,7 +452,7 @@ def _review_rejection(code, status_code, review_message, check_message, *, read_
         payload, status_code = context_rejected(
             code, status_code, review_message, kind=_REVIEW_ENDPOINT_KINDS[request.endpoint]
         )
-    elif request.endpoint == "main.inspect_live":
+    elif request.endpoint == "api.inspect_live":
         body = request.get_json(silent=True) if read_body else None
         payload, status_code = inspection_rejected(body, code, status_code, check_message)
     else:
@@ -442,9 +472,9 @@ def handle_csrf_error(error):
     # callback runs. Preserve the source contract without dispatching a read
     # or write; both raid URLs resolve to the same registered endpoint.
     count_key = {
-        "main.pending_raids_finalize": "promoted_count",
-        "main.archive_tracks": "archived_count",
-        "main.finalize_restore": "restored_count",
+        "api.pending_raids_finalize": "promoted_count",
+        "api.archive_tracks": "archived_count",
+        "api.finalize_restore": "restored_count",
     }.get(request.endpoint)
     if count_key:
         body = request.get_json(silent=True)
@@ -559,6 +589,24 @@ def handle_not_found(error):
     return render_template("errors/404.html"), 404
 
 
+def handle_http_error(error):
+    """Preserve HTTP status and protocol headers while formatting API failures."""
+    if not wants_json():
+        return error.get_response()
+    response, status = json_error_response(error.description, error.code)
+    for key, value in error.get_headers():
+        if key.lower() not in ("content-type", "content-length"):
+            response.headers.add(key, value)
+    return response, status
+
+
+def handle_unexpected_error(error):
+    """Format unexpected API exceptions while preserving Flask's page error flow."""
+    if is_api_request():
+        return handle_internal_error(error)
+    raise error
+
+
 def handle_internal_error(error):
     """Handle 500 Internal Server Error."""
     logger.error(
@@ -650,10 +698,14 @@ def register_error_handlers(app):
         (404, handle_not_found),
         (413, handle_request_too_large),
         (500, handle_internal_error),
+        (HTTPException, handle_http_error),
+        (Exception, handle_unexpected_error),
         (429, handle_rate_limit_exceeded),
     ]
 
     for exc_or_code, handler in handlers:
         app.errorhandler(exc_or_code)(handler)
+
+    app.after_request(normalize_api_response)
 
     logger.info("Global error handlers registered")

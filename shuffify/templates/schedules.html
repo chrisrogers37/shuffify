@@ -95,7 +95,7 @@
             const target = targets[nextTarget++];
             let capabilities = null;
             try {
-                const reply = await fetch('/playlist/' + encodeURIComponent(target) + '/routines/context');
+                const reply = await fetch('/api/playlist/' + encodeURIComponent(target) + '/routines/context');
                 const data = await reply.json();
                 if (reply.ok && data.success && data.capabilities &&
                         typeof data.capabilities === 'object' && !Array.isArray(data.capabilities)) {

@@ -4,11 +4,13 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.paths import api_path
+
 LIVE_ACTIONS = [
-    ("/playlist/untrusted-target/raid-now", "raid"),
-    ("/playlist/untrusted-target/drip-now", "drip"),
-    ("/playlist/untrusted-target/raid-and-drip", "raid_and_drip"),
-    ("/schedules/98765/run", "schedule"),
+    (api_path("/playlist/untrusted-target/raid-now"), "raid"),
+    (api_path("/playlist/untrusted-target/drip-now"), "drip"),
+    (api_path("/playlist/untrusted-target/raid-and-drip"), "raid_and_drip"),
+    (api_path("/schedules/98765/run"), "schedule"),
 ]
 
 

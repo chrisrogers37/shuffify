@@ -94,8 +94,8 @@ def test_snapshot_view_lists_tracks_read_only_once_and_a_second_view_closes_them
         track_uris: [t(2), 'spotify:track:zz', t(1)]}};
     const snapshot = id => ({id, snapshot_type: 'manual', track_count: 3, created_at: '2026-10-12T08:00:00Z',
         trigger_description: 'Before cleanup'});
-    await openHistory({'/playlist/target/snapshots': {success: true, snapshots: [snapshot(17), snapshot(18)]},
-        '/snapshots/17': SNAPSHOT, '/snapshots/18': {success: true, snapshot: {id: 18, track_uris: [t(3)]}}});
+    await openHistory({'/api/playlist/target/snapshots': {success: true, snapshots: [snapshot(17), snapshot(18)]},
+        '/api/snapshots/17': SNAPSHOT, '/api/snapshots/18': {success: true, snapshot: {id: 18, track_uris: [t(3)]}}});
     const viewButton = () => page.$('[data-action-click="wk-snapshot-view"][data-snap-id="17"]');
     const region = () => page.byId('snapshot-view-17');
     const listed = () => page.$$('#snapshot-view-17 li').map(item => page.text(item));
@@ -109,7 +109,7 @@ def test_snapshot_view_lists_tracks_read_only_once_and_a_second_view_closes_them
     const before = page.calls.length;
     view.focus(); view.click(); await settle(); await heard();
     // One read of the snapshot, and its tracks in its card: known titles, else the URI.
-    assert.deepEqual(page.calls.slice(before).map(call => [call.method, call.url]), [['GET', '/snapshots/17']]);
+    assert.deepEqual(page.calls.slice(before).map(call => [call.method, call.url]), [['GET', '/api/snapshots/17']]);
     assert.equal(view.getAttribute('aria-expanded'), 'true'); assert.equal(region().hidden, false);
     assert.deepEqual(listed(), ['1. Track 2', '2. spotify:track:zz', '3. Track <b>1</b>']);
     assert.equal(page.$$('#snapshot-view-17 b').length, 0);
@@ -122,10 +122,10 @@ def test_snapshot_view_lists_tracks_read_only_once_and_a_second_view_closes_them
     // opening shows the same list again, still without one.
     view.click(); await settle();
     assert.equal(view.getAttribute('aria-expanded'), 'false'); assert.equal(region().hidden, true);
-    assert.equal(reads('/snapshots/17'), 1);
+    assert.equal(reads('/api/snapshots/17'), 1);
     view.click(); await settle(); await heard();
     assert.equal(view.getAttribute('aria-expanded'), 'true'); assert.equal(region().hidden, false);
-    assert.equal(reads('/snapshots/17'), 1);
+    assert.equal(reads('/api/snapshots/17'), 1);
     assert.deepEqual(listed(), ['1. Track 2', '2. spotify:track:zz', '3. Track <b>1</b>']);
     assert.equal(announced(), 'Showing 3 tracks from this snapshot.');
     // An open list stays open when the timeline is rebuilt, and View stays usable while Save runs.
@@ -143,11 +143,11 @@ def test_snapshot_view_lists_tracks_read_only_once_and_a_second_view_closes_them
     assert.equal(page.text(page.byId('snapshot-view-18')), 'Snapshot not found.');
     assert.equal(announced(), 'Snapshot not found.');
     other().click(); await settle();
-    assert.equal(page.byId('snapshot-view-18').hidden, true); assert.equal(reads('/snapshots/18'), 1);
+    assert.equal(page.byId('snapshot-view-18').hidden, true); assert.equal(reads('/api/snapshots/18'), 1);
     other().click(); await settle(); await heard();
-    assert.equal(reads('/snapshots/18'), 2); assert.equal(page.byId('snapshot-view-18').hidden, false);
+    assert.equal(reads('/api/snapshots/18'), 2); assert.equal(page.byId('snapshot-view-18').hidden, false);
     assert.deepEqual(page.$$('#snapshot-view-18 li').map(item => page.text(item)), ['1. Track 3']);
-    assert.equal(reads('/snapshots/17'), 1); assert.deepEqual(writes(), []);
+    assert.equal(reads('/api/snapshots/17'), 1); assert.deepEqual(writes(), []);
     clean();
 """)
 
@@ -155,7 +155,7 @@ def test_snapshot_view_lists_tracks_read_only_once_and_a_second_view_closes_them
 def test_saved_drafts_list_this_playlists_drafts_with_their_groups(node, db_app):
     run_history(node, db_app, r"""
     const elsewhere = Object.assign(draft(8, 'Elsewhere', [t(1)]), {playlist_id: 'other'});
-    await openHistory({'/workshop/target/sessions': {success: true, sessions: [draft(5, 'Workout', [t(3), t(1)]),
+    await openHistory({'/api/workshop/target/sessions': {success: true, sessions: [draft(5, 'Workout', [t(3), t(1)]),
         draft(6, 'Chill <b>mix</b>', [t(2)]), elsewhere]}});
     // Each draft shows its name, track count and last change; a draft for another playlist is not listed.
     assert.deepEqual(draftIds(), ['5', '6']);
@@ -197,10 +197,10 @@ def test_saved_drafts_list_this_playlists_drafts_with_their_groups(node, db_app)
 def test_save_as_named_draft_sends_the_working_order_and_refuses_an_empty_name(node, db_app):
     run_history(node, db_app, r"""
     const LIST = {success: true, sessions: []};
-    await openHistory({'/workshop/target/sessions': LIST});
+    await openHistory({'/api/workshop/target/sessions': LIST});
     const name = page.byId('saved-draft-name'), save = page.byId('saved-draft-save-btn');
-    const posts = () => sent('POST', '/workshop/target/sessions');
-    const listReads = () => sent('GET', '/workshop/target/sessions').length;
+    const posts = () => sent('POST', '/api/workshop/target/sessions');
+    const listReads = () => sent('GET', '/api/workshop/target/sessions').length;
     // An empty name is refused at its field, and nothing is sent.
     name.value = '   '; save.focus(); save.click(); await settle(); await heard();
     assert.deepEqual(posts(), []);
@@ -242,7 +242,7 @@ def test_save_as_named_draft_sends_the_working_order_and_refuses_an_empty_name(n
     page.replies.push(page.reply({success: true, session: draft(7, 'Twelfth', [t(2), t(3)])}));
     save.click(); save.click(); page.key(name, 'Enter'); await settle();
     assert.equal(posts().length, 4);
-    assert.deepEqual(writes().map(call => call.url), Array(4).fill('/workshop/target/sessions'));
+    assert.deepEqual(writes().map(call => call.url), Array(4).fill('/api/workshop/target/sessions'));
     // Each saved draft goes first in the list (latest change first); the list was read once.
     assert.deepEqual(draftIds(), ['7', '6', '5']); assert.equal(listReads(), 1);
     clean();
@@ -252,8 +252,8 @@ def test_save_as_named_draft_sends_the_working_order_and_refuses_an_empty_name(n
 def test_update_always_sends_the_working_order_and_keeps_focus_on_update(node, db_app):
     run_history(node, db_app, r"""
     const LIST = {success: true, sessions: [draft(5, 'Workout', [t(3)]), draft(6, 'Chill', [t(2)])]};
-    await openHistory({'/workshop/target/sessions': LIST});
-    const puts = () => sent('PUT', '/workshop/sessions/6');
+    await openHistory({'/api/workshop/target/sessions': LIST});
+    const puts = () => sent('PUT', '/api/workshop/sessions/6');
     await removeRow(2);
     // The updated draft comes back in the reply and moves first in the list (latest change first),
     // without reading the list again; focus stays on its Update.
@@ -263,7 +263,7 @@ def test_update_always_sends_the_working_order_and_keeps_focus_on_update(node, d
     update.focus(); update.click(); await settle(); await heard();
     assert.equal(puts().length, 1);
     assert.deepEqual(JSON.parse(puts()[0].body), {track_uris: [t(1), t(2)], session_name: 'Chill'});
-    assert.deepEqual(draftIds(), ['6', '5']); assert.equal(reads('/workshop/target/sessions'), 1);
+    assert.deepEqual(draftIds(), ['6', '5']); assert.equal(reads('/api/workshop/target/sessions'), 1);
     assert.equal(rowLines(draftRows()[0])[0], 'Chill'); assert.match(rowLines(draftRows()[0])[1], /^2 tracks · /);
     assert.notEqual(draftControl('wk-draft-update', 6), update);
     assert.equal(focused(), draftControl('wk-draft-update', 6));
@@ -281,18 +281,18 @@ def test_update_always_sends_the_working_order_and_keeps_focus_on_update(node, d
     assert.equal(statusText(), 'Saved session not found.'); assert.equal(failed(), true);
     saidLast('Saved session not found.');
     // Without a reply the outcome is unknown: it says so, and the list is read again.
-    const listReads = reads('/workshop/target/sessions');
+    const listReads = reads('/api/workshop/target/sessions');
     page.replies.push(() => { throw new Error('connection reset'); });
     draftControl('wk-draft-update', 5).click(); await settle();
     assert.equal(statusText(),
         'No reply came from Shuffify, so this change may not have been made. The list shows what is saved.');
-    assert.equal(failed(), true); assert.equal(reads('/workshop/target/sessions'), listReads + 1);
+    assert.equal(failed(), true); assert.equal(reads('/api/workshop/target/sessions'), listReads + 1);
     // A reply that cannot be read leaves the outcome unknown as well: never a success.
     page.replies.push(Object.assign(page.reply(null), {json: async () => { throw new SyntaxError('Unexpected <'); }}));
     draftControl('wk-draft-update', 5).click(); await settle();
     assert.equal(statusText(),
         'No reply came from Shuffify, so this change may not have been made. The list shows what is saved.');
-    assert.equal(failed(), true); assert.equal(reads('/workshop/target/sessions'), listReads + 2);
+    assert.equal(failed(), true); assert.equal(reads('/api/workshop/target/sessions'), listReads + 2);
     assert.deepEqual(writes().map(call => call.method), ['PUT', 'PUT', 'PUT', 'PUT', 'PUT']);
     clean();
 """)
@@ -301,8 +301,8 @@ def test_update_always_sends_the_working_order_and_keeps_focus_on_update(node, d
 def test_delete_asks_first_and_focus_moves_to_the_next_or_previous_rows_delete(node, db_app):
     run_history(node, db_app, r"""
     const LIST = {success: true, sessions: [draft(5, 'A', [t(1)]), draft(6, 'B', [t(2)]), draft(7, 'C', [t(3)])]};
-    await openHistory({'/workshop/target/sessions': LIST});
-    const deletes = id => sent('DELETE', '/workshop/sessions/' + id);
+    await openHistory({'/api/workshop/target/sessions': LIST});
+    const deletes = id => sent('DELETE', '/api/workshop/sessions/' + id);
     // While the question is open the list waits to rebuild. Cancelled, nothing is sent, the list
     // rebuilds, and focus is on Delete in the rebuilt row.
     const asking = draftControl('wk-draft-delete', 6), answer = holdQuestion();
@@ -322,14 +322,14 @@ def test_delete_asks_first_and_focus_moves_to_the_next_or_previous_rows_delete(n
     // Confirmed: one deletion, the row goes without reading the list again, and focus moves to
     // Delete on the next row.
     page.answer = true;
-    const listReads = reads('/workshop/target/sessions');
+    const listReads = reads('/api/workshop/target/sessions');
     page.replies.push(page.reply({success: true, message: 'Session deleted.'}));
     remove.click(); await settle(); await heard();
     assert.equal(deletes(6).length, 1); assert.equal(deletes(6)[0].body, undefined);
     assert.deepEqual(draftIds(), ['5', '7']);
     assert.equal(focused(), draftControl('wk-draft-delete', 7));
     assert.equal(statusText(), 'Deleted "B".'); saidLast('Deleted "B".');
-    assert.equal(reads('/workshop/target/sessions'), listReads);
+    assert.equal(reads('/api/workshop/target/sessions'), listReads);
     // The last row's deletion moves focus to Delete on the previous row.
     page.replies.push(page.reply({success: true}));
     draftControl('wk-draft-delete', 7).focus(); draftControl('wk-draft-delete', 7).click(); await settle();
@@ -339,36 +339,37 @@ def test_delete_asks_first_and_focus_moves_to_the_next_or_previous_rows_delete(n
     draftControl('wk-draft-delete', 5).click(); await settle();
     assert.deepEqual(draftIds(), ['5']); assert.equal(statusText(), 'Saved session not found.');
     // Only a deletion without a reply reads the list again, to show what is saved.
-    assert.equal(reads('/workshop/target/sessions'), listReads);
+    assert.equal(reads('/api/workshop/target/sessions'), listReads);
     LIST.sessions = [draft(5, 'A', [t(1)])];
     page.replies.push(() => { throw new Error('connection reset'); });
     draftControl('wk-draft-delete', 5).click(); await settle();
-    assert.deepEqual(draftIds(), ['5']); assert.equal(reads('/workshop/target/sessions'), listReads + 1);
+    assert.deepEqual(draftIds(), ['5']); assert.equal(reads('/api/workshop/target/sessions'), listReads + 1);
     assert.equal(statusText(),
         'No reply came from Shuffify, so this change may not have been made. The list shows what is saved.');
     // The only row's deletion leaves focus in the section.
     page.replies.push(page.reply({success: true}));
     draftControl('wk-draft-delete', 5).focus(); draftControl('wk-draft-delete', 5).click(); await settle();
     assert.deepEqual(draftIds(), []); assert.equal(focused(), draftsSection());
-    assert.deepEqual(writes().map(call => call.method + ' ' + call.url), ['DELETE /workshop/sessions/6',
-        'DELETE /workshop/sessions/7', 'DELETE /workshop/sessions/5', 'DELETE /workshop/sessions/5',
-        'DELETE /workshop/sessions/5']);
-    assert.equal(reads('/workshop/target/sessions'), listReads + 1);
+    assert.deepEqual(writes().map(call => call.method + ' ' + call.url), ['DELETE /api/workshop/sessions/6',
+        'DELETE /api/workshop/sessions/7', 'DELETE /api/workshop/sessions/5', 'DELETE /api/workshop/sessions/5',
+        'DELETE /api/workshop/sessions/5']);
+    assert.equal(reads('/api/workshop/target/sessions'), listReads + 1);
     clean();
 """)
 
 
 def test_loading_a_saved_draft_replaces_the_working_order_keeping_each_tracks_keys(node, db_app):
     run_history(node, db_app, r"""
-    await openHistory({'/workshop/target/sessions': {success: true, sessions: [draft(5, 'Workout', [t(3), t(1)])]},
-        '/workshop/sessions/5': {success: true, session: draft(5, 'Workout', [t(3), t(1), 'spotify:track:zz', t(1)])}});
+    await openHistory({'/api/workshop/target/sessions': {success: true, sessions: [draft(5, 'Workout', [t(3), t(1)])]},
+        '/api/workshop/sessions/5': {success: true,
+            session: draft(5, 'Workout', [t(3), t(1), 'spotify:track:zz', t(1)])}});
     const [k1, k2, k3] = keysOf();
     const load = draftControl('wk-draft-load', 5);
     load.focus(); load.click(); load.click(); await settle(); await heard();
     // Pressed twice, only the latest press loads; with nothing to discard nothing is asked, and
     // nothing is written.
     assert.equal(page.asked.length, 0);
-    assert.equal(reads('/workshop/sessions/5'), 2); assert.deepEqual(writes(), []);
+    assert.equal(reads('/api/workshop/sessions/5'), 2); assert.deepEqual(writes(), []);
     // The saved draft is the working order. Each track keeps its rows' keys; added copies get new ones.
     assert.deepEqual(urisOf(), [t(3), t(1), 'spotify:track:zz', t(1)]);
     const keys = keysOf();
@@ -389,8 +390,8 @@ def test_loading_a_saved_draft_replaces_the_working_order_keeping_each_tracks_ke
 
 def test_loading_over_a_draft_or_staging_asks_and_discards_locally_first(node, db_app):
     run_history(node, db_app, r"""
-    await openHistory({'/workshop/target/sessions': {success: true, sessions: [draft(5, 'Workout', [t(3), t(1)])]},
-        '/workshop/sessions/5': {success: true, session: draft(5, 'Workout', [t(3), t(1)])}});
+    await openHistory({'/api/workshop/target/sessions': {success: true, sessions: [draft(5, 'Workout', [t(3), t(1)])]},
+        '/api/workshop/sessions/5': {success: true, session: draft(5, 'Workout', [t(3), t(1)])}});
     const k3 = keysOf()[2];
     await removeRow(0);
     const load = draftControl('wk-draft-load', 5);
@@ -432,19 +433,19 @@ def test_loading_over_a_draft_or_staging_asks_and_discards_locally_first(node, d
 def test_load_is_refused_with_a_reason_while_it_cannot_change_the_draft(node, db_app):
     run_history(node, db_app, r"""
     const SESSION = {success: true, session: draft(5, 'Workout', [t(3), t(1)])};
-    await openHistory({'/workshop/target/sessions': {success: true, sessions: [draft(5, 'Workout', [t(3), t(1)])]},
-        '/workshop/sessions/5': SESSION});
+    await openHistory({'/api/workshop/target/sessions': {success: true, sessions: [draft(5, 'Workout', [t(3), t(1)])]},
+        '/api/workshop/sessions/5': SESSION});
     const load = draftControl('wk-draft-load', 5);
     const unchanged = () => assert.deepEqual(urisOf(), [t(1), t(2), t(3)]);
     // Saved work that needs attention refuses the load, before any read.
     evaluate("workshopState.saveAttention = {retryable: false, message: 'Check the playlist.'}");
     load.click(); await settle(); await heard();
-    assert.equal(reads('/workshop/sessions/5'), 0); unchanged();
+    assert.equal(reads('/api/workshop/sessions/5'), 0); unchanged();
     assert.equal(statusText(), 'Resolve the saved work in Save results before loading a saved draft.');
     assert.equal(failed(), true); assert.equal(announced(), statusText());
     evaluate("workshopState.saveAttention = null; workshopState.sourceRecovery = [{kind: 'raids'}]");
     load.click(); await settle();
-    assert.equal(reads('/workshop/sessions/5'), 0); unchanged();
+    assert.equal(reads('/api/workshop/sessions/5'), 0); unchanged();
     evaluate('workshopState.sourceRecovery = []');
     // Attention that arrives while the draft is read still refuses it.
     page.replies.push(() => {
@@ -452,7 +453,7 @@ def test_load_is_refused_with_a_reason_while_it_cannot_change_the_draft(node, db
         return page.reply(SESSION);
     });
     load.click(); await settle();
-    assert.equal(reads('/workshop/sessions/5'), 1); unchanged();
+    assert.equal(reads('/api/workshop/sessions/5'), 1); unchanged();
     assert.equal(statusText(), 'Resolve the saved work in Save results before loading a saved draft.');
     evaluate('workshopState.saveAttention = null');
     // While Save runs (a blocked draft) and while a shuffle preview is coming, it says why.
@@ -463,7 +464,7 @@ def test_load_is_refused_with_a_reason_while_it_cannot_change_the_draft(node, db
     load.click(); await settle();
     assert.equal(statusText(), 'Wait for the shuffle preview to finish before loading a saved draft.');
     evaluate('workshopState.isShuffling = false');
-    assert.equal(reads('/workshop/sessions/5'), 1); unchanged();
+    assert.equal(reads('/api/workshop/sessions/5'), 1); unchanged();
     // Writes in a blocked group are refused before anything is asked or sent.
     evaluate('workshopState.isSaving = true');
     for (const call of ['deleteSavedDraft(5, null)', 'updateSavedDraft(5, null)']) {
@@ -480,19 +481,19 @@ def test_load_is_refused_with_a_reason_while_it_cannot_change_the_draft(node, db
 
 def test_only_a_draft_listed_for_this_playlist_loads(node, db_app):
     run_history(node, db_app, r"""
-    await openHistory({'/workshop/target/sessions': {success: true, sessions: [draft(5, 'Workout', [t(3)])]},
-        '/workshop/sessions/5': {success: true, session: Object.assign(draft(5, 'Workout', [t(3)]),
+    await openHistory({'/api/workshop/target/sessions': {success: true, sessions: [draft(5, 'Workout', [t(3)])]},
+        '/api/workshop/sessions/5': {success: true, session: Object.assign(draft(5, 'Workout', [t(3)]),
             {playlist_id: 'other'})}});
     // The read says the draft belongs to another playlist: nothing changes.
     draftControl('wk-draft-load', 5).click(); await settle(); await heard();
-    assert.equal(reads('/workshop/sessions/5'), 1);
+    assert.equal(reads('/api/workshop/sessions/5'), 1);
     assert.deepEqual(urisOf(), [t(1), t(2), t(3)]); assert.equal(page.asked.length, 0);
     assert.equal(statusText(), 'This saved draft belongs to another playlist, so it was not loaded.');
     assert.equal(announced(), statusText());
     // A draft the list does not show is refused without a read.
     evaluate('loadSavedDraft(9, null)'); await settle();
     assert.equal(statusText(), 'That saved draft is no longer listed for this playlist.');
-    assert.equal(page.calls.filter(call => call.url === '/workshop/sessions/9').length, 0);
+    assert.equal(page.calls.filter(call => call.url === '/api/workshop/sessions/9').length, 0);
     // A failed read says so and changes nothing.
     page.replies.push(page.reply({success: false, message: 'Saved session not found.'}, 404));
     draftControl('wk-draft-load', 5).click(); await settle();

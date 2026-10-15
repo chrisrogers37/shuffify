@@ -20,6 +20,7 @@ from tests.e2e.test_direct_live_actions import _open_inbox, _open_tool
 from tests.e2e.test_direct_live_actions import direct_browser as direct_browser
 from tests.e2e.test_live_operation_outcomes import _registration
 from tests.e2e.test_playlist_workspace import _no_sideways_scroll, _scroll_settled
+from tests.paths import api_path
 
 TARGET = pid("alice-morning-mix")
 ARCHIVE = pid("alice-morning-archive")
@@ -30,9 +31,9 @@ FOCUS = pid("frank-focus")
 SETUP_PATH = f"/playlist/{TARGET}/setup"
 SETUP = f"{APP}{SETUP_PATH}"
 WORKSHOP = f"{APP}/workshop/{TARGET}"
-IMPACT = f"{SETUP_PATH}/impact"
-SETTINGS = f"{SETUP_PATH}/settings"
-CREATE = f"{SETUP_PATH}/spotify-playlists"
+IMPACT = api_path(f"{SETUP_PATH}/impact")
+SETTINGS = api_path(f"{SETUP_PATH}/settings")
+CREATE = api_path(f"{SETUP_PATH}/spotify-playlists")
 DESKTOP, PHONE = (1440, 900), (375, 812)
 
 SAVED = "Settings saved. Existing routines now use these settings. No routine was started."

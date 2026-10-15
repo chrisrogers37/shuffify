@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
+from tests.paths import api_path
 
 
 class TestRegistryHiddenAlgorithms:
@@ -79,7 +80,7 @@ class TestRefreshPlaylistsRoute:
 
     def test_refresh_requires_auth(self, client):
         """Should return 401 when not authenticated."""
-        response = client.post("/refresh-playlists")
+        response = client.post(api_path("/refresh-playlists"))
         assert response.status_code == 401
         data = response.get_json()
         assert data["success"] is False
@@ -111,7 +112,7 @@ class TestRefreshPlaylistsRoute:
         ]
         mock_playlist_service_cls.return_value = mock_service
 
-        response = client.post("/refresh-playlists")
+        response = client.post(api_path("/refresh-playlists"))
         assert response.status_code == 200
         data = response.get_json()
         assert data["success"] is True
@@ -142,7 +143,7 @@ class TestRefreshPlaylistsRoute:
         mock_service.get_user_playlists.return_value = []
         mock_playlist_service_cls.return_value = mock_service
 
-        client.post("/refresh-playlists")
+        client.post(api_path("/refresh-playlists"))
 
         mock_service.get_user_playlists.assert_called_once_with(skip_cache=True)
 
@@ -172,7 +173,7 @@ class TestRefreshPlaylistsRoute:
         mock_service.get_user_playlists.side_effect = PlaylistError("API error")
         mock_playlist_service_cls.return_value = mock_service
 
-        response = client.post("/refresh-playlists")
+        response = client.post(api_path("/refresh-playlists"))
         assert response.status_code == 500
         data = response.get_json()
         assert data["success"] is False

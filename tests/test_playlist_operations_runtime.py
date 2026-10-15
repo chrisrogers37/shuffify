@@ -69,7 +69,7 @@ def test_run_accepts_only_prepared_handles_and_needs_no_mode_flag(node):
         + """
 (async () => {
     client.configure({});
-    const descriptor = {key: 'drip:target', url: '/playlist/target/drip-now', label: 'Drip now',
+    const descriptor = {key: 'drip:target', url: '/api/playlist/target/drip-now', label: 'Drip now',
         targetId: 'target', targetName: 'Target name', body: {}, trigger: element('run')};
     assert.equal(await client.run(descriptor), null);
     assert.equal(await client.run(Object.freeze({kind: 'drip', targetId: 'target'})), null);
@@ -77,7 +77,7 @@ def test_run_accepts_only_prepared_handles_and_needs_no_mode_flag(node):
     assert.equal('hasBlocked' in client, false); assert.equal('canRefreshPage' in client, false);
     replies.push(response({success: false, error_code: 'authorization_unavailable', message: 'Sign in again.'}, 409));
     client.prepare({kind: 'drip', targetId: 'target', trigger: element('run')}); await tick(); await tick();
-    assert.equal(calls.length, 1); assert.equal(calls[0].url, '/playlist/target/live-context');
+    assert.equal(calls.length, 1); assert.equal(calls[0].url, '/api/playlist/target/live-context');
     assert.deepEqual(JSON.parse(calls[0].options.body), {kind: 'drip'});
 })().catch(e => {console.error(e); process.exitCode = 1;});
 """,
