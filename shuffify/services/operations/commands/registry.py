@@ -1,5 +1,6 @@
 """Closed command schemas and worker handlers for queued playlist actions."""
 
+from .archive_move import UnarchiveCommand, unarchive
 from .direct import shuffle, snapshot_restore, undo, visibility
 from .finalizer_schemas import ArchiveAppendCommand, FinalizeRaidsCommand, FinalizeRestoreCommand
 from .finalizers import archive_append, finalize_raids, finalize_restore
@@ -15,6 +16,7 @@ from .schemas import (
 from .workshop import workshop_commit
 
 COMMAND_SCHEMAS = {
+    'unarchive': UnarchiveCommand,
     'shuffle': ShuffleCommand,
     'undo': UndoCommand,
     'visibility': VisibilityCommand,
@@ -29,6 +31,7 @@ COMMAND_SCHEMAS = {
     'workshop_finalize_restore': FinalizeRestoreCommand,
 }
 COMMAND_HANDLERS = {
+    'unarchive': unarchive,
     'shuffle': shuffle,
     'undo': undo,
     'visibility': visibility,

@@ -6,7 +6,7 @@ Manages playlist-archive pairings and archive operations.
 
 import logging
 
-from flask import jsonify, request
+from flask import jsonify, request, session
 from pydantic import ValidationError
 
 from shuffify.enums import ActivityType
@@ -21,6 +21,7 @@ from shuffify.routes import (
     validate_json,
 )
 from shuffify.routes.finalizer_queue import admit_finalizer
+from shuffify.routes.queue import AdmissionRejected, enqueue_command
 from shuffify.schemas.playlist_pair_requests import (
     CreatePairRequest,
     UnarchiveTracksRequest,
@@ -30,7 +31,9 @@ from shuffify.schemas.workshop_finalize_requests import (
     FinalizeArchiveRequest,
     FinalizeRestoreRequest,
 )
-from shuffify.services.api_response import busy_error
+from shuffify.services.api_response import busy_error, error_payload
+from shuffify.services.operations.commands.archive_move import ArchiveMoveRejected, capture_unarchive
+from shuffify.services.operations.history import HistoryStore, get_history_scope
 from shuffify.services.playlist_lock import PlaylistBusyError, playlist_configuration_lock
 from shuffify.services.playlist_pair_service import (
     PlaylistPairExistsError,
@@ -38,6 +41,7 @@ from shuffify.services.playlist_pair_service import (
     PlaylistPairService,
 )
 from shuffify.services.playlist_setup_service import CREATION_UNKNOWN, refusal
+from shuffify.services.state_service import PLAYLIST_STATES_KEY, StateError
 from shuffify.services.workshop_finalize_service import (
     WorkshopFinalizeResult,
     WorkshopFinalizeService,
@@ -261,48 +265,32 @@ def archive_tracks(playlist_id, user=None):
     "/playlist/<playlist_id>/pair/unarchive",
     methods=["POST"],
 )
-@require_auth_and_db
-def unarchive_tracks(
-    playlist_id, api=None, user=None
-):
-    """Unarchive tracks back to the playlist the archive is paired with."""
-    pair = PlaylistPairService.get_pair_for_playlist(
-        user.id, playlist_id
-    )
-    if not pair:
-        return json_error("No archive pair found", 404)
-
+@require_session_and_db
+def unarchive_tracks(playlist_id, user=None):
+    """Accept an exact owned archive move without authenticating Spotify."""
     req, err = validate_json(UnarchiveTracksRequest)
     if err:
         return err
 
-    try:
-        count = PlaylistPairService.unarchive_tracks(
-            api,
-            pair.production_playlist_id,
-            pair.archive_playlist_id,
-            req.track_uris,
-        )
-        log_activity(
-            user_id=user.id,
-            activity_type=ActivityType.UNARCHIVE_TRACKS,
-            description=(
-                f"Unarchived {count} tracks"
-            ),
-            playlist_id=playlist_id,
-            metadata={"track_count": count},
-        )
-        return json_success(
-            f"Unarchived {count} tracks",
-            unarchived_count=count,
-        )
-    except Exception as e:
-        logger.error(
-            "Failed to unarchive tracks: %s", e
-        )
-        return json_error(
-            "Failed to unarchive tracks", 500
-        )
+    def build(storage):
+        try:
+            command = capture_unarchive(storage, user.id, playlist_id, req.track_uris)
+            history = HistoryStore(session=storage).capture(
+                user.id, get_history_scope(session), command.reserved_targets,
+                legacy=session.get(PLAYLIST_STATES_KEY),
+            )
+            return command, history
+        except ArchiveMoveRejected as error:
+            body = error_payload(error.message, error.http_status, error_code=error.code, retryable=error.retryable)
+            raise AdmissionRejected((jsonify(body), error.http_status)) from error
+        except StateError as error:
+            body = error_payload(
+                "The saved playlist history is unavailable. Review it before moving tracks.",
+                409, error_code="history_unavailable", retryable=False,
+            )
+            raise AdmissionRejected((jsonify(body), 409)) from error
+
+    return enqueue_command(user, "unarchive", {"playlist_id": playlist_id, "track_uris": req.track_uris}, build)
 
 
 @api_bp.route("/playlist/<playlist_id>/pair/finalize-restore", methods=["POST"])
