@@ -30,7 +30,7 @@ def test_raid_review_keep_and_dismiss(alice, fake):
         "post", f"/playlist/{MORNING_MIX}/raid-watch",
         json={"source_playlist_id": BOB_FINDS, "source_playlist_name": "Bob's Finds", "auto_schedule": False},
     )["source"]
-    raided = alice.ok("post", f"/playlist/{MORNING_MIX}/raid-now", json={})
+    raided = alice.write(f"/playlist/{MORNING_MIX}/raid-now", json={})
     assert raided["tracks_added"] == 5  # the default per-source raid count
 
     pending = alice.ok("get", f"/playlist/{MORNING_MIX}/pending-raids")["tracks"]
@@ -61,6 +61,6 @@ def test_raid_review_keep_and_dismiss(alice, fake):
              json={"source_id": watched["id"], "raid_count": 100})
     unseen = set(source) - raided_uris
     assert len(unseen) <= 100, "the source has more unseen tracks than one raid can take"
-    assert alice.ok("post", f"/playlist/{MORNING_MIX}/raid-now", json={})["tracks_added"] == len(unseen)
+    assert alice.write(f"/playlist/{MORNING_MIX}/raid-now", json={})["tracks_added"] == len(unseen)
     pending_now = {t["track_uri"] for t in alice.ok("get", f"/playlist/{MORNING_MIX}/pending-raids")["tracks"]}
     assert pending_now == unseen | {t["track_uri"] for t in left}

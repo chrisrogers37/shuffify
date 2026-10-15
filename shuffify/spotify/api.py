@@ -496,15 +496,19 @@ class SpotifyAPI:
         self._ensure_valid_token()
 
         tracks = []
+        from shuffify.services.operations.control import propagate_control
+
         for uri in track_uris:
             match = _TRACK_URI.fullmatch(uri)
             if not match:
                 continue
             try:
                 track = self._http.get(f"/tracks/{match.group(1)}")
-            except SpotifyNotFoundError:
+            except SpotifyNotFoundError as error:
+                propagate_control(error)
                 continue
             except SpotifyAPIError as e:
+                propagate_control(e)
                 if not tracks:
                     raise
                 logger.warning(

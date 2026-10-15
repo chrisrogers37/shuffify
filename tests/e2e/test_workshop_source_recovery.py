@@ -325,7 +325,7 @@ def test_shared_collection_archive_browser_orders_all_source_effects(
         "source_playlist_id": RAID_SOURCE, "source_playlist_name": "Bob's Finds",
         "auto_schedule": False,
     })
-    alice.ok("post", f"/playlist/{TARGET}/raid-now", json={})
+    alice.write(f"/playlist/{TARGET}/raid-now", json={})
     pending = alice.ok("get", f"/playlist/{TARGET}/pending-raids")["tracks"]
     assert len(pending) == 5
     original = fake.uris(TARGET)
@@ -389,7 +389,7 @@ def test_bulk_captured_inbox_above_two_hundred_finalizes_without_target_replay(a
         "source_id": source["id"], "raid_count": 100,
     })
     for _ in range(3):
-        alice.ok("post", f"/playlist/{TARGET}/raid-now", json={})
+        alice.write(f"/playlist/{TARGET}/raid-now", json={})
     pending = alice.ok("get", f"/playlist/{TARGET}/pending-raids")["tracks"]
     assert len(pending) == 250
     baseline = fake.uris(TARGET)

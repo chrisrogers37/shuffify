@@ -2,6 +2,7 @@
 
 import logging
 
+from shuffify.services.operations.control import propagate_control
 from shuffify.spotify.deadline import SpotifyDeadlineError, check_deadline, remaining_seconds
 from shuffify.spotify.exceptions import SpotifyRateLimitError
 
@@ -76,6 +77,7 @@ class SearchPathway:
         except SpotifyDeadlineError:
             raise
         except Exception as e:
+            propagate_control(e)
             if isinstance(e, SpotifyRateLimitError) and remaining_seconds() is not None:
                 raise
             logger.warning(

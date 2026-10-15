@@ -200,12 +200,32 @@ class App:
         return result
 
 
+def wait_for_queued_operations(*, timeout=45):
+    """Wait for detached test operations before resetting their database and provider state."""
+    HarnessConfig.assert_safe()
+    engine = create_engine(HarnessConfig.SQLALCHEMY_DATABASE_URI, poolclass=NullPool)
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            with engine.connect() as connection:
+                active = connection.execute(text(
+                    "SELECT id, state FROM job_executions WHERE state IN ('queued', 'running', 'compensating')"
+                )).all()
+            if not active:
+                return
+            assert time.monotonic() < deadline, f"Queued operations still active before harness reset: {active}"
+            time.sleep(.05)
+    finally:
+        engine.dispose()
+
+
 @pytest.fixture
 def fake():
     """The fake, with the harness reset to its seed before and after. A test
     fails if the app made any call that departs from Spotify's documentation
     while it ran."""
     f = Fake()
+    wait_for_queued_operations()
     reset_harness()
     before = len(f.violations())
     yield f
@@ -213,6 +233,8 @@ def fake():
     try:
         # A test that failed with a write held must not have it answered later, inside the next test's seed.
         f.release()
+        wait_for_queued_operations()
+        new = f.violations()[before:]
         reset_harness()
     finally:
         assert new == [], "the app sent Spotify something it does not document"

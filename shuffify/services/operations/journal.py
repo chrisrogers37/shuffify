@@ -14,6 +14,7 @@ from shuffify.spotify.exceptions import (
     SpotifyWriteRejectedError,
     SpotifyWriteUnverifiedError,
 )
+from shuffify.spotify.http_client import _quota_exceeded, _retry_after
 from shuffify.spotify.observation import observe_mutations
 
 from .planner import batch, content, plan, state_hash
@@ -324,6 +325,30 @@ class DurableJournal:
             boundaries["revision"] += 1
         return baseline
 
+    def observe_resource(self, resource, *, expected_baseline):
+        """Fence a complete read-only input without creating a mutation or rollback target."""
+        self.check_pending_control()
+        if self.doc['phase'] != 'forward' or self.doc['status'] == 'needs_attention':
+            raise NeedsAttention('operation_blocked')
+        current = self.doc.get('boundaries', {}).get('current')
+        stored = self.doc['resources'].get(resource)
+        if stored is None or current is not None and resource not in current['baselines']:
+            self._base(resource, expected_baseline=expected_baseline)
+            self._save()
+            return deepcopy(expected_baseline)
+        anchor = current['baselines'][resource] if current is not None else stored
+        if (content(expected_baseline) != anchor['baseline']
+                or expected_baseline.get('snapshot_id') != anchor.get('snapshot_id')):
+            self._attention('prepared_baseline_changed')
+            raise NeedsAttention('prepared_baseline_changed')
+        observed = self._read(resource)
+        baseline, batches = self._resource_ledger(resource)
+        _, reason = reconcile_resource(baseline, batches, observed)
+        if reason not in {None, 'replay_settled'}:
+            self._attention(reason, {resource: observed})
+            raise NeedsAttention(reason)
+        return observed
+
     def _freeze(self, kind, resource, *, expected_baseline=None, **options):
         scope = "metadata" if kind == "details" and self.read_metadata and resource not in self.doc["resources"] else (
             self.doc["resources"].get(resource, {}).get("scope", "tracks"))
@@ -508,6 +533,13 @@ class DurableJournal:
         if self.doc["status"] in {"needs_attention", "failed"}:
             return self.outcome()
         self.check_pending_control()
+        if any(item.get("terminal_rejection") for step in self._plans() for item in step["batches"]):
+            if self.doc["phase"] == "compensating":
+                return self._attention("compensation_rejected")
+            raise OperationAborted("quota_exceeded", {
+                "success": False, "error_code": "write_rejected", "category": "error",
+                "message": "Spotify rejected the write because its quota is exhausted.", "retryable": False,
+            })
         conflict = self._reconcile()
         if conflict:
             return conflict
@@ -546,6 +578,15 @@ class DurableJournal:
         self.doc["recovery"] = {"available": False, "action": None, "reason": None}
         self._save()
         return self.outcome()
+
+    def verify_terminal(self):
+        """Reconcile terminal candidates without forward execution or compensation."""
+        self._check_publication(self.get_journal() or {})
+        self._defer_if_needed()
+        if self.doc['status'] == 'needs_attention':
+            return self.outcome()
+        conflict = self._reconcile()
+        return conflict or self.outcome()
 
     def compensate(self):
         self._defer_if_needed()
@@ -597,7 +638,8 @@ class DurableJournal:
     def restore_plan(self):
         boundaries = self.doc.get("boundaries")
         if boundaries is None:
-            originals = self.doc["resources"]
+            written = {step['resource'] for step in self.doc['plans'] if step['resource'] is not None}
+            originals = {resource: stored for resource, stored in self.doc['resources'].items() if resource in written}
         elif boundaries["current"] is None:
             originals = {}
         else:
@@ -692,16 +734,20 @@ class DurableJournal:
             self._ack(step, item, body)
         elif 400 <= response.status_code < 500:
             item["state"] = "rejected"
+            quota = response.status_code == 429 and _quota_exceeded(response)
             if response.status_code == 429:
-                try:
-                    retry_after = max(0, int(response.headers.get("Retry-After")))
-                except (ValueError, TypeError, AttributeError):
-                    retry_after = None
+                retry_after = _retry_after(response)
                 item["retry_after"] = retry_after
-                due = datetime.now(timezone.utc) + timedelta(seconds=max(1, 60 if retry_after is None else retry_after))
-                item["next_attempt_at"] = due.isoformat()
+                if quota:
+                    # A terminal refusal survives a crash before the caller can
+                    # record failure. Its Retry-After also fences rollback I/O.
+                    item["terminal_rejection"] = "quota_exceeded"
+                if not quota or retry_after is not None:
+                    delay = max(1, 60 if retry_after is None else retry_after)
+                    due = datetime.now(timezone.utc) + timedelta(seconds=delay)
+                    item["next_attempt_at"] = due.isoformat()
             self._save()
-            if response.status_code == 429:
+            if response.status_code == 429 and (not quota or retry_after is not None):
                 raise OperationDeferred(due)
         else:
             self._save()

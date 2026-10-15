@@ -294,11 +294,11 @@ def test_activity_and_exact_history_share_composite_results_and_keep_manual_even
     alice.ok("put", f"/playlist/{TARGET}/raid-link", json={"drip_enabled": True, "drip_count": 2})
     sid = _create_schedule(alice, "raid_and_drip", TARGET)["id"]
     fake.arm(operation="DELETE /playlists/{playlist_id}/items", kind="quota", playlist_id=collection)
-    response = alice.post(api_path(f"/schedules/{sid}/run"))
-    assert response.status_code == 502, response.text
-    execution_id = response.json()["result"]["execution_id"]
+    operation = alice.queued(f"/schedules/{sid}/run")
+    assert operation["state"] == "rolled_back", operation
+    execution_id = operation["result"]["result"]["execution_id"]
     # A separate manual collection event has no saved routine association.
-    alice.ok("post", f"/playlist/{TARGET}/raid-now", json={})
+    alice.write(f"/playlist/{TARGET}/raid-now", json={})
     session = open_session(width, height)
     page = session.page
     page.goto(f"{APP}/activity", wait_until="networkidle")

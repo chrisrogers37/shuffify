@@ -26,9 +26,11 @@ from shuffify.routes import (
     no_store,
     require_auth_and_db,
     require_auth_page,
+    require_session_and_db,
     site_bp,
     validate_json,
 )
+from shuffify.routes.routine_queue import admit_schedule
 from shuffify.schemas import (
     ScheduleCreateRequest,
     ScheduleUpdateRequest,
@@ -42,9 +44,6 @@ from shuffify.services import (
     UpstreamSourceService,
 )
 from shuffify.services.api_response import busy_error
-from shuffify.services.executors import (
-    JobExecutorService,
-)
 from shuffify.services.live_executor_context_service import (
     LiveExecutorContextService,
 )
@@ -61,7 +60,6 @@ from shuffify.services.live_review_bindings import (
     review_message,
 )
 from shuffify.services.live_review_context import context_unavailable
-from shuffify.services.live_review_scope import ReviewedRun
 from shuffify.services.routine_activation_service import _schedule_payload
 from shuffify.services.scheduler_service import (
     ScheduleBusyError,
@@ -448,27 +446,15 @@ def _run_preflight_error(message, status_code):
 @api_bp.route(
     "/schedules/<int:schedule_id>/run", methods=["POST"]
 )
-@require_auth_and_db(on_preflight_error=_run_preflight_error)
+@require_session_and_db(on_preflight_error=_run_preflight_error)
 def run_schedule_now(schedule_id, api=None, user=None):
-    """Return only this authorized invocation, including incomplete outcomes."""
+    """Accept one owned routine without authenticating or calling Spotify."""
     # An optional reviewed binding; a malformed one is refused before any read.
     try:
         binding = request_binding(request, "schedule")
     except ReviewBindingError:
         return _run_result_response(invalid_binding_result("schedule"))
-    review = ReviewedRun("schedule", binding["reviewed_scope"]) if binding else None
-    try:
-        result = JobExecutorService.execute_now(
-            schedule_id, user.id, review=review,
-        )
-    except Exception:
-        logger.exception("Manual schedule %d outcome unavailable", schedule_id)
-        result = rejected_result(
-            "schedule", unknown=True, error_code="outcome_unavailable",
-            http_status=502,
-        )
-    # Confirmed mutations are logged by the executor, once, with their origin.
-    return _run_result_response(result)
+    return admit_schedule(user, schedule_id, reviewed=binding, on_rejection=_run_preflight_error)
 
 
 @api_bp.route(

@@ -1,4 +1,4 @@
-"""Immediate executor results match the isolated fake's actual playlists."""
+"""Queued executor results match the isolated fake's actual playlists."""
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -79,9 +79,9 @@ def test_manual_run_identifies_this_invocation_without_changing_registration(ali
             assert alice.ok("post", f"/schedules/{sid}/toggle")["schedule"]["is_enabled"] is False
         registration = _registration(sid)
         assert (registration is None) is paused
-        older = alice.ok("post", f"/schedules/{sid}/run")
+        older = alice.write(f"/schedules/{sid}/run")
         before = fake.uris(LONG_HAUL)
-        run = alice.ok("post", f"/schedules/{sid}/run")
+        run = alice.write(f"/schedules/{sid}/run")
         after = fake.uris(LONG_HAUL)
         history = alice.ok("get", f"/schedules/{sid}/history")["history"]
         assert len(history) == 2
@@ -114,7 +114,7 @@ def test_collect_for_review_ignores_saved_composite_and_pause_state(alice, fake,
             alice.ok("post", f"/schedules/{sid}/toggle")
         registration = _registration(sid)
         before = fake.playlist(TARGET)
-        run = alice.ok("post", f"/playlist/{TARGET}/raid-now", json={})
+        run = alice.write(f"/playlist/{TARGET}/raid-now", json={})
         assert run["execution_id"] is not None
         assert run["operation"]["kind"] == "raid"
         assert run["operation"]["aggregate_status"] == "complete"
@@ -132,13 +132,13 @@ def test_collect_for_review_ignores_saved_composite_and_pause_state(alice, fake,
 
 def test_drip_reports_verified_compensation_when_collection_removal_is_rejected(alice, fake):
     collection = _collection(alice)
-    alice.ok("post", f"/playlist/{TARGET}/raid-now", json={})
+    alice.write(f"/playlist/{TARGET}/raid-now", json={})
     before = fake.uris(TARGET)
     collected = fake.uris(collection)
     fake.arm(operation="DELETE /playlists/{playlist_id}/items", kind="quota", playlist_id=collection)
-    response = alice.post(api_path(f"/playlist/{TARGET}/drip-now"), json={})
-    assert response.status_code == 502, response.text
-    body = response.json()
+    queued = alice.queued(f"/playlist/{TARGET}/drip-now", json={})
+    assert queued["state"] == "rolled_back", queued
+    body = queued["result"]
     assert body["success"] is False
     operation = body["operation"]
     assert operation["aggregate_status"] == "partial"
@@ -361,16 +361,17 @@ def test_lost_manual_run_response_retains_unknown_and_blocks_repeat(
     visit = Visit(live_browser, "desktop")
     page = visit.page
     page.set_viewport_size({"width": width, "height": height})
-    posted = []
+    posted, receipts = [], []
     run_url = (APP + api_path(f'/schedules/{sid}/run'))
 
     def lose_response_body(route):
         posted.append(route.request.url)
         response = route.fetch()
-        assert response.status == 200
-        # The isolated proxy lets the real request finish but loses its body.
-        # The client has no execution identity or generated intent to recover.
-        route.fulfill(status=200, content_type="application/json", body="")
+        assert response.status == 202
+        receipt = response.json()
+        receipts.append((response.headers["location"], receipt["operation_id"]))
+        # Only this test observer retains the receipt; the browser loses it.
+        route.fulfill(status=202, content_type="application/json", body="")
 
     page.route(run_url, lose_response_body)
     try:
@@ -389,6 +390,9 @@ def test_lost_manual_run_response_retains_unknown_and_blocks_repeat(
         assert page.evaluate("PlaylistOperations.hasAttention()") is True
         assert button.is_disabled()
         assert "Do not repeat this action" in page.locator("#live-operation-results").inner_text()
+        assert len(receipts) == 1
+        accepted = alice.wait_operation(*receipts[0])
+        assert accepted["state"] == "succeeded", accepted
         assert fake.uris(LONG_HAUL) != before
         assert len(alice.ok("get", f"/schedules/{sid}/history")["history"]) == 1
         assert posted == [run_url]
@@ -483,7 +487,7 @@ def test_composite_restoration_retains_completed_collection_and_named_results(
 
 def test_saved_drip_gate_and_direct_one_off_are_separate(alice, fake):
     collection = _collection(alice)
-    alice.ok("post", f"/playlist/{TARGET}/raid-now", json={})
+    alice.write(f"/playlist/{TARGET}/raid-now", json={})
     schedule = _create_schedule(alice, "drip", TARGET)
     sid = schedule["id"]
     alice.ok("post", f"/schedules/{sid}/toggle")
@@ -491,16 +495,16 @@ def test_saved_drip_gate_and_direct_one_off_are_separate(alice, fake):
     collected = fake.uris(collection)
     try:
         registration = _registration(sid)
-        run = alice.post(api_path(f"/schedules/{sid}/run"))
-        assert run.status_code == 409, run.text
-        body = run.json()
+        run = alice.queued(f"/schedules/{sid}/run")
+        assert run["state"] == "failed", run
+        body = run["result"]
         assert body["success"] is False
         assert body["operation"]["aggregate_status"] == "partial"
         assert body["result"]["execution_id"] is not None
         assert body["operation"]["retryable"] is True
         assert not any(r["dispatched"] for r in body["operation"]["resources"])
         assert fake.uris(TARGET) == before and fake.uris(collection) == collected
-        direct = alice.ok("post", f"/playlist/{TARGET}/drip-now", json={})
+        direct = alice.write(f"/playlist/{TARGET}/drip-now", json={})
         assert direct["execution_id"] != body["result"]["execution_id"]
         assert direct["operation"]["aggregate_status"] == "complete"
         assert len(fake.uris(TARGET)) > len(before)
@@ -531,9 +535,9 @@ def test_missing_source_retains_healthy_collection_and_stops_composite(alice, fa
     alice.ok("post", f"/schedules/{sid}/toggle")
     before = fake.playlist(TARGET)
     try:
-        response = alice.post(api_path(f"/schedules/{sid}/run"))
-        assert response.status_code == 502, response.text
-        body = response.json()
+        queued = alice.queued(f"/schedules/{sid}/run")
+        assert queued["state"] == "failed", queued
+        body = queued["result"]
         assert body["success"] is False
         operation = body["operation"]
         assert operation["aggregate_status"] == "partial"
@@ -560,9 +564,9 @@ def test_completed_collection_before_disabled_drip_is_recorded_as_partial(alice,
     alice.ok("post", f"/schedules/{sid}/toggle")
     target_before = fake.playlist(TARGET)
     try:
-        response = alice.post(api_path(f"/schedules/{sid}/run"))
-        assert response.status_code == 502, response.text
-        body = response.json()
+        queued = alice.queued(f"/schedules/{sid}/run")
+        assert queued["state"] == "failed", queued
+        body = queued["result"]
         operation = body["operation"]
         assert body["success"] is False
         assert operation["aggregate_status"] == "partial"

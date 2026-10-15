@@ -40,7 +40,7 @@ def capture_direct_history(user, playlist_id, kind, *, storage=None):
         raise AdmissionRejected((jsonify(payload), status)) from error
 
 
-def enqueue_command(user, kind, intent, build):
+def enqueue_command(user, kind, intent, build, *, schedule_id=None):
     """Reply with one owned operation, replaying the same key before local capture.
 
     ``build`` returns a validated Pydantic command and its optional scoped
@@ -55,12 +55,12 @@ def enqueue_command(user, kind, intent, build):
         payload = {"version": 1, "command": command.model_dump(mode="json")}
         if history is not None:
             payload["history"] = history
-        return [command.playlist_id], payload
+        return getattr(command, "reserved_targets", [command.playlist_id]), payload
 
     repository = OperationRepository()
     try:
         accepted = repository.enqueue(kind=kind, user_id=user.id, intent=intent, command_factory=factory,
-                                      request_key=key)
+                                      request_key=key, schedule_id=schedule_id)
     except AdmissionRejected as error:
         return error.response
     except BusyOperation as error:

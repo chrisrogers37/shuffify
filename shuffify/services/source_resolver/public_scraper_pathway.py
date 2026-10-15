@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
+from shuffify.services.operations.control import propagate_control
 from shuffify.spotify.deadline import (
     SpotifyDeadlineError,
     bounded_sleep,
@@ -284,6 +285,7 @@ class PublicScraperPathway:
                 requests.Timeout,
                 requests.ConnectionError,
             ) as e:
+                propagate_control(e)
                 check_deadline()
                 last_error = f"{type(e).__name__}: {e}"
                 logger.warning(
@@ -303,6 +305,7 @@ class PublicScraperPathway:
                     error=last_error,
                 )
             except Exception as e:
+                propagate_control(e)
                 # Non-retryable client-side error (e.g. bad URL,
                 # bad headers). Surface immediately.
                 logger.warning(
@@ -418,6 +421,7 @@ class PublicScraperPathway:
                 return None
             return row.track_uris
         except Exception as e:
+            propagate_control(e)
             logger.warning("Scraper cache read error: %s", e)
             return None
 
@@ -465,6 +469,7 @@ class PublicScraperPathway:
 
             db.session.commit()
         except Exception as e:
+            propagate_control(e)
             logger.warning("Scraper cache write error: %s", e)
             # Roll back so the session stays usable for
             # subsequent operations within the same request /
@@ -475,6 +480,7 @@ class PublicScraperPathway:
             try:
                 db.session.rollback()
             except Exception as rollback_err:
+                propagate_control(rollback_err)
                 logger.warning(
                     "Scraper cache rollback failed: %s",
                     rollback_err,

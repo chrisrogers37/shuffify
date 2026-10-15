@@ -280,7 +280,7 @@ def test_raid_routine_pauses_and_resumes_while_collect_runs(
         assert card.locator(".routine-run").is_disabled()
         for label, enabled in (("Resume", False), ("Pause", True)):
             assert (
-                toggle.is_enabled() and toggle.get_attribute("aria-describedby") is None
+                toggle.is_enabled() and toggle.get_attribute("aria-describedby") == f"routine-title-{sid}"
             )
             toggle.click()
             page.wait_for_function(
@@ -303,6 +303,11 @@ def test_raid_routine_pauses_and_resumes_while_collect_runs(
         )] == [False, True]
         s.assert_clean()
     finally:
+        fake.release()
+        for record in page.evaluate("PlaylistOperations.getRecords()"):
+            operation_id = record.get("acceptedOperationId")
+            if operation_id is not None:
+                alice.wait_operation(api_path(f"/operations/{operation_id}"), operation_id)
         alice.ok("delete", f"/schedules/{sid}")
 
 
@@ -419,7 +424,7 @@ def test_dismiss_all_asks_first_and_dismisses_only_the_unstaged_rows(
 ):
     """Dismiss all asks first, then sends only the rows shown; a staged row is part of the draft and stays pending."""
     collection = _collection(alice)
-    alice.ok("post", f"/playlist/{TARGET}/raid-now", json={})
+    alice.write(f"/playlist/{TARGET}/raid-now", json={})
     pending = alice.ok("get", f"/playlist/{TARGET}/pending-raids")["tracks"]
     assert len(pending) == 5 and len(fake.uris(collection)) == 5
     s = open_session(width, height)
@@ -584,12 +589,14 @@ def test_routines_state_stays_in_place_and_edit_guards_a_lost_run_reply(
     s = open_session(width, height)
     page = s.page
     posted = []
-    page.route(run_url, _lose_reply(posted))
+    lost = _lose_reply(posted)
+    page.route(run_url, lost)
     try:
         page.goto(f"{APP}/schedules", wait_until="networkidle")
         run = page.locator(f'[data-live-operation-key="schedule:{first}"]')
         _open_review(page, run, "Run routine now").click()
         _settled(page, 1)
+        assert alice.wait_operation(lost.location, lost.operation_id)["state"] == "succeeded"
         assert (
             page.evaluate("PlaylistOperations.getRecords()[0].aggregate") == "unknown"
         )

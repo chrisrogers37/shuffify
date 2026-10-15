@@ -1,6 +1,7 @@
 """Lease-owned command execution with graceful draining and durable interruption state."""
 
 import argparse
+import json
 import logging
 import signal
 import threading
@@ -14,6 +15,10 @@ from shuffify.services.operations.runtime import OperationResult, OperationRunti
 from shuffify.spotify.deadline import spotify_deadline
 
 logger = logging.getLogger(__name__)
+
+
+class TerminalPending(RuntimeError):
+    """A settled external outcome awaits a retry of its fenced local publication."""
 
 
 class OperationWorker:
@@ -92,7 +97,7 @@ class OperationWorker:
             runtime = OperationRuntime(self.repository, lease, api_factory=self.api_factory, lease_lost=lost)
             handler = self.handlers.get(runtime.operation.kind)
             if handler is None:
-                self.repository.finish(lease, "failed", result={
+                self._finish(lease, runtime, "failed", result={
                     "success": False, "error_code": "unsupported_operation", "category": "error",
                     "message": "This worker cannot run this operation.", "retryable": False,
                 })
@@ -100,6 +105,10 @@ class OperationWorker:
             with runtime.journal.observe():
                 if lease.recovering:
                     document = runtime.get_journal()
+                    terminal = document.get("runtime", {}).get("terminal_finalization")
+                    if terminal is not None:
+                        self._recover_terminal(lease, runtime, terminal)
+                        return True
                     failure = document.get("runtime", {}).get("failure")
                     if failure is not None:
                         return self._record_failure(lease, runtime, result=failure["result"])
@@ -108,7 +117,7 @@ class OperationWorker:
                     runtime.check_pending_control()
                     recovered = runtime.journal.resume()
                     if recovered["state"] == "needs_attention":
-                        self.repository.finish(lease, "needs_attention", result=self._attention())
+                        self._finish(lease, runtime, "needs_attention", result=self._attention())
                         return True
                     if recovered["state"] == "rolled_back":
                         self._finish(lease, runtime, "rolled_back", result={
@@ -131,6 +140,9 @@ class OperationWorker:
                 state, result = "needs_attention", self._attention(result)
             self._finish(lease, runtime, state, result=result)
             return True
+        except TerminalPending:
+            logger.warning("Operation %s awaits terminal database publication", lease.operation_id)
+            return False
         except OperationDeferred as deferred:
             try:
                 delay = max(0.001, (deferred.next_attempt_at - datetime.now(timezone.utc)).total_seconds())
@@ -146,6 +158,9 @@ class OperationWorker:
             try:
                 result = getattr(error, "result", None)
                 return self._record_failure(lease, runtime, result=result)
+            except TerminalPending:
+                logger.warning("Operation %s awaits terminal database publication", lease.operation_id)
+                return False
             except OperationDeferred as deferred:
                 try:
                     delay = max(0.001, (deferred.next_attempt_at - datetime.now(timezone.utc)).total_seconds())
@@ -167,7 +182,7 @@ class OperationWorker:
         if result is None and journal.get("abort"):
             result = journal["abort"].get("result")
         if journal.get("status") == "needs_attention":
-            self.repository.finish(lease, "needs_attention", result=self._attention(result))
+            self._finish(lease, runtime, "needs_attention", result=self._attention(result))
             return True
         state = "failed"
         result = result if result is not None else {
@@ -202,22 +217,129 @@ class OperationWorker:
         return True
 
     def _finish(self, lease, runtime, state, *, result):
-        """Publish history only alongside its confirmed terminal operation state."""
-        if runtime is not None:
-            runtime.ensure_lease()
-            retained = state == "failed" and bool(runtime.get_journal().get("boundaries", {}).get("accepted"))
-            if state in {"succeeded", "rolled_back"} or state == "failed" and retained:
-                from shuffify.services.operations.history import HistoryError
+        """Finalize local effects, then publish history and the settled result together.
 
-                try:
-                    runtime.stage_history(state)
-                except HistoryError:
-                    logger.exception("Operation %s could not confirm its history", lease.operation_id)
-                    state = "needs_attention"
-                    result = dict(result, success=False, error_code="history_confirmation_failed", category="error",
-                                  message="The playlist was verified, but its saved history needs review.",
-                                  retryable=False)
-        self.repository.finish(lease, state, result=result)
+        A terminal candidate is durable before any callback. Persistence errors
+        deliberately leave its lease recoverable and must never enter failure
+        compensation solely because a verified outcome could not be published.
+        """
+        try:
+            if runtime is not None:
+                runtime.ensure_lease()
+                state, result = self._finalize(runtime, state, result)
+                retained = state == "failed" and bool(runtime.get_journal().get("boundaries", {}).get("accepted"))
+                if state in {"succeeded", "rolled_back"} or state == "failed" and retained:
+                    from shuffify.services.operations.history import HistoryError
+
+                    try:
+                        runtime.stage_history(state)
+                    except HistoryError:
+                        logger.exception("Operation %s could not confirm its history", lease.operation_id)
+                        state = "needs_attention"
+                        result = dict(result, success=False, error_code="history_confirmation_failed", category="error",
+                                      message="The playlist was verified, but its saved history needs review.",
+                                      retryable=False)
+                        # The changed terminal state needs its own domain receipt;
+                        # cached success can never erase this downgrade on restart.
+                        state, result = self._finalize(runtime, state, result)
+            operation = result.get("operation")
+            code = (result.get("error_code") or result.get("skipped_reason")
+                    or (operation.get("error_code") if isinstance(operation, dict) else None))
+            legacy_status = "skipped" if (state == "failed" and result.get("status") == "skipped"
+                                          and code == "drip_disabled") else None
+            self.repository.finish(lease, state, result=result, legacy_status=legacy_status,
+                                   error_message=self._error_message(state, result),
+                                   tracks_added=self._count(result.get("tracks_added")),
+                                   tracks_total=self._count(result.get("tracks_total")))
+        except (LeaseLost, OperationDeferred):
+            raise
+        except Exception as error:
+            logger.exception("Operation %s terminal publication is pending", lease.operation_id)
+            raise TerminalPending() from error
+
+    def _recover_terminal(self, lease, runtime, terminal):
+        """Revalidate a terminal candidate without ever re-entering failure compensation."""
+        try:
+            # Read-only reconciliation is allowed through an abort; an outage
+            # leaves the candidate recoverable instead of authorizing a write.
+            recovered = runtime.journal.verify_terminal()
+            state, result = terminal["state"], terminal["result"]
+            if recovered["state"] == "needs_attention" and state != "needs_attention":
+                state, result = "needs_attention", self._attention(result)
+            self._finish(lease, runtime, state, result=result)
+        except (LeaseLost, OperationDeferred, TerminalPending):
+            raise
+        except Exception as error:
+            logger.exception("Operation %s terminal verification is pending", lease.operation_id)
+            raise TerminalPending() from error
+
+    @staticmethod
+    def _count(value):
+        return value if type(value) is int and value >= 0 else None
+
+    @staticmethod
+    def _error_message(state, result):
+        if state != "succeeded":
+            for name in ("error", "message"):
+                value = result.get(name)
+                if isinstance(value, str) and value:
+                    return value
+        return None
+
+    @staticmethod
+    def _json_result(result):
+        if not isinstance(result, dict):
+            raise ValueError("A terminal finalizer must return a result object.")
+        return json.loads(json.dumps(result, allow_nan=False))
+
+    def _save_terminal(self, runtime, state, result, *, done):
+        document = runtime.get_journal()
+        document.setdefault("runtime", {})["terminal_finalization"] = {
+            "state": state, "result": self._json_result(result), "done": done,
+        }
+        # Do not use forward Runtime.local_step/control: failed and aborted
+        # journals still require their independent, DB-only terminal receipts.
+        self.repository.checkpoint(runtime.lease, document)
+
+    def _finalize(self, runtime, state, result):
+        marker = runtime.get_journal().get("runtime", {}).get("terminal_finalization")
+        if marker is not None and marker["state"] == state:
+            result = self._json_result(marker["result"])
+            if marker["done"]:
+                return state, result
+        else:
+            self._save_terminal(runtime, state, result, done=False)
+        original = self._json_result(result)
+        callback = getattr(self.handlers.get(runtime.operation.kind), "finalize", None)
+        if callback is not None:
+            try:
+                # Trusted domain finalizers perform DB work only. They use
+                # repository.local_step(lease, state-qualified name, callback)
+                # for replay-safe records and never construct or use Spotify.
+                outcome = callback(runtime, state, deepcopy(original))
+                if (not isinstance(outcome, OperationResult)
+                        or outcome.state not in {state, "needs_attention"}):
+                    raise ValueError("A terminal finalizer may only retain state or require attention.")
+                result = self._json_result(outcome.result)
+                state = outcome.state
+            except (LeaseLost, OperationDeferred):
+                raise
+            except Exception:
+                logger.exception("Operation %s local finalization needs review", runtime.operation.id)
+                state, result = "needs_attention", self._finalization_attention(original)
+        self._save_terminal(runtime, state, result, done=True)
+        return state, result
+
+    @staticmethod
+    def _finalization_attention(result):
+        """Local record failure cannot invalidate already verified Spotify facts."""
+        retained = deepcopy(result)
+        if isinstance(retained.get("operation"), dict):
+            retained["operation"].update(aggregate_status="unknown", error_code="terminal_finalization_failed",
+                                         retryable=False)
+        return {**retained, "success": False, "error_code": "terminal_finalization_failed", "category": "error",
+                "message": "The operation's local records could not be confirmed. Its playlist result is retained.",
+                "retryable": False}
 
     @staticmethod
     def _has_dispatched(journal):

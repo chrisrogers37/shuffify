@@ -9,13 +9,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from shuffify.models.db import db
+from shuffify.models.db import Schedule, User, db
 from shuffify.services.user_service import UserService
 from tests.paths import api_path
+from tests.queued_operations import post_and_run
+from tests.routes.live_review_helpers import serving
+from tests.routes.test_live_raid_outcomes import MutableSpotify, uri
 
 
 @pytest.fixture(autouse=True)
-def _allow_playlist_edits():
+def _allow_playlist_edits(request):
     """No-op the playlist ownership guard for these route tests.
 
     ``create_schedule`` calls ``PlaylistService.validate_user_can_edit``, which
@@ -23,6 +26,9 @@ def _allow_playlist_edits():
     clients and aren't exercising the guard (it's covered directly in
     ``tests/services/test_playlist_service.py``), so patch it to a no-op.
     """
+    if request.node.cls is not None and request.node.cls.__name__ == "TestRunScheduleNow":
+        yield  # Queued worker tests exercise the real ownership/read guards.
+        return
     with patch(
         "shuffify.services.playlist_service."
         "PlaylistService.validate_user_can_edit"
@@ -617,60 +623,53 @@ class TestToggleSchedule:
 
 
 class TestRunScheduleNow:
-    """Tests for POST /schedules/<int:schedule_id>/run."""
+    """An accepted saved routine executes through the explicit worker driver."""
 
-    @patch(
-        "shuffify.routes.schedules.JobExecutorService"
-    )
-    @patch("shuffify.routes.require_auth")
-    def test_run_success(
-        self,
-        mock_auth,
-        mock_executor,
-        auth_client,
-    ):
-        mock_auth.return_value = MagicMock()
-        mock_executor.execute_now.return_value = {
-            "status": "success", "execution_id": 21,
-            "started_at": "2026-10-11T12:00:00+00:00",
-            "execution_state": "recorded", "tracks_total": 4,
-            "operation": {"kind": "shuffle", "aggregate_status": "complete",
-                          "resources": [], "bookkeeping": []},
-        }
+    @staticmethod
+    def routine():
+        user = User.query.filter_by(spotify_id="user123").one()
+        row = Schedule(user_id=user.id, job_type="shuffle", target_playlist_id="target",
+                       target_playlist_name="Target", algorithm_name="BasicShuffle", algorithm_params={})
+        db.session.add(row)
+        db.session.commit()
+        return row
 
-        resp = auth_client.post(api_path("/schedules/1/run"))
-        assert resp.status_code == 200
+    def test_run_success(self, auth_client):
+        row, api = self.routine(), MutableSpotify()
+        api.playlists["target"] = [uri(number) for number in range(1, 5)]
+        with serving(api):
+            resp = post_and_run(auth_client, api, api_path(f"/schedules/{row.id}/run"))
         data = resp.get_json()
+        assert resp.status_code == 200, data
+        assert resp.accepted.status_code == 202
+        assert resp.operation["state"] == "succeeded"
         assert data["success"] is True
-        assert data["result"]["execution_id"] == 21
+        assert data["result"]["execution_id"] == resp.operation["id"]
+        assert data["result"]["tracks_total"] == 4
         assert data["operation"]["kind"] == "shuffle"
         assert "operation" not in data["result"]
 
-    @patch(
-        "shuffify.routes.schedules.JobExecutorService"
-    )
-    @patch("shuffify.routes.require_auth")
-    def test_run_unavailable_outcome_is_unknown_without_raw_error(
-        self,
-        mock_auth,
-        mock_executor,
-        auth_client,
-    ):
-        from shuffify.services import JobExecutionError
+    def test_run_read_failure_has_no_write_and_unknown_total_without_raw_error(self, auth_client):
+        from shuffify.spotify.exceptions import SpotifyAPIError
 
-        mock_auth.return_value = MagicMock()
-        mock_executor.execute_now.side_effect = (
-            JobExecutionError("private execution detail")
-        )
+        row, api = self.routine(), MutableSpotify()
 
-        resp = auth_client.post(api_path("/schedules/1/run"))
-        assert resp.status_code == 502
+        def unavailable(*args, **kwargs):
+            raise SpotifyAPIError("private execution detail")
+
+        api.get_playlist = unavailable
+        with serving(api):
+            resp = post_and_run(auth_client, api, api_path(f"/schedules/{row.id}/run"))
         data = resp.get_json()
+        assert resp.status_code == 200, data
+        assert resp.operation["state"] in {"failed", "needs_attention"}
         assert data["success"] is False
-        assert data["operation"]["aggregate_status"] == "unknown"
+        assert data["operation"]["aggregate_status"] == "partial"
         assert data["operation"]["retryable"] is False
-        assert data["result"]["execution_state"] == "unknown"
-        assert data["result"]["tracks_added"] is None
+        assert data["result"]["execution_id"] == resp.operation["id"]
+        assert data["result"]["tracks_added"] == 0
+        assert data["result"]["tracks_total"] is None
+        assert api.writes == []
         assert "private execution detail" not in resp.get_data(as_text=True)
 
 

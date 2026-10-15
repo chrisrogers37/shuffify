@@ -7,7 +7,11 @@ for raid playlist link CRUD and drip endpoints.
 
 from unittest.mock import MagicMock, patch
 
+from shuffify.models.db import db
 from tests.paths import api_path
+from tests.queued_operations import post_and_run
+from tests.routes.live_review_helpers import serving
+from tests.routes.test_live_raid_outcomes import MutableSpotify, uri
 
 # =============================================================
 # Authentication Tests
@@ -191,30 +195,22 @@ class TestRaidLinkSuccess:
         data = resp.get_json()
         assert data["success"] is True
 
-    @patch("shuffify.routes.require_auth")
-    @patch(
-        "shuffify.routes.raid_panel"
-        ".RaidSyncService"
-    )
-    def test_drip_now_success(
-        self, mock_svc, mock_auth, auth_client,
-    ):
-        mock_auth.return_value = MagicMock()
-        mock_svc.drip_now.return_value = {
-            "tracks_added": 3,
-            "tracks_total": 50,
-            "status": "success",
-            "operation": {"kind": "drip", "aggregate_status": "complete",
-                          "resources": [], "bookkeeping": []},
-        }
-
-        resp = auth_client.post(
-            api_path("/playlist/p1/drip-now"),
-            json={},
-        )
-        assert resp.status_code == 200
+    def test_drip_now_success(self, raid_target):
+        api = MutableSpotify()
+        api.playlists["target"] = [uri(number) for number in range(1, 48)]
+        api.playlists["collection"] = [uri(number) for number in range(48, 51)]
+        raid_target.link.drip_count = 3
+        db.session.commit()
+        with serving(api):
+            resp = post_and_run(raid_target.client, api, api_path("/playlist/target/drip-now"), json={})
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.accepted.status_code == 202
+        assert resp.operation["state"] == "succeeded"
         data = resp.get_json()
         assert data["tracks_added"] == 3
+        assert data["tracks_total"] == 50
+        assert len(api.playlists["target"]) == 50
+        assert api.playlists["collection"] == []
 
 
 class TestRaidLinkCreationUnknown:

@@ -1,6 +1,8 @@
-"""Closed command schemas and worker handlers for queued direct actions."""
+"""Closed command schemas and worker handlers for queued playlist actions."""
 
 from .direct import shuffle, snapshot_restore, undo, visibility
+from .routine_schemas import DripNowCommand, RaidAndDripCommand, RaidNowCommand, ScheduleRunCommand
+from .routines import drip_now, raid_and_drip, raid_now, schedule_run
 from .schemas import (
     ShuffleCommand,
     SnapshotRestoreCommand,
@@ -16,6 +18,10 @@ COMMAND_SCHEMAS = {
     'visibility': VisibilityCommand,
     'snapshot_restore': SnapshotRestoreCommand,
     'workshop_commit': WorkshopCommitCommand,
+    'schedule_run': ScheduleRunCommand,
+    'raid_now': RaidNowCommand,
+    'drip_now': DripNowCommand,
+    'raid_and_drip': RaidAndDripCommand,
 }
 COMMAND_HANDLERS = {
     'shuffle': shuffle,
@@ -23,4 +29,8 @@ COMMAND_HANDLERS = {
     'visibility': visibility,
     'snapshot_restore': snapshot_restore,
     'workshop_commit': workshop_commit,
+    'schedule_run': schedule_run,
+    'raid_now': raid_now,
+    'drip_now': drip_now,
+    'raid_and_drip': raid_and_drip,
 }

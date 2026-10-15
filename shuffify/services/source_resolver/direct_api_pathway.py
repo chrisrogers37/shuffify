@@ -2,6 +2,7 @@
 
 import logging
 
+from shuffify.services.operations.control import propagate_control
 from shuffify.spotify.deadline import SpotifyDeadlineError, check_deadline, remaining_seconds
 from shuffify.spotify.exceptions import (
     SpotifyAPIError,
@@ -58,7 +59,8 @@ class DirectAPIPathway:
             check_deadline()
             tracks = api.get_playlist_tracks(playlist_id)
             check_deadline()
-        except SpotifyNotFoundError:
+        except SpotifyNotFoundError as error:
+            propagate_control(error)
             logger.info(
                 "DirectAPI: playlist %s not found, "
                 "deferring to next pathway",
@@ -80,6 +82,7 @@ class DirectAPIPathway:
         except SpotifyDeadlineError:
             raise
         except SpotifyAPIError as e:
+            propagate_control(e)
             if isinstance(e, SpotifyRateLimitError) and remaining_seconds() is not None:
                 raise
             logger.warning(

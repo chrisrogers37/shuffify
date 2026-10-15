@@ -244,6 +244,84 @@ def test_worker_defers_a_rate_limited_plan_until_its_durable_deadline(setup_work
     assert world.attempts == 2
 
 
+@pytest.mark.parametrize("retry_after", [None, 120])
+@pytest.mark.parametrize("crash_after_rejection", [False, True])
+def test_terminal_quota_rejection_never_retries_forward_and_restores_only_after_hint(
+    setup_worker, monkeypatch, retry_after, crash_after_rejection,
+):
+    repository, build, accept, expire = setup_worker
+    baseline = [f"spotify:track:{index:022d}" for index in range(250)]
+    desired = list(reversed(baseline))
+    world = SpotifyWorld(baseline)
+    transport = world.send
+    handler_calls, rejected = [], []
+
+    def send(method, url, **kwargs):
+        if world.attempts == 1:
+            world.attempts += 1
+            rejected.append((method, kwargs["json"]))
+            response = requests.Response()
+            response.status_code = 429
+            if retry_after is not None:
+                response.headers["Retry-After"] = str(retry_after)
+            response._content = b'{"error":{"status":429,"reason":"QUOTA_EXCEEDED"}}'
+            return response
+        return transport(method, url, **kwargs)
+
+    world.send = send
+
+    def handler(runtime):
+        handler_calls.append(True)
+        return {"success": runtime.api.update_playlist_tracks(PLAYLIST, desired)}
+
+    checkpoint = repository.checkpoint
+    stopped = []
+
+    def cut(lease, document, **kwargs):
+        value = checkpoint(lease, document, **kwargs)
+        if crash_after_rejection and not stopped and any(
+            item.get("last_http_status") == 429 for plan in document.get("plans", []) for item in plan["batches"]
+        ):
+            stopped.append(True)
+            raise ProcessStopped()
+        return value
+
+    monkeypatch.setattr(repository, "checkpoint", cut)
+    accepted = accept()
+    if crash_after_rejection:
+        with pytest.raises(ProcessStopped):
+            build(world, handler).run_once(accepted.id)
+        expire(accepted.id)
+    else:
+        completed = build(world, handler).run_once(accepted.id)
+        assert completed is (retry_after is None)
+
+    if retry_after is not None:
+        reads = []
+        observe = world.observe
+        world.observe = lambda playlist: (reads.append(playlist), observe(playlist))[1]
+        expire(accepted.id)
+        assert build(world, handler).run_once(accepted.id) is False
+        assert world.attempts == 2 and reads == []
+        journal = repository.get(accepted.id).journal
+        for plan in journal["plans"]:
+            for item in plan["batches"]:
+                if item.get("next_attempt_at"):
+                    item["next_attempt_at"] = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+        with repository.engine.begin() as connection:
+            connection.execute(update(JobExecution).where(JobExecution.id == accepted.id).values(journal=journal))
+        expire(accepted.id)
+
+    if crash_after_rejection or retry_after is not None:
+        assert build(world, handler).run_once(accepted.id) is True
+    row = repository.get(accepted.id)
+    assert row.state == "rolled_back"
+    assert world.uris == baseline
+    assert handler_calls == [True]
+    assert len(rejected) == 1
+    assert row.journal["plans"][0]["batches"][1]["terminal_rejection"] == "quota_exceeded"
+
+
 def test_worker_defers_rate_limited_compensation_without_finishing_it(setup_worker):
     repository, build, accept, expire = setup_worker
     baseline = ["spotify:track:baseline"]
@@ -261,6 +339,75 @@ def test_worker_defers_rate_limited_compensation_without_finishing_it(setup_work
     assert row.completed_at is None and row.lease_owner is None
     assert row.lease_expires_at > datetime.now(timezone.utc) + timedelta(seconds=100)
     assert world.calls == 1 and world.attempts == 2
+
+
+@pytest.mark.parametrize("retry_after", [None, 120])
+@pytest.mark.parametrize("crash_after_rejection", [False, True])
+def test_terminal_quota_during_compensation_requires_review_without_retrying(
+    setup_worker, monkeypatch, retry_after, crash_after_rejection,
+):
+    repository, build, accept, expire = setup_worker
+    baseline, desired = ["spotify:track:baseline"], ["spotify:track:desired"]
+    world = SpotifyWorld(baseline)
+    transport = world.send
+
+    def send(method, url, **kwargs):
+        if world.attempts == 1:
+            world.attempts += 1
+            response = requests.Response()
+            response.status_code = 429
+            if retry_after is not None:
+                response.headers["Retry-After"] = str(retry_after)
+            response._content = b'{"error":{"status":429,"reason":"QUOTA_EXCEEDED"}}'
+            return response
+        return transport(method, url, **kwargs)
+
+    world.send = send
+
+    def handler(runtime):
+        runtime.api.update_playlist_tracks(PLAYLIST, desired)
+        raise ValueError("Example failure requiring restoration")
+
+    checkpoint = repository.checkpoint
+    stopped = []
+
+    def cut(lease, document, **kwargs):
+        value = checkpoint(lease, document, **kwargs)
+        if crash_after_rejection and not stopped and any(
+            item.get("last_http_status") == 429
+            for plan in document.get("compensation", []) for item in plan["batches"]
+        ):
+            stopped.append(True)
+            raise ProcessStopped()
+        return value
+
+    monkeypatch.setattr(repository, "checkpoint", cut)
+    accepted = accept()
+    if crash_after_rejection:
+        with pytest.raises(ProcessStopped):
+            build(world, handler).run_once(accepted.id)
+    else:
+        assert build(world, handler).run_once(accepted.id) is (retry_after is None)
+    if retry_after is not None:
+        reads = []
+        observe = world.observe
+        world.observe = lambda playlist: (reads.append(playlist), observe(playlist))[1]
+        expire(accepted.id)
+        assert build(world, handler).run_once(accepted.id) is False
+        assert world.attempts == 2 and reads == []
+        journal = repository.get(accepted.id).journal
+        for plan in journal["compensation"]:
+            for item in plan["batches"]:
+                if item.get("next_attempt_at"):
+                    item["next_attempt_at"] = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+        with repository.engine.begin() as connection:
+            connection.execute(update(JobExecution).where(JobExecution.id == accepted.id).values(journal=journal))
+    if crash_after_rejection or retry_after is not None:
+        expire(accepted.id)
+        assert build(world, handler).run_once(accepted.id) is True
+    assert repository.get(accepted.id).state == "needs_attention"
+    assert world.uris == desired
+    assert world.attempts == 2 and world.calls == 1
 
 
 def test_ambiguous_baseline_without_provider_settlement_stays_untouched(setup_worker):

@@ -1,0 +1,105 @@
+"""Routine admissions wake the idle worker and keep one execution identity over real HTTP."""
+
+import pytest
+from sqlalchemy import create_engine, text
+from sqlalchemy.pool import NullPool
+
+from config import HarnessConfig
+from tests.e2e.test_live_operation_outcomes import SOURCE, TARGET, _collection
+from tests.e2e.test_queued_direct_operations import complete
+
+
+def _execution(operation_id):
+    HarnessConfig.assert_safe()
+    engine = create_engine(HarnessConfig.SQLALCHEMY_DATABASE_URI, poolclass=NullPool)
+    try:
+        with engine.connect() as connection:
+            rows = connection.execute(text(
+                "SELECT id, kind, schedule_id, payload -> 'command' ->> 'triggered_by' AS triggered_by "
+                "FROM job_executions ORDER BY id"
+            )).mappings().all()
+            assert len(rows) == 1, rows
+            assert rows[0]["id"] == operation_id
+            return dict(rows[0])
+    finally:
+        engine.dispose()
+
+
+def _assert_result_identity(operation):
+    result = operation["result"]
+    assert result["execution_id"] == operation["id"]
+    assert result["execution_state"] == "recorded"
+    assert result["triggered_by"] == "manual"
+    assert result["result_detail"]["execution_id"] == operation["id"]
+    for index, step in enumerate(result["operation"]["steps"]):
+        assert step["execution_id"] == operation["id"]
+        assert step["step_index"] == index
+    return result
+
+
+@pytest.mark.parametrize("job_type", ["shuffle", "rotate", "raid", "drip", "raid_and_shuffle", "raid_and_drip"])
+def test_saved_routine_uses_one_accepted_row_and_replays_its_key(alice, fake, job_type):
+    collection = _collection(alice)
+    alice.ok("put", f"/playlist/{TARGET}/raid-link", json={"drip_enabled": True, "drip_count": 2})
+    pair = alice.ok("post", f"/playlist/{TARGET}/pair", json={
+        "create_new": True, "production_playlist_name": "Morning Mix",
+    })
+    assert pair["success"] is True
+    before = fake.uris(TARGET)
+    payload = {
+        "job_type": job_type, "target_playlist_id": TARGET, "target_playlist_name": "Morning Mix",
+        "schedule_value": "daily", "source_playlist_ids": [SOURCE],
+    }
+    if job_type in {"shuffle", "raid_and_shuffle"}:
+        payload["algorithm_name"] = "BasicShuffle"
+    if job_type == "rotate":
+        payload["algorithm_params"] = {"rotation_mode": "swap", "rotation_count": 2, "target_size": 10}
+    schedule = alice.ok("post", "/schedules/create", json=payload)["schedule"]
+    schedule_id = schedule["id"]
+    alice.ok("post", f"/schedules/{schedule_id}/toggle")
+    try:
+        operation = complete(alice, f"/api/schedules/{schedule_id}/run", key="saved-routine")
+        result = _assert_result_identity(operation)
+        assert result["result"]["execution_id"] == operation["id"]
+        row = _execution(operation["id"])
+        assert (row["kind"], row["schedule_id"], row["triggered_by"]) == (
+            "schedule_run", schedule_id, "manual",
+        )
+        history = alice.ok("get", f"/schedules/{schedule_id}/history")["history"]
+        assert len(history) == 1
+        assert history[0]["id"] == operation["id"]
+        assert history[0]["result_detail"] == result["result_detail"]
+        current = next(row for row in alice.ok("get", f"/playlist/{TARGET}/schedules")["schedules"]
+                       if row["id"] == schedule_id)
+        assert current["is_enabled"] is False
+        if job_type == "raid":
+            assert fake.uris(TARGET) == before
+            assert len(fake.uris(collection)) == 5
+        elif job_type in {"shuffle", "raid_and_shuffle"}:
+            assert sorted(fake.uris(TARGET)) == sorted(before)
+            assert fake.uris(TARGET) != before
+        elif job_type == "raid_and_drip":
+            assert len(fake.uris(TARGET)) == len(before) + 2
+            assert len(fake.uris(collection)) == 3
+    finally:
+        alice.ok("delete", f"/schedules/{schedule_id}")
+
+
+@pytest.mark.parametrize("action,kind", [
+    ("raid-now", "raid_now"), ("drip-now", "drip_now"), ("raid-and-drip", "raid_and_drip"),
+])
+def test_explicit_action_keeps_one_standalone_execution(alice, fake, action, kind):
+    collection = _collection(alice)
+    before = fake.uris(TARGET)
+    operation = complete(alice, f"/api/playlist/{TARGET}/{action}", key="explicit-routine", json={})
+    _assert_result_identity(operation)
+    row = _execution(operation["id"])
+    assert (row["kind"], row["schedule_id"], row["triggered_by"]) == (kind, None, "manual")
+    if action == "raid-now":
+        assert fake.uris(TARGET) == before
+        assert len(fake.uris(collection)) == 5
+    elif action == "raid-and-drip":
+        assert len(fake.uris(TARGET)) > len(before)
+    else:
+        assert fake.uris(TARGET) == before
+        assert fake.uris(collection) == []

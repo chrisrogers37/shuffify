@@ -29,9 +29,17 @@ class CompletedOperation:
     status_code: int
     operation: dict
     accepted: object
+    polled: object = None
 
     def get_json(self):
         return self.operation["result"]
+
+    def get_data(self, as_text=False):
+        return self.polled.get_data(as_text=as_text)
+
+    @property
+    def headers(self):
+        return self.polled.headers
 
 
 def _response(status, body, *, retry_after=None):
@@ -78,16 +86,16 @@ def worker_api(provider, token):
                     provider.playlist_add_items(playlist_id, json["uris"], json.get("position"))
             else:
                 assert method == "DELETE"
-                assert len(json["tracks"]) <= 100
-                tracks = [track["uri"] for track in json["tracks"]]
+                assert len(json["items"]) <= 100
+                tracks = [track["uri"] for track in json["items"]]
                 if hasattr(provider, "_write"):
                     provider._write("remove", playlist_id, tracks)
                 else:
                     provider.playlist_remove_items(playlist_id, tracks)
         except Exception as error:
             if isinstance(error, SpotifyPartialBatchError) and error.completed_batches:
-                # The old fake exposed a multi-batch failure at its high-level
-                # method. At this wire seam it represents an uncertain response.
+                # A failure after acknowledged provider batches leaves this
+                # transport response uncertain.
                 raise requests.Timeout("Example lost batch response") from error
             cause = error.cause if isinstance(error, SpotifyPartialBatchError) else error
             statuses = ((SpotifyForbiddenError, 403), (SpotifyNotFoundError, 404),
@@ -96,14 +104,23 @@ def worker_api(provider, token):
             status = next((code for kind, code in statuses if isinstance(cause, kind)), None)
             if status is None:
                 raise
-            return _response(status, {"error": {"status": status, "message": "Example provider rejection"}},
-                             retry_after=1 if status == 429 else None)
+            body = {"error": {"status": status, "message": "Example provider rejection"}}
+            quota = isinstance(cause, SpotifyQuotaExceededError)
+            if quota:
+                body["error"]["reason"] = "QUOTA_EXCEEDED"
+            retry_after = getattr(cause, "retry_after", None) if status == 429 else None
+            if status == 429 and not quota and retry_after is None:
+                retry_after = 1
+            return _response(status, body, retry_after=retry_after)
         revision = (provider.revisions[playlist_id] if hasattr(provider, "revisions")
                     else repr(provider.playlists[playlist_id]) if hasattr(provider, "playlists")
                     else len(provider.writes))
         return _response(200, {"snapshot_id": str(revision)})
 
     api.get_playlist = metadata
+    for name in ("get_playlist_tracks", "get_tracks", "search_tracks"):
+        if hasattr(provider, name):
+            setattr(api, name, getattr(provider, name))
     if hasattr(provider, "get_playlist_items_raw"):
         api.get_playlist_items_raw = provider.get_playlist_items_raw
     api._http._session.request = send
@@ -116,13 +133,14 @@ def post_and_run(client, provider, path, **kwargs):
     if not isinstance(writes, list):
         return client.post(path, **kwargs)
     before = deepcopy(writes)
-    reads = deepcopy(getattr(provider, "reads", None))
+    reads = {name: deepcopy(getattr(provider, name)) for name in ("reads", "metadata_reads", "track_reads")
+             if hasattr(provider, name)}
     response = client.post(path, **kwargs)
     if response.status_code != 202:
         return response
     assert provider.writes == before
-    if reads is not None:
-        assert provider.reads == reads
+    for name, before_reads in reads.items():
+        assert getattr(provider, name) == before_reads
     return run_operation(client, provider, response.get_json()["operation"]["id"], response)
 
 
@@ -135,7 +153,7 @@ def run_operation(client, provider, operation_id, accepted_response):
     runner.run_once(operation_id)
     polled = client.get(accepted_response.headers["Location"])
     assert polled.status_code == 200
-    return CompletedOperation(polled.status_code, polled.get_json()["operation"], accepted_response)
+    return CompletedOperation(polled.status_code, polled.get_json()["operation"], accepted_response, polled)
 
 
 def scoped_history(client, playlist_id):

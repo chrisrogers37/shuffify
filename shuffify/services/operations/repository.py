@@ -31,6 +31,7 @@ ACTIVE_STATES = frozenset({"queued", "running", "compensating"})
 LEASED_STATES = frozenset({"running", "compensating"})
 TERMINAL_STATES = frozenset({"succeeded", "failed", "rolled_back", "needs_attention"})
 _STATUS = {"succeeded": "success", "failed": "failed", "rolled_back": "failed_rolled_back", "needs_attention": "failed"}
+_UNSET = object()
 _CODE = re.compile(r"[a-z][a-z0-9_]{0,79}\Z")
 _PRIVATE_FIELDS = frozenset({
     "journal", "payload", "lease_owner", "lease_expires_at", "heartbeat_at", "authorization", "client_secret",
@@ -399,13 +400,24 @@ class OperationRepository:
             session.flush()
             return deepcopy(result)
 
-    def finish(self, lease, state, *, result=None, error_message=None, tracks_added=None, tracks_total=None):
+    def finish(self, lease, state, *, result=None, error_message=None, tracks_added=_UNSET, tracks_total=_UNSET,
+               legacy_status=None):
         """Complete a live claim, preserve rich result and maintain execution-history compatibility."""
         if state not in TERMINAL_STATES:
             raise ValueError("An operation must finish in a terminal state.")
         if result is not None and not isinstance(result, dict):
             raise ValueError("An operation result must be an object.")
         result = _json_copy(result) if result is not None else None
+        for value in (tracks_added, tracks_total):
+            if value is not _UNSET and value is not None and (type(value) is not int or value < 0):
+                raise ValueError("Execution counts must be nonnegative integers or unknown.")
+        if legacy_status is not None:
+            operation = result.get("operation") if isinstance(result, dict) else None
+            code = (result.get("error_code") or result.get("skipped_reason")
+                    or (operation.get("error_code") if isinstance(operation, dict) else None)) if result else None
+            if (legacy_status != "skipped" or state != "failed" or not result
+                    or result.get("status") != "skipped" or code != "drip_disabled"):
+                raise ValueError("Only a failed closed Drip gate can retain skipped execution status.")
         with self._transaction(write=True) as session:
             row, now = self._leased_row(session, lease)
             journal = deepcopy(row.journal or {})
@@ -415,12 +427,12 @@ class OperationRepository:
                 projection = serialize_execution_detail(detail)
                 if projection["detail_status"] == "available":
                     row.result_json = {key: value for key, value in projection.items() if key != "detail_status"}
-            row.journal, row.state, row.status, row.completed_at = journal, state, _STATUS[state], now
+            row.journal, row.state, row.status, row.completed_at = journal, state, legacy_status or _STATUS[state], now
             row.lease_owner = row.lease_expires_at = None
             row.error_message = error_message
-            if tracks_added is not None:
+            if tracks_added is not _UNSET:
                 row.tracks_added = tracks_added
-            if tracks_total is not None:
+            if tracks_total is not _UNSET:
                 row.tracks_total = tracks_total
             return self._detach(session, row)
 

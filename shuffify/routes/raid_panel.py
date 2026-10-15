@@ -19,8 +19,10 @@ from shuffify.routes import (
     json_success,
     log_activity,
     require_auth_and_db,
+    require_session_and_db,
     validate_json,
 )
+from shuffify.routes.routine_queue import admit_direct
 from shuffify.schemas.pending_raid_requests import (
     DismissTracksRequest,
     PromoteTracksRequest,
@@ -55,7 +57,6 @@ from shuffify.services.live_review_bindings import (
     request_binding,
     review_message,
 )
-from shuffify.services.live_review_scope import ReviewedRun
 from shuffify.services.pending_raid_service import (
     PendingRaidService,
 )
@@ -673,13 +674,13 @@ def _live_preflight_error(message, status_code):
 
 
 def _live_review(kind):
-    """(ReviewedRun or None, error response) for an optional JSON binding."""
+    """Return a validated optional JSON binding before any local capture."""
     # A malformed binding is refused before any read, never run as legacy.
     try:
         binding = request_binding(request, kind)
     except ReviewBindingError:
         return None, _live_result_response(invalid_binding_result(kind), "")
-    return (ReviewedRun(kind, binding["reviewed_scope"]) if binding else None), None
+    return binding, None
 
 
 def _live_raid_request(kind):
@@ -707,88 +708,41 @@ def _live_raid_request(kind):
     "/playlist/<playlist_id>/raid-now",
     methods=["POST"],
 )
-@require_auth_and_db(on_preflight_error=_live_preflight_error)
+@require_session_and_db(on_preflight_error=_live_preflight_error)
 def raid_now(playlist_id, api=None, user=None):
     """Collect discoveries for review, regardless of saved routine type."""
     req, review, error = _live_raid_request("raid")
     if error:
         return error
-    try:
-        result = RaidSyncService.raid_now(
-            spotify_id=user.spotify_id,
-            target_playlist_id=playlist_id,
-            source_playlist_ids=req.source_playlist_ids,
-            user=user,
-            review=review,
-        )
-    except RaidSyncError as error:
-        return _live_preflight_error(str(error), 400)
-    except Exception:
-        logger.exception("Immediate Raid outcome unavailable")
-        result = rejected_result(
-            "raid", unknown=True, error_code="outcome_unavailable",
-            http_status=502,
-        )
-    return _live_result_response(
-        result,
-        "Raid complete: {} new tracks added.".format(result.get("tracks_added")),
-    )
+    return admit_direct(user, playlist_id, "raid", source_playlist_ids=req.source_playlist_ids,
+                        reviewed=review, on_rejection=_live_preflight_error)
 
 
 @api_bp.route(
     "/playlist/<playlist_id>/drip-now",
     methods=["POST"],
 )
-@require_auth_and_db(on_preflight_error=_live_preflight_error)
+@require_session_and_db(on_preflight_error=_live_preflight_error)
 def drip_now(playlist_id, api=None, user=None):
     """Trigger an immediate drip from raid playlist."""
     review, error = _live_review("drip")
     if error:
         return error
-    try:
-        result = RaidSyncService.drip_now(
-            spotify_id=user.spotify_id,
-            target_playlist_id=playlist_id,
-            user=user,
-            review=review,
-        )
-    except RaidSyncError as error:
-        return _live_preflight_error(str(error), 400)
-    except Exception:
-        logger.exception("Immediate Drip outcome unavailable")
-        result = rejected_result(
-            "drip", unknown=True, error_code="outcome_unavailable",
-            http_status=502,
-        )
-    return _live_result_response(
-        result,
-        "Drip complete: {} tracks moved.".format(result.get("tracks_added")),
-    )
+    return admit_direct(user, playlist_id, "drip", reviewed=review, on_rejection=_live_preflight_error)
 
 
 @api_bp.route(
     "/playlist/<playlist_id>/raid-and-drip",
     methods=["POST"],
 )
-@require_auth_and_db(on_preflight_error=_live_preflight_error)
+@require_session_and_db(on_preflight_error=_live_preflight_error)
 def raid_and_drip(playlist_id, api=None, user=None):
-    """Collect then drip once, retaining both child execution outcomes."""
+    """Accept one composite invocation with separate durable child outcomes."""
     req, review, error = _live_raid_request("raid_and_drip")
     if error:
         return error
-    result = RaidSyncService.raid_and_drip_now(
-        spotify_id=user.spotify_id,
-        target_playlist_id=playlist_id,
-        source_playlist_ids=req.source_playlist_ids,
-        user=user,
-        review=review,
-    )
-    return _live_result_response(
-        result,
-        "Raid & Drip: {} raided, {} added to playlist.".format(
-            result.get("tracks_raided"), result.get("tracks_dripped"),
-        ),
-    )
+    return admit_direct(user, playlist_id, "raid_and_drip", source_playlist_ids=req.source_playlist_ids,
+                        reviewed=review, on_rejection=_live_preflight_error)
 
 
 # =============================================================

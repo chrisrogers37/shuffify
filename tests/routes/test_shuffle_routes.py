@@ -135,7 +135,7 @@ def test_rejected_undo_preserves_exact_revision_for_explicit_retry(auth_client, 
     with patch("shuffify.routes.require_auth", return_value=api):
         response = post_and_run(auth_client, api, api_path("/undo/playlist123"))
         assert response.status_code == 200
-        if status == 429:
+        if status == 429 and error_type is SpotifyRateLimitError:
             assert response.operation["state"] == "running"
             assert response.get_json() is None
             assert scoped_history(auth_client, "playlist123")["current_index"] == 2
