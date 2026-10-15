@@ -1,5 +1,6 @@
 """Fresh, invocation-local metadata outcomes; no track or history mutations."""
 
+from copy import deepcopy
 from datetime import datetime, timezone
 
 from shuffify.services.live_operation_service import (
@@ -231,6 +232,10 @@ class LiveMetadataService:
             resource.pop("loaded_at", None)
             resource.update(dispatched=True, status="unknown", affected_count=None)
 
+            verified_resource = deepcopy(resource)
+            verified_resource.update(current_metadata={"public": public}, status="complete", affected_count=1)
+            verified_body = self._result(verified_resource, public=public, message=f"Playlist set to {state}")
+
             def apply():
                 expected = {"scope": "metadata", "snapshot_id": before.get("snapshot_id"),
                             "metadata": {key: before.get(key) for key in ("name", "public", "description")}}
@@ -241,6 +246,12 @@ class LiveMetadataService:
                     from shuffify.spotify.exceptions import SpotifyWriteUnverifiedError
 
                     raise SpotifyWriteUnverifiedError("Playlist visibility verification failed")
+                runtime.protect_verified("direct.publication.v1", verified_body)
+                resource.update(current_metadata={"public": after["public"]},
+                                loaded_at=datetime.now(timezone.utc).isoformat(), status="complete", affected_count=1)
+                runtime.protect_verified("direct.publication.v1", self._result(
+                    resource, public=after["public"], message=f"Playlist set to {state}",
+                ))
                 return after
 
             after = runtime.step("visibility.target.v1", apply)
@@ -250,6 +261,7 @@ class LiveMetadataService:
         except Exception as error:
             from shuffify.services.operations.journal import NeedsAttention
 
+            runtime.fail_if_verified(error)
             if isinstance(error, NeedsAttention) and resource is not None:
                 observed = runtime.journal.doc.get("observations", {}).get(playlist_id, {}).get("metadata", {})
                 if type(observed.get("public")) is bool:

@@ -5,6 +5,7 @@ import json
 import logging
 import signal
 import threading
+from collections import Counter
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -117,6 +118,7 @@ class OperationWorker:
                     if document.get("abort"):
                         return self._record_failure(lease, runtime, result=document["abort"].get("result"))
                     runtime.check_pending_control()
+                    self._protect_recovery(runtime, document)
                     recovered = runtime.journal.resume()
                     if recovered["state"] == "needs_attention":
                         self._finish(lease, runtime, "needs_attention", result=self._attention())
@@ -131,7 +133,9 @@ class OperationWorker:
                 outcome = handler(runtime)
                 if runtime.verified_step_failure is not None:
                     if isinstance(outcome, OperationResult) and outcome.state == "needs_attention":
-                        self._finish(lease, runtime, "needs_attention", result=outcome.result)
+                        body = (self._attention(outcome.result, invalidate_all=True)
+                                if runtime.verified_step_conflicted else outcome.result)
+                        self._finish(lease, runtime, "needs_attention", result=body)
                         return True
                     return self._record_failure(lease, runtime)
                 runtime.check_pending_control()
@@ -142,6 +146,19 @@ class OperationWorker:
                     state = "succeeded" if result.get("success", True) else "failed"
                 if state == "failed":
                     return self._record_failure(lease, runtime, result=result)
+                if state == "succeeded" and self._all_acknowledged(runtime.journal.doc):
+                    # The handler has finished every provider batch. Persist its
+                    # terminal direction before another reconciliation checkpoint.
+                    try:
+                        self._save_terminal(runtime, state, result, done=False)
+                        self._recover_terminal(lease, runtime, {"state": state, "result": result, "done": False})
+                    except (LeaseLost, OperationDeferred, TerminalPending):
+                        raise
+                    except Exception as error:
+                        with observe_mutations(None):
+                            propagate_control(error)
+                        raise TerminalPending() from error
+                    return True
                 reconciled = runtime.journal.resume() if state == "succeeded" else {"state": state}
             if reconciled["state"] == "needs_attention" and state != "needs_attention":
                 state, result = "needs_attention", self._attention(result)
@@ -163,16 +180,17 @@ class OperationWorker:
         except Exception as error:
             logger.exception("Operation %s did not complete", lease.operation_id)
             try:
-                verified_abort = False
+                verified_abort = verified_attention = False
                 try:
                     with observe_mutations(None):
                         propagate_control(error)
                 except OperationAborted:
                     verified_abort = True
                 except NeedsAttention:
-                    pass
+                    verified_attention = True
                 result = getattr(error, "result", None)
-                return self._record_failure(lease, runtime, result=result, verified_abort=verified_abort)
+                return self._record_failure(lease, runtime, result=result, verified_abort=verified_abort,
+                                            verified_attention=verified_attention)
             except TerminalPending:
                 logger.warning("Operation %s awaits terminal database publication", lease.operation_id)
                 return False
@@ -190,10 +208,18 @@ class OperationWorker:
             if runtime is not None:
                 runtime.close()
 
-    def _record_failure(self, lease, runtime, *, result=None, verified_abort=False):
+    def _record_failure(self, lease, runtime, *, result=None, verified_abort=False, verified_attention=False):
         if runtime is not None and runtime.verified_step_failure is not None and not verified_abort:
+            applied = runtime.verified_step_failure.applied
+            public = applied.get("public_result") if isinstance(applied, dict) else None
+            if verified_attention or runtime.verified_step_conflicted:
+                self._finish(lease, runtime, "needs_attention",
+                             result=self._attention(result or public, invalidate_all=True))
+                return True
             self._finish(lease, runtime, "needs_attention", result={
-                "success": False, "error_code": "verified_step_publication_failed", "category": "error",
+                **(deepcopy(public) if isinstance(public, dict) else {}),
+                "success": False, "status": "unknown", "error_code": "verified_step_publication_failed",
+                "category": "error",
                 "message": "Playlist changes were verified, but their local records could not be confirmed. "
                            "Review the result before another operation.",
                 "retryable": False,
@@ -238,6 +264,47 @@ class OperationWorker:
                 result = self._attention(result)
         self._finish(lease, runtime, state, result=result)
         return True
+
+    @staticmethod
+    def _all_acknowledged(document):
+        return all(item["state"] == "acknowledged" for plan in document.get("plans", [])
+                   for item in plan["batches"])
+
+    def _protect_recovery(self, runtime, document):
+        """Retain freshly proved recovered effects until their own acceptance."""
+        boundaries = document.get("boundaries", {})
+        current = boundaries.get("current")
+        accepted = boundaries.get("accepted", [])
+        boundary = current or (accepted[-1] if accepted else None)
+        if (document.get("phase") != "forward" or not document.get("plans")
+                or boundary is None or not self._all_acknowledged(document)):
+            return
+        resources = []
+        for resource, stored in sorted(document.get("resources", {}).items()):
+            plans = [item for item in document["plans"] if item["resource"] == resource]
+            desired = plans[-1]["desired"] if plans else stored["baseline"]
+            metadata = stored.get("scope") == "metadata"
+            mutation = ("metadata" if metadata else "track_order"
+                        if Counter(desired["track_uris"]) == Counter(stored["baseline"]["track_uris"])
+                        else "track_membership")
+            fact = {
+                "resource": resource, "resource_name": desired.get("metadata", {}).get("name"),
+                "step": boundary["name"], "mutation_type": mutation,
+                "status": "complete" if plans else "not_required", "dispatched": any(p["batches"] for p in plans),
+                "affected_count": None if plans else 0, "error_code": None, "retryable": False,
+                "verification": "metadata" if metadata else "ordered",
+            }
+            fact["current_metadata" if metadata else "current_track_uris"] = deepcopy(
+                desired.get("metadata", {}) if metadata else desired["track_uris"],
+            )
+            resources.append(fact)
+        public = {"operation": {
+            "kind": runtime.operation.kind, "aggregate_status": "unknown", "resources": resources,
+            "bookkeeping": [], "error_code": "verified_step_publication_failed", "retryable": False,
+        }}
+        runtime.journal.verify_terminal(on_verified=lambda: runtime.protect_verified(
+            boundary["name"], public, resuming=True,
+        ))
 
     def _finish(self, lease, runtime, state, *, result):
         """Finalize local effects, then publish history and the settled result together.
@@ -287,8 +354,10 @@ class OperationWorker:
             # leaves the candidate recoverable instead of authorizing a write.
             recovered = runtime.journal.verify_terminal()
             state, result = terminal["state"], terminal["result"]
-            if recovered["state"] == "needs_attention":
-                changed = self._attention(result)
+            if (recovered["state"] == "needs_attention"
+                    or state == "succeeded" and (runtime.journal.doc.get("phase") != "forward"
+                                                  or not self._all_acknowledged(runtime.journal.doc))):
+                changed = self._attention(result, invalidate_all=True)
                 if state != "needs_attention" or changed != result:
                     # Fresh reconciliation can invalidate resource facts even
                     # when the candidate already required local-record review.
@@ -296,6 +365,14 @@ class OperationWorker:
                     # must be finalized from this newly verified uncertainty.
                     self._save_terminal(runtime, "needs_attention", changed, done=False)
                 state, result = "needs_attention", changed
+            elif state == "succeeded":
+                document = runtime.get_journal()
+                if document.get("status") != "succeeded":
+                    # A verified no-op can still have a ready journal. Publish
+                    # its settled state without dispatching a forward plan.
+                    document.update(status="succeeded", phase="forward",
+                                    recovery={"available": False, "action": None, "reason": None})
+                    runtime.checkpoint(document)
             self._finish(lease, runtime, state, result=result)
         except (LeaseLost, OperationDeferred, TerminalPending):
             raise
@@ -380,7 +457,7 @@ class OperationWorker:
         )
 
     @staticmethod
-    def _attention(result=None):
+    def _attention(result=None, *, invalidate_all=False):
         retained = deepcopy(result) if isinstance(result, dict) else {}
         operation = retained.get("operation")
         if isinstance(operation, dict):
@@ -388,11 +465,18 @@ class OperationWorker:
             for resource in operation.get("resources", []):
                 if resource.get("dispatched"):
                     resource.update(status="unknown", affected_count=None, retryable=False)
+                if resource.get("dispatched") or invalidate_all:
                     for name in ("current_track_uris", "current_metadata", "loaded_at"):
                         resource.pop(name, None)
             for entry in operation.get("bookkeeping", []):
                 if entry.get("kind") == "session_history":
                     entry.update(status="unknown", affected_count=None, error_code="needs_attention")
+        if invalidate_all:
+            for name in ("current_track_uris", "current_tracks", "saved_track_uris", "loaded_at", "playlist_state",
+                         "playlist", "public"):
+                retained.pop(name, None)
+            if "target_status" in retained:
+                retained["target_status"] = "unknown"
         return {**retained,
             "success": False, "error_code": "needs_attention", "category": "error",
             "message": "Review the playlist's current state before another operation.", "retryable": False,

@@ -275,6 +275,24 @@ class FinalizerHandler:
             command = validate_command(runtime, self.schema)
         except (ValueError, TypeError):
             return OperationResult(state, result)
+        document = runtime.get_journal()
+        if (result.get("error_code") == "verified_step_publication_failed"
+                and document.get("status") != "needs_attention"):
+            # This classification follows a complete fresh recovery proof. The
+            # frozen result supplies source facts, never an assumed DB receipt.
+            frozen = document.get("runtime", {}).get("prepared", {}).get(PLAN_KEY, {})
+            result = {**deepcopy(frozen.get("result", {})), **result}
+            result.update(status="unknown", aggregate_status="partial", http_status=502)
+            if isinstance(command, FinalizeRaidsCommand):
+                accepted = next((item for item in document.get("boundaries", {}).get("accepted", [])
+                                 if item["name"] == self.label), None)
+                confirmed = accepted.get("result", {}).get("result", {}) if accepted else {}
+                result.update(
+                    source_status="complete" if command.source_playlist_id else "not_required",
+                    database_status=confirmed.get("database_status", "unknown"),
+                    promoted_count=confirmed.get("promoted_count"),
+                    affected_count=confirmed.get("affected_count"),
+                )
         # Recovery can settle before entering the domain handler. Reconstruct
         # identity from captured intent without treating predicted counts as facts.
         result.setdefault("resource", command.source_playlist_id)
@@ -300,6 +318,7 @@ class FinalizerHandler:
         if state == "needs_attention" and result.get("error_code") not in {
             "database_update_failed",
             "database_update_pending",
+            "verified_step_publication_failed",
         }:
             result.update(
                 status="unknown",

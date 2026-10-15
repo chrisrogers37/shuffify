@@ -49,6 +49,15 @@ class Runtime:
         self.local_calls.append(name)
         return None
 
+    def protect_verified(self, name, public_result):
+        self.verified_result = deepcopy(public_result)
+
+    def fail_if_verified(self, error):
+        if hasattr(self, 'verified_result'):
+            from shuffify.services.operations.runtime import VerifiedStepError
+
+            raise VerifiedStepError('direct.publication.v1', {'public_result': self.verified_result}) from error
+
 
 def api_for(world):
     api = object.__new__(SpotifyAPI)

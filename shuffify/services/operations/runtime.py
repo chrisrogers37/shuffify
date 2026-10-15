@@ -49,6 +49,8 @@ class OperationRuntime:
         self._history = None
         self._history_loaded = False
         self._verified_step = None
+        self._verified_resume = None
+        self._verified_conflict = False
 
     @property
     def verified_step_failure(self):
@@ -56,6 +58,38 @@ class OperationRuntime:
         if self._verified_step is None:
             return None
         return VerifiedStepError(self._verified_step["name"], self._verified_step["applied"])
+
+    @property
+    def verified_step_conflicted(self):
+        """Inspect a fresh conflict even if persisting it failed."""
+        return (self._verified_conflict
+                or self._journal is not None and self._journal.doc.get("status") == "needs_attention")
+
+    def protect_verified(self, name, public_result, *, resuming=False):
+        """Retain a service's fresh desired-state proof before any local publication.
+
+        Callers must already have authorized and freshly verified the complete
+        provider state. This setter performs no database or provider reads.
+        The enclosing composite acceptance clears the retained proof. Recovery
+        permits cached accepted prefixes and only the matching current boundary.
+        """
+        self.ensure_lease()
+        if not isinstance(name, str) or not name or len(name) > 120:
+            raise ValueError("A verified publication name must contain 1 to 120 characters.")
+        self._verified_step = {"name": name, "applied": {"public_result": deepcopy(public_result)}}
+        self._verified_resume = name if resuming else None
+
+    def fail_if_verified(self, error):
+        """Preserve controls and verified facts without consulting a failed database."""
+        if self._verified_step is None:
+            return
+        self._verified_conflict = self.verified_step_conflicted
+        from shuffify.services.operations.control import propagate_control
+        from shuffify.spotify.observation import observe_mutations
+
+        with observe_mutations(None):
+            propagate_control(error)
+        raise self.verified_step_failure from error
 
     @property
     def history(self):
@@ -184,13 +218,20 @@ class OperationRuntime:
         """
         if not isinstance(name, str) or not name or len(name) > 120:
             raise ValueError("A composite step name must contain 1 to 120 characters.")
-        if self.verified_step_failure is not None:
-            raise self.verified_step_failure
+        pending = self.verified_step_failure
+        if pending is not None and self._verified_resume is None:
+            raise pending
         self.check_pending_control()
         accepted = self.journal.accepted_step(name)
         if accepted is not None:
             self.journal.skip_to(accepted["end"])
+            if self._verified_resume == name:
+                self._verified_step = self._verified_resume = None
             return deepcopy(accepted.get("result"))
+        if pending is not None:
+            if self._verified_resume != name:
+                raise pending
+            self._verified_resume = None
         history = self.history
         self.journal.begin_step(name)
         applied = json.loads(json.dumps(apply(), allow_nan=False))
@@ -219,6 +260,9 @@ class OperationRuntime:
             from shuffify.services.operations.control import propagate_control
             from shuffify.spotify.observation import observe_mutations
 
+            # Keep a fresh conflict even if its checkpoint failed and a later
+            # receipt reload must adopt the older persisted document.
+            self._verified_conflict = self.verified_step_conflicted
             # Inspect causes without a second observer DB read masking the failure.
             with observe_mutations(None):
                 propagate_control(error)
@@ -267,7 +311,28 @@ class OperationRuntime:
         runtime = document.setdefault("runtime", {})
         runtime.setdefault("steps", {})[name] = json.loads(json.dumps(value, allow_nan=False))
         runtime.setdefault("step_plan_ranges", {})[name] = {"start": start, "end": self.journal.cursor}
-        self.checkpoint(self.history_working(document))
+        try:
+            self.checkpoint(self.history_working(document))
+        except Exception as error:
+            if self._verified_step is not None:
+                from shuffify.services.operations.control import propagate_control
+                from shuffify.spotify.observation import observe_mutations
+
+                with observe_mutations(None):
+                    propagate_control(error)
+                try:
+                    persisted = self.get_journal().get("runtime", {})
+                    if (name in persisted.get("steps", {})
+                            and json.dumps(persisted["steps"][name], sort_keys=True, allow_nan=False)
+                            == json.dumps(value, sort_keys=True, allow_nan=False)
+                            and persisted.get("step_plan_ranges", {}).get(name)
+                            == {"start": start, "end": self.journal.cursor}):
+                        return deepcopy(persisted["steps"][name])
+                except Exception as read_error:
+                    with observe_mutations(None):
+                        propagate_control(read_error)
+                self.fail_if_verified(error)
+            raise
         return deepcopy(value)
 
     def read_metadata_resource(self, playlist_id):

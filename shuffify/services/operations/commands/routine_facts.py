@@ -75,7 +75,7 @@ def build_result(runtime, command, state, *, error_code=None, message=None, http
     local_only_failure = (
         private.get("routine_db_failure")
         or private.get("history_unconfirmed")
-        or error_code == "terminal_finalization_failed"
+        or error_code in {"terminal_finalization_failed", "verified_step_publication_failed"}
     )
     uncertainty = (
         state == "needs_attention" and (not local_only_failure or document.get("status") == "needs_attention")
@@ -106,6 +106,7 @@ def build_result(runtime, command, state, *, error_code=None, message=None, http
         if gate:
             skipped = "drip_disabled"
         active = current is not None and current["name"] == name
+        publication_pending = active and error_code == "verified_step_publication_failed" and not uncertainty
         step_started = frozen is not None and not gate
         restored = active and state == "rolled_back"
         step_status = (
@@ -116,7 +117,7 @@ def build_result(runtime, command, state, *, error_code=None, message=None, http
             else "restored"
             if restored
             else "partial"
-            if private.get("routine_db_failure", {}).get("step") == name
+            if private.get("routine_db_failure", {}).get("step") == name or publication_pending
             else "unknown"
             if state == "needs_attention"
             else "failed"
@@ -201,11 +202,12 @@ def build_result(runtime, command, state, *, error_code=None, message=None, http
             else:
                 operation.book(
                     book_kind,
-                    "failed" if private.get("routine_db_failure", {}).get("step") == name else "not_required",
+                    "unknown" if publication_pending
+                    else "failed" if private.get("routine_db_failure", {}).get("step") == name else "not_required",
                     resource=target,
-                    affected_count=0,
+                    affected_count=None if publication_pending else 0,
                     error_code="required_bookkeeping_failed"
-                    if private.get("routine_db_failure", {}).get("step") == name
+                    if private.get("routine_db_failure", {}).get("step") == name or publication_pending
                     else None,
                 )
                 counts[name] = 0

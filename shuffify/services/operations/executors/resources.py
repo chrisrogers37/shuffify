@@ -31,9 +31,17 @@ def verify_resources(runtime, desired, label):
     after = {}
     for resource, frozen in desired.items():
         runtime.check_pending_control()
-        observed = runtime.read_resource(resource)
         expected = expected_baseline(runtime, resource, frozen)
+        observed = runtime.read_resource(resource)
         if content(observed) != content(frozen) or observed.get('snapshot_id') != expected.get('snapshot_id'):
             raise NeedsAttention(label + '_verification_failed')
         after[resource] = observed
+    protect_verified_resources(runtime)
     return after
+
+
+def protect_verified_resources(runtime):
+    """Retain a composite's complete fresh proof before local control or output I/O."""
+    current = runtime.journal.doc.get('boundaries', {}).get('current')
+    if current is not None and runtime.verified_step_failure is None:
+        runtime.protect_verified(current['name'], {})

@@ -206,11 +206,13 @@ class WorkshopCommitService:
             observed = before
             if execution is not None:
                 execution.check_pending_control()
+                verified = self._verified_result("already_applied", desired, 0)
                 observed, failure = self._fresh_read(playlist_id, user)
                 if failure:
                     return failure
                 if observed.track_uris != desired:
                     return self._unknown(0, 0, observed.response_fields())
+                execution.protect_verified("direct.publication.v1", verified)
             return self._confirmed(
                 "already_applied", playlist_id, user, session, before, observed, 0, execution=execution,
             )
@@ -361,6 +363,7 @@ class WorkshopCommitService:
         total = max(1, (len(desired) + _BATCH_SIZE - 1) // _BATCH_SIZE)
         if execution is not None:
             total = len(execution.journal.doc["plans"][plan_id]["batches"])
+        verified = self._verified_result("saved", desired, total)
         try:
             self.playlists.update_playlist_tracks(playlist_id, list(desired))
             if execution is not None:
@@ -399,9 +402,21 @@ class WorkshopCommitService:
             return self._unknown(total, total)
         if observed.track_uris != desired:
             return self._unknown(total, total, observed.response_fields())
+        if execution is not None:
+            execution.protect_verified("direct.publication.v1", verified)
         return self._confirmed(
             "saved", playlist_id, user, session, before, observed, total, execution=execution,
         )
+
+    @staticmethod
+    def _verified_result(status, desired, batches):
+        """Prepare a public fallback before the provider's verification boundary."""
+        return WorkshopTargetResult(
+            status, "Playlist contents were verified on Spotify.",
+            confirmed_batches=batches, total_batches=batches,
+            extra={"saved_track_uris": list(desired), "current_track_uris": list(desired),
+                   "representable": True, "bookkeeping": {"history": "unknown"}},
+        ).to_dict()
 
     @staticmethod
     def _journal_partial(execution, plan_id):
@@ -438,6 +453,11 @@ class WorkshopCommitService:
         before_uris, saved_uris = list(before.track_uris), list(observed.track_uris)
         extra = {**observed.response_fields(), "saved_track_uris": saved_uris}
         if execution is not None:
+            execution.protect_verified("direct.publication.v1", WorkshopTargetResult(
+                status, "Playlist contents were verified on Spotify.",
+                confirmed_batches=batches, total_batches=batches,
+                extra={**extra, "bookkeeping": {"history": "unknown"}},
+            ).to_dict())
             execution.check_pending_control()
             facts = {}
             try:

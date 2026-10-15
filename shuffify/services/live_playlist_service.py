@@ -14,6 +14,7 @@ from shuffify.services.live_operation_service import (
     book_not_required,
     direct_rejected_result,
     direct_response_payload,
+    operation_result,
 )
 from shuffify.services.live_review_bindings import (
     require_bindings,
@@ -250,6 +251,31 @@ class LivePlaylistService:
                 resource.pop("loaded_at", None)
                 resource.update(dispatched=True, status="unknown", affected_count=None)
 
+            count = (sum(a != b for a, b in zip(before.track_uris, desired))
+                     + abs(len(before.track_uris) - len(desired))) if kind == "shuffle" else (
+                         sum((Counter(desired) - Counter(before.track_uris)).values())
+                         + sum((Counter(before.track_uris) - Counter(desired)).values()))
+            verified_resource = deepcopy(resource)
+            verified_resource.update(status="complete" if changed else "not_required", affected_count=count,
+                                     current_track_uris=list(desired), error_code=None, retryable=False)
+            verified_resource.pop("loaded_at", None)
+            verified_body = {"status": "success", "http_status": 200,
+                             "message": "Playlist contents were verified on Spotify.",
+                             "operation": operation_result(kind, resources=[verified_resource], bookkeeping=[{
+                                 "kind": "session_history", "resource": playlist_id, "step": kind,
+                                 "status": "unknown", "affected_count": None, "error_code": None,
+                             }] if changed or selection is not None else [])}
+
+            def retain_verified(after):
+                operation.observed[playlist_id] = after
+                resource.update(status="complete" if changed else "not_required", affected_count=count,
+                                current_track_uris=list(after.track_uris), loaded_at=after.loaded_at,
+                                error_code=None, retryable=False)
+                body = {"status": "success", "http_status": 200,
+                        "message": self._success_message(kind, changed, selection),
+                        "playlist": self._playlist(playlist_id, metadata, after), "operation": operation.outcome()}
+                runtime.protect_verified("direct.publication.v1", direct_response_payload(body, kind)[0])
+
             def apply():
                 if changed:
                     expected = {"track_uris": list(before.track_uris), "snapshot_id": before.snapshot_id,
@@ -261,19 +287,14 @@ class LivePlaylistService:
                     from shuffify.services.executors.base_executor import PlaylistVerificationError
 
                     raise PlaylistVerificationError(playlist_id, desired, list(after.track_uris), None, kind)
+                runtime.protect_verified("direct.publication.v1", verified_body)
+                retain_verified(after)
                 return asdict(after)
 
             after_raw = runtime.step("direct.target.v1", apply)
             after = ObservedPlaylist(after_raw["name"], tuple(after_raw["track_uris"]), tuple(after_raw["tracks"]),
                                      after_raw["loaded_at"], after_raw["snapshot_id"])
-            operation.observed[playlist_id] = after
-            count = (sum(a != b for a, b in zip(before.track_uris, after.track_uris))
-                     + abs(len(before.track_uris) - len(after.track_uris))) if kind == "shuffle" else (
-                         sum((Counter(after.track_uris) - Counter(before.track_uris)).values())
-                         + sum((Counter(before.track_uris) - Counter(after.track_uris)).values()))
-            resource.update(status="complete" if changed else "not_required", affected_count=count,
-                            current_track_uris=list(after.track_uris), loaded_at=after.loaded_at,
-                            error_code=None, retryable=False)
+            retain_verified(after)
             result = {"playlist": self._playlist(playlist_id, metadata, after)}
 
             def confirm():
@@ -317,6 +338,7 @@ class LivePlaylistService:
         except Exception as error:
             from shuffify.services.operations.journal import NeedsAttention
 
+            runtime.fail_if_verified(error)
             if isinstance(error, NeedsAttention) and operation.resources:
                 error.result = direct_response_payload(self._failure(operation, playlist_id, metadata, error), kind)[0]
             self._propagate_control(error)

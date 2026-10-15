@@ -230,6 +230,12 @@ class UnarchiveHandler:
             command = validate_command(runtime, UnarchiveCommand)
         except (ValueError, TypeError):
             return OperationResult(state, result)
+        document = runtime.get_journal()
+        if (result.get("error_code") == "verified_step_publication_failed"
+                and document.get("status") != "needs_attention"):
+            frozen = document.get("runtime", {}).get("prepared", {}).get("unarchive.plan.v1", {})
+            result = {**deepcopy(frozen.get("result", {})), **result}
+            result.update(status="unknown", http_status=502)
         result.setdefault("playlist_id", command.playlist_id)
         result.setdefault("archive_playlist_id", command.archive_playlist_id)
         for key in ("unarchived_count", "tracks_added", "tracks_total", "removed_count"):
@@ -248,6 +254,7 @@ class UnarchiveHandler:
         elif state == "needs_attention" and result.get("error_code") not in {
             "required_bookkeeping_failed",
             "history_confirmation_failed",
+            "verified_step_publication_failed",
         }:
             result.update(
                 status="unknown",

@@ -11,6 +11,8 @@ from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 from shuffify.shuffle_algorithms.utils import reassemble_with_locks, split_locked_tracks
 from shuffify.spotify.observation import current_observer
 
+from .resources import protect_verified_resources
+
 
 @dataclass(frozen=True)
 class ShuffleConfig:
@@ -83,6 +85,7 @@ def execute_shuffle(runtime, config, *, prepare_key):
         if content(observed) != content(expected):
             raise PlaylistVerificationError(target, desired, observed["track_uris"],
                                             runtime.operation.schedule_id, "shuffle")
+        protect_verified_resources(runtime)
         return observed
 
     after = runtime.step(prepare_key + ".apply", apply)
