@@ -1,4 +1,3 @@
-import atexit
 import logging
 import os
 import re
@@ -508,6 +507,7 @@ _SENTRY_SECRET_CONFIG_ATTRS = (
     "SECRET_KEY",
     "TOKEN_ENCRYPTION_KEY",
     "TOKEN_ENCRYPTION_KEY_FALLBACKS",
+    "WORKER_CONTROL_TOKEN",
 )
 
 # Config attributes holding a URL whose password component is a secret. The
@@ -518,6 +518,7 @@ _SENTRY_SECRET_URL_CONFIG_ATTRS = (
     "SQLALCHEMY_DATABASE_URI",
     "DATABASE_URL",
     "REDIS_URL",
+    "WORKER_CONTROL_URL",
 )
 
 # A secret shorter than this is not safe to substring-match: a three-character
@@ -907,7 +908,7 @@ class BoundedRequest(Request):
 
 
 def create_app(config_name=None, *, start_scheduler=True):
-    """Create and configure the Flask application."""
+    """Create the API application; start_scheduler is a compatibility argument only."""
     if config_name is None:
         config_name = os.getenv("APP_CONFIG", "production")
 
@@ -1022,17 +1023,11 @@ def create_app(config_name=None, *, start_scheduler=True):
 
     register_cli(app)
 
-    # Initialize APScheduler (after all extensions)
-    if start_scheduler and app.config.get("SCHEDULER_ENABLED", True):
-        from shuffify.scheduler import init_scheduler, shutdown_scheduler
+    # API construction never starts a scheduler; the worker owns its memory jobs.
+    # Retain start_scheduler as a compatibility argument for existing launchers.
+    from shuffify.services.schedule_notifications import install_schedule_notifications
 
-        scheduler = init_scheduler(app)
-        if scheduler:
-            app.extensions["scheduler"] = scheduler
-        # Bound now, and only where a scheduler can exist: importing the
-        # scheduler module from inside an exit hook fails once threading has
-        # shut down.
-        atexit.register(shutdown_scheduler)
+    install_schedule_notifications()
 
     _apply_security_headers(app)
 

@@ -278,10 +278,11 @@ def _validate_submitted(definition, target_id):
         raise DefinitionError("definition.source_playlist_ids", "Use the reviewed legacy source IDs.")
 
 
-def _schedule_payload(schedule):
+def _schedule_payload(schedule, registration=None):
     from shuffify.scheduler import get_schedule_registration
 
-    registration = get_schedule_registration(schedule)
+    if registration is None:
+        registration = get_schedule_registration(schedule)
     if registration["status"] == "registered" and schedule.is_enabled:
         state = "Active"
     elif registration["status"] == "paused" and not schedule.is_enabled:
@@ -291,8 +292,17 @@ def _schedule_payload(schedule):
     return {
         "schedule_id": schedule.id, "schedule": schedule.to_dict(),
         "definition": _stored(schedule), "schedule_revision": schedule_revision(schedule),
-        "timing": serialize_timing(schedule), "registration": registration, "state": state,
+        "timing": serialize_timing(schedule, effective_timezone=registration["effective_timezone"]),
+        "registration": registration, "state": state,
     }
+
+
+def schedule_payloads(schedules):
+    from shuffify.scheduler import get_schedule_registrations
+
+    schedules = list(schedules)
+    registrations = get_schedule_registrations(schedules)
+    return [_schedule_payload(row, registrations[row.id]) for row in schedules]
 
 
 def _accepted_locked(user_id, target_id, receipt, *, replayed):
@@ -340,7 +350,7 @@ class RoutineActivationService:
         return {
             "success": True, "target": setup["target"], "prerequisites": setup,
             "dependency_revision": configuration_revision(state),
-            "routines": [_schedule_payload(row) for row in state.schedules],
+            "routines": schedule_payloads(state.schedules),
             "algorithms": ShuffleRegistry.list_algorithms(), "capabilities": capabilities,
         }, 200
 

@@ -38,10 +38,14 @@ class OperationWorker:
         self.operation_timeout = operation_timeout
         self._stopping = threading.Event()
         self._wake = threading.Event()
+        self._scheduler_controller = self._control_server = None
+        self._serving = False
 
     def request_stop(self):
         """Prevent new claims; the active command retains its lease until it settles."""
         self._stopping.set()
+        if self._scheduler_controller is not None:
+            self._scheduler_controller.request_stop()
         self._wake.set()
 
     def wake(self):
@@ -494,11 +498,33 @@ class OperationWorker:
         return count
 
     def serve(self):
-        """Drain on startup and wake events, never by an idle database polling loop."""
+        """Own queue, memory scheduler and private control until graceful drain ends."""
         from shuffify.services.operations.wake import PostgresWakeListener
+        from shuffify.services.worker_control import WorkerControlServer
+        from shuffify.services.worker_scheduler import WorkerScheduler
 
-        with PostgresWakeListener(self.repository, self.wake):
-            self._serve_waiting()
+        if self._stopping.is_set():
+            return
+        controller = WorkerScheduler(self.app, self.repository, wake_callback=self.wake)
+        self._scheduler_controller = controller
+        self._control_server = WorkerControlServer(
+            controller, self._control_status, token=self.app.config.get("WORKER_CONTROL_TOKEN"),
+            host=self.app.config.get("WORKER_CONTROL_HOST", "127.0.0.1"),
+            port=self.app.config.get("WORKER_CONTROL_PORT", 5001), wake_callback=self.wake,
+        )
+        self._serving = True
+        try:
+            with controller, self._control_server, PostgresWakeListener(
+                self.repository, self.wake, schedule_callback=controller.request_refresh,
+            ):
+                self._serve_waiting()
+        finally:
+            self._serving = False
+            controller.close()
+
+    def _control_status(self):
+        return {"running": self._serving, "stopping": self._stopping.is_set(),
+                "scheduler_enabled": bool(self.app.config.get("SCHEDULER_ENABLED", True))}
 
     def _serve_waiting(self):
         """Wake hints trigger durable reads; lease deadlines arrange their own wake."""

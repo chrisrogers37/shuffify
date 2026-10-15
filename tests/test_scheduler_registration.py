@@ -1,126 +1,93 @@
-"""Registration reports actual APScheduler state and preserves matching intervals."""
+"""API registration is a batched observation of worker memory, never a DB guess."""
 
-from datetime import datetime, timezone
-from types import SimpleNamespace
-from unittest.mock import MagicMock
+from copy import deepcopy
+from datetime import timedelta
 
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.interval import IntervalTrigger
+import pytest
 
 import shuffify.scheduler as scheduler_module
-from shuffify.models.db import Schedule, User, db
+from shuffify.services.schedule_utils import schedule_revision, serialize_timing
+from tests.services.operations.test_scheduled_admission import NOW
+from tests.services.operations.test_scheduled_admission import schedule as schedule
 
 
-def _schedule(enabled=True):
-    return SimpleNamespace(
-        id=42, schedule_type="interval", schedule_value="daily", timezone="UTC", is_enabled=enabled
-    )
+def snapshot(row):
+    return {'version': 1, 'leader': True, 'scheduler_running': True, 'generation': 'claim',
+            'effective_timezone': 'UTC', 'registrations': {str(row.id): {
+                'installed_revision': schedule_revision(row), 'effective_timezone': 'UTC',
+                'next_run_at': (NOW + timedelta(days=1)).isoformat()}}}
 
 
-def test_matching_interval_is_not_readded(monkeypatch):
-    next_run = datetime(2026, 10, 14, tzinfo=timezone.utc)
-    job = SimpleNamespace(args=[42], trigger=IntervalTrigger(days=1, timezone="UTC"), next_run_time=next_run)
-    scheduler = MagicMock(timezone=timezone.utc)
-    scheduler.get_job.return_value = job
-    monkeypatch.setattr(scheduler_module, "_scheduler", scheduler)
+def test_matching_registration_is_memory_observed_and_never_a_local_job(schedule, monkeypatch):
+    value = snapshot(schedule)
+    calls = []
 
-    scheduler_module.add_job_for_schedule(_schedule())
-    assert scheduler.add_job.call_count == 0
-    assert scheduler.remove_job.call_count == 0
-    assert scheduler_module.get_schedule_registration(_schedule()) == {
-        "status": "registered", "next_run_at": next_run.isoformat(), "effective_timezone": "UTC"
-    }
+    class Client:
+        def registrations(self, ids):
+            calls.append(ids)
+            return value
 
-
-def test_real_apscheduler_job_repeated_sync_retains_next_run(db_app, monkeypatch):
-    """APScheduler normalizes add_job(args=[id]) to a tuple on its real Job."""
-    with db_app.app_context():
-        user = User(spotify_id="registration-owner")
-        db.session.add(user)
-        db.session.flush()
-        schedule = Schedule(
-            user_id=user.id, job_type="shuffle", target_playlist_id="target",
-            schedule_type="interval", schedule_value="daily", timezone="UTC",
-        )
-        db.session.add(schedule)
-        db.session.commit()
-
-        actual = BackgroundScheduler(timezone="UTC")  # It is never started.
-        job = actual.add_job(
-            scheduler_module._execute_scheduled_job, "interval", days=1,
-            id=f"schedule_{schedule.id}", args=[schedule.id], timezone="UTC",
-        )
-        assert job.args == (schedule.id,)
-        next_run = datetime(2026, 10, 14, tzinfo=timezone.utc)
-        job._modify(next_run_time=next_run)
-        scheduler = SimpleNamespace(
-            running=True, timezone=timezone.utc, get_job=actual.get_job,
-            add_job=MagicMock(side_effect=AssertionError("matching interval was replaced")),
-        )
-        monkeypatch.setattr(scheduler_module, "_scheduler", scheduler)
-
-        first = scheduler_module.sync_schedule_registration(schedule)
-        second = scheduler_module.sync_schedule_registration(schedule)
-        assert first == second == {
-            "status": "registered", "next_run_at": next_run.isoformat(), "effective_timezone": "UTC"
-        }
-        assert actual.get_job(f"schedule_{schedule.id}") is job
-        scheduler.add_job.assert_not_called()
+    monkeypatch.setattr(scheduler_module, 'WorkerControlClient', Client)
+    assert scheduler_module.get_schedule_registration(schedule) == {
+        'status': 'registered', 'next_run_at': (NOW + timedelta(days=1)).isoformat(), 'effective_timezone': 'UTC'}
+    schedule.algorithm_params = {'keep_first': 2}
+    assert scheduler_module.get_schedule_registration(schedule)['status'] == 'needs_attention'
+    assert calls == [[schedule.id], [schedule.id]]
+    assert scheduler_module.get_scheduler() is None
 
 
-def test_matching_but_paused_real_job_is_repaired_on_sync(db_app, monkeypatch):
-    with db_app.app_context():
-        user = User(spotify_id="paused-registration-owner")
-        db.session.add(user)
-        db.session.flush()
-        schedule = Schedule(
-            user_id=user.id, job_type="shuffle", target_playlist_id="target",
-            schedule_type="interval", schedule_value="daily", timezone="UTC",
-        )
-        db.session.add(schedule)
-        db.session.commit()
-
-        actual = BackgroundScheduler(timezone="UTC")  # No thread or app is started.
-        job = actual.add_job(
-            scheduler_module._execute_scheduled_job, "interval", days=1,
-            id=f"schedule_{schedule.id}", args=[schedule.id], timezone="UTC",
-        )
-        assert job.args == (schedule.id,)
-        job._modify(next_run_time=None)
-        resumed_at = datetime(2026, 10, 14, tzinfo=timezone.utc)
-
-        def replace_paused_job(**kwargs):
-            assert kwargs["replace_existing"] is True
-            assert kwargs["id"] == f"schedule_{schedule.id}"
-            assert kwargs["args"] == [schedule.id]
-            job._modify(next_run_time=resumed_at)
-
-        add_job = MagicMock(side_effect=replace_paused_job)
-        scheduler = SimpleNamespace(
-            running=True, timezone=timezone.utc, get_job=actual.get_job, add_job=add_job,
-        )
-        monkeypatch.setattr(scheduler_module, "_scheduler", scheduler)
-        assert scheduler_module.get_schedule_registration(schedule)["status"] == "needs_attention"
-
-        assert scheduler_module.sync_schedule_registration(schedule) == {
-            "status": "registered", "next_run_at": resumed_at.isoformat(), "effective_timezone": "UTC"
-        }
-        add_job.assert_called_once()
-        scheduler_module.sync_schedule_registration(schedule)
-        add_job.assert_called_once()  # The healthy replacement is now reused.
+@pytest.mark.parametrize('bad', ['missing', 'paused', 'stale', 'naive', 'malformed', 'zone'])
+def test_enabled_registration_requires_actual_running_matching_job(schedule, monkeypatch, bad):
+    value = snapshot(schedule)
+    job = value['registrations'][str(schedule.id)]
+    if bad == 'missing':
+        value['registrations'][str(schedule.id)] = None
+    elif bad == 'paused':
+        value['scheduler_running'] = False
+    elif bad == 'stale':
+        job['installed_revision'] = 'other'
+    elif bad == 'naive':
+        job['next_run_at'] = '2026-10-15T00:00:00'
+    elif bad == 'malformed':
+        job['next_run_at'] = 'bad'
+    else:
+        job['effective_timezone'] = 'Europe/London'
+    monkeypatch.setattr(scheduler_module.WorkerControlClient, 'registrations', lambda self, ids: value)
+    result = scheduler_module.get_schedule_registration(schedule)
+    assert result['status'] == ('unavailable' if bad == 'paused' else 'needs_attention')
+    assert result['next_run_at'] is None
 
 
-def test_missing_enabled_and_stray_paused_job_need_attention(monkeypatch):
-    scheduler = MagicMock(timezone=timezone.utc)
-    scheduler.get_job.return_value = None
-    monkeypatch.setattr(scheduler_module, "_scheduler", scheduler)
-    assert scheduler_module.get_schedule_registration(_schedule())["status"] == "needs_attention"
-    assert scheduler_module.get_schedule_registration(_schedule(False))["status"] == "paused"
-    scheduler.get_job.return_value = object()
-    assert scheduler_module.get_schedule_registration(_schedule(False))["status"] == "needs_attention"
+def test_paused_and_unavailable_do_not_fabricate_registered(schedule, monkeypatch):
+    schedule.is_enabled = False
+    value = snapshot(schedule)
+    monkeypatch.setattr(scheduler_module.WorkerControlClient, 'registrations', lambda self, ids: value)
+    assert scheduler_module.get_schedule_registration(schedule)['status'] == 'needs_attention'
+    value['registrations'][str(schedule.id)] = None
+    assert scheduler_module.get_schedule_registration(schedule)['status'] == 'paused'
+    value['leader'] = False
+    assert scheduler_module.get_schedule_registration(schedule)['status'] == 'unavailable'
 
 
-def test_uninspectable_scheduler_is_unavailable(monkeypatch):
-    monkeypatch.setattr(scheduler_module, "_scheduler", None)
-    assert scheduler_module.get_schedule_registration(_schedule())["status"] == "unavailable"
-    assert scheduler_module.get_schedule_registration(_schedule(False))["status"] == "unavailable"
+def test_payload_list_reads_worker_once_and_passes_effective_timezone(schedule, monkeypatch):
+    from shuffify.services.routine_activation_service import schedule_payloads
+
+    schedule.timezone = None
+    value = snapshot(schedule)
+    value['effective_timezone'] = value['registrations'][str(schedule.id)]['effective_timezone'] = 'Europe/London'
+    calls = []
+
+    def registrations(self, ids):
+        calls.append(ids)
+        return deepcopy(value)
+
+    monkeypatch.setattr(scheduler_module.WorkerControlClient, 'registrations', registrations)
+    rows = schedule_payloads([schedule])
+    assert len(calls) == 1 and rows[0]['state'] == 'Active'
+    assert rows[0]['timing']['effective_timezone'] == 'Europe/London'
+    assert serialize_timing(schedule)['effective_timezone'] is None
+
+
+def test_empty_batch_performs_no_network(monkeypatch):
+    monkeypatch.setattr(scheduler_module.WorkerControlClient, 'registrations', lambda *args: pytest.fail('empty read'))
+    assert scheduler_module.get_schedule_registrations([]) == {}

@@ -10,6 +10,7 @@ from sqlalchemy.pool import NullPool
 
 logger = logging.getLogger(__name__)
 _CHANNEL = 'shuffify_operations'
+_SCHEDULE_CHANNEL = 'shuffify_schedules'
 
 
 class PostgresWakeListener:
@@ -20,10 +21,11 @@ class PostgresWakeListener:
     owns draining durable state; notification payloads are only wake hints.
     """
 
-    def __init__(self, repository, wake_callback, *, connection_factory=None,
+    def __init__(self, repository, wake_callback, *, schedule_callback=None, connection_factory=None,
                  reconnect_delay=0.1, max_reconnect_delay=5, connect_timeout=3):
         self.enabled = repository.engine.dialect.name == 'postgresql'
         self.wake_callback = wake_callback
+        self.schedule_callback = schedule_callback
         self.ready = threading.Event()
         self._stop = threading.Event()
         self._thread = None
@@ -81,12 +83,16 @@ class PostgresWakeListener:
                 cursor = driver.cursor()
                 try:
                     cursor.execute(f'LISTEN {_CHANNEL}')
+                    if self.schedule_callback is not None:
+                        cursor.execute(f'LISTEN {_SCHEDULE_CHANNEL}')
                 finally:
                     cursor.close()
                 with self._connection_lock:
                     self._connection = driver
                 self.ready.set()
                 self.wake_callback()
+                if self.schedule_callback is not None:
+                    self.schedule_callback()
                 delay = self._delay
                 while not self._stop.is_set():
                     readable, _, _ = select.select([driver, self._stop_read], [], [])
@@ -94,12 +100,15 @@ class PostgresWakeListener:
                         break
                     driver.poll()
                     notifications = driver.notifies
-                    wake = False
+                    wake = refresh = False
                     while notifications:
                         notification = notifications.pop(0)
                         wake = wake or notification.channel == _CHANNEL
+                        refresh = refresh or notification.channel == _SCHEDULE_CHANNEL
                     if wake:
                         self.wake_callback()
+                    if refresh and self.schedule_callback is not None:
+                        self.schedule_callback()
             except Exception as error:
                 # Connection errors can embed passwords, DSNs and hostnames; log only their type.
                 if not self._stop.is_set():

@@ -2,7 +2,7 @@
 # Local end-to-end harness for shuffify.
 #
 # Runs the real app the way production is shaped -- PostgreSQL, Redis, the
-# scheduler on, a new database built from the models by `flask create-schema`,
+# worker scheduler on, a new database built from the models by `flask create-schema`,
 # migrations applied by `flask db upgrade` before the app starts and verified at
 # head when it does -- with everything on this machine.
 #
@@ -45,6 +45,7 @@
 #                                    created with python3.12 and kept in sync.
 #   HARNESS_APP_PORT                 default 8000.
 #   HARNESS_FAKE_SPOTIFY_PORT        default 8900.
+#   HARNESS_WORKER_CONTROL_PORT      default 8001; loopback-only worker health/control.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -65,7 +66,9 @@ REDIRECT_URI="${APP_URL}/callback"
 # (API, OAuth, public pages) is pointed here via SPOTIFY_BASE_URL.
 FAKE_SPOTIFY_PORT="${HARNESS_FAKE_SPOTIFY_PORT:-8900}"
 FAKE_SPOTIFY_URL="http://127.0.0.1:${FAKE_SPOTIFY_PORT}"
-for _port in "${APP_PORT}" "${FAKE_SPOTIFY_PORT}"; do
+WORKER_CONTROL_PORT="${HARNESS_WORKER_CONTROL_PORT:-8001}"
+WORKER_CONTROL_URL="http://127.0.0.1:${WORKER_CONTROL_PORT}"
+for _port in "${APP_PORT}" "${FAKE_SPOTIFY_PORT}" "${WORKER_CONTROL_PORT}"; do
   [[ "${_port}" =~ ^[0-9]+$ ]] || { echo "harness: port must be a number, got '${_port}'" >&2; exit 1; }
 done
 PG_PORT=54329
@@ -128,6 +131,11 @@ print(f"TOKEN_ENCRYPTION_KEY={Fernet.generate_key().decode()}")
 EOF
     )
   fi
+  if ! grep -q '^WORKER_CONTROL_TOKEN=' "${file}"; then
+    ( umask 077
+      "${py}" -c 'import secrets; print("WORKER_CONTROL_TOKEN=" + secrets.token_urlsafe(32))' >> "${file}"
+    )
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -162,7 +170,7 @@ from urllib.parse import urlsplit
 print(",".join(str(urlsplit(u).port or d) for u, d in zip(sys.argv[1:], (6379, 5432))))
 ' "$(redis_url)" "$(database_url)")"
   fi
-  ALLOW_PORTS="${URL_PORTS},${APP_PORT},${FAKE_SPOTIFY_PORT}"
+  ALLOW_PORTS="${URL_PORTS},${APP_PORT},${FAKE_SPOTIFY_PORT},${WORKER_CONTROL_PORT}"
 }
 
 # ---------------------------------------------------------------------------
@@ -204,6 +212,11 @@ harness_cmd() {
     SPOTIFY_CLIENT_SECRET=harness-fake-client-secret
     SPOTIFY_REDIRECT_URI="${REDIRECT_URI}"
     SPOTIFY_BASE_URL="${FAKE_SPOTIFY_URL}"
+    SCHEDULER_ENABLED=true
+    SCHEDULER_TIMEZONE=UTC
+    WORKER_CONTROL_URL="${WORKER_CONTROL_URL}"
+    WORKER_CONTROL_HOST=127.0.0.1
+    WORKER_CONTROL_PORT="${WORKER_CONTROL_PORT}"
     SENTRY_DSN=
     PYTHONPATH="${REPO_ROOT}/harness/netguard"
     SHUFFIFY_NETGUARD=1
@@ -356,12 +369,13 @@ proc_pid() {  # proc_pid <name>
 }
 
 stop_proc() {  # stop_proc <name>
-  local pid
+  local pid attempts=20
+  if [[ "$1" == worker ]]; then attempts=7200; fi
   if pid="$(proc_pid "$1")"; then
     log "stopping $1 (pid ${pid})"
     kill "${pid}" 2>/dev/null || true
-    for _ in $(seq 20); do kill -0 "${pid}" 2>/dev/null || break; sleep 0.25; done
-    kill -9 "${pid}" 2>/dev/null || true
+    for _ in $(seq "${attempts}"); do kill -0 "${pid}" 2>/dev/null || break; sleep 0.25; done
+    if kill -0 "${pid}" 2>/dev/null; then kill -9 "${pid}" 2>/dev/null || true; fi
   fi
   rm -f "${STATE}/$1.pid"
 }
@@ -449,21 +463,9 @@ start_app() {
 start_worker() {
   local py="$1"
   stop_proc worker
-  log "starting the operation worker"
+  log "starting the operation worker on ${WORKER_CONTROL_URL}"
   harness_cmd "${py}" -- "${py}" -m shuffify.worker
-  : > "${STATE}/worker.log"
-  rm -f "${STATE}/worker.pid"
-  setsid nohup bash -c 'echo $$ > "$0"; exec "$@"' "${STATE}/worker.pid" "${HARNESS_CMD[@]}" \
-    >>"${STATE}/worker.log" 2>&1 < /dev/null &
-  for _ in $(seq 60); do
-    if [[ -f "${STATE}/worker.pid" ]] && ! proc_pid worker >/dev/null; then
-      tail -40 "${STATE}/worker.log" >&2
-      die "the worker exited during startup; see ${STATE}/worker.log"
-    fi
-    grep -q "Operation worker started" "${STATE}/worker.log" && return
-    sleep 0.5
-  done
-  die "the worker did not initialize within 30s; see ${STATE}/worker.log"
+  launch_proc worker "${WORKER_CONTROL_URL}/health"
 }
 
 # A whole login through the fake: the app's /login, the fake's consent page
@@ -511,11 +513,12 @@ check_app() {
   SCHEMA_REVISION="$(sed -n 's/.*Database schema verified at Alembic head (\([^)]*\)).*/\1/p' "${STATE}/app.log" | tail -1)"
   [[ -n "${SCHEMA_REVISION}" ]] || die "the app did not verify its schema at Alembic head; see ${STATE}/app.log"
   log "schema: verified at Alembic head (${SCHEMA_REVISION})"
+  [[ "$(url_code "${WORKER_CONTROL_URL}/health")" == 200 ]] \
+    || die "the worker scheduler is not ready; see ${STATE}/worker.log"
   if grep -q "APScheduler started" "${STATE}/app.log"; then
-    log "scheduler: running (PostgreSQL job store)"
-  else
-    die "the scheduler did not start; see ${STATE}/app.log"
+    die "the API must not start APScheduler; see ${STATE}/app.log"
   fi
+  log "scheduler: ready in the worker (memory job store)"
   # start_app confirmed the guard loads in a harness process before the app
   # started; an empty log now means it refused nothing since.
   check_violations
@@ -603,6 +606,7 @@ cmd_reset_db() {
   [[ "${SERVICES}" == local ]] || die "reset-db only manages the local database"
   local bin
   stop_proc app
+  stop_proc worker
   start_postgres
   bin="$(pg_bin)"
   log "dropping and re-creating ${DB_NAME}"

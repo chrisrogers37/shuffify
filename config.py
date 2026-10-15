@@ -207,6 +207,12 @@ class Config:
     # Scheduler configuration
     SCHEDULER_ENABLED = True
     SCHEDULER_THREAD_POOL_SIZE = int(os.getenv("SCHEDULER_THREAD_POOL_SIZE", "10"))
+    SCHEDULER_TIMEZONE = os.getenv("SCHEDULER_TIMEZONE", "UTC")
+    WORKER_CONTROL_URL = os.getenv("WORKER_CONTROL_URL", "")
+    WORKER_CONTROL_TOKEN = os.getenv("WORKER_CONTROL_TOKEN", "")
+    WORKER_CONTROL_HOST = os.getenv("WORKER_CONTROL_HOST", "127.0.0.1")
+    WORKER_CONTROL_PORT = int(os.getenv("WORKER_CONTROL_PORT", "5001"))
+    WORKER_CONTROL_TIMEOUT = float(os.getenv("WORKER_CONTROL_TIMEOUT", "0.5"))
 
     # After a job's write fails with an unconfirmed outcome, its rollback
     # re-reads the restored playlist this many times, this many seconds

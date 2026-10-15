@@ -60,7 +60,7 @@ from shuffify.services.live_review_bindings import (
     review_message,
 )
 from shuffify.services.live_review_context import context_unavailable
-from shuffify.services.routine_activation_service import _schedule_payload
+from shuffify.services.routine_activation_service import schedule_payloads
 from shuffify.services.scheduler_service import (
     ScheduleBusyError,
     SchedulerService,
@@ -117,7 +117,7 @@ def schedules(api=None, user=None, spotify_profile=None):
         return render_template(
             "schedules.html",
             user=spotify_profile,
-            routines=[_schedule_payload(s) for s in user_schedules],
+            routines=schedule_payloads(user_schedules),
             playlists=playlists,
         )
 
@@ -245,7 +245,7 @@ def create_schedule(api=None, user=None):
     except ScheduleBusyError as error:
         return json_reply(busy_error(str(error)))
 
-    # APScheduler registration is handled inside create_schedule.
+    # Committed definition notifications refresh the worker scheduler.
 
     logger.info(
         f"User {user.spotify_id} created schedule "
@@ -304,7 +304,7 @@ def update_schedule(
     except ScheduleBusyError as error:
         return json_reply(busy_error(str(error)))
 
-    # APScheduler sync is handled inside update_schedule.
+    # Committed definition notifications refresh the worker scheduler.
 
     logger.info(f"Updated schedule {schedule_id}")
 
@@ -338,7 +338,7 @@ def delete_schedule(
     schedule_id, api=None, user=None
 ):
     """Delete a schedule."""
-    # delete_schedule removes the APScheduler job after the DB delete commits,
+    # Worker refresh removes the memory registration after the DB delete commits,
     # so a failed delete can't orphan a live job.
     try:
         SchedulerService.delete_schedule(
@@ -377,7 +377,7 @@ def toggle_schedule(
     except ScheduleBusyError as error:
         return json_reply(busy_error(str(error)))
 
-    # APScheduler sync is handled inside toggle_schedule.
+    # Committed state notifications refresh the worker scheduler.
 
     status_text = (
         "enabled" if schedule.is_enabled else "disabled"

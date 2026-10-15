@@ -1,10 +1,18 @@
 """Queued executor results match the isolated fake's actual playlists."""
 
+import os
+import time
+from datetime import datetime
+
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
 from config import HarnessConfig
+from shuffify.models.db import Schedule
+from shuffify.services.schedule_utils import schedule_revision
+from shuffify.services.worker_control import WorkerControlClient
 from tests.e2e.conftest import pid
 from tests.e2e.test_direct_live_actions import (
     _close_result,
@@ -58,16 +66,31 @@ def _nav_to_settings(page):
 
 
 def _registration(schedule_id):
-    """The guarded harness DB's exact trigger/next-fire state, never unpickled."""
+    """Wait for the private memory observation to match the guarded stored definition."""
     HarnessConfig.assert_safe()
     engine = create_engine(HarnessConfig.SQLALCHEMY_DATABASE_URI, poolclass=NullPool)
     try:
-        with engine.connect() as conn:
-            return conn.execute(text(
-                "SELECT next_run_time, job_state FROM apscheduler_jobs WHERE id = :job_id"
-            ), {"job_id": f"schedule_{schedule_id}"}).one_or_none()
+        with Session(engine) as storage:
+            row = storage.get(Schedule, schedule_id)
+            enabled = row is not None and row.is_enabled
+            revision = schedule_revision(row) if row is not None else None
     finally:
         engine.dispose()
+    client = WorkerControlClient(url=os.environ["WORKER_CONTROL_URL"],
+                                 token=os.environ["WORKER_CONTROL_TOKEN"])
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        snapshot = client.registrations([schedule_id])
+        if snapshot and snapshot.get("leader") is True and snapshot.get("scheduler_running") is True:
+            job = snapshot["registrations"][str(schedule_id)]
+            if not enabled and job is None:
+                return None
+            if enabled and isinstance(job, dict) and job.get("installed_revision") == revision:
+                assert datetime.fromisoformat(job["next_run_at"]).utcoffset() is not None
+                return {key: job[key] for key in ("schedule_id", "cadence_fingerprint",
+                                                  "next_run_at", "effective_timezone")}
+        time.sleep(0.02)
+    raise AssertionError("The worker did not observe the current routine definition within five seconds")
 
 
 @pytest.mark.parametrize("paused", [False, True])

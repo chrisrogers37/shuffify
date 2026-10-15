@@ -2,7 +2,7 @@
 
 Each flow drives the app against the isolated fake
 Spotify at a desktop, a tablet and a phone width unless its docstring says otherwise. It checks the outcome in the
-app's own reads (the setup context, the routines, APScheduler's job store) and in the fake's playlists, not only in
+app's own reads (the setup context, routines and worker-memory registrations) and in the fake's playlists, not only in
 what the page says. Every request the page sends is recorded, and a flow fails on a native dialog, a console error or
 any failed request it did not provoke on purpose.
 """
@@ -200,7 +200,7 @@ def test_an_added_source_is_reviewed_against_every_collecting_routine_and_saved_
     """Two active collecting routines, a paused one and a shuffle share Morning Mix's sources. Adding Late Night
     by link is reviewed against the three collecting routines, by operation, timing and Active or Paused, and Save
     waits for the acknowledgment. Once saved, every collecting routine's source list holds it; no routine's timing,
-    state or APScheduler job changes, none runs, and Spotify is not written."""
+    state or scheduling cadence changes, none runs, and Spotify is not written."""
     _watch(alice, BOB_FINDS, "Bob's Finds")
     collect = _create_routine(alice, "raid", "daily")
     composite = _create_routine(alice, "raid_and_shuffle", "every_12h")
@@ -211,7 +211,7 @@ def test_an_added_source_is_reviewed_against_every_collecting_routine_and_saved_
     try:
         assert alice.ok("post", f"/schedules/{paused['id']}/toggle")["schedule"]["is_enabled"] is False
         before = _schedules(alice)
-        # The harness scheduler's PostgreSQL job store holds a job for each active routine, none for the paused one.
+        # The worker exposes a live memory registration for each active routine, none for the paused one.
         jobs = {sid: _registration(sid) for sid in ids}
         assert [sid for sid in ids if jobs[sid] is None] == [paused["id"]]
         spotify = fake.playlists()
@@ -272,8 +272,8 @@ def test_an_added_source_is_reviewed_against_every_collecting_routine_and_saved_
         for sid in ids:
             for field in ("job_type", "schedule_type", "schedule_value", "is_enabled", "algorithm_name"):
                 assert after[sid][field] == before[sid][field], (sid, field)
-            # The same APScheduler job, next run and trigger alike: nothing was registered again or removed, and
-            # the paused routine still has none.
+            # The current definition is installed with the same cadence and next run;
+            # the paused routine still has no memory registration.
             assert _registration(sid) == jobs[sid], sid
             assert alice.ok("get", f"/schedules/{sid}/history")["history"] == [], "a routine ran"
         assert fake.playlists() == spotify

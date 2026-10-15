@@ -113,3 +113,28 @@ def test_sqlite_is_an_explicit_noop():
     with PostgresWakeListener(repository('sqlite'), forbidden, connection_factory=forbidden) as listener:
         assert not listener.running
         assert not listener.ready.is_set()
+
+
+def test_schedule_channel_boot_delivery_and_reconnect_are_refresh_hints():
+    class ScheduleConnection(Connection):
+        def poll(self):
+            self.polls += 1
+            if not self.read.recv(1024):
+                raise OSError('disconnected')
+            self.notifies.append(SimpleNamespace(channel='shuffify_schedules'))
+
+    first, second = ScheduleConnection(), ScheduleConnection()
+    refreshed, queue = threading.Event(), []
+    connections = iter([first, second])
+    with PostgresWakeListener(repository(), lambda: queue.append(True), schedule_callback=refreshed.set,
+                              connection_factory=lambda: next(connections), reconnect_delay=.01) as listener:
+        assert refreshed.wait(1)
+        assert first.statements == ['LISTEN shuffify_operations', 'LISTEN shuffify_schedules']
+        refreshed.clear()
+        first.write.send(b'notify')
+        assert refreshed.wait(1) and queue == [True]
+        refreshed.clear()
+        first.write.close()  # Broken LISTEN socket: reconnect must refresh even with no subsequent notification.
+        assert refreshed.wait(1)
+        assert queue == [True, True]
+        assert listener.running

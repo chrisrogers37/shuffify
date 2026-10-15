@@ -1,7 +1,8 @@
 # Local Test Harness
 
 `scripts/harness.sh` runs the real app locally the way production is shaped:
-PostgreSQL, Redis, CSRF on, the APScheduler scheduler running, and migrations
+PostgreSQL, Redis, CSRF on, a separate operation worker with an in-memory
+APScheduler scheduler, and migrations
 applied by `flask db upgrade` before the app starts, then verified at head when
 it does. A new database is first built from the models by
 `flask create-schema`. Everything it talks to is on this machine.
@@ -33,7 +34,7 @@ code that is running now.
 1. Creates `.venv/` with Python 3.12 (what CI uses) and installs
    `requirements/dev.txt`. Skipped when the requirements have not changed, or
    when `HARNESS_PYTHON` names an interpreter the caller manages.
-2. Generates `SECRET_KEY` and `TOKEN_ENCRYPTION_KEY` into
+2. Generates `SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`, and `WORKER_CONTROL_TOKEN` into
    `.harness/secrets.env`, once per checkout. They are never printed, and
    `.harness/` is gitignored.
 3. Starts PostgreSQL on `127.0.0.1:54329` and Redis on `127.0.0.1:63799`, with
@@ -48,9 +49,11 @@ code that is running now.
    and runs `pytest tests/ -m "not integration"` under `env -i` with
    CI's backend-job values and `FLASK_SKIP_DOTENV=1`, so other shell exports
    and Flask dotenv auto-loading cannot add settings to the suite.
-6. Starts the fake Spotify on `http://127.0.0.1:8900`, then a fresh app
-   process on `http://127.0.0.1:8000` (`python run.py`), stopping any earlier
-   ones. Both use `127.0.0.1` rather than `localhost`: Spotify refuses
+6. Starts the fake Spotify on `http://127.0.0.1:8900`, a fresh Gunicorn
+   gthread API on `http://127.0.0.1:8000`, and a separate operation worker,
+   stopping this checkout's earlier processes. Worker health/control binds only
+   to `127.0.0.1:8001`; `HARNESS_WORKER_CONTROL_PORT` selects another local port.
+   API and worker share the private control token and explicit UTC timezone. Both use `127.0.0.1` rather than `localhost`: Spotify refuses
    `localhost` redirect URIs, and so does the fake. It
    then checks:
    - `/health` reports the database healthy;
@@ -61,11 +64,15 @@ code that is running now.
    - the fake Spotify recorded no call that departs from Spotify's
      documentation;
    - the app logged its schema as verified at Alembic head;
-   - the scheduler started;
+   - worker health confirms readiness and scheduler leadership;
+   - the API did not start APScheduler;
    - the network guard blocked nothing.
 
-The app and the fake keep running after `setup`. Their logs are
-`.harness/app.log` and `.harness/fake-spotify.log`.
+The API, worker and fake keep running after `setup`. Their logs are
+`.harness/app.log`, `.harness/worker.log` and `.harness/fake-spotify.log`.
+Shutdown gives the worker up to 30 minutes to drain its current operation.
+The worker stops before a database reset. Schedule definitions live in the
+database; live registrations remain in worker memory.
 
 ## Safety
 
@@ -363,7 +370,7 @@ commit. Covered:
 | Workshop merge from another of her playlists | the merged order, with the source untouched |
 | Workshop, another user's playlist | the app answers in restricted mode: its name and a search, no tracks |
 | Raid: link a staging playlist, watch Bob's Finds, raid, keep two, dismiss one | the private `[Raids]` playlist, the staged and remaining tracks, a target with the kept ones, and a second raid, for as many as the source has, that takes exactly the tracks not yet seen |
-| A scheduled shuffle (cron, every minute) | the scheduler fires it from its PostgreSQL job store and reorders the playlist (up to two minutes); the test then deletes the schedule through the app |
+| A scheduled shuffle (cron, every minute) | the worker’s in-memory scheduler enqueues a durable routine operation and the worker reorders the playlist (up to two minutes); the test then deletes the schedule through the app |
 | A scheduled shuffle run while Spotify rate-limits its first write | the client waits out `Retry-After`, the playlist is reordered, and the run succeeds |
 | A scheduled shuffle whose second write batch Spotify refuses for quota | the run fails as `failed_rolled_back` and the playlist is exactly as it was, not cut to the first 100 tracks |
 

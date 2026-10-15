@@ -1,11 +1,7 @@
-"""A scheduled job fires on its own: the harness app's scheduler, against the fake.
+"""The worker's memory scheduler admits a durable routine at its due minute.
 
-The schedule is created through the app, as the Schedules page does, with a
-cron expression for every minute, and nothing calls /run: the scheduler has
-to pick it up from its PostgreSQL job store, refresh Alice's token from the
-refresh token stored for her at login, and shuffle the playlist. The fake's
-playlist is the evidence. The test deletes the schedule through the app
-when it is done.
+The real API creates the definition, PostgreSQL notifies the worker, and the
+worker refreshes the stored login credentials before changing the local fake.
 """
 
 import time
@@ -38,9 +34,12 @@ def test_a_scheduled_shuffle_fires_and_reorders_the_playlist(alice, fake):
             history = alice.ok("get", f"/schedules/{schedule['id']}/history")["history"]
         assert history and history[0]["completed_at"], f"the schedule did not fire and finish within {FIRE_WITHIN}s"
         assert history[0]["status"] == "success", history[0]
+        operation = alice.ok("get", f"/operations/{history[0]['id']}")["operation"]
+        assert operation["kind"] == "schedule_run" and operation["state"] == "succeeded"
+        assert operation["result"]["execution_id"] == history[0]["id"]
+        assert operation["result"]["triggered_by"] == "scheduler"
     finally:
-        # Through the app, so the scheduler drops the job before the reset
-        # empties its job store.
+        # The committed deletion notifies the worker before the next harness reset.
         alice.ok("delete", f"/schedules/{schedule['id']}")
 
     after = fake.uris(LONG_HAUL)

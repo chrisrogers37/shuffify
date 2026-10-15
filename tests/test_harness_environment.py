@@ -60,7 +60,7 @@ def bash():
     for candidate in ("/opt/homebrew/bin/bash", shutil.which("bash")):
         if candidate and Path(candidate).is_file():
             version = subprocess.run(
-                [candidate, "-c", '(( BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 4) ))'],
+                [candidate, "-c", "(( BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 4) ))"],
                 capture_output=True,
                 timeout=10,
             )
@@ -81,7 +81,7 @@ def harness_environment(tmp_path, bash, launcher):
     script.write_text(definitions)
     state = checkout / ".harness"
     state.mkdir()
-    (state / "secrets.env").write_text("SECRET_KEY=harmless-test-secret\n")
+    (state / "secrets.env").write_text("SECRET_KEY=harmless-test-secret\nWORKER_CONTROL_TOKEN=harmless-control-token\n")
     shutil.copytree(REPO_ROOT / "harness" / "netguard", checkout / "harness" / "netguard")
 
     # run_checks() performs unrelated artifact/lint checks before its env -i.
@@ -89,10 +89,7 @@ def harness_environment(tmp_path, bash, launcher):
     bin_dir = checkout / "bin"
     bin_dir.mkdir()
     python = bin_dir / "python"
-    python.write_text(
-        '#!/bin/sh\ncase "$1" in scripts/*) exit 0 ;; esac\n'
-        'exec "$HARNESS_TEST_PYTHON" "$@"\n'
-    )
+    python.write_text('#!/bin/sh\ncase "$1" in scripts/*) exit 0 ;; esac\nexec "$HARNESS_TEST_PYTHON" "$@"\n')
     python.chmod(0o755)
     for command in (bin_dir / "ruff", scripts / "build-css.sh"):
         command.write_text("#!/bin/sh\nexit 0\n")
@@ -101,7 +98,9 @@ def harness_environment(tmp_path, bash, launcher):
     capture = tmp_path / "command.args"
     result = subprocess.run(
         [
-            bash, "-c", textwrap.dedent("""
+            bash,
+            "-c",
+            textwrap.dedent("""
                 source "$1"
                 capture="$4"
                 env() { printf '%s\\0' env "$@" > "$capture"; }
@@ -110,10 +109,16 @@ def harness_environment(tmp_path, bash, launcher):
                 case "$2" in
                     harness) run_harness "$3" -- "$3" ;;
                     fake) start_fake_spotify "$3" ;;
+                    api) start_app "$3" ;;
+                    worker) start_worker "$3" ;;
                     checks) run_checks "$3" ;;
                 esac
             """),
-            "harness-environment-test", str(script), launcher, str(python), str(capture),
+            "harness-environment-test",
+            str(script),
+            launcher,
+            str(python),
+            str(capture),
         ],
         cwd=checkout,
         env={
@@ -130,7 +135,7 @@ def harness_environment(tmp_path, bash, launcher):
     assert result.returncode == 0, result.stdout + result.stderr
     command = capture.read_text().rstrip("\0").split("\0")
     assert command[:2] == ["env", "-i"]
-    return checkout, command[:command.index(str(python))]
+    return checkout, command[: command.index(str(python))]
 
 
 def run_probe(checkout, environment, entrypoint):
@@ -144,13 +149,14 @@ def run_probe(checkout, environment, entrypoint):
         timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    reports = [line.removeprefix("DOTENV_PROBE=") for line in result.stdout.splitlines()
-               if line.startswith("DOTENV_PROBE=")]
+    reports = [
+        line.removeprefix("DOTENV_PROBE=") for line in result.stdout.splitlines() if line.startswith("DOTENV_PROBE=")
+    ]
     assert len(reports) == 1, result.stdout
     return json.loads(reports[0])
 
 
-@pytest.mark.parametrize("launcher", ["harness", "fake", "checks"])
+@pytest.mark.parametrize("launcher", ["harness", "fake", "checks", "api", "worker"])
 @pytest.mark.parametrize("location", ["checkout", "ancestor"])
 @pytest.mark.parametrize("entrypoint", ["cli", "app_run"])
 def test_harness_excludes_dotenv_and_shell_variables(tmp_path, bash, launcher, location, entrypoint):
@@ -170,3 +176,53 @@ def test_harness_excludes_dotenv_and_shell_variables(tmp_path, bash, launcher, l
         "running": SENTINELS,
     }
     assert run_probe(checkout, environment, entrypoint) == {"imported": empty, "running": empty}
+
+
+def test_harness_api_and_worker_share_local_private_control(tmp_path, bash):
+    _checkout, arguments = harness_environment(tmp_path, bash, "harness")
+    environment = dict(argument.split("=", 1) for argument in arguments if "=" in argument)
+    assert environment["WORKER_CONTROL_URL"] == "http://127.0.0.1:8001"
+    assert environment["WORKER_CONTROL_HOST"] == "127.0.0.1"
+    assert environment["WORKER_CONTROL_PORT"] == "8001"
+    assert environment["WORKER_CONTROL_TOKEN"] == "harmless-control-token"
+    assert environment["SCHEDULER_ENABLED"] == "true"
+    assert environment["SCHEDULER_TIMEZONE"] == "UTC"
+    assert "8001" in environment["SHUFFIFY_NETGUARD_ALLOW_PORTS"].split(",")
+
+
+def test_harness_worker_shutdown_allows_a_slow_drain_without_forcing_kill(tmp_path, bash):
+    source = (REPO_ROOT / "scripts/harness.sh").read_text()
+    definitions, separator, _ = source.partition('\ncase "${1:-}" in\n')
+    assert separator
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    script = scripts / "harness.sh"
+    script.write_text(definitions)
+    result = subprocess.run(
+        [
+            bash,
+            "-c",
+            textwrap.dedent("""
+            source "$1"
+            proc_pid() { printf '999999'; }
+            sleep() { :; }
+            probes=0
+            kill() {
+                case "$1" in
+                    -0) probes=$((probes + 1)); (( probes < 30 )) ;;
+                    -9) printf 'FORCED-KILL'; return 0 ;;
+                    *) return 0 ;;
+                esac
+            }
+            stop_proc worker
+            (( probes >= 30 ))
+        """),
+            "harness-drain-test",
+            str(script),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "FORCED-KILL" not in result.stdout
