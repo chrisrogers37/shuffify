@@ -24,7 +24,9 @@
     "test:static": "node --test tests/static/*.test.mjs",
     "test:public-browser": "playwright test --config playwright.public.config.ts",
     "test:settings-browser": "playwright test --config playwright.settings.config.ts",
-    "test:settings-fixtures": "SETTINGS_FIXTURE_BUILD=1 playwright test --config playwright.settings.config.ts"
+    "test:settings-fixtures": "SETTINGS_FIXTURE_BUILD=1 playwright test --config playwright.settings.config.ts",
+    "test:activity-browser": "playwright test --config playwright.activity.config.ts",
+    "test:activity-fixtures": "ACTIVITY_FIXTURE_BUILD=1 playwright test --config playwright.activity.config.ts"
   },
   "devDependencies": {
     "ajv": "8.20.0",

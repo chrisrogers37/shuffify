@@ -228,3 +228,45 @@
     text-decoration: underline;
   }
 }
+
+@layer components {
+  .sh-activity-page .sh-activity-link,
+  .sh-activity-resource-links a {
+    display: inline-flex;
+    min-width: var(--sh-space-control);
+    align-items: center;
+    min-height: var(--sh-space-control);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .sh-activity-event-body {
+    display: grid;
+    justify-items: start;
+  }
+  .sh-activity-origin {
+    font-size: var(--sh-type-caption);
+    color: var(--sh-muted);
+  }
+  .sh-activity-result details {
+    margin-top: var(--sh-space-2);
+  }
+  .sh-activity-result summary {
+    min-height: var(--sh-space-control);
+    padding-block: var(--sh-space-3);
+    cursor: pointer;
+    color: var(--sh-accent);
+    font-weight: var(--sh-weight-semibold);
+  }
+  .sh-activity-result .sh-result {
+    margin-block: var(--sh-space-3);
+  }
+  .sh-activity-resource-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sh-space-3);
+    font-size: var(--sh-type-caption);
+  }
+  .sh-activity-run {
+    scroll-margin-top: calc(var(--sh-space-nav-wide) + var(--sh-space-5));
+  }
+}
