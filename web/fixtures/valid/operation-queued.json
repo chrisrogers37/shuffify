@@ -1,0 +1,20 @@
+{
+  "success": true,
+  "operation": {
+    "id": 1,
+    "kind": "shuffle",
+    "state": "queued",
+    "targets": [
+      "alice-mix"
+    ],
+    "started_at": null,
+    "completed_at": null,
+    "progress": {},
+    "result": null,
+    "recovery": {
+      "available": false,
+      "action": null,
+      "reason": null
+    }
+  }
+}

@@ -15,12 +15,15 @@ from urllib.parse import urlencode
 import requests
 
 from .credentials import SpotifyCredentials
+from .deadline import SpotifyDeadlineError, check_deadline, remaining_timeout
 from .endpoints import ACCOUNTS_BASE_URL
 from .exceptions import (
     SpotifyAuthError,
+    SpotifyRateLimitError,
     SpotifyTokenError,
     SpotifyTokenExpiredError,
 )
+from .transport import request_with_deadline
 
 logger = logging.getLogger(__name__)
 
@@ -220,8 +223,8 @@ class SpotifyAuthManager:
             raise SpotifyAuthError("Authorization code is required")
 
         try:
-            response = requests.post(
-                self._TOKEN_URL,
+            response = request_with_deadline(
+                requests.post, "POST", self._TOKEN_URL,
                 data={
                     "grant_type": "authorization_code",
                     "code": code,
@@ -231,9 +234,15 @@ class SpotifyAuthManager:
                     self._credentials.client_id,
                     self._credentials.client_secret,
                 ),
-                timeout=30,
+                timeout=remaining_timeout(30),
             )
 
+            if response.status_code == 429:
+                try:
+                    retry_after = max(0, int(response.headers.get("Retry-After")))
+                except (TypeError, ValueError):
+                    retry_after = None
+                raise SpotifyRateLimitError("Spotify token endpoint is rate limited.", retry_after=retry_after)
             if response.status_code != 200:
                 error_msg = response.json().get("error_description", response.text)
                 raise SpotifyTokenError(f"Token exchange failed: {error_msg}")
@@ -243,20 +252,25 @@ class SpotifyAuthManager:
                 raise SpotifyTokenError("No token returned from Spotify")
 
             token_info = TokenInfo.from_dict(token_data)
+            check_deadline()
             logger.info("Successfully exchanged code for token")
             return token_info
 
-        except SpotifyTokenError:
+        except (SpotifyDeadlineError, SpotifyRateLimitError, SpotifyTokenError):
             raise
         except SpotifyAuthError:
             raise
         except Exception as e:
+            check_deadline()
             logger.error(f"Token exchange failed: {e}", exc_info=True)
             raise SpotifyTokenError(f"Token exchange failed: {e}")
 
     def refresh_token(self, token_info: TokenInfo) -> TokenInfo:
         """
         Refresh an expired token.
+
+        A successful response hands rotating credentials to SpotifyAPI, which
+        persists them before enforcing the completed workflow deadline.
 
         Args:
             token_info: The TokenInfo with a refresh_token.
@@ -271,8 +285,8 @@ class SpotifyAuthManager:
             raise SpotifyTokenError("Cannot refresh: no refresh_token available")
 
         try:
-            response = requests.post(
-                self._TOKEN_URL,
+            response = request_with_deadline(
+                requests.post, "POST", self._TOKEN_URL,
                 data={
                     "grant_type": "refresh_token",
                     "refresh_token": token_info.refresh_token,
@@ -281,9 +295,15 @@ class SpotifyAuthManager:
                     self._credentials.client_id,
                     self._credentials.client_secret,
                 ),
-                timeout=30,
+                timeout=remaining_timeout(30),
             )
 
+            if response.status_code == 429:
+                try:
+                    retry_after = max(0, int(response.headers.get("Retry-After")))
+                except (TypeError, ValueError):
+                    retry_after = None
+                raise SpotifyRateLimitError("Spotify token endpoint is rate limited.", retry_after=retry_after)
             if response.status_code != 200:
                 error_msg = response.json().get("error_description", response.text)
                 raise SpotifyTokenError(f"Token refresh failed: {error_msg}")
@@ -301,9 +321,10 @@ class SpotifyAuthManager:
             logger.info("Successfully refreshed token")
             return new_token_info
 
-        except SpotifyTokenError:
+        except (SpotifyDeadlineError, SpotifyRateLimitError, SpotifyTokenError):
             raise
         except Exception as e:
+            check_deadline()
             logger.error(f"Token refresh failed: {e}", exc_info=True)
             raise SpotifyTokenError(f"Token refresh failed: {e}")
 
@@ -344,8 +365,8 @@ class SpotifyAuthManager:
             True if the revocation request succeeded, False otherwise.
         """
         try:
-            response = requests.post(
-                self._REVOKE_URL,
+            response = request_with_deadline(
+                requests.post, "POST", self._REVOKE_URL,
                 data={
                     "token": access_token,
                     "token_type_hint": "access_token",
@@ -354,7 +375,7 @@ class SpotifyAuthManager:
                     self._credentials.client_id,
                     self._credentials.client_secret,
                 ),
-                timeout=2,
+                timeout=remaining_timeout(2),
             )
             # RFC 7009: 200 means revoked (or already invalid)
             if response.status_code == 200:

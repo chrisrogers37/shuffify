@@ -10,7 +10,8 @@ from typing import Any, Dict, Optional, Tuple
 from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.auth import SpotifyAuthManager, TokenInfo
 from shuffify.spotify.credentials import SpotifyCredentials
-from shuffify.spotify.exceptions import SpotifyTokenError
+from shuffify.spotify.deadline import SpotifyDeadlineError, remaining_seconds
+from shuffify.spotify.exceptions import SpotifyRateLimitError, SpotifyTokenError
 
 logger = logging.getLogger(__name__)
 
@@ -96,8 +97,12 @@ class AuthService:
             logger.debug("Successfully exchanged code for token")
             return token_data
 
-        except TokenValidationError:
+        except (SpotifyDeadlineError, TokenValidationError):
             raise
+        except SpotifyRateLimitError as error:
+            if remaining_seconds() is not None:
+                raise
+            raise AuthenticationError(f"Failed to exchange code for token: {error}") from error
         except Exception as e:
             logger.error(f"Token exchange failed: {e}", exc_info=True)
             raise AuthenticationError(f"Failed to exchange code for token: {e}")
@@ -177,6 +182,12 @@ class AuthService:
                 cache=get_spotify_cache(),
                 on_token_refresh=AuthService._persist_token_to_session,
             )
+        except SpotifyDeadlineError:
+            raise
+        except SpotifyRateLimitError as error:
+            if remaining_seconds() is not None:
+                raise
+            raise AuthenticationError(f"Failed to create Spotify client: {error}") from error
         except SpotifyTokenError as e:
             logger.error("Token initialization failed: %s", e)
             raise AuthenticationError(f"Invalid or expired token: {e}")
@@ -228,6 +239,12 @@ class AuthService:
         """
         try:
             return api.get_current_user()
+        except SpotifyDeadlineError:
+            raise
+        except SpotifyRateLimitError as error:
+            if remaining_seconds() is not None:
+                raise
+            raise AuthenticationError(f"Failed to fetch user profile: {error}") from error
         except Exception as e:
             logger.error(f"Failed to get user data: {e}", exc_info=True)
             raise AuthenticationError(f"Failed to fetch user profile: {e}")

@@ -1264,14 +1264,14 @@ class TestSleepWithBackoff:
         "shuffify.services.source_resolver.public_scraper_pathway.random.uniform",
         return_value=0.0,
     )
-    def test_max_backoff_caps_long_waits(self, _mock_rand, mock_sleep):
-        from shuffify.services.source_resolver.public_scraper_pathway import (
-            MAX_BACKOFF,
-            _sleep_with_backoff,
-        )
+    def test_long_provider_wait_is_reported_without_retrying_early(self, _mock_rand, mock_sleep):
+        from shuffify.services.source_resolver.public_scraper_pathway import _sleep_with_backoff
+        from shuffify.spotify.exceptions import SpotifyRateLimitError
 
-        _sleep_with_backoff(0, retry_after="999")
-        assert mock_sleep.call_args.args[0] == MAX_BACKOFF
+        with pytest.raises(SpotifyRateLimitError) as error:
+            _sleep_with_backoff(0, retry_after="999")
+        assert error.value.retry_after == 999
+        mock_sleep.assert_not_called()
 
 
 # ======================================================================

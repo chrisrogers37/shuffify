@@ -906,7 +906,7 @@ class BoundedRequest(Request):
         Request.max_content_length.fset(self, value)  # a view can still set its own
 
 
-def create_app(config_name=None):
+def create_app(config_name=None, *, start_scheduler=True):
     """Create and configure the Flask application."""
     if config_name is None:
         config_name = os.getenv("APP_CONFIG", "production")
@@ -1007,6 +1007,10 @@ def create_app(config_name=None):
 
     register_error_handlers(app)
 
+    from shuffify.request_deadline import register_spotify_deadline
+
+    register_spotify_deadline(app)
+
     # Templates render raw Spotify playlist objects, which carry the track
     # count under "tracks" or "items"; read it in either shape.
     from shuffify.spotify.api import playlist_item_count
@@ -1019,7 +1023,7 @@ def create_app(config_name=None):
     register_cli(app)
 
     # Initialize APScheduler (after all extensions)
-    if app.config.get("SCHEDULER_ENABLED", True):
+    if start_scheduler and app.config.get("SCHEDULER_ENABLED", True):
         from shuffify.scheduler import init_scheduler, shutdown_scheduler
 
         scheduler = init_scheduler(app)

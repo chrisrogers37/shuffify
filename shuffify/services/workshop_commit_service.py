@@ -49,6 +49,7 @@ class ObservedPlaylist:
     track_uris: tuple[str, ...]
     tracks: tuple[dict, ...]
     loaded_at: str
+    snapshot_id: str | None = None
 
     def response_fields(self) -> dict:
         return {
@@ -261,6 +262,7 @@ class WorkshopCommitService:
             track_uris=tuple(track["uri"] for track in tracks),
             tracks=tuple(tracks),
             loaded_at=datetime.now(timezone.utc).isoformat(),
+            snapshot_id=snapshot_id,
         )
 
     @staticmethod

@@ -14,6 +14,7 @@ export const schemaTypes = Object.freeze({
   'workshop-context': 'WorkshopContext',
   'user-playlists-context': 'UserPlaylistsContext',
   'return-target': 'ReturnTarget',
+  'operation-context': 'OperationContext',
 });
 
 const root = fileURLToPath(new URL('../', import.meta.url));

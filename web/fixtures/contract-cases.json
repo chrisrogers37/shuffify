@@ -2903,5 +2903,125 @@
     "schema": "routines-context",
     "valid": true,
     "fixture": "valid/routines-stored-params.json"
+  },
+  {
+    "name": "operation-queued",
+    "schema": "operation-context",
+    "valid": true,
+    "fixture": "valid/operation-queued.json"
+  },
+  {
+    "name": "operation-needs-attention",
+    "schema": "operation-context",
+    "valid": true,
+    "fixture": "valid/operation-needs-attention.json"
+  },
+  {
+    "name": "operation-rejects-journal",
+    "schema": "operation-context",
+    "valid": false,
+    "data": {
+      "success": true,
+      "operation": {
+        "id": 1,
+        "kind": "shuffle",
+        "state": "queued",
+        "targets": [
+          "alice-mix"
+        ],
+        "started_at": null,
+        "completed_at": null,
+        "progress": {},
+        "result": null,
+        "recovery": {
+          "available": false,
+          "action": null,
+          "reason": null
+        },
+        "journal": {
+          "baseline": [
+            "private-order"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "operation-rejects-lease-token",
+    "schema": "operation-context",
+    "valid": false,
+    "data": {
+      "success": true,
+      "operation": {
+        "id": 1,
+        "kind": "shuffle",
+        "state": "queued",
+        "targets": [
+          "alice-mix"
+        ],
+        "started_at": null,
+        "completed_at": null,
+        "progress": {},
+        "result": null,
+        "recovery": {
+          "available": false,
+          "action": null,
+          "reason": null
+        },
+        "lease_owner": "private-claim-token"
+      }
+    }
+  },
+  {
+    "name": "operation-rejects-unknown-state",
+    "schema": "operation-context",
+    "valid": false,
+    "data": {
+      "success": true,
+      "operation": {
+        "id": 1,
+        "kind": "shuffle",
+        "state": "complete",
+        "targets": [
+          "alice-mix"
+        ],
+        "started_at": null,
+        "completed_at": null,
+        "progress": {},
+        "result": null,
+        "recovery": {
+          "available": false,
+          "action": null,
+          "reason": null
+        }
+      }
+    }
+  },
+  {
+    "name": "operation-rejects-negative-progress",
+    "schema": "operation-context",
+    "valid": false,
+    "data": {
+      "success": true,
+      "operation": {
+        "id": 1,
+        "kind": "shuffle",
+        "state": "queued",
+        "targets": [
+          "alice-mix"
+        ],
+        "started_at": null,
+        "completed_at": null,
+        "progress": {
+          "batches_done": -1
+        },
+        "result": null,
+        "recovery": {
+          "available": false,
+          "action": null,
+          "reason": null
+        }
+      }
+    }
   }
 ]

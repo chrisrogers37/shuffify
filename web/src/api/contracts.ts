@@ -394,3 +394,29 @@ export interface WorkshopContext extends SuccessEnvelope {
   /** @maxItems 10 */
   recently_loaded: RecentlyLoadedPlaylist[];
 }
+
+export type OperationState = 'queued' | 'running' | 'compensating' | 'succeeded'
+  | 'failed' | 'rolled_back' | 'needs_attention';
+export interface OperationProgress {
+  batches_done?: Count;
+  total_batches?: Count;
+  phase?: 'forward' | 'compensating';
+}
+export interface OperationRecovery {
+  available: boolean;
+  action: 'restore' | null;
+  reason: string | null;
+}
+/** Private commands, credentials, baselines, and lease tokens never cross this boundary. */
+export interface Operation {
+  id: DatabaseId;
+  kind: string;
+  state: OperationState;
+  targets: string[];
+  started_at: Timestamp | null;
+  completed_at: Timestamp | null;
+  progress: OperationProgress;
+  result: JsonRecord | null;
+  recovery: OperationRecovery;
+}
+export interface OperationContext extends SuccessEnvelope { operation: Operation }

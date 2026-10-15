@@ -2,9 +2,11 @@
 
 import logging
 
+from shuffify.spotify.deadline import SpotifyDeadlineError, check_deadline, remaining_seconds
 from shuffify.spotify.exceptions import (
     SpotifyAPIError,
     SpotifyNotFoundError,
+    SpotifyRateLimitError,
     SpotifyTokenExpiredError,
 )
 
@@ -53,7 +55,9 @@ class DirectAPIPathway:
             )
 
         try:
+            check_deadline()
             tracks = api.get_playlist_tracks(playlist_id)
+            check_deadline()
         except SpotifyNotFoundError:
             logger.info(
                 "DirectAPI: playlist %s not found, "
@@ -73,7 +77,11 @@ class DirectAPIPathway:
             # / PublicScraperPathway here would burn two extra
             # network calls and obscure the real cause.
             raise
+        except SpotifyDeadlineError:
+            raise
         except SpotifyAPIError as e:
+            if isinstance(e, SpotifyRateLimitError) and remaining_seconds() is not None:
+                raise
             logger.warning(
                 "DirectAPI failed for %s: %s: %s",
                 playlist_id,

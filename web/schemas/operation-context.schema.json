@@ -1,0 +1,207 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/OperationContext",
+  "definitions": {
+    "OperationContext": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "message": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "const": "success"
+        },
+        "operation": {
+          "$ref": "#/definitions/Operation"
+        }
+      },
+      "required": [
+        "operation",
+        "success"
+      ],
+      "additionalProperties": false
+    },
+    "Operation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/definitions/OperationState"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "progress": {
+          "$ref": "#/definitions/OperationProgress"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/JsonRecord"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "recovery": {
+          "$ref": "#/definitions/OperationRecovery"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "state",
+        "targets",
+        "started_at",
+        "completed_at",
+        "progress",
+        "result",
+        "recovery"
+      ],
+      "additionalProperties": false,
+      "description": "Private commands, credentials, baselines, and lease tokens never cross this boundary."
+    },
+    "DatabaseId": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "OperationState": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "running",
+        "compensating",
+        "succeeded",
+        "failed",
+        "rolled_back",
+        "needs_attention"
+      ]
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "An ISO 8601 timestamp supplied by the server."
+    },
+    "OperationProgress": {
+      "type": "object",
+      "properties": {
+        "batches_done": {
+          "$ref": "#/definitions/Count"
+        },
+        "total_batches": {
+          "$ref": "#/definitions/Count"
+        },
+        "phase": {
+          "type": "string",
+          "enum": [
+            "forward",
+            "compensating"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "JsonRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/JsonValue"
+      },
+      "description": "Extensible metadata and preferences intentionally retain arbitrary JSON values."
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        }
+      ]
+    },
+    "OperationRecovery": {
+      "type": "object",
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "action": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "restore",
+            null
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "available",
+        "action",
+        "reason"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
