@@ -348,6 +348,20 @@ class OperationRuntime:
             raise IncompletePlaylistRead("Playlist metadata changed during reconciliation")
         return {"snapshot_id": second.get("snapshot_id"), "metadata": {name: second.get(name) for name in fields}}
 
+    def read_snapshot(self, playlist_id):
+        """Authorize one uncached metadata response for a known track-batch boundary."""
+        from shuffify.services.playlist_service import PlaylistService
+        from shuffify.services.workshop_commit_service import IncompletePlaylistRead
+
+        metadata = PlaylistService(self.api).validate_user_can_edit(
+            playlist_id, self.user.spotify_id, skip_cache=True,
+        )
+        snapshot = metadata.get("snapshot_id")
+        if not isinstance(snapshot, str) or not snapshot:
+            raise IncompletePlaylistRead("Playlist snapshot is unavailable")
+        return {"snapshot_id": snapshot,
+                "metadata": {name: metadata.get(name) for name in ("name", "public", "description")}}
+
     def read_resource(self, playlist_id):
         """Authorize two complete uncached reads with a stable snapshot and order."""
         from shuffify.services.workshop_commit_service import IncompletePlaylistRead, WorkshopCommitService
@@ -377,7 +391,7 @@ class OperationRuntime:
 
             self._journal = DurableJournal(
                 self.get_journal, self.checkpoint, self.read_resource, self.dispatch,
-                read_metadata=self.read_metadata_resource,
+                read_metadata=self.read_metadata_resource, read_snapshot=self.read_snapshot,
             )
         return self._journal
 

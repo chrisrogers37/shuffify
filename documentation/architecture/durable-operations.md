@@ -56,6 +56,35 @@ covers commits whose notification was missed. Known lease and retry deadlines
 arrange their own wake; there is no idle database polling loop. SIGTERM stops
 new claims and allows the active command to settle.
 
+Before another prepared track batch, an uncached metadata read compares both
+its snapshot and frozen playlist metadata. A mismatch requires a full read;
+initial, recovered and final reconciliation still read complete contents.
+Unacknowledged dispatched writes cannot use this shortcut. Transient read
+failures and exhausted budgets persist a retry deadline and retain the current
+forward or compensation direction. No provider request runs before that deadline.
+Compensation receives an independent bounded budget instead of inheriting a
+spent forward budget.
+
+Recovered protection requires a verified nonempty current boundary. A fresh
+complete reconciliation also retains its own proof before checkpointing it,
+so a database publication failure cannot reverse freshly verified effects.
+An empty next boundary cannot inherit protection from an accepted predecessor.
+
+A saved terminal candidate never replays forward work. Lost access, missing
+playlists or unsupported items settle it as `needs_attention`, invalidating
+current-state claims and releasing its active reservations. Three unclassified
+verification failures also require attention. Lease loss and explicit deferral
+remain worker controls and do not consume that failure allowance.
+
+The scheduler recovers the most recent eligible due instant within its one-hour
+grace window after restart or leadership transfer. Durable scheduled-fire
+identity prevents duplicate admission. Definition and enabled-state changes
+stamp a nullable `Schedule.definition_changed_at` in the same transaction;
+execution bookkeeping leaves it unchanged. Existing rows without that stamp
+use their last update conservatively. Interval eligibility starts one interval
+after creation, retaining the original cadence phase. Pause and Resume cannot
+backfill a slot that predates the current eligible definition.
+
 ## History and local effects
 
 Undo history is isolated by user and an opaque server-generated browser scope.

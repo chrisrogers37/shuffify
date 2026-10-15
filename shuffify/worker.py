@@ -10,14 +10,15 @@ from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timezone
 
-from shuffify.services.operations.control import propagate_control
+from shuffify.services.operations.control import propagate_control, read_retry_delay
 from shuffify.services.operations.journal import NeedsAttention, OperationAborted, OperationDeferred
 from shuffify.services.operations.repository import LeaseLost, OperationRepository
 from shuffify.services.operations.runtime import OperationResult, OperationRuntime
-from shuffify.spotify.deadline import spotify_deadline
+from shuffify.spotify.deadline import fresh_spotify_deadline, spotify_deadline
 from shuffify.spotify.observation import observe_mutations
 
 logger = logging.getLogger(__name__)
+TERMINAL_RECOVERY_LIMIT = 3
 
 
 class TerminalPending(RuntimeError):
@@ -123,7 +124,9 @@ class OperationWorker:
                         return self._record_failure(lease, runtime, result=document["abort"].get("result"))
                     runtime.check_pending_control()
                     self._protect_recovery(runtime, document)
-                    recovered = runtime.journal.resume()
+                    recovered = runtime.journal.resume(
+                        on_verified=lambda: self._retain_recovered_proof(runtime),
+                    )
                     if recovered["state"] == "needs_attention":
                         self._finish(lease, runtime, "needs_attention", result=self._attention())
                         return True
@@ -184,6 +187,9 @@ class OperationWorker:
         except Exception as error:
             logger.exception("Operation %s did not complete", lease.operation_id)
             try:
+                if (runtime is not None and read_retry_delay(error) is not None
+                        and not runtime.journal.has_ambiguous_write()):
+                    runtime.journal.defer_read(error)
                 verified_abort = verified_attention = False
                 try:
                     with observe_mutations(None):
@@ -257,7 +263,8 @@ class OperationWorker:
                 result = recorded_failure["result"]
         if runtime is not None and (has_effects or journal.get("boundaries") is not None):
             try:
-                compensated = runtime.journal.compensate()
+                with fresh_spotify_deadline(self.operation_timeout):
+                    compensated = runtime.journal.compensate()
                 state = compensated["state"]
             except (LeaseLost, OperationDeferred):
                 raise
@@ -279,10 +286,34 @@ class OperationWorker:
         boundaries = document.get("boundaries", {})
         current = boundaries.get("current")
         accepted = boundaries.get("accepted", [])
+        if current is not None and (
+            not current.get("verified") or current["start"] >= len(document.get("plans", []))
+        ):
+            return
         boundary = current or (accepted[-1] if accepted else None)
         if (document.get("phase") != "forward" or not document.get("plans")
                 or boundary is None or not self._all_acknowledged(document)):
             return
+        public = self._recovered_public_result(runtime, document, boundary)
+        runtime.journal.verify_terminal(on_verified=lambda: runtime.protect_verified(
+            boundary["name"], public, resuming=True,
+        ))
+
+    def _retain_recovered_proof(self, runtime):
+        """Retain this attempt's complete proof before its database checkpoint."""
+        document = runtime.journal.doc
+        current = document.get("boundaries", {}).get("current")
+        if (document.get("phase") != "forward" or current is None
+                or current["start"] >= len(document.get("plans", []))
+                or not self._all_acknowledged(document)):
+            return
+        runtime.protect_verified(
+            current["name"], self._recovered_public_result(runtime, document, current), resuming=True,
+        )
+
+    @staticmethod
+    def _recovered_public_result(runtime, document, boundary):
+        """Project the freshly reconciled ledger without database or provider I/O."""
         resources = []
         for resource, stored in sorted(document.get("resources", {}).items()):
             plans = [item for item in document["plans"] if item["resource"] == resource]
@@ -302,13 +333,10 @@ class OperationWorker:
                 desired.get("metadata", {}) if metadata else desired["track_uris"],
             )
             resources.append(fact)
-        public = {"operation": {
+        return {"operation": {
             "kind": runtime.operation.kind, "aggregate_status": "unknown", "resources": resources,
             "bookkeeping": [], "error_code": "verified_step_publication_failed", "retryable": False,
         }}
-        runtime.journal.verify_terminal(on_verified=lambda: runtime.protect_verified(
-            boundary["name"], public, resuming=True,
-        ))
 
     def _finish(self, lease, runtime, state, *, result):
         """Finalize local effects, then publish history and the settled result together.
@@ -353,10 +381,36 @@ class OperationWorker:
 
     def _recover_terminal(self, lease, runtime, terminal):
         """Revalidate a terminal candidate without ever re-entering failure compensation."""
+        from shuffify.services.playlist_service import PlaylistAccessError
+        from shuffify.services.workshop_commit_service import UnsupportedPlaylistItems
+        from shuffify.spotify.exceptions import SpotifyAuthError, SpotifyForbiddenError, SpotifyNotFoundError
+
         try:
-            # Read-only reconciliation is allowed through an abort; an outage
-            # leaves the candidate recoverable instead of authorizing a write.
-            recovered = runtime.journal.verify_terminal()
+            try:
+                recovered = runtime.journal.verify_terminal()
+            except (LeaseLost, OperationDeferred):
+                raise
+            except Exception as error:
+                with observe_mutations(None):
+                    propagate_control(error)
+                permanent = isinstance(error, (
+                    PlaylistAccessError, SpotifyNotFoundError, SpotifyForbiddenError,
+                    SpotifyAuthError, UnsupportedPlaylistItems,
+                ))
+                if not permanent:
+                    document = runtime.get_journal()
+                    attempts = document.setdefault("runtime", {}).get("terminal_recovery_attempts", 0) + 1
+                    document["runtime"]["terminal_recovery_attempts"] = attempts
+                    runtime.checkpoint(document)
+                    if attempts < TERMINAL_RECOVERY_LIMIT:
+                        raise
+                # An inaccessible resource or bounded unknown failure cannot retain
+                # a busy target indefinitely or authorize another Spotify write.
+                changed = self._attention(terminal["result"], invalidate_all=True)
+                self._save_terminal(runtime, "needs_attention", changed, done=False)
+                self._finish(lease, runtime, "needs_attention", result=changed)
+                return
+
             state, result = terminal["state"], terminal["result"]
             if (recovered["state"] == "needs_attention"
                     or state == "succeeded" and (runtime.journal.doc.get("phase") != "forward"

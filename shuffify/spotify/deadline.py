@@ -31,6 +31,17 @@ def spotify_deadline(seconds: float) -> Iterator[None]:
         _deadline.reset(token)
 
 
+@contextmanager
+def fresh_spotify_deadline(seconds: float) -> Iterator[None]:
+    """Bound an independent compensation workflow and restore its caller's budget."""
+    token = _deadline.set(None)
+    try:
+        with spotify_deadline(seconds):
+            yield
+    finally:
+        _deadline.reset(token)
+
+
 def remaining_seconds() -> float | None:
     """Return remaining monotonic seconds, or None when the caller set no budget."""
     expires_at = _deadline.get()

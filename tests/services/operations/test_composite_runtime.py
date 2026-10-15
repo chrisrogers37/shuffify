@@ -30,6 +30,7 @@ def composite(db_app, monkeypatch, sample_token):
     row = repository.enqueue(kind="example", user_id=user.id, targets=[PLAYLIST], payload={"version": 1})
     world = SpotifyWorld([BEFORE])
     monkeypatch.setattr(OperationRuntime, "read_resource", lambda self, target: world.observe(target))
+    monkeypatch.setattr(OperationRuntime, "read_snapshot", lambda self, target: world.observe(target)["snapshot_id"])
 
     def build(handler):
         def api_factory(_user):

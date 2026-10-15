@@ -65,16 +65,18 @@ def test_committed_public_pages_match_shared_sources():
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        env={**os.environ, "CONTACT_ADDRESS": "christophertrogers37@gmail.com"},
     )
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def _assert_preserved_legal_copy(name, source_dir, public_dir):
+def _assert_preserved_legal_copy(
+    name, source_dir, public_dir, contact_address="christophertrogers37@gmail.com"
+):
     expected = LEGAL_COPY_SHA256[name]
     source = (source_dir / f"{name}.html").read_bytes()
     generated = (public_dir / f"{name}.html").read_bytes()
     assert sha256(source).hexdigest() == expected
-    contact_address = os.environ.get("CONTACT_ADDRESS") or "CONTACT_ADDRESS"
     rendered_address = str(escape(contact_address)).encode("utf-8")
     assert _legal_copy(generated) == source.replace(b"CONTACT_ADDRESS", rendered_address)
 
@@ -101,6 +103,7 @@ def test_contact_build_and_check_preserve_legal_copy(
             name,
             public_source_tree / "assets" / "legal",
             public_source_tree / "shuffify" / "static" / "public",
+            contact_address,
         )
 
 
@@ -177,11 +180,48 @@ def test_legal_pages_escape_the_contact_address(public_page_builder, monkeypatch
         assert "&lt;script&gt;" in page
 
 
-def test_legal_pages_leave_a_clear_placeholder_without_contact_address(public_page_builder, monkeypatch):
+def test_legal_pages_default_to_public_owner_contact(public_page_builder, monkeypatch):
     monkeypatch.delenv("CONTACT_ADDRESS", raising=False)
 
     for page in public_page_builder.render_public_pages().values():
-        assert 'href="mailto:CONTACT_ADDRESS">CONTACT_ADDRESS</a>' in page
+        assert 'href="mailto:christophertrogers37@gmail.com">christophertrogers37@gmail.com</a>' in page
+        assert "CONTACT_ADDRESS" not in page
+
+
+def test_committed_public_pages_cannot_ship_contact_placeholder():
+    pages = sorted(PUBLIC_DIR.glob("*.html"))
+    assert pages
+    for page in pages:
+        assert "CONTACT_ADDRESS" not in page.read_text(encoding="utf-8"), page.name
+
+
+def test_check_rejects_placeholder_even_when_output_matches_rendered_source(
+    public_page_builder, public_source_tree, monkeypatch, capsys
+):
+    monkeypatch.setenv("CONTACT_ADDRESS", "CONTACT_ADDRESS")
+    monkeypatch.setattr(public_page_builder, "REPO_ROOT", public_source_tree)
+    public_dir = public_source_tree / "shuffify" / "static" / "public"
+    for name, html in public_page_builder.render_public_pages().items():
+        (public_dir / f"{name}.html").write_text(html, encoding="utf-8")
+    before = {page: page.read_bytes() for page in public_dir.glob("*.html")}
+
+    assert public_page_builder.main(["--check"]) == 1
+    assert "CONTACT_ADDRESS" in capsys.readouterr().err
+    assert {page: page.read_bytes() for page in before} == before
+
+
+def test_check_rejects_placeholder_in_an_additional_public_page(
+    public_page_builder, public_source_tree, monkeypatch, capsys
+):
+    monkeypatch.setenv("CONTACT_ADDRESS", "support@example.invalid")
+    monkeypatch.setattr(public_page_builder, "REPO_ROOT", public_source_tree)
+    assert public_page_builder.main([]) == 0
+    extra = public_source_tree / "shuffify" / "static" / "public" / "extra.html"
+    extra.write_text('<p>Contact: CONTACT_ADDRESS</p>\n', encoding="utf-8")
+
+    assert public_page_builder.main(["--check"]) == 1
+    assert "extra.html" in capsys.readouterr().err
+    assert "CONTACT_ADDRESS" in extra.read_text(encoding="utf-8")
 
 
 def test_check_detects_drift_without_rewriting_artifacts(

@@ -23,7 +23,14 @@ from sqlalchemy.pool import NullPool
 from shuffify.models.db import Schedule
 from shuffify.services.operations.repository import OperationRepository
 from shuffify.services.schedule_utils import schedule_revision
-from shuffify.services.scheduled_admission import AdmissionResult, admit_scheduled, build_cadence, utc
+from shuffify.services.scheduled_admission import (
+    AdmissionResult,
+    admit_scheduled,
+    build_cadence,
+    recoverable_fire,
+    recovery_evidence,
+    utc,
+)
 
 logger = logging.getLogger(__name__)
 LOCK_ID = 88442211
@@ -292,9 +299,17 @@ class WorkerScheduler:
             request, generation = self._requested, self._generation
         specs = {}
         with Session(self.repository.engine) as storage:
-            for schedule in storage.scalars(select(Schedule).where(Schedule.is_enabled.is_(True))):
+            schedules = list(storage.scalars(select(Schedule).where(Schedule.is_enabled.is_(True))))
+            fires, activations = recovery_evidence(storage, schedules)
+            now = utc(self.clock())
+            for schedule in schedules:
                 try:
-                    specs[schedule.id] = (schedule_revision(schedule), build_cadence(schedule, self.timezone))
+                    cadence = build_cadence(schedule, self.timezone)
+                    missed = recoverable_fire(
+                        schedule, cadence, now, latest=fires.get(schedule.id),
+                        activation_at=activations.get(schedule.id), grace_seconds=GRACE_SECONDS,
+                    )
+                    specs[schedule.id] = (schedule_revision(schedule), cadence, missed)
                 except (ValueError, TypeError, ZoneInfoNotFoundError):
                     self._emit("invalid_schedules")
         if not self._probe(generation):
@@ -308,7 +323,7 @@ class WorkerScheduler:
                 if job.id.startswith("schedule_") and job.id not in expected_ids:
                     self._scheduler.remove_job(job.id)
             installed = {}
-            for schedule_id, (revision, cadence) in specs.items():
+            for schedule_id, (revision, cadence, missed) in specs.items():
                 job_id = f"schedule_{schedule_id}"
                 job = self._scheduler.get_job(job_id)
                 args = (schedule_id, cadence.fingerprint, generation)
@@ -318,7 +333,9 @@ class WorkerScheduler:
                     or job.next_run_time is None
                     or _trigger_identity(job.trigger) != _trigger_identity(cadence.trigger)
                 ):
-                    next_fire = cadence.trigger.get_next_fire_time(None, utc(self.clock()) + timedelta(microseconds=1))
+                    next_fire = missed or cadence.trigger.get_next_fire_time(
+                        None, utc(self.clock()) + timedelta(microseconds=1),
+                    )
                     self._scheduler.add_job(
                         self._fire,
                         trigger=cadence.trigger,
@@ -394,6 +411,7 @@ class WorkerScheduler:
                     due,
                     default_timezone=self.timezone,
                     is_leader=lambda: self._probe(generation),
+                    revalidate_due=True,
                 )
             except (DBAPIError, DisconnectionError) as error:
                 if isinstance(error, DBAPIError) and not (
@@ -412,7 +430,7 @@ class WorkerScheduler:
                 except Exception as error:
                     logger.warning("Schedule queue wake failed (%s)", type(error).__name__)
                     self._emit("wake_failures")
-            if result.code in {"cadence_changed", "schedule_missing", "schedule_disabled"}:
+            if result.code in {"cadence_changed", "eligibility_changed", "schedule_missing", "schedule_disabled"}:
                 self.request_refresh()
             return result
 

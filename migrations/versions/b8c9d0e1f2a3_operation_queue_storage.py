@@ -1,4 +1,4 @@
-"""Add nullable operation queue storage to execution history."""
+"""Add nullable operation queue storage and a precise schedule eligibility floor."""
 
 import sqlalchemy as sa
 from alembic import op
@@ -10,6 +10,7 @@ depends_on = None
 
 
 def upgrade():
+    op.add_column("schedules", sa.Column("definition_changed_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("job_executions", sa.Column("kind", sa.String(80), nullable=True))
     op.add_column("job_executions", sa.Column("user_id", sa.Integer(), nullable=True))
     op.add_column("job_executions", sa.Column("targets", sa.JSON(), nullable=True))
@@ -39,3 +40,4 @@ def downgrade():
         "journal", "state", "payload", "targets", "user_id", "kind",
     ):
         op.drop_column("job_executions", name)
+    op.drop_column("schedules", "definition_changed_at")

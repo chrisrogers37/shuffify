@@ -24,6 +24,7 @@ PAGE_TITLES = {
 }
 # A committed artifact must not drift when the clock crosses into a new year.
 COPYRIGHT_YEAR = 2026
+DEFAULT_CONTACT_ADDRESS = "christophertrogers37@gmail.com"
 
 
 def render_public_pages(repo_root: Path | None = None) -> dict[str, str]:
@@ -48,7 +49,7 @@ def render_public_pages(repo_root: Path | None = None) -> dict[str, str]:
         legal_copy = (repo_root / "assets" / "legal" / f"{name}.html").read_text(
             encoding="utf-8"
         )
-        contact_address = os.environ.get("CONTACT_ADDRESS") or "CONTACT_ADDRESS"
+        contact_address = os.environ.get("CONTACT_ADDRESS") or DEFAULT_CONTACT_ADDRESS
         legal_copy = legal_copy.replace("CONTACT_ADDRESS", str(escape(contact_address)))
         pages[name] = template.render(
             title=title,
@@ -69,6 +70,19 @@ def main(argv: list[str] | None = None) -> int:
         "--check", action="store_true", help="verify committed pages without writing"
     )
     args = parser.parse_args(argv)
+    if args.check:
+        unresolved = [
+            path.relative_to(REPO_ROOT)
+            for path in sorted((REPO_ROOT / "shuffify" / "static" / "public").glob("*.html"))
+            if b"CONTACT_ADDRESS" in path.read_bytes()
+        ]
+        if unresolved:
+            print(
+                "build-public-pages: FAIL -- unresolved CONTACT_ADDRESS in: "
+                + ", ".join(str(path) for path in unresolved),
+                file=sys.stderr,
+            )
+            return 1
     stale = []
     for name, html in render_public_pages().items():
         output = REPO_ROOT / "shuffify" / "static" / "public" / f"{name}.html"

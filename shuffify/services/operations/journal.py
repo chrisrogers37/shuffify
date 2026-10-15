@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 
+from shuffify.spotify.deadline import SpotifyDeadlineError, check_deadline
 from shuffify.spotify.exceptions import (
     SpotifyAuthError,
     SpotifyForbiddenError,
@@ -51,13 +52,15 @@ class OperationAborted(SpotifyWriteUnverifiedError):
 class DurableJournal:
     """Persist through injected fenced checkpoints; never hold a transaction over I/O."""
 
-    def __init__(self, get_journal, checkpoint, read_resource, dispatch, settle_resource=None, read_metadata=None):
+    def __init__(self, get_journal, checkpoint, read_resource, dispatch, settle_resource=None, read_metadata=None,
+                 read_snapshot=None):
         self.get_journal = get_journal
         self.checkpoint = checkpoint
         self.read_resource = read_resource
         self.dispatch = dispatch
         self.settle_resource = settle_resource
         self.read_metadata = read_metadata
+        self.read_snapshot = read_snapshot
         self.active_batch = None
         self.cursor = 0
         self._observation_depth = 0
@@ -228,6 +231,13 @@ class DurableJournal:
     def _defer_if_needed(self):
         now = datetime.now(timezone.utc)
         deadlines = []
+        retry = self.doc.get("read_retry", {}).get("next_attempt_at")
+        if retry:
+            due = datetime.fromisoformat(retry)
+            if due.tzinfo is None:
+                raise JournalError("A retry deadline must include its timezone")
+            if due > now:
+                deadlines.append(due)
         for step in self._plans():
             for item in step["batches"]:
                 if item["state"] == "rejected" and item.get("next_attempt_at"):
@@ -251,7 +261,8 @@ class DurableJournal:
     def _save(self):
         self._progress()
         owned = {"version", "phase", "status", "resources", "plans", "compensation", "compensation_resources",
-                 "choices", "recovery", "observations", "progress", "abort", "boundaries", "compensation_scope"}
+                 "choices", "recovery", "observations", "progress", "abort", "boundaries",
+                 "compensation_scope", "read_retry"}
         latest = self.get_journal() or {}
         self._check_publication(latest)
         for key, value in latest.items():
@@ -274,13 +285,62 @@ class DurableJournal:
             raise JournalError("A complete observation requires a playlist snapshot")
         return observed
 
+    def has_ambiguous_write(self, document=None):
+        """A dispatched batch without an acknowledgement still requires complete reconciliation."""
+        document = self.doc if document is None else document
+        return any(item.get("state") == "dispatched"
+                   for step in document.get("plans", []) + document.get("compensation", [])
+                   for item in step.get("batches", []))
+
+    def defer_read(self, error):
+        """Persist a safe read's retry deadline without changing the mutation direction."""
+        from .control import read_retry_delay
+
+        if isinstance(error, OperationDeferred):
+            raise error
+        delay = read_retry_delay(error)
+        if delay is None:
+            raise error
+        due = datetime.now(timezone.utc) + timedelta(seconds=delay)
+        previous = self.doc.get("read_retry", {}).get("next_attempt_at")
+        if previous:
+            due = max(due, datetime.fromisoformat(previous))
+        self.doc["read_retry"] = {"next_attempt_at": due.isoformat(), "phase": self.doc["phase"],
+                                  "error_code": "read_rate_limited" if isinstance(error, SpotifyRateLimitError)
+                                  else "read_temporarily_unavailable"}
+        self._save()
+        raise OperationDeferred(due) from error
+
+    def _read_call(self, read, resource):
+        self._defer_if_needed()
+        try:
+            check_deadline()
+            return read(resource)
+        except Exception as error:
+            self.defer_read(error)
+
     def _read(self, resource, *, scope=None):
         scope = scope or self.doc["resources"].get(resource, {}).get("scope", "tracks")
         if scope == "metadata":
             if self.read_metadata is None:
                 raise JournalError("No authorized metadata reader is configured")
-            return self._observed({**self.read_metadata(resource), "scope": "metadata"})
-        return self._observed(self.read_resource(resource))
+            return self._observed({**self._read_call(self.read_metadata, resource), "scope": "metadata"})
+        return self._observed(self._read_call(self.read_resource, resource))
+
+    def _before_batch(self, step, item):
+        resource = step["resource"]
+        snapshot = self._expected_snapshot(resource)
+        if (self.read_snapshot is not None and self.doc["resources"][resource].get("scope", "tracks") == "tracks"
+                and item["path"].endswith("/items") and item["state"] in {"prepared", "rejected"}
+                and snapshot and not any(batch["state"] == "dispatched" for batch in self._resource_batches(resource))):
+            observed = self._read_call(self.read_snapshot, resource)
+            # Production readers return both fields from one authorized GET.
+            # A narrow injected snapshot reader can provide only the revision.
+            observed_snapshot = observed.get("snapshot_id") if isinstance(observed, dict) else observed
+            metadata_matches = not isinstance(observed, dict) or observed.get("metadata") == item["before"]["metadata"]
+            if observed_snapshot == snapshot and metadata_matches:
+                return {**deepcopy(item["before"]), "snapshot_id": observed_snapshot}
+        return self._read(resource)
 
     def _base(self, resource, *, scope="tracks", expected_baseline=None):
         self.check_pending_control()
@@ -481,7 +541,7 @@ class DurableJournal:
             base, batches = self._resource_ledger(resource)
             ambiguous = any(item["state"] == "dispatched" for item in batches)
             if ambiguous and self.settle_resource and stored.get("scope", "tracks") == "tracks":
-                observed = self._observed(self.settle_resource(resource))
+                observed = self._observed(self._read_call(self.settle_resource, resource))
             else:
                 observed = self._read(resource)
             observations[resource] = observed
@@ -536,7 +596,7 @@ class DurableJournal:
         item.update(state="acknowledged", snapshot_id=snapshot)
         self._save()
 
-    def resume(self):
+    def resume(self, *, on_verified=None):
         if self.doc["status"] in {"needs_attention", "failed"}:
             return self.outcome()
         self.check_pending_control()
@@ -547,7 +607,7 @@ class DurableJournal:
                 "success": False, "error_code": "write_rejected", "category": "error",
                 "message": "Spotify rejected the write because its quota is exhausted.", "retryable": False,
             })
-        conflict = self._reconcile()
+        conflict = self._reconcile(on_verified=on_verified)
         if conflict:
             return conflict
         self.doc["status"] = "running"
@@ -557,12 +617,17 @@ class DurableJournal:
                     continue
                 resource = step["resource"]
                 if resource is not None:
-                    observed = self._read(resource)
+                    observed = self._before_batch(step, item)
                     matches = content(observed) == item["before"]
                     expected_snapshot = self._expected_snapshot(resource)
                     if not matches or expected_snapshot and observed.get("snapshot_id") != expected_snapshot:
                         return self._attention("external_edit", {resource: observed})
                     item["snapshot_before"] = observed.get("snapshot_id")
+                try:
+                    check_deadline()
+                except SpotifyDeadlineError as error:
+                    self.defer_read(error)
+                prior_state, prior_attempts = item["state"], item["attempts"]
                 item.update(state="dispatched", dispatched_at=datetime.now(timezone.utc).isoformat())
                 self._save()
                 self.active_batch = (step, item)
@@ -570,6 +635,12 @@ class DurableJournal:
                     with self.observe():
                         response = self.dispatch(item["method"], item["path"], deepcopy(item["body"]))
                     self._ack(step, item, response)
+                except SpotifyDeadlineError as error:
+                    if item["attempts"] == prior_attempts:
+                        item["state"] = prior_state
+                        self._save()
+                        self.defer_read(error)
+                    raise
                 except (SpotifyAuthError, SpotifyForbiddenError, SpotifyNotFoundError,
                         SpotifyRateLimitError, SpotifyWriteRejectedError):
                     if item["state"] != "acknowledged":
@@ -578,7 +649,7 @@ class DurableJournal:
                     raise
                 finally:
                     self.active_batch = None
-        conflict = self._reconcile()
+        conflict = self._reconcile(on_verified=on_verified)
         if conflict:
             return conflict
         self.doc["status"] = "rolled_back" if self.doc["phase"] == "compensating" else "succeeded"
@@ -719,7 +790,7 @@ class DurableJournal:
         if (method, path, body) != (item["method"], item["path"], item["body"]):
             raise JournalError("The HTTP mutation differs from its frozen batch")
         if item["attempts"] and step["resource"] is not None:
-            observed = self._read(step["resource"])
+            observed = self._before_batch(step, item)
             metadata_only = self.doc["resources"][step["resource"]].get("scope") == "metadata"
             if content(observed) != item["before"] or (
                     not metadata_only and observed.get("snapshot_id") != item["snapshot_before"]):

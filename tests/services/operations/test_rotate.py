@@ -35,6 +35,10 @@ class RotateRuntime(OperationRuntime):
     def read_resource(self, resource):
         return self.world.read(resource)
 
+    def read_snapshot(self, resource):
+        state = self.world.read(resource)
+        return {"snapshot_id": state["snapshot_id"], "metadata": state["metadata"]}
+
     def dispatch(self, method, path, body):
         return self.world.dispatch(method, path, body)
 

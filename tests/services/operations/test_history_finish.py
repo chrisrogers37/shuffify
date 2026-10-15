@@ -30,6 +30,7 @@ def test_verified_write_with_failed_history_keeps_rich_result_without_compensati
         return api
 
     monkeypatch.setattr(OperationRuntime, "read_resource", lambda self, target: world.observe(target))
+    monkeypatch.setattr(OperationRuntime, "read_snapshot", lambda self, target: world.observe(target)["snapshot_id"])
 
     def handler(runtime):
         runtime.step("write", lambda: {"success": runtime.api.update_playlist_tracks(PLAYLIST, desired)})

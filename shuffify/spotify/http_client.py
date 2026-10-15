@@ -24,6 +24,7 @@ from .exceptions import (
     SpotifyNotFoundError,
     SpotifyQuotaExceededError,
     SpotifyRateLimitError,
+    SpotifyReadTransientError,
     SpotifyTokenExpiredError,
     SpotifyWriteRejectedError,
     SpotifyWriteUnverifiedError,
@@ -302,7 +303,7 @@ class SpotifyHTTPClient:
                                 f"Spotify answered {status} with a body that is not JSON"
                             )
                         if attempt >= MAX_RETRIES:
-                            raise SpotifyAPIError(
+                            raise SpotifyReadTransientError(
                                 f"Spotify answered {status} with an unreadable body "
                                 f"after {MAX_RETRIES + 1} attempts"
                             )
@@ -384,7 +385,7 @@ class SpotifyHTTPClient:
                             "its outcome is unverified"
                         )
                     if attempt >= MAX_RETRIES:
-                        raise SpotifyAPIError(
+                        raise SpotifyReadTransientError(
                             f"Server error {response.status_code} "
                             f"after {MAX_RETRIES + 1} attempts"
                         )
@@ -422,7 +423,7 @@ class SpotifyHTTPClient:
                         "Spotify write lost its response; its outcome is unverified"
                     ) from e
                 if attempt >= MAX_RETRIES:
-                    raise SpotifyAPIError(
+                    raise SpotifyReadTransientError(
                         f"Network error after {MAX_RETRIES + 1} attempts: {e}"
                     )
                 delay = _calculate_backoff_delay(attempt)

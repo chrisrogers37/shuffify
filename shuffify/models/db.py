@@ -459,6 +459,8 @@ class Schedule(db.Model):
         default=IntervalValue.DAILY,
     )
     is_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    # A precise eligibility floor, independent of execution bookkeeping.
+    definition_changed_at = db.Column(UTCDateTime, nullable=True)
     last_run_at = db.Column(UTCDateTime, nullable=True)
     last_status = db.Column(db.String(20), nullable=True)
     last_error = db.Column(db.Text, nullable=True)

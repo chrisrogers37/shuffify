@@ -16,7 +16,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.schema import CreateIndex
 
-from shuffify.models.db import JobExecution, UTCDateTime
+from shuffify.models.db import JobExecution, Schedule, UTCDateTime
 
 ROOT = Path(__file__).resolve().parents[2]
 REVISION = "b8c9d0e1f2a3"
@@ -93,6 +93,13 @@ def test_model_queue_types_and_legacy_serializer_are_preserved():
     }
 
 
+def test_schedule_definition_floor_is_nullable_without_defaults():
+    column = Schedule.__table__.c.definition_changed_at
+    assert isinstance(column.type, UTCDateTime)
+    assert column.nullable is True
+    assert column.default is column.server_default is None
+
+
 @pytest.mark.parametrize("name,columns", UNIQUE_INDEXES.items())
 def test_model_unique_indexes_compile_with_distinct_nulls(name, columns):
     indexes = {index.name: index for index in JobExecution.__table__.indexes}
@@ -119,7 +126,8 @@ def test_migration_postgresql_ddl_has_no_new_constraints_or_defaults():
     with Operations.context(context):
         _migration().upgrade()
     ddl = output.getvalue().upper()
-    assert ddl.count("ADD COLUMN") == len(QUEUE_COLUMNS)
+    assert ddl.count("ADD COLUMN") == len(QUEUE_COLUMNS) + 1
+    assert "ALTER TABLE SCHEDULES ADD COLUMN DEFINITION_CHANGED_AT" in ddl
     assert ddl.count("CREATE UNIQUE INDEX") == len(UNIQUE_INDEXES)
     assert "NULLS NOT DISTINCT" not in ddl
     assert "NOT NULL" not in ddl
@@ -136,6 +144,13 @@ def _exercise_additive_upgrade(connection):
     _migrate(connection, "upgrade")
 
     inspector = sa.inspect(connection)
+    schedule_columns = {column["name"]: column for column in inspector.get_columns("schedules")}
+    assert set(schedule_columns) == {"id", "definition_changed_at"}
+    assert schedule_columns["definition_changed_at"]["nullable"] is True
+    assert schedule_columns["definition_changed_at"]["default"] is None
+    assert connection.scalar(sa.text("SELECT definition_changed_at FROM schedules WHERE id = 7")) is None
+    connection.execute(sa.text("INSERT INTO schedules (id) VALUES (8)"))
+    assert connection.scalar(sa.text("SELECT definition_changed_at FROM schedules WHERE id = 8")) is None
     columns = {column["name"]: column for column in inspector.get_columns("job_executions")}
     assert set(columns) == legacy_names | QUEUE_COLUMNS
     for name in QUEUE_COLUMNS:
@@ -195,6 +210,8 @@ def test_sqlite_upgrade_unique_keys_and_downgrade_preserve_legacy_rows():
             legacy_names, upgraded = _exercise_additive_upgrade(connection)
             _exercise_unique_keys(connection, upgraded)
             _migrate(connection, "downgrade")
+            assert {column["name"] for column in sa.inspect(connection).get_columns("schedules")} == {"id"}
+            assert connection.scalar(sa.text("SELECT COUNT(*) FROM schedules")) == 2
             assert {column["name"] for column in sa.inspect(connection).get_columns("job_executions")} == legacy_names
             assert connection.execute(sa.text("SELECT tracks_added FROM job_executions WHERE id = 1")).scalar_one() == 5
             assert connection.execute(sa.text("SELECT COUNT(*) FROM job_executions")).scalar_one() == 15

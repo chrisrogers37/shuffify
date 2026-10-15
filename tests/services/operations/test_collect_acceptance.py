@@ -57,6 +57,7 @@ def accepted_runtime(db_app, sample_token, monkeypatch):
         client._http._session.request = request
         runtime = OperationRuntime(repository, lease, api_factory=lambda _user: client)
         runtime.read_resource = world.read
+        runtime.read_snapshot = lambda resource: world.read(resource)["snapshot_id"]
         return runtime
 
     config = RaidConfig(user.id, 'target', 'collection', sources=(RaidSource(None, 'external', 'upstream'),))

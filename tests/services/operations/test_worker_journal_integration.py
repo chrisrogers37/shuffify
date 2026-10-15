@@ -100,6 +100,7 @@ def setup_worker(db_app, monkeypatch, sample_token):
             return api
 
         monkeypatch.setattr(OperationRuntime, "read_resource", lambda self, key: world.observe(key))
+        monkeypatch.setattr(OperationRuntime, "read_snapshot", lambda self, key: world.observe(key)["snapshot_id"])
         return OperationWorker(db_app, repository=repository, handlers={"example": handler},
                                api_factory=api_factory, heartbeat_interval=0)
 

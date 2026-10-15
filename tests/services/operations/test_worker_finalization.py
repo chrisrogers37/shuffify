@@ -87,6 +87,7 @@ def terminal(db_app, monkeypatch, sample_token):
         return api
 
     monkeypatch.setattr(OperationRuntime, "read_resource", lambda self, target: world.observe(target))
+    monkeypatch.setattr(OperationRuntime, "read_snapshot", lambda self, target: world.observe(target)["snapshot_id"])
 
     def accept(payload=None):
         return repository.enqueue(kind="example", user_id=user.id, targets=[PLAYLIST], payload=payload or {})

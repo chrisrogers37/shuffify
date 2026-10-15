@@ -35,6 +35,10 @@ class SpotifyAPIError(SpotifyError):
     pass
 
 
+class SpotifyReadTransientError(SpotifyAPIError):
+    """A safe read exhausted transport retries and may be resumed later."""
+
+
 class SpotifyWriteUnverifiedError(SpotifyAPIError):
     """A dispatched write may have applied; it must not be replayed."""
 
