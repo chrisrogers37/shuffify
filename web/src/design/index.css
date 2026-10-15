@@ -188,3 +188,25 @@
     }
   }
 }
+
+@layer components {
+  /* The literal fragments use their existing recipes; these changes enforce shared accessibility contracts. */
+  .sh-landing .sh-landing-consent a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--sh-space-control);
+  }
+  .sh-landing .sh-landing-demo-controls[hidden] {
+    display: none;
+  }
+  .sh-landing .sh-landing-attribution a {
+    padding: var(--sh-space-3);
+    margin-right: calc(-1 * var(--sh-space-3));
+  }
+  @variant sh-workspace {
+    .sh-landing .sh-landing-cover,
+    .sh-landing .sh-song-cover {
+      border-radius: var(--sh-radius-artwork-wide);
+    }
+  }
+}

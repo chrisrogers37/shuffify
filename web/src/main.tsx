@@ -1,5 +1,5 @@
 import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
 import { RouterProvider } from "react-router/dom";
 import "./design/index.css";
 import { createServices } from "./app/services";
@@ -14,7 +14,7 @@ if (import.meta.env.VITE_FIXTURE_MODE === "true") {
   );
   const { createFixtureRouter } = await import("./app/FixtureApp");
   const router = createFixtureRouter(services);
-  createRoot(document.getElementById("root")!).render(
+  mount(
     <StrictMode>
       <RouterProvider router={router} />
     </StrictMode>,
@@ -23,9 +23,20 @@ if (import.meta.env.VITE_FIXTURE_MODE === "true") {
   services = createServices();
   const { createAppRouter } = await import("./app/App");
   const router = createAppRouter(services);
-  createRoot(document.getElementById("root")!).render(
+  mount(
     <StrictMode>
       <RouterProvider router={router} />
     </StrictMode>,
   );
+}
+
+function mount(app: React.ReactNode) {
+  const root = document.getElementById("root")!;
+  if (
+    root.hasChildNodes() &&
+    root.dataset.prerenderedRoute ===
+      (location.pathname.replace(/\/$/, "") || "/")
+  )
+    hydrateRoot(root, app);
+  else createRoot(root).render(app);
 }

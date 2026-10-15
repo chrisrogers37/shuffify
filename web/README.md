@@ -1,16 +1,19 @@
-# Shuffify web foundation
+# Shuffify web frontend
 
-The React/Vite application uses the existing After Hours design. It supplies shared shells, errors, controls, task behavior, authentication and API plumbing. The normal production router currently renders the shared 404 page; it does not substitute the component review for a product page.
+The React/Vite application uses the existing After Hours design. It provides shared shells, accessible controls, task panels, session and API clients, and static landing, Terms and Privacy pages.
 
 Node 24 is required. Install and verify from `web/`:
 
 ```sh
 npm ci
 npm run theme:check
+npm run public:check
 npm run schemas:check
 npm run typecheck
 npm test
 npm run build
+npm run test:static
+npm run test:public-browser
 npm run test:browser
 ```
 
@@ -61,3 +64,15 @@ Session notices are consumed once. A signed-out session omits `csrf_token`. Sett
 ## Static hosting boundary
 
 The Vite development proxy forwards `/api`, `/login`, `/callback`, `/logout` and `/health` to the local Flask API. The preview server enforces CSP with same-origin scripts, styles, fetches and fonts, Spotify image hosts, denied frames, nosniff, referrer policy and HSTS. There is no inline bootstrap, style attribute, CSS-in-JS runtime or CDN dependency. Production host rewrites and headers must mirror these rules. A Vite preview header is not deployment configuration.
+
+## Public pages and prerendering
+
+`/`, `/terms` and `/privacy` are real production routes. The build renders their complete semantic HTML using the same React route tree as hydration, with `StaticRouterProvider` hydration data disabled. Scripts, CSS and fonts stay external. Known static documents hydrate; a SPA fallback received at a different route mounts the matching client page instead of trying to hydrate the landing HTML as another page.
+
+`npm run build` now runs public-source generation, the theme generator, all TypeScript checks, a client bundle, a temporary server build, and `scripts/prerender.mjs`. Output includes `index.html`, `terms.html`, `privacy.html`, and equivalent `terms/index.html`/`privacy/index.html` aliases. This supports direct extensionless and trailing-slash public requests on the tested static preview. Host configuration must serve these public documents before its SPA fallback. `.prerender/` is temporary build tooling, never a deployed server. No runtime SSR service is needed.
+
+`assets/legal/{terms,privacy}.html` remain authoritative. `npm run public:generate` preserves those literal fragments while escaping build-time `CONTACT_ADDRESS` in link/text contexts; the default is the published support address `christophertrogers37@gmail.com`. The build environment may override that address. Browser fixtures supply a fictional contact address. `public:check` rejects missing, stale and obsolete generated source. The existing Python public-page builder and Jinja routes remain intact during the migration.
+
+Landing copy, five fictional sample tracks and the Raid/Drip/Rotate/Schedules walkthroughs are ported from `shuffify/templates/index.html` and `macros/design_showcase.html`, using their existing recipes. No Spotify data or requests power the demonstration. It begins in the readable original order without JavaScript. Hydration reveals Preview Shuffle/Undo; those same occurrences reorder into the existing illustrative order and restore exactly. Animation reads shared motion tokens and reduced motion applies immediately. The native required consent checkbox and GET `/login` form work without JavaScript; enhancement disables Connect until consent is checked. Only `legal_consent` is submitted. An authoritative signed-in session at `/` navigates to the fixed local `/library`; query parameters cannot choose an arbitrary return destination.
+
+`npm run test:public-browser` tests the production build on port 4174 in Chromium at 360/1440px, with a synthetic signed-out session supplied by the test runner. It checks actual raw HTML, no-JavaScript reading/navigation/native validation, hydration, legal copy, consent keyboard submission, exact login fields, route heading/title/current links, preview/undo, reduced motion, branding, artwork tokens, 44px targets and strict CSP. It writes public screenshots to `evidence/`. The separate foundation browser matrix still exercises its fixture build at 4173. Run them sequentially because both build the same `dist/` directory.

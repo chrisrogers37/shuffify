@@ -92,9 +92,8 @@ editing shared shell macros or legal sources, also run
 Legal pages receive their contact email from the `CONTACT_ADDRESS` build
 environment variable. Run `python scripts/build-public-pages.py` with that
 variable set to generate the public pages; `--check` uses the same variable.
-Without it, generated pages retain the literal `CONTACT_ADDRESS` placeholder.
-TODO: the owner must supply `CONTACT_ADDRESS` and regenerate the legal pages
-before publishing them.
+Without an override, legal pages use the published support address
+`christophertrogers37@gmail.com`.
 
 ## License
 

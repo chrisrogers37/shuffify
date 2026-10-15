@@ -25,6 +25,7 @@ export function SessionProvider({
   const snapshot = useSyncExternalStore(
     services.session.subscribe,
     services.session.getSnapshot,
+    services.session.getSnapshot,
   );
   const [notice, setNotice] = useState<AuthNotice | null>(null);
   useEffect(() => {
@@ -57,7 +58,11 @@ export function useServices() {
 }
 export function useSession() {
   const { session } = useServices();
-  return useSyncExternalStore(session.subscribe, session.getSnapshot);
+  return useSyncExternalStore(
+    session.subscribe,
+    session.getSnapshot,
+    session.getSnapshot,
+  );
 }
 export function AuthGuard({ children }: { children: ReactNode }) {
   const snapshot = useSession(),

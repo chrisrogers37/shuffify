@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
-import { Link, NavLink, useLocation } from "react-router";
+import { Link, NavLink, useLocation, useNavigationType } from "react-router";
+import { copyrightYear, publicPage } from "../pages/public/meta";
 const destinations = [
   ["Library", "/library"],
   ["Workshop", "/workshop"],
@@ -72,11 +73,15 @@ export function Footer() {
       <div className="sh-container sh-footer-inner">
         <div>
           <p>Shuffify is an independent app, unaffiliated with Spotify.</p>
-          <p>© {new Date().getFullYear()} Shuffify. All rights reserved.</p>
+          <p>© {copyrightYear} Shuffify. All rights reserved.</p>
         </div>
         <nav className="sh-nav-links" aria-label="Legal navigation">
-          <Link to="/terms">Terms of Service</Link>
-          <Link to="/privacy">Privacy Policy</Link>
+          <NavLink to="/terms" end>
+            Terms of Service
+          </NavLink>
+          <NavLink to="/privacy" end>
+            Privacy Policy
+          </NavLink>
         </nav>
       </div>
     </footer>
@@ -84,6 +89,7 @@ export function Footer() {
 }
 function RouteFocus() {
   const location = useLocation();
+  const navigationType = useNavigationType();
   useEffect(() => {
     const main = document.querySelector<HTMLElement>("#main-content");
     if (!main) return;
@@ -94,8 +100,29 @@ function RouteFocus() {
       );
       if (!heading || heading === lastHeading) return;
       lastHeading = heading;
-      document.title = `${heading.textContent ?? "Shuffify"} · Shuffify`;
-      heading.focus({ preventScroll: true });
+      document.title =
+        publicPage(location.pathname)?.title ??
+        `${heading.textContent ?? "Shuffify"} · Shuffify`;
+      let fragment: HTMLElement | null = null;
+      try {
+        if (location.hash)
+          fragment = document.getElementById(
+            decodeURIComponent(location.hash.slice(1)),
+          );
+      } catch {
+        /* Malformed fragment input falls back to the route heading. */
+      }
+      if (fragment && !fragment.closest("[hidden],[inert]")) {
+        if (!fragment.hasAttribute("tabindex")) fragment.tabIndex = -1;
+        fragment.focus({ preventScroll: true });
+        fragment.scrollIntoView({ behavior: "instant" });
+      } else {
+        heading.focus({ preventScroll: true });
+        // Native reload/back history keeps its scroll restoration. New route
+        // destinations begin at their heading rather than a previous page's footer.
+        if (navigationType !== "POP")
+          window.scrollTo({ top: 0, behavior: "instant" });
+      }
     };
     apply();
     const observer = new MutationObserver(apply);
@@ -106,7 +133,7 @@ function RouteFocus() {
       attributeFilter: ["hidden", "inert"],
     });
     return () => observer.disconnect();
-  }, [location.pathname]);
+  }, [location.pathname, location.hash, navigationType]);
   return null;
 }
 export function AppShell({ children }: { children: ReactNode }) {
@@ -134,8 +161,12 @@ export function PublicShell({ children }: { children: ReactNode }) {
         <div className="sh-container sh-nav-inner">
           <Brand />
           <nav className="sh-nav-links" aria-label="Public navigation">
-            <Link to="/terms">Terms</Link>
-            <Link to="/privacy">Privacy</Link>
+            <NavLink to="/terms" end>
+              Terms
+            </NavLink>
+            <NavLink to="/privacy" end>
+              Privacy
+            </NavLink>
           </nav>
         </div>
       </header>

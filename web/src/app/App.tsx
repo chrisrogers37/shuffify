@@ -3,8 +3,9 @@ import type { Services } from "../auth/SessionProvider";
 import { PublicShell } from "../shell/Shell";
 import { ErrorPage } from "../pages/errors/ErrorPage";
 import { Providers } from "./Providers";
-export function createAppRouter(services: Services) {
-  return createBrowserRouter([
+import { publicRoutes } from "./public-routes";
+export function createAppRoutes(services: Services) {
+  return [
     {
       errorElement: (
         <PublicShell>
@@ -17,6 +18,7 @@ export function createAppRouter(services: Services) {
         </Providers>
       ),
       children: [
+        ...publicRoutes(),
         {
           path: "*",
           element: (
@@ -27,5 +29,8 @@ export function createAppRouter(services: Services) {
         },
       ],
     },
-  ]);
+  ];
+}
+export function createAppRouter(services: Services) {
+  return createBrowserRouter(createAppRoutes(services));
 }

@@ -11,13 +11,18 @@
     "schemas:check": "node scripts/generate-schemas.mjs --check",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.contracts.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "test": "node --test tests/*.test.mjs",
-    "build": "npm run theme:generate && npm run typecheck && vite build",
+    "build": "npm run public:generate && npm run theme:generate && npm run typecheck && vite build && npm run prerender",
     "dev": "vite --host 127.0.0.1",
     "preview": "vite preview --host 127.0.0.1",
     "theme:generate": "node scripts/generate-theme.mjs",
     "theme:check": "node scripts/generate-theme.mjs --check",
-    "build:fixtures": "npm run build -- --mode fixture",
-    "test:browser": "playwright test"
+    "build:fixtures": "npm run public:generate && npm run theme:generate && npm run typecheck && vite build --mode fixture && npm run prerender",
+    "test:browser": "playwright test",
+    "public:generate": "node scripts/generate-public-sources.mjs",
+    "public:check": "node scripts/generate-public-sources.mjs --check",
+    "prerender": "vite build --ssr src/prerender.tsx --outDir .prerender && node scripts/prerender.mjs",
+    "test:static": "node --test tests/static/*.test.mjs",
+    "test:public-browser": "playwright test --config playwright.public.config.ts"
   },
   "devDependencies": {
     "ajv": "8.20.0",
