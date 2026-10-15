@@ -1,0 +1,2847 @@
+/* Generated compatibility composition of authoritative After Hours sources. */
+/* ./design/core.css */
+/* A sticky action footer's measured space (AppPanels.reserveFooter), written on the document
+   element and read there alone (components/action-footer.css). Registered as not inherited, a
+   new measurement restyles only that element, not the whole page. A runtime measurement, not a
+   design token: it sits outside the --sh- namespace. */
+@property --app-footer-space {
+  syntax: '*';
+  inherits: false;
+}
+
+/* Shared After Hours presentation. Every visual rule is opt-in. */
+@layer components {
+  .sh-document {
+    scroll-behavior: smooth;
+  }
+
+  .sh-document,
+  .sh-shell * {
+    scrollbar-color: var(--sh-control-border) var(--sh-surface);
+    scrollbar-width: thin;
+  }
+
+  .sh-document::-webkit-scrollbar,
+  .sh-shell *::-webkit-scrollbar {
+    width: var(--sh-space-2);
+  }
+
+  .sh-document::-webkit-scrollbar-track,
+  .sh-shell *::-webkit-scrollbar-track {
+    background: var(--sh-surface);
+  }
+
+  .sh-document::-webkit-scrollbar-thumb,
+  .sh-shell *::-webkit-scrollbar-thumb {
+    border-radius: var(--sh-radius-artwork);
+    background: var(--sh-control-border);
+  }
+
+  .sh-document::-webkit-scrollbar-thumb:hover,
+  .sh-shell *::-webkit-scrollbar-thumb:hover {
+    background: var(--sh-muted);
+  }
+
+  /* Shared page foundation for public and authenticated screens. */
+  .sh-shell {
+    display: flex;
+    min-height: 100vh;
+    min-height: 100svh;
+    flex-direction: column;
+    margin: 0;
+    background: var(--sh-base);
+    color: var(--sh-ink);
+    font-family: var(--sh-font-ui);
+    font-size: var(--sh-type-ui);
+    line-height: var(--sh-leading-normal);
+    color-scheme: dark;
+  }
+
+  .sh-shell > main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .sh-shell :focus-visible {
+    outline: 3px solid var(--sh-accent);
+    outline-offset: 4px;
+  }
+
+  .sh-container {
+    width: 100%;
+    max-width: var(--sh-layout-container);
+    margin-inline: auto;
+    padding-inline: var(--sh-space-5);
+  }
+
+  .sh-public-nav {
+    border-bottom: 1px solid var(--sh-border);
+    background: var(--sh-base);
+  }
+
+  .sh-nav-inner {
+    display: flex;
+    min-height: var(--sh-space-17);
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sh-space-4);
+    padding-block: var(--sh-space-3);
+  }
+
+  .sh-brand {
+    display: inline-flex;
+    min-height: var(--sh-space-11);
+    flex: none;
+    align-items: center;
+    gap: var(--sh-space-2);
+    color: var(--sh-ink);
+    font-family: var(--sh-font-display);
+    font-size: var(--sh-type-brand);
+    font-weight: var(--sh-weight-bold);
+    letter-spacing: var(--sh-tracking-heading);
+    line-height: var(--sh-leading-brand);
+    text-decoration: none;
+  }
+
+  .sh-brand-mark {
+    display: inline-flex;
+    color: var(--sh-accent);
+  }
+
+  .sh-brand-mark svg {
+    width: 23px;
+    height: 23px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .sh-nav-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--sh-space-2) var(--sh-space-3);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    line-height: var(--sh-leading-normal);
+  }
+
+  .sh-nav-links a {
+    display: inline-flex;
+    min-height: var(--sh-space-11);
+    min-width: var(--sh-space-11);
+    align-items: center;
+    text-decoration: none;
+    transition: color var(--sh-motion-feedback) var(--sh-motion-ease);
+  }
+
+  .sh-nav-links a:hover,
+  .sh-nav-links a[aria-current="page"] {
+    color: var(--sh-ink);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  .sh-footer {
+    border-top: 1px solid var(--sh-border);
+    padding-block: var(--sh-space-6);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    line-height: var(--sh-leading-reading);
+  }
+
+  .sh-footer-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sh-space-3);
+  }
+
+  .sh-footer a {
+    display: inline-flex;
+    min-height: var(--sh-space-11);
+    align-items: center;
+    color: var(--sh-ink);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .sh-skip-link {
+    position: fixed;
+    top: var(--sh-space-3);
+    left: var(--sh-space-5);
+    z-index: 100;
+    transform: translateY(-180%);
+    border-radius: var(--sh-radius-control);
+    padding: var(--sh-space-3) var(--sh-space-4);
+    background: var(--sh-accent);
+    color: var(--sh-accent-ink);
+    font-size: var(--sh-type-body);
+    font-weight: var(--sh-weight-bold);
+  }
+
+  .sh-skip-link:focus {
+    transform: translateY(0);
+  }
+
+  .sh-toast {
+    max-width: min(var(--sh-layout-toast), calc(100vw - var(--sh-space-gutter-wide)));
+    margin-bottom: var(--sh-space-4);
+    border: 1px solid var(--sh-control-border);
+    border-radius: var(--sh-radius-panel);
+    padding: var(--sh-space-4);
+    background: var(--sh-surface);
+    color: var(--sh-ink);
+    box-shadow: var(--sh-shadow-popover);
+    font-size: var(--sh-type-body);
+    line-height: var(--sh-leading-normal);
+    opacity: 1;
+    transition: opacity var(--sh-motion-feedback) var(--sh-motion-ease);
+    overflow-wrap: anywhere;
+  }
+
+  .sh-toast.hiding {
+    opacity: 0;
+  }
+
+  .sh-toast-error {
+    border-color: var(--sh-error);
+    background: var(--sh-error-surface);
+    color: var(--sh-error);
+  }
+
+  .sh-toast-success {
+    border-color: var(--sh-success);
+    background: var(--sh-success-surface);
+    color: var(--sh-success);
+  }
+
+  .sh-surface {
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-panel);
+    background: var(--sh-surface);
+  }
+
+  .sh-heading {
+    color: var(--sh-ink);
+    font-family: var(--sh-font-display);
+    font-weight: var(--sh-weight-bold);
+    letter-spacing: var(--sh-tracking-heading);
+    line-height: var(--sh-leading-heading);
+  }
+
+  .sh-text-muted {
+    color: var(--sh-muted);
+  }
+
+  .sh-button,
+  .sh-button-secondary,
+  .sh-button-danger,
+  .sh-icon-button {
+    display: inline-flex;
+    min-height: var(--sh-space-11);
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border: 1px solid var(--sh-accent);
+    border-radius: var(--sh-radius-control);
+    padding: var(--sh-space-label-gap) var(--sh-space-tight);
+    background: var(--sh-accent);
+    color: var(--sh-accent-ink);
+    font-family: var(--sh-font-ui);
+    font-size: var(--sh-type-body);
+    font-weight: var(--sh-weight-bold);
+    line-height: var(--sh-leading-normal);
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color var(--sh-motion-feedback) var(--sh-motion-ease),
+      border-color var(--sh-motion-feedback) var(--sh-motion-ease),
+      color var(--sh-motion-feedback) var(--sh-motion-ease);
+  }
+
+  .sh-button:hover {
+    border-color: var(--sh-accent-hover);
+    background: var(--sh-accent-hover);
+  }
+
+  .sh-button-secondary,
+  .sh-icon-button {
+    border-color: var(--sh-control-border);
+    background: var(--sh-surface);
+    color: var(--sh-ink);
+  }
+
+  .sh-button-secondary:hover,
+  .sh-icon-button:hover {
+    background: var(--sh-raised);
+  }
+
+  .sh-button-danger:disabled,
+  .sh-icon-button:disabled,
+  .sh-button:disabled,
+  .sh-button[aria-disabled="true"],
+  .sh-button-secondary:disabled,
+  .sh-button-secondary[aria-disabled="true"] {
+    border-color: var(--sh-border);
+    background: var(--sh-raised);
+    color: var(--sh-muted);
+    cursor: not-allowed;
+  }
+
+  .sh-input {
+    width: 100%;
+    min-height: var(--sh-space-11);
+    border: 1px solid var(--sh-control-border);
+    border-radius: var(--sh-radius-control);
+    padding: var(--sh-space-label-gap) var(--sh-space-3);
+    background: var(--sh-surface);
+    color: var(--sh-ink);
+    font-family: var(--sh-font-ui);
+    font-size: var(--sh-type-body);
+    line-height: var(--sh-leading-normal);
+  }
+
+  .sh-input::placeholder {
+    color: var(--sh-muted);
+    opacity: 1;
+  }
+
+  .sh-input:disabled {
+    background: var(--sh-raised);
+    color: var(--sh-muted);
+    cursor: not-allowed;
+  }
+
+  .sh-input[aria-invalid="true"] {
+    border-color: var(--sh-error);
+  }
+
+  .sh-state {
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-panel);
+    padding: var(--sh-space-8) var(--sh-space-5);
+    background: var(--sh-surface);
+    color: var(--sh-muted);
+    text-align: center;
+  }
+
+  /* Shared eyebrow typography and feature walkthroughs. */
+  .sh-eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: var(--sh-space-tight);
+      color: var(--sh-muted);
+      font-size: var(--sh-type-eyebrow);
+      font-weight: var(--sh-weight-bold);
+      letter-spacing: var(--sh-tracking-eyebrow);
+      line-height: var(--sh-leading-eyebrow);
+      text-transform: uppercase;
+  }
+
+  .sh-eyebrow > span {
+      width: 21px;
+      height: 2px;
+      flex: none;
+      background: var(--sh-accent);
+  }
+
+  .sh-showcase {
+    display: grid;
+    align-items: center;
+    gap: var(--sh-space-8);
+    padding-block: var(--sh-space-14);
+    scroll-margin-top: var(--sh-space-6);
+  }
+
+  .sh-showcase + .sh-showcase {
+    border-top: 1px solid var(--sh-border);
+  }
+
+  .sh-showcase-copy,
+  .sh-example,
+  .sh-example-row > div {
+    min-width: 0;
+  }
+
+  .sh-showcase-title {
+    font-size: var(--sh-type-section-title);
+    line-height: var(--sh-leading-heading);
+  }
+
+  .sh-showcase-description {
+    margin-top: var(--sh-space-5);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-reading);
+    line-height: var(--sh-leading-reading);
+  }
+
+  .sh-showcase-steps {
+    display: grid;
+    gap: var(--sh-space-5);
+    margin-top: var(--sh-space-7);
+    padding-left: var(--sh-space-5);
+    list-style: decimal;
+  }
+
+  .sh-showcase-steps li::marker {
+    color: var(--sh-accent);
+    font-weight: var(--sh-weight-semibold);
+  }
+
+  .sh-showcase-options {
+    padding-left: 0;
+    list-style: none;
+  }
+
+  .sh-showcase-steps strong {
+    font-size: var(--sh-type-ui);
+    font-weight: var(--sh-weight-semibold);
+  }
+
+  .sh-showcase-steps p {
+    margin-top: var(--sh-space-1);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-body);
+    line-height: var(--sh-leading-description);
+  }
+
+  .sh-example-head,
+  .sh-example-body {
+    padding: var(--sh-space-5);
+  }
+
+  .sh-example-head {
+    border-bottom: 1px solid var(--sh-border);
+  }
+
+  .sh-example-label {
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    font-weight: var(--sh-weight-medium);
+    letter-spacing: var(--sh-tracking-label);
+    line-height: var(--sh-leading-normal);
+    text-transform: uppercase;
+  }
+
+  .sh-example-head h3 {
+    font-size: var(--sh-type-card);
+    font-weight: var(--sh-weight-semibold);
+    line-height: var(--sh-leading-subheading);
+  }
+
+  .sh-example-head .sh-example-label + h3 {
+    margin-top: var(--sh-space-2);
+  }
+
+  .sh-example-list {
+    display: grid;
+    gap: var(--sh-space-3);
+    margin-top: var(--sh-space-3);
+  }
+
+  .sh-example-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sh-space-3);
+    border-bottom: 1px solid var(--sh-border);
+    padding-bottom: var(--sh-space-3);
+    overflow-wrap: anywhere;
+  }
+
+  .sh-example-row:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .sh-example-name {
+    font-size: var(--sh-type-ui);
+    font-weight: var(--sh-weight-semibold);
+    line-height: var(--sh-leading-normal);
+  }
+
+  .sh-example-detail,
+  .sh-example-note {
+    margin-top: var(--sh-space-1);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    line-height: var(--sh-leading-description);
+  }
+
+  .sh-example-badge {
+    flex: none;
+    border-radius: var(--sh-radius-badge);
+    padding: var(--sh-space-1) var(--sh-space-2);
+    background: var(--sh-raised);
+    color: var(--sh-ink);
+    font-size: var(--sh-type-caption);
+    font-weight: var(--sh-weight-semibold);
+    line-height: var(--sh-leading-normal);
+  }
+
+  .sh-example-flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sh-space-3);
+    padding-block: var(--sh-space-4);
+    color: var(--sh-accent);
+    font-size: var(--sh-type-body);
+    font-weight: var(--sh-weight-medium);
+    line-height: var(--sh-leading-normal);
+    text-align: center;
+  }
+
+  .sh-example-group {
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-control);
+    padding: var(--sh-space-4);
+  }
+
+  .sh-example-group + .sh-example-group {
+    margin-top: var(--sh-space-4);
+  }
+
+  .sh-example-caption {
+    border-top: 1px solid var(--sh-border);
+    padding: var(--sh-space-4) var(--sh-space-5);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    line-height: var(--sh-leading-description);
+  }
+
+  .sh-example-sample-note {
+    margin-top: var(--sh-space-2);
+    font-size: var(--sh-type-caption);
+  }
+
+  .sh-example-sample-note:first-child {
+    margin-top: 0;
+  }
+
+  /* Static playlist examples share the same playlist and song recipes. */
+  .sh-playlist-stage {
+    display: grid;
+    min-width: 0;
+    gap: var(--sh-space-3);
+  }
+
+  .sh-playlist-stage-title {
+    color: var(--sh-muted);
+    font-size: var(--sh-type-body);
+    font-weight: var(--sh-weight-semibold);
+    line-height: var(--sh-leading-normal);
+  }
+
+  .sh-mini-playlist {
+    min-width: 0;
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-control);
+    padding: var(--sh-space-3);
+    background: var(--sh-base);
+  }
+
+  .sh-mini-playlist-title {
+    margin-bottom: var(--sh-space-3);
+    color: var(--sh-ink);
+    font-size: var(--sh-type-body);
+    font-weight: var(--sh-weight-semibold);
+    line-height: var(--sh-leading-normal);
+    overflow-wrap: anywhere;
+  }
+
+  .sh-mini-playlist-tracks {
+    display: grid;
+    gap: var(--sh-space-2);
+  }
+
+  .sh-mini-playlist-empty {
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    line-height: var(--sh-leading-description);
+  }
+
+  .sh-song-tile {
+    display: grid;
+    grid-template-columns: var(--sh-space-7) minmax(0, 1fr);
+    align-items: center;
+    gap: var(--sh-space-2);
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-artwork);
+    padding: var(--sh-space-2);
+    background: var(--sh-surface);
+  }
+
+  .sh-song-tile-highlight {
+    border-color: var(--sh-accent);
+  }
+
+  .sh-song-cover {
+    display: grid;
+    width: var(--sh-space-7);
+    height: var(--sh-space-7);
+    place-items: center;
+    border-radius: var(--sh-radius-artwork);
+    font-size: var(--sh-type-caption);
+    font-weight: var(--sh-weight-bold);
+  }
+
+  .sh-illustration-cover { background: var(--sh-illustration-cover); color: var(--sh-ink); }
+  .sh-illustration-cover-2 { background: var(--sh-illustration-cover-2); color: var(--sh-illustration-ink-2); }
+  .sh-illustration-cover-3 { background: var(--sh-illustration-cover-3); color: var(--sh-illustration-ink-3); }
+  .sh-illustration-cover-4 { background: var(--sh-illustration-cover-4); color: var(--sh-illustration-ink-4); }
+  .sh-illustration-cover-5 { background: var(--sh-illustration-cover-5); color: var(--sh-illustration-ink-5); }
+  .sh-illustration-cover-6 { background: var(--sh-illustration-cover-6); color: var(--sh-illustration-ink-6); }
+  .sh-illustration-cover-7 { background: var(--sh-illustration-cover-7); color: var(--sh-illustration-ink-7); }
+  .sh-illustration-cover-8 { background: var(--sh-illustration-cover-8); color: var(--sh-illustration-ink-8); }
+
+  .sh-song-copy {
+    min-width: 0;
+  }
+
+  .sh-song-name {
+    color: var(--sh-ink);
+    font-size: var(--sh-type-detail);
+    font-weight: var(--sh-weight-semibold);
+    line-height: var(--sh-leading-normal);
+    overflow-wrap: anywhere;
+  }
+
+  .sh-song-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sh-space-1);
+    margin-top: var(--sh-space-1);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    line-height: var(--sh-leading-normal);
+  }
+
+  .sh-song-tag-highlight {
+    color: var(--sh-accent);
+  }
+
+  @media (min-width: 1024px) {
+    .sh-showcase {
+      grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+      gap: var(--sh-space-16);
+      padding-block: var(--sh-space-20);
+    }
+
+    .sh-example-head,
+    .sh-example-body {
+      padding: var(--sh-space-6);
+    }
+
+    .sh-example-caption {
+      padding-inline: var(--sh-space-6);
+    }
+  }
+
+  @media (min-width: 768px) {
+    .sh-container {
+      padding-inline: var(--sh-space-10);
+    }
+
+    .sh-nav-inner {
+      min-height: var(--sh-space-21);
+    }
+
+    .sh-brand {
+      gap: var(--sh-space-label-gap);
+      font-size: var(--sh-type-brand-wide);
+    }
+
+    .sh-nav-links {
+      gap: var(--sh-space-7);
+      font-size: var(--sh-type-body);
+    }
+
+    .sh-footer-inner {
+      flex-direction: row;
+      align-items: center;
+      gap: var(--sh-space-6);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sh-document {
+      scroll-behavior: auto !important;
+    }
+
+    .sh-shell *,
+    .sh-shell *::before,
+    .sh-shell *::after {
+      animation: none !important;
+      transition: none !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* Authenticated shell primitives shared by Settings and the workspace pages. */
+@layer components {
+  .sh-app-nav {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    border-bottom: 1px solid var(--sh-border);
+    background: var(--sh-base);
+    color: var(--sh-ink);
+    font-family: var(--sh-font-ui);
+    color-scheme: dark;
+  }
+
+  .sh-app-nav :focus-visible,
+  .sh-task-panel :focus-visible {
+    outline: 3px solid var(--sh-accent);
+    outline-offset: 4px;
+  }
+
+  .sh-app-nav-desktop { display: none; }
+
+  .sh-app-menu > summary {
+    display: flex;
+    min-height: var(--sh-space-nav);
+    align-items: center;
+    gap: var(--sh-space-3);
+    padding-block: var(--sh-space-3);
+    list-style: none;
+    cursor: pointer;
+  }
+
+  .sh-app-menu > summary::-webkit-details-marker { display: none; }
+
+  .sh-app-current {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sh-app-menu-label {
+    display: inline-flex;
+    min-height: var(--sh-space-control);
+    align-items: center;
+    gap: var(--sh-space-1);
+    font-size: var(--sh-type-body);
+    font-weight: var(--sh-weight-semibold);
+  }
+
+  .sh-app-menu-chevron { display: inline-block; }
+  .sh-app-menu[open] .sh-app-menu-chevron { transform: rotate(180deg); }
+
+  .sh-app-links {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sh-space-1);
+    border-top: 1px solid var(--sh-border);
+    padding-block: var(--sh-space-3);
+    list-style: none;
+  }
+
+  .sh-app-links a {
+    display: flex;
+    min-height: var(--sh-space-control);
+    align-items: center;
+    border-radius: var(--sh-radius-control);
+    padding-inline: var(--sh-space-3);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-body);
+    font-weight: var(--sh-weight-medium);
+    text-decoration: none;
+  }
+
+  .sh-app-links a:hover { background: var(--sh-surface); color: var(--sh-ink); }
+  .sh-app-links a[aria-current="page"] {
+    background: var(--sh-raised);
+    color: var(--sh-accent);
+    text-decoration: underline;
+    text-underline-offset: var(--sh-space-1);
+  }
+
+  .sh-form-field { display: flex; flex-direction: column; gap: var(--sh-space-2); }
+  .sh-field-label {
+    display: block;
+    color: var(--sh-ink);
+    font-size: var(--sh-type-body);
+    font-weight: var(--sh-weight-medium);
+  }
+  .sh-field-help {
+    display: block;
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    line-height: var(--sh-type-leading-caption);
+  }
+  .sh-toggle {
+    display: flex;
+    min-height: var(--sh-space-control);
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sh-space-4);
+    cursor: pointer;
+  }
+  .sh-toggle input {
+    width: var(--sh-space-5);
+    height: var(--sh-space-5);
+    flex: none;
+    accent-color: var(--sh-accent);
+  }
+  .sh-field-error { color: var(--sh-error); font-size: var(--sh-type-body); }
+  .sh-form-error {
+    border: 1px solid var(--sh-error);
+    border-radius: var(--sh-radius-control);
+    padding: var(--sh-space-4);
+    background: var(--sh-error-surface);
+    color: var(--sh-error);
+    font-size: var(--sh-type-body);
+  }
+
+  .sh-workspace { display: grid; min-width: 0; gap: var(--sh-space-panel); }
+  [data-panel-primary] { min-width: 0; }
+  .sh-task-panel {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-panel);
+    background: var(--sh-surface);
+    color: var(--sh-ink);
+    font-family: var(--sh-font-ui);
+    font-size: var(--sh-type-body);
+    line-height: var(--sh-type-leading-body);
+  }
+  /* Native hidden always wins over component display recipes such as buttons. */
+  [hidden]:not([hidden="until-found"]) { display: none !important; }
+  .sh-panel-header,
+  .sh-panel-footer {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--sh-space-3);
+    padding: var(--sh-space-4);
+  }
+  .sh-panel-header { border-bottom: 1px solid var(--sh-border); }
+  .sh-panel-header h2 {
+    font-family: var(--sh-font-display);
+    font-size: var(--sh-type-subheading);
+    font-weight: var(--sh-weight-semibold);
+  }
+  .sh-panel-body { min-height: 0; padding: var(--sh-space-4); overflow-wrap: anywhere; }
+  .sh-panel-footer {
+    border-top: 1px solid var(--sh-border);
+    padding-bottom: max(var(--sh-space-4), env(safe-area-inset-bottom));
+  }
+  .sh-panel-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    z-index: 70;
+    width: min(var(--sh-layout-error-panel), calc(100% - 2 * var(--sh-space-gutter)));
+    max-height: calc(100dvh - 2 * var(--sh-space-gutter));
+    transform: translate(-50%, -50%);
+    box-shadow: var(--sh-shadow-modal);
+  }
+  .sh-panel-modal .sh-panel-body { overflow-y: auto; }
+
+  @media (min-width: 1024px) {
+    .sh-app-menu { display: none; }
+    .sh-app-nav-desktop {
+      display: flex;
+      min-height: var(--sh-space-nav-wide);
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--sh-space-panel);
+    }
+    .sh-app-links { flex-direction: row; border-top: 0; }
+    .sh-workspace-panel-open:not(.sh-panel-narrow) {
+      grid-template-columns: minmax(var(--sh-layout-workspace-min), 1fr) var(--sh-layout-aside);
+      align-items: start;
+    }
+    /* Only a task beside the primary content sticks and scrolls inside itself; a task that
+       takes the content area (below the breakpoint, or [data-panel-full]) scrolls with the page. */
+    .sh-workspace-panel-open:not(.sh-panel-narrow) .sh-task-panel:not(.sh-panel-modal) {
+      position: sticky;
+      top: calc(var(--sh-space-nav-wide) + var(--sh-space-panel));
+      max-height: calc(100dvh - var(--sh-space-nav-wide) - 2 * var(--sh-space-panel));
+    }
+    .sh-workspace-panel-open:not(.sh-panel-narrow) .sh-task-panel:not(.sh-panel-modal) .sh-panel-body {
+      overflow-y: auto;
+    }
+    .sh-panel-header, .sh-panel-body, .sh-panel-footer { padding: var(--sh-space-panel); }
+  }
+}
+
+/* Shared controls and state recipes; feature modules compose these tokens. */
+@layer components {
+  h1.sh-heading { font-size: var(--sh-type-heading); }
+  .sh-text-primary { color: var(--sh-ink); }
+  .sh-text-accent { color: var(--sh-accent); }
+  .sh-text-success { color: var(--sh-success); }
+  .sh-text-warning { color: var(--sh-warning); }
+  .sh-text-error { color: var(--sh-error); }
+  .sh-caption { font-size: var(--sh-type-caption); line-height: var(--sh-leading-description); }
+  .sh-detail { font-size: var(--sh-type-detail); line-height: var(--sh-leading-description); }
+  .sh-button-danger {
+    border-color: var(--sh-error);
+    background: var(--sh-error-surface);
+    color: var(--sh-error);
+  }
+  .sh-button-danger:hover { background: var(--sh-raised); }
+  .sh-icon-button { min-width: var(--sh-space-11); padding: var(--sh-space-2); }
+  .sh-badge,
+  .sh-badge-success,
+  .sh-badge-warning,
+  .sh-badge-error {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sh-space-1);
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-badge);
+    padding: var(--sh-space-1) var(--sh-space-2);
+    background: var(--sh-raised);
+    color: var(--sh-ink);
+    font-size: var(--sh-type-caption);
+    font-weight: var(--sh-weight-medium);
+    line-height: var(--sh-leading-normal);
+  }
+  .sh-badge-success { border-color: var(--sh-success); background: var(--sh-success-surface); color: var(--sh-success); }
+  .sh-badge-warning { border-color: var(--sh-warning); background: var(--sh-warning-surface); color: var(--sh-warning); }
+  .sh-badge-error { border-color: var(--sh-error); background: var(--sh-error-surface); color: var(--sh-error); }
+  .sh-divider { border-top: 1px solid var(--sh-border); }
+  /* Spotify attribution: the unmodified white full logo, at least 70px wide, in a 44px
+     target (macros/app_ui.html spotify_link). */
+  .sh-spotify-link {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--sh-space-11);
+    padding: var(--sh-space-2);
+  }
+  .sh-spotify-logo { width: 70px; height: auto; }
+  .sh-callout {
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-control);
+    padding: var(--sh-space-4);
+    background: var(--sh-raised);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-body);
+    line-height: var(--sh-leading-description);
+  }
+  div.sh-spinner { border: 2px solid var(--sh-border); border-top-color: var(--sh-accent); border-radius: var(--sh-radius-full); }
+  .sh-spinner { animation: sh-spin var(--sh-motion-reorder) linear infinite; }
+  @keyframes sh-spin { to { transform: rotate(360deg); } }
+}
+
+/* ./design/components/library.css */
+@layer components {
+  .sh-library { padding-block: var(--sh-space-8) var(--sh-space-16); }
+  .sh-library-section { margin-top: var(--sh-space-6); }
+  .sh-library-section-heading { font-size: var(--sh-type-lead); }
+  .sh-library-inline-link { color: var(--sh-ink); text-decoration: underline; text-underline-offset: var(--sh-space-1); }
+  .sh-library-favorite { color: var(--sh-accent); }
+  .sh-library-hidden-toggle { width: 100%; justify-content: space-between; }
+  /* A disclosure's chevron turns while it is open: in an open details element's summary,
+     or in a control that says it is expanded. */
+  .sh-library-chevron { transition: transform var(--sh-motion-feedback) var(--sh-motion-ease); }
+  details[open] > summary .sh-library-chevron,
+  [aria-expanded="true"] > .sh-library-chevron { transform: rotate(180deg); }
+  /* A playlist row's states: hidden, draggable in Organize, a drop target, being dragged. */
+  .sh-library-row[data-hidden="true"] { border-style: dashed; }
+  .sh-library-row.organize-mode-active { cursor: grab; }
+  .sh-library-row.organize-mode-active:active { cursor: grabbing; }
+  .sh-library-row.drag-over { border-color: var(--sh-accent); outline: 2px solid var(--sh-accent); outline-offset: 2px; }
+  .sh-library-row.sh-library-dragging { opacity: 0.5; }
+  .sh-library-cover { width: 100%; height: 100%; object-fit: contain; border-radius: var(--sh-radius-artwork); }
+  .sh-library-cover-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-artwork);
+    background: var(--sh-base);
+    color: var(--sh-muted);
+  }
+  .sh-library-music-symbol { font-size: var(--sh-type-heading); }
+  /* Restore's longer label takes its own line rather than squeezing Shuffle now. */
+  .sh-library-quick-actions { display: flex; flex-wrap: wrap; gap: var(--sh-space-2); }
+  .sh-library-quick-actions .library-quick-shuffle { flex: 1; }
+  .sh-library-quiet-control {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sh-space-1);
+    min-height: var(--sh-space-11);
+    padding: var(--sh-space-2);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-body);
+    cursor: pointer;
+    list-style: none;
+  }
+  .sh-library-quiet-control::-webkit-details-marker { display: none; }
+  .sh-library-quiet-control:hover { color: var(--sh-ink); }
+  /* Start-aligned: its words line up with the text above it, inside the same padded target. */
+  .sh-library-quiet-control-start {
+    justify-content: flex-start;
+    width: fit-content;
+    margin-inline-start: calc(var(--sh-space-2) * -1);
+  }
+  .sh-library-shuffle-details { margin-top: var(--sh-space-1); }
+  .sh-library-shuffle-details > summary { flex-wrap: wrap; }
+  .sh-library-shuffle-fields { display: grid; gap: var(--sh-space-2); }
+  .sh-library-shuffle-details > .sh-library-shuffle-fields {
+    border-top: 1px solid var(--sh-border);
+    margin-bottom: var(--sh-space-3);
+    padding-top: var(--sh-space-3);
+  }
+  .sh-library-shuffle-fields .sh-field-label { display: block; margin-bottom: var(--sh-space-1); }
+  .sh-library-quick-shuffle > .sh-caption { margin-top: var(--sh-space-2); }
+  #live-operation-review ul { padding-left: var(--sh-space-4); list-style: disc; }
+  @media (min-width: 1024px) {
+    .sh-library-cover { border-radius: var(--sh-radius-control); }
+  }
+}
+
+/* ./design/components/workspace.css */
+/* Workshop recipes: the component layer of the playlist workspace. Shared controls, text,
+   surfaces and status badges stay in core.css; pages/workspace.css composes the page.
+   No route or action semantics. */
+@layer components {
+  .sh-workshop-subheading {
+    color: var(--sh-ink);
+    font-family: var(--sh-font-display);
+    font-size: var(--sh-type-card);
+    font-weight: var(--sh-weight-bold);
+    line-height: var(--sh-type-leading-card);
+    letter-spacing: var(--sh-tracking-card);
+  }
+
+  .sh-workshop-emphasis { font-weight: var(--sh-weight-semibold); }
+  .sh-workshop-number { font-variant-numeric: tabular-nums; }
+  .sh-workshop-divider-top { border-top: 1px solid var(--sh-border); }
+  .sh-workshop-divider-bottom { border-bottom: 1px solid var(--sh-border); }
+
+  .sh-workshop-artwork {
+    overflow: hidden;
+    flex-shrink: 0;
+    border-radius: var(--sh-radius-artwork);
+    background: var(--sh-raised);
+    object-fit: contain;
+  }
+  .sh-workshop-row {
+    border-radius: var(--sh-radius-control);
+    transition: background-color var(--sh-motion-feedback) var(--sh-motion-ease);
+  }
+  .sh-workshop-row:hover { background: var(--sh-raised); }
+
+  /* A track row: at least 64px, the pointer-only drag handle, the position, intact 40px
+     artwork, the title and artist (with the lock in words), the duration from 640px and one
+     44px actions button. Its open actions take a line of their own. */
+  .sh-workshop .track-item {
+    display: flex;
+    min-height: var(--sh-space-16);
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sh-space-2) var(--sh-space-3);
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-control);
+    padding: var(--sh-space-2) var(--sh-space-3);
+    background: var(--sh-surface);
+  }
+  .sh-workshop .drag-handle {
+    display: inline-flex;
+    width: var(--sh-space-6);
+    min-height: var(--sh-space-11);
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    color: var(--sh-muted);
+    cursor: grab;
+  }
+  .sh-workshop .drag-handle:active { cursor: grabbing; }
+  .sh-workshop .track-number { min-width: 2ch; flex-shrink: 0; text-align: right; }
+  .sh-workshop .track-art {
+    width: var(--sh-space-10);
+    height: var(--sh-space-10);
+    flex-shrink: 0;
+  }
+  .sh-workshop .track-text { min-width: 0; flex: 1 1 0; }
+  .sh-workshop .track-title,
+  .sh-workshop .track-artist { overflow-wrap: anywhere; }
+  .sh-workshop .track-duration { display: none; flex-shrink: 0; }
+  /* Below the workspace width the document's scroll padding keeps a focused actions button
+     clear of the sticky draft footer; this margin keeps its focus ring (3px, 4px out) clear too. */
+  .sh-workshop .track-actions-btn { flex-shrink: 0; scroll-margin-bottom: var(--sh-space-2); }
+  .sh-workshop .track-actions-btn[aria-expanded="true"] { border-color: var(--sh-accent); }
+
+  .sh-workshop-popover {
+    border: 1px solid var(--sh-control-border);
+    border-radius: var(--sh-radius-panel);
+    background: var(--sh-raised);
+    color: var(--sh-ink);
+    box-shadow: var(--sh-shadow-popover);
+  }
+  .sh-workshop-playlist-option {
+    min-height: var(--sh-space-14);
+    border: 1px solid transparent;
+    border-radius: var(--sh-radius-control);
+    padding: var(--sh-space-3);
+    color: var(--sh-ink);
+    font-size: var(--sh-type-body);
+    transition: background-color var(--sh-motion-feedback) var(--sh-motion-ease);
+  }
+  .sh-workshop-playlist-option:hover { background: var(--sh-surface); }
+  .sh-workshop-playlist-current {
+    border-color: var(--sh-accent);
+    background: var(--sh-surface);
+  }
+  .sh-workshop-callout-error {
+    border-color: var(--sh-error);
+    background: var(--sh-error-surface);
+    color: var(--sh-error);
+  }
+
+  .sh-workshop-toggle {
+    position: relative;
+    display: inline-flex;
+    width: var(--sh-space-11);
+    min-width: var(--sh-space-11);
+    height: var(--sh-space-11);
+    min-height: var(--sh-space-11);
+    align-items: center;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .sh-workshop-toggle::before {
+    content: '';
+    position: absolute;
+    inset-inline-start: var(--sh-space-1);
+    top: var(--sh-space-3);
+    width: var(--sh-space-9);
+    height: var(--sh-space-5);
+    border: 1px solid var(--sh-control-border);
+    border-radius: var(--sh-radius-control);
+    background: var(--sh-surface);
+    transition: background-color var(--sh-motion-feedback) var(--sh-motion-ease);
+  }
+  .sh-workshop-toggle-on::before {
+    background: var(--sh-accent);
+    border-color: var(--sh-accent);
+  }
+  .sh-workshop-toggle-dot {
+    position: absolute;
+    left: var(--sh-space-2);
+    width: var(--sh-space-3);
+    height: var(--sh-space-3);
+    border-radius: var(--sh-radius-full);
+    background: var(--sh-ink);
+    transition: transform var(--sh-motion-feedback) var(--sh-motion-ease);
+  }
+  .sh-workshop-toggle-dot-on {
+    transform: translateX(var(--sh-space-4));
+    background: var(--sh-accent-ink);
+  }
+  .sh-workshop-field-saved { border-color: var(--sh-success); }
+  .sh-workshop-track-added { color: var(--sh-muted); }
+
+  .sh-workshop .sortable-ghost {
+    opacity: 0.4;
+    background: var(--sh-success-surface);
+    border-radius: var(--sh-radius-control);
+  }
+  .sh-workshop .sortable-chosen { background: var(--sh-raised); }
+  .sh-workshop .sortable-drag {
+    background: var(--sh-success-surface);
+    border-radius: var(--sh-radius-control);
+    box-shadow: var(--sh-shadow-popover);
+  }
+  .sh-workshop .track-locked-standard {
+    border-left: 3px solid var(--sh-warning);
+    background: var(--sh-warning-surface);
+  }
+  .sh-workshop .track-locked-super {
+    border-left: 3px solid var(--sh-error);
+    background: var(--sh-error-surface);
+  }
+  .sh-workshop .track-locked .drag-handle { pointer-events: none; opacity: 0.4; }
+
+  @media (min-width: 640px) {
+    .sh-workshop .track-duration { display: inline; }
+  }
+
+  @media (max-width: 639px) {
+    .sh-workshop .track-item { gap: var(--sh-space-2); padding-inline: var(--sh-space-2); }
+    .sh-workshop .sh-input { min-width: 0; }
+  }
+}
+
+/* ./design/components/routines.css */
+/* Shared routine forms, schedule history and Activity presentation. */
+@layer components {
+  .sh-routines-page {
+    padding-bottom: var(--sh-space-8);
+  }
+
+  .sh-routine-card,
+  .sh-activity-panel,
+  .sh-activity-stat,
+  .sh-routine-empty {
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-panel);
+    background: var(--sh-surface);
+  }
+
+  .sh-routine-card {
+    padding: var(--sh-space-4);
+    display: grid;
+    gap: var(--sh-space-2);
+    min-width: 0;
+  }
+
+  .sh-routine-header,
+  .sh-routine-create,
+  .sh-routine-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: var(--sh-space-4);
+  }
+
+  .sh-routine-header { justify-content: space-between; }
+  .sh-routine-create > *, .sh-routine-filters > * { min-width: min(100%, 12rem); }
+  .sh-routine-filters { margin-block: var(--sh-space-5); }
+  .sh-routine-filters label { display: block; margin-bottom: var(--sh-space-1); }
+  .sh-routine-list { display: grid; gap: var(--sh-space-4); }
+  .sh-routine-latest { overflow-wrap: anywhere; }
+
+  .sh-routine-info {
+    flex: 1 1 var(--sh-layout-copy);
+    min-width: 0;
+  }
+
+  .sh-routine-title {
+    color: var(--sh-ink);
+    font-family: var(--sh-font-display);
+    font-size: var(--sh-type-subheading);
+    font-weight: var(--sh-weight-bold);
+    line-height: var(--sh-leading-subheading);
+    letter-spacing: var(--sh-tracking-card);
+  }
+
+  .sh-routine-name,
+  .sh-activity-description {
+    overflow-wrap: anywhere;
+  }
+
+  .sh-routine-emphasis,
+  .sh-routine-history-symbol {
+    font-weight: var(--sh-weight-semibold);
+  }
+
+  .sh-routine-actions {
+    display: flex;
+    flex-wrap: wrap;
+    flex: none;
+    max-width: 100%;
+    align-items: center;
+    gap: var(--sh-space-2);
+  }
+
+  .sh-routine-actions > * { min-height: var(--sh-space-11); }
+
+  .sh-routine-disclosure {
+    margin-top: var(--sh-space-5);
+    padding-top: var(--sh-space-5);
+    border-top: 1px solid var(--sh-border);
+  }
+
+  .sh-routine-section-label {
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    font-weight: var(--sh-weight-semibold);
+    line-height: var(--sh-leading-normal);
+    letter-spacing: var(--sh-tracking-label);
+    text-transform: uppercase;
+  }
+
+  .sh-routine-source-list {
+    max-height: calc(var(--sh-space-20) * 2);
+    overflow-y: auto;
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-control);
+    background: var(--sh-base);
+    padding: var(--sh-space-2);
+  }
+
+  .sh-routine-choice {
+    display: flex;
+    min-height: var(--sh-space-11);
+    align-items: center;
+    gap: var(--sh-space-2);
+    padding: var(--sh-space-2);
+    border-radius: var(--sh-radius-control);
+    cursor: pointer;
+  }
+
+  .sh-routine-choice:hover {
+    background: var(--sh-raised);
+  }
+
+  .sh-routine-checkbox {
+    flex: none;
+    width: var(--sh-space-4);
+    height: var(--sh-space-4);
+    accent-color: var(--sh-accent);
+  }
+
+  .sh-routine-callout {
+    padding: var(--sh-space-3);
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-control);
+  }
+
+  .sh-routine-callout-warning {
+    color: var(--sh-warning);
+    border-color: var(--sh-warning);
+    background: var(--sh-warning-surface);
+  }
+
+  .sh-routine-callout-success {
+    color: var(--sh-success);
+    border-color: var(--sh-success);
+    background: var(--sh-success-surface);
+  }
+
+  .sh-routine-history-row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sh-space-2);
+    padding: var(--sh-space-3);
+    border-radius: var(--sh-radius-control);
+    background: var(--sh-raised);
+    overflow-wrap: anywhere;
+  }
+
+  .sh-routine-empty,
+  .sh-activity-empty {
+    padding: var(--sh-space-8);
+    color: var(--sh-muted);
+    text-align: center;
+  }
+
+  .sh-activity-stat {
+    padding: var(--sh-space-5);
+    text-align: center;
+  }
+
+  .sh-activity-stat-value {
+    color: var(--sh-ink);
+    font-family: var(--sh-font-display);
+    font-size: var(--sh-type-heading);
+    font-weight: var(--sh-weight-bold);
+    line-height: var(--sh-leading-heading);
+  }
+
+  .sh-activity-panel { overflow: hidden; }
+
+  .sh-activity-panel-heading {
+    padding: var(--sh-space-5) var(--sh-space-6);
+    border-bottom: 1px solid var(--sh-border);
+  }
+
+  .sh-activity-log {
+    max-height: calc(var(--sh-space-16) * 8);
+    overflow-y: auto;
+  }
+
+  .sh-activity-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sh-space-3);
+    padding: var(--sh-space-4) var(--sh-space-6);
+    border-bottom: 1px solid var(--sh-border);
+  }
+
+  .sh-activity-row:last-child { border-bottom: 0; }
+
+  .sh-activity-icon {
+    display: flex;
+    flex: none;
+    width: var(--sh-space-8);
+    height: var(--sh-space-8);
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-control);
+    background: var(--sh-raised);
+    color: var(--sh-accent);
+  }
+
+  .sh-activity-details {
+    flex: 1 1 var(--sh-space-22);
+    min-width: 0;
+  }
+
+  .sh-activity-time {
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    line-height: var(--sh-leading-normal);
+    flex-basis: 100%;
+    margin-left: calc(var(--sh-space-8) + var(--sh-space-3));
+  }
+
+  .sh-activity-execution { justify-content: space-between; }
+
+  .sh-activity-execution-result {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sh-space-3);
+  }
+  @media (min-width: 640px) {
+    .sh-routine-card { padding: var(--sh-space-6); }
+    .sh-routine-actions { gap: var(--sh-space-2); }
+    .sh-activity-time { flex-basis: auto; margin-left: auto; }
+  }
+}
+
+/* ./design/components/action-footer.css */
+/* The sticky action footer: one element holding a page's save actions (the Workshop's draft
+   footer, the setup page's Review and Save). Mark it .sh-action-footer and [data-action-footer].
+   Below the workspace width it sticks to the bottom of the viewport, moved after the content by
+   CSS order; from the workspace width it is in flow, a bordered panel. AppPanels.reserveFooter
+   keeps its measured height in --app-footer-space on the document element. */
+@layer components {
+  .sh-action-footer {
+    order: 1;
+    position: sticky;
+    bottom: 0;
+    z-index: 30;
+    margin-inline: calc(-1 * var(--sh-space-gutter));
+    border-top: 1px solid var(--sh-border);
+    padding: var(--sh-space-3) var(--sh-space-gutter) max(var(--sh-space-3), env(safe-area-inset-bottom));
+    background: var(--sh-base);
+  }
+  /* Focused or scrolled-to content clears the sticky footer by its measured space, with an
+     estimate until it is measured; in flow, the footer never covers the last row. Focus inside
+     the footer is always on screen, so the space lifts while it is there: otherwise focusing
+     its own controls would scroll the page away from the content. A footer hidden with its
+     region (a narrow task covering the page) reserves nothing. */
+  html:has([data-action-footer]:not([hidden], [hidden] *)):not(:has([data-action-footer]:focus-within)) {
+    scroll-padding-bottom: var(--app-footer-space, var(--sh-space-22));
+  }
+
+  @media (min-width: 768px) {
+    .sh-action-footer {
+      margin-inline: calc(-1 * var(--sh-space-gutter-wide));
+      padding-inline: var(--sh-space-gutter-wide);
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .sh-action-footer {
+      order: 0;
+      position: static;
+      margin-inline: 0;
+      border: 1px solid var(--sh-border);
+      border-radius: var(--sh-radius-panel);
+      padding: var(--sh-space-4);
+      background: var(--sh-surface);
+    }
+    html:has([data-action-footer]:not([hidden], [hidden] *)):not(:has([data-action-footer]:focus-within)) {
+      scroll-padding-bottom: 0;
+    }
+  }
+}
+
+/* ./design/pages/landing.css */
+@layer components {
+/* After Hours landing presentation. All selectors stay inside this page. */
+.sh-landing .sh-landing-icon {
+    width: 19px;
+    height: 19px;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.sh-landing .sh-landing-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sh-space-10);
+    padding-block: var(--sh-space-10) var(--sh-space-12);
+}
+
+.sh-landing .sh-landing-copy,
+.sh-landing .sh-landing-stage {
+    min-width: 0;
+}
+
+.sh-landing h1,
+.sh-landing .sh-landing-section-heading h2 {
+    font-family: var(--sh-font-display);
+    font-weight: var(--sh-weight-bold);
+    letter-spacing: var(--sh-tracking-hero);
+}
+
+.sh-landing h1 {
+    font-size: var(--sh-type-hero-mobile);
+    line-height: var(--sh-leading-hero-mobile);
+}
+
+.sh-landing h1 > span {
+    color: var(--sh-accent);
+}
+
+.sh-landing .sh-landing-description {
+    max-width: var(--sh-layout-copy);
+    margin-top: 22px;
+    color: var(--sh-muted);
+    font-size: var(--sh-type-reading);
+    line-height: var(--sh-leading-intro);
+}
+
+.sh-landing .sh-landing-connect {
+    max-width: var(--sh-layout-connect);
+    margin-top: 26px;
+}
+
+.sh-landing .sh-landing-consent {
+    display: flex;
+    min-height: var(--sh-space-11);
+    align-items: flex-start;
+    gap: var(--sh-space-label-gap);
+    margin: -8px -8px 9px;
+    border-radius: var(--sh-radius-control);
+    padding: var(--sh-space-2);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    line-height: var(--sh-leading-reading);
+    cursor: pointer;
+}
+
+.sh-landing .sh-landing-consent input {
+    width: var(--sh-space-5);
+    height: var(--sh-space-5);
+    flex: none;
+    margin: 1px 0 0;
+    accent-color: var(--sh-accent);
+    cursor: pointer;
+}
+
+.sh-landing .sh-landing-consent a {
+    color: var(--sh-ink);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.sh-landing .sh-landing-connect-button {
+    width: 100%;
+    min-height: 54px;
+    background: var(--sh-ink);
+    border-color: var(--sh-ink);
+    color: var(--sh-base);
+}
+
+.sh-landing .sh-landing-connect-button:hover:not(:disabled) {
+    background: var(--sh-accent);
+    border-color: var(--sh-accent);
+    color: var(--sh-accent-ink);
+}
+
+.sh-landing .sh-landing-connect-button:disabled {
+    background: var(--sh-raised);
+    border-color: var(--sh-border);
+    color: var(--sh-muted);
+}
+
+.sh-landing .sh-landing-caption,
+.sh-landing .sh-landing-data-note {
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    line-height: var(--sh-leading-intro);
+}
+
+.sh-landing .sh-landing-caption {
+    margin-top: var(--sh-space-label-gap);
+}
+
+.sh-landing .sh-landing-data-note {
+    max-width: var(--sh-layout-copy);
+    margin-top: 14px;
+}
+
+.sh-landing .sh-landing-demo-label {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 6px var(--sh-space-4);
+    margin-bottom: var(--sh-space-3);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-micro);
+    font-weight: var(--sh-weight-medium);
+    letter-spacing: var(--sh-tracking-label);
+    line-height: var(--sh-leading-eyebrow);
+    text-transform: uppercase;
+}
+
+.sh-landing .sh-landing-demo {
+    overflow: hidden;
+    box-shadow: var(--sh-shadow-panel);
+}
+
+.sh-landing .sh-landing-demo-head {
+    display: grid;
+    grid-template-columns: var(--sh-space-10) minmax(0, 1fr);
+    align-items: center;
+    gap: var(--sh-space-3);
+    border-bottom: 1px solid var(--sh-border);
+    padding: var(--sh-space-tight);
+}
+
+.sh-landing .sh-landing-demo-head h2 {
+    font-size: var(--sh-type-ui);
+    font-weight: var(--sh-weight-semibold);
+    letter-spacing: var(--sh-tracking-demo);
+    line-height: var(--sh-leading-normal);
+}
+
+.sh-landing .sh-landing-demo-head p {
+    margin-top: 3px;
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    line-height: var(--sh-leading-normal);
+}
+
+.sh-landing .sh-landing-demo-icon {
+    display: inline-flex;
+    width: 38px;
+    height: 38px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-control);
+    background: var(--sh-raised);
+    color: var(--sh-accent);
+}
+
+.sh-landing .sh-landing-demo-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    grid-column: 2;
+    justify-self: start;
+    border-radius: var(--sh-radius-badge);
+    padding: 5px var(--sh-space-2);
+    background: var(--sh-raised);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-micro);
+    font-weight: var(--sh-weight-bold);
+    line-height: var(--sh-leading-normal);
+    white-space: nowrap;
+}
+
+.sh-landing .sh-landing-demo[data-demo-state="shuffled"] .sh-landing-demo-badge {
+    background: var(--sh-accent);
+    color: var(--sh-accent-ink);
+}
+
+.sh-landing .sh-landing-demo-badge .sh-landing-icon {
+    width: 13px;
+    height: 13px;
+}
+
+.sh-landing .sh-landing-demo-method {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sh-space-4);
+    border-bottom: 1px solid var(--sh-border);
+    padding: var(--sh-space-3) var(--sh-space-tight);
+    font-size: var(--sh-type-caption);
+    line-height: var(--sh-leading-normal);
+}
+
+.sh-landing .sh-landing-demo-method > span {
+    color: var(--sh-muted);
+}
+
+.sh-landing .sh-landing-demo-method strong {
+    font-weight: var(--sh-weight-semibold);
+}
+
+.sh-landing .sh-landing-demo-position {
+    border-bottom: 1px solid var(--sh-border);
+    padding: var(--sh-space-3) var(--sh-space-tight);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    line-height: var(--sh-leading-normal);
+}
+
+.sh-landing .sh-landing-demo-rows {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.sh-landing .sh-landing-demo-row {
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--sh-space-7) 34px minmax(0, 1fr) 30px;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--sh-border);
+    padding: 10px var(--sh-space-tight);
+    background: var(--sh-surface);
+}
+
+.sh-landing .sh-landing-demo-row:last-child {
+    border-bottom: 0;
+}
+
+.sh-landing .sh-landing-row-number,
+.sh-landing .sh-landing-track-duration {
+    color: var(--sh-muted);
+    font-size: var(--sh-type-eyebrow);
+    font-variant-numeric: tabular-nums;
+}
+
+.sh-landing .sh-landing-cover {
+    display: flex;
+    width: 34px;
+    height: 34px;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--sh-radius-artwork);
+    font-size: var(--sh-type-detail);
+    font-weight: var(--sh-weight-semibold);
+}
+
+.sh-landing .sh-landing-track {
+    min-width: 0;
+}
+
+.sh-landing .sh-landing-track-name {
+    overflow: hidden;
+    font-size: var(--sh-type-detail);
+    font-weight: var(--sh-weight-medium);
+    line-height: var(--sh-leading-normal);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sh-landing .sh-landing-track-artist {
+    margin-top: 1px;
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    line-height: var(--sh-leading-normal);
+}
+
+.sh-landing .sh-landing-track-origin {
+    margin-top: var(--sh-space-1);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-eyebrow);
+    line-height: var(--sh-leading-normal);
+}
+
+.sh-landing .sh-landing-demo[data-demo-state="shuffled"] .sh-landing-row-number,
+.sh-landing .sh-landing-demo[data-demo-state="shuffled"] .sh-landing-track-origin {
+    color: var(--sh-accent);
+}
+
+.sh-landing .sh-landing-demo-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sh-space-2);
+    border-top: 1px solid var(--sh-border);
+    padding: var(--sh-space-4) var(--sh-space-tight);
+}
+
+.sh-landing .sh-landing-demo-controls > button {
+    flex: 1 1 auto;
+}
+
+.sh-landing .sh-landing-demo-foot {
+    border-top: 1px solid var(--sh-border);
+    padding: 14px var(--sh-space-tight);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    line-height: var(--sh-leading-normal);
+}
+
+.sh-landing .sh-landing-attribution {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sh-space-2) var(--sh-space-4);
+    margin-top: 10px;
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    line-height: var(--sh-leading-normal);
+}
+
+.sh-landing .sh-landing-attribution a {
+    display: inline-flex;
+    min-height: var(--sh-space-11);
+    align-items: center;
+    margin-right: -8px;
+    padding: var(--sh-space-2);
+}
+
+.sh-landing .sh-landing-attribution img {
+    display: block;
+    width: var(--sh-space-19);
+    height: auto;
+}
+
+.sh-landing .sh-landing-jump-nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sh-space-3);
+    border-block: 1px solid var(--sh-border);
+    padding-block: var(--sh-space-5);
+}
+
+.sh-landing .sh-landing-jump-link {
+    flex: 1 1 auto;
+}
+
+.sh-landing .sh-landing-section {
+    padding-block: var(--sh-space-14);
+}
+
+.sh-landing .sh-landing-section-heading {
+    margin-bottom: var(--sh-space-7);
+}
+
+.sh-landing .sh-landing-section-heading h2 {
+    font-size: var(--sh-type-section-title);
+    line-height: var(--sh-leading-heading);
+}
+
+.sh-landing .sh-landing-section-heading > p:last-child {
+    max-width: var(--sh-layout-intro);
+    margin-top: var(--sh-space-tight);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-reading);
+    line-height: var(--sh-leading-intro);
+}
+
+@media (min-width: 640px) {
+    .sh-landing .sh-landing-demo-head {
+        grid-template-columns: var(--sh-space-10) minmax(0, 1fr) auto;
+    }
+
+    .sh-landing .sh-landing-demo-badge {
+        grid-column: auto;
+    }
+
+    .sh-landing .sh-landing-demo-head,
+    .sh-landing .sh-landing-demo-foot {
+        padding-inline: var(--sh-space-6);
+    }
+
+    .sh-landing .sh-landing-demo-row,
+    .sh-landing .sh-landing-demo-method,
+    .sh-landing .sh-landing-demo-position,
+    .sh-landing .sh-landing-demo-controls {
+        padding-inline: var(--sh-space-6);
+    }
+
+    .sh-landing .sh-landing-demo-row {
+        grid-template-columns: var(--sh-space-7) 38px minmax(0, 1fr) var(--sh-space-8);
+        gap: var(--sh-space-3);
+    }
+
+    .sh-landing .sh-landing-cover {
+        width: 38px;
+        height: 38px;
+    }
+}
+
+@media (min-width: 768px) {
+    .sh-landing .sh-landing-hero {
+        gap: var(--sh-space-14);
+        padding-block: var(--sh-space-16);
+    }
+
+    .sh-landing h1 {
+        font-size: var(--sh-type-title-wide);
+    }
+
+    .sh-landing .sh-landing-description {
+        font-size: var(--sh-type-intro);
+    }
+
+    .sh-landing .sh-landing-section {
+        padding-block: var(--sh-space-20);
+    }
+
+    .sh-landing .sh-landing-section-heading {
+        margin-bottom: var(--sh-space-9);
+    }
+}
+
+@media (min-width: 1024px) {
+    .sh-landing .sh-landing-hero {
+        flex-direction: row;
+        align-items: flex-start;
+        gap: var(--sh-space-16);
+        padding-block: var(--sh-space-22);
+    }
+
+    .sh-landing .sh-landing-copy {
+        flex: 1.05;
+    }
+
+    .sh-landing .sh-landing-stage {
+        flex: 1;
+    }
+
+    .sh-landing h1 {
+        font-size: var(--sh-type-hero-desktop);
+        line-height: var(--sh-leading-hero-desktop);
+    }
+
+    .sh-landing .sh-eyebrow {
+        margin-bottom: 22px;
+    }
+
+}
+}
+
+/* ./design/pages/errors.css */
+@layer components {
+/* Anonymous error pages opt in to the After Hours public design system. */
+.sh-error-main {
+    display: flex;
+}
+
+.sh-error-page {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    flex: 1;
+    place-items: center;
+    padding: var(--sh-space-16) var(--sh-space-5);
+}
+
+.sh-error-panel {
+    width: 100%;
+    max-width: var(--sh-layout-error-panel);
+    padding: var(--sh-space-8) var(--sh-space-6);
+    text-align: center;
+}
+
+.sh-error-icon {
+    display: flex;
+    width: var(--sh-space-16);
+    height: var(--sh-space-16);
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto var(--sh-space-6);
+    border-radius: var(--sh-radius-panel);
+}
+
+.sh-error-icon svg {
+    width: var(--sh-space-8);
+    height: var(--sh-space-8);
+}
+
+.sh-error-icon-warning {
+    background: var(--sh-warning-surface);
+    color: var(--sh-warning);
+}
+
+.sh-error-icon-danger {
+    background: var(--sh-error-surface);
+    color: var(--sh-error);
+}
+
+.sh-error-code {
+    margin-bottom: var(--sh-space-3);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-caption);
+    font-weight: var(--sh-weight-bold);
+    letter-spacing: var(--sh-tracking-code);
+    line-height: var(--sh-type-leading-caption);
+    text-transform: uppercase;
+}
+
+.sh-error-title {
+    margin-bottom: var(--sh-space-4);
+    font-size: var(--sh-type-heading);
+    line-height: var(--sh-type-leading-heading);
+    overflow-wrap: anywhere;
+}
+
+.sh-error-message {
+    margin: 0 auto;
+    max-width: var(--sh-layout-message);
+    font-size: var(--sh-type-ui);
+    line-height: var(--sh-space-6);
+    overflow-wrap: anywhere;
+}
+
+.sh-error-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sh-space-3);
+    margin-top: var(--sh-space-8);
+}
+
+.sh-error-actions svg {
+    width: var(--sh-space-5);
+    height: var(--sh-space-5);
+    flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+    .sh-error-page {
+        padding: var(--sh-space-22) var(--sh-space-10);
+    }
+
+    .sh-error-panel {
+        padding: var(--sh-space-12);
+    }
+}
+}
+
+/* ./design/pages/legal.css */
+@layer components {
+/* Static legal pages share the public shell through tailwind.css. */
+.legal-page {
+    padding-block: var(--sh-space-10) var(--sh-space-16);
+}
+
+.legal-document {
+    width: 100%;
+    max-width: var(--sh-layout-legal-copy);
+    margin-inline: auto;
+    font-size: var(--sh-type-reading);
+    line-height: var(--sh-leading-reading);
+}
+
+.legal-heading {
+    margin-bottom: var(--sh-space-8);
+    border-bottom: 1px solid var(--sh-border);
+    padding-bottom: var(--sh-space-8);
+}
+
+.legal-heading h1 {
+    color: var(--sh-ink);
+    font-family: var(--sh-font-display);
+    font-size: var(--sh-type-document-title);
+    font-weight: var(--sh-weight-bold);
+    letter-spacing: var(--sh-tracking-heading);
+    line-height: var(--sh-leading-heading);
+    overflow-wrap: break-word;
+}
+
+.legal-copy {
+    color: var(--sh-muted);
+    overflow-wrap: break-word;
+}
+
+.legal-copy section + section {
+    margin-top: var(--sh-space-8);
+}
+
+.legal-copy section {
+    scroll-margin-top: var(--sh-space-6);
+}
+
+.legal-copy h2 {
+    margin-bottom: var(--sh-space-3);
+    color: var(--sh-ink);
+    font-family: var(--sh-font-display);
+    font-size: var(--sh-type-subheading);
+    font-weight: var(--sh-weight-bold);
+    letter-spacing: var(--sh-tracking-card);
+    line-height: var(--sh-leading-subheading);
+}
+
+.legal-copy p + p,
+.legal-copy p + ul,
+.legal-copy ul + p {
+    margin-top: var(--sh-space-3);
+}
+
+.legal-copy ul {
+    padding-inline-start: var(--sh-space-6);
+    list-style: disc;
+}
+
+.legal-copy li + li {
+    margin-top: var(--sh-space-2);
+}
+
+.legal-copy li::marker {
+    color: var(--sh-accent);
+}
+
+.legal-copy strong {
+    color: var(--sh-ink);
+    font-weight: var(--sh-weight-semibold);
+}
+
+.legal-copy a {
+    display: inline-flex;
+    min-height: var(--sh-space-11);
+    align-items: center;
+    color: var(--sh-accent);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+    transition: color var(--sh-motion-feedback) var(--sh-motion-ease);
+}
+
+.legal-copy a:hover {
+    color: var(--sh-accent-hover);
+}
+
+.legal-copy .legal-updated {
+    margin-top: var(--sh-space-10);
+    border-top: 1px solid var(--sh-border);
+    padding-top: var(--sh-space-6);
+    font-size: var(--sh-type-body);
+    line-height: var(--sh-leading-eyebrow);
+}
+
+.legal-back {
+    margin-top: var(--sh-space-6);
+}
+
+@media (min-width: 768px) {
+    .legal-page {
+        padding-block: var(--sh-space-16) var(--sh-space-22);
+    }
+
+    .legal-heading {
+        margin-bottom: var(--sh-space-10);
+        padding-bottom: var(--sh-space-10);
+    }
+
+    .legal-heading h1 {
+        font-size: var(--sh-type-title);
+        line-height: var(--sh-leading-document-title-wide);
+    }
+
+    .legal-copy section + section {
+        margin-top: var(--sh-space-10);
+    }
+
+    .legal-copy h2 {
+        font-size: var(--sh-type-subheading-wide);
+        line-height: var(--sh-leading-subheading-wide);
+    }
+}
+}
+
+/* ./design/pages/settings.css */
+@layer components {
+  .sh-settings-page {
+    padding-block: var(--sh-space-10) var(--sh-space-16);
+  }
+
+  .sh-settings-content {
+    max-width: var(--sh-layout-legal-copy);
+    margin-inline: auto;
+  }
+
+  .sh-settings-heading {
+    margin-bottom: var(--sh-space-8);
+  }
+
+  .sh-settings-heading h1 {
+    font-size: var(--sh-type-heading);
+    line-height: var(--sh-type-leading-heading);
+  }
+
+  .sh-settings-heading p {
+    margin-top: var(--sh-space-3);
+    font-size: var(--sh-type-body);
+    line-height: var(--sh-type-leading-body);
+  }
+
+  .sh-settings-fields {
+    min-width: 0;
+  }
+
+  .sh-settings-section {
+    display: grid;
+    min-width: 0;
+    gap: var(--sh-space-6);
+    border-top: 1px solid var(--sh-border);
+    padding-block: var(--sh-space-6);
+  }
+
+  .sh-settings-section h2 {
+    font-size: var(--sh-type-card);
+    line-height: var(--sh-leading-subheading);
+  }
+
+  .sh-settings-limit {
+    max-width: var(--sh-space-22);
+  }
+
+  .sh-settings-save {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sh-space-4);
+    padding-block: var(--sh-space-6);
+  }
+
+  .sh-settings-account {
+    margin-top: var(--sh-space-6);
+    padding-bottom: 0;
+    font-size: var(--sh-type-body);
+  }
+
+  .sh-settings-account-name {
+    color: var(--sh-ink);
+    overflow-wrap: anywhere;
+  }
+
+  .sh-settings-unavailable {
+    display: grid;
+    gap: var(--sh-space-4);
+  }
+
+  .sh-settings-unavailable dd {
+    margin-top: var(--sh-space-1);
+  }
+
+  @media (min-width: 768px) {
+    .sh-settings-page {
+      padding-block: var(--sh-space-14) var(--sh-space-20);
+    }
+  }
+}
+
+/* ./design/pages/library.css */
+/* Library page composition: the header, sections and playlist rows.
+   It only arranges the shared recipes and tokens; recipes and their states stay in
+   components/library.css. */
+@layer components {
+  /* Header: "Your playlists" and its controls, then the plain welcome text. */
+  .sh-library-header { display: grid; gap: var(--sh-space-3); }
+  /* The title row, and Organize mode's note: what its controls save, and the reset that
+     clears them. Each puts its words first and its controls after, wrapping when narrow. */
+  .sh-library-title-row,
+  .sh-library-organize-note {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sh-space-3);
+  }
+  .sh-library-header-actions { display: flex; flex-wrap: wrap; gap: var(--sh-space-2); }
+  .sh-library-intro {
+    max-width: var(--sh-layout-legal-copy);
+    font-size: var(--sh-type-body);
+    line-height: var(--sh-leading-description);
+  }
+  .sh-library-greeting { color: var(--sh-ink); font-weight: var(--sh-weight-semibold); }
+  .sh-library-organize-note > p {
+    flex: 1 1 calc(var(--sh-space-20) * 4);
+    min-width: 0;
+    max-width: var(--sh-layout-legal-copy);
+  }
+
+  /* Sections: a heading with its count, then an ordered list of rows. */
+  .sh-library-section-header {
+    display: flex;
+    align-items: center;
+    gap: var(--sh-space-2);
+    margin-bottom: var(--sh-space-3);
+  }
+  .sh-library-list { display: grid; gap: var(--sh-space-2); }
+  .sh-library-hidden-label { display: inline-flex; align-items: center; gap: var(--sh-space-2); }
+  #hidden-grid-wrapper { margin-top: var(--sh-space-3); }
+
+  /* Rows: intact 64px artwork, then the name and count. The links, the Playlist actions
+     disclosure and the Organize controls follow; below 768px the links take a line. */
+  .sh-library-row {
+    display: grid;
+    grid-template-columns: var(--sh-space-16) minmax(0, 1fr);
+    align-items: center;
+    gap: var(--sh-space-3) var(--sh-space-4);
+    min-width: 0;
+    padding: var(--sh-space-3);
+  }
+  .sh-library-row > .sh-library-row-links,
+  .sh-library-row > .sh-library-actions,
+  .sh-library-row > .sh-library-organize { grid-column: 1 / -1; }
+  .sh-library-row-art { display: flex; width: var(--sh-space-16); height: var(--sh-space-16); }
+  .sh-library-row-info { min-width: 0; }
+  .sh-library-row-title {
+    font-size: var(--sh-type-reading);
+    line-height: var(--sh-leading-subheading);
+    overflow-wrap: anywhere;
+  }
+  /* A row's links, and its Organize controls: favorite, hide or show, and its place in
+     its section. Each is one line that wraps. */
+  .sh-library-row-links,
+  .sh-library-organize,
+  .sh-library-order,
+  .sh-library-position {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sh-space-2);
+  }
+  @media (min-width: 768px) {
+    .sh-library-row { grid-template-columns: var(--sh-space-16) minmax(0, 1fr) auto; }
+    .sh-library-row > .sh-library-row-links { grid-column: auto; justify-content: flex-end; }
+    /* Playlist actions and Organize sit under the name, as part of the same playlist. */
+    .sh-library-row > .sh-library-actions,
+    .sh-library-row > .sh-library-organize { grid-column: 2 / -1; }
+  }
+
+  /* Playlist actions: the labelled disclosure holding the row's Spotify changes. */
+  .sh-library-actions-body {
+    display: grid;
+    gap: var(--sh-space-4);
+    max-width: var(--sh-layout-workspace-min);
+    border-top: 1px solid var(--sh-border);
+    padding-top: var(--sh-space-3);
+  }
+  .sh-library-visibility { display: grid; justify-items: start; gap: var(--sh-space-2); }
+
+  /* Organize controls, set apart from Playlist actions above them. */
+  .sh-library-organize {
+    border-top: 1px solid var(--sh-border);
+    padding-top: var(--sh-space-3);
+  }
+  .sh-library-position > .sh-input { width: var(--sh-space-20); }
+  .sh-library-grip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--sh-space-11);
+    min-height: var(--sh-space-11);
+    color: var(--sh-muted);
+    cursor: grab;
+  }
+}
+
+/* ./design/pages/workspace.css */
+/* Playlist workspace composition: identity header, action and tool bars, track
+   rows and row actions, tool panels and the narrow draft footer. Compose the shared
+   recipes and tokens; recipes stay in components/workspace.css, and the draft footer is the
+   shared sticky action footer (components/action-footer.css). */
+
+@layer components {
+  /* The workspace is a core container (at most 1200px, 20px gutters, 40px from 768px). From
+     the workspace width an open task takes 360px beside the playlist, 24px apart (the core
+     grid). */
+  #workshop-review-workspace { padding-top: var(--sh-space-6); }
+
+  /* Primary content in reading order: identity, the draft group, the action and tool bars,
+     then the list. Below the workspace width the draft group is the sticky footer after the
+     list (CSS order moves the one element; nothing is duplicated). */
+  .sh-workspace-primary {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: var(--sh-space-5);
+  }
+
+  .sh-workspace-identity {
+    display: grid;
+    min-width: 0;
+    gap: var(--sh-space-2);
+  }
+  .sh-workspace-title { overflow-wrap: anywhere; }
+  /* The selector's list opens under its row, inside the content width at every size. */
+  .sh-workspace-identity-row {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sh-space-2) var(--sh-space-3);
+  }
+  .sh-workspace-popover {
+    position: absolute;
+    top: calc(100% + var(--sh-space-2));
+    left: 0;
+    z-index: 50;
+    width: min(var(--sh-layout-message), 100%);
+    overflow: hidden;
+  }
+  .sh-workspace-hub-popover {
+    left: 50%;
+    width: min(var(--sh-layout-message), calc(100vw - 2 * var(--sh-space-gutter)));
+    transform: translateX(-50%);
+  }
+  .sh-workspace-popover-list {
+    max-height: calc(4 * var(--sh-space-18));
+    overflow-y: auto;
+  }
+
+  .sh-workspace-draft {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sh-space-3);
+  }
+  .sh-workspace-save-status {
+    display: grid;
+    flex: 1 1 calc(3 * var(--sh-space-20));
+    min-width: 0;
+    justify-items: start;
+    gap: var(--sh-space-2);
+  }
+  .sh-workspace-draft-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sh-space-2);
+  }
+  .sh-workspace-actions,
+  .sh-workspace-tools {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sh-space-2) var(--sh-space-3);
+  }
+  #workshop-algorithm-summary { min-width: 0; overflow-wrap: anywhere; }
+
+  /* The playlist scrolls with the document: no nested track scroller. Rows sit 8px apart. */
+  .sh-workspace-list {
+    display: grid;
+    min-width: 0;
+    gap: var(--sh-space-3);
+  }
+  .sh-workspace-tracks {
+    display: grid;
+    min-width: 0;
+    gap: var(--sh-space-2);
+  }
+  /* A row's open actions: under the row's own line, inside the row. */
+  .sh-workspace-row-actions {
+    display: grid;
+    flex-basis: 100%;
+    min-width: 0;
+    gap: var(--sh-space-3);
+    border-top: 1px solid var(--sh-border);
+    padding-block: var(--sh-space-3) var(--sh-space-1);
+  }
+
+  /* Tool panels, Save and results take core's task layout: beside the playlist from the
+     workspace width, else (and for a full-width setup task) in the content area, scrolling with
+     the document. A setup task's prose keeps a readable measure. */
+  .sh-workspace-setup { max-width: var(--sh-layout-legal-copy); }
+
+  #workshop-save-panel .sh-panel-footer {
+    background: var(--sh-surface);
+    border-radius: 0 0 var(--sh-radius-panel) var(--sh-radius-panel);
+  }
+  #workshop-source-results > * + * { margin-top: var(--sh-space-4); }
+  #workshop-source-results button { max-width: 100%; white-space: normal; }
+
+  /* Below the workspace width only Add tracks and Inbox stay in the bars; Playlist tools
+     lists every destination. Every wide-only control is a button (core's inline-flex). */
+  .sh-workspace-wide-only { display: none; }
+
+  @media (min-width: 1024px) {
+    .sh-workspace-primary { padding-bottom: var(--sh-space-10); }
+    .sh-workspace-wide-only { display: inline-flex; }
+    .sh-workspace-narrow-only { display: none; }
+  }
+}
+
+/* ./design/pages/setup.css */
+/* Shared playlist setup: the identity header, the three setup sections, and the
+   shared-settings summary with its save actions. Compose the core recipes and tokens; no
+   recipe or palette is defined here: the sections and the summary are core surfaces
+   (.sh-surface), the review and outcome open with a core divider (.sh-divider), and a pending
+   mark is core warning text (.sh-text-warning).
+
+   From the workspace width the sections sit beside the summary, which stays in view with
+   its actions under it. Below it everything is one column and the actions are the shared
+   sticky action footer after the summary (components/action-footer.css: one element, moved
+   by CSS order, whose measured height is the page's scroll padding). */
+@layer components {
+  .sh-setup-page {
+    display: grid;
+    min-width: 0;
+    gap: var(--sh-space-6);
+    padding-block: var(--sh-space-6) var(--sh-space-10);
+  }
+
+  .sh-setup-header {
+    display: grid;
+    min-width: 0;
+    justify-items: start;
+    gap: var(--sh-space-3);
+  }
+  .sh-setup-boundary {
+    color: var(--sh-accent);
+    font-size: var(--sh-type-caption);
+    font-weight: var(--sh-weight-semibold);
+    letter-spacing: var(--sh-tracking-label);
+    line-height: var(--sh-type-leading-caption);
+  }
+  .sh-setup-title,
+  .sh-setup-identity,
+  .sh-setup-name { overflow-wrap: anywhere; }
+  .sh-setup-identity {
+    max-width: var(--sh-layout-legal-copy);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-body);
+    line-height: var(--sh-leading-description);
+  }
+  .sh-setup-name {
+    min-width: 0;
+    color: var(--sh-ink);
+    font-weight: var(--sh-weight-semibold);
+  }
+
+  /* Ordinary in-page links to the three sections, each a 44px target. */
+  .sh-setup-nav ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sh-space-2);
+  }
+  .sh-setup-nav a {
+    display: inline-flex;
+    min-height: var(--sh-space-control);
+    align-items: center;
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-control);
+    padding-inline: var(--sh-space-4);
+    color: var(--sh-ink);
+    font-size: var(--sh-type-body);
+  }
+  .sh-setup-nav a:hover { border-color: var(--sh-accent); }
+
+  .sh-setup-layout {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: var(--sh-space-panel);
+  }
+  .sh-setup-sections {
+    display: grid;
+    min-width: 0;
+    gap: var(--sh-space-panel);
+  }
+  .sh-setup-section {
+    display: grid;
+    min-width: 0;
+    align-content: start;
+    gap: var(--sh-space-4);
+    padding: var(--sh-space-4);
+    /* A section link lands below the sticky navigation bar. */
+    scroll-margin-top: calc(var(--sh-space-nav) + var(--sh-space-4));
+  }
+  .sh-setup-section-title {
+    font-size: var(--sh-type-card);
+    line-height: var(--sh-leading-subheading);
+  }
+  .sh-setup-subheading {
+    color: var(--sh-ink);
+    font-size: var(--sh-type-body);
+    font-weight: var(--sh-weight-semibold);
+    line-height: var(--sh-leading-normal);
+  }
+  .sh-setup-emphasis { color: var(--sh-ink); font-weight: var(--sh-weight-semibold); }
+  .sh-setup-group {
+    display: grid;
+    min-width: 0;
+    gap: var(--sh-space-3);
+  }
+
+  /* Rows wrap: the name and its state, then the row's own controls. */
+  .sh-setup-list {
+    display: grid;
+    min-width: 0;
+    gap: var(--sh-space-2);
+  }
+  .sh-setup-row {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sh-space-2) var(--sh-space-3);
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-control);
+    padding: var(--sh-space-3);
+    background: var(--sh-raised);
+  }
+  .sh-setup-row-text {
+    display: grid;
+    flex: 1 1 calc(2 * var(--sh-space-22));
+    min-width: 0;
+    gap: var(--sh-space-1);
+    overflow-wrap: anywhere;
+  }
+  .sh-setup-row-actions,
+  .sh-setup-actions,
+  .sh-setup-inline {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sh-space-2);
+  }
+  .sh-setup-row > .sh-field-error { flex-basis: 100%; }
+  .sh-setup-inline > .sh-input {
+    flex: 1 1 calc(2 * var(--sh-space-22));
+    width: auto;
+    min-width: 0;
+  }
+  .sh-setup-pending-mark { font-weight: var(--sh-weight-medium); }
+  .sh-setup-count {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sh-space-2);
+    color: var(--sh-muted);
+    font-size: var(--sh-type-body);
+  }
+  .sh-setup-number {
+    width: var(--sh-space-22);
+    flex: none;
+  }
+  .sh-setup-current { display: grid; min-width: 0; gap: var(--sh-space-2); }
+
+  /* The summary: saved settings, routines, pending changes, the review and the outcome. */
+  .sh-setup-side { display: contents; }
+  .sh-setup-summary {
+    display: grid;
+    min-width: 0;
+    align-content: start;
+    gap: var(--sh-space-5);
+    padding: var(--sh-space-4);
+  }
+  .sh-setup-saved {
+    display: grid;
+    min-width: 0;
+    gap: var(--sh-space-2);
+  }
+  .sh-setup-saved-item { min-width: 0; overflow-wrap: anywhere; }
+  .sh-setup-review,
+  .sh-setup-outcome {
+    padding-top: var(--sh-space-4);
+    overflow-wrap: anywhere;
+  }
+  .sh-setup-ack { align-items: flex-start; }
+  .sh-setup-ack input { margin-top: var(--sh-space-1); }
+
+  /* The action footer's own row: its status, then its actions. */
+  .sh-setup-footer {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sh-space-2) var(--sh-space-3);
+  }
+  .sh-setup-footer-status {
+    display: grid;
+    flex: 1 1 calc(2 * var(--sh-space-22));
+    min-width: 0;
+    gap: var(--sh-space-1);
+  }
+
+  @media (min-width: 768px) {
+    .sh-setup-section,
+    .sh-setup-summary { padding: var(--sh-space-panel); }
+  }
+
+  @media (min-width: 1024px) {
+    .sh-setup-page { padding-block: var(--sh-space-10) var(--sh-space-16); }
+    .sh-setup-section { scroll-margin-top: calc(var(--sh-space-nav-wide) + var(--sh-space-4)); }
+    .sh-setup-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) var(--sh-layout-aside);
+      align-items: start;
+    }
+    /* The summary stays in view beside the sections; it scrolls inside itself when long,
+       with its actions always under it. */
+    .sh-setup-side {
+      position: sticky;
+      top: calc(var(--sh-space-nav-wide) + var(--sh-space-panel));
+      display: flex;
+      max-height: calc(100dvh - var(--sh-space-nav-wide) - 2 * var(--sh-space-panel));
+      min-width: 0;
+      flex-direction: column;
+      gap: var(--sh-space-3);
+    }
+    .sh-setup-summary {
+      min-height: 0;
+      overflow-y: auto;
+    }
+    .sh-setup-footer { flex: none; }
+  }
+}
+
+/* ./design/pages/activity.css */
+@layer components {
+  .sh-activity-page {
+    padding-block: var(--sh-space-8) var(--sh-space-16);
+  }
+
+  .sh-activity-header { margin-bottom: var(--sh-space-6); }
+  .sh-activity-header p { margin-top: var(--sh-space-2); }
+  .sh-activity-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sh-space-3);
+  }
+  .sh-activity-section { margin-top: var(--sh-space-8); }
+  .sh-activity-panel-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    justify-content: space-between;
+    gap: var(--sh-space-4);
+  }
+  .sh-activity-panel-heading > div { min-width: 0; }
+  .sh-activity-filter {
+    display: grid;
+    gap: var(--sh-space-2);
+    min-width: min(100%, var(--sh-space-22));
+  }
+  .sh-activity-filter label { font-weight: var(--sh-weight-semibold); }
+  .sh-activity-filter select { min-height: var(--sh-space-11); }
+  .sh-activity-panel > .sh-caption {
+    padding: var(--sh-space-3) var(--sh-space-6);
+    border-bottom: 1px solid var(--sh-border);
+  }
+  .sh-activity-list { display: grid; }
+  .sh-activity-list > [hidden] { display: none; }
+  .sh-activity-run, .sh-activity-event {
+    display: grid;
+    gap: var(--sh-space-3);
+    min-width: 0;
+    align-items: start;
+  }
+  .sh-activity-row-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sh-space-3);
+    min-width: 0;
+  }
+  .sh-activity-description,
+  .sh-activity-result,
+  .sh-activity-event-body,
+  .sh-result { min-width: 0; overflow-wrap: anywhere; }
+  .sh-activity-time { margin: 0; }
+  .sh-activity-manual {
+    display: inline-block;
+    margin-top: var(--sh-space-2);
+    color: var(--sh-accent);
+    font-size: var(--sh-type-caption);
+  }
+
+  /* The same result markup appears in Activity and exact routine History. */
+  .sh-result { display: grid; gap: var(--sh-space-2); }
+  .sh-result-heading { font-weight: var(--sh-weight-semibold); color: var(--sh-ink); }
+  .sh-result-time, .sh-result-unavailable { color: var(--sh-muted); font-size: var(--sh-type-caption); }
+  .sh-result-steps { display: grid; gap: var(--sh-space-3); padding-left: var(--sh-space-5); list-style: decimal; }
+  .sh-result-step { padding-left: var(--sh-space-1); }
+  .sh-result-step-heading { font-weight: var(--sh-weight-semibold); }
+  .sh-result-counts, .sh-result-resources, .sh-result-bookkeeping {
+    display: grid;
+    gap: var(--sh-space-1);
+    margin-top: var(--sh-space-1);
+  }
+  .sh-result-counts { color: var(--sh-ink); }
+  .sh-result-resources, .sh-result-bookkeeping { color: var(--sh-muted); font-size: var(--sh-type-caption); }
+  .sh-result-record-warning { color: var(--sh-warning); }
+  .sh-result--compact .sh-result-steps { gap: var(--sh-space-2); }
+
+  @media (min-width: 768px) {
+    .sh-activity-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .sh-activity-run { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+    .sh-activity-event { grid-template-columns: minmax(0, 1fr) auto; }
+  }
+}
+
+/* ./design/pages/routines.css */
+/* Dedicated guided routine task. The shared design tokens own its palette and type scale. */
+@layer components {
+  .sh-routine-task {
+    display: grid;
+    gap: var(--sh-space-6);
+    min-width: 0;
+    padding-block: var(--sh-space-6) var(--sh-space-10);
+  }
+  .sh-routine-task-header { display: grid; justify-items: start; gap: var(--sh-space-3); min-width: 0; }
+  .sh-routine-task-header h1 { overflow-wrap: anywhere; }
+  .sh-routine-status { min-height: 1.5em; color: var(--sh-ink); }
+  .sh-routine-progress ol { display: flex; flex-wrap: wrap; gap: var(--sh-space-2); padding: 0; list-style: none; }
+  .sh-routine-progress li {
+    border: 1px solid var(--sh-border); border-radius: var(--sh-radius-control);
+    padding: var(--sh-space-2) var(--sh-space-3); color: var(--sh-muted);
+  }
+  .sh-routine-progress [aria-current="step"] { color: var(--sh-ink); border-color: var(--sh-accent); font-weight: var(--sh-weight-semibold); }
+  .sh-routine-layout { display: grid; gap: var(--sh-space-6); min-width: 0; }
+  .sh-routine-main, .sh-routine-summary, .sh-routine-step { min-width: 0; }
+  .sh-routine-main { display: grid; gap: var(--sh-space-5); }
+  .sh-routine-step, .sh-routine-summary { padding: var(--sh-space-6); border-radius: var(--sh-radius-panel); }
+  .sh-routine-step { display: grid; gap: var(--sh-space-5); }
+  .sh-routine-step > .sh-heading { scroll-margin-top: calc(var(--sh-space-nav) + var(--sh-space-4)); }
+  .sh-routine-step[hidden] { display: none; }
+  .sh-routine-goals, .sh-routine-field-grid, .sh-routine-result-actions { display: grid; gap: var(--sh-space-3); }
+  .sh-routine-goals button, .sh-routine-result-actions a { min-height: var(--sh-space-control); }
+  .sh-routine-group { display: grid; gap: var(--sh-space-3); border-top: 1px solid var(--sh-border); padding-top: var(--sh-space-5); }
+  .sh-routine-group[hidden] { display: none; }
+  .sh-routine-source-summary { padding-left: var(--sh-space-5); list-style: disc; overflow-wrap: anywhere; }
+  .sh-routine-candidates { display: grid; gap: var(--sh-space-3); }
+  .sh-routine-candidate { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sh-space-3); padding: var(--sh-space-3); border: 1px solid var(--sh-border); border-radius: var(--sh-radius-control); }
+  .sh-routine-candidate p { overflow-wrap: anywhere; }
+  .sh-routine-shared-note { border-left: 3px solid var(--sh-accent); padding: var(--sh-space-3); background: var(--sh-surface); }
+  .sh-routine-review-details dl, .sh-routine-summary dl { display: grid; gap: var(--sh-space-3); min-width: 0; }
+  #routine-review-disclosure summary { min-height: var(--sh-space-control); cursor: pointer; padding-block: var(--sh-space-3); }
+  .sh-routine-fact { display: grid; gap: var(--sh-space-1); border-bottom: 1px solid var(--sh-border); padding-bottom: var(--sh-space-2); min-width: 0; }
+  .sh-routine-fact dt { color: var(--sh-muted); font-size: var(--sh-type-caption); }
+  .sh-routine-fact dd { margin: 0; overflow-wrap: anywhere; }
+  .sh-routine-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sh-space-3); }
+  .sh-routine-footer button { min-height: var(--sh-space-control); }
+  .sh-routine-footer button[aria-disabled="true"] { cursor: progress; opacity: .65; }
+  @media (max-width: 63.999rem) {
+    .sh-routine-task[data-view="review"] .sh-routine-summary { display: none; }
+  }
+  @media (min-width: 48rem) {
+    .sh-routine-field-grid, .sh-routine-goals, .sh-routine-result-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (min-width: 64rem) {
+    .sh-routine-layout { grid-template-columns: minmax(0, 1.8fr) minmax(16rem, .8fr); align-items: start; }
+    .sh-routine-summary { position: sticky; top: var(--sh-space-6); }
+    .sh-routine-step > .sh-heading { scroll-margin-top: calc(var(--sh-space-nav-wide) + var(--sh-space-4)); }
+  }
+}
+

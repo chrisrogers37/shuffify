@@ -28,7 +28,7 @@ const schemaDirectory = outputArgument
 const check = process.argv.includes('--check');
 const generator = createGenerator({
   path: `${root}src/api/contracts.ts`,
-  tsconfig: `${root}tsconfig.json`,
+  tsconfig: `${root}tsconfig.contracts.json`,
   type: '*',
   expose: 'export',
   topRef: true,

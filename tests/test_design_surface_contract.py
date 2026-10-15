@@ -13,7 +13,30 @@ TEMPLATES = REPO_ROOT / "shuffify/templates"
 STATIC = REPO_ROOT / "shuffify/static"
 DESIGN = REPO_ROOT / "assets/design"
 
-GENERATED_CSS = {STATIC / "css/tailwind.css"}
+# Only these named outputs are exempt from handwritten-source checks. The
+# theme generator's --check owns the two React outputs and rejects stale,
+# missing and obsolete output; no directory-wide generated exemption exists.
+GENERATED_CSS = {
+    Path("shuffify/static/css/tailwind.css"),
+    Path("web/src/design/generated/theme.css"),
+    Path("web/src/design/generated/recipes.css"),
+}
+REACT_RECIPE_DIRECTORIES = (Path("web/src/pages"), Path("web/src/components"))
+CSS_DECLARATION = re.compile(r"(?:^|[;{\s])([\w-]+)\s*:\s*([^;{}]+)")
+SHARED_VARIABLE = re.compile(r"var\(\s*--sh-[\w-]+\s*\)")
+PALETTE_PROPERTY = re.compile(
+    r"color|background(?:-color|-image)?|(?:border|outline)(?:-(?:top|right|bottom|left))?(?:-color)?|"
+    r"box-shadow|text-shadow|fill|stroke", re.I
+)
+PALETTE_SYNTAX = {
+    "none", "transparent", "currentcolor", "inherit", "initial", "unset", "revert", "revert-layer",
+    "solid", "dashed", "dotted", "double", "groove", "ridge", "inset", "outset", "auto",
+    "linear-gradient", "radial-gradient", "conic-gradient", "repeating-linear-gradient",
+    "repeating-radial-gradient", "repeating-conic-gradient", "to", "top", "right", "bottom", "left",
+    "at", "center", "circle", "ellipse", "closest-side", "closest-corner", "farthest-side", "farthest-corner",
+    "calc", "min", "max", "clamp",
+}
+
 
 COMMENTS = re.compile(r"/\*.*?\*/|<!--.*?-->|\{#.*?#\}", re.S)
 STYLE_BLOCK = re.compile(r"<style\b[^>]*>(.*?)</style\s*>", re.I | re.S)
@@ -40,6 +63,34 @@ def css_violations(text):
         ("visual recipe outside core", VISUAL_PROPERTY),
         ("core redefinition", CORE_DEFINITION),
     ) if pattern.search(css)]
+
+
+def react_css_violations(text):
+    """Component recipes may compose tokens, but cannot supply new palette or font sources."""
+    css = COMMENTS.sub("", text)
+    violations = []
+    if LITERAL_COLOR.search(css):
+        violations.append("literal palette")
+    if re.search(r"--[\w-]+\s*:", css):
+        violations.append("token definition outside generator")
+    if re.search(r"@font-face\b", css, re.I):
+        violations.append("font source outside generator")
+    for property_name, value in CSS_DECLARATION.findall(css):
+        property_name = property_name.lower()
+        value = re.sub(r"\s*!important\s*$", "", value, flags=re.I).strip()
+        if property_name in {"font", "font-family"}:
+            if not re.fullmatch(
+                r"var\(\s*--sh-font-[\w-]+\s*\)|inherit|initial|unset|revert|revert-layer", value, re.I
+            ):
+                violations.append("hardcoded font")
+        if PALETTE_PROPERTY.fullmatch(property_name):
+            # Remove only exact shared references: a literal fallback or local
+            # custom property must remain visible to the palette check.
+            remaining = SHARED_VARIABLE.sub("", value)
+            words = re.findall(r"(?<![\w-])[a-zA-Z][\w-]*", remaining)
+            if set(word.lower() for word in words) - PALETTE_SYNTAX:
+                violations.append("palette outside shared tokens")
+    return violations
 
 
 def visual_utilities(text):
@@ -130,9 +181,15 @@ def test_generic_css_cannot_add_palette_fonts_or_component_recipes():
             path = Path(directory) / name
             if not name.endswith(".css") or path.is_relative_to(DESIGN):
                 continue
-            if path in GENERATED_CSS:
+            relative = path.relative_to(REPO_ROOT)
+            if relative in GENERATED_CSS:
                 continue
-            assert not css_violations(path.read_text()), path
+            react_recipe = relative == Path("web/src/design/index.css") or any(
+                relative.is_relative_to(directory) for directory in REACT_RECIPE_DIRECTORIES
+            )
+            checker = react_css_violations if react_recipe else css_violations
+            violations = checker(path.read_text())
+            assert not violations, (path, violations)
 
 
 def test_static_js_cannot_build_new_visual_recipes_outside_core():

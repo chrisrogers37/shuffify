@@ -3,17 +3,38 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24 <25" },
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "schemas:generate": "node scripts/generate-schemas.mjs",
     "schemas:check": "node scripts/generate-schemas.mjs --check",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.contracts.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "test": "node --test tests/*.test.mjs",
-    "build": "tsc --emitDeclarationOnly"
+    "build": "npm run theme:generate && npm run typecheck && vite build",
+    "dev": "vite --host 127.0.0.1",
+    "preview": "vite preview --host 127.0.0.1",
+    "theme:generate": "node scripts/generate-theme.mjs",
+    "theme:check": "node scripts/generate-theme.mjs --check",
+    "build:fixtures": "npm run build -- --mode fixture",
+    "test:browser": "playwright test"
   },
   "devDependencies": {
     "ajv": "8.20.0",
     "ts-json-schema-generator": "2.9.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vite": "8.3.4",
+    "@vitejs/plugin-react": "6.1.2",
+    "tailwindcss": "4.3.3",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/node": "24.19.2",
+    "@playwright/test": "1.64.1"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-router": "8.4.0"
   }
 }
