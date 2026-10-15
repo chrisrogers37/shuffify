@@ -174,17 +174,20 @@ class OperationWorker:
             "success": False, "error_code": "operation_failed", "category": "error",
             "message": "The operation did not complete.", "retryable": False,
         }
+        has_effects = self._has_dispatched(journal)
+        if runtime is not None and journal.get("boundaries") is not None:
+            has_effects = runtime.journal.compensation_has_effects(journal)
         if runtime is not None:
             recorded_failure = journal.setdefault("runtime", {}).get("failure")
             if recorded_failure is None:
                 journal["runtime"]["failure"] = {"result": result}
                 # Recovery must retain the abort direction even if planning its rollback is interrupted.
                 self.repository.checkpoint(
-                    lease, journal, state="compensating" if self._has_dispatched(journal) else None,
+                    lease, journal, state="compensating" if has_effects else None,
                 )
             else:
                 result = recorded_failure["result"]
-        if runtime is not None and self._has_dispatched(journal):
+        if runtime is not None and (has_effects or journal.get("boundaries") is not None):
             try:
                 compensated = runtime.journal.compensate()
                 state = compensated["state"]
@@ -202,7 +205,8 @@ class OperationWorker:
         """Publish history only alongside its confirmed terminal operation state."""
         if runtime is not None:
             runtime.ensure_lease()
-            if state in {"succeeded", "rolled_back"}:
+            retained = state == "failed" and bool(runtime.get_journal().get("boundaries", {}).get("accepted"))
+            if state in {"succeeded", "rolled_back"} or state == "failed" and retained:
                 from shuffify.services.operations.history import HistoryError
 
                 try:

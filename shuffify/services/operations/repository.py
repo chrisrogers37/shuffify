@@ -352,15 +352,19 @@ class OperationRepository:
             row.journal = journal
             return self._detach(session, row)
 
-    def local_step(self, lease, name, callback):
+    def local_step(self, lease, name, callback, *, journal_update=None):
         """Commit local effects and their replay receipt in one short fenced transaction.
 
         The callback receives this transaction's explicit SQLAlchemy Session.
         It must perform database work only, without committing or external I/O.
         Its result must be JSON and is replayed without running the callback.
+        An optional pure ``journal_update(document, result)`` returns the journal
+        committed alongside the effect, for an accepted step's atomic boundary.
         """
         if not isinstance(name, str) or not name or len(name) > 128:
             raise ValueError("A local step name must contain 1 to 128 characters.")
+        if journal_update is not None and not callable(journal_update):
+            raise ValueError("A local journal update must be callable.")
         with self._transaction(write=True) as session:
             row, _now = self._leased_row(session, lease)
             journal = deepcopy(row.journal or {})
@@ -375,6 +379,16 @@ class OperationRepository:
             event.listen(session, "before_commit", prevent_commit)
             try:
                 result = _json_copy(callback(session))
+                receipts[name] = result
+                if journal_update is not None:
+                    updated = _json_copy(journal_update(deepcopy(journal), deepcopy(result)))
+                    if not isinstance(updated, dict):
+                        raise ValueError("A local journal update must return an object.")
+                    # Existing local receipts describe already-committed effects.
+                    # A new acceptance boundary cannot erase or replace them.
+                    updated.setdefault("runtime", {})["local_steps"] = deepcopy(receipts)
+                    journal = updated
+                    receipts = journal["runtime"]["local_steps"]
             finally:
                 event.remove(session, "before_commit", prevent_commit)
             # A callback that unexpectedly runs past its lease cannot commit

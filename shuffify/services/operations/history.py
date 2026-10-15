@@ -26,7 +26,7 @@ from shuffify.services.state_service import PLAYLIST_STATES_KEY, StaleHistoryErr
 
 HISTORY_SCOPE_KEY = "history_scope"
 _SCOPE = re.compile(r"[A-Za-z0-9_-]{32,128}\Z")
-_CONFIRMED_STATES = frozenset({"succeeded", "rolled_back"})
+_CONFIRMED_STATES = frozenset({"succeeded", "rolled_back", "failed"})
 
 
 class HistoryError(StateError):
@@ -72,6 +72,21 @@ def _entry(value):
 
 
 def _assert_confirmed_writes(journal, state):
+    if state == "failed":
+        accepted = journal.get("boundaries", {}).get("accepted", [])
+        scope = journal.get("compensation_scope", {})
+        if (journal.get("phase") != "forward" or journal.get("status") != "failed"
+                or not accepted or type(accepted[-1].get("end")) is not int
+                or not isinstance(scope, dict) or scope.get("start", -1) < accepted[-1]["end"]):
+            raise HistoryError("A failed operation has no verified retained history boundary.")
+        plans = journal.get("plans", [])
+        end = accepted[-1]["end"]
+        if (not isinstance(plans, list) or not 0 <= end <= len(plans)
+                or any(batch.get("state") != "acknowledged" for plan in plans[:end] for batch in plan["batches"])
+                or any(batch.get("state") in {"dispatched", "acknowledged"}
+                       for plan in plans[end:] for batch in plan["batches"])):
+            raise HistoryError("An unresolved failed child cannot confirm retained history.")
+        return
     expected_phase = "compensating" if state == "rolled_back" else "forward"
     if ("status" in journal and journal["status"] != state
             or "phase" in journal and journal["phase"] != expected_phase):
@@ -139,6 +154,10 @@ class HistoryStore:
                 or type(receipt.get("user_id")) is not int or receipt["user_id"] != row.user_id
                 or not isinstance(receipt.get("scope"), str) or not _SCOPE.fullmatch(receipt["scope"])
                 or not isinstance(receipt.get("entries"), dict)):
+            return None
+        retained = receipt.get("retained_steps")
+        if row.state == "failed" and (not isinstance(retained, list) or not retained
+                                     or any(not isinstance(name, str) or not name for name in retained)):
             return None
         return receipt
 
@@ -223,12 +242,12 @@ class HistoryStore:
     def stage(self, journal, session, *, state, confirmed):
         """Stage a receipt for repository.finish; never independently commit history.
 
-        A rolled-back command records its frozen before-state, including a null
-        tombstone when there was no history. The advanced worker mapping is never
-        retained after compensation restored the original playlist.
+        Compensation publishes the most recent accepted child's mapping, or the
+        original mapping when no child was accepted. A failed aggregate may
+        publish only freshly verified, retained child history.
         """
         if confirmed is not True or state not in _CONFIRMED_STATES:
-            raise HistoryError("Only a verified successful or rolled-back operation can confirm history.")
+            raise HistoryError("Only verified terminal effects can confirm history.")
         if not isinstance(session, HistorySession) or not isinstance(journal, dict):
             raise HistoryError("History must be staged from its detached worker mapping.")
         _assert_confirmed_writes(journal, state)
@@ -236,21 +255,35 @@ class HistoryStore:
         current = session.get(PLAYLIST_STATES_KEY)
         if not isinstance(current, dict) or set(current) - set(session._before):
             raise HistoryError("History includes a playlist outside the command's target set.")
+        retained = journal.get("boundaries", {}).get("accepted", [])
+        publication = current
+        if state in {"rolled_back", "failed"}:
+            if retained:
+                accepted_session = HistorySession(session.user_id, session.scope, session.before, session.revisions)
+                accepted_session.restore(journal.get("runtime", {}).get("accepted_history_working"))
+                publication = accepted_session[PLAYLIST_STATES_KEY]
+            elif state == "failed":
+                raise HistoryError("A failed command has no accepted history to retain.")
+            else:
+                publication = session.before
         changes = {}
         for playlist_id, before in session._before.items():
             self.assert_revision(session.user_id, session.scope, playlist_id, session._revisions[playlist_id])
-            after = _entry(current.get(playlist_id))
+            after = _entry(publication.get(playlist_id))
             # Record an actual change, a first legacy import, or the deliberate
             # before-state of a command whose later step required compensation.
-            if after != before or (before is not None and session._revisions[playlist_id] is None):
+            if (after != before or _entry(current.get(playlist_id)) != before
+                    or before is not None and session._revisions[playlist_id] is None):
                 changes[playlist_id] = {
-                    "entry": deepcopy(before) if state == "rolled_back" else after,
+                    "entry": after,
                     "parent_revision": session._revisions[playlist_id],
                 }
         result = deepcopy(journal)
         if changes:
             result["history"] = {"version": 1, "user_id": session.user_id, "scope": session.scope,
                                  "state": state, "confirmed": True, "entries": changes}
+            if retained:
+                result["history"]["retained_steps"] = [step["name"] for step in retained]
         else:
             result.pop("history", None)
         return result

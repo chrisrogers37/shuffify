@@ -82,7 +82,9 @@ class OperationRuntime:
         document = self.get_journal()
         if document.get("runtime", {}).get("history_unconfirmed"):
             raise HistoryError("The verified playlist's saved history could not be confirmed.")
-        if state not in {"succeeded", "rolled_back"} or self.history is None:
+        retained = bool(document.get("boundaries", {}).get("accepted"))
+        if (state not in {"succeeded", "rolled_back"} and not (state == "failed" and retained)
+                or self.history is None):
             return None
         document = HistoryStore(self.repository.engine).stage(
             document, self.history, state=state, confirmed=confirmed,
@@ -140,10 +142,49 @@ class OperationRuntime:
         self.ensure_lease()
         self.journal.check_pending_control()
 
-    def local_step(self, name, callback):
+    def local_step(self, name, callback, *, journal_update=None):
         """Commit local database effects and their receipt in one fenced transaction."""
         self.check_pending_control()
-        return self.repository.local_step(self.lease, name, callback)
+        if journal_update is None:
+            return self.repository.local_step(self.lease, name, callback)
+        result = self.repository.local_step(self.lease, name, callback, journal_update=journal_update)
+        if self._journal is not None:
+            self._journal.reload_latest()
+        return result
+
+    def composite_step(self, name, apply, commit):
+        """Accept a verified child and its local effects before a later child begins.
+
+        ``apply`` may use prepared choices and journaled Spotify steps. The final
+        ``commit(storage, applied)`` performs only local database work and returns
+        its rich JSON outcome. Its receipt and accepted boundary commit together.
+        """
+        if not isinstance(name, str) or not name or len(name) > 120:
+            raise ValueError("A composite step name must contain 1 to 120 characters.")
+        self.check_pending_control()
+        accepted = self.journal.accepted_step(name)
+        if accepted is not None:
+            self.journal.skip_to(accepted["end"])
+            return deepcopy(accepted.get("result"))
+        history = self.history
+        self.journal.begin_step(name)
+        applied = json.loads(json.dumps(apply(), allow_nan=False))
+        self.check_pending_control()
+        proof = self.journal.verify_step(name)
+
+        def accept(document, value):
+            document = self.history_working(document)
+            if history is not None:
+                document["runtime"]["accepted_history_working"] = deepcopy(document["runtime"]["history_working"])
+            return self.journal.accept_step_document(
+                document, name, proof=proof, result=value,
+            )
+
+        result = self.local_step("accept." + name, lambda storage: commit(storage, deepcopy(applied)),
+                                 journal_update=accept)
+        if self.journal.accepted_step(name) is None:
+            raise ValueError("The child step's local receipt has no accepted boundary.")
+        return result
 
     def step(self, name, execute):
         """Persist a command step's output for an idempotent continuation."""
