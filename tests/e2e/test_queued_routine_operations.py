@@ -9,7 +9,7 @@ from tests.e2e.test_live_operation_outcomes import SOURCE, TARGET, _collection
 from tests.e2e.test_queued_direct_operations import complete
 
 
-def _execution(operation_id):
+def _executions():
     HarnessConfig.assert_safe()
     engine = create_engine(HarnessConfig.SQLALCHEMY_DATABASE_URI, poolclass=NullPool)
     try:
@@ -18,11 +18,15 @@ def _execution(operation_id):
                 "SELECT id, kind, schedule_id, payload -> 'command' ->> 'triggered_by' AS triggered_by "
                 "FROM job_executions ORDER BY id"
             )).mappings().all()
-            assert len(rows) == 1, rows
-            assert rows[0]["id"] == operation_id
-            return dict(rows[0])
+            return {row["id"]: dict(row) for row in rows}
     finally:
         engine.dispose()
+
+
+def _execution(operation_id, previous):
+    rows = _executions()
+    assert rows.keys() - previous.keys() == {operation_id}, rows
+    return rows[operation_id]
 
 
 def _assert_result_identity(operation):
@@ -41,7 +45,7 @@ def _assert_result_identity(operation):
 def test_saved_routine_uses_one_accepted_row_and_replays_its_key(alice, fake, job_type):
     collection = _collection(alice)
     alice.ok("put", f"/playlist/{TARGET}/raid-link", json={"drip_enabled": True, "drip_count": 2})
-    pair = alice.ok("post", f"/playlist/{TARGET}/pair", json={
+    pair = alice.write(f"/playlist/{TARGET}/pair", json={
         "create_new": True, "production_playlist_name": "Morning Mix",
     })
     assert pair["success"] is True
@@ -57,11 +61,12 @@ def test_saved_routine_uses_one_accepted_row_and_replays_its_key(alice, fake, jo
     schedule = alice.ok("post", "/schedules/create", json=payload)["schedule"]
     schedule_id = schedule["id"]
     alice.ok("post", f"/schedules/{schedule_id}/toggle")
+    previous = _executions()
     try:
         operation = complete(alice, f"/api/schedules/{schedule_id}/run", key="saved-routine")
         result = _assert_result_identity(operation)
         assert result["result"]["execution_id"] == operation["id"]
-        row = _execution(operation["id"])
+        row = _execution(operation["id"], previous)
         assert (row["kind"], row["schedule_id"], row["triggered_by"]) == (
             "schedule_run", schedule_id, "manual",
         )
@@ -91,9 +96,10 @@ def test_saved_routine_uses_one_accepted_row_and_replays_its_key(alice, fake, jo
 def test_explicit_action_keeps_one_standalone_execution(alice, fake, action, kind):
     collection = _collection(alice)
     before = fake.uris(TARGET)
+    previous = _executions()
     operation = complete(alice, f"/api/playlist/{TARGET}/{action}", key="explicit-routine", json={})
     _assert_result_identity(operation)
-    row = _execution(operation["id"])
+    row = _execution(operation["id"], previous)
     assert (row["kind"], row["schedule_id"], row["triggered_by"]) == (kind, None, "manual")
     if action == "raid-now":
         assert fake.uris(TARGET) == before

@@ -700,13 +700,15 @@
         Object.assign(creation, {busy: true, requested: name, found: null, createdId: null,
             status: 'Creating ' + name + ' in your Spotify library…'});
         render();
-        const result = await send(URLS.create, {method: 'POST', json: {purpose: purpose, name: name}});
+        const result = await send(URLS.create, {method: 'POST', queued: true, newIntent: another === true, json: {purpose: purpose, name: name}});
         creation.busy = false;
         const data = result.data;
-        if (result.unknown) return creationUnknown(purpose, name);
-        if (result.ok && data.outcome === 'created' && data.playlist && typeof data.playlist.id === 'string') {
+        creation.operationId = result.operationId || null;
+        if ((result.ok || result.answered) && data.outcome === 'created' && data.playlist &&
+                typeof data.playlist.id === 'string') {
             return created(purpose, data, name, trigger);
         }
+        if (result.unknown) return creationUnknown(purpose, name);
         if (result.status < 300) return creationUnknown(purpose, name);
         // A refusal is read from its body: another layer's 400 or 429 (the CSRF check, the
         // app's rate limit) is neither a name error nor Spotify being busy.
@@ -753,8 +755,9 @@
     }
     function creationUnknown(purpose, name) {
         Object.assign(state.creation[purpose], {unknown: true, refreshed: false, episode: ++unknownEpisodes,
-            requested: name, found: null, status: TEXT.creationUnknown});
-        say(TEXT.creationUnknown);
+            requested: name, found: null, status: TEXT.creationUnknown + (state.creation[purpose].operationId ?
+                ' Accepted operation: ' + state.creation[purpose].operationId + '.' : '')});
+        say(state.creation[purpose].status);
         render();
         return false;
     }

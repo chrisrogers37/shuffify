@@ -11,6 +11,8 @@ import pytest
 
 from shuffify.services.workshop_finalize_service import WorkshopFinalizeResult
 from tests.paths import api_path
+from tests.playlist_setup_fixtures import SetupSpotify
+from tests.queued_operations import post_and_run
 
 # =============================================================================
 # Authentication Tests
@@ -127,25 +129,25 @@ class TestCreatePairRoute:
         """A lost answer from Spotify leaves the archive playlist's existence unknown."""
         from shuffify.models.db import PlaylistPair
         from shuffify.services.playlist_setup_service import CREATION_UNKNOWN
-        from shuffify.spotify.api import SpotifyAPI
         from shuffify.spotify.exceptions import SpotifyWriteUnverifiedError
 
-        api = MagicMock(spec=SpotifyAPI)
-        api.create_user_playlist.side_effect = SpotifyWriteUnverifiedError("timed out")
+        api = SetupSpotify(playlists={"p1": {"name": "Mix"}})
+        api.create_failure = SpotifyWriteUnverifiedError("timed out")
         mock_auth.return_value = api
 
-        resp = auth_client.post(
+        resp = post_and_run(auth_client, api,
             api_path("/playlist/p1/pair"),
             json={"create_new": True, "production_playlist_name": "Mix"},
         )
 
-        assert resp.status_code == 502
+        assert resp.status_code == 200 and resp.accepted.status_code == 202
+        assert resp.operation["state"] == "needs_attention"
         data = resp.get_json()
         assert data["success"] is False
         assert data["error_code"] == "creation_unknown"
         assert data["outcome"] == "unknown"
         assert data["message"] == CREATION_UNKNOWN
-        api.create_user_playlist.assert_called_once()
+        assert len([call for call in api.calls if call[0] == "create_user_playlist"]) == 1
         assert PlaylistPair.query.count() == 0
 
     @patch("shuffify.routes.require_auth")
@@ -155,25 +157,28 @@ class TestCreatePairRoute:
         """An empty 2xx from Spotify may still have created the archive playlist."""
         from shuffify.models.db import PlaylistPair
         from shuffify.services.playlist_setup_service import CREATION_UNKNOWN
-        from shuffify.spotify.api import SpotifyAPI
+        api = SetupSpotify(playlists={"p1": {"name": "Mix"}})
 
-        api = MagicMock(spec=SpotifyAPI)
-        api.create_user_playlist.return_value = None
+        def no_id(name, public=False, description=""):
+            api.calls.append(("create_user_playlist", name, public, description))
+
+        api.create_user_playlist = no_id
         mock_auth.return_value = api
 
-        resp = auth_client.post(
+        resp = post_and_run(auth_client, api,
             api_path("/playlist/p1/pair"),
             json={"create_new": True, "production_playlist_name": "Mix"},
         )
 
-        assert resp.status_code == 502
+        assert resp.status_code == 200 and resp.accepted.status_code == 202
+        assert resp.operation["state"] == "needs_attention"
         data = resp.get_json()
         assert data["success"] is False
         assert data["error_code"] == "creation_unknown"
         assert data["outcome"] == "unknown"
         assert data["message"] == CREATION_UNKNOWN
-        api.create_user_playlist.assert_called_once()
-        api.update_playlist_details.assert_not_called()
+        assert len([call for call in api.calls if call[0] == "create_user_playlist"]) == 1
+        assert not [call for call in api.calls if call[0] == "update_playlist_details"]
         assert PlaylistPair.query.count() == 0
 
 

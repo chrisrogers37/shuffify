@@ -432,13 +432,18 @@
     window.AppRequest = {
         send: function (url, options) {
             var init = Object.assign({headers: {'X-Requested-With': 'XMLHttpRequest'}}, options);
-            var json = init.json, limit = init.timeoutMs, controller = null, timer = null;
+            var json = init.json, limit = init.timeoutMs, queued = init.queued, newIntent = init.newIntent, controller = null, timer = null;
             delete init.json;
             delete init.timeoutMs;
+            delete init.queued;
+            delete init.newIntent;
             if (json !== undefined) {
                 init.headers = Object.assign({'X-Requested-With': 'XMLHttpRequest'}, init.headers,
                     {'Content-Type': 'application/json'});
                 init.body = JSON.stringify(json);
+            }
+            if (queued && window.OperationQueue && typeof window.OperationQueue.asset === 'function') {
+                return window.OperationQueue.asset(url, init, {timeoutMs: limit, newIntent: newIntent});
             }
             if (limit && typeof AbortController === 'function') {
                 controller = new AbortController();

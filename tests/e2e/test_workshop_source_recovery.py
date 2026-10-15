@@ -20,7 +20,7 @@ RAID_SOURCE = pid("bob-finds")
 
 
 def _pair(alice, archive=ARCHIVE):
-    alice.ok("post", f"/playlist/{TARGET}/pair", json={
+    alice.write(f"/playlist/{TARGET}/pair", json={
         "archive_playlist_id": archive,
         "archive_playlist_name": "Browser-supplied name is not authoritative",
         "production_playlist_name": "Morning Mix",
@@ -320,7 +320,7 @@ def test_shared_collection_archive_browser_orders_all_source_effects(
     alice, fake, recovery_browser, reject_removal,
 ):
     _pair(alice)
-    alice.ok("post", f"/playlist/{TARGET}/raid-link", json={
+    alice.write(f"/playlist/{TARGET}/raid-link", json={
         "create_new": False, "raid_playlist_id": ARCHIVE,
         "raid_playlist_name": "Morning Mix [Archive]",
     })
@@ -381,7 +381,7 @@ def test_shared_collection_archive_browser_orders_all_source_effects(
 
 
 def test_bulk_captured_inbox_above_two_hundred_finalizes_without_target_replay(alice, fake):
-    alice.ok("post", f"/playlist/{TARGET}/raid-link", json={
+    alice.write(f"/playlist/{TARGET}/raid-link", json={
         "create_new": False, "raid_playlist_id": ARCHIVE,
     })
     source = alice.ok("post", f"/playlist/{TARGET}/raid-watch", json={

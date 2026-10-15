@@ -437,7 +437,6 @@ def test_an_unconfirmed_creation_blocks_create_until_refresh_finds_it_and_is_nev
     fake.arm(operation="POST /me/playlists", kind="slow", delay=CREATION_HOLD, times=5)
     before = {playlist["id"] for playlist in fake.playlists()}
     s = open_session(*PHONE)
-    s.visit.allowed.add((f"{APP}{CREATE}", 502))
     page = s.page
     page.goto(SETUP, wait_until="networkidle")
     create, status = page.locator("#setup-collection-create"), page.locator("#setup-collection-create-status")
@@ -455,12 +454,12 @@ def test_an_unconfirmed_creation_blocks_create_until_refresh_finds_it_and_is_nev
     assert page.url == SETUP
 
     # The server gives up after its Spotify timeout: the page cannot tell whether the playlist exists.
-    expect(status).to_have_text(CREATION_UNKNOWN, timeout=(CREATION_HOLD + 10) * 1000)
+    expect(status).to_contain_text(CREATION_UNKNOWN, timeout=(CREATION_HOLD + 10) * 1000)
     expect(create).to_have_text("Create playlist in Spotify")
     expect(create).to_have_attribute("aria-disabled", "true")
     expect(page.locator("#setup-collection-create-another")).to_be_hidden()
     create.click(force=True)
-    expect(status).to_have_text(CREATION_UNKNOWN)
+    expect(status).to_contain_text(CREATION_UNKNOWN)
     assert len(s.writes("POST", CREATE)) == 1
 
     # Released, the fake applies the creation the server gave up on.
@@ -501,7 +500,7 @@ def test_a_created_playlist_left_unsaved_is_named_on_leaving_and_nothing_is_link
     page.fill("#setup-collection-create-name", name)
     with page.expect_response(lambda response: response.url == f"{APP}{CREATE}") as reply:
         page.click("#setup-collection-create")
-    assert reply.value.status == 201
+    assert reply.value.status == 202
     expect(page.locator("#setup-collection-create-status")).to_have_text(
         f"Created {name} in your Spotify library. It stays there if you close setup. "
         "Save playlist settings to use it."

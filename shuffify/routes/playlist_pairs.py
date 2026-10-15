@@ -20,6 +20,7 @@ from shuffify.routes import (
     require_session_and_db,
     validate_json,
 )
+from shuffify.routes.asset_queue import admit_asset
 from shuffify.routes.finalizer_queue import admit_finalizer
 from shuffify.routes.queue import AdmissionRejected, enqueue_command
 from shuffify.schemas.playlist_pair_requests import (
@@ -34,19 +35,16 @@ from shuffify.schemas.workshop_finalize_requests import (
 from shuffify.services.api_response import busy_error, error_payload
 from shuffify.services.operations.commands.archive_move import ArchiveMoveRejected, capture_unarchive
 from shuffify.services.operations.history import HistoryStore, get_history_scope
-from shuffify.services.playlist_lock import PlaylistBusyError, playlist_configuration_lock
+from shuffify.services.playlist_lock import PlaylistBusyError
 from shuffify.services.playlist_pair_service import (
-    PlaylistPairExistsError,
     PlaylistPairNotFoundError,
     PlaylistPairService,
 )
-from shuffify.services.playlist_setup_service import CREATION_UNKNOWN, refusal
 from shuffify.services.state_service import PLAYLIST_STATES_KEY, StateError
 from shuffify.services.workshop_finalize_service import (
     WorkshopFinalizeResult,
     WorkshopFinalizeService,
 )
-from shuffify.spotify.exceptions import SpotifyWriteUnverifiedError
 
 logger = logging.getLogger(__name__)
 
@@ -81,81 +79,18 @@ def get_pair(playlist_id, api=None, user=None):
 @api_bp.route(
     "/playlist/<playlist_id>/pair", methods=["POST"]
 )
-@require_auth_and_db
+@require_session_and_db
 def create_pair(playlist_id, api=None, user=None):
-    """Create an archive pair for a playlist."""
-    req, err = validate_json(CreatePairRequest)
-    if err:
-        return err
-
-    try:
-        # Serialize the existing-pair check, external creation, and DB
-        # association. Busy responses must precede the Spotify write.
-        with playlist_configuration_lock(playlist_id, timeout_s=2.0) as acquired:
-            if not acquired:
-                raise PlaylistBusyError("Playlist is busy; please retry.")
-
-            if PlaylistPairService.get_pair_for_playlist(user.id, playlist_id):
-                raise PlaylistPairExistsError("A pair already exists for this playlist")
-
-            if req.create_new:
-                prod_name = (
-                    req.production_playlist_name or "Playlist"
-                )
-                try:
-                    archive_id, archive_name = (
-                        PlaylistPairService.create_archive_playlist(
-                            api,
-                            prod_name,
-                        )
-                    )
-                except SpotifyWriteUnverifiedError:
-                    logger.warning(
-                        "Archive playlist creation for %s has an unknown outcome",
-                        playlist_id,
-                        exc_info=True,
-                    )
-                    return json_reply(refusal("creation_unknown", 502, CREATION_UNKNOWN, outcome="unknown"))
-            else:
-                archive_id = req.archive_playlist_id
-                archive_name = req.archive_playlist_name
-
-            pair = PlaylistPairService.create_pair(
-                user_id=user.id,
-                production_playlist_id=playlist_id,
-                archive_playlist_id=archive_id,
-                production_playlist_name=(
-                    req.production_playlist_name
-                ),
-                archive_playlist_name=archive_name,
-            )
-
-        log_activity(
-            user_id=user.id,
-            activity_type=ActivityType.PAIR_CREATE,
-            description=(
-                f"Paired with archive '{archive_name}'"
-            ),
-            playlist_id=playlist_id,
-            playlist_name=req.production_playlist_name,
-        )
-
-        return json_success(
-            "Archive pair created",
-            pair=pair.to_dict(),
-        )
-
-    except PlaylistPairExistsError:
-        return json_error(
-            "A pair already exists for this playlist", 409
-        )
-    except PlaylistBusyError:
-        return json_reply(busy_error())
-    except Exception as e:
-        logger.error("Failed to create pair: %s", e)
-        return json_error(
-            "Failed to create archive pair", 500
-        )
+    """Accept one owned archive creation/association without provider I/O."""
+    req, error = validate_json(CreatePairRequest)
+    if error:
+        return error
+    return admit_asset(user, playlist_id, "pair_create", {
+        "create_new": req.create_new,
+        "target_playlist_name": req.production_playlist_name,
+        "asset_playlist_id": None if req.create_new else req.archive_playlist_id,
+        "asset_playlist_name": None if req.create_new else req.archive_playlist_name,
+    })
 
 
 @api_bp.route(

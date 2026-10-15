@@ -325,20 +325,23 @@ class DurableJournal:
             boundaries["revision"] += 1
         return baseline
 
-    def observe_resource(self, resource, *, expected_baseline):
+    def observe_resource(self, resource, *, expected_baseline, scope="tracks"):
         """Fence a complete read-only input without creating a mutation or rollback target."""
+        if (scope not in ("tracks", "metadata")
+                or (expected_baseline.get("scope") == "metadata") != (scope == "metadata")):
+            raise JournalError("The observation scope must match its frozen baseline")
         self.check_pending_control()
         if self.doc['phase'] != 'forward' or self.doc['status'] == 'needs_attention':
             raise NeedsAttention('operation_blocked')
         current = self.doc.get('boundaries', {}).get('current')
         stored = self.doc['resources'].get(resource)
         if stored is None or current is not None and resource not in current['baselines']:
-            self._base(resource, expected_baseline=expected_baseline)
+            self._base(resource, scope=scope, expected_baseline=expected_baseline)
             self._save()
             return deepcopy(expected_baseline)
         anchor = current['baselines'][resource] if current is not None else stored
         if (content(expected_baseline) != anchor['baseline']
-                or expected_baseline.get('snapshot_id') != anchor.get('snapshot_id')):
+                or scope != "metadata" and expected_baseline.get('snapshot_id') != anchor.get('snapshot_id')):
             self._attention('prepared_baseline_changed')
             raise NeedsAttention('prepared_baseline_changed')
         observed = self._read(resource)

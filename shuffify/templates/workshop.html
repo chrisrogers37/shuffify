@@ -1303,6 +1303,25 @@ async function workshopRequest(url, options, {read = false, group = null} = {}) 
     if (!read) workshopState.pendingWrites += 1;
     markDirty();
     try {
+        const assetWrite = !read && (options.method || '').toUpperCase() === 'POST' &&
+            /\/(pair|raid-link)$/.test(url);
+        if (assetWrite && window.OperationQueue && typeof window.OperationQueue.asset === 'function') {
+            const reply = await window.OperationQueue.asset(url, options, {timeoutMs: 300000});
+            if (!reply.answered) {
+                const error = new Error(reply.operationId ?
+                    'Operation ' + reply.operationId + ' was accepted. Its result is not available yet; check it again.' :
+                    'We could not confirm whether the playlist was created. Check your Spotify playlists before creating another.');
+                error.code = 'creation_unknown'; error.operationId = reply.operationId;
+                throw error;
+            }
+            const data = reply.data;
+            if (!reply.ok && data.playlist && typeof data.playlist.id === 'string') {
+                data.message = (data.message || 'The created playlist needs review.') + ' Playlist: ' +
+                    (data.playlist.name || data.playlist.id) + ' (' + data.playlist.id + ').';
+            }
+            return {ok: reply.ok, status: reply.status, headers: {get: () => 'application/json'},
+                json: async () => data};
+        }
         const response = await fetch(url, options);
         // Keep the boundary until the body arrives, not just response headers.
         await response.clone().arrayBuffer();

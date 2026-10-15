@@ -29,6 +29,7 @@ from tests.playlist_setup_fixtures import (
     add_source,
     assert_never_scheduled,
 )
+from tests.queued_operations import post_and_run
 
 pytestmark = pytest.mark.usefixtures("no_scraping")
 
@@ -145,12 +146,16 @@ def test_a_target_the_user_cannot_edit_is_refused_everywhere(auth_client, api, t
             auth_client.put(api_path(f"/playlist/{target}/setup/settings"), json={
                 "configuration_revision": revision, "changes": [{"op": "unlink_collection"}], "acknowledgment": {},
             }),
-            auth_client.post(
-                api_path(f"/playlist/{target}/setup/spotify-playlists"), json={"purpose": "archive", "name": "A"},
-            ),
         ]
+        created = post_and_run(auth_client, api, api_path(f"/playlist/{target}/setup/spotify-playlists"),
+                               json={"purpose": "archive", "name": "A"})
     for response in responses:
         assert (response.status_code, response.get_json()) == (status, expected)
+    assert created.status_code == 200 and created.accepted.status_code == 202
+    assert {key: created.get_json()[key] for key in ("success", "error_code", "message")} == {
+        key: expected[key] for key in ("success", "error_code", "message")
+    }
+    assert created.get_json()["http_status"] == status
     assert api.writes == []
 
 
@@ -377,15 +382,19 @@ def test_csrf_refuses_writes_and_reviews_before_anything_runs(
         spy.assert_not_called()
 
 
-def test_a_valid_csrf_token_reaches_the_view(csrf_client, csrf_headers, db_app, api):
+def test_a_valid_csrf_token_reaches_the_view(csrf_client, csrf_headers, db_app, api, sample_token):
     from shuffify.services.user_service import UserService
 
     user = UserService.upsert_from_spotify({"id": "user123", "display_name": "Test User", "images": []}).user
+    with csrf_client.session_transaction() as session:
+        session["spotify_token"] = sample_token
+        session["user_data"] = {"id": "user123"}
     with as_user(api), patch("shuffify.routes.get_db_user", return_value=user):
-        response = csrf_client.post(
+        response = post_and_run(csrf_client, api,
             CREATE, json={"purpose": "archive", "name": "Old Mix"}, headers=csrf_headers("valid")
         )
-    assert response.status_code == 201 and response.get_json()["playlist"]["name"] == "Old Mix"
+    assert response.status_code == 200 and response.accepted.status_code == 202
+    assert response.get_json()["playlist"]["name"] == "Old Mix"
 
 
 # --- Spotify creation ---------------------------------------------------------------------
@@ -393,7 +402,7 @@ def test_a_valid_csrf_token_reaches_the_view(csrf_client, csrf_headers, db_app, 
 
 def create(client, api, purpose="collection", name="  New Finds  "):
     with as_user(api):
-        return client.post(CREATE, json={"purpose": purpose, "name": name})
+        return post_and_run(client, api, CREATE, json={"purpose": purpose, "name": name})
 
 
 def creations(api):
@@ -405,32 +414,51 @@ def test_creation_makes_one_private_playlist_with_the_exact_name_and_never_links
     auth_client, api, user, purpose, scheduler_spies
 ):
     response = create(auth_client, api, purpose)
-    assert response.status_code == 201
-    assert response.get_json() == {
+    assert response.status_code == 200 and response.accepted.status_code == 202
+    reply = response.get_json()
+    assert {key: reply[key] for key in ("success", "outcome", "playlist", "privacy_confirmed")} == {
         "success": True, "outcome": "created", "playlist": {"id": "Created1", "name": "New Finds"},
         "privacy_confirmed": True,
     }
     assert api.writes == [
         ("create_user_playlist", "New Finds", False, setup.DESCRIPTIONS[purpose]),
-        ("update_playlist_details", "Created1", {"public": False}),
     ]
     activity = ActivityLog.query.one()
     assert (activity.activity_type, activity.playlist_id) == (ActivityType.PLAYLIST_SETUP_CREATE, TARGET)
-    assert activity.metadata_json == {"purpose": purpose, "playlist_id": "Created1", "privacy_confirmed": True}
+    assert activity.metadata_json == {"purpose": purpose, "playlist_id": "Created1", "privacy_confirmed": True,
+                                      "operation_id": response.operation["id"]}
     assert RaidPlaylistLink.query.count() == PlaylistPair.query.count() == Schedule.query.count() == 0
     assert_never_scheduled(scheduler_spies)
 
 
-def test_a_privacy_or_activity_failure_after_creation_still_reports_the_playlist(auth_client, api):
-    api.privacy_failure = SpotifyWriteUnverifiedError("lost")
-    # ActivityLogService.log swallows its own failure when it commits.
+def test_an_optional_activity_failure_retains_verified_creation(auth_client, api):
     with patch("shuffify.services.activity_log_service.ActivityLog", side_effect=RuntimeError("log down")):
         response = create(auth_client, api)
-    assert response.status_code == 201
-    assert response.get_json() == {
+    assert response.status_code == 200 and response.accepted.status_code == 202
+    assert response.operation["state"] == "succeeded"
+    reply = response.get_json()
+    assert {key: reply[key] for key in ("success", "outcome", "playlist", "privacy_confirmed")} == {
         "success": True, "outcome": "created", "playlist": {"id": "Created1", "name": "New Finds"},
-        "privacy_confirmed": False,
+        "privacy_confirmed": True,
     }
+
+
+def test_a_privacy_failure_retains_created_identity_without_claiming_private(auth_client, api):
+    original = api.create_user_playlist
+
+    def public(name, **kwargs):
+        return {**original(name, **kwargs), "public": True}
+
+    api.create_user_playlist = public
+    api.privacy_failure = SpotifyWriteUnverifiedError("lost")
+    response = create(auth_client, api)
+    assert response.status_code == 200 and response.accepted.status_code == 202
+    assert response.operation["state"] == "needs_attention"
+    reply = response.get_json()
+    assert reply["outcome"] == "created" and reply["playlist"]["id"] == "Created1"
+    assert reply["privacy_confirmed"] is False and reply["creation_unknown"] is False
+    assert len(creations(api)) == 1
+    assert RaidPlaylistLink.query.count() == PlaylistPair.query.count() == 0
 
 
 @pytest.mark.parametrize("purpose, seed, code", [
@@ -446,7 +474,7 @@ def test_an_existing_link_or_pair_is_reported_before_any_spotify_write(auth_clie
     assert reply["playlist"]["id"] == expected_id
     assert creations(api) == [] and api.writes == []
     other = "archive" if purpose == "collection" else "collection"
-    assert create(auth_client, api, other).status_code == 201
+    assert create(auth_client, api, other).status_code == 200
 
 
 UNKNOWN = ("We could not confirm whether the playlist was created. "
@@ -457,11 +485,9 @@ UNKNOWN = ("We could not confirm whether the playlist was created. "
     (SpotifyWriteUnverifiedError("timed out"), 502, "creation_unknown", "unknown"),
     (SpotifyForbiddenError("API error 403: Insufficient client scope"), 422, "creation_refused", "refused"),
     (SpotifyWriteRejectedError("API error 400: Bad name"), 422, "creation_refused", "refused"),
-    (SpotifyRateLimitError("slow", retry_after=12), 429, "rate_limited", "rate_limited"),
-    (SpotifyQuotaExceededError("quota", retry_after=3600), 429, "rate_limited", "rate_limited"),
-    (SpotifyTokenExpiredError("expired"), 500, "creation_failed", "unknown"),
-    (SpotifyAPIError("Unexpected error: boom"), 500, "creation_failed", "unknown"),
-    (RuntimeError("boom"), 500, "creation_failed", "unknown"),
+    (SpotifyTokenExpiredError("expired"), 401, "authentication_required", "refused"),
+    (SpotifyAPIError("Unexpected error: boom"), 502, "creation_unknown", "unknown"),
+    (RuntimeError("boom"), 502, "creation_unknown", "unknown"),
 ])
 def test_each_creation_failure_maps_to_its_outcome_and_is_never_retried(
     auth_client, api, failure, status, code, outcome
@@ -469,16 +495,39 @@ def test_each_creation_failure_maps_to_its_outcome_and_is_never_retried(
     api.create_failure = failure
     response = create(auth_client, api)
     reply = response.get_json()
-    assert (response.status_code, reply["success"], reply["error_code"], reply["outcome"]) == (
+    assert response.status_code == 200 and response.accepted.status_code == 202
+    assert (reply["http_status"], reply["success"], reply["error_code"], reply["outcome"]) == (
         status, False, code, outcome)
     assert len(creations(api)) == 1 and ActivityLog.query.count() == 0
     if outcome == "unknown":
         assert reply["message"] == UNKNOWN
     if outcome == "refused":
-        assert reply["reason"] == str(failure)
-    if outcome == "rate_limited":
-        assert response.headers["Retry-After"] == str(failure.retry_after)
-        assert reply["retry_after"] == failure.retry_after
+        assert str(failure) not in reply["message"]
+        assert "reason" not in reply
+
+
+@pytest.mark.parametrize("failure", [
+    SpotifyRateLimitError("slow", retry_after=12),
+    SpotifyQuotaExceededError("quota", retry_after=3600),
+])
+def test_creation_defers_the_original_operation_until_the_retry_deadline(auth_client, api, failure):
+    from datetime import datetime, timezone
+
+    from shuffify.services.operations.repository import OperationRepository
+
+    api.create_failure = failure
+    before = datetime.now(timezone.utc)
+    response = create(auth_client, api)
+    assert response.status_code == 200 and response.accepted.status_code == 202
+    assert response.operation["state"] == "running" and response.get_json() is None
+    repository = OperationRepository()
+    stored = repository.get(response.operation["id"])
+    document = stored.journal
+    deferred = next(item for plan in document["plans"] for item in plan["batches"]
+                    if item.get("next_attempt_at"))
+    assert datetime.fromisoformat(deferred["next_attempt_at"]) > before
+    assert stored.lease_owner is None and stored.lease_expires_at > before
+    assert len(creations(api)) == 1 and ActivityLog.query.count() == 0
 
 
 @pytest.mark.parametrize("answer", [{}, {"id": ""}, {"id": 5}, [], None, "Created"])
@@ -490,14 +539,15 @@ def test_a_creation_answer_without_an_id_is_unknown(auth_client, api, answer):
     api.create_user_playlist = answered
     response = create(auth_client, api)
     reply = response.get_json()
-    assert (response.status_code, reply["error_code"], reply["outcome"], reply["message"]) == (
+    assert response.status_code == 200 and response.accepted.status_code == 202
+    assert (reply["http_status"], reply["error_code"], reply["outcome"], reply["message"]) == (
         502, "creation_unknown", "unknown", UNKNOWN)
     assert ("update_playlist_details",) not in [call[:1] for call in api.calls]
 
 
 def test_creation_is_limited_to_ten_a_minute(auth_client, api):
     statuses = [create(auth_client, api, name=f"Mix {index}").status_code for index in range(11)]
-    assert statuses == [201] * 10 + [429]
+    assert statuses == [200] * 10 + [429]
     assert len(creations(api)) == 10
 
 

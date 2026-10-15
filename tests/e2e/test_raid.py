@@ -17,8 +17,8 @@ BOB_FINDS = pid("bob-finds")
 
 def test_raid_review_keep_and_dismiss(alice, fake):
     before, source = fake.uris(MORNING_MIX), fake.uris(BOB_FINDS)
-    link = alice.ok(
-        "post", f"/playlist/{MORNING_MIX}/raid-link",
+    link = alice.write(
+        f"/playlist/{MORNING_MIX}/raid-link",
         json={"create_new": True, "target_playlist_name": "Morning Mix"},
     )["raid_link"]
     staging = fake.playlist(link["raid_playlist_id"])

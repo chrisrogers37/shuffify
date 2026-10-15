@@ -56,8 +56,64 @@
         }
     }
 
-    global.OperationQueue = Object.freeze({poll: poll, requestKey: function () {
+    var uncertainAssets = [];
+    function requestKey() {
         return global.crypto && global.crypto.randomUUID ? global.crypto.randomUUID()
             : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
-    }});
+    }
+    // One deliberate creation intent. Uncertain requests stay retained in page memory;
+    // another press can read the same accepted operation, never send its POST again.
+    async function asset(url, options, limits) {
+        options = Object.assign({}, options); limits = limits || {};
+        var prior = limits.newIntent ? null : uncertainAssets.slice().reverse().find(function (item) {
+            return item.url === url && item.body === options.body;
+        });
+        var record = prior || {url: url, body: options.body, key: requestKey(), accepted: null};
+        var unknown = function () { return {ok: false, answered: false, status: 0, retryAfter: null,
+            data: {}, operationId: record.accepted ? record.accepted.operation_id : null, requestKey: record.key}; };
+        if (prior && !prior.accepted) return unknown();
+        var controller = new AbortController(), started = Date.now(), timeout = limits.timeoutMs || 300000;
+        var external = options.signal, abort = function () { controller.abort(); };
+        if (external) {
+            external.addEventListener('abort', abort, {once: true});
+            if (external.aborted) abort();
+        }
+        var timer = setTimeout(abort, timeout);
+        options.signal = controller.signal;
+        options.headers = Object.assign({'X-Requested-With': 'XMLHttpRequest'}, options.headers,
+            {'Idempotency-Key': record.key});
+        try {
+            if (!prior) {
+                uncertainAssets.push(record);
+                var response = await global.fetch(url, options);
+                var data = await response.json();
+                if (!data || typeof data !== 'object' || Array.isArray(data)) return unknown();
+                if (response.status !== 202) {
+                    if (response.status >= 500) return unknown();
+                    uncertainAssets = uncertainAssets.filter(function (item) { return item !== record; });
+                    var header = response.headers && response.headers.get ? response.headers.get('Retry-After') : null;
+                    var delay = [header, data.retry_after].map(function (value) { return Number.parseInt(value, 10); })
+                        .find(function (value) { return Number.isFinite(value) && value > 0; }) || null;
+                    return {ok: response.ok && data.success === true, answered: true, status: response.status,
+                        data: data, retryAfter: delay};
+                }
+                if (!Number.isSafeInteger(data.operation_id) || data.operation_id < 1 || !data.operation ||
+                        data.operation.id !== data.operation_id) return unknown();
+                record.accepted = data;
+            }
+            var result = await poll(record.accepted, {signal: controller.signal,
+                timeoutMs: Math.max(1, timeout - (Date.now() - started)), pollMs: limits.pollMs});
+            var retained = !result.ok && ['created', 'unknown'].includes(result.data.outcome);
+            if (!retained) uncertainAssets = uncertainAssets.filter(function (item) { return item !== record; });
+            return Object.assign(result, {answered: true, operationId: record.accepted.operation_id,
+                requestKey: record.key, retryAfter: Number(result.data.retry_after) || null});
+        } catch (_) {
+            return unknown();
+        } finally {
+            clearTimeout(timer);
+            if (external) external.removeEventListener('abort', abort);
+        }
+    }
+
+    global.OperationQueue = Object.freeze({poll: poll, asset: asset, requestKey: requestKey});
 })(window);

@@ -22,6 +22,7 @@ from shuffify.routes import (
     require_session_and_db,
     validate_json,
 )
+from shuffify.routes.asset_queue import admit_asset
 from shuffify.routes.finalizer_queue import admit_finalizer
 from shuffify.routes.routine_queue import admit_direct
 from shuffify.schemas.pending_raid_requests import (
@@ -70,10 +71,8 @@ from shuffify.services.playlist_service import (
     PlaylistNotFoundError,
     PlaylistService,
 )
-from shuffify.services.playlist_setup_service import CREATION_UNKNOWN, refusal
 from shuffify.services.raid_link_service import (
     RaidLinkError,
-    RaidLinkExistsError,
     RaidLinkNotFoundError,
     RaidLinkService,
 )
@@ -94,7 +93,6 @@ from shuffify.services.workshop_finalize_service import (
     WorkshopFinalizeResult,
     WorkshopFinalizeService,
 )
-from shuffify.spotify.exceptions import SpotifyWriteUnverifiedError
 from shuffify.spotify.url_parser import (
     parse_spotify_playlist_url,
 )
@@ -131,97 +129,22 @@ def raid_status(playlist_id, api=None, user=None):
     "/playlist/<playlist_id>/raid-link",
     methods=["POST"],
 )
-@require_auth_and_db
+@require_session_and_db
 def raid_link_create(
     playlist_id, api=None, user=None
 ):
-    """Create a raid playlist link."""
-    req, err = validate_json(CreateRaidLinkRequest)
-    if err:
-        return err
-
+    """Accept one owned collection creation/association without provider I/O."""
+    req, error = validate_json(CreateRaidLinkRequest)
+    if error:
+        return error
     data = request.get_json(silent=True) or {}
-
-    try:
-        # The same lock covers the existing-link check, external creation,
-        # and the association commit. A busy target must not create an
-        # unlinked Spotify playlist before it returns 409.
-        with playlist_configuration_lock(playlist_id, timeout_s=2.0) as acquired:
-            if not acquired:
-                raise PlaylistBusyError("Playlist is busy; please retry.")
-
-            existing = RaidLinkService.get_link_for_playlist(
-                user.id, playlist_id
-            )
-            if existing:
-                return json_success(
-                    "Raid playlist already linked.",
-                    raid_link=existing.to_dict(),
-                )
-
-            if req.create_new:
-                target_name = data.get(
-                    "target_playlist_name", playlist_id
-                )
-                try:
-                    raid_id, raid_name = (
-                        RaidLinkService.create_raid_playlist(
-                            api,
-                            target_name,
-                        )
-                    )
-                except SpotifyWriteUnverifiedError:
-                    logger.warning(
-                        "Raid playlist creation for %s has an unknown outcome",
-                        playlist_id,
-                        exc_info=True,
-                    )
-                    return json_reply(refusal("creation_unknown", 502, CREATION_UNKNOWN, outcome="unknown"))
-            else:
-                raid_id = req.raid_playlist_id
-                raid_name = data.get(
-                    "raid_playlist_name", raid_id
-                )
-
-            link = RaidLinkService.create_link(
-                user_id=user.id,
-                target_playlist_id=playlist_id,
-                raid_playlist_id=raid_id,
-                target_playlist_name=data.get(
-                    "target_playlist_name"
-                ),
-                raid_playlist_name=raid_name,
-                drip_count=req.drip_count,
-                drip_enabled=req.drip_enabled,
-            )
-
-        log_activity(
-            user_id=user.id,
-            activity_type=ActivityType.RAID_LINK_CREATE,
-            description=(
-                "Created raid link: "
-                "'{}'".format(raid_name)
-            ),
-            playlist_id=playlist_id,
-        )
-
-        return json_success(
-            "Raid playlist linked.",
-            raid_link=link.to_dict(),
-        )
-    except RaidLinkExistsError as e:
-        return json_error(str(e), 409)
-    except PlaylistBusyError:
-        return json_reply(busy_error())
-    except RaidLinkError as e:
-        return json_error(str(e), 400)
-    except Exception as e:
-        logger.error(
-            "Failed to create raid link: %s", e
-        )
-        return json_error(
-            "Failed to create raid link", 500
-        )
+    return admit_asset(user, playlist_id, "raid_link_create", {
+        "create_new": req.create_new,
+        "target_playlist_name": data.get("target_playlist_name"),
+        "asset_playlist_id": None if req.create_new else req.raid_playlist_id,
+        "asset_playlist_name": None if req.create_new else data.get("raid_playlist_name"),
+        "drip_count": req.drip_count, "drip_enabled": req.drip_enabled,
+    })
 
 
 @api_bp.route(

@@ -255,7 +255,8 @@ def test_setup_return_preserves_local_choices_and_cancel_keeps_explicit_shared_s
     create_path = api_path(f"/playlist/{TARGET}/setup/spotify-playlists")
     with page.expect_response(f"{APP}{create_path}") as response:
         page.click("#setup-collection-create")
-    assert response.value.status == 201
+    assert response.value.status == 202
+    expect(page.locator("#setup-collection-create-status")).to_contain_text("Created ")
     created = [item for item in fake.playlists() if item["id"] not in before_playlists]
     assert len(created) == 1 and created[0]["name"] == name
     _review_setup(page)

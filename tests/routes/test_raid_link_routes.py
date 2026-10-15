@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 from shuffify.models.db import db
 from tests.paths import api_path
+from tests.playlist_setup_fixtures import SetupSpotify
 from tests.queued_operations import post_and_run
 from tests.routes.live_review_helpers import serving
 from tests.routes.test_live_raid_outcomes import MutableSpotify, uri
@@ -164,36 +165,31 @@ class TestRaidLinkSuccess:
     """Basic success path tests."""
 
     @patch("shuffify.routes.require_auth")
-    @patch(
-        "shuffify.routes.raid_panel"
-        ".RaidLinkService"
-    )
     def test_create_new_raid_link(
-        self, mock_svc, mock_auth, auth_client,
+        self, mock_auth, auth_client,
     ):
-        mock_auth.return_value = MagicMock()
-        # No existing link — allows creation to proceed
-        mock_svc.get_link_for_playlist.return_value = None
-        mock_link = MagicMock()
-        mock_link.to_dict.return_value = {
-            "id": 1,
-            "raid_playlist_id": "new_raid",
-        }
-        mock_svc.create_raid_playlist.return_value = (
-            "new_raid", "My Playlist [Raids]"
-        )
-        mock_svc.create_link.return_value = mock_link
+        from shuffify.enums import ActivityType
+        from shuffify.models.db import ActivityLog, RaidPlaylistLink
 
-        resp = auth_client.post(
+        api = SetupSpotify(playlists={"p1": {"name": "My Playlist"}})
+        mock_auth.return_value = api
+        resp = post_and_run(auth_client, api,
             api_path("/playlist/p1/raid-link"),
             json={
                 "create_new": True,
                 "target_playlist_name": "My Playlist",
             },
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 200 and resp.accepted.status_code == 202
+        assert resp.operation["state"] == "succeeded"
         data = resp.get_json()
         assert data["success"] is True
+        link = RaidPlaylistLink.query.one()
+        assert link.raid_playlist_id == "Created1"
+        assert link.raid_playlist_name == "My Playlist [Raids]"
+        assert api.playlists["Created1"]["public"] is False
+        assert len(api.writes) == 1
+        assert ActivityLog.query.one().activity_type == ActivityType.RAID_LINK_CREATE
 
     def test_drip_now_success(self, raid_target):
         api = MutableSpotify()
@@ -222,25 +218,25 @@ class TestRaidLinkCreationUnknown:
     ):
         from shuffify.models.db import RaidPlaylistLink
         from shuffify.services.playlist_setup_service import CREATION_UNKNOWN
-        from shuffify.spotify.api import SpotifyAPI
         from shuffify.spotify.exceptions import SpotifyWriteUnverifiedError
 
-        api = MagicMock(spec=SpotifyAPI)
-        api.create_user_playlist.side_effect = SpotifyWriteUnverifiedError("timed out")
+        api = SetupSpotify(playlists={"p1": {"name": "Mix"}})
+        api.create_failure = SpotifyWriteUnverifiedError("timed out")
         mock_auth.return_value = api
 
-        resp = auth_client.post(
+        resp = post_and_run(auth_client, api,
             api_path("/playlist/p1/raid-link"),
             json={"create_new": True, "target_playlist_name": "Mix"},
         )
 
-        assert resp.status_code == 502
+        assert resp.status_code == 200 and resp.accepted.status_code == 202
+        assert resp.operation["state"] == "needs_attention"
         data = resp.get_json()
         assert data["success"] is False
         assert data["error_code"] == "creation_unknown"
         assert data["outcome"] == "unknown"
         assert data["message"] == CREATION_UNKNOWN
-        api.create_user_playlist.assert_called_once()
+        assert len([call for call in api.calls if call[0] == "create_user_playlist"]) == 1
         assert RaidPlaylistLink.query.count() == 0
 
 

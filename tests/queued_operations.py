@@ -57,6 +57,9 @@ def worker_api(provider, token):
 
     def metadata(playlist_id, **kwargs):
         raw = provider.get_playlist(playlist_id, **kwargs)
+        entry = getattr(provider, "playlists", {}).get(playlist_id)
+        if isinstance(entry, dict):
+            raw = {**raw, **{name: entry[name] for name in ("name", "public", "description") if name in entry}}
         if hasattr(provider, "revisions"):
             revision = provider.revisions[playlist_id]
         else:
@@ -66,12 +69,26 @@ def worker_api(provider, token):
     def send(method, url, *, json=None, **kwargs):
         path = urlsplit(url).path.removeprefix("/v1")
         parts = path.strip("/").split("/")
-        assert parts[0] == "playlists" and len(parts) in {2, 3}
-        playlist_id = parts[1]
+        creation = path == "/me/playlists"
+        assert creation or parts[0] == "playlists" and len(parts) in {2, 3}
+        playlist_id = None if creation else parts[1]
         try:
+            if creation:
+                assert method == "POST"
+                created = provider.create_user_playlist(**json)
+                if isinstance(created, dict) and isinstance(created.get("id"), str) and created["id"]:
+                    entry = getattr(provider, "playlists", {}).get(created["id"])
+                    if isinstance(entry, dict):
+                        entry.update({
+                            "description": json["description"], "public": created.get("public", json["public"]),
+                        })
+                return _response(201, created)
             if len(parts) == 2:
                 assert method == "PUT"
                 provider.update_playlist_details(playlist_id, **json)
+                entry = getattr(provider, "playlists", {}).get(playlist_id)
+                if isinstance(entry, dict):
+                    entry.update(json)
             elif method == "PUT":
                 assert len(json["uris"]) <= 100
                 if hasattr(provider, "_write"):
@@ -136,7 +153,7 @@ def post_and_run(client, provider, path, **kwargs):
     if not isinstance(writes, list):
         return client.post(path, **kwargs)
     before = deepcopy(writes)
-    reads = {name: deepcopy(getattr(provider, name)) for name in ("reads", "metadata_reads", "track_reads")
+    reads = {name: deepcopy(getattr(provider, name)) for name in ("reads", "metadata_reads", "track_reads", "calls")
              if hasattr(provider, name)}
     response = client.post(path, **kwargs)
     if response.status_code != 202:

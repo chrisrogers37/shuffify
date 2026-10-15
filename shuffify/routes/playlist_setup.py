@@ -19,8 +19,10 @@ from shuffify.routes import (
     no_store,
     require_auth_and_db,
     require_auth_page,
+    require_session_and_db,
     site_bp,
 )
+from shuffify.routes.asset_queue import admit_asset
 from shuffify.routes.workshop import _unloadable_playlist_message
 from shuffify.schemas import CreateSetupPlaylistRequest, SetupImpactRequest, SetupSaveRequest
 from shuffify.services import AuthenticationError, PlaylistError
@@ -144,13 +146,13 @@ def playlist_setup_settings(playlist_id, api=None, user=None):
 
 
 @api_bp.route("/playlist/<playlist_id>/setup/spotify-playlists", methods=["POST"])
-@require_auth_and_db(on_preflight_error=_preflight)
+@require_session_and_db(on_preflight_error=_preflight)
 def playlist_setup_create_playlist(playlist_id, api=None, user=None):
-    """Create one private playlist in Spotify. It is not linked until settings are saved."""
+    """Accept a private creation; only a later settings Save can link it."""
     body, invalid = _body(CreateSetupPlaylistRequest)
     if invalid:
         return json_reply(invalid)
-    return json_reply(PlaylistSetupService.create_playlist(api, user, playlist_id, body))
+    return admit_asset(user, playlist_id, "setup_playlist_create", body.model_dump())
 
 
 @api_bp.route("/playlist/<playlist_id>/setup/playlists")

@@ -22,7 +22,7 @@ SOURCE = pid("bob-finds")
 
 
 def _collection(alice):
-    link = alice.ok("post", f"/playlist/{TARGET}/raid-link", json={
+    link = alice.write(f"/playlist/{TARGET}/raid-link", json={
         "create_new": True, "target_playlist_name": "Morning Mix",
     })["raid_link"]
     alice.ok("post", f"/playlist/{TARGET}/raid-watch", json={

@@ -1,5 +1,6 @@
 """Reviewed activation against real PostgreSQL and the fake-only harness scheduler."""
 
+import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
@@ -189,29 +190,44 @@ def test_legacy_mutators_share_the_activation_target_lock(alice, fake, method, s
     ("raid-link", {"create_new": True}),
     ("pair", {"create_new": True}),
 ])
-def test_legacy_prerequisite_writes_wait_for_activation_lock(alice, fake, suffix, body):
+def test_prerequisite_writes_wait_for_activation_lock(alice, fake, suffix, body):
     before = alice.ok("get", f"/playlist/{TARGET}/routines/context")
     counts = _counts()
     spotify = fake.playlist(TARGET)
     playlist_ids = {item["id"] for item in fake.playlists()}
     with _hold_configuration_lock(TARGET):
         response = alice.post(api_path(f"/playlist/{TARGET}/{suffix}"), json=body)
-    assert response.status_code == 409, response.text
-    assert response.json()["error_code"] == "playlist_busy"
-    after = alice.ok("get", f"/playlist/{TARGET}/routines/context")
-    assert after["dependency_revision"] == before["dependency_revision"]
+        if suffix in {"pair", "raid-link"}:
+            assert response.status_code == 202, response.text
+            operation_id = response.json()["operation_id"]
+            # The worker must wait/defer before authentication or any creation.
+            time.sleep(2.2)
+            pending = alice.get(response.headers["Location"]).json()["operation"]
+            assert pending["id"] == operation_id and pending["state"] in {"queued", "running"}
+            assert pending["result"] is None
+            assert {item["id"] for item in fake.playlists()} == playlist_ids
+        else:
+            assert response.status_code == 409, response.text
+            assert response.json()["error_code"] == "playlist_busy"
+    if suffix in {"pair", "raid-link"}:
+        completed = alice.wait_operation(response.headers["Location"], operation_id)
+        assert completed["state"] == "succeeded", completed
+        assert completed["result"]["success"] is True
+    else:
+        after = alice.ok("get", f"/playlist/{TARGET}/routines/context")
+        assert after["dependency_revision"] == before["dependency_revision"]
+        assert {item["id"] for item in fake.playlists()} == playlist_ids
     assert _counts() == counts
     assert fake.playlist(TARGET) == spotify
-    assert {item["id"] for item in fake.playlists()} == playlist_ids
 
 
 def test_state_and_compatible_settings_remain_available_during_execution(alice, fake):
     accepted = _activate(alice, _review(alice, "execution-independent-state"))
     sid = accepted["schedule_id"]
-    alice.ok("post", f"/playlist/{TARGET}/raid-link", json={
+    alice.write(f"/playlist/{TARGET}/raid-link", json={
         "raid_playlist_id": OTHER, "create_new": False,
     })
-    alice.ok("post", f"/playlist/{TARGET}/pair", json={
+    alice.write(f"/playlist/{TARGET}/pair", json={
         "archive_playlist_id": pid("alice-morning-archive"),
         "archive_playlist_name": "Archive", "create_new": False,
     })

@@ -7,8 +7,7 @@ TARGET, ARCHIVE = pid("alice-morning-mix"), pid("alice-morning-archive")
 
 
 def _prepared_archive(alice, fake):
-    alice.ok(
-        "post",
+    alice.write(
         f"/playlist/{TARGET}/pair",
         json={
             "archive_playlist_id": ARCHIVE,
