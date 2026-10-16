@@ -163,6 +163,8 @@ async function backend(
     }
     if (path === "/api/workshop/alice-mix/locks" && method === "GET")
       return route.fulfill({ json: { success: true, locks: [] } });
+    if (method === "GET" && /^\/api\/playlist\/[^/]+\/pair$/u.test(path))
+      return route.fulfill({ json: { success: true, paired: false } });
     if (path === "/api/workshop/alice-mix") {
       const ctx = workshopContext("alice-mix");
       ctx.playlist.name = "Evening rotation";

@@ -166,7 +166,7 @@ export function createToolsController(
     installing = true;
     const items = confirmedLocks;
     release();
-    if (core.setLocks(activeLockMap(items))) {
+    if (core.permission("locks").allowed && core.setLocks(activeLockMap(items))) {
       confirmedLocks = null;
       update("locks", {
         items,

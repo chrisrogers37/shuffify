@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import type {ReactNode} from 'react';
 import { useParams } from "react-router";
 import { useServices, useSession } from "../../../auth/SessionProvider";
 import { WorkshopPage } from "../WorkshopPage";
@@ -70,14 +71,22 @@ function LockBootstrapNotice({
     </div>
   ) : null;
 }
-function ToolsWorkshopPage({ controller }: { controller: WorkshopController }) {
+export function ToolsWorkshopPage({
+  controller,
+  tools = workshopTools,
+  children,
+}: {
+  controller: WorkshopController;
+  tools?: readonly WorkshopTool[];
+  children?:ReactNode;
+}) {
   useEffect(() => {
     void getToolsController(controller).initialize();
   }, [controller]);
   return (
     <>
       <LockBootstrapNotice controller={controller} />
-      <WorkshopPage controller={controller} tools={workshopTools} />
+      <WorkshopPage controller={controller} tools={tools}>{children}</WorkshopPage>
     </>
   );
 }

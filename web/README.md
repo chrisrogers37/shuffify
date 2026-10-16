@@ -86,3 +86,5 @@ Spotify requests reserve shared actor and playlist claims before admission. Unce
 Workshop Save freezes its target order and source continuations in one review. Verified target completion permits that initial continuation chain; uncertainty retains its original identities and requires an explicit follow-up review.
 
 Owned operations with known unresolved effects can open a fresh restoration comparison. Confirmation queues the exact server-issued review and retains the same request key until admission is known; original receipts and drafts remain available throughout.
+
+The Workshop inbox, archive, source configuration and routine panels share the occurrence draft and retained reviews. Source cleanup follows verified target saves, retains exact source bindings and IDs, and keeps uncertain outcomes visible without automatic write retries.

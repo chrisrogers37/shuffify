@@ -1,3 +1,4 @@
+import { createWorkshopSourcesFixtures, workshopSourcesScenarios } from "./workshop-sources";
 import { createWorkshopToolsFixtures, workshopToolsScenarios } from "./workshop-tools";
 import { createWorkshopFixtures, workshopScenarios } from "./workshop";
 import { createRoutinesFixtures, routinesScenarios } from "./routines.ts";
@@ -12,6 +13,7 @@ import attention from "../../fixtures/valid/operation-needs-attention.json";
 import library from "../../fixtures/valid/library-context.json";
 import type { Transport } from "../api/transport";
 const scenarios = [
+  ...workshopSourcesScenarios,
   ...workshopScenarios,
   ...workshopToolsScenarios,
   ...libraryScenarios,
@@ -53,6 +55,7 @@ const failure = (message: string, code = "fixture_error") => ({
 export function createFixtureTransport(scenario: Scenario): Transport {
   if (scenario === "workshop-source-http") return (input, init) => fetch(input, init);
   const workshop = createWorkshopFixtures(scenario);
+  const sources = createWorkshopSourcesFixtures(scenario);
   const workshopTools = createWorkshopToolsFixtures(scenario, workshop);
   const settings = createSettingsFixtures(scenario);
   const activity = createActivityFixtures(scenario);
@@ -65,6 +68,8 @@ export function createFixtureTransport(scenario: Scenario): Transport {
     if (init?.signal?.aborted) throw init.signal.reason;
     const path = String(input),
       method = init?.method ?? "GET";
+    const sourcesResponse = await sources(path, method, init);
+    if (sourcesResponse) return sourcesResponse;
     const toolsResponse = await workshopTools(path, method, init);
     if (toolsResponse) return toolsResponse;
     const workshopResponse = await workshop(path, method, init);

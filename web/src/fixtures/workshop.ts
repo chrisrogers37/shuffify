@@ -159,6 +159,10 @@ export function createWorkshopFixtures(scenario: string) {
   ): Promise<Response | null> => {
     const parsed = new URL(path, "https://fixture.invalid"),
       url = parsed.pathname;
+    if(method === "GET" && /^\/api\/playlist\/[^/]+\/pair$/.test(url)) return json({success:true,paired:false});
+    if(method === "GET" && url.endsWith("/raid-status")) return json({success:true,raid_status:{sources:[],raid_link:null,source_count:0,max_sources:10}});
+    if(method === "GET" && url.endsWith("/pending-raids")) return json({success:true,tracks:[]});
+
     if (url === "/api/session" && scenario === "workshop-auth-loss")
       return json(
         authLost
