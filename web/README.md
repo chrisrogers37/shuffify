@@ -63,7 +63,7 @@ Session notices are consumed once. A signed-out session omits `csrf_token`. Sett
 
 ## Static hosting boundary
 
-The Vite development proxy forwards `/api`, `/login`, `/callback`, `/logout` and `/health` to the local Flask API. The preview server enforces CSP with same-origin scripts, styles, fetches and fonts, Spotify image hosts, denied frames, nosniff, referrer policy and HSTS. There is no inline bootstrap, style attribute, CSS-in-JS runtime or CDN dependency. Production host rewrites and headers must mirror these rules. A Vite preview header is not deployment configuration.
+The Vite development proxy forwards `/api`, `/login`, `/callback`, `/logout` and `/health` to the local Flask API. The preview server enforces CSP with same-origin scripts, styles, fetches and fonts, Spotify image hosts, denied frames, nosniff, referrer policy and HSTS. There is no inline bootstrap, style attribute, CSS-in-JS runtime or CDN dependency. `security-headers.ts` is shared by preview and the Vercel output builder, so both emit the same policy. Dynamic API/authentication/health responses also carry browser and CDN `no-store` headers.
 
 ## Public pages and prerendering
 
@@ -71,7 +71,7 @@ The Vite development proxy forwards `/api`, `/login`, `/callback`, `/logout` and
 
 `npm run build` now runs public-source generation, the theme generator, all TypeScript checks, a client bundle, a temporary server build, and `scripts/prerender.mjs`. Output includes `index.html`, `terms.html`, `privacy.html`, and equivalent `terms/index.html`/`privacy/index.html` aliases. This supports direct extensionless and trailing-slash public requests on the tested static preview. Host configuration must serve these public documents before its SPA fallback. `.prerender/` is temporary build tooling, never a deployed server. No runtime SSR service is needed.
 
-`assets/legal/{terms,privacy}.html` remain authoritative. `npm run public:generate` preserves those literal fragments while escaping build-time `CONTACT_ADDRESS` in link/text contexts; the default is the published support address `christophertrogers37@gmail.com`. The build environment may override that address. Browser fixtures supply a fictional contact address. `public:check` rejects missing, stale and obsolete generated source. The existing Python public-page builder and Jinja routes remain intact during the migration.
+`assets/legal/{terms,privacy}.html` remain authoritative. `npm run public:generate` preserves those literal fragments while escaping build-time `CONTACT_ADDRESS` in link/text contexts. The default is the owner’s published support address, defined in `scripts/public-contact.mjs`; an environment override remains supported. Unresolved contact placeholders fail generation. `public:check` rejects missing, stale and obsolete generated source. Browser fixtures use `support@example.invalid`.
 
 Landing copy, five fictional sample tracks and the Raid/Drip/Rotate/Schedules walkthroughs are ported from `shuffify/templates/index.html` and `macros/design_showcase.html`, using their existing recipes. No Spotify data or requests power the demonstration. It begins in the readable original order without JavaScript. Hydration reveals Preview Shuffle/Undo; those same occurrences reorder into the existing illustrative order and restore exactly. Animation reads shared motion tokens and reduced motion applies immediately. The native required consent checkbox and GET `/login` form work without JavaScript; enhancement disables Connect until consent is checked. Only `legal_consent` is submitted. An authoritative signed-in session at `/` navigates to the fixed local `/library`; query parameters cannot choose an arbitrary return destination.
 
@@ -88,3 +88,20 @@ Workshop Save freezes its target order and source continuations in one review. V
 Owned operations with known unresolved effects can open a fresh restoration comparison. Confirmation queues the exact server-issued review and retains the same request key until admission is known; original receipts and drafts remain available throughout.
 
 The Workshop inbox, archive, source configuration and routine panels share the occurrence draft and retained reviews. Source cleanup follows verified target saves, retains exact source bindings and IDs, and keeps uncertain outcomes visible without automatic write retries.
+
+## Vercel build output
+
+Use `web/` as the project root with Node 24. `vercel.json` installs the exact lockfile with `npm ci` and runs `npm run build:vercel`. Set `RAILWAY_API_URL` to the API’s HTTPS origin, without credentials, a path, query or fragment. The build rejects an absent or invalid origin. `CONTACT_ADDRESS` optionally overrides the published support address and is escaped before entering legal content.
+
+The builder emits Build Output API v3 under `.vercel/output/` and copies only `dist/` into its `static/` directory. API, login, callback, logout and health rewrites run before public documents, filesystem lookup and SPA fallback. Terms and privacy remain prerendered documents. Missing asset and file paths return 404 instead of the application shell. No environment file, source tree, dependency directory or server bundle is copied.
+
+`Cache-Control`, `CDN-Cache-Control` and `Vercel-CDN-Cache-Control` are `no-store` on rewritten dynamic routes. Every response receives the shared strict CSP, denied framing, nosniff, referrer policy and HSTS. Scripts, styles and fonts are same origin; Spotify image hosts are allowed for images and image fetches. Release output refuses unresolved legal-contact placeholders, inline HTML behavior and fixture bundle markers.
+
+```sh
+RAILWAY_API_URL=https://api.example.invalid npm run build:vercel
+npm run test:readiness-browser
+```
+
+The readiness browser matrix runs the production application at 360×800 and 1440×1000. Its test runner supplies fictional API responses; fixture code is excluded from the production bundle. It verifies actual HTTP preview headers against generated Vercel configuration, route landmarks, accessible control names, Chromium accessibility-tree output, keyboard focus, 44px targets, artwork attribution/radii, reduced motion, and absence of inline behavior or CSP violations. Screenshots and accessibility snapshots are written to `evidence/readiness/`. Accessibility-tree and live-region checks supplement a manual screen-reader review; they do not establish manual VoiceOver coverage.
+
+Generated routing is checked locally against the documented Build Output API. Hosting verification must also exercise the real same-origin session, OAuth, CSRF and API forwarding after the projects are connected.

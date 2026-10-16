@@ -5,3 +5,4 @@ playwright-report/
 evidence/
 .foundation-source.json
 .prerender/
+.vercel/

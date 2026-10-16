@@ -93,7 +93,7 @@ Legal pages receive their contact email from the `CONTACT_ADDRESS` build
 environment variable. Run `python scripts/build-public-pages.py` with that
 variable set to generate the public pages; `--check` uses the same variable.
 Without an override, legal pages use the published support address
-`christophertrogers37@gmail.com`.
+`christophertrogers37@gmail.com`. Generation and release checks reject unresolved contact placeholders.
 
 ## License
 
@@ -112,10 +112,10 @@ The Railway infrastructure definition and setup instructions are in [.railway/RE
 | API and worker | `APP_CONFIG`, `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`, `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI`, `WORKER_CONTROL_TOKEN`, `SCHEDULER_ENABLED`, `SCHEDULER_TIMEZONE` |
 | API | `PORT`, `SHUFFIFY_PROCESS_ROLE`, `WORKER_CONTROL_URL` |
 | Worker | `PORT`, `SHUFFIFY_PROCESS_ROLE`, `WORKER_CONTROL_HOST`, `WORKER_CONTROL_PORT` |
-| Frontend build | `RAILWAY_API_URL` |
+| Frontend build | `RAILWAY_API_URL`; optional `CONTACT_ADDRESS` override |
 
 Keep the OAuth callback on the public frontend origin. API rewrites preserve the same-origin session and CSRF flow. Legal pages use the published support address unless `CONTACT_ADDRESS` overrides it at build time. Store credentials in the hosting platforms and keep environment files out of Git and build artifacts.
 
 For local containers, set the shared environment names in `.env`; `DATABASE_URL` must use the `db` service hostname and `REDIS_URL` must use `redis`. The PostgreSQL image provides TLS for the production configuration. Build the image and start `db redis`, then bootstrap a fresh empty database explicitly with `docker compose --profile migration run --rm -e SCHEDULER_ENABLED=false -e SHUFFIFY_MIGRATION_STEP=1 migrate flask create-schema`. Run `docker compose --profile migration run --rm migrate` before `docker compose up -d api worker`. The migration profile runs only when selected. The development override mounts source into both application processes; the production override starts image-only services when selected with the base file explicitly.
 
-The Vercel project root is `web/`. Its build command generates `.vercel/output/config.json` from `RAILWAY_API_URL` and copies only the built static files. Dynamic API/authentication/health routes precede static files and the SPA fallback, and use `no-store` headers. The API URL must be an HTTPS origin with no credentials or path. Set the API origin and any contact override in the platform, then build normally; generated output stays outside Git.
+The Vercel project root is `web/`. Its build command generates `.vercel/output/config.json` from `RAILWAY_API_URL` and copies only the built static files. Dynamic API/authentication/health routes precede static files and the SPA fallback, and use `no-store` headers. The API URL must be an HTTPS origin with no credentials or path. Set the API origin and any desired public-contact override in the platform, then build normally; generated output stays outside Git. See [web/README.md](web/README.md) for local routing, security-header and accessibility checks.

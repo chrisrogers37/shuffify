@@ -36,7 +36,9 @@
     "test:admissions-browser": "playwright test --config playwright.admissions.config.ts",
     "test:source-lifecycle-browser": "playwright test --config playwright.source-lifecycle.config.ts",
     "test:workshop-sources-browser": "playwright test --config playwright.workshop-sources.config.ts",
-    "test:workshop-sources-fixtures": "WORKSHOP_SOURCES_FIXTURE_BUILD=1 playwright test --config playwright.workshop-sources.config.ts"
+    "test:workshop-sources-fixtures": "WORKSHOP_SOURCES_FIXTURE_BUILD=1 playwright test --config playwright.workshop-sources.config.ts",
+    "build:vercel": "npm run build && node scripts/build-vercel-output.mjs",
+    "test:readiness-browser": "playwright test --config playwright.readiness.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
