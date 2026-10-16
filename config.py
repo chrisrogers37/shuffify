@@ -55,6 +55,19 @@ def validate_required_env_vars(config_name=None):
     required_vars = ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET"]
     if config_name == "production":
         required_vars.append("SECRET_KEY")
+        process_role = os.getenv("SHUFFIFY_PROCESS_ROLE")
+        if process_role in {"api", "worker"} and not os.getenv("DATABASE_URL"):
+            raise ValueError(
+                "DATABASE_URL is required for the production API and worker; "
+                "set the owner-managed database URL"
+            )
+        # The split Railway API sits behind Vercel, whose browser-facing HTTPS
+        # origin differs from the API host. Requiring it only for the API keeps
+        # private workers and single-origin production deployments unchanged.
+        if process_role == "api" and not os.getenv("PUBLIC_ORIGIN"):
+            raise ValueError(
+                "PUBLIC_ORIGIN is required for the production API behind the split frontend"
+            )
         # The override exists for the local fake Spotify. In production it
         # would redirect OAuth -- and the client secret sent to the token
         # endpoint -- away from Spotify, so its presence is a boot failure.
