@@ -204,6 +204,7 @@ export interface Receipt {
     | "settled"
     | "refused";
   readonly operationId: number | null;
+  readonly busyId: number | null;
   readonly operation: Operation | null;
   readonly result: TargetResult | null;
   readonly message: string;

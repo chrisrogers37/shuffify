@@ -231,6 +231,13 @@ export function safelySettled(operation: Operation): boolean {
       return false;
     return true;
   }
+  if (
+    operation.state === "failed" &&
+    facts?.success === false &&
+    Array.isArray(detail?.resources) &&
+    detail.resources.length === 0
+  )
+    return true;
   if (detail?.aggregate_status === "partial") return false;
   if (
     typeof facts?.error_code === "string" &&
@@ -329,9 +336,17 @@ export function createAdmissionRegistry(
     if (
       !current ||
       current.acknowledgedOrphan ||
+      current.operationId !== operation.id
+    )
+      return false;
+    if (current.relation === "blocking") {
+      const refused = terminalOperationStates.has(operation.state);
+      update(key, { ...current, status: refused ? "refused" : "accepted" });
+      return refused;
+    }
+    if (
       (current.relation === "original" &&
         operation.kind !== current.request.expected.kind) ||
-      current.operationId !== operation.id ||
       !operation.targets.includes(current.request.expected.target)
     )
       return false;
@@ -376,8 +391,13 @@ export function createAdmissionRegistry(
   operations.subscribe(() => {
     for (const [key, a] of snapshot) {
       if (a.operationId === null || !held(a)) continue;
-      const op = operations.getSnapshot().get(a.operationId)?.operation;
-      if (op) reconcile(key, op);
+      const observed = operations.getSnapshot().get(a.operationId);
+      if (
+        a.relation === "blocking" &&
+        observed?.observation === "unavailable"
+      ) {
+        update(key, { ...a, status: "refused" });
+      } else if (observed?.operation) reconcile(key, observed.operation);
     }
   });
   async function perform(
@@ -881,9 +901,10 @@ export function createAdmissionRegistry(
           ["failed", "rolled_back"].includes(operation.state) &&
           safelySettled(operation)) ||
         (old.status === "refused" &&
-          old.operationId === null &&
-          old.relation === null &&
-          old.conclusiveRefusal !== undefined)
+          ((old.operationId === null &&
+            old.relation === null &&
+            old.conclusiveRefusal !== undefined) ||
+            (old.relation === "blocking" && old.operationId !== null)))
       ) ||
       !record(body) ||
       review.currentTarget.id !== old.request.expected.target ||
@@ -971,6 +992,7 @@ export function createAdmissionRegistry(
         !dependency ||
         dependency.status !== "settled" ||
         !op ||
+        !originalParent(dependency, op) ||
         op.state !== "succeeded" ||
         op.result?.success !== true ||
         !["complete", "not_required"].includes(String(op.result.status))

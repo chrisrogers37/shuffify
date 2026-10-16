@@ -1,6 +1,60 @@
 import { test, expect } from "@playwright/test";
 import { checks, start, open, close, panel } from "./helpers";
 checks();
+test("a busy Workshop save displays refusal without the other operation's result", async ({ page }, info) => {
+  await start(page);
+  let blockerObserved = false;
+  await page.route("**/api/workshop/target/commit", route => route.fulfill({
+    status: 409, contentType: "application/json", body: JSON.stringify({
+      success: false, error_code: "playlist_busy", category: "error",
+      message: "This playlist is busy.", operation_id: 7777,
+    }),
+  }));
+  await page.route("**/api/operations/7777", route => {
+    blockerObserved = true;
+    return route.fulfill({status: 200, contentType: "application/json", body: JSON.stringify({
+      success: true, operation: {
+        id: 7777, kind: "workshop_commit", state: "succeeded", targets: ["target"],
+        started_at: null, completed_at: null, progress: {},
+        result: {success: true, message: "Another request's completed result."},
+        recovery: {available: false, action: null, reason: null},
+      },
+    })});
+  });
+  await page.locator("[data-occurrence]").first().getByRole("button", {name: /^Actions/}).click();
+  await page.getByRole("button", {name: "Remove from draft", exact: true}).click();
+  await page.getByRole("button", {name: "Review & save", exact: true}).click();
+  await page.getByRole("button", {name: "Save to Spotify", exact: true}).click();
+  const receipt = page.getByRole("region", {name: "Retained operation", exact: true});
+  await expect.poll(() => blockerObserved).toBe(true);
+  await expect(receipt.getByText("refused", {exact: true})).toBeVisible();
+  await expect(receipt.getByText("Blocking operation", {exact: true})).toBeVisible();
+  await expect(receipt.getByText("Operation result details", {exact: true})).toHaveCount(0);
+  await expect(receipt).not.toContainText("Another request's completed result.");
+  await info.attach("busy-refusal", {body: await page.screenshot(), contentType: "image/png"});
+});
+test("opening the snapshot form retries a failed list only once", async ({ page }) => {
+  await start(page);
+  let reads = 0;
+  await page.route("**/api/playlist/target/snapshots?*", async route => {
+    reads++;
+    await route.fulfill({
+      status: reads === 1 || reads > 2 ? 503 : 200,
+      contentType: "application/json",
+      body: JSON.stringify(reads === 2 ? {success: true, snapshots: []} : {
+        success: false, error_code: "read_failed", category: "error",
+        message: reads === 1 ? "Snapshot list unavailable." : "Unexpected repeated list request.",
+      }),
+    });
+  });
+  await open(page, "Snapshots");
+  await expect(panel(page)).toContainText("Snapshot list unavailable.");
+  expect(reads).toBe(1);
+  await page.getByRole("button", {name: "Take snapshot", exact: true}).click();
+  await expect(page.getByRole("textbox", {name: "Snapshot description"})).toBeFocused();
+  await expect(panel(page)).toContainText("No snapshots yet.");
+  expect(reads).toBe(2);
+});
 test("all seven dynamic algorithms retain controls and preview only the local duplicate draft", async ({
   page,
 }) => {

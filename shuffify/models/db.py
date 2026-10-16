@@ -469,6 +469,12 @@ class Schedule(db.Model):
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
+    # Initial catch-up eligibility never moves with execution bookkeeping.
+    recovery_start_at = db.Column(
+        UTCDateTime,
+        nullable=True,
+        default=lambda context: context.get_current_parameters().get("created_at") or datetime.now(timezone.utc),
+    )
     updated_at = db.Column(
         UTCDateTime,
         nullable=False,

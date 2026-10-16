@@ -174,6 +174,8 @@ export function createWorkshopController(
     const resolution = claim?.resolution;
     if (
       receipt &&
+      claim?.relation === "original" &&
+      claim.operationId === receipt.operationId &&
       resolution?.kind === "restored" &&
       receipt.restoredBy !== resolution.operationId
     )
@@ -181,7 +183,7 @@ export function createWorkshopController(
         receipt: {
           ...receipt,
           restoredBy: resolution.operationId,
-          status: claim?.relation === "blocking" ? "refused" : "settled",
+          status: "settled",
           message: `Operation ${receipt.operationId} was restored by operation ${resolution.operationId}. Original result facts are retained; review the current draft before another change.`,
         },
       });
@@ -582,6 +584,7 @@ export function createWorkshopController(
         review,
         status: "submitting",
         operationId: null,
+        busyId: null,
         operation: null,
         result: null,
         message: "Submitting this exact reviewed request…",
@@ -660,6 +663,7 @@ export function createWorkshopController(
           review,
           status: "accepted",
           operationId: op.id,
+          busyId: null,
           operation: op,
           result: null,
           message: `Operation ${op.id} was accepted. Closing this panel does not cancel it.`,
@@ -682,8 +686,9 @@ export function createWorkshopController(
         retryUntil: until,
         receipt: {
           review,
-          status: busy ? "accepted" : unknown ? "unknown" : "refused",
-          operationId: busy ?? null,
+          status: unknown ? "unknown" : "refused",
+          operationId: null,
+          busyId: busy ?? null,
           operation: null,
           result:
             e instanceof ApiRequestError
@@ -774,26 +779,19 @@ export function createWorkshopController(
     const observed = operations.getSnapshot().get(receipt.operationId);
     if (!observed?.operation) return;
     const op = observed.operation;
+    const claim = admissions.getSnapshot().get(receipt.review.key);
+    const expected = receipt.review.kind === "commit"
+      ? "workshop_commit"
+      : receipt.review.kind === "privacy" ? "visibility" : receipt.review.kind;
+    if (
+      claim?.relation !== "original" ||
+      claim.operationId !== receipt.operationId ||
+      op.kind !== expected || !op.targets.includes(playlistId)
+    ) return;
     if (receipt.operation?.state === op.state && receipt.operation === op)
       return;
     const terminal = terminalOperationStates.has(op.state),
       result = targetResult(op.result);
-    const claim = admissions.getSnapshot().get(receipt.review.key);
-    if (claim?.relation === "blocking") {
-      update({
-        receipt: {
-          ...receipt,
-          status: claim.status === "settled" ? "refused" : "accepted",
-          operation: op,
-          result: null,
-          message:
-            claim.status === "settled"
-              ? `Blocking operation ${op.id} is settled. This save was not accepted; review it again before submitting.`
-              : `Blocking operation ${op.id} retains this target. This save was not accepted.`,
-        },
-      });
-      return;
-    }
     let patch: Partial<WorkshopState> = {
       receipt: {
         ...receipt,

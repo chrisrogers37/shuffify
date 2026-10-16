@@ -21,6 +21,10 @@ from shuffify.spotify.observation import observe_mutations
 from .planner import batch, content, plan, state_hash
 from .recovery import reconcile_resource
 
+READ_DEFERRAL_LIMIT = 8
+READ_DEFERRAL_WINDOW_SECONDS = 15 * 60
+READ_DEADLINE_LIMIT = 3
+
 
 class JournalError(RuntimeError):
     """The durable mutation cannot be matched to a frozen plan."""
@@ -47,6 +51,10 @@ class OperationAborted(SpotifyWriteUnverifiedError):
     def __init__(self, reason, result=None):
         self.reason, self.result = reason, deepcopy(result)
         super().__init__(f"The operation was stopped: {reason}")
+
+
+class ReadRetryExhausted(OperationAborted):
+    """A persisted safe-read budget cannot authorize another deferral."""
 
 
 class DurableJournal:
@@ -231,7 +239,15 @@ class DurableJournal:
     def _defer_if_needed(self):
         now = datetime.now(timezone.utc)
         deadlines = []
-        retry = self.doc.get("read_retry", {}).get("next_attempt_at")
+        read_retry = self.doc.get("read_retry", {})
+        first = read_retry.get("first_deferred_at")
+        if first and not read_retry.get("exhausted"):
+            started = datetime.fromisoformat(first)
+            if started.tzinfo is None:
+                raise JournalError("A retry start must include its timezone")
+            if (now - started).total_seconds() >= READ_DEFERRAL_WINDOW_SECONDS:
+                self._exhaust_read_retry()
+        retry = read_retry.get("next_attempt_at")
         if retry:
             due = datetime.fromisoformat(retry)
             if due.tzinfo is None:
@@ -301,15 +317,48 @@ class DurableJournal:
         delay = read_retry_delay(error)
         if delay is None:
             raise error
-        due = datetime.now(timezone.utc) + timedelta(seconds=delay)
-        previous = self.doc.get("read_retry", {}).get("next_attempt_at")
-        if previous:
-            due = max(due, datetime.fromisoformat(previous))
+        now = datetime.now(timezone.utc)
+        previous = self.doc.get("read_retry", {})
+        first = datetime.fromisoformat(previous["first_deferred_at"]) if previous.get("first_deferred_at") else now
+        if first.tzinfo is None:
+            raise JournalError("A retry start must include its timezone")
+        attempts, deadlines = previous.get("attempts", 0), previous.get("deadline_expiries", 0)
+        if type(attempts) is not int or attempts < 0 or type(deadlines) is not int or deadlines < 0:
+            raise JournalError("A retry counter must be a nonnegative integer")
+        current, seen = error, set()
+        while current is not None and id(current) not in seen:
+            seen.add(id(current))
+            if isinstance(current, SpotifyDeadlineError):
+                deadlines += 1
+                break
+            current = current.__cause__ or current.__context__ or getattr(current, "cause", None)
+        cutoff = first + timedelta(seconds=READ_DEFERRAL_WINDOW_SECONDS)
+        # Clamp before constructing a timedelta: even an enormous Retry-After
+        # must not overflow or reserve this target beyond its durable window.
+        due = now + timedelta(seconds=min(delay, max(0, (cutoff - now).total_seconds())))
+        if previous.get("next_attempt_at"):
+            due = min(cutoff, max(due, datetime.fromisoformat(previous["next_attempt_at"])))
         self.doc["read_retry"] = {"next_attempt_at": due.isoformat(), "phase": self.doc["phase"],
+                                  "attempts": attempts + 1, "first_deferred_at": first.isoformat(),
+                                  "deadline_expiries": deadlines,
                                   "error_code": "read_rate_limited" if isinstance(error, SpotifyRateLimitError)
                                   else "read_temporarily_unavailable"}
+        if attempts + 1 >= READ_DEFERRAL_LIMIT or deadlines >= READ_DEADLINE_LIMIT or now >= cutoff:
+            self._exhaust_read_retry()
         self._save()
         raise OperationDeferred(due) from error
+
+    def _exhaust_read_retry(self):
+        retry = self.doc["read_retry"]
+        retry["exhausted"] = True
+        retry.pop("next_attempt_at", None)
+        result = {"success": False, "error_code": "read_retry_exhausted", "category": "error",
+                  "message": "Spotify remained unavailable. The operation stopped; review its result before retrying.",
+                  "retryable": False}
+        if self.doc["phase"] == "forward":
+            self.doc.setdefault("abort", {"reason": "read_retry_exhausted", "result": deepcopy(result)})
+        self._save()
+        raise ReadRetryExhausted("read_retry_exhausted", result)
 
     def _read_call(self, read, resource):
         self._defer_if_needed()

@@ -89,16 +89,17 @@ def recovery_evidence(storage, schedules):
 
 
 def eligibility_floor(schedule, activation_at=None):
-    changed = schedule.definition_changed_at or schedule.updated_at or schedule.created_at
-    floor = max(utc(schedule.created_at), utc(changed))
+    started = schedule.recovery_start_at or schedule.created_at
+    changed = schedule.definition_changed_at or started
+    floor = max(utc(schedule.created_at), utc(started), utc(changed))
     return max(floor, utc(activation_at)) if activation_at is not None else floor
 
 
 def recoverable_fire(schedule, cadence, now, *, latest=None, activation_at=None, grace_seconds=3600):
     """Coalesce to the latest eligible slot, never to a new admission-time identity.
 
-    Rows predating the precise definition floor use updated_at conservatively;
-    their execution bookkeeping cannot prove when the definition last changed.
+    A persisted start and current definition/activation floors bound catch-up;
+    execution bookkeeping cannot move those eligibility boundaries.
     """
     now = utc(now)
     floor = max(eligibility_floor(schedule, activation_at), now - timedelta(seconds=grace_seconds))

@@ -256,6 +256,12 @@ export function ReviewPanel({
                   </dd>
                 </div>
               )}
+              {relevant.busyId && (
+                <div>
+                  <dt>Blocking operation</dt>
+                  <dd>{relevant.busyId}</dd>
+                </div>
+              )}
               {relevant.result && (
                 <>
                   <div>

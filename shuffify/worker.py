@@ -11,7 +11,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 
 from shuffify.services.operations.control import propagate_control, read_retry_delay
-from shuffify.services.operations.journal import NeedsAttention, OperationAborted, OperationDeferred
+from shuffify.services.operations.journal import NeedsAttention, OperationAborted, OperationDeferred, ReadRetryExhausted
 from shuffify.services.operations.repository import LeaseLost, OperationRepository
 from shuffify.services.operations.runtime import OperationResult, OperationRuntime
 from shuffify.spotify.deadline import fresh_spotify_deadline, spotify_deadline
@@ -117,6 +117,19 @@ class OperationWorker:
                     if terminal is not None:
                         self._recover_terminal(lease, runtime, terminal)
                         return True
+                    current = document.get("boundaries", {}).get("current")
+                    if (document.get("abort", {}).get("reason") == "read_retry_exhausted"
+                            and document.get("phase") == "forward" and current is not None
+                            and current.get("verified") and current["start"] < len(document.get("plans", []))
+                            and self._all_acknowledged(document)):
+                        # The abort and persisted verification can outlive the
+                        # runtime's sticky proof. Exhausted reads cannot turn
+                        # that publication boundary into rollback permission.
+                        result = self._attention(
+                            self._recovered_public_result(runtime, document, current), invalidate_all=True,
+                        )
+                        self._finish(lease, runtime, "needs_attention", result=result)
+                        return True
                     failure = document.get("runtime", {}).get("failure")
                     if failure is not None:
                         return self._record_failure(lease, runtime, result=failure["result"])
@@ -189,13 +202,18 @@ class OperationWorker:
             try:
                 if (runtime is not None and read_retry_delay(error) is not None
                         and not runtime.journal.has_ambiguous_write()):
-                    runtime.journal.defer_read(error)
+                    try:
+                        runtime.journal.defer_read(error)
+                    except ReadRetryExhausted as exhausted:
+                        error = exhausted
                 verified_abort = verified_attention = False
                 try:
                     with observe_mutations(None):
                         propagate_control(error)
-                except OperationAborted:
-                    verified_abort = True
+                except OperationAborted as aborted:
+                    # A read budget cannot revoke sticky, freshly verified
+                    # publication protection merely to force compensation.
+                    verified_abort = not isinstance(aborted, ReadRetryExhausted)
                 except NeedsAttention:
                     verified_attention = True
                 result = getattr(error, "result", None)
@@ -388,6 +406,11 @@ class OperationWorker:
         try:
             try:
                 recovered = runtime.journal.verify_terminal()
+            except ReadRetryExhausted:
+                changed = self._attention(terminal["result"], invalidate_all=True)
+                self._save_terminal(runtime, "needs_attention", changed, done=False)
+                self._finish(lease, runtime, "needs_attention", result=changed)
+                return
             except (LeaseLost, OperationDeferred):
                 raise
             except Exception as error:

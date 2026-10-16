@@ -189,16 +189,16 @@ def test_pause_then_resume_after_due_does_not_backfill_even_with_prior_scheduled
         assert [row.id for row in executions(repository)] == [first.operation_id]
 
 
-def test_legacy_null_definition_floor_conservatively_uses_last_update(schedule, db_app, scheduler_clock):
-    schedule.definition_changed_at = None
+def test_legacy_null_floors_use_creation_instead_of_bookkeeping(schedule, db_app, scheduler_clock):
+    schedule.definition_changed_at = schedule.recovery_start_at = None
     schedule.updated_at = NOW + timedelta(minutes=1)
     db.session.commit()
     scheduler_clock[0] = NOW + timedelta(minutes=5)
     repository = OperationRepository()
-    with runtime(db_app, repository, scheduler_clock) as replacement:
+    admitted = Event()
+    with runtime(db_app, repository, scheduler_clock, admitted=admitted) as replacement:
         assert replacement.ready.wait(2)
-        time.sleep(0.03)
-        assert executions(repository) == []
+        assert [row.scheduled_for for row in wait_for_fire(repository, admitted)] == [NOW]
 
 
 def test_resume_after_registration_before_catchup_admission_refuses_old_slot(

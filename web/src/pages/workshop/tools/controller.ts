@@ -476,9 +476,10 @@ export function createToolsController(
     return ok;
   }
   function applyList(items: Snapshot[]) {
-    if (state.snapshots.form || state.snapshots.confirming !== null)
+    if (state.snapshots.form || state.snapshots.confirming !== null) {
       deferredList = items;
-    else update("snapshots", { items, loaded: true });
+      update("snapshots", { loaded: true });
+    } else update("snapshots", { items, loaded: true });
   }
   function flushList() {
     if (

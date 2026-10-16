@@ -211,6 +211,8 @@ class RestoreHandler:
         if runtime.operation.schedule_id is not None or runtime.operation.scheduled_for is not None:
             raise ValueError("A restoration requires a manual operation")
         try:
+            # A history refusal belongs to this empty, undispatched boundary.
+            runtime.journal.begin_step("restore")
             history = runtime.history
             if history is None:
                 raise RestoreUnavailable("history_unavailable", "The restoration's saved history is unavailable.")

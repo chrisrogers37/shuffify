@@ -20,6 +20,7 @@ from .endpoints import ACCOUNTS_BASE_URL
 from .exceptions import (
     SpotifyAuthError,
     SpotifyRateLimitError,
+    SpotifyReadTransientError,
     SpotifyTokenError,
     SpotifyTokenExpiredError,
 )
@@ -304,6 +305,8 @@ class SpotifyAuthManager:
                 except (TypeError, ValueError):
                     retry_after = None
                 raise SpotifyRateLimitError("Spotify token endpoint is rate limited.", retry_after=retry_after)
+            if 500 <= response.status_code < 600:
+                raise SpotifyReadTransientError("Spotify token refresh is temporarily unavailable.")
             if response.status_code != 200:
                 error_msg = response.json().get("error_description", response.text)
                 raise SpotifyTokenError(f"Token refresh failed: {error_msg}")
@@ -321,8 +324,11 @@ class SpotifyAuthManager:
             logger.info("Successfully refreshed token")
             return new_token_info
 
-        except (SpotifyDeadlineError, SpotifyRateLimitError, SpotifyTokenError):
+        except (SpotifyDeadlineError, SpotifyRateLimitError, SpotifyReadTransientError, SpotifyTokenError):
             raise
+        except requests.RequestException as error:
+            check_deadline()
+            raise SpotifyReadTransientError("Spotify token refresh is temporarily unavailable.") from error
         except Exception as e:
             check_deadline()
             logger.error(f"Token refresh failed: {e}", exc_info=True)

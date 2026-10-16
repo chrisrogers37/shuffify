@@ -85,6 +85,36 @@ async function harness(handle = () => null) {
     },
   };
 }
+test("a retried snapshot list is fetched even while its form defers installing the result", async () => {
+  let reads = 0;
+  const h = await harness(path => path.includes("/snapshots?")
+    ? ++reads === 1 ? Promise.reject(Error("list unavailable"))
+      : json({success: true, snapshots: [snapshot(17)]}) : null);
+  await h.t.initialize();
+  await h.t.loadSnapshots();
+  assert.ok(h.t.getSnapshot().snapshots.error);
+  h.t.showSnapshotForm(true);
+  await h.t.loadSnapshots();
+  assert.equal(h.t.getSnapshot().snapshots.loaded, true);
+  assert.deepEqual(h.t.getSnapshot().snapshots.items, []);
+  assert.equal(reads, 2);
+  h.t.showSnapshotForm(false);
+  assert.deepEqual(h.t.getSnapshot().snapshots.items.map(s => s.id), [17]);
+  assert.equal(reads, 2);
+});
+test("a snapshot list is fetched while delete confirmation defers its installation", async () => {
+  const pending = deferred();
+  const h = await harness(path => path.includes("/snapshots?") ? pending.promise : null);
+  await h.t.initialize();
+  const loading = h.t.loadSnapshots();
+  h.t.confirmingSnapshot(17);
+  pending.resolve(json({success: true, snapshots: [snapshot(17)]}));
+  await loading;
+  assert.equal(h.t.getSnapshot().snapshots.loaded, true);
+  assert.deepEqual(h.t.getSnapshot().snapshots.items, []);
+  h.t.confirmingSnapshot(null);
+  assert.deepEqual(h.t.getSnapshot().snapshots.items.map(s => s.id), [17]);
+});
 test("initial lock read blocks editing until all duplicate occurrences are held; error requires explicit read retry", async () => {
   const read = deferred();
   let fail = true;

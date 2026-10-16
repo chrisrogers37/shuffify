@@ -78,6 +78,45 @@ async function harness(handler = () => null) {
     },
   };
 }
+test("a busy Workshop commit stays refused without adopting the blocking operation", async () => {
+  const h = await harness((path) => path.endsWith("/commit") ? json({
+    success: false, error_code: "playlist_busy", message: "This playlist is busy.",
+    category: "error", operation_id: 7777,
+  }, 409) : null);
+  h.c.removeOccurrence(h.c.getSnapshot().working[1].key);
+  await h.c.submitReviewed((await h.c.prepareReview()).id);
+  assert.equal(h.c.getSnapshot().receipt.status, "refused");
+  assert.equal(h.c.getSnapshot().receipt.operationId, null);
+  assert.equal(h.c.getSnapshot().receipt.busyId, 7777);
+  h.finish({...operation(7777, "succeeded", {
+    success: true, target_status: "saved", saved_track_uris: [uri(1), uri(1)],
+    message: "Another request saved its playlist.",
+  }), kind: "shuffle"});
+  const receipt = h.c.getSnapshot().receipt;
+  assert.equal(receipt.status, "refused");
+  assert.equal(receipt.operationId, null);
+  assert.equal(receipt.operation, null);
+  assert.equal(receipt.result, null);
+  assert.deepEqual(h.c.getSnapshot().baseline.map(row => row.uri), [uri(1), uri(2), uri(1)]);
+  assert.equal(h.c.hasDraft(), true);
+});
+test("Workshop operation observations must match the reviewed kind and target", async () => {
+  for (const mismatch of [{kind: "shuffle"}, {targets: ["another-playlist"]}]) {
+    const h = await harness((path) => path.endsWith("/commit")
+      ? json({success: true, operation_id: 2001, operation: operation()}, 202) : null);
+    h.c.removeOccurrence(h.c.getSnapshot().working[1].key);
+    await h.c.submitReviewed((await h.c.prepareReview()).id);
+    h.finish({...operation(2001, "succeeded", {
+      success: true, target_status: "saved", saved_track_uris: [uri(1), uri(1)],
+      message: "A mismatched operation succeeded.",
+    }), ...mismatch});
+    assert.equal(h.c.getSnapshot().receipt.operation.kind, "workshop_commit");
+    assert.equal(h.c.getSnapshot().receipt.operation.state, "queued");
+    assert.equal(h.c.getSnapshot().receipt.result, null);
+    assert.deepEqual(h.c.getSnapshot().baseline.map(row => row.uri), [uri(1), uri(2), uri(1)]);
+    assert.equal(h.c.hasDraft(), true);
+  }
+});
 test("locks block moving held rows/landing on held positions but removal remains allowed", async () => {
   const { c } = await harness();
   const rows = c.getSnapshot().working;
