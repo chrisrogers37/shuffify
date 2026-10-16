@@ -1,6 +1,37 @@
-import { createRailwayContext, defineRailway, postgres, project, redis, service } from "railway/iac";
+import { createRailwayContext, defineRailway, github, postgres, project, redis, service } from "railway/iac";
+
+function configuredGitSource() {
+  const env = (globalThis as typeof globalThis & {
+    process: { env: Record<string, string | undefined> };
+  }).process.env;
+  const repo = env.SHUFFIFY_RAILWAY_GITHUB_REPO;
+  const branch = env.SHUFFIFY_RAILWAY_GITHUB_BRANCH;
+  if (!repo || !branch) {
+    throw new Error("Set both SHUFFIFY_RAILWAY_GITHUB_REPO and SHUFFIFY_RAILWAY_GITHUB_BRANCH before evaluating Railway configuration.");
+  }
+  const [owner, repository, ...extra] = repo.split("/");
+  if (
+    extra.length || !owner || owner.length > 39 ||
+    !/^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/.test(owner) ||
+    !repository || repository.length > 100 ||
+    !/^[A-Za-z0-9._-]+$/.test(repository) || [".", ".."].includes(repository)
+  ) {
+    throw new Error("SHUFFIFY_RAILWAY_GITHUB_REPO must be a GitHub owner/repository slug, without a URL or credentials.");
+  }
+  if (
+    branch === "HEAD" || branch.startsWith("-") || branch.startsWith("/") ||
+    branch.endsWith("/") || branch.endsWith(".") || branch.includes("//") ||
+    branch.includes("..") || branch.includes("@{") ||
+    /[\u0000-\u0020\u007f~^:?*\[\\]/u.test(branch) ||
+    branch.split("/").some(part => part.startsWith(".") || part.endsWith(".lock"))
+  ) {
+    throw new Error("SHUFFIFY_RAILWAY_GITHUB_BRANCH must be a valid Git branch name.");
+  }
+  return github(repo, { branch });
+}
 
 export default defineRailway((rawContext) => {
+  const source = configuredGitSource();
   // Native CLI evaluation supplies {}; preserve complete SDK-injected contexts.
   const ctx = rawContext.shared ? rawContext : createRailwayContext(rawContext);
   const database = postgres("postgres");
@@ -19,6 +50,7 @@ export default defineRailway((rawContext) => {
     SCHEDULER_TIMEZONE: "UTC",
   };
   const worker = service("worker", {
+    source,
     build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile" },
     start: "python -m shuffify.worker",
     replicas: 1,
@@ -38,6 +70,7 @@ export default defineRailway((rawContext) => {
     },
   });
   const api = service("api", {
+    source,
     build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile" },
     start: "gunicorn --config gunicorn.conf.py run:app",
     preDeploy: "sh scripts/pre-deploy.sh",
