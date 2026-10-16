@@ -126,16 +126,9 @@ class WorkerControlServer:
 
     def _ready(self):
         worker = self.worker_status()
-        scheduler = self.controller.registration_snapshot([])
-        return bool(
-            worker.get("running")
-            and not worker.get("stopping")
-            and (
-                not worker.get("scheduler_enabled", True)
-                or scheduler.get("leader")
-                and scheduler.get("scheduler_running")
-            )
-        )
+        # A replacement must serve while the incumbent holds scheduler leadership.
+        # Private control reports leadership independently; only the leader schedules.
+        return bool(worker.get("running") and not worker.get("stopping"))
 
     def start(self):
         if self._closed:

@@ -98,3 +98,24 @@ Without an override, legal pages use the published support address
 ## License
 
 This project is licensed under the MIT License - see the `LICENSE` file for details.
+
+## Split runtime
+
+The API runs Gunicorn with one gthread worker, eight threads, a 30-second timeout, and application preload disabled. Its command is `gunicorn --config gunicorn.conf.py run:app`. The background service runs `python -m shuffify.worker`; it owns queued Spotify writes and the in-memory scheduler. Start one worker replica. API and worker each expose `/health` on their own listener. Worker health reports whether the command processor is serving; scheduler leadership and registration are reported separately by authenticated private control. A healthy standby can take the scheduler lock when the leader drains. Detailed worker control requires the shared bearer credential and stays on the private network.
+
+Run `SCHEDULER_ENABLED=false SHUFFIFY_MIGRATION_STEP=1 flask db upgrade` as a separate pre-deploy step. `scripts/pre-deploy.sh` provides that command. Starting the image only executes the selected service command. An empty development database requires an explicit one-time `flask create-schema` bootstrap before upgrading; never stamp a populated database to bypass migration checks.
+
+The Railway infrastructure definition and setup instructions are in [.railway/README.md](.railway/README.md).
+
+| Service | Required environment variable names |
+| --- | --- |
+| API and worker | `APP_CONFIG`, `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`, `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI`, `WORKER_CONTROL_TOKEN`, `SCHEDULER_ENABLED`, `SCHEDULER_TIMEZONE` |
+| API | `PORT`, `SHUFFIFY_PROCESS_ROLE`, `WORKER_CONTROL_URL` |
+| Worker | `PORT`, `SHUFFIFY_PROCESS_ROLE`, `WORKER_CONTROL_HOST`, `WORKER_CONTROL_PORT` |
+| Frontend build | `RAILWAY_API_URL` |
+
+Keep the OAuth callback on the public frontend origin. API rewrites preserve the same-origin session and CSRF flow. Legal pages use the published support address unless `CONTACT_ADDRESS` overrides it at build time. Store credentials in the hosting platforms and keep environment files out of Git and build artifacts.
+
+For local containers, set the shared environment names in `.env`; `DATABASE_URL` must use the `db` service hostname and `REDIS_URL` must use `redis`. The PostgreSQL image provides TLS for the production configuration. Build the image and start `db redis`, then bootstrap a fresh empty database explicitly with `docker compose --profile migration run --rm -e SCHEDULER_ENABLED=false -e SHUFFIFY_MIGRATION_STEP=1 migrate flask create-schema`. Run `docker compose --profile migration run --rm migrate` before `docker compose up -d api worker`. The migration profile runs only when selected. The development override mounts source into both application processes; the production override starts image-only services when selected with the base file explicitly.
+
+The Vercel project root is `web/`. Its build command generates `.vercel/output/config.json` from `RAILWAY_API_URL` and copies only the built static files. Dynamic API/authentication/health routes precede static files and the SPA fallback, and use `no-store` headers. The API URL must be an HTTPS origin with no credentials or path. Set the API origin and any contact override in the platform, then build normally; generated output stays outside Git.

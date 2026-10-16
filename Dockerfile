@@ -36,18 +36,17 @@ ENV APP_CONFIG=production
 EXPOSE 8000
 
 # Add health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:8000/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["python", "scripts/container-health.py"]
 
 # Drop root privileges: run the app as the non-root 'nobody' user.
 # The .flask_session dir above is chowned to nobody:nogroup so the filesystem
 # session fallback stays writable; gunicorn binds :8000 (>1024, no root needed).
 USER nobody
 
-# Apply migrations before the server starts: scripts/docker-entrypoint.sh
-# brings the schema to head, then runs CMD. This step runs under `docker run`,
-# docker-compose and any platform that keeps the image's ENTRYPOINT.
+# Startup only forwards the selected service process. Run scripts/pre-deploy.sh
+# separately before starting services that require the upgraded schema.
 ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
 
 # Run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--preload", "run:app"]
+CMD ["gunicorn", "--config", "gunicorn.conf.py", "run:app"]

@@ -48,6 +48,9 @@ Thumbs.db
 
 # Node (Tailwind tooling)
 node_modules
+**/node_modules
+.railway
+web
 
 # Session and cache
 .flask_session

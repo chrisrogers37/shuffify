@@ -1,18 +1,53 @@
+x-runtime: &runtime
+  build: .
+  env_file:
+    - .env
+  environment: &shared-environment
+    APP_CONFIG: production
+    DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL using the db service hostname}
+    REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+    SCHEDULER_ENABLED: "true"
+    SCHEDULER_TIMEZONE: UTC
+    WORKER_CONTROL_TOKEN: ${WORKER_CONTROL_TOKEN:?Set WORKER_CONTROL_TOKEN in .env}
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
 services:
-  app:
-    build: .
+  api:
+    <<: *runtime
+    command: ["gunicorn", "--config", "gunicorn.conf.py", "run:app"]
     ports:
       - "8000:8000"
-    env_file:
-      - .env
-    depends_on:
-      db:
-        condition: service_healthy
-    volumes:
-      - flask_session:/app/.flask_session
+    environment:
+      <<: *shared-environment
+      SHUFFIFY_PROCESS_ROLE: api
+      PORT: "8000"
+      WORKER_CONTROL_URL: http://worker:5001
+
+  worker:
+    <<: *runtime
+    command: ["python", "-m", "shuffify.worker"]
+    stop_grace_period: 30m
+    environment:
+      <<: *shared-environment
+      SHUFFIFY_PROCESS_ROLE: worker
+      PORT: "5001"
+      WORKER_CONTROL_HOST: "0.0.0.0"
+      WORKER_CONTROL_PORT: "5001"
+
+  migrate:
+    <<: *runtime
+    profiles: ["migration"]
+    command: ["sh", "scripts/pre-deploy.sh"]
+    environment:
+      <<: *shared-environment
+      SCHEDULER_ENABLED: "false"
 
   db:
-    image: postgres:16-alpine
+    image: ghcr.io/railwayapp-templates/postgres-ssl:17
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-shuffify_dev}
       POSTGRES_USER: ${POSTGRES_USER:-shuffify}
@@ -25,6 +60,13 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
-  flask_session:
   pgdata:

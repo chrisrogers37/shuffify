@@ -122,15 +122,25 @@ def test_control_server_stops_and_never_restarts(private_server):
         server.start()
 
 
-def test_public_health_is_readiness_only_and_disabled_scheduling_is_explicit(private_server):
+def test_live_standby_passes_deployment_health_without_claiming_scheduler_leadership(private_server):
     controller, state, server = private_server
     controller.ready = False
     with requests.Session() as http:
         http.trust_env = False
         reply = http.get(server.url + "/health", timeout=1)
-        assert reply.status_code == 503 and reply.json() == {"status": "unavailable"}
+        assert reply.status_code == 200 and reply.json() == {"status": "ready"}
+        assert controller.ids == []
+        client = module().WorkerControlClient(url=server.url, token="test-secret")
+        health = client.health()
+        assert health["worker"]["running"] is True
+        assert health["scheduler"]["leader"] is False
+        assert health["scheduler"]["scheduler_running"] is False
+        assert client.registrations([1])["registrations"] == {"1": None}
         state["scheduler_enabled"] = False
         assert http.get(server.url + "/health", timeout=1).json() == {"status": "ready"}
+        state["running"] = False
+        reply = http.get(server.url + "/health", timeout=1)
+        assert reply.status_code == 503 and reply.json() == {"status": "unavailable"}
     with module().WorkerControlServer(controller, lambda: state, token=None, port=0) as disabled:
         assert not disabled.running
 
