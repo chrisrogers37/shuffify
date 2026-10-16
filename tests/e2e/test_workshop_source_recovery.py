@@ -12,6 +12,7 @@ from tests.e2e.conftest import APP, pid
 from tests.e2e.test_direct_live_actions import _close_tool, _open_inbox, _remove_row
 from tests.e2e.test_pages import CHROMIUM_ARGS, Visit
 from tests.paths import api_path
+from tests.routine_flow import add_playlist_source
 
 TARGET = pid("alice-morning-mix")
 ARCHIVE = pid("alice-morning-archive")
@@ -324,10 +325,7 @@ def test_shared_collection_archive_browser_orders_all_source_effects(
         "create_new": False, "raid_playlist_id": ARCHIVE,
         "raid_playlist_name": "Morning Mix [Archive]",
     })
-    alice.ok("post", f"/playlist/{TARGET}/raid-watch", json={
-        "source_playlist_id": RAID_SOURCE, "source_playlist_name": "Bob's Finds",
-        "auto_schedule": False,
-    })
+    add_playlist_source(alice, TARGET, RAID_SOURCE)
     alice.write(f"/playlist/{TARGET}/raid-now", json={})
     pending = alice.ok("get", f"/playlist/{TARGET}/pending-raids")["tracks"]
     assert len(pending) == 5
@@ -384,10 +382,7 @@ def test_bulk_captured_inbox_above_two_hundred_finalizes_without_target_replay(a
     alice.write(f"/playlist/{TARGET}/raid-link", json={
         "create_new": False, "raid_playlist_id": ARCHIVE,
     })
-    source = alice.ok("post", f"/playlist/{TARGET}/raid-watch", json={
-        "source_playlist_id": pid("alice-long-haul"),
-        "source_playlist_name": "Long Haul", "auto_schedule": False,
-    })["source"]
+    source = add_playlist_source(alice, TARGET, pid("alice-long-haul"))
     alice.ok("put", f"/playlist/{TARGET}/raid-source-count", json={
         "source_id": source["id"], "raid_count": 100,
     })
@@ -399,7 +394,7 @@ def test_bulk_captured_inbox_above_two_hundred_finalizes_without_target_replay(a
     desired = baseline + [track["track_uri"] for track in pending]
     _save(alice, TARGET, baseline, desired)
     saved_target = fake.playlist(TARGET)
-    result = alice.write(f"/playlist/{TARGET}/pending-raids/finalize-all", json={
+    result = alice.write(f"/playlist/{TARGET}/pending-raids/finalize", json={
         "source_playlist_id": ARCHIVE, "target_track_uris": desired,
         "track_ids": [track["id"] for track in pending],
     })

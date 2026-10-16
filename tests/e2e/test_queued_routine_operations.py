@@ -5,8 +5,9 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
 from config import HarnessConfig
-from tests.e2e.test_live_operation_outcomes import SOURCE, TARGET, _collection
+from tests.e2e.test_live_operation_outcomes import TARGET, _collection
 from tests.e2e.test_queued_direct_operations import complete
+from tests.routine_flow import create_routine, list_schedules, set_routine_enabled
 
 
 def _executions():
@@ -50,17 +51,10 @@ def test_saved_routine_uses_one_accepted_row_and_replays_its_key(alice, fake, jo
     })
     assert pair["success"] is True
     before = fake.uris(TARGET)
-    payload = {
-        "job_type": job_type, "target_playlist_id": TARGET, "target_playlist_name": "Morning Mix",
-        "schedule_value": "daily", "source_playlist_ids": [SOURCE],
-    }
-    if job_type in {"shuffle", "raid_and_shuffle"}:
-        payload["algorithm_name"] = "BasicShuffle"
-    if job_type == "rotate":
-        payload["algorithm_params"] = {"rotation_mode": "swap", "rotation_count": 2, "target_size": 10}
-    schedule = alice.ok("post", "/schedules/create", json=payload)["schedule"]
+    options = {"rotation_mode": "swap", "rotation_count": 2, "target_size": 10} if job_type == "rotate" else None
+    schedule = create_routine(alice, TARGET, job_type=job_type, algorithm_params=options)
     schedule_id = schedule["id"]
-    alice.ok("post", f"/schedules/{schedule_id}/toggle")
+    set_routine_enabled(alice, schedule_id, False)
     previous = _executions()
     try:
         operation = complete(alice, f"/api/schedules/{schedule_id}/run", key="saved-routine")
@@ -74,7 +68,7 @@ def test_saved_routine_uses_one_accepted_row_and_replays_its_key(alice, fake, jo
         assert len(history) == 1
         assert history[0]["id"] == operation["id"]
         assert history[0]["result_detail"] == result["result_detail"]
-        current = next(row for row in alice.ok("get", f"/playlist/{TARGET}/schedules")["schedules"]
+        current = next(row for row in list_schedules(alice, TARGET)
                        if row["id"] == schedule_id)
         assert current["is_enabled"] is False
         if job_type == "raid":

@@ -10,7 +10,6 @@ from tests.paths import api_path
 A = "spotify:track:" + "a" * 22
 FINALIZERS = [
     ("pending-raids/finalize", "promoted_count", "raid_panel", "finalize_raids"),
-    ("pending-raids/finalize-all", "promoted_count", "raid_panel", "finalize_raids"),
     ("pair/archive", "archived_count", "playlist_pairs", "append_archive"),
     ("pair/finalize-restore", "restored_count", "playlist_pairs", "finalize_restore"),
 ]

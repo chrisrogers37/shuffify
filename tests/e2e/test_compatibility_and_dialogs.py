@@ -34,6 +34,7 @@ from tests.e2e.test_live_operation_outcomes import _collection, _create_schedule
 from tests.e2e.test_pages import Visit
 from tests.e2e.test_workshop_source_recovery import _pair, _save
 from tests.paths import api_path
+from tests.routine_flow import list_schedules
 
 TARGET = pid("alice-morning-mix")
 ARCHIVE = pid("alice-morning-archive")
@@ -128,7 +129,7 @@ def _locks(alice):
 def _routine(alice, target, schedule_id):
     return next(
         s
-        for s in alice.ok("get", f"/playlist/{target}/schedules")["schedules"]
+        for s in list_schedules(alice, target)
         if s["id"] == schedule_id
     )
 
@@ -714,7 +715,7 @@ def test_routine_delete_asks_first_and_moves_focus_to_what_remains(
     def listed(target):
         return [
             r["id"]
-            for r in alice.ok("get", f"/playlist/{target}/schedules")["schedules"]
+            for r in list_schedules(alice, target)
         ]
 
     # Cancel keeps the routine and returns focus to the control that asked.

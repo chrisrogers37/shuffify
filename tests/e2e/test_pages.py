@@ -36,6 +36,7 @@ from playwright.sync_api import sync_playwright
 
 from harness.vendor import CDN_COPIES
 from tests.e2e.conftest import APP, FAKE, greets, pid
+from tests.routine_flow import create_routine
 
 SCREENSHOTS = Path(__file__).resolve().parents[2] / ".harness" / "screenshots"
 VIEWPORTS = {
@@ -181,9 +182,6 @@ def test_logged_in_pages(visit, alice):
     visit.check(BEFORE)
     # Something on the activity and schedules pages: a shuffle and a schedule.
     alice.write(f"/shuffle/{pid('alice-morning-mix')}", data={"algorithm": "BasicShuffle"})
-    alice.ok("post", "/schedules/create", json={
-        "job_type": "shuffle", "target_playlist_id": pid("alice-long-haul"),
-        "target_playlist_name": "Long Haul", "schedule_value": "daily", "algorithm_name": "BasicShuffle",
-    })
+    create_routine(alice, pid("alice-long-haul"))
     visit.check(LOGGED_IN)
     assert visit.problems == []

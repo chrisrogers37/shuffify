@@ -252,7 +252,7 @@ def test_reads_never_wait_while_writes_follow_their_group(node):
         /Unavailable while your draft saves to Spotify/);
     replies.push(response({success: true}));
     assert.equal((await context.workshopRequest(
-        '/api/schedules/5/toggle', {method: 'POST'}, {group: 'pause'})).ok, true);
+        '/api/routines/5/state', {method: 'PUT'}, {group: 'pause'})).ok, true);
     state.isSaving = false;
 })().catch(e => {console.error(e); process.exitCode = 1;});
 """),

@@ -14,15 +14,13 @@ from sqlalchemy.pool import NullPool
 
 from config import HarnessConfig
 from tests.e2e.conftest import pid
+from tests.routine_flow import create_routine
 
 LONG_HAUL = pid("alice-long-haul")  # 250 tracks: a PUT of 100, then two POSTs
 
 
 def _daily_shuffle(alice) -> int:
-    return alice.ok("post", "/schedules/create", json={
-        "job_type": "shuffle", "target_playlist_id": LONG_HAUL, "target_playlist_name": "Long Haul",
-        "schedule_value": "daily", "algorithm_name": "BasicShuffle",
-    })["schedule"]["id"]
+    return create_routine(alice, LONG_HAUL)["id"]
 
 
 def _last_run(alice, schedule_id) -> dict:

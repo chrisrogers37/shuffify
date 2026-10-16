@@ -62,17 +62,6 @@ class TestRaidLinkAuthRequired:
             assert resp.status_code == 401
 
     @patch("shuffify.routes.require_auth")
-    def test_drip_toggle_unauth(
-        self, mock_auth, db_app
-    ):
-        mock_auth.return_value = None
-        with db_app.test_client() as client:
-            resp = client.post(
-                api_path("/playlist/p1/drip-schedule-toggle")
-            )
-            assert resp.status_code == 401
-
-    @patch("shuffify.routes.require_auth")
     def test_source_count_unauth(
         self, mock_auth, db_app
     ):

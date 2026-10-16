@@ -143,7 +143,7 @@ def _guarded_handlers():
 
 def test_guarded_handlers_exist_to_check():
     """Guard against the collector silently matching nothing."""
-    assert len(list(_guarded_handlers())) >= 70
+    assert len(list(_guarded_handlers())) >= 60
 
 
 @pytest.mark.parametrize(

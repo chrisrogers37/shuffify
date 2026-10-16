@@ -7,6 +7,7 @@ worker refreshes the stored login credentials before changing the local fake.
 import time
 
 from tests.e2e.conftest import pid
+from tests.routine_flow import create_routine
 
 LONG_HAUL = pid("alice-long-haul")
 # A minute for the next cron tick, and time for the job to finish after it.
@@ -15,17 +16,9 @@ FIRE_WITHIN = 120
 
 def test_a_scheduled_shuffle_fires_and_reorders_the_playlist(alice, fake):
     before = fake.uris(LONG_HAUL)
-    schedule = alice.ok(
-        "post", "/schedules/create",
-        json={
-            "job_type": "shuffle",
-            "target_playlist_id": LONG_HAUL,
-            "target_playlist_name": "Long Haul",
-            "schedule_type": "cron",
-            "schedule_value": "* * * * *",
-            "algorithm_name": "BasicShuffle",
-        },
-    )["schedule"]
+    schedule = create_routine(alice, LONG_HAUL, timing={
+        "kind": "advanced", "expression": "* * * * *", "timezone": "UTC",
+    })
     try:
         deadline = time.monotonic() + FIRE_WITHIN
         history = []

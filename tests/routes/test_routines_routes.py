@@ -98,11 +98,9 @@ def test_target_errors_match_setup(auth_client, api, target, status, code):
 
 
 @pytest.mark.parametrize("method,path,body,service_method", [
-    ("put", api_path("/schedules/1"), {"schedule_value": "weekly"}, "update_schedule"),
-    ("post", api_path("/schedules/1/toggle"), None, "toggle_schedule"),
     ("delete", api_path("/schedules/1"), None, "delete_schedule"),
 ])
-def test_legacy_schedule_busy_reply(auth_client, api, method, path, body, service_method):
+def test_delete_schedule_busy_reply(auth_client, api, method, path, body, service_method):
     with patch("shuffify.routes.require_auth", return_value=api), patch.object(
         SchedulerService, service_method, side_effect=ScheduleBusyError("A routine is using this playlist. Try again.")
     ):

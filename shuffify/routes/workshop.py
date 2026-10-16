@@ -356,50 +356,6 @@ def workshop_search(api=None, user=None):
 # =============================================================================
 
 
-@api_bp.route(
-    "/workshop/search-playlists", methods=["POST"]
-)
-@require_auth_and_db
-def workshop_search_playlists(
-    api=None, user=None
-):
-    """Search for public playlists by name."""
-    data = request.get_json()
-    if not data:
-        return json_error("Request body must be JSON.", 400)
-
-    query = data.get("query", "").strip()
-    if not query:
-        return json_error("Search query is required.", 400)
-
-    if len(query) > 200:
-        return json_error(
-            "Search query too long (max 200 characters).",
-            400,
-        )
-
-    try:
-        results = api.search_playlists(query, limit=10)
-
-        logger.info(
-            f"Playlist search for '{query}' returned "
-            f"{len(results)} results"
-        )
-
-        return jsonify({
-            "success": True,
-            "playlists": results,
-        })
-
-    except Exception as e:
-        logger.error(
-            f"Playlist search failed: {e}", exc_info=True
-        )
-        return json_error(
-            "Search failed. Please try again.", 500
-        )
-
-
 def _load_playlist_by_url(api, ext_request, current_user_id=None):
     """Load tracks from a specific playlist by URL/URI/ID."""
     playlist_id = parse_spotify_playlist_url(

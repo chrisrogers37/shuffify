@@ -117,8 +117,8 @@ class TestInjectedClient:
 
 AUTHENTICATED_GET_ROUTES = [
     api_path("/api/user-playlists"),
-    api_path("/playlist/playlist123"),
-    api_path("/playlist/playlist123/stats"),
+    api_path("/workshop/playlist123"),
+    api_path("/playlist/playlist123/routines/context"),
     "/activity",
     "/schedules",
     "/settings",

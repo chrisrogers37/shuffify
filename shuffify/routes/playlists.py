@@ -1,5 +1,5 @@
 """
-Playlist API routes: fetch, refresh, and query playlists.
+Playlist summaries and reviewed live playlist actions.
 """
 
 import logging
@@ -16,7 +16,6 @@ from shuffify.routes import (
     require_session_and_db,
 )
 from shuffify.routes.queue import enqueue_command
-from shuffify.schemas import PlaylistQueryParams
 from shuffify.services import PlaylistError, PlaylistService
 from shuffify.services.live_action_context_service import (
     INSPECTION_KINDS,
@@ -49,32 +48,6 @@ from shuffify.services.playlist_preference_service import (
 from shuffify.services.state_service import StateError
 
 logger = logging.getLogger(__name__)
-
-
-@api_bp.route("/playlist/<playlist_id>")
-@require_auth_and_db
-def get_playlist(playlist_id, api=None, user=None):
-    """Get playlist data with optional audio features."""
-    query_params = PlaylistQueryParams(
-        features=request.args.get("features", "false")
-    )
-
-    playlist_service = PlaylistService(api)
-    playlist = playlist_service.get_playlist(
-        playlist_id, query_params.features
-    )
-    return jsonify(playlist.to_dict())
-
-
-@api_bp.route("/playlist/<playlist_id>/stats")
-@require_auth_and_db
-def get_playlist_stats(
-    playlist_id, api=None, user=None
-):
-    """Get playlist audio feature statistics."""
-    playlist_service = PlaylistService(api)
-    stats = playlist_service.get_playlist_stats(playlist_id)
-    return jsonify(stats)
 
 
 @api_bp.route("/user-playlists")

@@ -16,6 +16,7 @@ from tests.e2e.test_playlist_setup import _save as _save_setup
 from tests.e2e.test_playlist_setup import _use_existing
 from tests.e2e.test_playlist_workspace import _no_sideways_scroll, _scroll_settled
 from tests.paths import api_path
+from tests.routine_flow import add_playlist_source
 
 TARGET = pid("alice-morning-mix")
 TASK_PATH = f"/playlist/{TARGET}/routines/new"
@@ -232,9 +233,7 @@ def test_setup_return_preserves_local_choices_and_cancel_keeps_explicit_shared_s
     alice, fake, open_session, tmp_path, width, height,
 ):
     source = pid("bob-finds")
-    alice.ok("post", f"/playlist/{TARGET}/raid-watch", json={
-        "source_playlist_id": source, "source_playlist_name": "Bob's Finds", "auto_schedule": False,
-    })
+    add_playlist_source(alice, TARGET, source)
     existing = _create_schedule(alice, "raid", TARGET)["id"]
     registration = _registration(existing)
     before_playlists = {item["id"] for item in fake.playlists()}

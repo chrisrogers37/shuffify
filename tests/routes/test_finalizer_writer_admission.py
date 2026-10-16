@@ -43,7 +43,6 @@ def forbid_spotify(monkeypatch):
     "path,kind,source",
     [
         ("pending-raids/finalize", "workshop_finalize_raids", "collection"),
-        ("pending-raids/finalize-all", "workshop_finalize_raids", "collection"),
         ("pair/archive", "workshop_archive_append", "archive"),
         ("pair/finalize-restore", "workshop_finalize_restore", "archive"),
     ],

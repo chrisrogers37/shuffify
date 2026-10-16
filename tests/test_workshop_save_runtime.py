@@ -374,7 +374,7 @@ def test_target_commit_serializes_all_but_view_and_pause_and_final_save_dispatch
         /Unavailable while your draft saves to Spotify/);
     replies.push(response({success: true}));
     assert.equal((await context.workshopRequest(
-        '/api/schedules/5/toggle', {method: 'POST'}, {group: 'pause'})).ok, true);
+        '/api/routines/5/state', {method: 'PUT'}, {group: 'pause'})).ok, true);
     replies.push(response({success: true, tracks: []}));
     assert.equal((await context.workshopRequest('/api/workshop/search', {method: 'POST'}, {read: true})).ok, true);
     await context.saveReviewedWorkshop();

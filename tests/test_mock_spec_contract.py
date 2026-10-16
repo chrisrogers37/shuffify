@@ -44,7 +44,7 @@ BASELINE = {
     "routes/test_error_page_rendering.py": 4,
     "routes/test_schedules_routes.py": 5,
     "routes/test_settings_routes.py": 4,
-    "routes/test_workshop_external_routes.py": 2,
+    "routes/test_workshop_external_routes.py": 1,
     "routes/test_workshop_routes.py": 2,
     "routes/test_workshop_search_routes.py": 1,
     "services/test_auth_service.py": 23,

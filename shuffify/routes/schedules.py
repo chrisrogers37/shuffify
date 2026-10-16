@@ -1,5 +1,5 @@
 """
-Schedule routes: CRUD and execution for scheduled operations.
+Routine management page, exact deletion, execution and history endpoints.
 """
 
 import logging
@@ -13,13 +13,11 @@ from flask import (
     url_for,
 )
 
-from shuffify.enums import ActivityType, JobType
-from shuffify.models.db import Schedule
+from shuffify.enums import ActivityType
 from shuffify.routes import (
     api_bp,
     clear_session_and_show_login,
     context_preflight,
-    json_error,
     json_reply,
     json_success,
     log_activity,
@@ -28,20 +26,13 @@ from shuffify.routes import (
     require_auth_page,
     require_session_and_db,
     site_bp,
-    validate_json,
 )
 from shuffify.routes.routine_queue import admit_schedule
-from shuffify.schemas import (
-    ScheduleCreateRequest,
-    ScheduleUpdateRequest,
-)
 from shuffify.services import (
     AuthenticationError,
     PlaylistError,
-    PlaylistPairService,
     PlaylistService,
     ScheduleError,
-    UpstreamSourceService,
 )
 from shuffify.services.api_response import busy_error
 from shuffify.services.live_executor_context_service import (
@@ -77,26 +68,6 @@ def latest_schedule_results(api=None, user=None):
     return json_success(
         "Latest routine results loaded",
         results=SchedulerService.get_latest_executions(user.id, request.args.get("playlist_id")),
-    )
-
-
-@api_bp.route(
-    "/playlist/<playlist_id>/schedules",
-    methods=["GET"],
-)
-@require_auth_and_db
-def playlist_schedules(
-    playlist_id, api=None, user=None
-):
-    """Get all schedules for a specific playlist."""
-    schedules = (
-        SchedulerService.get_schedules_for_playlist(
-            user.id, playlist_id
-        )
-    )
-    return json_success(
-        "Schedules loaded",
-        schedules=[s.to_dict() for s in schedules],
     )
 
 
@@ -158,178 +129,6 @@ def schedules(api=None, user=None, spotify_profile=None):
         return redirect(url_for("site.index"))
 
 
-@api_bp.route("/schedules/create", methods=["POST"])
-@require_auth_and_db
-def create_schedule(api=None, user=None):
-    """Create a new scheduled operation."""
-    if not user.encrypted_refresh_token:
-        return json_error(
-            "Your account needs a fresh login to enable "
-            "scheduled operations. Please log out and "
-            "log back in.",
-            400,
-        )
-
-    create_request, err = validate_json(
-        ScheduleCreateRequest
-    )
-    if err:
-        return err
-
-    # Defense-in-depth: the user must be able to edit the target playlist
-    # (owner or collaborative). Otherwise a schedule can be created against an
-    # arbitrary playlist ID that fails forever at execution time.
-    PlaylistService(api).validate_user_can_edit(
-        create_request.target_playlist_id, user.spotify_id
-    )
-
-    # Defense-in-depth: validate raid sources exist in Workshop
-    if create_request.job_type in ("raid", "raid_and_shuffle"):
-        if create_request.source_playlist_ids:
-            sources = (
-                UpstreamSourceService.list_sources(
-                    user.spotify_id,
-                    create_request.target_playlist_id,
-                )
-            )
-            valid_ids = {
-                s.source_playlist_id for s in sources
-            }
-            invalid = [
-                sid
-                for sid in create_request.source_playlist_ids
-                if sid not in valid_ids
-            ]
-            if invalid:
-                return json_error(
-                    "Some raid sources are not configured "
-                    "in the Workshop. Please set them up "
-                    "first.",
-                    400,
-                )
-
-    # Defense-in-depth: validate rotation pair exists
-    if create_request.job_type == "rotate":
-        pair = PlaylistPairService.get_pair_for_playlist(
-            user_id=user.id,
-            production_playlist_id=(
-                create_request.target_playlist_id
-            ),
-        )
-        if not pair:
-            return json_error(
-                "This playlist needs an archive pair "
-                "configured in the Workshop before "
-                "rotation can be scheduled.",
-                400,
-            )
-
-    try:
-        schedule = SchedulerService.create_schedule(
-            user_id=user.id,
-            job_type=create_request.job_type,
-            target_playlist_id=(
-                create_request.target_playlist_id
-            ),
-            target_playlist_name=(
-                create_request.target_playlist_name
-            ),
-            schedule_type=create_request.schedule_type,
-            schedule_value=create_request.schedule_value,
-            source_playlist_ids=(
-                create_request.source_playlist_ids
-            ),
-            algorithm_name=create_request.algorithm_name,
-            algorithm_params=create_request.algorithm_params,
-        )
-    except ScheduleBusyError as error:
-        return json_reply(busy_error(str(error)))
-
-    # Committed definition notifications refresh the worker scheduler.
-
-    logger.info(
-        f"User {user.spotify_id} created schedule "
-        f"{schedule.id}: {schedule.job_type} on "
-        f"{schedule.target_playlist_name}"
-    )
-
-    log_activity(
-        user_id=user.id,
-        activity_type=ActivityType.SCHEDULE_CREATE,
-        description=(
-            f"Created {schedule.job_type} schedule "
-            f"for '{schedule.target_playlist_name}'"
-        ),
-        playlist_id=schedule.target_playlist_id,
-        playlist_name=schedule.target_playlist_name,
-        metadata={
-            "schedule_id": schedule.id,
-            "job_type": schedule.job_type,
-            "schedule_value": schedule.schedule_value,
-        },
-    )
-
-    return json_success(
-        "Schedule created successfully.",
-        schedule=schedule.to_dict(),
-    )
-
-
-@api_bp.route(
-    "/schedules/<int:schedule_id>", methods=["PUT"]
-)
-@require_auth_and_db
-def update_schedule(
-    schedule_id, api=None, user=None
-):
-    """Update an existing schedule."""
-    update_request, err = validate_json(
-        ScheduleUpdateRequest
-    )
-    if err:
-        return err
-
-    update_fields = {
-        k: v
-        for k, v in update_request.model_dump().items()
-        if v is not None
-    }
-
-    try:
-        schedule = SchedulerService.update_schedule(
-            schedule_id=schedule_id,
-            user_id=user.id,
-            **update_fields,
-        )
-    except ScheduleBusyError as error:
-        return json_reply(busy_error(str(error)))
-
-    # Committed definition notifications refresh the worker scheduler.
-
-    logger.info(f"Updated schedule {schedule_id}")
-
-    log_activity(
-        user_id=user.id,
-        activity_type=ActivityType.SCHEDULE_UPDATE,
-        description=(
-            f"Updated schedule {schedule_id}"
-        ),
-        playlist_id=schedule.target_playlist_id,
-        playlist_name=schedule.target_playlist_name,
-        metadata={
-            "schedule_id": schedule_id,
-            "updated_fields": list(
-                update_fields.keys()
-            ),
-        },
-    )
-
-    return json_success(
-        "Schedule updated successfully.",
-        schedule=schedule.to_dict(),
-    )
-
-
 @api_bp.route(
     "/schedules/<int:schedule_id>", methods=["DELETE"]
 )
@@ -359,48 +158,6 @@ def delete_schedule(
     )
 
     return json_success("Schedule deleted successfully.")
-
-
-@api_bp.route(
-    "/schedules/<int:schedule_id>/toggle",
-    methods=["POST"],
-)
-@require_auth_and_db
-def toggle_schedule(
-    schedule_id, api=None, user=None
-):
-    """Toggle a schedule's enabled/disabled state."""
-    try:
-        schedule = SchedulerService.toggle_schedule(
-            schedule_id, user.id
-        )
-    except ScheduleBusyError as error:
-        return json_reply(busy_error(str(error)))
-
-    # Committed state notifications refresh the worker scheduler.
-
-    status_text = (
-        "enabled" if schedule.is_enabled else "disabled"
-    )
-
-    log_activity(
-        user_id=user.id,
-        activity_type=ActivityType.SCHEDULE_TOGGLE,
-        description=(
-            f"Schedule {schedule_id} {status_text}"
-        ),
-        playlist_id=schedule.target_playlist_id,
-        playlist_name=schedule.target_playlist_name,
-        metadata={
-            "schedule_id": schedule_id,
-            "is_enabled": schedule.is_enabled,
-        },
-    )
-
-    return json_success(
-        f"Schedule {status_text}.",
-        schedule=schedule.to_dict(),
-    )
 
 
 def _run_result_response(result, *, message=None):
@@ -483,47 +240,3 @@ def schedule_history(
     )
 
     return jsonify({"success": True, "history": history})
-
-
-@api_bp.route(
-    "/playlist/<playlist_id>/rotation-status"
-)
-@require_auth_and_db
-def rotation_status(
-    playlist_id, api=None, user=None
-):
-    """Get rotation status for a playlist."""
-    from shuffify.services.playlist_pair_service import (
-        PlaylistPairService,
-    )
-
-    pair_info = None
-    pair = PlaylistPairService.get_pair_for_playlist(
-        user_id=user.id,
-        production_playlist_id=playlist_id,
-    )
-    if pair:
-        pair_info = pair.to_dict()
-
-    rotate_schedule_obj = (
-        Schedule.query.filter_by(
-            user_id=user.id,
-            target_playlist_id=playlist_id,
-            job_type=JobType.ROTATE,
-        ).first()
-    )
-    rotate_schedule = (
-        rotate_schedule_obj.to_dict()
-        if rotate_schedule_obj
-        else None
-    )
-
-    return jsonify({
-        "success": True,
-        "has_pair": pair_info is not None,
-        "pair": pair_info,
-        "has_rotation_schedule": (
-            rotate_schedule is not None
-        ),
-        "rotation_schedule": rotate_schedule,
-    })

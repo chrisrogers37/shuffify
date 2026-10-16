@@ -454,7 +454,7 @@ def test_complete_reader_checks_every_source_page_before_removal(ctx):
     assert ctx.api.playlists["archive"] == [C] * 60
 
 
-@pytest.mark.parametrize("endpoint", ["finalize", "finalize-all"])
+@pytest.mark.parametrize("endpoint", ["finalize"])
 def test_real_finalizer_route_handles_201_captured_records_without_target_rewrite(
     ctx, db_app, sample_token, endpoint
 ):
@@ -554,7 +554,6 @@ def test_rejected_inspection_scope_never_claims_no_prior_effect(
     "path,count_key",
     [
         ("pending-raids/finalize", "promoted_count"),
-        ("pending-raids/finalize-all", "promoted_count"),
         ("pair/archive", "archived_count"),
         ("pair/finalize-restore", "restored_count"),
     ],

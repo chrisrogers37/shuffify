@@ -1822,12 +1822,7 @@ def test_per_row_actions_keep_focus_on_the_same_control_in_their_list(node, db_a
                 for n in (3, 2, 1)
             ],
         },
-        api_path("/playlist/target/rotation-status"): {
-            "success": True,
-            "has_pair": True,
-            "pair": {"archive_playlist_id": "archive"},
-            "has_rotation_schedule": False,
-        },
+
     }
     run_workspace(
         node,
@@ -2518,9 +2513,7 @@ def test_add_tracks_inbox_and_archive_rows_share_one_recipe(node, db_app):
                 {"uri": "spotify:track:a1", "name": "Archived 1", "artists": ["A", "B"], "album_image_url": image},
             ],
         },
-        api_path("/playlist/target/rotation-status"): {"success": True, "has_pair": True,
-                                             "pair": {"archive_playlist_id": "archive"},
-                                             "has_rotation_schedule": False},
+
     }
     run_workspace(
         node,
@@ -2821,7 +2814,7 @@ def test_create_and_link_controls_keep_focus_while_busy_and_send_once(node, db_a
     status = {api_path("/playlist/target/raid-status"): {"raid_status": {
         "raid_link": None, "sources": [{"id": 1, "source_name": "One", "raid_count": 5}],
         "schedule": None, "drip_schedule": None, "source_count": 1, "max_sources": 10}},
-        api_path("/playlist/target/rotation-status"): {"success": True, "schedule": None},
+
         api_path("/playlist/target/pair/archive-tracks"): {"success": True, "tracks": [], "total": 0}}
     page = workspace_page(db_app)
     flows = HELD + r"""
@@ -2879,8 +2872,7 @@ def test_controls_that_hide_themselves_hand_focus_to_a_status_or_their_section(n
     routes = {api_path("/playlist/target/pair"): {"success": True, "paired": True, "pair": {
         "archive_playlist_id": "arch", "archive_playlist_name": "Arch", "auto_archive_on_remove": False}},
         api_path("/playlist/target/pair/archive-tracks"): {"success": True, "total": 1, "tracks": [
-            {"uri": "spotify:track:a1", "name": "Archived 1", "artists": ["X"]}]},
-        api_path("/playlist/target/rotation-status"): {"success": True, "schedule": None}}
+            {"uri": "spotify:track:a1", "name": "Archived 1", "artists": ["X"]}]}}
     run_workspace(node, workspace_page(db_app), r"""
     await openWorkshop('/workshop/target', __ROUTES__);
     await removeRow(0);
@@ -2967,7 +2959,7 @@ def test_save_panel_steps_keep_focus_in_the_panel(node, db_app):
     pair = {api_path("/playlist/target/pair"): {"success": True, "paired": True, "pair": {
         "archive_playlist_id": "arch", "archive_playlist_name": "Arch", "auto_archive_on_remove": True}},
         api_path("/playlist/target/pair/archive-tracks"): {"success": True, "tracks": [], "total": 0},
-        api_path("/playlist/target/rotation-status"): {"success": True, "schedule": None},
+
         api_path("/workshop/target/source-context"): {"success": True,
             "target": {"id": "target", "name": "Morning Mix"},
             "archive": {"id": "arch", "name": "Arch", "baseline_track_uris": []}}}
@@ -3071,8 +3063,7 @@ def test_only_a_copy_the_saved_playlist_had_queues_for_archiving(node, db_app):
     and adding a track back takes its queued archiving back."""
     routes = {api_path("/playlist/target/pair"): {"success": True, "paired": True, "pair": {
         "archive_playlist_id": "arch", "archive_playlist_name": "Arch", "auto_archive_on_remove": True}},
-        api_path("/playlist/target/pair/archive-tracks"): {"success": True, "tracks": [], "total": 0},
-        api_path("/playlist/target/rotation-status"): {"success": True, "schedule": None}}
+        api_path("/playlist/target/pair/archive-tracks"): {"success": True, "tracks": [], "total": 0}}
     run_workspace(node, workspace_page(db_app, tracks=[1, 1, 2]), r"""
     await openWorkshop('/workshop/target', __ROUTES__);
     const queue = () => plain(evaluate('workshopState.archiveQueue'));
@@ -3107,8 +3098,7 @@ def test_a_preview_applies_only_to_the_draft_it_was_asked_for(node, db_app):
     so a stale order never moves a row locked since. An unchanged draft takes the reply."""
     routes = {api_path("/playlist/target/pair"): {"success": True, "paired": True, "pair": {
         "archive_playlist_id": "arch", "archive_playlist_name": "Arch", "auto_archive_on_remove": True}},
-        api_path("/playlist/target/pair/archive-tracks"): {"success": True, "tracks": [], "total": 0},
-        api_path("/playlist/target/rotation-status"): {"success": True, "schedule": None}}
+        api_path("/playlist/target/pair/archive-tracks"): {"success": True, "tracks": [], "total": 0}}
     run_workspace(node, workspace_page(db_app), HELD + r"""
     await openWorkshop('/workshop/target', __ROUTES__);
     page.byId('workshop-tool-archive').click(); await settle(); closeTask('workshop-archive-panel'); await settle();

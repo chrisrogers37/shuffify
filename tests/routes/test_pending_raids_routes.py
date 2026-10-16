@@ -30,33 +30,12 @@ class TestPendingRaidsAuth:
             assert resp.status_code == 401
 
     @patch("shuffify.routes.require_auth")
-    def test_promote_unauth(self, mock_auth, db_app):
-        mock_auth.return_value = None
-        with db_app.test_client() as client:
-            resp = client.post(
-                api_path("/playlist/p1/pending-raids/promote"),
-                json={"track_ids": [1]},
-            )
-            assert resp.status_code == 401
-
-    @patch("shuffify.routes.require_auth")
     def test_dismiss_unauth(self, mock_auth, db_app):
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
                 api_path("/playlist/p1/pending-raids/dismiss"),
                 json={"track_ids": [1]},
-            )
-            assert resp.status_code == 401
-
-    @patch("shuffify.routes.require_auth")
-    def test_promote_all_unauth(
-        self, mock_auth, db_app
-    ):
-        mock_auth.return_value = None
-        with db_app.test_client() as client:
-            resp = client.post(
-                api_path("/playlist/p1/pending-raids/promote-all")
             )
             assert resp.status_code == 401
 
@@ -71,20 +50,6 @@ class TestPendingRaidsAuth:
             )
             assert resp.status_code == 401
 
-    @patch("shuffify.routes.require_auth")
-    def test_unpromote_unauth(self, mock_auth, db_app):
-        mock_auth.return_value = None
-        with db_app.test_client() as client:
-            resp = client.post(
-                api_path("/playlist/p1/pending-raids/unpromote"),
-                json={
-                    "track_uris": [
-                        "spotify:track:1",
-                    ]
-                },
-            )
-            assert resp.status_code == 401
-
 
 # =============================================================
 # Validation Tests
@@ -95,17 +60,6 @@ class TestPendingRaidsValidation:
     """Request validation tests."""
 
     @patch("shuffify.routes.require_auth")
-    def test_promote_missing_track_ids(
-        self, mock_auth, auth_client
-    ):
-        mock_auth.return_value = MagicMock()
-        resp = auth_client.post(
-            api_path("/playlist/p1/pending-raids/promote"),
-            json={},
-        )
-        assert resp.status_code == 400
-
-    @patch("shuffify.routes.require_auth")
     def test_dismiss_missing_track_ids(
         self, mock_auth, auth_client
     ):
@@ -113,17 +67,6 @@ class TestPendingRaidsValidation:
         resp = auth_client.post(
             api_path("/playlist/p1/pending-raids/dismiss"),
             json={},
-        )
-        assert resp.status_code == 400
-
-    @patch("shuffify.routes.require_auth")
-    def test_promote_empty_track_ids(
-        self, mock_auth, auth_client
-    ):
-        mock_auth.return_value = MagicMock()
-        resp = auth_client.post(
-            api_path("/playlist/p1/pending-raids/promote"),
-            json={"track_ids": []},
         )
         assert resp.status_code == 400
 
@@ -160,28 +103,6 @@ class TestPendingRaidsValidation:
         )
         assert resp.status_code == 400
 
-    @patch("shuffify.routes.require_auth")
-    def test_unpromote_missing_uris(
-        self, mock_auth, auth_client
-    ):
-        mock_auth.return_value = MagicMock()
-        resp = auth_client.post(
-            api_path("/playlist/p1/pending-raids/unpromote"),
-            json={},
-        )
-        assert resp.status_code == 400
-
-    @patch("shuffify.routes.require_auth")
-    def test_unpromote_empty_uris(
-        self, mock_auth, auth_client
-    ):
-        mock_auth.return_value = MagicMock()
-        resp = auth_client.post(
-            api_path("/playlist/p1/pending-raids/unpromote"),
-            json={"track_uris": []},
-        )
-        assert resp.status_code == 400
-
 
 # =============================================================
 # Finalize Endpoint Tests
@@ -189,7 +110,7 @@ class TestPendingRaidsValidation:
 
 
 class TestPendingRaidsFinalize:
-    @pytest.mark.parametrize("endpoint", ["finalize", "finalize-all"])
+    @pytest.mark.parametrize("endpoint", ["finalize"])
     @patch("shuffify.routes.require_auth")
     def test_unauth(self, mock_auth, db_app, endpoint):
         mock_auth.return_value = None
@@ -199,7 +120,7 @@ class TestPendingRaidsFinalize:
         assert response.json["status"] == "failed"
         assert response.json["promoted_count"] == 0
 
-    @pytest.mark.parametrize("endpoint", ["finalize", "finalize-all"])
+    @pytest.mark.parametrize("endpoint", ["finalize"])
     @pytest.mark.parametrize("status,http_status,retryable", [
         ("complete", 200, False), ("failed", 409, False),
         ("failed", 502, True), ("unknown", 502, False),
@@ -235,7 +156,7 @@ class TestPendingRaidsFinalize:
         api.playlist_add_items.assert_not_called()
         api.playlist_remove_items.assert_not_called()
 
-    @pytest.mark.parametrize("endpoint", ["finalize", "finalize-all"])
+    @pytest.mark.parametrize("endpoint", ["finalize"])
     @pytest.mark.parametrize("payload", [None, {}, [], {"track_ids": [1]}, {
         "source_playlist_id": None, "target_track_uris": [],
     }])

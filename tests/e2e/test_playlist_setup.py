@@ -21,6 +21,7 @@ from tests.e2e.test_direct_live_actions import direct_browser as direct_browser
 from tests.e2e.test_live_operation_outcomes import _registration
 from tests.e2e.test_playlist_workspace import _no_sideways_scroll, _scroll_settled
 from tests.paths import api_path
+from tests.routine_flow import add_playlist_source, create_routine, list_schedules, save_setup, set_routine_enabled
 
 TARGET = pid("alice-morning-mix")
 ARCHIVE = pid("alice-morning-archive")
@@ -62,26 +63,18 @@ def _context(alice):
 
 
 def _schedules(alice):
-    return {s["id"]: s for s in alice.ok("get", f"/playlist/{TARGET}/schedules")["schedules"]}
+    return {s["id"]: s for s in list_schedules(alice, TARGET)}
 
 
 def _watch(alice, playlist_id, name):
-    """A saved source, through the legacy route and without its automatic routine."""
-    return alice.ok("post", f"/playlist/{TARGET}/raid-watch", json={
-        "source_playlist_id": playlist_id, "source_playlist_name": name, "auto_schedule": False,
-    })["source"]
+    """Save a shared source without starting or changing a routine."""
+    return add_playlist_source(alice, TARGET, playlist_id)
 
 
 def _create_routine(alice, kind, every):
-    payload = {
-        "job_type": kind, "target_playlist_id": TARGET, "target_playlist_name": "Morning Mix",
-        "schedule_type": "interval", "schedule_value": every,
-    }
-    if kind.startswith("raid"):
-        payload["source_playlist_ids"] = [BOB_FINDS]
-    if kind in ("shuffle", "raid_and_shuffle"):
-        payload["algorithm_name"] = "BasicShuffle"
-    return alice.ok("post", "/schedules/create", json=payload)["schedule"]
+    return create_routine(alice, TARGET, job_type=kind, timing={
+        "kind": "interval", "interval": every, "timezone": "UTC",
+    })
 
 
 def _eventually(read, timeout=10):
@@ -202,6 +195,10 @@ def test_an_added_source_is_reviewed_against_every_collecting_routine_and_saved_
     waits for the acknowledgment. Once saved, every collecting routine's source list holds it; no routine's timing,
     state or scheduling cadence changes, none runs, and Spotify is not written."""
     _watch(alice, BOB_FINDS, "Bob's Finds")
+    save_setup(alice, TARGET, [
+        {"op": "link_collection", "playlist_id": OLD_FAITHFUL},
+        {"op": "set_drip", "drip_enabled": True},
+    ])
     collect = _create_routine(alice, "raid", "daily")
     composite = _create_routine(alice, "raid_and_shuffle", "every_12h")
     paused = _create_routine(alice, "raid_and_drip", "every_3d")
@@ -209,7 +206,7 @@ def test_an_added_source_is_reviewed_against_every_collecting_routine_and_saved_
     ids = [collect["id"], composite["id"], paused["id"], shuffle["id"]]
     collecting = ids[:3]
     try:
-        assert alice.ok("post", f"/schedules/{paused['id']}/toggle")["schedule"]["is_enabled"] is False
+        assert set_routine_enabled(alice, paused['id'], False)["schedule"]["is_enabled"] is False
         before = _schedules(alice)
         # The worker exposes a live memory registration for each active routine, none for the paused one.
         jobs = {sid: _registration(sid) for sid in ids}
@@ -266,8 +263,17 @@ def test_an_added_source_is_reviewed_against_every_collecting_routine_and_saved_
         added = [src for src in _context(alice)["sources"] if src["playlist_id"] == LATE_NIGHT]
         assert [(src["type"], src["name"], src["raid_count"]) for src in added] == [("external", "Late Night", 5)]
         after = _schedules(alice)
+        routine_rows = alice.ok("get", f"/playlist/{TARGET}/routines/context")["routines"]
+        source_ids = {src["id"] for src in _context(alice)["sources"]}
+        assert {src["playlist_id"] for src in _context(alice)["sources"]} == {BOB_FINDS, LATE_NIGHT}
         for sid in collecting:
-            assert after[sid]["source_playlist_ids"] == [BOB_FINDS, LATE_NIGHT], sid
+            assert after[sid]["source_playlist_ids"] == before[sid]["source_playlist_ids"] + [LATE_NIGHT], sid
+            row = next(row for row in routine_rows if row["schedule_id"] == sid)
+            review = alice.ok("post", f"/playlist/{TARGET}/routines/review", json={
+                "request_key": f"source-scope-{sid}", "definition": {},
+                "schedule_id": sid, "expected_revision": row["schedule_revision"],
+            })
+            assert set(review["resource_scope"]["source_ids"]) == source_ids, sid
         assert after[shuffle["id"]]["source_playlist_ids"] == []
         for sid in ids:
             for field in ("job_type", "schedule_type", "schedule_value", "is_enabled", "algorithm_name"):

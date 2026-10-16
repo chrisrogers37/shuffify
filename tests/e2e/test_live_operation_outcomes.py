@@ -14,6 +14,7 @@ from shuffify.models.db import Schedule
 from shuffify.services.schedule_utils import schedule_revision
 from shuffify.services.worker_control import WorkerControlClient
 from tests.e2e.conftest import pid
+from tests.e2e.legacy_fixtures import seed_unavailable_legacy_source
 from tests.e2e.test_direct_live_actions import (
     _close_result,
     _heading,
@@ -23,6 +24,7 @@ from tests.e2e.test_direct_live_actions import (
     _settled,
 )
 from tests.paths import api_path
+from tests.routine_flow import add_playlist_source, create_routine, list_schedules, save_setup, set_routine_enabled
 
 TARGET = pid("alice-morning-mix")
 LONG_HAUL = pid("alice-long-haul")
@@ -33,24 +35,12 @@ def _collection(alice):
     link = alice.write(f"/playlist/{TARGET}/raid-link", json={
         "create_new": True, "target_playlist_name": "Morning Mix",
     })["raid_link"]
-    alice.ok("post", f"/playlist/{TARGET}/raid-watch", json={
-        "source_playlist_id": SOURCE, "source_playlist_name": "Bob's Finds",
-        "auto_schedule": False,
-    })
+    add_playlist_source(alice, TARGET, SOURCE)
     return link["raid_playlist_id"]
 
 
 def _create_schedule(alice, kind="shuffle", target=LONG_HAUL):
-    payload = {
-        "job_type": kind, "target_playlist_id": target,
-        "target_playlist_name": "Name supplied by browser",
-        "schedule_value": "daily",
-    }
-    if kind in ("shuffle", "raid_and_shuffle"):
-        payload["algorithm_name"] = "BasicShuffle"
-    if kind.startswith("raid"):
-        payload["source_playlist_ids"] = [SOURCE]
-    return alice.ok("post", "/schedules/create", json=payload)["schedule"]
+    return create_routine(alice, target, job_type=kind)
 
 
 def _nav_to_settings(page):
@@ -99,7 +89,7 @@ def test_manual_run_identifies_this_invocation_without_changing_registration(ali
     sid = schedule["id"]
     try:
         if paused:
-            assert alice.ok("post", f"/schedules/{sid}/toggle")["schedule"]["is_enabled"] is False
+            assert set_routine_enabled(alice, sid, False)["schedule"]["is_enabled"] is False
         registration = _registration(sid)
         assert (registration is None) is paused
         older = alice.write(f"/schedules/{sid}/run")
@@ -119,7 +109,7 @@ def test_manual_run_identifies_this_invocation_without_changing_registration(ali
         assert resource["desired_track_uris"] == resource["current_track_uris"] == after
         assert sorted(after) == sorted(before) and after != before
         assert _registration(sid) == registration
-        current = next(s for s in alice.ok("get", f"/playlist/{LONG_HAUL}/schedules")["schedules"] if s["id"] == sid)
+        current = next(s for s in list_schedules(alice, LONG_HAUL) if s["id"] == sid)
         assert current["is_enabled"] is (not paused)
         assert current["schedule_value"] == "daily"
     finally:
@@ -130,11 +120,13 @@ def test_manual_run_identifies_this_invocation_without_changing_registration(ali
 @pytest.mark.parametrize("paused", [False, True])
 def test_collect_for_review_ignores_saved_composite_and_pause_state(alice, fake, kind, paused):
     collection = _collection(alice)
+    if kind == "raid_and_drip":
+        save_setup(alice, TARGET, [{"op": "set_drip", "drip_enabled": True}])
     schedule = _create_schedule(alice, kind, TARGET)
     sid = schedule["id"]
     try:
         if paused:
-            alice.ok("post", f"/schedules/{sid}/toggle")
+            set_routine_enabled(alice, sid, False)
         registration = _registration(sid)
         before = fake.playlist(TARGET)
         run = alice.write(f"/playlist/{TARGET}/raid-now", json={})
@@ -147,7 +139,7 @@ def test_collect_for_review_ignores_saved_composite_and_pause_state(alice, fake,
         assert all(r["resource"] != TARGET or not r["dispatched"] for r in run["operation"]["resources"])
         assert alice.ok("get", f"/schedules/{sid}/history")["history"] == []
         assert _registration(sid) == registration
-        current = next(s for s in alice.ok("get", f"/playlist/{TARGET}/schedules")["schedules"] if s["id"] == sid)
+        current = next(s for s in list_schedules(alice, TARGET) if s["id"] == sid)
         assert current["job_type"] == kind and current["is_enabled"] is (not paused)
     finally:
         alice.ok("delete", f"/schedules/{sid}")
@@ -295,7 +287,7 @@ def test_collect_only_routine_is_reviewed_as_collect_only_and_stays_paused(
     collection = _collection(alice)
     schedule = _create_schedule(alice, "raid", TARGET)
     sid = schedule["id"]
-    alice.ok("post", f"/schedules/{sid}/toggle")
+    set_routine_enabled(alice, sid, False)
     before = fake.uris(TARGET)
     visit = Visit(live_browser, "desktop")
     page = visit.page
@@ -315,7 +307,7 @@ def test_collect_only_routine_is_reviewed_as_collect_only_and_stays_paused(
         assert fake.uris(TARGET) == before
         assert fake.uris(collection)
         assert alice.ok("get", f"/playlist/{TARGET}/pending-raids")["tracks"]
-        current = next(s for s in alice.ok("get", f"/playlist/{TARGET}/schedules")["schedules"] if s["id"] == sid)
+        current = next(s for s in list_schedules(alice, TARGET) if s["id"] == sid)
         assert current["is_enabled"] is False
         assert visit.problems == []
     finally:
@@ -379,7 +371,7 @@ def test_lost_manual_run_response_retains_unknown_and_blocks_repeat(
 
     schedule = _create_schedule(alice)
     sid = schedule["id"]
-    alice.ok("post", f"/schedules/{sid}/toggle")
+    set_routine_enabled(alice, sid, False)
     before = fake.uris(LONG_HAUL)
     visit = Visit(live_browser, "desktop")
     page = visit.page
@@ -438,7 +430,7 @@ def test_lost_manual_run_response_retains_unknown_and_blocks_repeat(
         page.click("#live-operation-leave-stay")
         page.locator("#live-operation-leave").wait_for(state="hidden")
         assert page.url == f"{APP}/schedules"
-        current = next(s for s in alice.ok("get", f"/playlist/{LONG_HAUL}/schedules")["schedules"] if s["id"] == sid)
+        current = next(s for s in list_schedules(alice, LONG_HAUL) if s["id"] == sid)
         assert current["is_enabled"] is False
         assert visit.problems == []
     finally:
@@ -456,7 +448,7 @@ def test_composite_restoration_retains_completed_collection_and_named_results(
     alice.ok("put", f"/playlist/{TARGET}/raid-link", json={"drip_enabled": True})
     schedule = _create_schedule(alice, "raid_and_drip", TARGET)
     sid = schedule["id"]
-    alice.ok("post", f"/schedules/{sid}/toggle")
+    set_routine_enabled(alice, sid, False)
     before = fake.uris(TARGET)
     assert fake.uris(collection) == []
     assert alice.ok("get", f"/playlist/{TARGET}/pending-raids")["tracks"] == []
@@ -511,9 +503,11 @@ def test_composite_restoration_retains_completed_collection_and_named_results(
 def test_saved_drip_gate_and_direct_one_off_are_separate(alice, fake):
     collection = _collection(alice)
     alice.write(f"/playlist/{TARGET}/raid-now", json={})
+    save_setup(alice, TARGET, [{"op": "set_drip", "drip_enabled": True}])
     schedule = _create_schedule(alice, "drip", TARGET)
     sid = schedule["id"]
-    alice.ok("post", f"/schedules/{sid}/toggle")
+    set_routine_enabled(alice, sid, False)
+    save_setup(alice, TARGET, [{"op": "set_drip", "drip_enabled": False}])
     before = fake.uris(TARGET)
     collected = fake.uris(collection)
     try:
@@ -535,7 +529,7 @@ def test_saved_drip_gate_and_direct_one_off_are_separate(alice, fake):
         assert alice.ok("get", f"/playlist/{TARGET}/raid-status")["raid_status"]["raid_link"]["drip_enabled"] is False
         history = alice.ok("get", f"/schedules/{sid}/history")["history"]
         assert len(history) == 1 and history[0]["id"] == body["result"]["execution_id"]
-        current = next(s for s in alice.ok("get", f"/playlist/{TARGET}/schedules")["schedules"] if s["id"] == sid)
+        current = next(s for s in list_schedules(alice, TARGET) if s["id"] == sid)
         assert current["is_enabled"] is False
         assert _registration(sid) == registration
     finally:
@@ -545,17 +539,10 @@ def test_saved_drip_gate_and_direct_one_off_are_separate(alice, fake):
 def test_missing_source_retains_healthy_collection_and_stops_composite(alice, fake):
     collection = _collection(alice)
     missing = pid("a-source-that-does-not-exist")
-    alice.ok("post", f"/playlist/{TARGET}/raid-watch", json={
-        "source_playlist_id": missing, "source_playlist_name": "Unavailable source",
-        "auto_schedule": False,
-    })
-    schedule = alice.ok("post", "/schedules/create", json={
-        "job_type": "raid_and_shuffle", "target_playlist_id": TARGET,
-        "target_playlist_name": "Morning Mix", "schedule_value": "daily",
-        "algorithm_name": "BasicShuffle", "source_playlist_ids": [SOURCE, missing],
-    })["schedule"]
+    schedule = _create_schedule(alice, "raid_and_shuffle", TARGET)
     sid = schedule["id"]
-    alice.ok("post", f"/schedules/{sid}/toggle")
+    set_routine_enabled(alice, sid, False)
+    seed_unavailable_legacy_source(alice, TARGET, sid, missing, legacy_ids=[SOURCE, missing])
     before = fake.playlist(TARGET)
     try:
         queued = alice.queued(f"/schedules/{sid}/run")
@@ -582,9 +569,11 @@ def test_missing_source_retains_healthy_collection_and_stops_composite(alice, fa
 
 def test_completed_collection_before_disabled_drip_is_recorded_as_partial(alice, fake):
     collection = _collection(alice)
+    save_setup(alice, TARGET, [{"op": "set_drip", "drip_enabled": True}])
     schedule = _create_schedule(alice, "raid_and_drip", TARGET)
     sid = schedule["id"]
-    alice.ok("post", f"/schedules/{sid}/toggle")
+    set_routine_enabled(alice, sid, False)
+    save_setup(alice, TARGET, [{"op": "set_drip", "drip_enabled": False}])
     target_before = fake.playlist(TARGET)
     try:
         queued = alice.queued(f"/schedules/{sid}/run")
@@ -605,7 +594,7 @@ def test_completed_collection_before_disabled_drip_is_recorded_as_partial(alice,
         assert len(history) == 1
         assert history[0]["id"] == body["result"]["execution_id"]
         assert history[0]["status"] == "failed"
-        current = next(s for s in alice.ok("get", f"/playlist/{TARGET}/schedules")["schedules"]
+        current = next(s for s in list_schedules(alice, TARGET)
                        if s["id"] == sid)
         assert current["last_status"] == "failed"
         assert current["is_enabled"] is False

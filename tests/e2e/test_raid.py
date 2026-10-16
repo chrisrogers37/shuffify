@@ -10,6 +10,7 @@ finalizes them, so the test does the same: commit, then finalize.
 """
 
 from tests.e2e.conftest import pid
+from tests.routine_flow import add_playlist_source
 
 MORNING_MIX = pid("alice-morning-mix")
 BOB_FINDS = pid("bob-finds")
@@ -26,10 +27,7 @@ def test_raid_review_keep_and_dismiss(alice, fake):
         "Morning Mix [Raids]", "alice", False, []
     )
 
-    watched = alice.ok(
-        "post", f"/playlist/{MORNING_MIX}/raid-watch",
-        json={"source_playlist_id": BOB_FINDS, "source_playlist_name": "Bob's Finds", "auto_schedule": False},
-    )["source"]
+    watched = add_playlist_source(alice, MORNING_MIX, BOB_FINDS)
     raided = alice.write(f"/playlist/{MORNING_MIX}/raid-now", json={})
     assert raided["tracks_added"] == 5  # the default per-source raid count
 

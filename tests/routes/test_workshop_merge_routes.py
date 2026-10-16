@@ -1,8 +1,7 @@
 """
 Tests for the Workshop source playlist merging feature.
 
-Covers the /api/user-playlists endpoint and the interaction between
-source playlists and the existing /playlist/<id> endpoint.
+Covers the user-playlists listing and authenticated external playlist loading.
 """
 
 from unittest.mock import MagicMock, Mock, patch
@@ -195,21 +194,20 @@ class TestApiUserPlaylists:
 
 
 # =============================================================================
-# Source Playlist Loading Tests (via existing GET /playlist/<id>)
+# Source Playlist Loading Tests
 # =============================================================================
 
 
 class TestSourcePlaylistLoading:
     """
-    Verify GET /playlist/<id> returns data with all fields the source
-    panel JS needs.
+    Verify external loading preserves every track field and occurrence.
     """
 
     @patch("shuffify.is_db_available")
     @patch("shuffify.routes.get_db_user")
     @patch("shuffify.routes.require_auth")
-    @patch("shuffify.routes.playlists.PlaylistService")
-    def test_playlist_endpoint_returns_tracks_with_required_fields(
+    @patch("shuffify.routes.workshop.PlaylistService")
+    def test_external_playlist_load_returns_ordered_tracks_with_required_fields(
         self,
         mock_playlist_svc,
         mock_auth,
@@ -217,15 +215,17 @@ class TestSourcePlaylistLoading:
         mock_db_available,
         authenticated_client,
     ):
-        """GET /playlist/<id> must include uri, name, artists, album_image_url, duration_ms, id."""
+        """The read boundary retains track metadata, order and duplicate occurrences."""
         mock_auth.return_value = Mock()
         mock_db_available.return_value = True
         mock_user = MagicMock()
         mock_user.id = 1
+        mock_user.spotify_id = "user123"
         mock_get_db_user.return_value = mock_user
+        source_id = "s" * 22
 
         mock_playlist = Playlist(
-            id="source_pl",
+            id=source_id,
             name="Source",
             owner_id="user123",
             tracks=[
@@ -246,16 +246,53 @@ class TestSourcePlaylistLoading:
             ],
         )
 
+        first = mock_playlist.tracks[0]
+        second = {
+            **first,
+            "id": "t2",
+            "name": "Track Two",
+            "uri": "spotify:track:t2",
+            "track_url": "https://open.spotify.com/track/t2",
+        }
+        mock_playlist.tracks = [first, second, dict(first)]
+        expected_tracks = [dict(track) for track in mock_playlist.tracks]
+
         mock_ps_instance = Mock()
         mock_ps_instance.get_playlist.return_value = mock_playlist
         mock_playlist_svc.return_value = mock_ps_instance
 
-        response = authenticated_client.get(api_path("/playlist/source_pl"))
+        removed = authenticated_client.get(api_path(f"/playlist/{source_id}"))
+        assert removed.status_code == 404
+        assert removed.get_json()["error_code"] == "not_found"
+        mock_auth.assert_not_called()
+        mock_playlist_svc.assert_not_called()
+
+        response = authenticated_client.post(
+            api_path("/workshop/load-external-playlist"),
+            json={"url": f"https://open.spotify.com/playlist/{source_id}"},
+        )
         assert response.status_code == 200
+        mock_auth.assert_called_once_with()
+        mock_get_db_user.assert_called_once_with()
+        mock_playlist_svc.assert_called_once_with(mock_auth.return_value)
+        mock_ps_instance.get_playlist.assert_called_once_with(
+            source_id, include_features=False
+        )
 
         data = response.get_json()
-        assert "tracks" in data
-        assert len(data["tracks"]) == 1
+        assert data["success"] is True
+        assert data["mode"] == "tracks"
+        assert data["playlist"] == {
+            "id": source_id,
+            "name": "Source",
+            "owner_id": "user123",
+            "description": None,
+            "track_count": 3,
+        }
+        assert data["tracks"] == expected_tracks
+        assert [track["uri"] for track in data["tracks"]] == [
+            "spotify:track:t1", "spotify:track:t2", "spotify:track:t1"
+        ]
 
         track = data["tracks"][0]
         assert "uri" in track

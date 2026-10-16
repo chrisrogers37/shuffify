@@ -9,7 +9,6 @@ from unittest.mock import MagicMock, Mock, patch
 
 from shuffify.models.playlist import Playlist
 from shuffify.services import PlaylistAccessError
-from shuffify.spotify.api import SpotifyAPI
 from tests.paths import api_path
 
 # =============================================================================
@@ -279,107 +278,6 @@ class TestLoadExternalPlaylistBySearch:
 # =============================================================================
 # Search Playlists Route Tests
 # =============================================================================
-
-
-class TestSearchPlaylistsRoute:
-    """Tests for POST /workshop/search-playlists."""
-
-    @patch("shuffify.is_db_available")
-    @patch("shuffify.routes.get_db_user")
-    @patch("shuffify.routes.require_auth")
-    def test_search_returns_results(
-        self,
-        mock_auth,
-        mock_get_db_user,
-        mock_db_available,
-        authenticated_client,
-    ):
-        """Search should return playlist results."""
-        mock_client = Mock()
-        mock_client.search_playlists.return_value = [
-            {
-                "id": "result1",
-                "name": "Test Playlist",
-                "owner_display_name": "Owner",
-                "image_url": None,
-                "total_tracks": 10,
-            }
-        ]
-        mock_auth.return_value = mock_client
-        mock_db_available.return_value = True
-        mock_user = MagicMock()
-        mock_user.id = 1
-        mock_get_db_user.return_value = mock_user
-
-        response = authenticated_client.post(
-            api_path("/workshop/search-playlists"),
-            data=json.dumps({"query": "test"}),
-            content_type="application/json",
-        )
-
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data["success"] is True
-        assert len(data["playlists"]) == 1
-
-    @patch("shuffify.is_db_available")
-    @patch("shuffify.routes.get_db_user")
-    @patch("shuffify.routes.require_auth")
-    def test_search_empty_query_returns_400(
-        self,
-        mock_auth,
-        mock_get_db_user,
-        mock_db_available,
-        authenticated_client,
-    ):
-        """Empty search query should return 400."""
-        mock_auth.return_value = Mock()
-        mock_db_available.return_value = True
-        mock_user = MagicMock()
-        mock_user.id = 1
-        mock_get_db_user.return_value = mock_user
-
-        response = authenticated_client.post(
-            api_path("/workshop/search-playlists"),
-            data=json.dumps({"query": ""}),
-            content_type="application/json",
-        )
-
-        assert response.status_code == 400
-
-    @patch("shuffify.is_db_available")
-    @patch("shuffify.routes.get_db_user")
-    @patch("shuffify.routes.require_auth")
-    def test_search_too_long_query_returns_400(
-        self,
-        mock_auth,
-        mock_get_db_user,
-        mock_db_available,
-        authenticated_client,
-    ):
-        """Query exceeding 200 characters should return 400."""
-        mock_auth.return_value = Mock()
-        mock_db_available.return_value = True
-        mock_user = MagicMock()
-        mock_user.id = 1
-        mock_get_db_user.return_value = mock_user
-
-        response = authenticated_client.post(
-            api_path("/workshop/search-playlists"),
-            data=json.dumps({"query": "x" * 201}),
-            content_type="application/json",
-        )
-
-        assert response.status_code == 400
-
-    def test_search_requires_auth(self, client):
-        """Unauthenticated search should return 401."""
-        response = client.post(
-            api_path("/workshop/search-playlists"),
-            data=json.dumps({"query": "test"}),
-            content_type="application/json",
-        )
-        assert response.status_code == 401
 
 
 # =============================================================================
@@ -696,51 +594,3 @@ class TestRestrictedPlaylistDetection:
         data = response.get_json()
         assert data["success"] is True
         assert data["mode"] == "tracks"
-
-
-class TestSearchPlaylistsOwnerIdField:
-    """Tests for owner_id field in search results."""
-
-    @patch("shuffify.is_db_available")
-    @patch("shuffify.routes.get_db_user")
-    @patch("shuffify.routes.require_auth")
-    def test_search_playlists_includes_owner_id(
-        self,
-        mock_auth,
-        mock_get_db_user,
-        mock_db_available,
-        authenticated_client,
-    ):
-        """Search results should include owner_id field."""
-        mock_client = Mock(spec=SpotifyAPI)
-        mock_client.search_playlists.return_value = [
-            {
-                "id": "pl1",
-                "name": "Jazz Mix",
-                "owner_display_name": "Spotify",
-                "owner_id": "spotify",
-                "image_url": (
-                    "https://example.com/img.jpg"
-                ),
-                "total_tracks": 50,
-            }
-        ]
-        mock_auth.return_value = mock_client
-        mock_db_available.return_value = True
-        mock_user = MagicMock()
-        mock_user.id = 1
-        mock_get_db_user.return_value = mock_user
-
-        response = authenticated_client.post(
-            api_path("/workshop/search-playlists"),
-            data=json.dumps({"query": "jazz"}),
-            content_type="application/json",
-        )
-
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data["success"] is True
-        assert len(data["playlists"]) == 1
-        assert data["playlists"][0]["owner_id"] == (
-            "spotify"
-        )

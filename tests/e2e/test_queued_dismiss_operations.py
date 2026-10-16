@@ -4,6 +4,7 @@ import pytest
 
 from tests.e2e.conftest import pid
 from tests.paths import api_path
+from tests.routine_flow import add_playlist_source
 
 TARGET, SOURCE = pid("alice-morning-mix"), pid("bob-finds")
 
@@ -14,11 +15,7 @@ def collect(alice, fake):
         f"/playlist/{TARGET}/raid-link", json={"create_new": True, "target_playlist_name": "Morning Mix"}
     )
     collection = link["raid_link"]["raid_playlist_id"]
-    alice.ok(
-        "post",
-        f"/playlist/{TARGET}/raid-watch",
-        json={"source_playlist_id": SOURCE, "source_playlist_name": "Bob's Finds", "auto_schedule": False},
-    )
+    add_playlist_source(alice, TARGET, SOURCE)
     alice.write(f"/playlist/{TARGET}/raid-now", json={})
     pending = alice.ok("get", f"/playlist/{TARGET}/pending-raids")["tracks"]
     assert len(pending) == 5
