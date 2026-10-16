@@ -1,0 +1,118 @@
+@layer components {
+  .sh-routine-stack {
+    display: grid;
+    gap: var(--sh-space-5);
+    min-width: 0;
+  }
+  .sh-routine-card-heading {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sh-space-3);
+    justify-content: space-between;
+    align-items: start;
+  }
+  .sh-routine-feedback {
+    border: 1px solid var(--sh-border);
+    border-radius: var(--sh-radius-panel);
+    padding: var(--sh-space-4);
+    overflow-wrap: anywhere;
+  }
+  .sh-routine-feedback h3 {
+    font-weight: var(--sh-weight-semibold);
+    margin-bottom: var(--sh-space-2);
+  }
+  .sh-routine-warning {
+    border-left: 3px solid var(--sh-accent);
+    padding: var(--sh-space-3);
+    color: var(--sh-ink);
+    background: var(--sh-surface);
+  }
+  .sh-routine-history-row {
+    margin-top: var(--sh-space-4);
+    border-top: 1px solid var(--sh-border);
+    padding-top: var(--sh-space-4);
+  }
+  .sh-routine-history-row h3,
+  .sh-setup-source h3 {
+    font-weight: var(--sh-weight-semibold);
+  }
+  .sh-routine-list button,
+  .sh-routine-list a,
+  .sh-routine-task button,
+  .sh-routine-task a,
+  .sh-setup-page button,
+  .sh-setup-page a {
+    min-height: var(--sh-space-control);
+  }
+  .sh-routines-page label,
+  .sh-setup-page label,
+  .sh-routine-task label {
+    display: grid;
+    gap: var(--sh-space-2);
+    min-width: 0;
+  }
+  .sh-routine-step fieldset,
+  .sh-setup-sections {
+    min-width: 0;
+    border: 0;
+    padding: 0;
+    margin: 0;
+  }
+  .sh-setup-sections:disabled {
+    opacity: 0.7;
+  }
+  .sh-routine-summary,
+  .sh-setup-summary {
+    display: grid;
+    align-content: start;
+    gap: var(--sh-space-4);
+    overflow-wrap: anywhere;
+  }
+  .sh-routine-summary dl {
+    display: grid;
+    gap: var(--sh-space-2);
+  }
+  .sh-routine-summary dt {
+    color: var(--sh-muted);
+  }
+  .sh-setup-source {
+    display: grid;
+    gap: var(--sh-space-3);
+    padding-block: var(--sh-space-4);
+    border-bottom: 1px solid var(--sh-border);
+  }
+  .sh-routine-step,
+  .sh-setup-section {
+    display: grid;
+    gap: var(--sh-space-5);
+  }
+  .sh-routine-step legend {
+    padding-bottom: var(--sh-space-4);
+  }
+  .sh-setup-page form {
+    display: grid;
+    gap: var(--sh-space-3);
+  }
+  .sh-setup-page ol,
+  .sh-routine-stack ul {
+    padding-left: var(--sh-space-5);
+    list-style: disc;
+  }
+  .sh-routine-task fieldset:disabled {
+    opacity: 0.75;
+  }
+  .sh-routine-feedback a,
+  .sh-routine-list a,
+  .sh-setup-page aside button {
+    overflow-wrap: anywhere;
+  }
+  @media (max-width: 639px) {
+    .sh-routine-filters,
+    .sh-routine-create {
+      align-items: stretch;
+    }
+    .sh-routine-filters > * {
+      flex: 1 1 100%;
+    }
+  }
+}

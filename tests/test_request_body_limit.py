@@ -14,13 +14,13 @@ from werkzeug.exceptions import RequestEntityTooLarge
 
 # One track as the Workshop's preview shuffle sends it, with long metadata.
 TRACK = {
-    "id": "4uLU6hMCjMI75M1A2tKUQC",
-    "name": "Symphony No. 9 in D Minor, Op. 125 'Choral': IV. Presto - Allegro assai (Live at the Royal Albert Hall)",
-    "artists": ["Ludwig van Beethoven", "Berliner Philharmoniker", "Herbert von Karajan", "Wiener Singverein"],
-    "album_name": "Beethoven: The Complete Symphonies (Remastered Deluxe Edition with Bonus Rehearsals)",
+    "id": "0000000000000000000001",
+    "name": "Fictional Symphony No. 9: IV. Evening Lights - Extended Finale (Live at the Example Concert Hall)",
+    "artists": ["Alice Example", "Example Philharmonic", "Bob Example", "Example Concert Choir"],
+    "album_name": "Example Orchestra: The Complete Symphonies (Remastered Deluxe Edition with Bonus Rehearsals)",
     "album_image_url": "https://i.scdn.co/image/ab67616d0000b273" + "0" * 24,
     "duration_ms": 1_440_000,
-    "uri": "spotify:track:4uLU6hMCjMI75M1A2tKUQC",
+    "uri": "spotify:track:0000000000000000000001",
 }
 
 
@@ -30,19 +30,26 @@ def client(app):
     return app.test_client()
 
 
-@pytest.mark.parametrize("content_type, accept, says", [
-    ("application/x-www-form-urlencoded", "text/html", b"That request was too large to send."),
-    ("application/x-www-form-urlencoded", "application/json", b'"That request is too large."'),
-    ("multipart/form-data", "text/html", b"That request was too large to send."),
+@pytest.mark.parametrize("content_type, accept", [
+    ("application/x-www-form-urlencoded", "text/html"),
+    ("application/x-www-form-urlencoded", "application/json"),
+    ("multipart/form-data", "text/html"),
 ])
-def test_a_form_over_the_form_limit_is_refused_before_it_is_parsed(app, client, content_type, accept, says):
+def test_a_form_over_the_form_limit_is_refused_before_it_is_parsed(app, client, content_type, accept):
     """Parsed, it would be a 400 for its missing CSRF token."""
     form = {"a": "x" * app.config["MAX_FORM_MEMORY_SIZE"]}
 
     response = client.post("/logout", data=form, content_type=content_type, headers={"Accept": accept})
 
     assert response.status_code == 413
-    assert says in response.data
+    assert response.content_type.startswith("application/json")
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.get_json() == {
+        "success": False,
+        "category": "error",
+        "error_code": "request_too_large",
+        "message": "That request is too large.",
+    }
 
 
 def test_the_largest_workshop_body_is_read(app):

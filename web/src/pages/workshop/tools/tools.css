@@ -1,0 +1,188 @@
+.sh-tools-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sh-space-4);
+  min-width: 0;
+}
+.sh-tools-stack :is(h3, h4, p) {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.sh-tools-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sh-space-2);
+}
+.sh-tools-list {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  gap: var(--sh-space-4);
+}
+.sh-tools-card {
+  padding: var(--sh-space-4);
+  border: 1px solid var(--sh-border);
+  border-radius: var(--sh-radius-panel);
+  background: var(--sh-surface);
+  min-width: 0;
+}
+.sh-tools-card h4 {
+  font-size: var(--sh-type-body);
+  margin: 0 0 var(--sh-space-2);
+}
+.sh-tools-card p {
+  margin-block: var(--sh-space-2);
+}
+.sh-tools-muted {
+  color: var(--sh-muted);
+  font-size: var(--sh-type-caption);
+}
+.sh-tools-notice {
+  padding: var(--sh-space-3);
+  border-left: 3px solid var(--sh-accent);
+}
+.sh-tools-error {
+  color: var(--sh-error);
+  padding: var(--sh-space-3);
+  border: 1px solid var(--sh-border);
+  border-radius: var(--sh-radius-control);
+}
+.sh-tools-track {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sh-space-4);
+  min-width: 0;
+  padding-bottom: var(--sh-space-4);
+  border-bottom: 1px solid var(--sh-border);
+}
+.sh-tools-track .sh-artwork {
+  display: contents;
+}
+.sh-tools-track .sh-artwork-frame {
+  grid-column: 1;
+  grid-row: 1;
+  width: 64px;
+  height: 64px;
+  align-self: start;
+}
+.sh-tools-track .sh-artwork-image {
+  width: 64px;
+  height: 64px;
+  min-height: 0;
+  object-fit: contain;
+}
+.sh-tools-track .sh-artwork-missing {
+  padding: 4px;
+  text-align: center;
+  font-size: var(--sh-type-caption);
+}
+.sh-tools-track .sh-artwork figcaption {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sh-space-3);
+  font-size: var(--sh-type-caption);
+  margin: 0;
+  min-width: 0;
+}
+.sh-tools-track .sh-artwork figcaption a {
+  overflow-wrap: anywhere;
+  flex: 1;
+}
+.sh-tools-track .sh-spotify-logo {
+  margin-block: 12px;
+}
+.sh-tools-track-copy {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: var(--sh-space-2);
+  min-width: 0;
+}
+.sh-tools-track-copy h4 {
+  margin: 0;
+  font-size: var(--sh-type-body);
+}
+.sh-tools-track-copy p {
+  margin: 0;
+}
+.sh-tools-track-copy .sh-button-secondary {
+  width: 100%;
+}
+.sh-tools-snapshot-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--sh-space-2);
+  color: var(--sh-muted);
+  font-size: var(--sh-type-caption);
+}
+.sh-tools-badge {
+  font-family: var(--sh-font-ui);
+  color: var(--sh-ink);
+}
+.sh-tools-snapshot-tracks {
+  padding-left: var(--sh-space-6);
+  max-height: 22rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.sh-tools-snapshot-tracks li {
+  padding: var(--sh-space-2);
+  overflow-wrap: anywhere;
+}
+.sh-tools-snapshot-tracks small {
+  display: block;
+  color: var(--sh-muted);
+}
+.sh-tools-facts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sh-space-4);
+  margin: 0;
+}
+.sh-tools-facts dt {
+  color: var(--sh-muted);
+  font-size: var(--sh-type-caption);
+}
+.sh-tools-facts dd {
+  margin: var(--sh-space-1) 0 0;
+  overflow-wrap: anywhere;
+}
+.sh-tools-row-lock {
+  margin-top: var(--sh-space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: var(--sh-space-2);
+}
+.sh-tools-row-lock p {
+  margin: 0;
+}
+.sh-tools-stack textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sh-tools-stack * {
+    scroll-behavior: auto;
+  }
+}
+
+.sh-tools-bootstrap {
+  padding-top: var(--sh-space-4);
+}
+
+.sh-tools-operation-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  min-width: 44px;
+}

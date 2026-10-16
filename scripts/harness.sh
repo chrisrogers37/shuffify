@@ -2,7 +2,7 @@
 # Local end-to-end harness for shuffify.
 #
 # Runs the real app the way production is shaped -- PostgreSQL, Redis, the
-# scheduler on, a new database built from the models by `flask create-schema`,
+# worker scheduler on, a new database built from the models by `flask create-schema`,
 # migrations applied by `flask db upgrade` before the app starts and verified at
 # head when it does -- with everything on this machine.
 #
@@ -44,7 +44,9 @@
 #                                    (not installed here); default is .venv/,
 #                                    created with python3.12 and kept in sync.
 #   HARNESS_APP_PORT                 default 8000.
+#   HARNESS_API_PORT                 default 8002; proxied by the React test origin.
 #   HARNESS_FAKE_SPOTIFY_PORT        default 8900.
+#   HARNESS_WORKER_CONTROL_PORT      default 8001; loopback-only worker health/control.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -57,15 +59,19 @@ unset "${!PG@}"
 STATE="${REPO_ROOT}/.harness"
 SERVICES="${HARNESS_SERVICES:-local}"
 APP_PORT="${HARNESS_APP_PORT:-8000}"
+API_PORT="${HARNESS_API_PORT:-8002}"
 # 127.0.0.1, not localhost: Spotify refuses localhost redirect URIs, and the
 # fake does too.
 APP_URL="http://127.0.0.1:${APP_PORT}"
+API_URL="http://127.0.0.1:${API_PORT}"
 REDIRECT_URI="${APP_URL}/callback"
 # Where the local fake Spotify listens. Every Spotify host the app talks to
 # (API, OAuth, public pages) is pointed here via SPOTIFY_BASE_URL.
 FAKE_SPOTIFY_PORT="${HARNESS_FAKE_SPOTIFY_PORT:-8900}"
 FAKE_SPOTIFY_URL="http://127.0.0.1:${FAKE_SPOTIFY_PORT}"
-for _port in "${APP_PORT}" "${FAKE_SPOTIFY_PORT}"; do
+WORKER_CONTROL_PORT="${HARNESS_WORKER_CONTROL_PORT:-8001}"
+WORKER_CONTROL_URL="http://127.0.0.1:${WORKER_CONTROL_PORT}"
+for _port in "${APP_PORT}" "${API_PORT}" "${FAKE_SPOTIFY_PORT}" "${WORKER_CONTROL_PORT}"; do
   [[ "${_port}" =~ ^[0-9]+$ ]] || { echo "harness: port must be a number, got '${_port}'" >&2; exit 1; }
 done
 PG_PORT=54329
@@ -128,6 +134,11 @@ print(f"TOKEN_ENCRYPTION_KEY={Fernet.generate_key().decode()}")
 EOF
     )
   fi
+  if ! grep -q '^WORKER_CONTROL_TOKEN=' "${file}"; then
+    ( umask 077
+      "${py}" -c 'import secrets; print("WORKER_CONTROL_TOKEN=" + secrets.token_urlsafe(32))' >> "${file}"
+    )
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -162,7 +173,7 @@ from urllib.parse import urlsplit
 print(",".join(str(urlsplit(u).port or d) for u, d in zip(sys.argv[1:], (6379, 5432))))
 ' "$(redis_url)" "$(database_url)")"
   fi
-  ALLOW_PORTS="${URL_PORTS},${APP_PORT},${FAKE_SPOTIFY_PORT}"
+  ALLOW_PORTS="${URL_PORTS},${APP_PORT},${API_PORT},${FAKE_SPOTIFY_PORT},${WORKER_CONTROL_PORT}"
 }
 
 # ---------------------------------------------------------------------------
@@ -204,6 +215,11 @@ harness_cmd() {
     SPOTIFY_CLIENT_SECRET=harness-fake-client-secret
     SPOTIFY_REDIRECT_URI="${REDIRECT_URI}"
     SPOTIFY_BASE_URL="${FAKE_SPOTIFY_URL}"
+    SCHEDULER_ENABLED=true
+    SCHEDULER_TIMEZONE=UTC
+    WORKER_CONTROL_URL="${WORKER_CONTROL_URL}"
+    WORKER_CONTROL_HOST=127.0.0.1
+    WORKER_CONTROL_PORT="${WORKER_CONTROL_PORT}"
     SENTRY_DSN=
     PYTHONPATH="${REPO_ROOT}/harness/netguard"
     SHUFFIFY_NETGUARD=1
@@ -356,12 +372,13 @@ proc_pid() {  # proc_pid <name>
 }
 
 stop_proc() {  # stop_proc <name>
-  local pid
+  local pid attempts=20
+  if [[ "$1" == worker ]]; then attempts=7200; fi
   if pid="$(proc_pid "$1")"; then
     log "stopping $1 (pid ${pid})"
     kill "${pid}" 2>/dev/null || true
-    for _ in $(seq 20); do kill -0 "${pid}" 2>/dev/null || break; sleep 0.25; done
-    kill -9 "${pid}" 2>/dev/null || true
+    for _ in $(seq "${attempts}"); do kill -0 "${pid}" 2>/dev/null || break; sleep 0.25; done
+    if kill -0 "${pid}" 2>/dev/null; then kill -9 "${pid}" 2>/dev/null || true; fi
   fi
   rm -f "${STATE}/$1.pid"
 }
@@ -437,22 +454,54 @@ check_fake_spotify() {
 start_app() {
   local py="$1"
   stop_proc app
-  log "starting the app on ${APP_URL}"
+  log "starting the API on ${API_URL}"
   require_netguard "${py}"
-  harness_cmd "${py}" FLASK_HOST=127.0.0.1 FLASK_PORT="${APP_PORT}" FLASK_USE_RELOADER=false -- \
-    "${py}" run.py
+  harness_cmd "${py}" -- "${py}" -m gunicorn --worker-class gthread \
+    --workers 1 --threads 8 --timeout 30 --bind "127.0.0.1:${API_PORT}" run:app
   # The schema check runs here for real: MIGRATE_ON_STARTUP is off, so the
   # app refuses to start unless migrate() left the schema at head.
-  launch_proc app "${APP_URL}/health"
+  launch_proc app "${API_URL}/health"
+}
+
+build_frontend() {
+  local py="$1" want contact
+  command -v npm >/dev/null || die "Node 24 and npm are required for the React harness"
+  [[ "$(node -p 'process.versions.node.split(".")[0]')" == 24 ]] || die "the React harness requires Node 24"
+  want="$(sha256sum web/package-lock.json | cut -d' ' -f1)"
+  if [[ ! -d web/node_modules || ! -f "${STATE}/frontend-deps.sha" || \
+        "$(cat "${STATE}/frontend-deps.sha")" != "${want}" ]]; then
+    npm --prefix web ci --no-audit --no-fund
+    echo "${want}" > "${STATE}/frontend-deps.sha"
+  fi
+  contact="$("${py}" -c 'import runpy; print(runpy.run_path("scripts/build-public-pages.py")["DEFAULT_CONTACT_ADDRESS"])')"
+  log "building the production React app"
+  CONTACT_ADDRESS="${CONTACT_ADDRESS:-${contact}}" npm --prefix web run build
+}
+
+start_frontend() {
+  local py="$1"
+  stop_proc frontend
+  log "starting the React test origin on ${APP_URL}"
+  harness_cmd "${py}" -- "${py}" -m tests.frontend_preview --port "${APP_PORT}" --api-url "${API_URL}" \
+    --fake-origin "${FAKE_SPOTIFY_URL}"
+  launch_proc frontend "${APP_URL}/"
+}
+
+start_worker() {
+  local py="$1"
+  stop_proc worker
+  log "starting the operation worker on ${WORKER_CONTROL_URL}"
+  harness_cmd "${py}" -- "${py}" -m shuffify.worker
+  launch_proc worker "${WORKER_CONTROL_URL}/health"
 }
 
 # A whole login through the fake: the app's /login, the fake's consent page
 # (as a seeded user), the app's /callback exchanging the code with the fake,
-# then the dashboard, which reads the user's playlists from it. Run against
+# then the JSON session, which confirms identity and CSRF. Run against
 # the redirect URI's own host, so the cookie set at /login comes back at
 # /callback.
 check_login() {
-  local jar="${STATE}/login-check.cookies" consent callback answer home
+  local py="$1" jar="${STATE}/login-check.cookies" consent callback answer session
   rm -f "${jar}"
   consent="$(curl --noproxy '*' -sS -c "${jar}" -b "${jar}" -o /dev/null -w '%{redirect_url}' \
     "${APP_URL}/login?legal_consent=true")" || die "GET /login failed"
@@ -466,12 +515,14 @@ check_login() {
   answer="$(curl --noproxy '*' -sS -c "${jar}" -b "${jar}" -o /dev/null -w '%{http_code} %{redirect_url}' \
     "${callback}")" || die "GET /callback failed"
   [[ "${answer}" == "302 ${APP_URL}/" ]] || die "/callback answered '${answer}', not a redirect home"
-  # Captured first: grep -q stopping early would SIGPIPE curl under pipefail.
-  home="$(curl --noproxy '*' -sS -b "${jar}" "${APP_URL}/")" || die "GET / after logging in failed"
-  grep -Eq "Welcome (back|to Shuffify), Alice Harness!" <<<"${home}" \
-    || die "after logging in, the dashboard does not greet the seeded user; see ${STATE}/app.log"
+  session="$(curl --noproxy '*' -fsS -b "${jar}" "${APP_URL}/api/session")" || die "GET /api/session failed"
+  printf '%s' "${session}" | "${py}" -c '
+import json,sys
+value=json.load(sys.stdin)
+assert value["signed_in"] is True and value["user"]["id"] == "alice" and value["csrf_token"]
+' || die "the JSON session did not confirm the seeded user and CSRF token"
   rm -f "${jar}"
-  log "login: OAuth through the fake Spotify as alice, dashboard rendered"
+  log "login: OAuth through the fake Spotify as alice, JSON session and CSRF confirmed"
 }
 
 check_app() {
@@ -484,18 +535,19 @@ check_app() {
     [[ "${code}" == 200 ]] || die "GET ${page} returned ${code}"
   done
   log "logged-out pages: / /terms /privacy all 200"
-  check_login
+  check_login "${py}"
   check_fake_spotify
   # /health stays healthy if the schema check errors out rather than
   # refusing, so require the app's own confirmation.
   SCHEMA_REVISION="$(sed -n 's/.*Database schema verified at Alembic head (\([^)]*\)).*/\1/p' "${STATE}/app.log" | tail -1)"
   [[ -n "${SCHEMA_REVISION}" ]] || die "the app did not verify its schema at Alembic head; see ${STATE}/app.log"
   log "schema: verified at Alembic head (${SCHEMA_REVISION})"
+  [[ "$(url_code "${WORKER_CONTROL_URL}/health")" == 200 ]] \
+    || die "the worker scheduler is not ready; see ${STATE}/worker.log"
   if grep -q "APScheduler started" "${STATE}/app.log"; then
-    log "scheduler: running (PostgreSQL job store)"
-  else
-    die "the scheduler did not start; see ${STATE}/app.log"
+    die "the API must not start APScheduler; see ${STATE}/app.log"
   fi
+  log "scheduler: ready in the worker (memory job store)"
   # start_app confirmed the guard loads in a harness process before the app
   # started; an empty log now means it refused nothing since.
   check_violations
@@ -536,19 +588,24 @@ cmd_setup() {
   ensure_secrets "${py}"
   start_services "${py}"
   migrate "${py}"
+  build_frontend "${py}"
   if (( ! quick )); then
     run_checks "${py}"
   fi
   start_fake_spotify "${py}"
   start_app "${py}"
+  start_worker "${py}"
+  start_frontend "${py}"
   check_app "${py}"
-  log "logs: .harness/app.log, .harness/fake-spotify.log; stop: scripts/harness.sh down"
+  log "logs: .harness/app.log, .harness/worker.log, .harness/fake-spotify.log; stop: scripts/harness.sh down"
   # The one line on stdout.
   echo "harness: ready at ${APP_URL} (schema ${SCHEMA_REVISION} at head, network guard active)"
 }
 
 cmd_down() {
+  stop_proc frontend
   stop_proc app
+  stop_proc worker
   stop_proc fake-spotify
   if [[ "${SERVICES}" == local ]]; then
     stop_redis
@@ -558,7 +615,9 @@ cmd_down() {
 
 cmd_status() {
   local bin pid
-  if pid="$(proc_pid app)"; then echo "app:        running (pid ${pid}) ${APP_URL}"; else echo "app:        stopped"; fi
+  if pid="$(proc_pid frontend)"; then echo "frontend:   running (pid ${pid}) ${APP_URL}"; else echo "frontend:   stopped"; fi
+  if pid="$(proc_pid app)"; then echo "api:        running (pid ${pid}) ${API_URL}"; else echo "api:        stopped"; fi
+  if pid="$(proc_pid worker)"; then echo "worker:     running (pid ${pid})"; else echo "worker:     stopped"; fi
   if pid="$(proc_pid fake-spotify)"; then echo "spotify:    fake, running (pid ${pid}) ${FAKE_SPOTIFY_URL}"; else echo "spotify:    fake, stopped"; fi
   if [[ "${SERVICES}" == local ]]; then
     bin="$(pg_bin)"
@@ -579,7 +638,9 @@ cmd_status() {
 cmd_reset_db() {
   [[ "${SERVICES}" == local ]] || die "reset-db only manages the local database"
   local bin
+  stop_proc frontend
   stop_proc app
+  stop_proc worker
   start_postgres
   bin="$(pg_bin)"
   log "dropping and re-creating ${DB_NAME}"

@@ -6,19 +6,23 @@ Manages playlist-archive pairings and archive operations.
 
 import logging
 
-from flask import jsonify, request
+from flask import jsonify, request, session
 from pydantic import ValidationError
 
 from shuffify.enums import ActivityType
 from shuffify.routes import (
+    api_bp,
     json_error,
     json_reply,
     json_success,
     log_activity,
-    main,
     require_auth_and_db,
+    require_session_and_db,
     validate_json,
 )
+from shuffify.routes.asset_queue import admit_asset
+from shuffify.routes.finalizer_queue import admit_finalizer
+from shuffify.routes.queue import AdmissionRejected, enqueue_command
 from shuffify.schemas.playlist_pair_requests import (
     CreatePairRequest,
     UnarchiveTracksRequest,
@@ -28,29 +32,21 @@ from shuffify.schemas.workshop_finalize_requests import (
     FinalizeArchiveRequest,
     FinalizeRestoreRequest,
 )
-from shuffify.services.playlist_lock import PlaylistBusyError, playlist_configuration_lock
+from shuffify.services.api_response import busy_error, error_payload
+from shuffify.services.operations.commands.archive_move import ArchiveMoveRejected, capture_unarchive
+from shuffify.services.operations.history import HistoryStore, get_history_scope
+from shuffify.services.playlist_lock import PlaylistBusyError
 from shuffify.services.playlist_pair_service import (
-    PlaylistPairExistsError,
     PlaylistPairNotFoundError,
     PlaylistPairService,
 )
-from shuffify.services.playlist_setup_service import CREATION_UNKNOWN, refusal
+from shuffify.services.state_service import PLAYLIST_STATES_KEY, StateError
 from shuffify.services.workshop_finalize_service import (
     WorkshopFinalizeResult,
     WorkshopFinalizeService,
 )
-from shuffify.spotify.exceptions import SpotifyWriteUnverifiedError
 
 logger = logging.getLogger(__name__)
-
-
-def _playlist_busy_response():
-    return jsonify({
-        "success": False,
-        "category": "error",
-        "error_code": "playlist_busy",
-        "message": "A routine is using this playlist. Try again.",
-    }), 409
 
 
 # The playlist-items resource names the nested object "track" on the legacy
@@ -61,7 +57,7 @@ _TRACK_SHAPE = "id,name,uri,artists(name),album(name,images),duration_ms"
 PLAYLIST_ITEM_FIELDS = f"items(track({_TRACK_SHAPE}),item({_TRACK_SHAPE}))"
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/pair", methods=["GET"]
 )
 @require_auth_and_db
@@ -80,87 +76,24 @@ def get_pair(playlist_id, api=None, user=None):
     })
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/pair", methods=["POST"]
 )
-@require_auth_and_db
+@require_session_and_db
 def create_pair(playlist_id, api=None, user=None):
-    """Create an archive pair for a playlist."""
-    req, err = validate_json(CreatePairRequest)
-    if err:
-        return err
-
-    try:
-        # Serialize the existing-pair check, external creation, and DB
-        # association. Busy responses must precede the Spotify write.
-        with playlist_configuration_lock(playlist_id, timeout_s=2.0) as acquired:
-            if not acquired:
-                raise PlaylistBusyError("Playlist is busy; please retry.")
-
-            if PlaylistPairService.get_pair_for_playlist(user.id, playlist_id):
-                raise PlaylistPairExistsError("A pair already exists for this playlist")
-
-            if req.create_new:
-                prod_name = (
-                    req.production_playlist_name or "Playlist"
-                )
-                try:
-                    archive_id, archive_name = (
-                        PlaylistPairService.create_archive_playlist(
-                            api,
-                            prod_name,
-                        )
-                    )
-                except SpotifyWriteUnverifiedError:
-                    logger.warning(
-                        "Archive playlist creation for %s has an unknown outcome",
-                        playlist_id,
-                        exc_info=True,
-                    )
-                    return json_reply(refusal("creation_unknown", 502, CREATION_UNKNOWN, outcome="unknown"))
-            else:
-                archive_id = req.archive_playlist_id
-                archive_name = req.archive_playlist_name
-
-            pair = PlaylistPairService.create_pair(
-                user_id=user.id,
-                production_playlist_id=playlist_id,
-                archive_playlist_id=archive_id,
-                production_playlist_name=(
-                    req.production_playlist_name
-                ),
-                archive_playlist_name=archive_name,
-            )
-
-        log_activity(
-            user_id=user.id,
-            activity_type=ActivityType.PAIR_CREATE,
-            description=(
-                f"Paired with archive '{archive_name}'"
-            ),
-            playlist_id=playlist_id,
-            playlist_name=req.production_playlist_name,
-        )
-
-        return json_success(
-            "Archive pair created",
-            pair=pair.to_dict(),
-        )
-
-    except PlaylistPairExistsError:
-        return json_error(
-            "A pair already exists for this playlist", 409
-        )
-    except PlaylistBusyError:
-        return _playlist_busy_response()
-    except Exception as e:
-        logger.error("Failed to create pair: %s", e)
-        return json_error(
-            "Failed to create archive pair", 500
-        )
+    """Accept one owned archive creation/association without provider I/O."""
+    req, error = validate_json(CreatePairRequest)
+    if error:
+        return error
+    return admit_asset(user, playlist_id, "pair_create", {
+        "create_new": req.create_new,
+        "target_playlist_name": req.production_playlist_name,
+        "asset_playlist_id": None if req.create_new else req.archive_playlist_id,
+        "asset_playlist_name": None if req.create_new else req.archive_playlist_name,
+    })
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/pair", methods=["PATCH"]
 )
 @require_auth_and_db
@@ -185,7 +118,7 @@ def update_pair(playlist_id, api=None, user=None):
     except PlaylistPairNotFoundError:
         return json_error("No pair found", 404)
     except PlaylistBusyError:
-        return _playlist_busy_response()
+        return json_reply(busy_error())
     except Exception as e:
         logger.error("Failed to update pair: %s", e)
         return json_error(
@@ -193,7 +126,7 @@ def update_pair(playlist_id, api=None, user=None):
         )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/pair", methods=["DELETE"]
 )
 @require_auth_and_db
@@ -213,7 +146,7 @@ def delete_pair(playlist_id, api=None, user=None):
     except PlaylistPairNotFoundError:
         return json_error("No pair found", 404)
     except PlaylistBusyError:
-        return _playlist_busy_response()
+        return json_reply(busy_error())
 
 
 def _rejected(count_key):
@@ -230,7 +163,7 @@ _archive_rejected = _rejected("archived_count")
 _restore_rejected = _rejected("restored_count")
 
 
-def _finalize_archive_task(playlist_id, api, user, *, restore):
+def _finalize_archive_task(playlist_id, user, *, restore):
     rejected = _restore_rejected if restore else _archive_rejected
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
@@ -242,87 +175,67 @@ def _finalize_archive_task(playlist_id, api, user, *, restore):
         return rejected(
             "Review the source changes again; the captured task is incomplete or invalid.", 400
         )
+    if not req.inspect_only:
+        return admit_finalizer(user, playlist_id,
+                               "workshop_finalize_restore" if restore else "workshop_archive_append", req)
+    from shuffify.routes import require_auth
+
+    api = require_auth()
+    if api is None:
+        return rejected("Please log in first.", 401)
     service = WorkshopFinalizeService(api)
     finalize = service.finalize_restore if restore else service.append_archive
     result = finalize(playlist_id, user, **req.model_dump())
-    if (
-        result.status == "complete"
-        and (result.affected_count or 0) > 0
-        and not req.inspect_only
-    ):
-        count = result.affected_count
-        log_activity(
-            user_id=user.id,
-            activity_type=ActivityType.UNARCHIVE_TRACKS if restore else ActivityType.ARCHIVE_TRACKS,
-            description=f"Verified {count} archive {'restorations' if restore else 'additions'}",
-            playlist_id=playlist_id, metadata={"track_count": count},
-        )
     return jsonify(result.to_dict()), result.http_status
 
 
-@main.route("/playlist/<playlist_id>/pair/archive", methods=["POST"])
-@require_auth_and_db(on_preflight_error=_archive_rejected)
-def archive_tracks(playlist_id, api=None, user=None):
+@api_bp.route("/playlist/<playlist_id>/pair/archive", methods=["POST"])
+@require_session_and_db(on_preflight_error=_archive_rejected)
+def archive_tracks(playlist_id, user=None):
     """Append the captured occurrences and verify the complete archive order."""
-    return _finalize_archive_task(playlist_id, api, user, restore=False)
+    return _finalize_archive_task(playlist_id, user, restore=False)
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/pair/unarchive",
     methods=["POST"],
 )
-@require_auth_and_db
-def unarchive_tracks(
-    playlist_id, api=None, user=None
-):
-    """Unarchive tracks back to the playlist the archive is paired with."""
-    pair = PlaylistPairService.get_pair_for_playlist(
-        user.id, playlist_id
-    )
-    if not pair:
-        return json_error("No archive pair found", 404)
-
+@require_session_and_db
+def unarchive_tracks(playlist_id, user=None):
+    """Accept an exact owned archive move without authenticating Spotify."""
     req, err = validate_json(UnarchiveTracksRequest)
     if err:
         return err
 
-    try:
-        count = PlaylistPairService.unarchive_tracks(
-            api,
-            pair.production_playlist_id,
-            pair.archive_playlist_id,
-            req.track_uris,
-        )
-        log_activity(
-            user_id=user.id,
-            activity_type=ActivityType.UNARCHIVE_TRACKS,
-            description=(
-                f"Unarchived {count} tracks"
-            ),
-            playlist_id=playlist_id,
-            metadata={"track_count": count},
-        )
-        return json_success(
-            f"Unarchived {count} tracks",
-            unarchived_count=count,
-        )
-    except Exception as e:
-        logger.error(
-            "Failed to unarchive tracks: %s", e
-        )
-        return json_error(
-            "Failed to unarchive tracks", 500
-        )
+    def build(storage):
+        try:
+            command = capture_unarchive(storage, user.id, playlist_id, req.track_uris)
+            history = HistoryStore(session=storage).capture(
+                user.id, get_history_scope(session), command.reserved_targets,
+                legacy=session.get(PLAYLIST_STATES_KEY),
+            )
+            return command, history
+        except ArchiveMoveRejected as error:
+            body = error_payload(error.message, error.http_status, error_code=error.code, retryable=error.retryable)
+            raise AdmissionRejected((jsonify(body), error.http_status)) from error
+        except StateError as error:
+            body = error_payload(
+                "The saved playlist history is unavailable. Review it before moving tracks.",
+                409, error_code="history_unavailable", retryable=False,
+            )
+            raise AdmissionRejected((jsonify(body), 409)) from error
+
+    return enqueue_command(user, "unarchive", {"playlist_id": playlist_id, "track_uris": req.track_uris}, build)
 
 
-@main.route("/playlist/<playlist_id>/pair/finalize-restore", methods=["POST"])
-@require_auth_and_db(on_preflight_error=_restore_rejected)
-def finalize_restore(playlist_id, api=None, user=None):
+@api_bp.route("/playlist/<playlist_id>/pair/finalize-restore", methods=["POST"])
+@require_session_and_db(on_preflight_error=_restore_rejected)
+def finalize_restore(playlist_id, user=None):
     """Verify target membership before removing all source URI occurrences."""
-    return _finalize_archive_task(playlist_id, api, user, restore=True)
+    return _finalize_archive_task(playlist_id, user, restore=True)
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/pair/archive-tracks",
     methods=["GET"],
 )

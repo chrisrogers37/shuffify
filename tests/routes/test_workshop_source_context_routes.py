@@ -4,6 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.paths import api_path
+
 
 @pytest.mark.parametrize(
     "query,raid,archive",
@@ -25,7 +27,7 @@ def test_requested_context_scopes(auth, service, auth_client, query, raid, archi
         "archive": None,
     }
     service.return_value.source_context.return_value = body, 200
-    response = auth_client.get(f"/workshop/p1/source-context{query}")
+    response = auth_client.get(api_path(f"/workshop/p1/source-context{query}"))
     assert response.status_code == 200
     assert response.json == body
     service.assert_called_once_with(auth.return_value)
@@ -42,9 +44,10 @@ def test_context_failure_preserves_status(auth, service, auth_client, status):
         "success": False,
         "message": "Could not read source",
         "error_code": "read_failed",
+        "category": "error",
     }
     service.return_value.source_context.return_value = body, status
-    response = auth_client.get("/workshop/p1/source-context?archive=1")
+    response = auth_client.get(api_path("/workshop/p1/source-context?archive=1"))
     assert response.status_code == status
     assert response.json == body
 
@@ -52,5 +55,5 @@ def test_context_failure_preserves_status(auth, service, auth_client, status):
 @patch("shuffify.routes.require_auth", return_value=None)
 def test_context_requires_authentication(auth, db_app):
     with db_app.test_client() as client:
-        response = client.get("/workshop/p1/source-context")
+        response = client.get(api_path("/workshop/p1/source-context"))
     assert response.status_code == 401

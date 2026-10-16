@@ -2,6 +2,10 @@
 
 import logging
 
+from shuffify.services.operations.control import propagate_control
+from shuffify.spotify.deadline import SpotifyDeadlineError, check_deadline, remaining_seconds
+from shuffify.spotify.exceptions import SpotifyRateLimitError
+
 from .base import ResolveResult
 
 logger = logging.getLogger(__name__)
@@ -54,11 +58,13 @@ class SearchPathway:
 
         try:
             for page in range(MAX_PAGES):
+                check_deadline()
                 tracks = api.search_tracks(
                     query=query,
                     limit=PAGE_SIZE,
                     offset=page * PAGE_SIZE,
                 )
+                check_deadline()
 
                 if not tracks:
                     break
@@ -68,7 +74,12 @@ class SearchPathway:
                     if uri and uri not in seen:
                         seen.add(uri)
                         all_uris.append(uri)
+        except SpotifyDeadlineError:
+            raise
         except Exception as e:
+            propagate_control(e)
+            if isinstance(e, SpotifyRateLimitError) and remaining_seconds() is not None:
+                raise
             logger.warning(
                 "Search failed for query '%s': %s", query, e
             )

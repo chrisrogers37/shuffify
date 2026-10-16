@@ -5,19 +5,22 @@ playlist snapshots.
 
 import logging
 
-from flask import jsonify, request, session
+from flask import jsonify, request
+from pydantic import ValidationError
 
 from shuffify.enums import SnapshotType
 from shuffify.routes import (
+    api_bp,
     context_preflight,
     json_error,
     json_reply,
     json_success,
-    main,
     no_store,
     require_auth_and_db,
+    require_session_and_db,
     validate_json,
 )
+from shuffify.routes.queue import AdmissionRejected, capture_direct_history, enqueue_command
 from shuffify.schemas import ManualSnapshotRequest
 from shuffify.services import (
     PlaylistSnapshotError,
@@ -30,18 +33,18 @@ from shuffify.services.live_operation_service import (
     direct_response_payload,
     preflight_error_code,
 )
-from shuffify.services.live_playlist_service import LivePlaylistService
 from shuffify.services.live_review_bindings import (
     ReviewBindingError,
     invalid_binding_result,
     request_binding,
 )
 from shuffify.services.live_review_context import context_unavailable
+from shuffify.services.operations.commands.schemas import SnapshotRestoreCommand
 
 logger = logging.getLogger(__name__)
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/snapshots", methods=["GET"]
 )
 @require_auth_and_db
@@ -59,7 +62,7 @@ def list_snapshots(playlist_id, api=None, user=None):
     })
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/snapshots", methods=["POST"]
 )
 @require_auth_and_db
@@ -96,7 +99,7 @@ def create_manual_snapshot(
         return json_error(str(e), 500)
 
 
-@main.route(
+@api_bp.route(
     "/snapshots/<int:snapshot_id>", methods=["GET"]
 )
 @require_auth_and_db
@@ -126,41 +129,51 @@ def _snapshot_restore_preflight(message, status_code):
     ))
 
 
-@main.route("/snapshots/<int:snapshot_id>/restore", methods=["POST"])
-@require_auth_and_db(on_preflight_error=_snapshot_restore_preflight)
-def restore_snapshot(snapshot_id, api=None, user=None):
-    """Restore the owned snapshot through the verified direct target service."""
+@api_bp.route("/snapshots/<int:snapshot_id>/restore", methods=["POST"])
+@require_session_and_db(on_preflight_error=_snapshot_restore_preflight)
+def restore_snapshot(snapshot_id, user=None):
+    """Freeze an owned snapshot's order and queue its verified restoration."""
     # An optional reviewed bundle; other body keys stay ignored, and a
     # malformed bundle is refused before any database or Spotify read.
     try:
         reviewed = request_binding(request, "snapshot_restore")
     except ReviewBindingError:
         return _snapshot_restore_response(invalid_binding_result("snapshot_restore"))
-    try:
-        snapshot = PlaylistSnapshotService.get_snapshot(snapshot_id, user.id)
-    except PlaylistSnapshotNotFoundError:
-        return _snapshot_restore_response(direct_rejected_result(
-            "snapshot_restore", error_code="snapshot_not_found", http_status=404,
-            message="Snapshot not found.",
-        ))
-    except Exception:
-        logger.exception("Snapshot lookup unavailable for %s", snapshot_id)
-        return _snapshot_restore_response(direct_rejected_result(
-            "snapshot_restore", error_code="snapshot_unavailable", http_status=503,
-            retryable=True, message="Snapshot could not be read. No changes were sent.",
-        ))
-    try:
-        result = LivePlaylistService(api).restore_snapshot(snapshot, user, session, reviewed=reviewed)
-    except Exception:
-        logger.exception("Snapshot restore outcome unavailable for %s", snapshot_id)
-        result = direct_rejected_result(
-            "snapshot_restore", error_code="outcome_unavailable", http_status=502, unknown=True,
-            message="The restore could not be verified. Check the playlist before another change.",
-        )
-    return _snapshot_restore_response(result)
+
+    def build(storage):
+        try:
+            snapshot = PlaylistSnapshotService.get_snapshot(snapshot_id, user.id, session=storage)
+        except PlaylistSnapshotNotFoundError as error:
+            raise AdmissionRejected(_snapshot_restore_response(direct_rejected_result(
+                "snapshot_restore", error_code="snapshot_not_found", http_status=404, message="Snapshot not found.",
+            ))) from error
+        except Exception as error:
+            logger.exception("Snapshot lookup unavailable for %s", snapshot_id)
+            raise AdmissionRejected(_snapshot_restore_response(direct_rejected_result(
+                "snapshot_restore", error_code="snapshot_unavailable", http_status=503,
+                retryable=True, message="Snapshot could not be read. No changes were sent.",
+            ))) from error
+        if not snapshot.track_uris:
+            raise AdmissionRejected(_snapshot_restore_response(direct_rejected_result(
+                "snapshot_restore", error_code="empty_snapshot", http_status=400,
+                message="This snapshot has no saved tracks to restore.",
+            )))
+        try:
+            command = SnapshotRestoreCommand(
+                playlist_id=snapshot.playlist_id, snapshot=snapshot.to_dict(), reviewed=reviewed,
+            )
+        except ValidationError as error:
+            raise AdmissionRejected(_snapshot_restore_response(direct_rejected_result(
+                "snapshot_restore", error_code="invalid_track_order", http_status=400,
+                message="The saved track order cannot be safely restored.",
+            ))) from error
+        binding, _mapping = capture_direct_history(user, snapshot.playlist_id, "snapshot_restore", storage=storage)
+        return command, binding
+
+    return enqueue_command(user, "snapshot_restore", {"snapshot_id": snapshot_id, "reviewed": reviewed}, build)
 
 
-@main.route("/snapshots/<int:snapshot_id>/restore-context", methods=["GET"])
+@api_bp.route("/snapshots/<int:snapshot_id>/restore-context", methods=["GET"])
 @no_store
 @require_auth_and_db(on_preflight_error=context_preflight("snapshot_restore"))
 def snapshot_restore_context(snapshot_id, api=None, user=None):
@@ -173,7 +186,7 @@ def snapshot_restore_context(snapshot_id, api=None, user=None):
     return json_reply(reply)
 
 
-@main.route(
+@api_bp.route(
     "/snapshots/<int:snapshot_id>", methods=["DELETE"]
 )
 @require_auth_and_db

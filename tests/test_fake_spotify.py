@@ -254,12 +254,32 @@ class TestSelfCheck:
                           data="{not json", content_type="application/json")
         assert resp.status_code == 400 and resp.get_json()["error"]["message"] == "Error parsing JSON."
 
-    def test_links_never_point_off_the_machine(self, client, alice):
+    def test_api_links_stay_local_and_spotify_backlinks_are_canonical(self, client, alice):
         resp = client.get("/v1/me", headers=alice, base_url="http://api.spotify.com")
         assert resp.status_code == 400
         served = create_app(origin="http://127.0.0.1:8900").test_client()
         me = served.get("/v1/me", headers=token_with("")).get_json()
         assert me["href"] == "http://127.0.0.1:8900/v1/users/alice"
+        assert me["external_urls"]["spotify"] == "https://open.spotify.com/user/alice"
+        playlist_id = pid("alice-long-haul")
+        playlist = served.get(f"/v1/playlists/{playlist_id}", headers=alice).get_json()
+
+        def check_links(value):
+            if isinstance(value, dict):
+                if "external_urls" in value:
+                    assert value["external_urls"]["spotify"] == (
+                        f"https://open.spotify.com/{value['type']}/{value['id']}"
+                    )
+                for key, item in value.items():
+                    if key in {"href", "next", "previous"} and item is not None:
+                        assert item.startswith("http://127.0.0.1:8900/v1/")
+                    check_links(item)
+            elif isinstance(value, list):
+                for item in value:
+                    check_links(item)
+
+        check_links(playlist)
+        assert playlist["items"]["next"]
 
 
 # ---------------------------------------------------------------------------
@@ -714,15 +734,14 @@ class TestFaults:
         arm(client, operation="GET /me", kind="rate_limit")
         assert "Retry-After" not in client.get("/v1/me", headers=alice).headers
 
-    def test_a_spent_quota_is_the_july_2026_body_and_matches_the_corrected_schema(self, client, alice):
+    def test_a_spent_quota_returns_a_reason_only_accepted_by_the_429_schema(self, client, alice):
         arm(client, operation="GET /me", kind="quota")
         resp = client.get("/v1/me", headers=alice)
         assert resp.status_code == 429 and "Retry-After" not in resp.headers
         assert resp.get_json() == {"error": {"status": 429, "message": "Too many requests", "reason": "QUOTA_EXCEEDED"}}
-        # The client fixture fails the test unless the fake recorded nothing,
-        # so the corrected 429 schema accepts the reason ...
+        # The 429 error schema accepts the optional quota reason.
         assert response_problems("GET /me", 429, resp.get_json(), has_body=True) == []
-        # ... on a 429 only.
+        # Other error statuses do not accept the quota reason.
         unauthorized = {"error": {"status": 401, "message": "x", "reason": "QUOTA_EXCEEDED"}}
         assert response_problems("GET /me", 401, unauthorized, has_body=True) != []
 

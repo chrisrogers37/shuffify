@@ -1,0 +1,10 @@
+{
+  "default_algorithm": null,
+  "default_algorithm_params": {},
+  "theme": "dark",
+  "notifications_enabled": true,
+  "auto_snapshot_enabled": false,
+  "max_snapshots_per_playlist": 5,
+  "dashboard_show_recent_activity": false,
+  "extra": {}
+}

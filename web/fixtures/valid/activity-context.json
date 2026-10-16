@@ -1,0 +1,132 @@
+{
+  "success": true,
+  "category": "success",
+  "stats": {
+    "total_shuffles": 4,
+    "total_scheduled_runs": 2,
+    "total_snapshots": 5,
+    "active_schedule_count": 1
+  },
+  "activities": [
+    {
+      "id": 1,
+      "user_id": 1,
+      "activity_type": "schedule_run",
+      "description": "Collected tracks for Alice mix",
+      "playlist_id": "alice-mix",
+      "playlist_name": "Alice mix",
+      "metadata": {
+        "triggered_by": "scheduler",
+        "result": {
+          "tracks_added": 2
+        }
+      },
+      "created_at": "2026-01-01T12:00:00+00:00",
+      "triggered_by": "scheduler"
+    },
+    {
+      "id": 2,
+      "user_id": 1,
+      "activity_type": "shuffle",
+      "description": "Collected tracks for Alice mix",
+      "playlist_id": "alice-mix",
+      "playlist_name": "Alice mix",
+      "metadata": null,
+      "created_at": "2026-01-01T12:00:00+00:00",
+      "triggered_by": "manual"
+    }
+  ],
+  "executions": [
+    {
+      "id": 1,
+      "schedule_id": 1,
+      "started_at": "2026-01-01T12:00:00+00:00",
+      "completed_at": "2026-01-01T12:00:00+00:00",
+      "status": "success",
+      "tracks_added": 2,
+      "tracks_total": 3,
+      "error_message": null,
+      "result_detail": {
+        "detail_status": "available",
+        "version": 1,
+        "operation": "raid_and_drip",
+        "execution_id": 1,
+        "outcome": "complete",
+        "steps": [
+          {
+            "step": "raid",
+            "status": "complete",
+            "counts": {
+              "tracks_collected": 2
+            },
+            "resources": [],
+            "bookkeeping": [
+              {
+                "kind": "pending_stage",
+                "status": "complete",
+                "resource": "alice-mix",
+                "affected_count": 2
+              }
+            ]
+          },
+          {
+            "step": "drip",
+            "status": "complete",
+            "counts": {
+              "tracks_moved_to_target": 2,
+              "tracks_removed_from_collection": 2
+            },
+            "resources": [
+              {
+                "resource": "alice-mix",
+                "status": "complete",
+                "phase": "drip",
+                "kind": "target",
+                "mutation_type": "track_membership",
+                "affected_count": 2,
+                "dispatched": true
+              },
+              {
+                "resource": "alice-collection",
+                "status": "complete",
+                "phase": "drip",
+                "kind": "collection",
+                "mutation_type": "track_membership",
+                "affected_count": 2,
+                "dispatched": true
+              }
+            ],
+            "bookkeeping": []
+          }
+        ],
+        "resource_ids": {
+          "target": "alice-mix",
+          "collection": "alice-collection"
+        },
+        "execution_record": "complete",
+        "run_state": "finished"
+      },
+      "schedule_name": "Alice mix",
+      "job_type": "raid_and_drip",
+      "triggered_by": null
+    },
+    {
+      "id": 2,
+      "schedule_id": 1,
+      "started_at": "2026-01-01T12:00:00+00:00",
+      "completed_at": "2026-01-01T12:00:00+00:00",
+      "status": "failed",
+      "tracks_added": null,
+      "tracks_total": null,
+      "error_message": "The run could not finish.",
+      "result_detail": {
+        "detail_status": "unavailable",
+        "version": null,
+        "steps": null
+      },
+      "schedule_name": "Alice mix",
+      "job_type": "raid_and_drip",
+      "triggered_by": null
+    }
+  ]
+}

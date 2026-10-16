@@ -1,26 +1,25 @@
 """
-Workshop routes: playlist workshop page, preview shuffle, commit,
+Workshop API: preview shuffle, commit,
 search, external playlist loading, and session persistence.
 """
 
 import logging
 
-from flask import flash, jsonify, redirect, render_template, request, session, url_for
+from flask import jsonify, request, session
 from pydantic import ValidationError
 
 from shuffify.enums import ActivityType
 from shuffify.error_handlers import format_validation_error
 from shuffify.routes import (
-    clear_session_and_show_login,
+    api_bp,
     json_error,
     json_success,
-    load_schedule_context,
     log_activity,
-    main,
     require_auth_and_db,
-    require_auth_page,
+    require_session_and_db,
     validate_json,
 )
+from shuffify.routes.queue import capture_direct_history, enqueue_command
 from shuffify.schemas import (
     ExternalPlaylistRequest,
     WorkshopCommitRequest,
@@ -28,10 +27,8 @@ from shuffify.schemas import (
     parse_shuffle_request,
 )
 from shuffify.services import (
-    AuthenticationError,
     PlaylistAccessError,
     PlaylistError,
-    PlaylistNotFoundError,
     PlaylistService,
     ShuffleService,
     WorkshopSessionError,
@@ -39,15 +36,12 @@ from shuffify.services import (
     WorkshopSessionNotFoundError,
     WorkshopSessionService,
 )
-from shuffify.services.playlist_preference_service import (
-    PlaylistPreferenceService,
-)
+from shuffify.services.operations.commands.schemas import WorkshopCommitCommand
 from shuffify.services.workshop_commit_service import (
     WorkshopCommitService,
     WorkshopTargetResult,
 )
 from shuffify.services.workshop_finalize_service import WorkshopFinalizeService
-from shuffify.spotify.exceptions import SpotifyAuthError
 from shuffify.spotify.url_parser import (
     parse_spotify_playlist_url,
 )
@@ -55,134 +49,7 @@ from shuffify.spotify.url_parser import (
 logger = logging.getLogger(__name__)
 
 
-@main.route("/workshop")
-@require_auth_page
-def workshop_hub(api=None, user=None, spotify_profile=None):
-    """Render the Workshop hub with no playlist selected."""
-    algorithms = ShuffleService.list_algorithms()
-    return render_template(
-        "workshop.html",
-        playlist=None,
-        algorithms=algorithms,
-        prev_playlist_id=None,
-        next_playlist_id=None,
-        prev_playlist_name=None,
-        next_playlist_name=None,
-        upstream_sources_json={},
-    )
-
-
-@main.route("/workshop/<playlist_id>")
-@require_auth_page
-def workshop(playlist_id, api=None, user=None, spotify_profile=None):
-    """Render the Playlist Workshop page."""
-    try:
-        playlist_service = PlaylistService(api)
-        playlist = playlist_service.get_playlist(
-            playlist_id, include_features=False
-        )
-
-        algorithms = ShuffleService.list_algorithms()
-
-        upstream_sources_json, _ = (
-            load_schedule_context(user)
-        )
-
-        prev_playlist_id = None
-        next_playlist_id = None
-        # The neighbours' names label the previous/next links (presentation only).
-        playlist_names = {}
-        try:
-            all_playlists = (
-                playlist_service.get_user_playlists()
-            )
-            ordered_ids = [
-                p["id"] for p in all_playlists
-            ]
-            playlist_names = {
-                p["id"]: p.get("name") for p in all_playlists
-            }
-            try:
-                preferences = (
-                    PlaylistPreferenceService
-                    .get_user_preferences(user.id)
-                )
-                if preferences:
-                    favs, visible, _hidden = (
-                        PlaylistPreferenceService
-                        .apply_preferences(
-                            all_playlists, preferences
-                        )
-                    )
-                    ordered_ids = [
-                        p["id"]
-                        for p in favs + visible
-                    ]
-            except Exception as e:
-                logger.debug(
-                    "Could not apply playlist "
-                    "preferences for navigation: %s",
-                    e,
-                )
-
-            if playlist_id in ordered_ids:
-                idx = ordered_ids.index(playlist_id)
-                if idx > 0:
-                    prev_playlist_id = ordered_ids[
-                        idx - 1
-                    ]
-                if idx < len(ordered_ids) - 1:
-                    next_playlist_id = ordered_ids[
-                        idx + 1
-                    ]
-        except Exception as e:
-            logger.debug(
-                "Could not build playlist "
-                "navigation: %s",
-                e,
-            )
-
-        logger.info(
-            f"User {(spotify_profile or {}).get('display_name', 'Unknown')} "
-            f"opened workshop for playlist "
-            f"'{playlist.name}' ({len(playlist)} tracks)"
-        )
-
-        return render_template(
-            "workshop.html",
-            playlist=playlist.to_dict(),
-            user=spotify_profile,
-            algorithms=algorithms,
-            upstream_sources_json=upstream_sources_json,
-            prev_playlist_id=prev_playlist_id,
-            next_playlist_id=next_playlist_id,
-            prev_playlist_name=playlist_names.get(prev_playlist_id),
-            next_playlist_name=playlist_names.get(next_playlist_id),
-        )
-
-    except (AuthenticationError, SpotifyAuthError) as e:
-        logger.error(f"Error loading workshop: {e}")
-        return clear_session_and_show_login(
-            "Your session has expired. Please log in again."
-        )
-    except PlaylistError as e:
-        # A missing playlist, someone else's, or Spotify failing: the
-        # session is fine, so the user stays logged in.
-        logger.warning(f"Could not open playlist {playlist_id} in the workshop: {e}")
-        flash(_unloadable_playlist_message(e), "error")
-        return redirect(url_for("main.workshop_hub"))
-
-
-def _unloadable_playlist_message(error: PlaylistError) -> str:
-    """What to tell the user when the Workshop cannot load a playlist."""
-    if isinstance(error, PlaylistNotFoundError):
-        return "That playlist doesn't exist or was deleted."
-    if isinstance(error, PlaylistAccessError):
-        return "You can only open your own or collaborative playlists in the Workshop."
-    return "Couldn't load that playlist from Spotify. Please try again."
-
-
-@main.route(
+@api_bp.route(
     "/workshop/<playlist_id>/preview-shuffle",
     methods=["POST"],
 )
@@ -240,9 +107,9 @@ def _commit_preflight_error(message, status_code):
     return jsonify(result.to_dict()), result.http_status
 
 
-@main.route("/workshop/<playlist_id>/commit", methods=["POST"])
-@require_auth_and_db(on_preflight_error=_commit_preflight_error)
-def workshop_commit(playlist_id, api=None, user=None):
+@api_bp.route("/workshop/<playlist_id>/commit", methods=["POST"])
+@require_session_and_db(on_preflight_error=_commit_preflight_error)
+def workshop_commit(playlist_id, user=None):
     """Validate and serialize a target-only Workshop commit."""
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
@@ -262,17 +129,18 @@ def workshop_commit(playlist_id, api=None, user=None):
         return _commit_preflight_error(
             f"Validation error: {format_validation_error(error)}", 400
         )
-    result = WorkshopCommitService(api).commit(
-        playlist_id,
-        user,
-        session,
-        commit_request.baseline_track_uris,
-        commit_request.track_uris,
-    )
-    return jsonify(result.to_dict()), result.http_status
+    command = WorkshopCommitCommand(playlist_id=playlist_id,
+                                     baseline_track_uris=commit_request.baseline_track_uris,
+                                     track_uris=commit_request.track_uris)
+
+    def build(storage):
+        binding, _mapping = capture_direct_history(user, playlist_id, "workshop_commit", storage=storage)
+        return command, binding
+
+    return enqueue_command(user, "workshop_commit", command.model_dump(mode="json"), build)
 
 
-@main.route("/workshop/<playlist_id>/current-state")
+@api_bp.route("/workshop/<playlist_id>/current-state")
 @require_auth_and_db
 def workshop_current_state(playlist_id, api=None, user=None):
     """Read a complete current order without altering the draft or its history."""
@@ -280,7 +148,7 @@ def workshop_current_state(playlist_id, api=None, user=None):
     return jsonify(result.to_dict()), result.http_status
 
 
-@main.route("/workshop/<playlist_id>/source-context")
+@api_bp.route("/workshop/<playlist_id>/source-context")
 @require_auth_and_db
 def workshop_source_context(playlist_id, api=None, user=None):
     """Read named source scope before review without changing Spotify or the DB."""
@@ -293,7 +161,7 @@ def workshop_source_context(playlist_id, api=None, user=None):
     return jsonify(body), status
 
 
-@main.route("/workshop/search", methods=["POST"])
+@api_bp.route("/workshop/search", methods=["POST"])
 @require_auth_and_db
 def workshop_search(api=None, user=None):
     """Search Spotify's catalog for tracks."""
@@ -349,50 +217,6 @@ def workshop_search(api=None, user=None):
 # =============================================================================
 # External Playlist Routes
 # =============================================================================
-
-
-@main.route(
-    "/workshop/search-playlists", methods=["POST"]
-)
-@require_auth_and_db
-def workshop_search_playlists(
-    api=None, user=None
-):
-    """Search for public playlists by name."""
-    data = request.get_json()
-    if not data:
-        return json_error("Request body must be JSON.", 400)
-
-    query = data.get("query", "").strip()
-    if not query:
-        return json_error("Search query is required.", 400)
-
-    if len(query) > 200:
-        return json_error(
-            "Search query too long (max 200 characters).",
-            400,
-        )
-
-    try:
-        results = api.search_playlists(query, limit=10)
-
-        logger.info(
-            f"Playlist search for '{query}' returned "
-            f"{len(results)} results"
-        )
-
-        return jsonify({
-            "success": True,
-            "playlists": results,
-        })
-
-    except Exception as e:
-        logger.error(
-            f"Playlist search failed: {e}", exc_info=True
-        )
-        return json_error(
-            "Search failed. Please try again.", 500
-        )
 
 
 def _load_playlist_by_url(api, ext_request, current_user_id=None):
@@ -536,7 +360,7 @@ def _search_playlists_by_query(api, ext_request):
         )
 
 
-@main.route(
+@api_bp.route(
     "/workshop/load-external-playlist", methods=["POST"]
 )
 @require_auth_and_db
@@ -568,7 +392,7 @@ def workshop_load_external_playlist(
 # =============================================================================
 
 
-@main.route(
+@api_bp.route(
     "/workshop/<playlist_id>/sessions", methods=["GET"]
 )
 @require_auth_and_db
@@ -585,7 +409,7 @@ def list_workshop_sessions(
     })
 
 
-@main.route(
+@api_bp.route(
     "/workshop/<playlist_id>/sessions", methods=["POST"]
 )
 @require_auth_and_db
@@ -647,7 +471,7 @@ def save_workshop_session(
         return json_error(str(e), 500)
 
 
-@main.route(
+@api_bp.route(
     "/workshop/sessions/<int:session_id>", methods=["GET"]
 )
 @require_auth_and_db
@@ -667,7 +491,7 @@ def load_workshop_session(
         return json_error("Saved session not found.", 404)
 
 
-@main.route(
+@api_bp.route(
     "/workshop/sessions/<int:session_id>",
     methods=["PUT"],
 )
@@ -711,7 +535,7 @@ def update_workshop_session(
         return json_error(str(e), 500)
 
 
-@main.route(
+@api_bp.route(
     "/workshop/sessions/<int:session_id>",
     methods=["DELETE"],
 )

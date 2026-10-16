@@ -1,44 +1,22 @@
-"""Compatibility and dialogs in a real browser: Workshop blocks only incompatible controls,
-destructive choices ask through the shared confirmation, and the Library and Routines pages
-update in place.
-
-Each test drives the app against the isolated fake Spotify at a desktop
-and a phone width, checks the outcome in the app's own API and in the fake's playlists, and fails on a native dialog,
-a console error or any failed request.
-
-A live action is held in flight with a slow fault on its Spotify write: the fake holds the write, so the page stays
-Busy while the test acts on the controls around it. The test releases the hold (``fake.release()``) as soon as it has
-checked the page, rather than waiting the delay out.
-"""
+"""Real-browser compatibility, retained write receipts and accessible confirmations."""
 
 import json
 import re
+import time
 
 import pytest
 from playwright.sync_api import expect
 
 from tests.e2e.conftest import APP, pid
-from tests.e2e.test_direct_live_actions import (
-    _choose_shuffle,
-    _close_result,
-    _close_tool,
-    _lose_reply,
-    _open_inbox,
-    _open_review,
-    _open_row_actions,
-    _open_tool,
-    _settled,
-)
 from tests.e2e.test_direct_live_actions import direct_browser as direct_browser
 from tests.e2e.test_live_operation_outcomes import _collection, _create_schedule
 from tests.e2e.test_pages import Visit
-from tests.e2e.test_workshop_source_recovery import _pair, _save
+from tests.paths import api_path
+from tests.routine_flow import list_schedules
 
 TARGET = pid("alice-morning-mix")
 ARCHIVE = pid("alice-morning-archive")
 LONG_HAUL = pid("alice-long-haul")
-# The most seconds the fake holds a live action's Spotify write. Each test releases the hold as soon as it has
-# checked the page while the action is in flight, so this only bounds a test that fails before it gets there.
 SLOW = 20
 SIZES = [(1440, 900), (768, 1024), (375, 812)]
 WORKSHOP = f"{APP}/workshop/{TARGET}"
@@ -65,9 +43,7 @@ class Session:
 
     def _record(self, request):
         if request.method != "GET":
-            self.sent.append(
-                (request.method, request.url.removeprefix(APP), request.post_data)
-            )
+            self.sent.append((request.method, request.url.removeprefix(APP), request.post_data))
 
     def _navigated(self, frame):
         if frame == self.page.main_frame:
@@ -75,9 +51,7 @@ class Session:
 
     def writes(self, method, path):
         """The bodies of every request of this method to this path so far."""
-        return [
-            body for verb, where, body in self.sent if verb == method and where == path
-        ]
+        return [body for verb, where, body in self.sent if verb == method and where == path]
 
     def assert_clean(self):
         assert self.dialogs == [], f"native dialogs opened: {self.dialogs}"
@@ -99,701 +73,550 @@ def open_session(direct_browser):
         session.visit.close()
 
 
-def _described(locator):
-    """The text a control's aria-describedby names: why it is unavailable. Empty when it names nothing."""
-    return locator.evaluate(
-        r"""el => (el.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean)
-            .map(id => { const node = document.getElementById(id); return node ? node.textContent.trim() : ''; })
-            .join(' ').trim()"""
+def _sections(alice):
+    """Where the server places each Library row now: playlist ID -> favorites, regular or hidden.
+
+    The dict is in page order: Favorites, then All playlists, then Hidden."""
+    context = alice.ok("get", "/api/library?refresh=1")
+    return {
+        row["id"]: "regular" if section == "playlists" else section
+        for section in ("favorites", "playlists", "hidden")
+        for row in context["sections"][section]
+    }
+
+
+def _panel(page):
+    return page.locator("section.sh-task-panel:visible").last
+
+
+def _close_all_panels(page):
+    while page.locator("section.sh-task-panel:visible").count():
+        _panel(page).get_by_role("button", name="Close", exact=True).click()
+
+
+def _open_tool(page, tool):
+    names = {
+        "inbox": "Inbox",
+        "archive": "Archive",
+        "routines": "Routines",
+        "locks": "Track locks",
+        "details": "Playlist details",
+    }
+    _close_all_panels(page)
+    page.get_by_role("button", name="Tools", exact=True).click()
+    _panel(page).get_by_role("button", name=names.get(tool, tool), exact=True).click()
+    expect(_panel(page).get_by_role("heading", name=names.get(tool, tool), exact=True)).to_be_visible()
+    return _panel(page)
+
+
+def _row_actions(page, uri=None):
+    _close_all_panels(page)
+    rows = page.locator(".sh-workshop-track")
+    row = (
+        rows.filter(has=page.locator(f'a[href="https://open.spotify.com/track/{uri.split(":")[-1]}"]')).first
+        if uri
+        else rows.first
     )
+    action = row.locator("[data-row-actions]")
+    if action.get_attribute("aria-expanded") != "true":
+        action.click()
+    return row.get_by_role("region")
 
 
-def _start_run(page, trigger, label):
-    """Review and run a live action, then close its results so the page behind it is reachable at every width.
+def _remove_row(page, index=0):
+    _close_all_panels(page)
+    row = page.locator(".sh-workshop-track").nth(index)
+    row.locator("[data-row-actions]").click()
+    row.get_by_role("button", name="Remove from draft", exact=True).click()
 
-    Returns while the action is still in flight: the caller holds its Spotify write with a slow fault."""
-    _open_review(page, trigger, label).click()
-    page.wait_for_function("() => PlaylistOperations.isBusy()")
-    _close_result(page)
+
+def _described(locator):
+    return locator.evaluate(r"""el => (el.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean)
+        .map(id => document.getElementById(id)?.textContent.trim() || '').join(' ').trim()""")
+
+
+def _no_sideways(page):
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+
+
+def _running(alice, operation_id):
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        operation = alice.ok("get", f"/operations/{operation_id}")["operation"]
+        if operation["state"] == "running":
+            return operation
+        assert operation["state"] == "queued", operation
+        time.sleep(0.025)
+    raise AssertionError(f"Operation {operation_id} did not start its held write")
+
+
+def _start_run(page, alice, trigger, path):
+    trigger.click()
+    expect(_panel(page).get_by_role("button", name="Run reviewed action", exact=True)).to_be_visible()
+    with page.expect_response(
+        lambda response: response.request.method == "POST" and response.url == APP + path
+    ) as response:
+        _panel(page).get_by_role("button", name="Run reviewed action", exact=True).click()
+    assert response.value.status == 202, response.value.text()
+    body = response.value.json()
+    operation_id = body["operation_id"]
+    assert body["operation"]["id"] == operation_id
+    _running(alice, operation_id)
+    _close_all_panels(page)
+    return operation_id
 
 
 def _locks(alice):
-    return [
-        lock["track_uri"]
-        for lock in alice.ok("get", f"/workshop/{TARGET}/locks")["locks"]
-    ]
+    return [lock["track_uri"] for lock in alice.ok("get", f"/workshop/{TARGET}/locks")["locks"]]
 
 
 def _routine(alice, target, schedule_id):
-    return next(
-        s
-        for s in alice.ok("get", f"/playlist/{target}/schedules")["schedules"]
-        if s["id"] == schedule_id
-    )
+    return next(row for row in list_schedules(alice, target) if row["id"] == schedule_id)
 
 
 def _paired(alice):
     return alice.ok("get", f"/playlist/{TARGET}/pair")["paired"]
 
 
-def _sections(alice):
-    """Where the server places each Library row now: playlist ID -> favorites, regular or hidden.
+def _pair(alice):
+    alice.write(
+        f"/playlist/{TARGET}/pair",
+        json={
+            "archive_playlist_id": ARCHIVE,
+            "archive_playlist_name": "Browser-supplied name is not authoritative",
+            "production_playlist_name": "Morning Mix",
+        },
+    )
 
-    The dict is in page order: Favorites, then All playlists, then Hidden."""
-    html = alice.get("/").text
-    sections = {}
-    for tile in re.findall(r"<li\b[^>]*\bcard-tile\b[^>]*>", html):
-        playlist = re.search(r'data-playlist-id="([^"]+)"', tile)
-        section = re.search(r'data-section="([^"]+)"', tile)
-        sections[playlist.group(1)] = section.group(1)
-    return sections
+
+def _save(alice, playlist, before, desired):
+    return alice.write(
+        f"/workshop/{playlist}/commit",
+        json={
+            "baseline_track_uris": before,
+            "track_uris": desired,
+        },
+    )
+
+
+def _library_row(page, playlist):
+    return page.locator(f'.sh-library-row[data-playlist-id="{playlist}"]')
+
+
+def _choose_shuffle(page, playlist):
+    row = _library_row(page, playlist)
+    row.locator(".sh-library-playlist-actions > summary").click()
+    row.locator("details details > summary").click()
+    row.get_by_label("Shuffle method", exact=True).select_option("BasicShuffle")
+    # The options disclosure may remain open: the reviewed action freezes its values.
+    return row
+
+
+def _shuffle(page, playlist):
+    row = _choose_shuffle(page, playlist)
+    row.get_by_role("button", name=re.compile(r"^Shuffle now")).click()
+    expect(_panel(page).get_by_role("button", name="Run shuffle", exact=True)).to_be_visible()
+    return row, _panel(page).get_by_role("button", name="Run shuffle", exact=True)
+
+
+def _lose_reply(posted):
+    def handle(route):
+        posted.append(route.request.url)
+        handle.requests.append(
+            {
+                "key": route.request.headers.get("idempotency-key"),
+                "body": route.request.post_data,
+            }
+        )
+        response = route.fetch()
+        assert response.status == 202, response.text()
+        operation_id = response.json()["operation_id"]
+        if len(posted) == 1:
+            handle.operation_id = operation_id
+            handle.location = response.headers["location"]
+            route.fulfill(status=202, content_type="application/json", body="")
+        else:
+            assert operation_id == handle.operation_id
+            route.fulfill(response=response)
+
+    handle.requests = []
+    return handle
 
 
 @pytest.mark.parametrize("width,height", SIZES)
-def test_a_lock_is_saved_while_collect_runs_but_refused_while_drip_runs(
-    alice, fake, open_session, width, height
-):
-    """Locks are saved configuration: allowed beside Collect for review, refused while Drip runs (and say why)."""
+def test_a_lock_is_saved_while_collect_runs_but_refused_while_drip_runs(alice, fake, open_session, width, height):
     collection = _collection(alice)
     before = fake.uris(TARGET)
-    s = open_session(width, height)
-    page = s.page
-    toggle_path = f"/workshop/{TARGET}/locks/toggle"
+    uri = before[0]
+    session = open_session(width, height)
+    page = session.page
     page.goto(WORKSHOP, wait_until="networkidle")
-    first = page.locator("#track-list .track-item").first
-    # A row has no lock button of its own: Row actions has one Lock control, shown in the row that opened it.
-    lock, uri = page.locator("#track-actions-lock"), first.get_attribute("data-uri")
-    assert lock.get_attribute("data-workshop-compat") == "locks"
-
-    # Collect writes only the collection and the review inbox, so a lock may still be saved beside it.
-    fake.arm(
-        operation="POST /playlists/{playlist_id}/items",
-        kind="slow",
-        delay=SLOW,
-        playlist_id=collection,
+    toggle_path = api_path(f"/workshop/{TARGET}/locks/toggle")
+    fake.arm(operation="POST /playlists/{playlist_id}/items", kind="slow", delay=SLOW, playlist_id=collection)
+    inbox = _open_tool(page, "inbox")
+    collect = _start_run(
+        page,
+        alice,
+        inbox.get_by_role("button", name="Collect for review", exact=True),
+        api_path(f"/playlist/{TARGET}/raid-now"),
     )
-    _open_inbox(page)
-    page.locator("#raid-now-btn").wait_for(state="visible")
-    _start_run(page, page.locator("#raid-now-btn"), "Collect for review")
-    assert page.evaluate("workshopState.liveRun.kind") == "raid"
-    _open_row_actions(page, first)
-    # Only the control's own note describes it: no reason for being unavailable is attached.
-    assert (
-        lock.is_enabled()
-        and lock.get_attribute("aria-describedby") == "track-actions-lock-note"
-    )
-    lock.click()
-    page.wait_for_function("uri => Boolean(workshopState.locks[uri])", arg=uri)
+    lock = _row_actions(page, uri).get_by_role("button", name="Lock for 30 days", exact=True)
+    expect(lock).to_be_enabled()
+    with page.expect_response(APP + toggle_path) as reply:
+        lock.click()
+    assert reply.value.status == 200, reply.value.text()
     assert _locks(alice) == [uri]
-    assert len(s.writes("POST", toggle_path)) == 1
-    assert page.evaluate("PlaylistOperations.isBusy()") is True, (
-        "the Collect finished before the lock was saved"
-    )
+    assert len(session.writes("POST", toggle_path)) == 1
+    assert alice.ok("get", f"/operations/{collect}")["operation"]["state"] == "running"
     fake.release()
-    _settled(page, 1)
-    assert page.evaluate("PlaylistOperations.getRecords()[0].complete") is True
+    assert alice.wait_operation(api_path(f"/operations/{collect}"), collect)["state"] == "succeeded"
     assert len(fake.uris(collection)) == 5 and fake.uris(TARGET) == before
 
-    # Adding collected tracks reads locks while it moves tracks, so a lock waits for it and says why.
-    fake.arm(
-        operation="POST /playlists/{playlist_id}/items",
-        kind="slow",
-        delay=SLOW,
-        playlist_id=TARGET,
+    fake.arm(operation="POST /playlists/{playlist_id}/items", kind="slow", delay=SLOW, playlist_id=TARGET)
+    inbox = _open_tool(page, "inbox")
+    collect_receipt = inbox.get_by_role("region", name="Collect for review", exact=True)
+    expect(collect_receipt.locator(":scope > p").first).to_have_text("complete", timeout=15000)
+    drip = _start_run(
+        page,
+        alice,
+        inbox.get_by_role("button", name="Add collected tracks now", exact=True),
+        api_path(f"/playlist/{TARGET}/drip-now"),
     )
-    _open_inbox(page)
-    page.locator("#drip-now-btn").wait_for(state="visible")
-    _start_run(page, page.locator("#drip-now-btn"), "Add collected tracks now")
-    assert page.evaluate("workshopState.liveRun.kind") == "drip"
-    _open_row_actions(page, first)
-    assert lock.is_disabled()
-    assert "adding collected tracks" in _described(lock)
-    assert page.locator("#track-actions-lock:not([disabled])").count() == 0
-    # A click that reaches the control, or its handler, still sends nothing and changes no lock.
+    lock = _row_actions(page, uri).get_by_role("button", name="Lock permanently", exact=True)
+    expect(lock).to_be_disabled()
+    assert "target tracks" in _described(lock)
     lock.dispatch_event("click")
-    page.evaluate("toggleTrackLock(workshopState.occurrences[0].key)")
-    # Unlock all is in Playlist details, and waits for the run the same way.
-    _open_tool(page, "details")
-    unlock_all = page.locator("#unlock-all-btn")
-    assert (
-        unlock_all.is_visible() and unlock_all.is_disabled() and _described(unlock_all)
-    )
-    unlock_all.dispatch_event("click")
-    assert (
-        len(s.writes("POST", toggle_path)) == 1
-        and s.writes("POST", f"/workshop/{TARGET}/locks/unlock-all") == []
-    )
-    assert _locks(alice) == [uri] and page.evaluate(
-        "Object.keys(workshopState.locks)"
-    ) == [uri]
-    assert page.evaluate("PlaylistOperations.isBusy()") is True
+    locks = _open_tool(page, "locks")
+    unlock = locks.get_by_role("button", name="Unlock all tracks now", exact=True)
+    expect(unlock).to_be_disabled()
+    unlock.dispatch_event("click")
+    assert len(session.writes("POST", toggle_path)) == 1
+    assert session.writes("POST", api_path(f"/workshop/{TARGET}/locks/unlock-all")) == []
+    assert _locks(alice) == [uri]
+    assert alice.ok("get", f"/operations/{drip}")["operation"]["state"] == "running"
     fake.release()
-    _settled(page, 2)
-    assert page.evaluate("PlaylistOperations.getRecords()[1].complete") is True
+    assert alice.wait_operation(api_path(f"/operations/{drip}"), drip)["state"] == "succeeded"
+    expect(unlock).to_be_enabled()
     after = fake.uris(TARGET)
     assert len(after) > len(before) and after[-len(before) :] == before
-    # The block lifts with the run, and the lock saved earlier is still there.
-    assert page.locator("#track-actions-lock:not([disabled])").count() == 1
     assert _locks(alice) == [uri]
     assert [fault["fired"] for fault in fake.faults()] == [1, 1]
-    s.assert_clean()
+    session.assert_clean()
 
 
 @pytest.mark.parametrize("width,height", SIZES)
-def test_raid_routine_pauses_and_resumes_while_collect_runs(
-    alice, fake, open_session, width, height
-):
-    """Pause and Resume are never blocked by a running live action; the routine's own Run waits."""
+def test_raid_routine_pauses_and_resumes_while_collect_runs(alice, fake, open_session, width, height):
     collection = _collection(alice)
     sid = _create_schedule(alice, "raid", TARGET)["id"]
-    s = open_session(width, height)
-    page = s.page
-    try:
-        page.goto(WORKSHOP, wait_until="networkidle")
-        # The compact Routines tool shows this exact saved routine, including its own Pause.
-        _open_tool(page, "routines")
-        card = page.locator(f'#workshop-routine-management .schedule-card[data-schedule-id="{sid}"]')
-        toggle = card.locator(".routine-toggle")
-        toggle.wait_for(state="visible")
-        assert (
-            toggle.inner_text().strip() == "Pause"
-            and toggle.get_attribute("data-workshop-compat") == "pause"
-        )
-        assert _routine(alice, TARGET, sid)["is_enabled"] is True
-
-        fake.arm(
-            operation="POST /playlists/{playlist_id}/items",
-            kind="slow",
-            delay=SLOW,
-            playlist_id=collection,
-        )
-        _close_tool(page, "routines")
-        _open_inbox(page)
-        _start_run(page, page.locator("#raid-now-btn"), "Collect for review")
-        assert page.evaluate("workshopState.liveRun.kind") == "raid"
-        # The routine's own Run waits for the Collect; Pause and Resume do not.
-        if page.locator("#workshop-inbox-panel").is_visible():
-            _close_tool(page, "inbox")
-        _open_tool(page, "routines")
-        card.locator(".routine-run").wait_for(state="visible")
-        assert card.locator(".routine-run").is_disabled()
-        for label, enabled in (("Resume", False), ("Pause", True)):
-            assert (
-                toggle.is_enabled() and toggle.get_attribute("aria-describedby") is None
-            )
+    session = open_session(width, height)
+    page = session.page
+    page.goto(WORKSHOP, wait_until="networkidle")
+    fake.arm(operation="POST /playlists/{playlist_id}/items", kind="slow", delay=SLOW, playlist_id=collection)
+    inbox = _open_tool(page, "inbox")
+    operation_id = _start_run(
+        page,
+        alice,
+        inbox.get_by_role("button", name="Collect for review", exact=True),
+        api_path(f"/playlist/{TARGET}/raid-now"),
+    )
+    routines = _open_tool(page, "routines")
+    card = routines.locator(f'[data-routine-id="{sid}"]')
+    # Read-only saved configuration remains available; the conflicting run is refused at review/admission.
+    for label, enabled in (("Pause", False), ("Resume", True)):
+        toggle = card.get_by_role("button", name=label, exact=True)
+        expect(toggle).to_be_enabled()
+        with page.expect_response(APP + api_path(f"/routines/{sid}/state")) as reply:
             toggle.click()
-            page.wait_for_function(
-                "args => document.querySelector(`.schedule-card[data-schedule-id='${args.id}'] "
-                ".routine-toggle`).textContent.trim() === args.label",
-                arg={"id": sid, "label": label},
-            )
-            assert _routine(alice, TARGET, sid)["is_enabled"] is enabled
-            assert page.evaluate("PlaylistOperations.isBusy()") is True, (
-                "the Collect finished too soon"
-            )
-        fake.release()
-        _settled(page, 1)
-        assert page.evaluate("PlaylistOperations.getRecords()[0].complete") is True
-        assert len(fake.uris(collection)) == 5
-        assert [fault["fired"] for fault in fake.faults()] == [1]
-        assert len(s.writes("PUT", f"/routines/{sid}/state")) == 2
-        assert [json.loads(body)["desired_enabled"] for body in s.writes(
-            "PUT", f"/routines/{sid}/state"
-        )] == [False, True]
-        s.assert_clean()
-    finally:
-        alice.ok("delete", f"/schedules/{sid}")
+        assert reply.value.status == 200, reply.value.text()
+        assert _routine(alice, TARGET, sid)["is_enabled"] is enabled
+        expect(card.get_by_role("button", name="Resume" if label == "Pause" else "Pause", exact=True)).to_be_visible()
+        assert alice.ok("get", f"/operations/{operation_id}")["operation"]["state"] == "running"
+    card.get_by_role("button", name="Run now", exact=True).click()
+    _panel(page).get_by_role("button", name="Run reviewed action", exact=True).click()
+    expect(_panel(page)).to_contain_text("is not reconciled. Open its original review")
+    assert session.writes("POST", api_path(f"/schedules/{sid}/run")) == []
+    _close_all_panels(page)
+    fake.release()
+    assert alice.wait_operation(api_path(f"/operations/{operation_id}"), operation_id)["state"] == "succeeded"
+    assert len(fake.uris(collection)) == 5
+    assert [fault["fired"] for fault in fake.faults()] == [1]
+    states = session.writes("PUT", api_path(f"/routines/{sid}/state"))
+    assert len(states) == 2 and [json.loads(body)["desired_enabled"] for body in states] == [False, True]
+    assert session.writes("POST", api_path(f"/schedules/{sid}/run")) == []
+    session.assert_clean()
 
 
 @pytest.mark.parametrize("width,height", SIZES)
 def test_archive_unlink_waits_for_staged_tracks_and_then_asks_before_it_unlinks(
-    alice,
-    fake,
-    open_session,
-    tmp_path,
-    width,
-    height,
+    alice, fake, open_session, tmp_path, width, height
 ):
-    """Unlink never clears staged archive work; once it is discarded, unlink asks through the shared confirmation."""
     _pair(alice)
     archived = fake.uris(LONG_HAUL)[:3]
     _save(alice, ARCHIVE, [], archived)
     original = fake.uris(TARGET)
-    s = open_session(width, height)
-    page = s.page
-    unlink, confirm = page.locator("#archive-unlink-btn"), page.locator("#app-confirm")
-    pair_path = f"/playlist/{TARGET}/pair"
-
-    def open_setup():
-        # Unlink is in Archive setup, which Archive opens; closing the setup returns to Archive.
-        _open_tool(page, "archive")
-        page.click("#workshop-archive-setup-btn")
-        unlink.wait_for(state="visible")
-
+    session = open_session(width, height)
+    page = session.page
     page.goto(WORKSHOP, wait_until="networkidle")
-    _open_tool(page, "archive")
-    page.wait_for_function(
-        "n => workshopState.archivePair !== null && workshopState.archiveTracks.length === n",
-        arg=len(archived),
-    )
-    open_setup()
-    assert unlink.get_attribute("data-workshop-compat") == "pair-unlink"
-    assert unlink.is_enabled() and _described(unlink) == ""
-
-    # Staging an archive restoration is a draft: unlink waits for it and never clears it.
-    _close_tool(page, "archive-setup")
-    page.locator("#inbox-archive-list .archive-add-btn").first.click()
-    page.wait_for_function("() => workshopState.stagedRestorations.length === 1")
-    # The draft controls are on the playlist, which an open tool covers below 1024px.
-    _close_tool(page, "archive")
-    discard = page.locator("#undo-preview-btn")
-    assert (
-        discard.is_visible() and discard.inner_text().strip() == "Discard draft changes"
-    )
-    open_setup()
-    assert unlink.is_disabled()
-    assert _described(unlink) == "Save or discard the staged archive tracks first"
+    archive = _open_tool(page, "archive")
+    expect(archive.locator("[data-archive-row]")).to_have_count(len(archived))
+    archive.get_by_role("button", name="Add to draft", exact=True).first.click()
+    expect(archive).to_contain_text("1 archive rows staged for restoration.")
+    archive.get_by_role("button", name="Archive setup", exact=True).click()
+    unlink = _panel(page).get_by_role("button", name="Unlink archive playlist", exact=True)
+    expect(unlink).to_be_disabled()
     unlink.dispatch_event("click")
-    unlink.evaluate("el => deleteArchivePair(el)")
-    assert confirm.is_hidden() and s.writes("DELETE", pair_path) == []
-    assert (
-        page.evaluate("workshopState.stagedRestorations.length") == 1
-        and _paired(alice) is True
-    )
-
-    # Discarding the draft returns the staged tracks to the archive and releases the control.
-    _close_tool(page, "archive-setup")
-    _close_tool(page, "archive")
-    page.click("#undo-preview-btn")
-    page.wait_for_function("() => workshopState.stagedRestorations.length === 0")
-    assert page.evaluate("workshopState.workingUris") == original
-    assert page.evaluate("workshopState.archiveTracks.length") == len(archived)
-    open_setup()
-    assert unlink.is_enabled() and _described(unlink) == ""
-
-    # Cancel keeps the pairing and returns focus to the control that asked.
-    # The confirmation hides the panel behind it, so the archive's name is read first.
-    name = page.locator("#archive-pair-name").inner_text()
+    expect(page.get_by_role("dialog")).to_have_count(0)
+    pair_path = api_path(f"/playlist/{TARGET}/pair")
+    assert session.writes("DELETE", pair_path) == [] and _paired(alice) is True
+    _close_all_panels(page)
+    page.get_by_role("button", name="Discard draft changes", exact=True).click()
+    page.get_by_role("dialog", name="Discard local draft changes?", exact=True).get_by_role(
+        "button", name="Discard draft", exact=True
+    ).click()
+    expect(page.locator(".sh-workshop-draft-footer")).to_contain_text("Confirmed baseline")
+    assert fake.uris(TARGET) == original and fake.uris(ARCHIVE) == archived
+    archive = _open_tool(page, "archive")
+    expect(archive.locator("[data-archive-row]")).to_have_count(len(archived))
+    archive.get_by_role("button", name="Archive setup", exact=True).click()
+    unlink = _panel(page).get_by_role("button", name="Unlink archive playlist", exact=True)
+    expect(unlink).to_be_enabled()
     unlink.click()
-    confirm.wait_for(state="visible")
-    assert (
-        page.locator("#app-confirm-heading").inner_text()
-        == "Unlink the archive playlist?"
-    )
-    assert name and name in page.locator("#app-confirm-text").inner_text()
-    assert page.evaluate(
-        "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
-    )
-    for button in ("#app-confirm-ok", "#app-confirm-cancel"):
-        box = page.locator(button).bounding_box()
-        assert (
-            0 <= box["x"]
-            and box["x"] + box["width"] <= width
-            and box["y"] + box["height"] <= height
-        )
-    page.screenshot(
-        path=tmp_path / f"archive-unlink-confirm-{width}.png", full_page=True
-    )
-    page.click("#app-confirm-cancel")
-    confirm.wait_for(state="hidden")
-    assert page.evaluate("document.activeElement.id") == "archive-unlink-btn"
-    assert s.writes("DELETE", pair_path) == [] and _paired(alice) is True
-    assert page.evaluate("workshopState.archivePair !== null")
-
-    # Confirm unlinks; the archive playlist and its tracks stay on Spotify.
+    dialog = page.get_by_role("dialog", name="Unlink the archive playlist?", exact=True)
+    expect(dialog).to_contain_text(fake.playlist(ARCHIVE)["name"])
+    _no_sideways(page)
+    for button in dialog.get_by_role("button").all():
+        box = button.bounding_box()
+        assert box and 0 <= box["x"] and box["x"] + box["width"] <= width and box["y"] + box["height"] <= height
+    page.screenshot(path=tmp_path / f"archive-unlink-confirm-{width}.png", full_page=True)
+    dialog.get_by_role("button", name="Cancel", exact=True).click()
+    expect(unlink).to_be_focused()
+    assert session.writes("DELETE", pair_path) == [] and _paired(alice) is True
     unlink.click()
-    confirm.wait_for(state="visible")
-    page.click("#app-confirm-ok")
-    page.wait_for_function("() => workshopState.archivePair === null")
-    assert _paired(alice) is False
-    assert len(s.writes("DELETE", pair_path)) == 1
+    with page.expect_response(APP + pair_path) as reply:
+        page.get_by_role("dialog").get_by_role("button", name="Unlink archive", exact=True).click()
+    assert reply.value.status == 200, reply.value.text()
+    expect(_panel(page)).to_contain_text("No archive linked.")
+    assert _paired(alice) is False and len(session.writes("DELETE", pair_path)) == 1
     assert fake.uris(ARCHIVE) == archived and fake.uris(TARGET) == original
-    assert page.locator("#archive-no-pair").is_visible()
-    s.assert_clean()
+    session.assert_clean()
 
 
 @pytest.mark.parametrize("width,height", SIZES)
-def test_dismiss_all_asks_first_and_dismisses_only_the_unstaged_rows(
-    alice, fake, open_session, width, height
-):
-    """Dismiss all asks first, then sends only the rows shown; a staged row is part of the draft and stays pending."""
+def test_dismiss_all_asks_first_and_dismisses_only_the_unstaged_rows(alice, fake, open_session, width, height):
     collection = _collection(alice)
-    alice.ok("post", f"/playlist/{TARGET}/raid-now", json={})
+    alice.write(f"/playlist/{TARGET}/raid-now", json={})
     pending = alice.ok("get", f"/playlist/{TARGET}/pending-raids")["tracks"]
     assert len(pending) == 5 and len(fake.uris(collection)) == 5
-    s = open_session(width, height)
-    page = s.page
-    confirm = page.locator("#app-confirm")
-    dismiss_path = f"/playlist/{TARGET}/pending-raids/dismiss"
+    session = open_session(width, height)
+    page = session.page
     page.goto(WORKSHOP, wait_until="networkidle")
-    _open_tool(page, "inbox")
-    page.wait_for_function("() => pendingRaidsState.tracks.length === 5")
-
-    # Stage one inbox track for promotion: it is part of the draft, not of what Dismiss all may remove.
-    rows = page.locator("#inbox-raids-list > div")
-    staged_id = int(rows.first.get_attribute("data-track-id"))
+    inbox = _open_tool(page, "inbox")
+    rows = inbox.locator("[data-pending-id]")
+    expect(rows).to_have_count(5)
+    staged_id = int(rows.first.get_attribute("data-pending-id"))
     staged = next(track for track in pending if track["id"] == staged_id)
-    rows.first.locator(".inbox-add-btn").click()
-    page.wait_for_function(
-        "() => pendingRaidsState.stagedPromotions.length === 1 && pendingRaidsState.tracks.length === 4"
-    )
+    rows.first.get_by_role("button", name="Add to draft", exact=True).click()
+    expect(rows).to_have_count(4)
     others = sorted(track["id"] for track in pending if track["id"] != staged_id)
-    dismiss_all = page.locator("#inbox-raids-dismiss-all")
-    assert (
-        dismiss_all.get_attribute("data-workshop-compat") == "dismiss"
-        and dismiss_all.is_enabled()
-    )
-
-    # Cancel sends nothing.
-    dismiss_all.click()
-    confirm.wait_for(state="visible")
-    assert (
-        page.locator("#app-confirm-heading").inner_text()
-        == "Dismiss all pending tracks?"
-    )
-    assert "4 pending tracks" in page.locator("#app-confirm-text").inner_text()
-    assert page.evaluate(
-        "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
-    )
-    page.click("#app-confirm-cancel")
-    confirm.wait_for(state="hidden")
-    assert s.writes("POST", dismiss_path) == []
+    dismiss = inbox.get_by_role("button", name="Dismiss all now", exact=True)
+    dismiss.click()
+    dialog = page.get_by_role("dialog", name="Dismiss all pending tracks?", exact=True)
+    expect(dialog).to_contain_text("4 currently shown pending tracks")
+    dialog.get_by_role("button", name="Cancel", exact=True).click()
+    expect(dismiss).to_be_focused()
+    dismiss_path = api_path(f"/playlist/{TARGET}/pending-raids/dismiss")
+    assert session.writes("POST", dismiss_path) == []
     assert len(alice.ok("get", f"/playlist/{TARGET}/pending-raids")["tracks"]) == 5
-
-    # Confirm sends exactly the four rows shown, through the one-row route, and never the dismiss-everything route.
-    dismiss_all.click()
-    confirm.wait_for(state="visible")
-    page.click("#app-confirm-ok")
-    page.wait_for_function("() => pendingRaidsState.tracks.length === 0")
-    sent = s.writes("POST", dismiss_path)
+    dismiss.click()
+    with page.expect_response(APP + dismiss_path) as reply:
+        page.get_by_role("dialog").get_by_role("button", name="Dismiss 4 pending tracks", exact=True).click()
+    assert reply.value.status == 202, reply.value.text()
+    operation_id = reply.value.json()["operation_id"]
+    assert alice.wait_operation(api_path(f"/operations/{operation_id}"), operation_id)["state"] == "succeeded"
+    expect(rows).to_have_count(0)
+    expect(inbox).to_contain_text("1 pending IDs staged for the next reviewed save.")
+    sent = session.writes("POST", dismiss_path)
     assert len(sent) == 1 and sorted(json.loads(sent[0])["track_ids"]) == others
-    assert s.writes("POST", f"/playlist/{TARGET}/pending-raids/dismiss-all") == []
-    assert [
-        track["id"]
-        for track in alice.ok("get", f"/playlist/{TARGET}/pending-raids")["tracks"]
-    ] == [staged_id]
+    assert session.writes("POST", api_path(f"/playlist/{TARGET}/pending-raids/dismiss-all")) == []
+    assert [track["id"] for track in alice.ok("get", f"/playlist/{TARGET}/pending-raids")["tracks"]] == [staged_id]
     assert fake.uris(collection) == [staged["track_uri"]]
-    assert page.evaluate(
-        "pendingRaidsState.stagedPromotions.map(track => track.id)"
-    ) == [staged_id]
+    _close_all_panels(page)
+    expect(page.locator(".sh-workshop-draft-footer")).to_contain_text("Local changes waiting for review")
     assert (
-        page.evaluate(
-            "uri => workshopState.workingUris.includes(uri)", staged["track_uri"]
-        )
-        is True
+        page.locator(".sh-workshop-track")
+        .filter(has=page.locator(f'a[href="https://open.spotify.com/track/{staged["track_uri"].split(":")[-1]}"]'))
+        .count()
+        > 0
     )
-    s.assert_clean()
+    session.assert_clean()
 
 
 @pytest.mark.parametrize("width,height", SIZES)
 def test_library_favorite_and_hide_update_in_place_beside_a_lost_reply_result(
-    alice,
-    fake,
-    open_session,
-    tmp_path,
-    width,
-    height,
+    alice, fake, open_session, tmp_path, width, height
 ):
-    """Favorite and hide save app preferences only, so tiles move without a reload and the result stays."""
-    shuffle = f"{APP}/shuffle/{TARGET}"
-    s = open_session(width, height)
-    page = s.page
+    session = open_session(width, height)
+    page = session.page
     posted = []
-    page.route(shuffle, _lose_reply(posted))
-    card = _choose_shuffle(page, TARGET)
-    _open_review(page, card.locator(".library-quick-shuffle"), "Shuffle now").click()
-    _settled(page, 1)
-    assert page.evaluate("PlaylistOperations.getRecords()[0].aggregate") == "unknown"
-    assert page.evaluate("PlaylistOperations.hasAttention()") is True
-    _close_result(page)
-    assert posted == [shuffle]
-
-    # Nothing here may reload the page: the result below would be lost with it.
+    shuffle_path = api_path(f"/shuffle/{TARGET}")
+    lost = _lose_reply(posted)
+    page.route(APP + shuffle_path, lost)
+    row, run = _shuffle(page, TARGET)
+    run.click()
+    expect(_panel(page).get_by_role("button", name="Retry this exact request", exact=True)).to_be_visible()
+    assert alice.wait_operation(lost.location, lost.operation_id)["state"] == "succeeded"
+    _close_all_panels(page)
     page.evaluate("window.__sameDocument = true")
-    navigations = list(s.navigations)
-    other = page.locator(f'.card-tile[data-playlist-id="{LONG_HAUL}"]')
+    navigations = list(session.navigations)
     assert _sections(alice)[TARGET] == _sections(alice)[LONG_HAUL] == "regular"
-
-    # Favorite and Hide are Organize controls; they save Library preferences only, never a Spotify change.
-    page.locator("#organize-btn").click()
-    card.locator(".fav-btn").click()
-    page.wait_for_function(
-        "id => Boolean(document.querySelector(`#favorites-grid .card-tile[data-playlist-id='${id}']`))",
-        arg=TARGET,
-    )
-    assert (
-        card.get_attribute("data-pinned") == "true"
-        and card.get_attribute("data-section") == "favorites"
-    )
-    assert (
-        page.locator("#favorites-section").is_visible()
-        and page.locator("#favorites-count").inner_text() == "1"
-    )
-    # The star has no title: its words and its accessible name say what it would do next.
-    favorite = card.locator(".fav-btn")
-    assert favorite.text_content().strip() == "Unfavorite"
-    assert favorite.get_attribute("aria-label") == "Unfavorite: Morning Mix"
-    # The tile that moved is the one the unknown result is about: it keeps waiting for a check.
-    assert card.locator(".library-quick-shuffle").is_disabled()
-
-    # In Organize, Hide shows on the row itself: there is no disclosure to open first.
-    other.locator(".hide-btn").click()
-    page.wait_for_function(
-        "id => Boolean(document.querySelector(`#hidden-grid .card-tile[data-playlist-id='${id}']`))",
-        arg=LONG_HAUL,
-    )
-    assert (
-        other.get_attribute("data-hidden") == "true"
-        and other.get_attribute("data-section") == "hidden"
-    )
-    assert (
-        page.locator("#hidden-playlists-section").is_visible()
-        and page.locator("#hidden-count").inner_text() == "1"
-    )
-    assert page.locator("#library-reload-notice").is_hidden()
-    assert page.evaluate(
-        "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
-    )
+    page.get_by_role("button", name="Organize", exact=True).click()
+    row.get_by_role("button", name=re.compile(r"^Add favorite")).click()
+    expect(
+        page.locator("section[aria-labelledby='library-favorites-heading']").locator(f'[data-playlist-id="{TARGET}"]')
+    ).to_have_count(1)
+    expect(row.get_by_role("button", name=re.compile(r"^Remove favorite"))).to_be_visible()
+    row.locator(".sh-library-playlist-actions > summary").click()
+    expect(row.get_by_role("button", name=re.compile(r"^Shuffle now"))).to_be_disabled()
+    other = _library_row(page, LONG_HAUL)
+    other.get_by_role("button", name=re.compile(r"^Hide playlist")).click()
+    expect(page.locator("#library-hidden-content").locator(f'[data-playlist-id="{LONG_HAUL}"]')).to_have_count(1)
+    assert _sections(alice)[TARGET] == "favorites" and _sections(alice)[LONG_HAUL] == "hidden"
+    _no_sideways(page)
     page.screenshot(path=tmp_path / f"library-in-place-{width}.png", full_page=True)
-
-    # The server saved both, and the page that showed them is the one that was already open.
-    assert (
-        _sections(alice)[TARGET] == "favorites"
-        and _sections(alice)[LONG_HAUL] == "hidden"
-    )
-    assert page.url == f"{APP}/" and s.navigations == navigations
+    assert page.url == f"{APP}/library" and session.navigations == navigations
     assert page.evaluate("window.__sameDocument") is True
-    assert page.evaluate("PlaylistOperations.getRecords().length") == 1
-    assert page.evaluate("PlaylistOperations.hasAttention()") is True
-    assert page.evaluate("PlaylistOperations.getRecords()[0].aggregate") == "unknown"
-    assert page.locator("#live-operation-open").is_visible()
-    assert posted == [shuffle]
-    s.assert_clean()
+    reopen = page.get_by_role("button", name="View action results", exact=True)
+    reopen.click()
+    expect(_panel(page).get_by_role("button", name="Retry this exact request", exact=True)).to_be_visible()
+    _close_all_panels(page)
+    expect(reopen).to_be_focused()
+    assert posted == [APP + shuffle_path]
+    session.assert_clean()
 
 
 @pytest.mark.parametrize("width,height", SIZES)
 def test_routines_state_stays_in_place_and_edit_guards_a_lost_run_reply(
     alice, fake, open_session, tmp_path, width, height
 ):
-    """Exact state changes stay in place; a dedicated Edit obeys the unresolved-result leave guard."""
-    # The first routine's Run loses its reply; the second can still be paused and resumed.
     first = _create_schedule(alice)["id"]
     second = _create_schedule(alice, "shuffle", TARGET)["id"]
-    run_url = f"{APP}/schedules/{first}/run"
-    s = open_session(width, height)
-    page = s.page
+    session = open_session(width, height)
+    page = session.page
     posted = []
-    page.route(run_url, _lose_reply(posted))
-    try:
-        page.goto(f"{APP}/schedules", wait_until="networkidle")
-        run = page.locator(f'[data-live-operation-key="schedule:{first}"]')
-        _open_review(page, run, "Run routine now").click()
-        _settled(page, 1)
-        assert (
-            page.evaluate("PlaylistOperations.getRecords()[0].aggregate") == "unknown"
-        )
-        assert page.evaluate("PlaylistOperations.hasAttention()") is True
-        _close_result(page)
-        assert posted == [run_url] and run.is_disabled()
-
-        # Nothing below may reload the page: the result above would be lost with it.
-        page.evaluate("window.__sameDocument = true")
-        navigations = list(s.navigations)
-        card = page.locator(f'.schedule-card[data-schedule-id="{second}"]')
-        status, toggle = (
-            card.locator(".routine-status"),
-            card.locator(".routine-toggle"),
-        )
-        assert status.inner_text() == "Active" and toggle.inner_text().strip() == "Pause"
-
-        for badge, label in (("Paused", "Resume"), ("Active", "Pause")):
-            toggle.click()
-            page.wait_for_function(
-                "args => document.querySelector(`.schedule-card[data-schedule-id='${args.id}'] .routine-status`)"
-                ".textContent === args.badge",
-                arg={"id": second, "badge": badge},
-            )
-            assert toggle.inner_text().strip() == label
-            assert _routine(alice, TARGET, second)["is_enabled"] is (badge == "Active")
-        states = s.writes("PUT", f"/routines/{second}/state")
-        assert len(states) == 2
-        assert [json.loads(body)["desired_enabled"] for body in states] == [False, True]
-
-        # Edit navigates to the dedicated task. Cancel the Attention guard first: the
-        # same document, unknown result and recoverable details must remain here.
-        edit = card.locator(".routine-edit")
-        expected_edit = (
-            f"/playlist/{TARGET}/routines/new?schedule_id={second}&from=routines"
-        )
-        assert edit.get_attribute("href") == expected_edit
-        edit.click()
-        leave = page.locator("#live-operation-leave")
-        leave.wait_for(state="visible")
-        copy = page.locator("#live-operation-leave-text").inner_text()
-        assert "Leaving or reloading loses these details" in copy
-        assert "does not cancel or undo anything already sent to Spotify" in copy
-        page.click("#live-operation-leave-stay")
-        leave.wait_for(state="hidden")
-        assert page.url == f"{APP}/schedules" and s.navigations == navigations
-        assert page.evaluate("window.__sameDocument") is True
-        assert page.evaluate("PlaylistOperations.hasAttention()") is True
-        assert page.evaluate("PlaylistOperations.getRecords()[0].aggregate") == "unknown"
-        assert s.writes("PUT", f"/schedules/{second}") == []
-        assert page.evaluate(
-            "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
-        )
-        page.screenshot(
-            path=tmp_path / f"routines-in-place-{width}.png", full_page=True
-        )
-
-        assert page.url == f"{APP}/schedules" and s.navigations == navigations
-        assert page.evaluate("window.__sameDocument") is True
-        assert page.locator("#routines-reload-notice").is_hidden()
-        assert page.evaluate("PlaylistOperations.getRecords().length") == 1
-        assert (
-            page.evaluate("PlaylistOperations.getRecords()[0].aggregate") == "unknown"
-        )
-        assert page.evaluate("PlaylistOperations.hasAttention()") is True
-        assert posted == [run_url]
-
-        # Closed results remain reachable near the page heading at every width.
-        reopen = page.locator("#live-operation-open")
-        expect(reopen).to_be_visible()
-        reopen.click()
-        expect(page.locator("#live-operation-panel")).to_be_visible()
-        assert page.evaluate("PlaylistOperations.getRecords()[0].aggregate") == "unknown"
-        _close_result(page)
-        expect(reopen).to_be_focused()
-
-        # Leaving is a separate deliberate choice; the guard remains truthful about
-        # losing this page's unresolved details without claiming the Spotify action was undone.
-        edit.click()
-        leave.wait_for(state="visible")
-        assert page.locator("#live-operation-leave-text").inner_text() == copy
-        page.click("#live-operation-leave-confirm")
-        page.wait_for_url(f"{APP}{expected_edit}")
-        assert page.locator("#routine-task").is_visible()
-        assert page.locator("#routine-heading").inner_text() == "Edit routine"
-        assert posted == [run_url] and s.writes("PUT", f"/schedules/{second}") == []
-        s.assert_clean()
-    finally:
-        for sid in (first, second):
-            alice.ok("delete", f"/schedules/{sid}")
+    run_path = api_path(f"/schedules/{first}/run")
+    lost = _lose_reply(posted)
+    page.route(APP + run_path, lost)
+    page.goto(f"{APP}/routines", wait_until="networkidle")
+    first_card, other = page.locator(f"#routine-{first}"), page.locator(f"#routine-{second}")
+    first_card.get_by_role("button", name="Run now", exact=True).click()
+    _panel(page).get_by_role("button", name="Run reviewed routine", exact=True).click()
+    expect(_panel(page).get_by_role("button", name="Check the same run request", exact=True)).to_be_visible()
+    assert alice.wait_operation(lost.location, lost.operation_id)["state"] == "succeeded"
+    _close_all_panels(page)
+    expect(first_card.get_by_role("button", name="Edit this routine", exact=True)).to_be_disabled()
+    expect(first_card.get_by_role("button", name="Delete routine", exact=True)).to_be_disabled()
+    page.evaluate("window.__sameDocument = true")
+    navigations = list(session.navigations)
+    for label, enabled in (("Pause", False), ("Resume", True)):
+        other.get_by_role("button", name=label, exact=True).click()
+        expect(other.locator(".sh-badge")).to_have_text("Paused" if not enabled else "Active")
+        assert _routine(alice, TARGET, second)["is_enabled"] is enabled
+    states = session.writes("PUT", api_path(f"/routines/{second}/state"))
+    assert len(states) == 2 and [json.loads(body)["desired_enabled"] for body in states] == [False, True]
+    assert page.url == f"{APP}/routines" and session.navigations == navigations
+    _no_sideways(page)
+    page.screenshot(path=tmp_path / f"routines-in-place-{width}.png", full_page=True)
+    expected_edit = f"/playlist/{TARGET}/routines/new?schedule_id={second}&origin=routines"
+    edit = other.get_by_role("link", name="Edit this routine", exact=True)
+    expect(edit).to_have_attribute("href", expected_edit)
+    edit.click()
+    dialog = page.get_by_role("dialog", name="Leave this page?", exact=True)
+    expect(dialog).to_be_visible()
+    dialog.get_by_role("button", name="Stay", exact=True).click()
+    expect(edit).to_be_focused()
+    assert page.url == f"{APP}/routines" and session.navigations == navigations
+    assert page.evaluate("window.__sameDocument") is True
+    expect(first_card.get_by_role("button", name="Check run request", exact=True)).to_be_visible()
+    assert posted == [APP + run_path]
+    edit.click()
+    page.get_by_role("dialog").get_by_role("button", name="Leave page", exact=True).click()
+    expect(page.get_by_role("heading", name=f"Edit routine #{second}", exact=True)).to_be_visible()
+    assert page.evaluate("window.__sameDocument") is True
+    page.get_by_role("link", name="Back to routines", exact=True).click()
+    first_card.get_by_role("button", name="Check run request", exact=True).click()
+    expect(_panel(page).get_by_role("button", name="Check the same run request", exact=True)).to_be_visible()
+    _panel(page).get_by_role("button", name="Check the same run request", exact=True).click()
+    expect(_panel(page).get_by_role("heading", name=re.compile(rf"^Operation #{lost.operation_id} ·"))).to_be_visible()
+    assert len(lost.requests) == 2 and lost.requests[0] == lost.requests[1]
+    assert lost.requests[0]["key"]
+    _close_all_panels(page)
+    assert posted == [APP + run_path, APP + run_path]
+    assert session.writes("PUT", api_path(f"/schedules/{second}")) == []
+    session.assert_clean()
 
 
 @pytest.mark.parametrize("width,height", SIZES)
-def test_routine_delete_asks_first_and_moves_focus_to_what_remains(
-    alice, fake, open_session, width, height
-):
-    """Delete asks through the shared confirmation; confirming updates the count and moves focus on."""
+def test_routine_delete_asks_first_and_moves_focus_to_what_remains(alice, fake, open_session, width, height):
     first = _create_schedule(alice)["id"]
     second = _create_schedule(alice, "shuffle", TARGET)["id"]
-    s = open_session(width, height)
-    page = s.page
-    confirm, count = page.locator("#app-confirm"), page.locator("[data-routine-count]")
-    page.goto(f"{APP}/schedules", wait_until="networkidle")
-    assert count.inner_text() == "2 routines"
-
-    def remove(sid):
-        return page.locator(f'.schedule-card[data-schedule-id="{sid}"] .routine-delete')
-
-    def card_gone(sid):
-        page.wait_for_function(
-            "id => !document.querySelector(`.schedule-card[data-schedule-id='${id}']`)",
-            arg=sid,
-        )
-
-    def listed(target):
-        return [
-            r["id"]
-            for r in alice.ok("get", f"/playlist/{target}/schedules")["schedules"]
-        ]
-
-    # Cancel keeps the routine and returns focus to the control that asked.
-    remove(first).click()
-    confirm.wait_for(state="visible")
-    assert page.locator("#app-confirm-heading").inner_text() == "Delete this routine?"
-    assert page.locator("#app-confirm-ok").inner_text() == "Delete routine"
-    assert page.evaluate(
-        "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
-    )
-    page.click("#app-confirm-cancel")
-    confirm.wait_for(state="hidden")
-    assert remove(first).evaluate("el => document.activeElement === el") is True
-    assert s.writes("DELETE", f"/schedules/{first}") == []
-    assert count.inner_text() == "2 routines" and listed(LONG_HAUL) == [
-        first
-    ]
-
-    # Confirm deletes it: the count drops and focus lands on the card that remains.
-    remove(first).click()
-    confirm.wait_for(state="visible")
-    page.click("#app-confirm-ok")
-    card_gone(first)
-    assert count.inner_text() == "1 routine"
-    assert page.evaluate(
-        "document.activeElement.closest('.schedule-card').dataset.scheduleId"
-    ) == str(second)
-    assert listed(LONG_HAUL) == [] and listed(TARGET) == [second]
-    assert len(s.writes("DELETE", f"/schedules/{first}")) == 1
-
-    # Deleting the last routine leaves the empty state and puts focus on the page heading.
-    remove(second).click()
-    confirm.wait_for(state="visible")
-    page.click("#app-confirm-ok")
-    card_gone(second)
-    assert count.inner_text() == "0 routines"
-    assert page.locator("[data-routine-empty]").is_visible()
-    assert page.evaluate("document.activeElement.id") == "routines-heading"
-    assert listed(TARGET) == []
-    assert page.url == f"{APP}/schedules"
-    s.assert_clean()
+    session = open_session(width, height)
+    page = session.page
+    page.goto(f"{APP}/routines", wait_until="networkidle")
+    expect(page.get_by_text("2 of 2 routines shown", exact=True)).to_be_visible()
+    for sid, target, remaining in ((first, LONG_HAUL, 1), (second, TARGET, 0)):
+        card = page.locator(f"#routine-{sid}")
+        delete = card.get_by_role("button", name="Delete routine", exact=True)
+        delete.click()
+        dialog = page.get_by_role("dialog", name=f"Delete routine #{sid}?", exact=True)
+        _no_sideways(page)
+        dialog.get_by_role("button", name="Cancel", exact=True).click()
+        expect(delete).to_be_focused()
+        assert session.writes("DELETE", api_path(f"/schedules/{sid}")) == []
+        assert [row["id"] for row in list_schedules(alice, target)] == [sid]
+        delete.click()
+        with page.expect_response(APP + api_path(f"/schedules/{sid}")) as reply:
+            page.get_by_role("dialog").get_by_role("button", name="Delete routine", exact=True).click()
+        assert reply.value.status == 200, reply.value.text()
+        expect(card).to_have_count(0)
+        expect(page.get_by_text(f"{remaining} of {remaining} routines shown", exact=True)).to_be_visible()
+        expect(page.get_by_role("heading", name="Routines", exact=True)).to_be_focused()
+        assert list_schedules(alice, target) == []
+        assert len(session.writes("DELETE", api_path(f"/schedules/{sid}"))) == 1
+    expect(page.get_by_role("heading", name="No routines yet", exact=True)).to_be_visible()
+    assert page.url == f"{APP}/routines"
+    session.assert_clean()
 
 
 @pytest.mark.parametrize("width,height", SIZES)
-def test_the_announcer_reads_a_verified_library_shuffle_once(
-    alice, fake, open_session, width, height
-):
-    """One polite announcer says a run started and how it finished, naming its action and playlist."""
+def test_the_announcer_reads_a_verified_library_shuffle_once(alice, fake, open_session, width, height):
     before = fake.uris(TARGET)
-    s = open_session(width, height)
-    page = s.page
-    announcer = page.locator("#live-operation-announcer")
-    # One polite region, outside every panel and the page content, so a closed results view is still heard.
-    assert (
-        announcer.get_attribute("role") == "status"
-        and announcer.get_attribute("aria-live") == "polite"
-    )
-    assert page.evaluate(
-        "!document.getElementById('live-operation-announcer').closest('#live-operation-panel, [data-panel-primary]')"
-    )
-    page.evaluate(
-        """() => {
-            window.__announced = [];
-            const region = document.getElementById('live-operation-announcer');
-            new MutationObserver(() => window.__announced.push(region.textContent))
-                .observe(region, {childList: true, characterData: true, subtree: true});
-        }"""
-    )
-    card = _choose_shuffle(page, TARGET)
-    _open_review(page, card.locator(".library-quick-shuffle"), "Shuffle now").click()
-    _settled(page, 1)
-    assert page.evaluate("PlaylistOperations.getRecords()[0].complete") is True
+    session = open_session(width, height)
+    page = session.page
+    announcer = page.locator('[aria-live="polite"]')
+    expect(announcer).to_have_count(1)
+    assert announcer.get_attribute("aria-atomic") == "true"
+    assert announcer.locator("xpath=ancestor::main | ancestor::section[contains(@class, 'sh-task-panel')]").count() == 0
+    page.evaluate("""() => {
+        window.__announced = [];
+        const region = document.querySelector('[aria-live="polite"]');
+        new MutationObserver(() => { if (region.textContent) window.__announced.push(region.textContent); })
+          .observe(region, {childList: true, characterData: true, subtree: true});
+    }""")
+    _, run = _shuffle(page, TARGET)
+    with page.expect_response(APP + api_path(f"/shuffle/{TARGET}")) as reply:
+        run.click()
+    assert reply.value.status == 202, reply.value.text()
+    operation_id = reply.value.json()["operation_id"]
+    assert alice.wait_operation(api_path(f"/operations/{operation_id}"), operation_id)["state"] == "succeeded"
+    terminal = f"Operation {operation_id}: succeeded."
+    expect(announcer).to_have_text(terminal)
     assert fake.uris(TARGET) != before
-    done = "Complete: Shuffle now, Morning Mix. Morning Mix: verified; saved version history: saved."
-    # The announcer writes once after the task that spoke, so the read waits for it.
-    expect(announcer).to_have_text(done)
-    # The review once when ready, the run once when it started and once when it finished;
-    # the re-renders in between say nothing.
-    assert page.evaluate("window.__announced") == [
-        "Review ready: Shuffle now, Morning Mix. Nothing is sent until you run it.",
-        "Running: Shuffle now, Morning Mix.",
-        done,
-    ]
-    # Nothing else reads it again: no toast, and the card's note is visible text only.
-    assert page.locator("#flash-messages .sh-toast").count() == 0
-    # (Below 1024px the open results hide the Library, so the note is checked, not seen.)
-    note = card.locator(".library-shuffle-feedback")
-    assert note.get_attribute("hidden") is None and note.text_content().strip()
-    assert note.get_attribute("role") is None
-    s.assert_clean()
+    assert page.evaluate("text => window.__announced.filter(value => value === text).length", terminal) == 1
+    _close_all_panels(page)
+    page.get_by_role("button", name="View action results", exact=True).click()
+    expect(_panel(page).get_by_role("heading", name=f"Operation #{operation_id}", exact=True)).to_be_visible()
+    _close_all_panels(page)
+    expect(announcer).to_have_text(terminal)
+    assert page.evaluate("text => window.__announced.filter(value => value === text).length", terminal) == 1
+    assert page.locator(".sh-toast").count() == 0
+    session.assert_clean()

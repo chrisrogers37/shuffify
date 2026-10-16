@@ -1,8 +1,7 @@
 """
 Raid panel routes.
 
-Smart raid management: watch/unwatch sources, trigger raids,
-manage raid schedules, raid playlist links, and drip operations.
+Manage shared sources, collection links, pending tracks and reviewed raid/drip actions.
 """
 
 import logging
@@ -11,20 +10,22 @@ from contextlib import ExitStack
 from flask import jsonify, request
 from pydantic import ValidationError
 
-from shuffify.enums import ActivityType, JobType
+from shuffify.enums import ActivityType
 from shuffify.routes import (
+    api_bp,
     json_error,
     json_reply,
     json_success,
     log_activity,
-    main,
     require_auth_and_db,
+    require_session_and_db,
     validate_json,
 )
+from shuffify.routes.asset_queue import admit_asset
+from shuffify.routes.finalizer_queue import admit_finalizer
+from shuffify.routes.routine_queue import admit_direct
 from shuffify.schemas.pending_raid_requests import (
     DismissTracksRequest,
-    PromoteTracksRequest,
-    UnpromoteTracksRequest,
 )
 from shuffify.schemas.raid_link_requests import (
     CreateRaidLinkRequest,
@@ -33,14 +34,11 @@ from shuffify.schemas.raid_link_requests import (
 )
 from shuffify.schemas.raid_requests import (
     AddRaidUrlRequest,
-    CreateRaidScheduleRequest,
     RaidNowRequest,
     UnwatchPlaylistRequest,
-    UpdateRaidScheduleRequest,
-    WatchPlaylistRequest,
-    WatchSearchQueryRequest,
 )
 from shuffify.schemas.workshop_finalize_requests import FinalizeRaidRequest
+from shuffify.services.api_response import busy_error
 from shuffify.services.live_operation_service import (
     LIVE_ENDPOINT_KINDS,
     error_status,
@@ -54,7 +52,6 @@ from shuffify.services.live_review_bindings import (
     request_binding,
     review_message,
 )
-from shuffify.services.live_review_scope import ReviewedRun
 from shuffify.services.pending_raid_service import (
     PendingRaidService,
 )
@@ -67,10 +64,8 @@ from shuffify.services.playlist_service import (
     PlaylistNotFoundError,
     PlaylistService,
 )
-from shuffify.services.playlist_setup_service import CREATION_UNKNOWN, refusal
 from shuffify.services.raid_link_service import (
     RaidLinkError,
-    RaidLinkExistsError,
     RaidLinkNotFoundError,
     RaidLinkService,
 )
@@ -80,7 +75,6 @@ from shuffify.services.raid_sync_service import (
 )
 from shuffify.services.scheduler_service import (
     ScheduleBusyError,
-    SchedulerService,
 )
 from shuffify.services.upstream_source_service import (
     UpstreamSourceLimitError,
@@ -91,7 +85,6 @@ from shuffify.services.workshop_finalize_service import (
     WorkshopFinalizeResult,
     WorkshopFinalizeService,
 )
-from shuffify.spotify.exceptions import SpotifyWriteUnverifiedError
 from shuffify.spotify.url_parser import (
     parse_spotify_playlist_url,
 )
@@ -99,21 +92,12 @@ from shuffify.spotify.url_parser import (
 logger = logging.getLogger(__name__)
 
 
-def _playlist_busy_response():
-    return jsonify({
-        "success": False,
-        "category": "error",
-        "error_code": "playlist_busy",
-        "message": "A routine is using this playlist. Try again.",
-    }), 409
-
-
 # =============================================================
 # Raid Status
 # =============================================================
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-status",
     methods=["GET"],
 )
@@ -133,104 +117,29 @@ def raid_status(playlist_id, api=None, user=None):
 # =============================================================
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-link",
     methods=["POST"],
 )
-@require_auth_and_db
+@require_session_and_db
 def raid_link_create(
     playlist_id, api=None, user=None
 ):
-    """Create a raid playlist link."""
-    req, err = validate_json(CreateRaidLinkRequest)
-    if err:
-        return err
-
+    """Accept one owned collection creation/association without provider I/O."""
+    req, error = validate_json(CreateRaidLinkRequest)
+    if error:
+        return error
     data = request.get_json(silent=True) or {}
-
-    try:
-        # The same lock covers the existing-link check, external creation,
-        # and the association commit. A busy target must not create an
-        # unlinked Spotify playlist before it returns 409.
-        with playlist_configuration_lock(playlist_id, timeout_s=2.0) as acquired:
-            if not acquired:
-                raise PlaylistBusyError("Playlist is busy; please retry.")
-
-            existing = RaidLinkService.get_link_for_playlist(
-                user.id, playlist_id
-            )
-            if existing:
-                return json_success(
-                    "Raid playlist already linked.",
-                    raid_link=existing.to_dict(),
-                )
-
-            if req.create_new:
-                target_name = data.get(
-                    "target_playlist_name", playlist_id
-                )
-                try:
-                    raid_id, raid_name = (
-                        RaidLinkService.create_raid_playlist(
-                            api,
-                            target_name,
-                        )
-                    )
-                except SpotifyWriteUnverifiedError:
-                    logger.warning(
-                        "Raid playlist creation for %s has an unknown outcome",
-                        playlist_id,
-                        exc_info=True,
-                    )
-                    return json_reply(refusal("creation_unknown", 502, CREATION_UNKNOWN, outcome="unknown"))
-            else:
-                raid_id = req.raid_playlist_id
-                raid_name = data.get(
-                    "raid_playlist_name", raid_id
-                )
-
-            link = RaidLinkService.create_link(
-                user_id=user.id,
-                target_playlist_id=playlist_id,
-                raid_playlist_id=raid_id,
-                target_playlist_name=data.get(
-                    "target_playlist_name"
-                ),
-                raid_playlist_name=raid_name,
-                drip_count=req.drip_count,
-                drip_enabled=req.drip_enabled,
-            )
-
-        log_activity(
-            user_id=user.id,
-            activity_type=ActivityType.RAID_LINK_CREATE,
-            description=(
-                "Created raid link: "
-                "'{}'".format(raid_name)
-            ),
-            playlist_id=playlist_id,
-        )
-
-        return json_success(
-            "Raid playlist linked.",
-            raid_link=link.to_dict(),
-        )
-    except RaidLinkExistsError as e:
-        return json_error(str(e), 409)
-    except PlaylistBusyError:
-        return _playlist_busy_response()
-    except RaidLinkError as e:
-        return json_error(str(e), 400)
-    except Exception as e:
-        logger.error(
-            "Failed to create raid link: %s", e
-        )
-        return json_error(
-            "Failed to create raid link", 500
-        )
+    return admit_asset(user, playlist_id, "raid_link_create", {
+        "create_new": req.create_new,
+        "target_playlist_name": data.get("target_playlist_name"),
+        "asset_playlist_id": None if req.create_new else req.raid_playlist_id,
+        "asset_playlist_name": None if req.create_new else data.get("raid_playlist_name"),
+        "drip_count": req.drip_count, "drip_enabled": req.drip_enabled,
+    })
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-link",
     methods=["PUT"],
 )
@@ -265,7 +174,7 @@ def raid_link_update(
             "No raid link found", 404
         )
     except PlaylistBusyError:
-        return _playlist_busy_response()
+        return json_reply(busy_error())
     except RaidLinkError as e:
         return json_error(str(e), 400)
     except Exception as e:
@@ -277,7 +186,7 @@ def raid_link_update(
         )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-link",
     methods=["DELETE"],
 )
@@ -304,7 +213,7 @@ def raid_link_delete(
             "No raid link found", 404
         )
     except PlaylistBusyError:
-        return _playlist_busy_response()
+        return json_reply(busy_error())
     except RaidLinkError as e:
         return json_error(str(e), 400)
     except Exception as e:
@@ -321,7 +230,7 @@ def raid_link_delete(
 # =============================================================
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-source-count",
     methods=["PUT"],
 )
@@ -350,7 +259,7 @@ def raid_source_count_update(
     except UpstreamSourceNotFoundError:
         return json_error("Source not found", 404)
     except PlaylistBusyError:
-        return _playlist_busy_response()
+        return json_reply(busy_error())
 
 
 # =============================================================
@@ -358,122 +267,7 @@ def raid_source_count_update(
 # =============================================================
 
 
-@main.route(
-    "/playlist/<playlist_id>/raid-watch",
-    methods=["POST"],
-)
-@require_auth_and_db
-def raid_watch(playlist_id, api=None, user=None):
-    """Watch a playlist as a raid source."""
-    req, err = validate_json(WatchPlaylistRequest)
-    if err:
-        return err
-
-    data = request.get_json(silent=True)
-    try:
-        result = RaidSyncService.watch_playlist(
-            spotify_id=user.spotify_id,
-            target_playlist_id=playlist_id,
-            target_playlist_name=data.get(
-                "target_playlist_name", playlist_id
-            ),
-            source_playlist_id=req.source_playlist_id,
-            source_playlist_name=req.source_playlist_name,
-            source_url=req.source_url,
-            auto_schedule=req.auto_schedule,
-            schedule_value=req.schedule_value,
-            schedule_time=req.schedule_time,
-            user=user,
-        )
-
-        log_activity(
-            user_id=user.id,
-            activity_type=ActivityType.RAID_WATCH_ADD,
-            description=(
-                "Watching '"
-                "{}'"
-                .format(
-                    req.source_playlist_name
-                    or req.source_playlist_id
-                )
-            ),
-            playlist_id=playlist_id,
-        )
-
-        return json_success(
-            "Source watched.",
-            source=result["source"],
-            schedule=result["schedule"],
-        )
-    except (UpstreamSourceLimitError, RaidSyncError) as e:
-        return json_error(str(e), 400)
-    except (PlaylistBusyError, ScheduleBusyError):
-        return _playlist_busy_response()
-    except Exception as e:
-        logger.error("Failed to watch playlist: %s", e)
-        return json_error(
-            "Failed to watch playlist", 500
-        )
-
-
-@main.route(
-    "/playlist/<playlist_id>/raid-watch-search",
-    methods=["POST"],
-)
-@require_auth_and_db
-def raid_watch_search(
-    playlist_id, api=None, user=None
-):
-    """Watch a search query as a raid source."""
-    req, err = validate_json(WatchSearchQueryRequest)
-    if err:
-        return err
-
-    data = request.get_json(silent=True)
-    try:
-        result = RaidSyncService.watch_search_query(
-            spotify_id=user.spotify_id,
-            target_playlist_id=playlist_id,
-            target_playlist_name=data.get(
-                "target_playlist_name", playlist_id
-            ),
-            search_query=req.search_query,
-            source_name=req.source_name,
-            auto_schedule=req.auto_schedule,
-            schedule_value=req.schedule_value,
-            schedule_time=req.schedule_time,
-            user=user,
-        )
-
-        log_activity(
-            user_id=user.id,
-            activity_type=ActivityType.RAID_WATCH_ADD,
-            description=(
-                "Watching search: "
-                "'{}'".format(req.search_query)
-            ),
-            playlist_id=playlist_id,
-        )
-
-        return json_success(
-            "Search source watched.",
-            source=result["source"],
-            schedule=result["schedule"],
-        )
-    except (UpstreamSourceLimitError, RaidSyncError) as e:
-        return json_error(str(e), 400)
-    except (PlaylistBusyError, ScheduleBusyError):
-        return _playlist_busy_response()
-    except Exception as e:
-        logger.error(
-            "Failed to watch search query: %s", e
-        )
-        return json_error(
-            "Failed to watch search query", 500
-        )
-
-
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-add-url",
     methods=["POST"],
 )
@@ -589,7 +383,7 @@ def raid_add_url(playlist_id, api=None, user=None):
     except (UpstreamSourceLimitError, RaidSyncError) as e:
         return json_error(str(e), 400)
     except (PlaylistBusyError, ScheduleBusyError):
-        return _playlist_busy_response()
+        return json_reply(busy_error())
     except Exception as e:
         logger.error(
             "Failed to add external source: %s", e
@@ -599,7 +393,7 @@ def raid_add_url(playlist_id, api=None, user=None):
         )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-unwatch",
     methods=["POST"],
 )
@@ -631,7 +425,7 @@ def raid_unwatch(playlist_id, api=None, user=None):
     except RaidSyncError as e:
         return json_error(str(e), 400)
     except (PlaylistBusyError, ScheduleBusyError):
-        return _playlist_busy_response()
+        return json_reply(busy_error())
     except Exception as e:
         logger.error("Failed to unwatch: %s", e)
         return json_error(
@@ -681,13 +475,13 @@ def _live_preflight_error(message, status_code):
 
 
 def _live_review(kind):
-    """(ReviewedRun or None, error response) for an optional JSON binding."""
+    """Return a validated optional JSON binding before any local capture."""
     # A malformed binding is refused before any read, never run as legacy.
     try:
         binding = request_binding(request, kind)
     except ReviewBindingError:
         return None, _live_result_response(invalid_binding_result(kind), "")
-    return (ReviewedRun(kind, binding["reviewed_scope"]) if binding else None), None
+    return binding, None
 
 
 def _live_raid_request(kind):
@@ -711,338 +505,45 @@ def _live_raid_request(kind):
         )
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-now",
     methods=["POST"],
 )
-@require_auth_and_db(on_preflight_error=_live_preflight_error)
+@require_session_and_db(on_preflight_error=_live_preflight_error)
 def raid_now(playlist_id, api=None, user=None):
     """Collect discoveries for review, regardless of saved routine type."""
     req, review, error = _live_raid_request("raid")
     if error:
         return error
-    try:
-        result = RaidSyncService.raid_now(
-            spotify_id=user.spotify_id,
-            target_playlist_id=playlist_id,
-            source_playlist_ids=req.source_playlist_ids,
-            user=user,
-            review=review,
-        )
-    except RaidSyncError as error:
-        return _live_preflight_error(str(error), 400)
-    except Exception:
-        logger.exception("Immediate Raid outcome unavailable")
-        result = rejected_result(
-            "raid", unknown=True, error_code="outcome_unavailable",
-            http_status=502,
-        )
-    return _live_result_response(
-        result,
-        "Raid complete: {} new tracks added.".format(result.get("tracks_added")),
-    )
+    return admit_direct(user, playlist_id, "raid", source_playlist_ids=req.source_playlist_ids,
+                        reviewed=review, on_rejection=_live_preflight_error)
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/drip-now",
     methods=["POST"],
 )
-@require_auth_and_db(on_preflight_error=_live_preflight_error)
+@require_session_and_db(on_preflight_error=_live_preflight_error)
 def drip_now(playlist_id, api=None, user=None):
     """Trigger an immediate drip from raid playlist."""
     review, error = _live_review("drip")
     if error:
         return error
-    try:
-        result = RaidSyncService.drip_now(
-            spotify_id=user.spotify_id,
-            target_playlist_id=playlist_id,
-            user=user,
-            review=review,
-        )
-    except RaidSyncError as error:
-        return _live_preflight_error(str(error), 400)
-    except Exception:
-        logger.exception("Immediate Drip outcome unavailable")
-        result = rejected_result(
-            "drip", unknown=True, error_code="outcome_unavailable",
-            http_status=502,
-        )
-    return _live_result_response(
-        result,
-        "Drip complete: {} tracks moved.".format(result.get("tracks_added")),
-    )
+    return admit_direct(user, playlist_id, "drip", reviewed=review, on_rejection=_live_preflight_error)
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/raid-and-drip",
     methods=["POST"],
 )
-@require_auth_and_db(on_preflight_error=_live_preflight_error)
+@require_session_and_db(on_preflight_error=_live_preflight_error)
 def raid_and_drip(playlist_id, api=None, user=None):
-    """Collect then drip once, retaining both child execution outcomes."""
+    """Accept one composite invocation with separate durable child outcomes."""
     req, review, error = _live_raid_request("raid_and_drip")
     if error:
         return error
-    result = RaidSyncService.raid_and_drip_now(
-        spotify_id=user.spotify_id,
-        target_playlist_id=playlist_id,
-        source_playlist_ids=req.source_playlist_ids,
-        user=user,
-        review=review,
-    )
-    return _live_result_response(
-        result,
-        "Raid & Drip: {} raided, {} added to playlist.".format(
-            result.get("tracks_raided"), result.get("tracks_dripped"),
-        ),
-    )
-
-
-# =============================================================
-# Raid Schedule Management
-# =============================================================
-
-
-def _toggle_schedule(schedule, user_id, playlist_id, label):
-    """Shared toggle logic for raid and drip schedules."""
-    try:
-        schedule = SchedulerService.toggle_schedule(
-            schedule.id, user_id
-        )
-
-        # APScheduler sync is handled inside toggle_schedule.
-
-        state = (
-            "enabled"
-            if schedule.is_enabled
-            else "disabled"
-        )
-        log_activity(
-            user_id=user_id,
-            activity_type=ActivityType.SCHEDULE_TOGGLE,
-            description="{} schedule {}".format(
-                label, state
-            ),
-            playlist_id=playlist_id,
-        )
-
-        return json_success(
-            "{} schedule {}.".format(label, state),
-            schedule=schedule.to_dict(),
-        )
-    except (PlaylistBusyError, ScheduleBusyError):
-        return _playlist_busy_response()
-    except Exception as e:
-        logger.error(
-            "Failed to toggle %s schedule: %s",
-            label.lower(), e,
-        )
-        return json_error(
-            "Failed to toggle {} schedule".format(
-                label.lower()
-            ),
-            500,
-        )
-
-
-@main.route(
-    "/playlist/<playlist_id>/raid-schedule-toggle",
-    methods=["POST"],
-)
-@require_auth_and_db
-def raid_schedule_toggle(
-    playlist_id, api=None, user=None
-):
-    """Toggle the raid schedule on/off."""
-    schedule = RaidSyncService._find_raid_schedule(
-        user.id, playlist_id
-    )
-    if not schedule:
-        return json_error("No raid schedule found", 404)
-    return _toggle_schedule(
-        schedule, user.id, playlist_id, "Raid"
-    )
-
-
-@main.route(
-    "/playlist/<playlist_id>/drip-schedule-toggle",
-    methods=["POST"],
-)
-@require_auth_and_db
-def drip_schedule_toggle(
-    playlist_id, api=None, user=None
-):
-    """Toggle the drip schedule on/off."""
-    schedule = RaidSyncService._find_drip_schedule(
-        user.id, playlist_id
-    )
-    if not schedule:
-        return json_error("No drip schedule found", 404)
-    return _toggle_schedule(
-        schedule, user.id, playlist_id, "Drip"
-    )
-
-
-@main.route(
-    "/playlist/<playlist_id>/raid-schedule-create",
-    methods=["POST"],
-)
-@require_auth_and_db
-def raid_schedule_create(
-    playlist_id, api=None, user=None
-):
-    """Create a raid/drip schedule from the raids panel."""
-    if not user.encrypted_refresh_token:
-        return json_error(
-            "Your account needs a fresh login to enable "
-            "scheduled operations. Please log out and "
-            "log back in.",
-            400,
-        )
-
-    req, err = validate_json(CreateRaidScheduleRequest)
-    if err:
-        return err
-
-    # Check for existing raid-family schedule
-    existing = RaidSyncService._find_raid_schedule(
-        user.id, playlist_id
-    )
-    drip_existing = RaidSyncService._find_drip_schedule(
-        user.id, playlist_id
-    )
-    if existing or drip_existing:
-        return json_error(
-            "A schedule already exists for this playlist. "
-            "Delete it first to create a new one.",
-            409,
-        )
-
-    try:
-        data = request.get_json(silent=True) or {}
-        sched_type, sched_val = (
-            RaidSyncService._resolve_schedule_params(
-                req.schedule_value, req.schedule_time
-            )
-        )
-        schedule = SchedulerService.create_schedule(
-            user_id=user.id,
-            job_type=JobType(req.job_type),
-            target_playlist_id=playlist_id,
-            target_playlist_name=data.get(
-                "target_playlist_name", playlist_id
-            ),
-            schedule_type=sched_type,
-            schedule_value=sched_val,
-            source_playlist_ids=(
-                req.source_playlist_ids or []
-            ),
-        )
-
-        # APScheduler registration handled in create_schedule.
-
-        log_activity(
-            user_id=user.id,
-            activity_type=ActivityType.SCHEDULE_CREATE,
-            description="Created {} schedule".format(
-                req.job_type
-            ),
-            playlist_id=playlist_id,
-        )
-
-        return json_success(
-            "Schedule created.",
-            schedule=schedule.to_dict(),
-        )
-    except (PlaylistBusyError, ScheduleBusyError):
-        return _playlist_busy_response()
-    except Exception as e:
-        logger.error(
-            "Failed to create raid schedule: %s", e
-        )
-        return json_error(
-            "Failed to create schedule", 500
-        )
-
-
-@main.route(
-    "/playlist/<playlist_id>/raid-schedule",
-    methods=["PUT"],
-)
-@require_auth_and_db
-def raid_schedule_update(
-    playlist_id, api=None, user=None
-):
-    """Update a raid schedule (frequency, time, enabled)."""
-    req, err = validate_json(UpdateRaidScheduleRequest)
-    if err:
-        return err
-
-    try:
-        schedule = RaidSyncService.update_raid_schedule(
-            spotify_id=user.spotify_id,
-            target_playlist_id=playlist_id,
-            user=user,
-            schedule_value=req.schedule_value,
-            schedule_time=req.schedule_time,
-            is_enabled=req.is_enabled,
-        )
-
-        log_activity(
-            user_id=user.id,
-            activity_type=ActivityType.SCHEDULE_TOGGLE,
-            description="Updated raid schedule",
-            playlist_id=playlist_id,
-        )
-
-        return json_success(
-            "Schedule updated.",
-            schedule=schedule.to_dict(),
-        )
-    except RaidSyncError as e:
-        return json_error(str(e), 400)
-    except (PlaylistBusyError, ScheduleBusyError):
-        return _playlist_busy_response()
-    except Exception as e:
-        logger.error(
-            "Failed to update raid schedule: %s", e
-        )
-        return json_error(
-            "Failed to update schedule", 500
-        )
-
-
-@main.route(
-    "/playlist/<playlist_id>/raid-schedule/history",
-    methods=["GET"],
-)
-@require_auth_and_db
-def raid_schedule_history(
-    playlist_id, api=None, user=None
-):
-    """Get execution history for a raid schedule."""
-    schedule = RaidSyncService._find_raid_schedule(
-        user.id, playlist_id
-    )
-    if not schedule:
-        return json_error("No raid schedule found", 404)
-
-    try:
-        history = SchedulerService.get_execution_history(
-            schedule.id, user.id, limit=10
-        )
-        return json_success(
-            "History loaded.",
-            history=history,
-        )
-    except Exception as e:
-        logger.error(
-            "Failed to load raid history: %s", e
-        )
-        return json_error(
-            "Failed to load history", 500
-        )
+    return admit_direct(user, playlist_id, "raid_and_drip", source_playlist_ids=req.source_playlist_ids,
+                        reviewed=review, on_rejection=_live_preflight_error)
 
 
 # =============================================================
@@ -1050,7 +551,7 @@ def raid_schedule_history(
 # =============================================================
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/pending-raids",
     methods=["GET"],
 )
@@ -1068,196 +569,31 @@ def pending_raids_list(
     )
 
 
-@main.route(
-    "/playlist/<playlist_id>/pending-raids/promote",
-    methods=["POST"],
-)
-@require_auth_and_db
-def pending_raids_promote(
-    playlist_id, api=None, user=None
-):
-    """Promote selected pending tracks.
-
-    Spotify writes are deferred to workshop commit so
-    that undo can revert promoted tracks back to pending.
-    """
-    req, err = validate_json(PromoteTracksRequest)
-    if err:
-        return err
-
-    promoted = PendingRaidService.promote_tracks(
-        user.id, playlist_id, req.track_ids
-    )
-
-    if promoted:
-        log_activity(
-            user_id=user.id,
-            activity_type=ActivityType.RAID_PROMOTE,
-            description=(
-                "Promoted {} raided tracks".format(
-                    len(promoted)
-                )
-            ),
-            playlist_id=playlist_id,
-        )
-
-    return json_success(
-        "{} tracks promoted.".format(len(promoted)),
-        promoted_count=len(promoted),
-        uris=[t.track_uri for t in promoted],
-    )
-
-
-@main.route(
-    "/playlist/<playlist_id>/pending-raids/unpromote",
-    methods=["POST"],
-)
-@require_auth_and_db
-def pending_raids_unpromote(
-    playlist_id, api=None, user=None
-):
-    """Revert promoted tracks back to pending."""
-    req, err = validate_json(UnpromoteTracksRequest)
-    if err:
-        return err
-
-    count = PendingRaidService.unpromote_tracks(
-        user.id, playlist_id, req.track_uris
-    )
-
-    return json_success(
-        "{} tracks restored to inbox.".format(count),
-        reverted_count=count,
-    )
-
-
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/pending-raids/dismiss",
     methods=["POST"],
 )
-@require_auth_and_db
-def pending_raids_dismiss(
-    playlist_id, api=None, user=None
-):
-    """Dismiss selected pending tracks."""
+@require_session_and_db
+def pending_raids_dismiss(playlist_id, user=None):
+    """Accept the owned pending intersection without Spotify authentication."""
     req, err = validate_json(DismissTracksRequest)
     if err:
         return err
+    from shuffify.routes.pending_dismiss_queue import admit_pending_dismiss
 
-    # Get tracks before dismissing for raid playlist sync
-    from shuffify.enums import PendingRaidStatus
-    from shuffify.models.db import PendingRaidTrack
-
-    tracks = PendingRaidTrack.query.filter(
-        PendingRaidTrack.id.in_(req.track_ids),
-        PendingRaidTrack.user_id == user.id,
-        PendingRaidTrack.target_playlist_id
-        == playlist_id,
-        PendingRaidTrack.status
-        == PendingRaidStatus.PENDING,
-    ).all()
-    uris_to_remove = [t.track_uri for t in tracks]
-
-    count = PendingRaidService.dismiss_tracks(
-        user.id, playlist_id, req.track_ids
-    )
-
-    # Remove from raid playlist
-    if uris_to_remove:
-        RaidLinkService.remove_tracks_from_raid_playlist(
-            api, user.id,
-            playlist_id, uris_to_remove,
-        )
-
-    log_activity(
-        user_id=user.id,
-        activity_type=ActivityType.RAID_DISMISS,
-        description=(
-            "Dismissed {} raided tracks".format(count)
-        ),
-        playlist_id=playlist_id,
-    )
-
-    return json_success(
-        "{} tracks dismissed.".format(count),
-        dismissed_count=count,
-    )
+    return admit_pending_dismiss(user, playlist_id, track_ids=req.track_ids)
 
 
-@main.route(
-    "/playlist/<playlist_id>/pending-raids/promote-all",
-    methods=["POST"],
-)
-@require_auth_and_db
-def pending_raids_promote_all(
-    playlist_id, api=None, user=None
-):
-    """Promote all pending tracks.
-
-    Spotify writes are deferred to workshop commit so
-    that undo can revert promoted tracks back to pending.
-    """
-    promoted = PendingRaidService.promote_all(
-        user.id, playlist_id
-    )
-
-    if promoted:
-        log_activity(
-            user_id=user.id,
-            activity_type=ActivityType.RAID_PROMOTE,
-            description=(
-                "Promoted all {} "
-                "raided tracks".format(len(promoted))
-            ),
-            playlist_id=playlist_id,
-        )
-
-    return json_success(
-        "{} tracks promoted.".format(len(promoted)),
-        promoted_count=len(promoted),
-        uris=[t.track_uri for t in promoted],
-    )
-
-
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/pending-raids/dismiss-all",
     methods=["POST"],
 )
-@require_auth_and_db
-def pending_raids_dismiss_all(
-    playlist_id, api=None, user=None
-):
-    """Dismiss all pending tracks."""
-    # Get URIs before dismissing for raid playlist sync
-    pending = PendingRaidService.list_pending(
-        user.id, playlist_id
-    )
-    uris_to_remove = [t.track_uri for t in pending]
+@require_session_and_db
+def pending_raids_dismiss_all(playlist_id, user=None):
+    """Accept all currently owned pending IDs, including an explicit empty set."""
+    from shuffify.routes.pending_dismiss_queue import admit_pending_dismiss
 
-    count = PendingRaidService.dismiss_all(
-        user.id, playlist_id
-    )
-
-    # Remove from raid playlist
-    if uris_to_remove:
-        RaidLinkService.remove_tracks_from_raid_playlist(
-            api, user.id,
-            playlist_id, uris_to_remove,
-        )
-
-    log_activity(
-        user_id=user.id,
-        activity_type=ActivityType.RAID_DISMISS,
-        description=(
-            "Dismissed all {} raided tracks".format(count)
-        ),
-        playlist_id=playlist_id,
-    )
-
-    return json_success(
-        "{} tracks dismissed.".format(count),
-        dismissed_count=count,
-    )
+    return admit_pending_dismiss(user, playlist_id)
 
 
 def _raid_finalize_preflight_error(message, status_code):
@@ -1267,21 +603,13 @@ def _raid_finalize_preflight_error(message, status_code):
     return jsonify(result.to_dict()), result.http_status
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/pending-raids/finalize",
     methods=["POST"],
 )
-@main.route(
-    "/playlist/<playlist_id>/pending-raids/finalize-all",
-    methods=["POST"],
-)
-@require_auth_and_db(on_preflight_error=_raid_finalize_preflight_error)
-def pending_raids_finalize(playlist_id, api=None, user=None):
-    """Finalize exactly the captured IDs after verified target/source checks.
-
-    The legacy finalize-all URL accepts the same explicit ID payload; tracks
-    discovered after review must never be implicitly promoted or removed.
-    """
+@require_session_and_db(on_preflight_error=_raid_finalize_preflight_error)
+def pending_raids_finalize(playlist_id, user=None):
+    """Finalize exactly the captured IDs after verified target/source checks."""
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return _raid_finalize_preflight_error("Request body must be a JSON object.", 400)
@@ -1291,17 +619,12 @@ def pending_raids_finalize(playlist_id, api=None, user=None):
         return _raid_finalize_preflight_error(
             "Review the source changes again; the captured task is incomplete or invalid.", 400
         )
-    result = WorkshopFinalizeService(api).finalize_raids(
-        playlist_id, user, **req.model_dump()
-    )
-    if (
-        result.status == "complete"
-        and (result.affected_count or 0) > 0
-        and not req.inspect_only
-    ):
-        log_activity(
-            user_id=user.id, activity_type=ActivityType.RAID_PROMOTE,
-            description=f"Finalized {result.affected_count} raided tracks",
-            playlist_id=playlist_id,
-        )
+    if not req.inspect_only:
+        return admit_finalizer(user, playlist_id, "workshop_finalize_raids", req)
+    from shuffify.routes import require_auth
+
+    api = require_auth()
+    if api is None:
+        return _raid_finalize_preflight_error("Please log in first.", 401)
+    result = WorkshopFinalizeService(api).finalize_raids(playlist_id, user, **req.model_dump())
     return jsonify(result.to_dict()), result.http_status

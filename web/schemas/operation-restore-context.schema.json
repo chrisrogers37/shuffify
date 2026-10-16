@@ -1,0 +1,266 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/OperationRestoreContext",
+  "definitions": {
+    "OperationRestoreContext": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "message": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "const": "success"
+        },
+        "context": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "operation_restore"
+            },
+            "operation_id": {
+              "$ref": "#/definitions/DatabaseId"
+            },
+            "available": {
+              "type": "boolean",
+              "const": true
+            },
+            "reviewed": {
+              "$ref": "#/definitions/OperationRestoreReview"
+            },
+            "resources": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/OperationRestoreResource"
+              },
+              "minItems": 1,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "kind",
+            "operation_id",
+            "available",
+            "reviewed",
+            "resources"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "context",
+        "success"
+      ],
+      "additionalProperties": false
+    },
+    "DatabaseId": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "OperationRestoreReview": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "number",
+          "const": 1
+        },
+        "reviewed_scope": {
+          "$ref": "#/definitions/RestoreDigest"
+        },
+        "reviewed_resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RestoreResourceDigest"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "version",
+        "reviewed_scope",
+        "reviewed_resources"
+      ],
+      "additionalProperties": false
+    },
+    "RestoreDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "RestoreResourceDigest": {
+      "type": "object",
+      "properties": {
+        "playlist_id": {
+          "type": "string"
+        },
+        "digest": {
+          "$ref": "#/definitions/RestoreDigest"
+        }
+      },
+      "required": [
+        "playlist_id",
+        "digest"
+      ],
+      "additionalProperties": false
+    },
+    "OperationRestoreResource": {
+      "type": "object",
+      "properties": {
+        "playlist_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "restore",
+            "guard"
+          ]
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "tracks",
+            "metadata"
+          ]
+        },
+        "write_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "tracks",
+              "name",
+              "description",
+              "public"
+            ]
+          },
+          "maxItems": 4
+        },
+        "current_count": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "desired_count": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "current_preview": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20
+        },
+        "desired_preview": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20
+        },
+        "current_metadata": {
+          "$ref": "#/definitions/RestoreCurrentMetadata"
+        },
+        "desired_metadata": {
+          "$ref": "#/definitions/RestoreDesiredMetadata"
+        },
+        "metadata_truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "playlist_id",
+        "name",
+        "role",
+        "scope",
+        "write_fields",
+        "current_count",
+        "desired_count",
+        "current_preview",
+        "desired_preview",
+        "current_metadata",
+        "desired_metadata",
+        "metadata_truncated"
+      ],
+      "additionalProperties": false
+    },
+    "Count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "RestoreCurrentMetadata": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RestoreMetadataText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RestoreMetadataText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "public": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "RestoreMetadataText": {
+      "type": "string",
+      "maxLength": 1024
+    },
+    "RestoreDesiredMetadata": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/RestoreMetadataText"
+        },
+        "description": {
+          "$ref": "#/definitions/RestoreMetadataText"
+        },
+        "public": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

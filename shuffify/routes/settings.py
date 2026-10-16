@@ -1,16 +1,11 @@
 """
-Settings routes: view and update user preferences.
+Settings API: read and update user preferences.
 """
 
 import logging
 
 from flask import (
-    flash,
-    jsonify,
-    redirect,
-    render_template,
     request,
-    url_for,
 )
 from pydantic import ValidationError
 
@@ -18,16 +13,13 @@ from shuffify.error_handlers import (
     format_validation_error,
 )
 from shuffify.routes import (
-    clear_session_and_show_login,
+    api_bp,
     json_error,
     json_success,
-    main,
     require_auth_and_db,
-    require_auth_page,
 )
 from shuffify.schemas import UserSettingsUpdateRequest
 from shuffify.services import (
-    AuthenticationError,
     ShuffleService,
     UserSettingsError,
     UserSettingsService,
@@ -36,79 +28,42 @@ from shuffify.services import (
 logger = logging.getLogger(__name__)
 
 
-@main.route("/settings")
-@require_auth_page
-def settings(api=None, user=None, spotify_profile=None):
-    """Render the user settings page."""
-    try:
-        user_settings = UserSettingsService.get_or_create(user.id)
-        algorithms = ShuffleService.list_algorithms()
-        algorithm_options = [
-            {"value": "", "label": "No default (choose each time)"}
-        ] + [
-            {"value": a["class_name"], "label": a["name"]}
-            for a in algorithms
-        ]
-
-        # AJAX request from sidebar — return JSON
-        is_ajax = (
-            request.headers.get("X-Requested-With")
-            == "XMLHttpRequest"
-        )
-        if is_ajax:
-            return jsonify({
-                "settings": user_settings.to_dict(),
-                "algorithm_options": algorithm_options,
-            })
-
-        return render_template(
-            "settings.html",
-            user=spotify_profile,
-            settings=user_settings.to_dict(),
-            algorithms=algorithms,
-            algorithm_options=algorithm_options,
-        )
-
-    except AuthenticationError as e:
-        logger.error("Auth error loading settings page: %s", e)
-        return clear_session_and_show_login(
-            "Your session has expired. "
-            "Please log in again."
-        )
-    except UserSettingsError as e:
-        logger.error(
-            "Settings service error loading settings page: %s",
-            e,
-        )
-        flash(
-            "Could not load your settings. "
-            "Please try again.",
-            "error",
-        )
-        return redirect(url_for("main.index"))
-    except Exception as e:
-        logger.error(
-            "Unexpected error loading settings page: %s "
-            "[type=%s]",
-            e,
-            type(e).__name__,
-            exc_info=True,
-        )
-        flash(
-            "Something went wrong loading settings. "
-            "Please try again.",
-            "error",
-        )
-        return redirect(url_for("main.index"))
+@api_bp.route("/settings", methods=["GET"])
+@require_auth_and_db
+def get_settings(api=None, user=None):
+    """Read saved settings and available algorithms."""
+    return json_success("Settings loaded.", **_settings_context(user))
 
 
-@main.route("/settings", methods=["POST"])
+def _settings_context(user, settings=None):
+    """The complete settings context returned after both reads and updates."""
+    algorithms = ShuffleService.list_algorithms()
+    return {
+        "settings": settings if settings is not None else UserSettingsService.get_or_create(user.id).to_dict(),
+        "algorithms": algorithms,
+        "algorithm_options": [{"value": "", "label": "No default (choose each time)"}] + [
+            {"value": algorithm["class_name"], "label": algorithm["name"]} for algorithm in algorithms
+        ],
+    }
+
+
+@api_bp.route("/settings", methods=["POST"])
 @require_auth_and_db
 def update_settings(api=None, user=None):
-    """Update user settings from form submission."""
+    """Update user settings and return the saved values."""
+    updated, error = _save_settings(user)
+    if error:
+        return json_error(error, 400)
+    return json_success("Settings saved successfully.", **_settings_context(user, updated))
+
+
+def _save_settings(user):
+    """Parse JSON or native form values and persist one validated settings update."""
     # Handle both JSON and form-encoded data
     if request.is_json:
         data = request.get_json()
+        if not isinstance(data, dict):
+            return None, "Request body must be a JSON object."
     else:
         data = request.form.to_dict()
 
@@ -150,9 +105,7 @@ def update_settings(api=None, user=None):
                 data["max_snapshots_per_playlist"]
             )
         except (ValueError, TypeError):
-            return json_error(
-                "Invalid value for max snapshots.", 400
-            )
+            return None, "Invalid value for max snapshots."
 
     # Handle empty algorithm as None (no default)
     if data.get("default_algorithm") == "":
@@ -161,11 +114,7 @@ def update_settings(api=None, user=None):
     try:
         update_request = UserSettingsUpdateRequest(**data)
     except ValidationError as e:
-        return json_error(
-            f"Validation error: "
-            f"{format_validation_error(e)}",
-            400,
-        )
+        return None, f"Validation error: {format_validation_error(e)}"
 
     # Leave omitted values unchanged, but an explicitly cleared algorithm
     # means "choose each time" and must clear the stored default.
@@ -182,19 +131,6 @@ def update_settings(api=None, user=None):
             user.id, **update_kwargs
         )
     except UserSettingsError as e:
-        return json_error(str(e), 400)
+        return None, str(e)
 
-    # For AJAX requests, return JSON
-    is_ajax = (
-        request.headers.get("X-Requested-With")
-        == "XMLHttpRequest"
-    )
-    if is_ajax or request.is_json:
-        return json_success(
-            "Settings saved successfully.",
-            settings=updated.to_dict(),
-        )
-
-    # For regular form submission, redirect with flash
-    flash("Settings saved successfully.", "success")
-    return redirect(url_for("main.settings"))
+    return updated.to_dict(), None

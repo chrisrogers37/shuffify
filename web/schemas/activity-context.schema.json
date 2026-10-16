@@ -1,0 +1,589 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/ActivityContext",
+  "definitions": {
+    "ActivityContext": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "message": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "const": "success"
+        },
+        "stats": {
+          "$ref": "#/definitions/QuickStats"
+        },
+        "activities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Activity"
+          },
+          "maxItems": 100
+        },
+        "executions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ActivityExecution"
+          },
+          "maxItems": 20
+        }
+      },
+      "required": [
+        "activities",
+        "executions",
+        "stats",
+        "success"
+      ],
+      "additionalProperties": false
+    },
+    "QuickStats": {
+      "type": "object",
+      "properties": {
+        "total_shuffles": {
+          "$ref": "#/definitions/Count"
+        },
+        "total_scheduled_runs": {
+          "$ref": "#/definitions/Count"
+        },
+        "total_snapshots": {
+          "$ref": "#/definitions/Count"
+        },
+        "active_schedule_count": {
+          "$ref": "#/definitions/Count"
+        }
+      },
+      "required": [
+        "total_shuffles",
+        "total_scheduled_runs",
+        "total_snapshots",
+        "active_schedule_count"
+      ],
+      "additionalProperties": false
+    },
+    "Count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "Activity": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "user_id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "activity_type": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "playlist_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "playlist_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/JsonRecord"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "triggered_by": {
+          "$ref": "#/definitions/TriggeredBy"
+        }
+      },
+      "required": [
+        "id",
+        "user_id",
+        "activity_type",
+        "description",
+        "playlist_id",
+        "playlist_name",
+        "metadata",
+        "created_at",
+        "triggered_by"
+      ],
+      "additionalProperties": false
+    },
+    "DatabaseId": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "JsonRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/JsonValue"
+      },
+      "description": "Extensible metadata and preferences intentionally retain arbitrary JSON values."
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        }
+      ]
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "An ISO 8601 timestamp supplied by the server."
+    },
+    "TriggeredBy": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "manual",
+        "scheduler",
+        null
+      ]
+    },
+    "ActivityExecution": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "schedule_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DatabaseId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "tracks_added": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tracks_total": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error_message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result_detail": {
+          "$ref": "#/definitions/ExecutionDetail"
+        },
+        "schedule_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "job_type": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/JobType"
+            },
+            {
+              "type": "string",
+              "const": "unknown"
+            }
+          ]
+        },
+        "triggered_by": {
+          "$ref": "#/definitions/TriggeredBy",
+          "description": "Null means no persisted origin is known; readers must never guess an origin."
+        }
+      },
+      "required": [
+        "completed_at",
+        "error_message",
+        "id",
+        "job_type",
+        "result_detail",
+        "schedule_id",
+        "schedule_name",
+        "started_at",
+        "status",
+        "tracks_added",
+        "tracks_total",
+        "triggered_by"
+      ],
+      "additionalProperties": false
+    },
+    "ExecutionDetail": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/UnavailableExecutionDetail"
+        },
+        {
+          "$ref": "#/definitions/AvailableExecutionDetail"
+        }
+      ]
+    },
+    "UnavailableExecutionDetail": {
+      "type": "object",
+      "properties": {
+        "detail_status": {
+          "type": "string",
+          "const": "unavailable"
+        },
+        "version": {
+          "type": "null"
+        },
+        "steps": {
+          "type": "null"
+        }
+      },
+      "required": [
+        "detail_status",
+        "version",
+        "steps"
+      ],
+      "additionalProperties": false
+    },
+    "AvailableExecutionDetail": {
+      "type": "object",
+      "properties": {
+        "detail_status": {
+          "type": "string",
+          "const": "available"
+        },
+        "version": {
+          "type": "number",
+          "const": 1
+        },
+        "operation": {
+          "$ref": "#/definitions/JobType"
+        },
+        "execution_id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "partial",
+            "unknown"
+          ]
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ExecutionStep"
+          },
+          "minItems": 1,
+          "maxItems": 4
+        },
+        "run_state": {
+          "type": "string",
+          "enum": [
+            "running",
+            "finished"
+          ]
+        },
+        "resource_ids": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string"
+            },
+            "collection": {
+              "type": "string"
+            },
+            "archive": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "execution_record": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "unknown"
+          ]
+        }
+      },
+      "required": [
+        "detail_status",
+        "version",
+        "operation",
+        "execution_id",
+        "outcome",
+        "steps"
+      ],
+      "additionalProperties": false
+    },
+    "JobType": {
+      "type": "string",
+      "enum": [
+        "raid",
+        "shuffle",
+        "raid_and_shuffle",
+        "raid_and_drip",
+        "rotate",
+        "drip"
+      ]
+    },
+    "ExecutionStep": {
+      "type": "object",
+      "properties": {
+        "step": {
+          "$ref": "#/definitions/ExecutionStepName"
+        },
+        "status": {
+          "$ref": "#/definitions/ExecutionStepStatus"
+        },
+        "counts": {
+          "$ref": "#/definitions/ExecutionCounts"
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ExecutionResourceFact"
+          },
+          "maxItems": 12
+        },
+        "bookkeeping": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ExecutionBookkeepingFact"
+          },
+          "maxItems": 12
+        }
+      },
+      "required": [
+        "step",
+        "status",
+        "resources",
+        "bookkeeping"
+      ],
+      "additionalProperties": false
+    },
+    "ExecutionStepName": {
+      "type": "string",
+      "enum": [
+        "raid",
+        "shuffle",
+        "rotate",
+        "drip"
+      ]
+    },
+    "ExecutionStepStatus": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "partial",
+        "unknown",
+        "failed",
+        "restored",
+        "not_started",
+        "pending"
+      ]
+    },
+    "ExecutionCounts": {
+      "type": "object",
+      "properties": {
+        "tracks_collected": {
+          "$ref": "#/definitions/Count"
+        },
+        "tracks_moved_to_target": {
+          "$ref": "#/definitions/Count"
+        },
+        "tracks_removed_from_collection": {
+          "$ref": "#/definitions/Count"
+        },
+        "tracks_reordered": {
+          "$ref": "#/definitions/Count"
+        },
+        "tracks_archived": {
+          "$ref": "#/definitions/Count"
+        },
+        "tracks_returned": {
+          "$ref": "#/definitions/Count"
+        },
+        "archive_overlaps_removed": {
+          "$ref": "#/definitions/Count"
+        },
+        "tracks_removed_from_target": {
+          "$ref": "#/definitions/Count"
+        },
+        "tracks_removed_from_archive": {
+          "$ref": "#/definitions/Count"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExecutionResourceFact": {
+      "type": "object",
+      "properties": {
+        "resource": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/FactStatus"
+        },
+        "phase": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ExecutionStepName"
+            },
+            {
+              "type": "string",
+              "const": "archive_purge"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "target",
+            "collection",
+            "archive"
+          ]
+        },
+        "mutation_type": {
+          "type": "string",
+          "enum": [
+            "track_order",
+            "track_membership"
+          ]
+        },
+        "affected_count": {
+          "$ref": "#/definitions/Count"
+        },
+        "dispatched": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "resource",
+        "status",
+        "dispatched"
+      ],
+      "additionalProperties": false
+    },
+    "FactStatus": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "failed",
+        "unknown",
+        "restored",
+        "not_required"
+      ]
+    },
+    "ExecutionBookkeepingFact": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "pending_stage",
+            "pending_promotion",
+            "pending_restore",
+            "execution_record"
+          ]
+        },
+        "status": {
+          "$ref": "#/definitions/FactStatus"
+        },
+        "resource": {
+          "type": "string"
+        },
+        "affected_count": {
+          "$ref": "#/definitions/Count"
+        }
+      },
+      "required": [
+        "kind",
+        "status"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

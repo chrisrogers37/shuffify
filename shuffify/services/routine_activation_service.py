@@ -10,6 +10,7 @@ from shuffify.models.db import RoutineActivationReceipt, Schedule, db
 from shuffify.schemas.playlist_setup_requests import is_playlist_id
 from shuffify.services import signed_digest
 from shuffify.services.activity_log_service import ActivityLogService
+from shuffify.services.api_response import busy_error
 from shuffify.services.live_review_bindings import fingerprint
 from shuffify.services.playlist_lock import playlist_configuration_lock, playlist_lock
 from shuffify.services.playlist_service import PlaylistAccessError, PlaylistNotFoundError, PlaylistService
@@ -277,10 +278,11 @@ def _validate_submitted(definition, target_id):
         raise DefinitionError("definition.source_playlist_ids", "Use the reviewed legacy source IDs.")
 
 
-def _schedule_payload(schedule):
+def _schedule_payload(schedule, registration=None):
     from shuffify.scheduler import get_schedule_registration
 
-    registration = get_schedule_registration(schedule)
+    if registration is None:
+        registration = get_schedule_registration(schedule)
     if registration["status"] == "registered" and schedule.is_enabled:
         state = "Active"
     elif registration["status"] == "paused" and not schedule.is_enabled:
@@ -290,8 +292,17 @@ def _schedule_payload(schedule):
     return {
         "schedule_id": schedule.id, "schedule": schedule.to_dict(),
         "definition": _stored(schedule), "schedule_revision": schedule_revision(schedule),
-        "timing": serialize_timing(schedule), "registration": registration, "state": state,
+        "timing": serialize_timing(schedule, effective_timezone=registration["effective_timezone"]),
+        "registration": registration, "state": state,
     }
+
+
+def schedule_payloads(schedules):
+    from shuffify.scheduler import get_schedule_registrations
+
+    schedules = list(schedules)
+    registrations = get_schedule_registrations(schedules)
+    return [_schedule_payload(row, registrations[row.id]) for row in schedules]
 
 
 def _accepted_locked(user_id, target_id, receipt, *, replayed):
@@ -330,7 +341,10 @@ class RoutineActivationService:
         editable_cache = {}
         for job_type in JobType:
             try:
-                _validate_dependencies(api, user, target_id, state, job_type, editable_cache=editable_cache)
+                _validate_dependencies(
+                    api, user, target_id, state, job_type,
+                    extra_source_ids=[], editable_cache=editable_cache,
+                )
                 capabilities[job_type] = {"available": True, "reason": None}
             except DefinitionError as exc:
                 capabilities[job_type] = {"available": False, "reason": str(exc)}
@@ -339,7 +353,7 @@ class RoutineActivationService:
         return {
             "success": True, "target": setup["target"], "prerequisites": setup,
             "dependency_revision": configuration_revision(state),
-            "routines": [_schedule_payload(row) for row in state.schedules],
+            "routines": schedule_payloads(state.schedules),
             "algorithms": ShuffleRegistry.list_algorithms(), "capabilities": capabilities,
         }, 200
 
@@ -408,9 +422,9 @@ class RoutineActivationService:
             # cannot race the executor or invert the setup lock order.
             if request.get("schedule_id") is not None:
                 if not locks.enter_context(playlist_lock(target_id, timeout_s=LOCK_WAIT_S)):
-                    return _error("playlist_busy", 409, "A routine is using this playlist. Try again.")
+                    return busy_error()
             if not locks.enter_context(playlist_configuration_lock(target_id, timeout_s=LOCK_WAIT_S)):
-                return _error("playlist_busy", 409, "A routine is using this playlist. Try again.")
+                return busy_error()
             return RoutineActivationService._activate_locked(api, user, target_id, request, payload_hash)
 
     @staticmethod
@@ -519,7 +533,7 @@ class RoutineActivationService:
         target_id = schedule.target_playlist_id
         with playlist_configuration_lock(target_id, timeout_s=LOCK_WAIT_S) as acquired:
             if not acquired:
-                return _error("playlist_busy", 409, "A routine is using this playlist. Try again.")
+                return busy_error()
             db.session.expire_all()
             schedule = Schedule.query.filter_by(id=schedule_id, user_id=user.id).first()
             if schedule is None:

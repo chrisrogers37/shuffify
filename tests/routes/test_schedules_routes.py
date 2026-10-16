@@ -1,71 +1,25 @@
 """
 Tests for schedule routes.
 
-Tests cover the schedule endpoints including CRUD,
-toggle, manual run, execution history, and rotation status.
+Tests cover exact schedule deletion, manual execution, history and the management page.
 """
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from shuffify.models.db import db
-from shuffify.services.user_service import UserService
-
-
-@pytest.fixture(autouse=True)
-def _allow_playlist_edits():
-    """No-op the playlist ownership guard for these route tests.
-
-    ``create_schedule`` calls ``PlaylistService.validate_user_can_edit``, which
-    fetches the playlist to verify editability. These tests use bare-mock
-    clients and aren't exercising the guard (it's covered directly in
-    ``tests/services/test_playlist_service.py``), so patch it to a no-op.
-    """
-    with patch(
-        "shuffify.services.playlist_service."
-        "PlaylistService.validate_user_can_edit"
-    ):
-        yield
-
-
-# Note: Schedule routes use two auth patterns:
-# - GET /schedules uses is_authenticated() directly (302 redirect)
-# - All other endpoints use @require_auth_and_db (401 JSON)
-# The decorator resolves require_auth/get_db_user from
-# shuffify.routes.__init__, NOT from schedules module.
+from shuffify.models.db import Schedule, User, db
+from tests.paths import api_path
+from tests.queued_operations import post_and_run
+from tests.routes.live_review_helpers import serving
+from tests.routes.test_live_raid_outcomes import MutableSpotify, uri
 
 
 class TestSchedulesAuth:
     """Auth guard tests for all schedule endpoints."""
 
-    def test_get_schedules_unauth_redirects(self, db_app):
-        """GET /schedules without auth returns 302 redirect."""
+    def test_get_routines_unauthenticated_returns_json(self, db_app):
+        """Routines context uses the same signed-out JSON contract as other reads."""
         with db_app.test_client() as client:
-            resp = client.get("/schedules")
-            assert resp.status_code == 302
-
-    @patch("shuffify.routes.require_auth")
-    def test_create_unauth_returns_401(
-        self, mock_auth, db_app
-    ):
-        mock_auth.return_value = None
-        with db_app.test_client() as client:
-            resp = client.post(
-                "/schedules/create",
-                json={"job_type": "shuffle"},
-            )
-            assert resp.status_code == 401
-
-    @patch("shuffify.routes.require_auth")
-    def test_update_unauth_returns_401(
-        self, mock_auth, db_app
-    ):
-        mock_auth.return_value = None
-        with db_app.test_client() as client:
-            resp = client.put(
-                "/schedules/1", json={}
-            )
+            resp = client.get("/api/routines")
             assert resp.status_code == 401
 
     @patch("shuffify.routes.require_auth")
@@ -74,16 +28,7 @@ class TestSchedulesAuth:
     ):
         mock_auth.return_value = None
         with db_app.test_client() as client:
-            resp = client.delete("/schedules/1")
-            assert resp.status_code == 401
-
-    @patch("shuffify.routes.require_auth")
-    def test_toggle_unauth_returns_401(
-        self, mock_auth, db_app
-    ):
-        mock_auth.return_value = None
-        with db_app.test_client() as client:
-            resp = client.post("/schedules/1/toggle")
+            resp = client.delete(api_path("/schedules/1"))
             assert resp.status_code == 401
 
     @patch("shuffify.routes.require_auth")
@@ -92,7 +37,7 @@ class TestSchedulesAuth:
     ):
         mock_auth.return_value = None
         with db_app.test_client() as client:
-            resp = client.post("/schedules/1/run")
+            resp = client.post(api_path("/schedules/1/run"))
             assert resp.status_code == 401
 
     @patch("shuffify.routes.require_auth")
@@ -101,406 +46,8 @@ class TestSchedulesAuth:
     ):
         mock_auth.return_value = None
         with db_app.test_client() as client:
-            resp = client.get("/schedules/1/history")
+            resp = client.get(api_path("/schedules/1/history"))
             assert resp.status_code == 401
-
-    @patch("shuffify.routes.require_auth")
-    def test_rotation_status_unauth_returns_401(
-        self, mock_auth, db_app
-    ):
-        mock_auth.return_value = None
-        with db_app.test_client() as client:
-            resp = client.get(
-                "/playlist/p1/rotation-status"
-            )
-            assert resp.status_code == 401
-
-
-class TestGetSchedulesPage:
-    """Tests for GET /schedules."""
-
-    @patch("shuffify.routes.schedules.PlaylistService")
-    @patch("shuffify.routes.get_db_user")
-    @patch("shuffify.routes.AuthService")
-    @patch("shuffify.routes.require_auth")
-    def test_renders_page_for_authenticated_user(
-        self,
-        mock_is_auth,
-        mock_auth_service,
-        mock_get_db_user,
-        mock_ps_class,
-        auth_client,
-    ):
-        mock_is_auth.return_value = True
-        mock_client = MagicMock()
-        mock_auth_service.get_authenticated_client.return_value = (
-            mock_client
-        )
-        mock_auth_service.get_user_data.return_value = {
-            "id": "user123",
-            "display_name": "Test User",
-        }
-
-        mock_db_user = MagicMock()
-        mock_db_user.id = 1
-        mock_db_user.spotify_id = "user123"
-        mock_get_db_user.return_value = mock_db_user
-
-        from shuffify.services.scheduler_service import (
-            SchedulerService,
-        )
-
-        with patch.object(
-            SchedulerService,
-            "get_user_schedules",
-            return_value=[],
-        ):
-            mock_ps = MagicMock()
-            mock_ps.get_user_playlists.return_value = []
-            mock_ps_class.return_value = mock_ps
-            resp = auth_client.get("/schedules")
-            assert resp.status_code == 200
-
-    @patch("shuffify.routes.get_db_user")
-    @patch("shuffify.routes.AuthService")
-    @patch("shuffify.routes.require_auth")
-    def test_no_db_user_redirects(
-        self,
-        mock_is_auth,
-        mock_auth_service,
-        mock_get_db_user,
-        auth_client,
-    ):
-        mock_is_auth.return_value = True
-        mock_client = MagicMock()
-        mock_auth_service.get_authenticated_client.return_value = (
-            mock_client
-        )
-        mock_auth_service.get_user_data.return_value = {
-            "id": "user123",
-            "display_name": "Test User",
-        }
-        mock_get_db_user.return_value = None
-
-        resp = auth_client.get("/schedules")
-        assert resp.status_code == 302
-
-
-class TestCreateSchedule:
-    """Tests for POST /schedules/create."""
-
-    @patch("shuffify.scheduler.add_job_for_schedule")
-    @patch(
-        "shuffify.routes.schedules.SchedulerService"
-    )
-    @patch("shuffify.routes.require_auth")
-    def test_create_success(
-        self,
-        mock_auth,
-        mock_sched_svc,
-        mock_add_job,
-        auth_client,
-    ):
-        mock_auth.return_value = MagicMock()
-
-        # Route checks user.encrypted_refresh_token
-        user = UserService.get_by_spotify_id("user123")
-        user.encrypted_refresh_token = "enc_token"
-        db.session.commit()
-
-        mock_schedule = MagicMock()
-        mock_schedule.id = 1
-        mock_schedule.job_type = "shuffle"
-        mock_schedule.target_playlist_name = "My Playlist"
-        mock_schedule.target_playlist_id = "p1"
-        mock_schedule.is_enabled = True
-        mock_schedule.to_dict.return_value = {"id": 1}
-        mock_sched_svc.create_schedule.return_value = (
-            mock_schedule
-        )
-
-        resp = auth_client.post(
-            "/schedules/create",
-            json={
-                "job_type": "shuffle",
-                "target_playlist_id": "p1",
-                "target_playlist_name": "My Playlist",
-                "algorithm_name": "BasicShuffle",
-            },
-        )
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["success"] is True
-
-    @patch("shuffify.routes.require_auth")
-    def test_missing_refresh_token_returns_400(
-        self, mock_auth, auth_client
-    ):
-        mock_auth.return_value = MagicMock()
-
-        # The real db_user from db_app fixture has
-        # no encrypted_refresh_token set
-        resp = auth_client.post(
-            "/schedules/create",
-            json={
-                "job_type": "shuffle",
-                "target_playlist_id": "p1",
-                "target_playlist_name": "My Playlist",
-                "algorithm_name": "BasicShuffle",
-            },
-        )
-        assert resp.status_code == 400
-
-    @patch("shuffify.routes.require_auth")
-    def test_no_json_body_returns_400(
-        self, mock_auth, auth_client
-    ):
-        mock_auth.return_value = MagicMock()
-
-        # Set encrypted_refresh_token so we get past
-        # that check
-        user = UserService.get_by_spotify_id("user123")
-        user.encrypted_refresh_token = "enc_token"
-        db.session.commit()
-
-        resp = auth_client.post(
-            "/schedules/create",
-            json={},
-        )
-        assert resp.status_code == 400
-
-
-class TestAPSchedulerErrorHandling:
-    """Tests that APScheduler failures don't mask route success."""
-
-    def _make_schedule_mock(self):
-        """Helper to create a mock schedule."""
-        mock_schedule = MagicMock()
-        mock_schedule.id = 1
-        mock_schedule.job_type = "shuffle"
-        mock_schedule.target_playlist_name = "My Playlist"
-        mock_schedule.target_playlist_id = "p1"
-        mock_schedule.is_enabled = True
-        mock_schedule.schedule_value = "daily"
-        mock_schedule.to_dict.return_value = {"id": 1}
-        return mock_schedule
-
-    @patch(
-        "shuffify.routes.schedules.SchedulerService"
-    )
-    @patch("shuffify.routes.require_auth")
-    def test_create_succeeds_despite_key_error(
-        self,
-        mock_auth,
-        mock_sched_svc,
-        auth_client,
-    ):
-        """Non-RuntimeError from APScheduler must not mask success."""
-        mock_auth.return_value = MagicMock()
-
-        user = UserService.get_by_spotify_id("user123")
-        user.encrypted_refresh_token = "enc_token"
-        db.session.commit()
-
-        mock_sched_svc.create_schedule.return_value = (
-            self._make_schedule_mock()
-        )
-
-        with patch(
-            "shuffify.scheduler.add_job_for_schedule",
-            side_effect=KeyError("ConflictingId"),
-        ):
-            resp = auth_client.post(
-                "/schedules/create",
-                json={
-                    "job_type": "shuffle",
-                    "target_playlist_id": "p1",
-                    "target_playlist_name": "My Playlist",
-                    "algorithm_name": "BasicShuffle",
-                },
-            )
-            assert resp.status_code == 200
-            data = resp.get_json()
-            assert data["success"] is True
-
-    @patch(
-        "shuffify.routes.schedules.SchedulerService"
-    )
-    @patch("shuffify.routes.require_auth")
-    def test_create_succeeds_despite_runtime_error(
-        self,
-        mock_auth,
-        mock_sched_svc,
-        auth_client,
-    ):
-        """A RuntimeError from APScheduler does not fail schedule creation."""
-        mock_auth.return_value = MagicMock()
-
-        user = UserService.get_by_spotify_id("user123")
-        user.encrypted_refresh_token = "enc_token"
-        db.session.commit()
-
-        mock_sched_svc.create_schedule.return_value = (
-            self._make_schedule_mock()
-        )
-
-        with patch(
-            "shuffify.scheduler.add_job_for_schedule",
-            side_effect=RuntimeError("Scheduler not init"),
-        ):
-            resp = auth_client.post(
-                "/schedules/create",
-                json={
-                    "job_type": "shuffle",
-                    "target_playlist_id": "p1",
-                    "target_playlist_name": "My Playlist",
-                    "algorithm_name": "BasicShuffle",
-                },
-            )
-            assert resp.status_code == 200
-
-    @patch(
-        "shuffify.routes.schedules.SchedulerService"
-    )
-    @patch("shuffify.routes.require_auth")
-    def test_update_succeeds_despite_apscheduler_error(
-        self,
-        mock_auth,
-        mock_sched_svc,
-        auth_client,
-    ):
-        """Update route catches non-RuntimeError from APScheduler."""
-        mock_auth.return_value = MagicMock()
-
-        mock_schedule = self._make_schedule_mock()
-        mock_sched_svc.update_schedule.return_value = (
-            mock_schedule
-        )
-
-        with patch(
-            "shuffify.scheduler.add_job_for_schedule",
-            side_effect=TypeError("bad trigger"),
-        ):
-            resp = auth_client.put(
-                "/schedules/1",
-                json={"schedule_value": "weekly"},
-            )
-            assert resp.status_code == 200
-            data = resp.get_json()
-            assert data["success"] is True
-
-    @patch(
-        "shuffify.routes.schedules.SchedulerService"
-    )
-    @patch("shuffify.routes.require_auth")
-    def test_toggle_succeeds_despite_apscheduler_error(
-        self,
-        mock_auth,
-        mock_sched_svc,
-        auth_client,
-    ):
-        """Toggle route catches non-RuntimeError from APScheduler."""
-        mock_auth.return_value = MagicMock()
-
-        mock_schedule = self._make_schedule_mock()
-        mock_sched_svc.toggle_schedule.return_value = (
-            mock_schedule
-        )
-
-        with patch(
-            "shuffify.scheduler.add_job_for_schedule",
-            side_effect=KeyError("ConflictingId"),
-        ):
-            resp = auth_client.post(
-                "/schedules/1/toggle"
-            )
-            assert resp.status_code == 200
-
-    @patch(
-        "shuffify.routes.schedules.SchedulerService"
-    )
-    @patch("shuffify.routes.require_auth")
-    def test_apscheduler_failure_logs_warning(
-        self,
-        mock_auth,
-        mock_sched_svc,
-        auth_client,
-    ):
-        """Create still succeeds when scheduler registration fails.
-
-        Registration lives in SchedulerService, which swallows and logs
-        the failure; the route does not own it.
-        """
-        mock_auth.return_value = MagicMock()
-
-        user = UserService.get_by_spotify_id("user123")
-        user.encrypted_refresh_token = "enc_token"
-        db.session.commit()
-
-        mock_sched_svc.create_schedule.return_value = (
-            self._make_schedule_mock()
-        )
-
-        with patch(
-            "shuffify.scheduler.add_job_for_schedule",
-            side_effect=KeyError("ConflictingId"),
-        ):
-            resp = auth_client.post(
-                "/schedules/create",
-                json={
-                    "job_type": "shuffle",
-                    "target_playlist_id": "p1",
-                    "target_playlist_name": "My Playlist",
-                    "algorithm_name": "BasicShuffle",
-                },
-            )
-            assert resp.status_code == 200
-
-
-class TestUpdateSchedule:
-    """Tests for PUT /schedules/<int:schedule_id>."""
-
-    @patch("shuffify.scheduler.add_job_for_schedule")
-    @patch(
-        "shuffify.routes.schedules.SchedulerService"
-    )
-    @patch("shuffify.routes.require_auth")
-    def test_update_success(
-        self,
-        mock_auth,
-        mock_sched_svc,
-        mock_add_job,
-        auth_client,
-    ):
-        mock_auth.return_value = MagicMock()
-
-        mock_schedule = MagicMock()
-        mock_schedule.is_enabled = True
-        mock_schedule.target_playlist_id = "p1"
-        mock_schedule.target_playlist_name = "My Playlist"
-        mock_schedule.to_dict.return_value = {"id": 1}
-        mock_sched_svc.update_schedule.return_value = (
-            mock_schedule
-        )
-
-        resp = auth_client.put(
-            "/schedules/1",
-            json={"schedule_value": "weekly"},
-        )
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["success"] is True
-
-    @patch("shuffify.routes.require_auth")
-    def test_empty_json_body_returns_400(
-        self, mock_auth, auth_client
-    ):
-        mock_auth.return_value = MagicMock()
-
-        resp = auth_client.put(
-            "/schedules/1", json={}
-        )
-        assert resp.status_code == 400
 
 
 class TestDeleteSchedule:
@@ -520,7 +67,7 @@ class TestDeleteSchedule:
     ):
         mock_auth.return_value = MagicMock()
 
-        resp = auth_client.delete("/schedules/1")
+        resp = auth_client.delete(api_path("/schedules/1"))
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["success"] is True
@@ -544,132 +91,58 @@ class TestDeleteSchedule:
             ScheduleNotFoundError("not found")
         )
 
-        resp = auth_client.delete("/schedules/99")
+        resp = auth_client.delete(api_path("/schedules/99"))
         assert resp.status_code == 404
 
 
-class TestToggleSchedule:
-    """Tests for POST /schedules/<int:schedule_id>/toggle."""
-
-    @patch("shuffify.scheduler.add_job_for_schedule")
-    @patch(
-        "shuffify.routes.schedules.SchedulerService"
-    )
-    @patch("shuffify.routes.require_auth")
-    def test_toggle_enables(
-        self,
-        mock_auth,
-        mock_sched_svc,
-        mock_add_job,
-        auth_client,
-    ):
-        mock_auth.return_value = MagicMock()
-
-        mock_schedule = MagicMock()
-        mock_schedule.is_enabled = True
-        mock_schedule.target_playlist_id = "p1"
-        mock_schedule.target_playlist_name = "My Playlist"
-        mock_schedule.to_dict.return_value = {
-            "id": 1,
-            "is_enabled": True,
-        }
-        mock_sched_svc.toggle_schedule.return_value = (
-            mock_schedule
-        )
-
-        resp = auth_client.post("/schedules/1/toggle")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["success"] is True
-        assert "enabled" in data["message"]
-
-    @patch("shuffify.scheduler.remove_job_for_schedule")
-    @patch(
-        "shuffify.routes.schedules.SchedulerService"
-    )
-    @patch("shuffify.routes.require_auth")
-    def test_toggle_disables(
-        self,
-        mock_auth,
-        mock_sched_svc,
-        mock_remove_job,
-        auth_client,
-    ):
-        mock_auth.return_value = MagicMock()
-
-        mock_schedule = MagicMock()
-        mock_schedule.is_enabled = False
-        mock_schedule.target_playlist_id = "p1"
-        mock_schedule.target_playlist_name = "My Playlist"
-        mock_schedule.to_dict.return_value = {
-            "id": 1,
-            "is_enabled": False,
-        }
-        mock_sched_svc.toggle_schedule.return_value = (
-            mock_schedule
-        )
-
-        resp = auth_client.post("/schedules/1/toggle")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert "disabled" in data["message"]
-
-
 class TestRunScheduleNow:
-    """Tests for POST /schedules/<int:schedule_id>/run."""
+    """An accepted saved routine executes through the explicit worker driver."""
 
-    @patch(
-        "shuffify.routes.schedules.JobExecutorService"
-    )
-    @patch("shuffify.routes.require_auth")
-    def test_run_success(
-        self,
-        mock_auth,
-        mock_executor,
-        auth_client,
-    ):
-        mock_auth.return_value = MagicMock()
-        mock_executor.execute_now.return_value = {
-            "status": "success", "execution_id": 21,
-            "started_at": "2026-10-11T12:00:00+00:00",
-            "execution_state": "recorded", "tracks_total": 4,
-            "operation": {"kind": "shuffle", "aggregate_status": "complete",
-                          "resources": [], "bookkeeping": []},
-        }
+    @staticmethod
+    def routine():
+        user = User.query.filter_by(spotify_id="user123").one()
+        row = Schedule(user_id=user.id, job_type="shuffle", target_playlist_id="target",
+                       target_playlist_name="Target", algorithm_name="BasicShuffle", algorithm_params={})
+        db.session.add(row)
+        db.session.commit()
+        return row
 
-        resp = auth_client.post("/schedules/1/run")
-        assert resp.status_code == 200
+    def test_run_success(self, auth_client):
+        row, api = self.routine(), MutableSpotify()
+        api.playlists["target"] = [uri(number) for number in range(1, 5)]
+        with serving(api):
+            resp = post_and_run(auth_client, api, api_path(f"/schedules/{row.id}/run"))
         data = resp.get_json()
+        assert resp.status_code == 200, data
+        assert resp.accepted.status_code == 202
+        assert resp.operation["state"] == "succeeded"
         assert data["success"] is True
-        assert data["result"]["execution_id"] == 21
+        assert data["result"]["execution_id"] == resp.operation["id"]
+        assert data["result"]["tracks_total"] == 4
         assert data["operation"]["kind"] == "shuffle"
         assert "operation" not in data["result"]
 
-    @patch(
-        "shuffify.routes.schedules.JobExecutorService"
-    )
-    @patch("shuffify.routes.require_auth")
-    def test_run_unavailable_outcome_is_unknown_without_raw_error(
-        self,
-        mock_auth,
-        mock_executor,
-        auth_client,
-    ):
-        from shuffify.services import JobExecutionError
+    def test_run_read_failure_has_no_write_and_unknown_total_without_raw_error(self, auth_client):
+        from shuffify.spotify.exceptions import SpotifyAPIError
 
-        mock_auth.return_value = MagicMock()
-        mock_executor.execute_now.side_effect = (
-            JobExecutionError("private execution detail")
-        )
+        row, api = self.routine(), MutableSpotify()
 
-        resp = auth_client.post("/schedules/1/run")
-        assert resp.status_code == 502
+        def unavailable(*args, **kwargs):
+            raise SpotifyAPIError("private execution detail")
+
+        api.get_playlist = unavailable
+        with serving(api):
+            resp = post_and_run(auth_client, api, api_path(f"/schedules/{row.id}/run"))
         data = resp.get_json()
+        assert resp.status_code == 200, data
+        assert resp.operation["state"] in {"failed", "needs_attention"}
         assert data["success"] is False
-        assert data["operation"]["aggregate_status"] == "unknown"
+        assert data["operation"]["aggregate_status"] == "partial"
         assert data["operation"]["retryable"] is False
-        assert data["result"]["execution_state"] == "unknown"
-        assert data["result"]["tracks_added"] is None
+        assert data["result"]["execution_id"] == resp.operation["id"]
+        assert data["result"]["tracks_added"] == 0
+        assert data["result"]["tracks_total"] is None
+        assert api.writes == []
         assert "private execution detail" not in resp.get_data(as_text=True)
 
 
@@ -691,193 +164,42 @@ class TestScheduleHistory:
             {"id": 1, "status": "success"}
         ]
 
-        resp = auth_client.get("/schedules/1/history")
+        resp = auth_client.get(api_path("/schedules/1/history"))
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["success"] is True
         assert len(data["history"]) == 1
 
 
-class TestSchedulesReadScope:
-    """The management page reads only owned routines and playlist labels."""
-
-    @patch("shuffify.routes.schedules.PlaylistService")
-    @patch("shuffify.routes.get_db_user")
-    @patch("shuffify.routes.AuthService")
-    @patch("shuffify.routes.require_auth")
-    def test_skips_legacy_editor_context_reads(
-        self, mock_is_auth, mock_auth_service, mock_get_db_user,
-        mock_playlist_service, auth_client,
-    ):
-        mock_is_auth.return_value = True
-        mock_auth_service.get_authenticated_client.return_value = MagicMock()
-        mock_auth_service.get_user_data.return_value = {
-            "id": "user123", "display_name": "Test User",
-        }
-        mock_get_db_user.return_value = MagicMock(id=1, spotify_id="user123")
-        mock_playlist_service.return_value.get_user_playlists.return_value = []
-
-        with (
-            patch("shuffify.routes.schedules.SchedulerService.get_user_schedules", return_value=[]) as routines,
-            patch("shuffify.routes.schedules.UpstreamSourceService.list_all_sources_for_user") as sources,
-            patch("shuffify.routes.schedules.PlaylistPairService.get_pairs_for_user") as pairs,
-            patch("shuffify.services.shuffle_service.ShuffleService.list_algorithms") as algorithms,
-        ):
-            response = auth_client.get("/schedules")
-
+class TestRoutinesContext:
+    def test_reads_owned_routines_and_playlist_labels_without_editor_dependencies(self, auth_client):
+        user_id = User.query.filter_by(spotify_id="user123").one().id
+        with patch("shuffify.routes.require_auth", autospec=True, return_value=object()), patch(
+            "shuffify.routes.contexts.PlaylistService", autospec=True
+        ) as playlists, patch(
+            "shuffify.routes.contexts.SchedulerService.get_user_schedules", autospec=True, return_value=[]
+        ) as routines, patch(
+            "shuffify.services.upstream_source_service.UpstreamSourceService.list_all_sources_for_user", autospec=True
+        ) as sources, patch(
+            "shuffify.services.playlist_pair_service.PlaylistPairService.get_pairs_for_user", autospec=True
+        ) as pairs, patch(
+            "shuffify.services.shuffle_service.ShuffleService.list_algorithms", autospec=True
+        ) as algorithms:
+            playlists.return_value.get_user_playlists.return_value = [{"id": "target", "name": "Target"}]
+            response = auth_client.get("/api/routines")
         assert response.status_code == 200
-        routines.assert_called_once_with(1)
-        mock_playlist_service.return_value.get_user_playlists.assert_called_once_with()
+        assert response.json["routines"] == []
+        assert response.json["playlists"] == [{"id": "target", "name": "Target"}]
+        routines.assert_called_once_with(user_id)
+        playlists.return_value.get_user_playlists.assert_called_once_with()
         sources.assert_not_called()
         pairs.assert_not_called()
         algorithms.assert_not_called()
 
-
-class TestBackendValidation:
-    """Tests for defense-in-depth validation in create_schedule."""
-
-    @patch(
-        "shuffify.routes.schedules.UpstreamSourceService"
-    )
-    @patch("shuffify.routes.require_auth")
-    def test_raid_with_invalid_sources_returns_400(
-        self,
-        mock_auth,
-        mock_upstream_svc,
-        auth_client,
-    ):
-        """Raid with source IDs not in Workshop is rejected."""
-        mock_auth.return_value = MagicMock()
-
-        user = UserService.get_by_spotify_id("user123")
-        user.encrypted_refresh_token = "enc_token"
-        db.session.commit()
-
-        # No sources configured in Workshop
-        mock_upstream_svc.list_sources.return_value = []
-
-        resp = auth_client.post(
-            "/schedules/create",
-            json={
-                "job_type": "raid",
-                "target_playlist_id": "p1",
-                "target_playlist_name": "My Playlist",
-                "source_playlist_ids": ["unknown_id"],
-            },
-        )
-        assert resp.status_code == 400
-        data = resp.get_json()
-        assert "not configured" in data["message"]
-
-    @patch(
-        "shuffify.routes.schedules.UpstreamSourceService"
-    )
-    @patch("shuffify.scheduler.add_job_for_schedule")
-    @patch(
-        "shuffify.routes.schedules.SchedulerService"
-    )
-    @patch("shuffify.routes.require_auth")
-    def test_raid_with_valid_sources_passes(
-        self,
-        mock_auth,
-        mock_sched_svc,
-        mock_add_job,
-        mock_upstream_svc,
-        auth_client,
-    ):
-        """Raid with valid Workshop sources passes validation."""
-        mock_auth.return_value = MagicMock()
-
-        user = UserService.get_by_spotify_id("user123")
-        user.encrypted_refresh_token = "enc_token"
-        db.session.commit()
-
-        src = MagicMock()
-        src.source_playlist_id = "ext1"
-        mock_upstream_svc.list_sources.return_value = [src]
-
-        mock_schedule = MagicMock()
-        mock_schedule.id = 1
-        mock_schedule.job_type = "raid"
-        mock_schedule.target_playlist_name = "My Playlist"
-        mock_schedule.target_playlist_id = "p1"
-        mock_schedule.is_enabled = True
-        mock_schedule.to_dict.return_value = {"id": 1}
-        mock_sched_svc.create_schedule.return_value = (
-            mock_schedule
-        )
-
-        resp = auth_client.post(
-            "/schedules/create",
-            json={
-                "job_type": "raid",
-                "target_playlist_id": "p1",
-                "target_playlist_name": "My Playlist",
-                "source_playlist_ids": ["ext1"],
-            },
-        )
-        assert resp.status_code == 200
-
-    @patch(
-        "shuffify.routes.schedules.PlaylistPairService"
-    )
-    @patch("shuffify.routes.require_auth")
-    def test_rotate_without_pair_returns_400(
-        self,
-        mock_auth,
-        mock_pair_svc,
-        auth_client,
-    ):
-        """Rotate without archive pair is rejected."""
-        mock_auth.return_value = MagicMock()
-
-        user = UserService.get_by_spotify_id("user123")
-        user.encrypted_refresh_token = "enc_token"
-        db.session.commit()
-
-        mock_pair_svc.get_pair_for_playlist.return_value = (
-            None
-        )
-
-        resp = auth_client.post(
-            "/schedules/create",
-            json={
-                "job_type": "rotate",
-                "target_playlist_id": "p1",
-                "target_playlist_name": "My Playlist",
-                "algorithm_params": {
-                    "rotation_mode": "swap",
-                    "rotation_count": 5,
-                    "target_size": 50,
-                },
-            },
-        )
-        assert resp.status_code == 400
-        data = resp.get_json()
-        assert "archive pair" in data["message"]
-
-
-class TestRotationStatus:
-    """Tests for GET /playlist/<id>/rotation-status."""
-
-    @patch(
-        "shuffify.routes.schedules.SchedulerService"
-    )
-    @patch("shuffify.routes.require_auth")
-    def test_no_pair_no_schedule(
-        self,
-        mock_auth,
-        mock_sched_svc,
-        auth_client,
-    ):
-        mock_auth.return_value = MagicMock()
-        mock_sched_svc.get_user_schedules.return_value = []
-
-        resp = auth_client.get(
-            "/playlist/p1/rotation-status"
-        )
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["success"] is True
-        assert data["has_pair"] is False
-        assert data["has_rotation_schedule"] is False
+    def test_missing_local_user_returns_bounded_json(self, auth_client):
+        with patch("shuffify.routes.require_auth", autospec=True, return_value=object()), patch(
+            "shuffify.routes.get_db_user", autospec=True, return_value=None
+        ):
+            response = auth_client.get("/api/routines")
+        assert response.status_code == 401
+        assert response.json["success"] is False

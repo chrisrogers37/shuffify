@@ -15,6 +15,7 @@ from sqlalchemy.orm import joinedload
 
 from shuffify.enums import ActivityType
 from shuffify.models.db import JobExecution, Schedule, db
+from shuffify.services.page_context_service import triggered_by
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +288,8 @@ class DashboardService:
             result = []
             for ex in executions:
                 ex_dict = ex.to_dict()
+                metadata = ex.result_json.get("metadata") if isinstance(ex.result_json, dict) else None
+                ex_dict["triggered_by"] = triggered_by(metadata)
                 ex_dict["schedule_name"] = (
                     ex.schedule.target_playlist_name
                     if ex.schedule

@@ -173,6 +173,9 @@ class Config:
     SESSION_COOKIE_SAMESITE = "Lax"  # More permissive for OAuth flows
     SESSION_COOKIE_SECURE = True
 
+    # Browser-facing origin when an HTTPS proxy rewrites the backend Host.
+    PUBLIC_ORIGIN = os.getenv("PUBLIC_ORIGIN", "")
+
     # The largest body accepted other than a form, which is held to Flask's
     # MAX_FORM_MEMORY_SIZE (shuffify.BoundedRequest). A body that declares a
     # bigger length gets a 413 before it is read; one sent without a length
@@ -207,6 +210,12 @@ class Config:
     # Scheduler configuration
     SCHEDULER_ENABLED = True
     SCHEDULER_THREAD_POOL_SIZE = int(os.getenv("SCHEDULER_THREAD_POOL_SIZE", "10"))
+    SCHEDULER_TIMEZONE = os.getenv("SCHEDULER_TIMEZONE", "UTC")
+    WORKER_CONTROL_URL = os.getenv("WORKER_CONTROL_URL", "")
+    WORKER_CONTROL_TOKEN = os.getenv("WORKER_CONTROL_TOKEN", "")
+    WORKER_CONTROL_HOST = os.getenv("WORKER_CONTROL_HOST", "127.0.0.1")
+    WORKER_CONTROL_PORT = int(os.getenv("WORKER_CONTROL_PORT", "5001"))
+    WORKER_CONTROL_TIMEOUT = float(os.getenv("WORKER_CONTROL_TIMEOUT", "0.5"))
 
     # After a job's write fails with an unconfirmed outcome, its rollback
     # re-reads the restored playlist this many times, this many seconds
@@ -306,6 +315,7 @@ class TestConfig(Config):
     TESTING = True
     WTF_CSRF_ENABLED = False
     SESSION_COOKIE_SECURE = False
+    PUBLIC_ORIGIN = ""
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     SCHEDULER_ENABLED = False
     # Unit tests that roll back an unconfirmed write don't wait; the settle tests turn it on.
@@ -333,6 +343,7 @@ class HarnessConfig(Config):
     MIGRATE_ON_STARTUP = False
     # Served over plain http://localhost.
     SESSION_COOKIE_SECURE = False
+    PUBLIC_ORIGIN = ""
     # No defaults: harness.sh always sets both, and a missing value must fail
     # assert_safe rather than fall back to something nobody chose.
     REDIS_URL = os.getenv("REDIS_URL", "")

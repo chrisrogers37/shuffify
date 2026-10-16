@@ -4,11 +4,13 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.paths import api_path
+
 LIVE_ACTIONS = [
-    ("/playlist/untrusted-target/raid-now", "raid"),
-    ("/playlist/untrusted-target/drip-now", "drip"),
-    ("/playlist/untrusted-target/raid-and-drip", "raid_and_drip"),
-    ("/schedules/98765/run", "schedule"),
+    (api_path("/playlist/untrusted-target/raid-now"), "raid"),
+    (api_path("/playlist/untrusted-target/drip-now"), "drip"),
+    (api_path("/playlist/untrusted-target/raid-and-drip"), "raid_and_drip"),
+    (api_path("/schedules/98765/run"), "schedule"),
 ]
 
 
@@ -20,8 +22,8 @@ def test_live_csrf_is_known_not_started_without_resource_disclosure(
     with (
         patch("shuffify.routes.require_auth") as auth,
         patch("shuffify.routes.get_db_user") as db_user,
-        patch("shuffify.routes.raid_panel.RaidSyncService") as raid,
-        patch("shuffify.routes.schedules.JobExecutorService") as executor,
+        patch("shuffify.routes.raid_panel.admit_direct") as direct,
+        patch("shuffify.routes.schedules.admit_schedule") as saved,
         patch("shuffify.services.activity_log_service.ActivityLogService.log") as activity,
     ):
         response = csrf_client.post(path, json={
@@ -50,5 +52,5 @@ def test_live_csrf_is_known_not_started_without_resource_disclosure(
     assert "earlier Spotify changes remain" in body["message"]
     assert "untrusted" not in response.text
     assert "http_status" not in body
-    for service in (auth, db_user, raid, executor, activity):
+    for service in (auth, db_user, direct, saved, activity):
         service.assert_not_called()

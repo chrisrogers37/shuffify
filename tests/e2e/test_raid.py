@@ -10,6 +10,7 @@ finalizes them, so the test does the same: commit, then finalize.
 """
 
 from tests.e2e.conftest import pid
+from tests.routine_flow import add_playlist_source
 
 MORNING_MIX = pid("alice-morning-mix")
 BOB_FINDS = pid("bob-finds")
@@ -17,8 +18,8 @@ BOB_FINDS = pid("bob-finds")
 
 def test_raid_review_keep_and_dismiss(alice, fake):
     before, source = fake.uris(MORNING_MIX), fake.uris(BOB_FINDS)
-    link = alice.ok(
-        "post", f"/playlist/{MORNING_MIX}/raid-link",
+    link = alice.write(
+        f"/playlist/{MORNING_MIX}/raid-link",
         json={"create_new": True, "target_playlist_name": "Morning Mix"},
     )["raid_link"]
     staging = fake.playlist(link["raid_playlist_id"])
@@ -26,11 +27,8 @@ def test_raid_review_keep_and_dismiss(alice, fake):
         "Morning Mix [Raids]", "alice", False, []
     )
 
-    watched = alice.ok(
-        "post", f"/playlist/{MORNING_MIX}/raid-watch",
-        json={"source_playlist_id": BOB_FINDS, "source_playlist_name": "Bob's Finds", "auto_schedule": False},
-    )["source"]
-    raided = alice.ok("post", f"/playlist/{MORNING_MIX}/raid-now", json={})
+    watched = add_playlist_source(alice, MORNING_MIX, BOB_FINDS)
+    raided = alice.write(f"/playlist/{MORNING_MIX}/raid-now", json={})
     assert raided["tracks_added"] == 5  # the default per-source raid count
 
     pending = alice.ok("get", f"/playlist/{MORNING_MIX}/pending-raids")["tracks"]
@@ -42,10 +40,10 @@ def test_raid_review_keep_and_dismiss(alice, fake):
 
     kept, dismissed, left = pending[:2], pending[2:3], pending[3:]
     staged = before + [t["track_uri"] for t in kept]
-    alice.ok("post", f"/workshop/{MORNING_MIX}/commit", json={"baseline_track_uris": before, "track_uris": staged})
-    alice.ok("post", f"/playlist/{MORNING_MIX}/pending-raids/finalize", json={"track_ids": [t["id"] for t in kept],
+    alice.write(f"/workshop/{MORNING_MIX}/commit", json={"baseline_track_uris": before, "track_uris": staged})
+    alice.write(f"/playlist/{MORNING_MIX}/pending-raids/finalize", json={"track_ids": [t["id"] for t in kept],
               "source_playlist_id": link["raid_playlist_id"], "target_track_uris": staged})
-    alice.ok("post", f"/playlist/{MORNING_MIX}/pending-raids/dismiss",
+    alice.write(f"/playlist/{MORNING_MIX}/pending-raids/dismiss",
              json={"track_ids": [t["id"] for t in dismissed]})
 
     assert fake.uris(MORNING_MIX) == staged
@@ -61,6 +59,6 @@ def test_raid_review_keep_and_dismiss(alice, fake):
              json={"source_id": watched["id"], "raid_count": 100})
     unseen = set(source) - raided_uris
     assert len(unseen) <= 100, "the source has more unseen tracks than one raid can take"
-    assert alice.ok("post", f"/playlist/{MORNING_MIX}/raid-now", json={})["tracks_added"] == len(unseen)
+    assert alice.write(f"/playlist/{MORNING_MIX}/raid-now", json={})["tracks_added"] == len(unseen)
     pending_now = {t["track_uri"] for t in alice.ok("get", f"/playlist/{MORNING_MIX}/pending-raids")["tracks"]}
     assert pending_now == unseen | {t["track_uri"] for t in left}

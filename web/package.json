@@ -1,0 +1,63 @@
+{
+  "name": "shuffify-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "schemas:generate": "node scripts/generate-schemas.mjs",
+    "schemas:check": "node scripts/generate-schemas.mjs --check",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.contracts.json --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "test": "node --test tests/*.test.mjs",
+    "build": "npm run public:generate && npm run theme:generate && npm run typecheck && vite build && npm run prerender",
+    "dev": "vite --host 127.0.0.1",
+    "preview": "vite preview --host 127.0.0.1",
+    "theme:generate": "node scripts/generate-theme.mjs",
+    "theme:check": "node scripts/generate-theme.mjs --check",
+    "build:fixtures": "npm run public:generate && npm run theme:generate && npm run typecheck && vite build --mode fixture && npm run prerender",
+    "test:browser": "playwright test",
+    "public:generate": "node scripts/generate-public-sources.mjs",
+    "public:check": "node scripts/generate-public-sources.mjs --check",
+    "prerender": "vite build --ssr src/prerender.tsx --outDir .prerender && node scripts/prerender.mjs",
+    "test:static": "node --test tests/static/*.test.mjs",
+    "test:public-browser": "playwright test --config playwright.public.config.ts",
+    "test:settings-browser": "playwright test --config playwright.settings.config.ts",
+    "test:settings-fixtures": "SETTINGS_FIXTURE_BUILD=1 playwright test --config playwright.settings.config.ts",
+    "test:activity-browser": "playwright test --config playwright.activity.config.ts",
+    "test:activity-fixtures": "ACTIVITY_FIXTURE_BUILD=1 playwright test --config playwright.activity.config.ts",
+    "test:library-browser": "playwright test --config playwright.library.config.ts",
+    "test:library-fixtures": "LIBRARY_FIXTURE_BUILD=1 playwright test --config playwright.library.config.ts",
+    "test:routines-browser": "playwright test --config playwright.routines.config.ts",
+    "test:routines-fixtures": "ROUTINES_FIXTURE_BUILD=1 playwright test --config playwright.routines.config.ts",
+    "test:workshop-browser": "playwright test --config playwright.workshop.config.ts",
+    "test:workshop-fixtures": "WORKSHOP_FIXTURE_BUILD=1 playwright test --config playwright.workshop.config.ts",
+    "test:admissions-browser": "playwright test --config playwright.admissions.config.ts",
+    "test:source-lifecycle-browser": "playwright test --config playwright.source-lifecycle.config.ts",
+    "test:workshop-sources-browser": "playwright test --config playwright.workshop-sources.config.ts",
+    "test:workshop-sources-fixtures": "WORKSHOP_SOURCES_FIXTURE_BUILD=1 playwright test --config playwright.workshop-sources.config.ts",
+    "build:vercel": "npm run build && node scripts/build-vercel-output.mjs",
+    "test:readiness-browser": "playwright test --config playwright.readiness.config.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/sortablejs": "1.15.9",
+    "@vitejs/plugin-react": "6.1.2",
+    "ajv": "8.20.0",
+    "tailwindcss": "4.3.3",
+    "ts-json-schema-generator": "2.9.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.4"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-router": "8.4.0",
+    "sortablejs": "1.15.7"
+  }
+}

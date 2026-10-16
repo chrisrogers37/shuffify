@@ -2,7 +2,10 @@
 
 import hashlib
 import json
+import shutil
+import subprocess
 from copy import deepcopy
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -29,13 +32,9 @@ from shuffify.spotify.exceptions import (
     SpotifyNotFoundError,
     SpotifyTokenExpiredError,
 )
-from tests.node_runtime import run_scenario
 from tests.services.test_live_executor_outcomes import MutableSpotify, uri
 from tests.services.test_live_metadata_service import MISSING, OWNER, MetadataSpotify
 from tests.services.test_live_playlist_service import seed_history
-from tests.test_workshop_save_runtime import CLIENT as WORKSHOP_CLIENT
-from tests.test_workshop_save_runtime import ROOT
-from tests.test_workshop_save_runtime import node as node
 
 
 @pytest.fixture(autouse=True)
@@ -331,14 +330,19 @@ SUMMARY_CASES = [
 ]
 
 
-def test_summary_matches_the_shipped_workshop_review_summary(node):
-    """Reviews describe changes exactly as the shipped WorkshopSave.summarize does."""
-    script = WORKSHOP_CLIENT + (
+def test_summary_matches_the_shipped_react_workshop_review_summary():
+    """The backend and React describe duplicate-aware changes identically."""
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node 24 is required for the frontend summary contract")
+    script = (
+        'import {summarize} from "./web/src/pages/workshop/core/occurrences.ts";\n'
         f"const cases = {json.dumps(SUMMARY_CASES)};\n"
-        "console.log(JSON.stringify(cases.map(([baseline, desired]) => client.summarize(baseline, desired))));\n"
+        "console.log(JSON.stringify(cases.map(([before, after]) => summarize(before, after))));\n"
     )
-    shipped = json.loads(run_scenario(node, script, ROOT).stdout.splitlines()[0])
-    assert [summarize(*case) for case in SUMMARY_CASES] == [
-        {"added_count": item["added"], "removed_count": item["removed"], "order_changed": item["orderChanged"]}
-        for item in shipped
-    ]
+    result = subprocess.run(
+        [node, "--input-type=module", "-"], input=script, cwd=Path(__file__).resolve().parents[2],
+        capture_output=True, text=True, timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+    assert [summarize(*case) for case in SUMMARY_CASES] == json.loads(result.stdout)

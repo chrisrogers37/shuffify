@@ -1,0 +1,28 @@
+{
+  "success": true,
+  "operation": {
+    "id": 1,
+    "kind": "shuffle",
+    "state": "needs_attention",
+    "targets": [
+      "alice-mix"
+    ],
+    "started_at": "2026-01-01T12:00:00+00:00",
+    "completed_at": "2026-01-01T12:01:00+00:00",
+    "progress": {
+      "batches_done": 1,
+      "total_batches": 3,
+      "phase": "forward"
+    },
+    "result": {
+      "success": false,
+      "error_code": "needs_attention",
+      "message": "Review the current playlist."
+    },
+    "recovery": {
+      "available": true,
+      "action": "restore",
+      "reason": "external_edit"
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "success": true,
+  "category": "success",
+  "message": "Settings loaded.",
+  "settings": {
+    "id": 1,
+    "user_id": 1,
+    "default_algorithm": "BasicShuffle",
+    "default_algorithm_params": {
+      "custom_mode": {
+        "enabled": true,
+        "weights": [
+          1,
+          null,
+          2.5
+        ]
+      }
+    },
+    "theme": "system",
+    "notifications_enabled": false,
+    "auto_snapshot_enabled": true,
+    "max_snapshots_per_playlist": 10,
+    "dashboard_show_recent_activity": true,
+    "extra": {
+      "compact": false
+    },
+    "created_at": "2026-01-01T12:00:00+00:00",
+    "updated_at": "2026-01-01T12:00:00+00:00"
+  },
+  "algorithms": [
+    {
+      "name": "Basic",
+      "class_name": "BasicShuffle",
+      "description": "Shuffle all tracks while keeping a chosen starting group.",
+      "parameters": {
+        "keep_first": {
+          "type": "integer",
+          "description": "Number of tracks to keep at start",
+          "default": 0,
+          "min": 0
+        }
+      }
+    }
+  ],
+  "algorithm_options": [
+    {
+      "value": "",
+      "label": "No default (choose each time)"
+    },
+    {
+      "value": "BasicShuffle",
+      "label": "Basic"
+    }
+  ]
+}

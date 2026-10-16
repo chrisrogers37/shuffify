@@ -7,6 +7,13 @@ for raid playlist link CRUD and drip endpoints.
 
 from unittest.mock import MagicMock, patch
 
+from shuffify.models.db import db
+from tests.paths import api_path
+from tests.playlist_setup_fixtures import SetupSpotify
+from tests.queued_operations import post_and_run
+from tests.routes.live_review_helpers import serving
+from tests.routes.test_live_raid_outcomes import MutableSpotify, uri
+
 # =============================================================
 # Authentication Tests
 # =============================================================
@@ -20,7 +27,7 @@ class TestRaidLinkAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/playlist/p1/raid-link",
+                api_path("/playlist/p1/raid-link"),
                 json={"create_new": True},
             )
             assert resp.status_code == 401
@@ -30,7 +37,7 @@ class TestRaidLinkAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.put(
-                "/playlist/p1/raid-link",
+                api_path("/playlist/p1/raid-link"),
                 json={"drip_count": 5},
             )
             assert resp.status_code == 401
@@ -40,7 +47,7 @@ class TestRaidLinkAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.delete(
-                "/playlist/p1/raid-link"
+                api_path("/playlist/p1/raid-link")
             )
             assert resp.status_code == 401
 
@@ -49,19 +56,8 @@ class TestRaidLinkAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/playlist/p1/drip-now",
+                api_path("/playlist/p1/drip-now"),
                 json={},
-            )
-            assert resp.status_code == 401
-
-    @patch("shuffify.routes.require_auth")
-    def test_drip_toggle_unauth(
-        self, mock_auth, db_app
-    ):
-        mock_auth.return_value = None
-        with db_app.test_client() as client:
-            resp = client.post(
-                "/playlist/p1/drip-schedule-toggle"
             )
             assert resp.status_code == 401
 
@@ -72,7 +68,7 @@ class TestRaidLinkAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.put(
-                "/playlist/p1/raid-source-count",
+                api_path("/playlist/p1/raid-source-count"),
                 json={
                     "source_id": 1,
                     "raid_count": 5,
@@ -95,7 +91,7 @@ class TestRaidLinkValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/raid-link",
+            api_path("/playlist/p1/raid-link"),
             data="not json",
             content_type="text/plain",
         )
@@ -107,7 +103,7 @@ class TestRaidLinkValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.put(
-            "/playlist/p1/raid-link",
+            api_path("/playlist/p1/raid-link"),
             json={},
         )
         assert resp.status_code == 400
@@ -118,7 +114,7 @@ class TestRaidLinkValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.put(
-            "/playlist/p1/raid-link",
+            api_path("/playlist/p1/raid-link"),
             json={"drip_count": 0},
         )
         assert resp.status_code == 400
@@ -129,7 +125,7 @@ class TestRaidLinkValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.put(
-            "/playlist/p1/raid-source-count",
+            api_path("/playlist/p1/raid-source-count"),
             json={"source_id": 1, "raid_count": 0},
         )
         assert resp.status_code == 400
@@ -140,7 +136,7 @@ class TestRaidLinkValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/raid-link",
+            api_path("/playlist/p1/raid-link"),
             json={
                 "create_new": False,
                 # Missing raid_playlist_id
@@ -158,61 +154,48 @@ class TestRaidLinkSuccess:
     """Basic success path tests."""
 
     @patch("shuffify.routes.require_auth")
-    @patch(
-        "shuffify.routes.raid_panel"
-        ".RaidLinkService"
-    )
     def test_create_new_raid_link(
-        self, mock_svc, mock_auth, auth_client,
+        self, mock_auth, auth_client,
     ):
-        mock_auth.return_value = MagicMock()
-        # No existing link — allows creation to proceed
-        mock_svc.get_link_for_playlist.return_value = None
-        mock_link = MagicMock()
-        mock_link.to_dict.return_value = {
-            "id": 1,
-            "raid_playlist_id": "new_raid",
-        }
-        mock_svc.create_raid_playlist.return_value = (
-            "new_raid", "My Playlist [Raids]"
-        )
-        mock_svc.create_link.return_value = mock_link
+        from shuffify.enums import ActivityType
+        from shuffify.models.db import ActivityLog, RaidPlaylistLink
 
-        resp = auth_client.post(
-            "/playlist/p1/raid-link",
+        api = SetupSpotify(playlists={"p1": {"name": "My Playlist"}})
+        mock_auth.return_value = api
+        resp = post_and_run(auth_client, api,
+            api_path("/playlist/p1/raid-link"),
             json={
                 "create_new": True,
                 "target_playlist_name": "My Playlist",
             },
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 200 and resp.accepted.status_code == 202
+        assert resp.operation["state"] == "succeeded"
         data = resp.get_json()
         assert data["success"] is True
+        link = RaidPlaylistLink.query.one()
+        assert link.raid_playlist_id == "Created1"
+        assert link.raid_playlist_name == "My Playlist [Raids]"
+        assert api.playlists["Created1"]["public"] is False
+        assert len(api.writes) == 1
+        assert ActivityLog.query.one().activity_type == ActivityType.RAID_LINK_CREATE
 
-    @patch("shuffify.routes.require_auth")
-    @patch(
-        "shuffify.routes.raid_panel"
-        ".RaidSyncService"
-    )
-    def test_drip_now_success(
-        self, mock_svc, mock_auth, auth_client,
-    ):
-        mock_auth.return_value = MagicMock()
-        mock_svc.drip_now.return_value = {
-            "tracks_added": 3,
-            "tracks_total": 50,
-            "status": "success",
-            "operation": {"kind": "drip", "aggregate_status": "complete",
-                          "resources": [], "bookkeeping": []},
-        }
-
-        resp = auth_client.post(
-            "/playlist/p1/drip-now",
-            json={},
-        )
-        assert resp.status_code == 200
+    def test_drip_now_success(self, raid_target):
+        api = MutableSpotify()
+        api.playlists["target"] = [uri(number) for number in range(1, 48)]
+        api.playlists["collection"] = [uri(number) for number in range(48, 51)]
+        raid_target.link.drip_count = 3
+        db.session.commit()
+        with serving(api):
+            resp = post_and_run(raid_target.client, api, api_path("/playlist/target/drip-now"), json={})
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.accepted.status_code == 202
+        assert resp.operation["state"] == "succeeded"
         data = resp.get_json()
         assert data["tracks_added"] == 3
+        assert data["tracks_total"] == 50
+        assert len(api.playlists["target"]) == 50
+        assert api.playlists["collection"] == []
 
 
 class TestRaidLinkCreationUnknown:
@@ -224,25 +207,25 @@ class TestRaidLinkCreationUnknown:
     ):
         from shuffify.models.db import RaidPlaylistLink
         from shuffify.services.playlist_setup_service import CREATION_UNKNOWN
-        from shuffify.spotify.api import SpotifyAPI
         from shuffify.spotify.exceptions import SpotifyWriteUnverifiedError
 
-        api = MagicMock(spec=SpotifyAPI)
-        api.create_user_playlist.side_effect = SpotifyWriteUnverifiedError("timed out")
+        api = SetupSpotify(playlists={"p1": {"name": "Mix"}})
+        api.create_failure = SpotifyWriteUnverifiedError("timed out")
         mock_auth.return_value = api
 
-        resp = auth_client.post(
-            "/playlist/p1/raid-link",
+        resp = post_and_run(auth_client, api,
+            api_path("/playlist/p1/raid-link"),
             json={"create_new": True, "target_playlist_name": "Mix"},
         )
 
-        assert resp.status_code == 502
+        assert resp.status_code == 200 and resp.accepted.status_code == 202
+        assert resp.operation["state"] == "needs_attention"
         data = resp.get_json()
         assert data["success"] is False
         assert data["error_code"] == "creation_unknown"
         assert data["outcome"] == "unknown"
         assert data["message"] == CREATION_UNKNOWN
-        api.create_user_playlist.assert_called_once()
+        assert len([call for call in api.calls if call[0] == "create_user_playlist"]) == 1
         assert RaidPlaylistLink.query.count() == 0
 
 
@@ -303,7 +286,7 @@ class TestRaidSourceCountPlaylistScope:
         source_id = _seed_source(db_app, "user123", "playlist-A")
 
         resp = auth_client.put(
-            "/playlist/playlist-A/raid-source-count",
+            api_path("/playlist/playlist-A/raid-source-count"),
             json={"source_id": source_id, "raid_count": 9},
         )
 
@@ -319,7 +302,7 @@ class TestRaidSourceCountPlaylistScope:
         source_id = _seed_source(db_app, "user123", "playlist-A")
 
         resp = auth_client.put(
-            "/playlist/playlist-B/raid-source-count",
+            api_path("/playlist/playlist-B/raid-source-count"),
             json={"source_id": source_id, "raid_count": 99},
         )
 
@@ -335,7 +318,7 @@ class TestRaidSourceCountPlaylistScope:
         source_id = _seed_source(db_app, "user123", "playlist-A")
 
         resp = auth_client.put(
-            "/playlist/not-my-playlist/raid-source-count",
+            api_path("/playlist/not-my-playlist/raid-source-count"),
             json={"source_id": source_id, "raid_count": 77},
         )
 
@@ -351,7 +334,7 @@ class TestRaidSourceCountPlaylistScope:
         victim_source_id = _seed_source(db_app, "victim456", "playlist-A")
 
         resp = auth_client.put(
-            "/playlist/playlist-A/raid-source-count",
+            api_path("/playlist/playlist-A/raid-source-count"),
             json={"source_id": victim_source_id, "raid_count": 99},
         )
 
@@ -376,7 +359,7 @@ class TestRaidUnwatchPlaylistScope:
         source_id = _seed_source(db_app, "user123", "playlist-A")
 
         resp = auth_client.post(
-            "/playlist/playlist-A/raid-unwatch",
+            api_path("/playlist/playlist-A/raid-unwatch"),
             json={"source_id": source_id},
         )
 
@@ -392,7 +375,7 @@ class TestRaidUnwatchPlaylistScope:
         source_id = _seed_source(db_app, "user123", "playlist-A")
 
         resp = auth_client.post(
-            "/playlist/playlist-B/raid-unwatch",
+            api_path("/playlist/playlist-B/raid-unwatch"),
             json={"source_id": source_id},
         )
 
@@ -408,7 +391,7 @@ class TestRaidUnwatchPlaylistScope:
         victim_source_id = _seed_source(db_app, "victim456", "playlist-A")
 
         resp = auth_client.post(
-            "/playlist/playlist-A/raid-unwatch",
+            api_path("/playlist/playlist-A/raid-unwatch"),
             json={"source_id": victim_source_id},
         )
 

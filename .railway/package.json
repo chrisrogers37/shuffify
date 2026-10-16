@@ -1,0 +1,16 @@
+{
+  "name": "shuffify-infrastructure",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "railway": "3.16.0",
+    "typescript": "5.9.3"
+  }
+}

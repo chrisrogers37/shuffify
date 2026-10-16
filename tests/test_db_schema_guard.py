@@ -6,7 +6,9 @@ that actually ships, so a migration added without a corresponding stamp is
 caught here.
 """
 
+import json
 import os
+import sys
 
 import pytest
 from flask import Flask
@@ -168,6 +170,11 @@ class TestVerifySchemaAtHead:
             _verify_schema_at_head(MIGRATIONS_DIR)
         assert SCHEMA_DRIFT_OVERRIDE_VAR in str(exc.value)
 
+    def test_message_includes_the_production_migration_marker(self, schema_app):
+        with pytest.raises(SchemaOutOfDateError) as exc:
+            _verify_schema_at_head(MIGRATIONS_DIR)
+        assert "SCHEDULER_ENABLED=false SHUFFIFY_MIGRATION_STEP=1 flask db upgrade" in str(exc.value)
+
 
 class TestBreakGlassOverride:
     """The guard must be clearable without a code change."""
@@ -280,12 +287,11 @@ ENTRYPOINT = os.path.join(
 )
 
 
-def run_entrypoint(tmp_path, stub_body, env=None):
-    """Run the shipped entrypoint with a stub `flask` on PATH.
+PREDEPLOY = os.path.join(os.path.dirname(ENTRYPOINT), "pre-deploy.sh")
 
-    stub_body is the shell body of the fake `flask`, so a test can control
-    both what the migration step reports and whether it succeeds.
-    """
+
+def run_entrypoint(tmp_path, stub_body, env=None, *, script=ENTRYPOINT, command=None):
+    """Run a real process boundary with controlled Flask outcome and environment."""
     import subprocess
 
     stub_dir = tmp_path / "bin"
@@ -301,7 +307,7 @@ def run_entrypoint(tmp_path, stub_body, env=None):
     environ.update(env or {})
 
     return subprocess.run(
-        ["sh", ENTRYPOINT, "echo", "SERVER-STARTED"],
+        ["sh", script, *(command if command is not None else ["echo", "SERVER-STARTED"])],
         capture_output=True,
         text=True,
         env=environ,
@@ -309,58 +315,56 @@ def run_entrypoint(tmp_path, stub_body, env=None):
 
 
 class TestDockerEntrypoint:
-    """The shipped entrypoint script's migrate-then-exec contract.
+    """Startup forwards the selected process without taking over schema ownership."""
 
-    Exercises scripts/docker-entrypoint.sh directly with a stub `flask` on
-    PATH, so the branch that decides whether a deploy proceeds is tested
-    rather than described. No Docker required.
-    """
-
-    def test_successful_migration_starts_the_server(self, tmp_path):
-        result = run_entrypoint(tmp_path, 'echo "stub flask: $*"')
+    def test_startup_never_invokes_flask(self, tmp_path):
+        result = run_entrypoint(tmp_path, 'echo "UNEXPECTED-FLASK"; exit 91')
         assert result.returncode == 0
-        assert "SERVER-STARTED" in result.stdout
-        calls = [line for line in result.stdout.splitlines() if line.startswith("stub flask:")]
-        assert calls == ["stub flask: create-schema", "stub flask: db upgrade"]
+        assert result.stdout == "SERVER-STARTED\n"
 
-    def test_failed_migration_stops_the_container(self, tmp_path):
-        result = run_entrypoint(tmp_path, "exit 1")
-        assert result.returncode == 1
-        assert "SERVER-STARTED" not in result.stdout
-        assert SCHEMA_DRIFT_OVERRIDE_VAR in result.stderr
-
-    def test_override_starts_the_server_despite_a_failed_migration(self, tmp_path):
-        """Recoverable from the platform console, no code change."""
+    def test_startup_does_not_invent_a_migration_marker(self, tmp_path):
         result = run_entrypoint(
-            tmp_path, "exit 1", env={SCHEMA_DRIFT_OVERRIDE_VAR: "true"}
+            tmp_path, "exit 91", command=[sys.executable, "-c",
+                f"import os; print(repr(os.getenv('{MIGRATION_STEP_VAR}')))"]
         )
         assert result.returncode == 0
-        assert "SERVER-STARTED" in result.stdout
+        assert result.stdout.strip() == "None"
 
-    def test_override_is_not_triggered_by_a_falsey_value(self, tmp_path):
+
+class TestPredeploy:
+    """A distinct upgrade failure blocks deployment without starting a service."""
+
+    def test_runs_only_the_explicit_upgrade(self, tmp_path):
         result = run_entrypoint(
-            tmp_path, "exit 1", env={SCHEMA_DRIFT_OVERRIDE_VAR: "false"}
+            tmp_path, 'echo "stub flask: $*"', script=PREDEPLOY, command=[]
         )
-        assert result.returncode == 1
+        assert result.returncode == 0
+        assert result.stdout.splitlines() == ["stub flask: db upgrade"]
         assert "SERVER-STARTED" not in result.stdout
 
-    def test_a_failed_schema_build_stops_the_container(self, tmp_path):
+    @pytest.mark.parametrize("override", ["true", "false"])
+    def test_failed_upgrade_is_not_bypassed_by_the_runtime_guard_override(self, tmp_path, override):
         result = run_entrypoint(
-            tmp_path, 'if [ "$1" = create-schema ]; then exit 1; fi; echo "stub flask: $*"'
+            tmp_path, "exit 17", env={SCHEMA_DRIFT_OVERRIDE_VAR: override},
+            script=PREDEPLOY, command=[]
         )
-        assert result.returncode == 1
-        assert "db upgrade" not in result.stdout
+        assert result.returncode == 17
         assert "SERVER-STARTED" not in result.stdout
+
+    def test_missing_schema_is_never_silently_bootstrapped(self, tmp_path):
+        result = run_entrypoint(
+            tmp_path, 'if [ "$1" = create-schema ]; then exit 91; fi; echo "stub flask: $*"',
+            script=PREDEPLOY, command=[]
+        )
+        assert result.returncode == 0
+        assert result.stdout.strip() == "stub flask: db upgrade"
 
     def test_migration_runs_with_the_scheduler_disabled(self, tmp_path):
-        """Each step command builds the whole app; APScheduler must stay off."""
         result = run_entrypoint(
-            tmp_path,
-            'echo "SCHEDULER_ENABLED=$SCHEDULER_ENABLED"',
-            env={"SCHEDULER_ENABLED": "true"},
+            tmp_path, 'echo "SCHEDULER_ENABLED=$SCHEDULER_ENABLED"',
+            env={"SCHEDULER_ENABLED": "true"}, script=PREDEPLOY, command=[]
         )
-        assert "SCHEDULER_ENABLED=false" in result.stdout
-        assert "SCHEDULER_ENABLED=true" not in result.stdout
+        assert result.stdout.strip() == "SCHEDULER_ENABLED=false"
 
 
 class TestMigrationStepIsExempt:
@@ -393,9 +397,11 @@ class TestMigrationStepIsExempt:
 
         assert create_app("production") is not None
 
-    def test_entrypoint_sets_the_migration_step_marker(self, tmp_path):
-        """The exemption is only safe because the entrypoint is what sets it."""
-        result = run_entrypoint(tmp_path, f'echo "MARKER=${MIGRATION_STEP_VAR}"')
+    def test_predeploy_sets_the_migration_step_marker(self, tmp_path):
+        """Only the explicit migration process bypasses the schema guard."""
+        result = run_entrypoint(
+            tmp_path, f'echo "MARKER=${MIGRATION_STEP_VAR}"', script=PREDEPLOY, command=[]
+        )
         markers = {line for line in result.stdout.splitlines() if line.startswith("MARKER=")}
         assert markers == {"MARKER=1"}
 
@@ -420,35 +426,23 @@ OVERRIDE_VALUES = [
 ]
 
 
-class TestOverrideTruthinessParity:
-    """One variable, two gates, one answer.
-
-    SHUFFIFY_ALLOW_SCHEMA_DRIFT is read twice by separate implementations --
-    the entrypoint's shell `is_true` and the app factory's `_env_is_true` --
-    and the recovery path is only usable if they agree. Whichever gate is
-    stricter decides, and the shell runs first, so a value the shell rejects
-    never reaches the Python side to be honoured. Surrounding whitespace is
-    the realistic divergence: an operator pasting the override into a console
-    field can pick up a stray space.
-
-    Both sides are parametrized over one table, so an edit to either
-    implementation alone turns this class red.
-    """
+class TestSchemaDriftOverride:
+    """The app factory evaluates the runtime guard override; startup preserves its value."""
 
     @pytest.mark.parametrize("value,expected", OVERRIDE_VALUES)
     def test_app_factory_reading(self, monkeypatch, value, expected):
         monkeypatch.setenv(SCHEMA_DRIFT_OVERRIDE_VAR, value)
         assert _env_is_true(SCHEMA_DRIFT_OVERRIDE_VAR) is expected
 
-    @pytest.mark.parametrize("value,expected", OVERRIDE_VALUES)
-    def test_entrypoint_reading(self, tmp_path, value, expected):
-        """Observed through the shipped script: does a failed upgrade proceed?"""
+    @pytest.mark.parametrize("value,_expected", OVERRIDE_VALUES)
+    def test_entrypoint_preserves_the_runtime_value_without_migrating(self, tmp_path, value, _expected):
         result = run_entrypoint(
-            tmp_path, "exit 1", env={SCHEMA_DRIFT_OVERRIDE_VAR: value}
+            tmp_path, 'echo "UNEXPECTED-FLASK"; exit 91', env={SCHEMA_DRIFT_OVERRIDE_VAR: value},
+            command=[sys.executable, "-c",
+                     f"import json,os; print(json.dumps(os.getenv('{SCHEMA_DRIFT_OVERRIDE_VAR}')))"]
         )
-        started = result.returncode == 0
-        assert started is expected
-        assert ("SERVER-STARTED" in result.stdout) is expected
+        assert result.returncode == 0
+        assert json.loads(result.stdout) == value
 
 
 @pytest.fixture
@@ -456,7 +450,7 @@ def new_database_app(monkeypatch, production_env, tmp_path):
     """A production app on an empty database, built as the migration step builds it.
 
     Flask-Migrate finds migrations/ relative to the working directory, as the
-    harness and the container entrypoint run it. env.py applies alembic.ini's
+    harness and the pre-deploy process run it. env.py applies alembic.ini's
     logging config, which would disable the loggers later tests capture from.
     """
     import logging.config

@@ -7,6 +7,8 @@ GET /workshop/<id>/locks, POST .../toggle, POST .../unlock-all.
 
 from unittest.mock import MagicMock, patch
 
+from tests.paths import api_path
+
 # =============================================================
 # Authentication Tests
 # =============================================================
@@ -19,7 +21,7 @@ class TestAuthRequired:
     def test_get_locks_unauth(self, mock_auth, db_app):
         mock_auth.return_value = None
         with db_app.test_client() as c:
-            resp = c.get("/workshop/pl1/locks")
+            resp = c.get(api_path("/workshop/pl1/locks"))
             assert resp.status_code == 401
 
     @patch("shuffify.routes.require_auth")
@@ -29,7 +31,7 @@ class TestAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as c:
             resp = c.post(
-                "/workshop/pl1/locks/toggle",
+                api_path("/workshop/pl1/locks/toggle"),
                 json={
                     "track_uri": "spotify:track:t1",
                     "position": 0,
@@ -44,7 +46,7 @@ class TestAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as c:
             resp = c.post(
-                "/workshop/pl1/locks/unlock-all",
+                api_path("/workshop/pl1/locks/unlock-all"),
                 json={},
             )
             assert resp.status_code == 401
@@ -63,7 +65,7 @@ class TestGetLocks:
         self, mock_auth, auth_client
     ):
         mock_auth.return_value = MagicMock()
-        resp = auth_client.get("/workshop/pl1/locks")
+        resp = auth_client.get(api_path("/workshop/pl1/locks"))
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["success"] is True
@@ -77,14 +79,14 @@ class TestGetLocks:
 
         # Create a lock
         auth_client.post(
-            "/workshop/pl1/locks/toggle",
+            api_path("/workshop/pl1/locks/toggle"),
             json={
                 "track_uri": "spotify:track:t1",
                 "position": 0,
             },
         )
 
-        resp = auth_client.get("/workshop/pl1/locks")
+        resp = auth_client.get(api_path("/workshop/pl1/locks"))
         data = resp.get_json()
         assert data["success"] is True
         assert len(data["locks"]) == 1
@@ -108,7 +110,7 @@ class TestToggleLock:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/workshop/pl1/locks/toggle",
+            api_path("/workshop/pl1/locks/toggle"),
             json={
                 "track_uri": "spotify:track:t1",
                 "position": 0,
@@ -127,7 +129,7 @@ class TestToggleLock:
 
         # First toggle -> standard
         auth_client.post(
-            "/workshop/pl1/locks/toggle",
+            api_path("/workshop/pl1/locks/toggle"),
             json={
                 "track_uri": "spotify:track:t1",
                 "position": 0,
@@ -136,7 +138,7 @@ class TestToggleLock:
 
         # Second toggle -> super
         resp = auth_client.post(
-            "/workshop/pl1/locks/toggle",
+            api_path("/workshop/pl1/locks/toggle"),
             json={
                 "track_uri": "spotify:track:t1",
                 "position": 0,
@@ -154,7 +156,7 @@ class TestToggleLock:
         # Toggle 3 times: standard -> super -> unlocked
         for _ in range(3):
             resp = auth_client.post(
-                "/workshop/pl1/locks/toggle",
+                api_path("/workshop/pl1/locks/toggle"),
                 json={
                     "track_uri": "spotify:track:t1",
                     "position": 0,
@@ -170,7 +172,7 @@ class TestToggleLock:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/workshop/pl1/locks/toggle",
+            api_path("/workshop/pl1/locks/toggle"),
             json={
                 "track_uri": "invalid_uri",
                 "position": 0,
@@ -184,7 +186,7 @@ class TestToggleLock:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/workshop/pl1/locks/toggle"
+            api_path("/workshop/pl1/locks/toggle")
         )
         assert resp.status_code == 400
 
@@ -205,7 +207,7 @@ class TestUnlockAll:
 
         # Create locks and verify they succeed
         r1 = auth_client.post(
-            "/workshop/pl1/locks/toggle",
+            api_path("/workshop/pl1/locks/toggle"),
             json={
                 "track_uri": "spotify:track:t1",
                 "position": 0,
@@ -214,7 +216,7 @@ class TestUnlockAll:
         assert r1.get_json()["success"] is True
 
         r2 = auth_client.post(
-            "/workshop/pl1/locks/toggle",
+            api_path("/workshop/pl1/locks/toggle"),
             json={
                 "track_uri": "spotify:track:t2",
                 "position": 1,
@@ -223,11 +225,11 @@ class TestUnlockAll:
         assert r2.get_json()["success"] is True
 
         # Verify locks exist
-        resp = auth_client.get("/workshop/pl1/locks")
+        resp = auth_client.get(api_path("/workshop/pl1/locks"))
         assert len(resp.get_json()["locks"]) == 2
 
         resp = auth_client.post(
-            "/workshop/pl1/locks/unlock-all",
+            api_path("/workshop/pl1/locks/unlock-all"),
             json={"track_uris": None},
         )
         data = resp.get_json()
@@ -237,7 +239,7 @@ class TestUnlockAll:
         assert data["count"] == 2
 
         # Verify all unlocked
-        resp = auth_client.get("/workshop/pl1/locks")
+        resp = auth_client.get(api_path("/workshop/pl1/locks"))
         data = resp.get_json()
         assert data["locks"] == []
 
@@ -248,14 +250,14 @@ class TestUnlockAll:
         mock_auth.return_value = MagicMock()
 
         auth_client.post(
-            "/workshop/pl1/locks/toggle",
+            api_path("/workshop/pl1/locks/toggle"),
             json={
                 "track_uri": "spotify:track:t1",
                 "position": 0,
             },
         )
         auth_client.post(
-            "/workshop/pl1/locks/toggle",
+            api_path("/workshop/pl1/locks/toggle"),
             json={
                 "track_uri": "spotify:track:t2",
                 "position": 1,
@@ -263,7 +265,7 @@ class TestUnlockAll:
         )
 
         resp = auth_client.post(
-            "/workshop/pl1/locks/unlock-all",
+            api_path("/workshop/pl1/locks/unlock-all"),
             json={
                 "track_uris": ["spotify:track:t1"],
             },
@@ -272,7 +274,7 @@ class TestUnlockAll:
         assert data["count"] == 1
 
         # t2 should still be locked
-        resp = auth_client.get("/workshop/pl1/locks")
+        resp = auth_client.get(api_path("/workshop/pl1/locks"))
         data = resp.get_json()
         assert len(data["locks"]) == 1
         assert data["locks"][0]["track_uri"] == (

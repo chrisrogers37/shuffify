@@ -12,9 +12,10 @@ import pytest
 from werkzeug.exceptions import ServiceUnavailable
 
 from shuffify.models.playlist import Playlist
-from shuffify.services import PlaylistAccessError, PlaylistError, PlaylistNotFoundError
+from shuffify.services import PlaylistAccessError
 from shuffify.spotify.api import SpotifyAPI
-from shuffify.spotify.exceptions import SpotifyError, SpotifyTokenExpiredError
+from shuffify.spotify.exceptions import SpotifyTokenExpiredError
+from tests.paths import api_path
 
 # =============================================================================
 # Fixtures
@@ -49,330 +50,6 @@ def _make_mock_playlist():
 # =============================================================================
 # Workshop Page Route Tests
 # =============================================================================
-
-
-class TestWorkshopPage:
-    """Tests for GET /workshop/<playlist_id>."""
-
-    def test_workshop_redirects_when_not_authenticated(self, client):
-        """Unauthenticated users should be redirected to index."""
-        response = client.get("/workshop/playlist123")
-        assert response.status_code in (302, 200)
-
-    @patch("shuffify.routes.get_db_user")
-    @patch("shuffify.routes.AuthService")
-    @patch("shuffify.routes.workshop.PlaylistService")
-    @patch("shuffify.routes.workshop.ShuffleService")
-    def test_workshop_renders_with_valid_playlist(
-        self,
-        mock_shuffle_svc,
-        mock_playlist_svc,
-        mock_auth_svc,
-        mock_get_db_user,
-        authenticated_client,
-        sample_user,
-    ):
-        """Workshop page should render successfully with playlist data."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
-        mock_auth_svc.get_user_data.return_value = sample_user
-        mock_get_db_user.return_value = Mock(id=1, spotify_id="u1")
-
-        mock_ps_instance = Mock()
-        mock_ps_instance.get_playlist.return_value = _make_mock_playlist()
-        mock_playlist_svc.return_value = mock_ps_instance
-
-        mock_shuffle_svc.list_algorithms.return_value = [
-            {
-                "name": "Basic",
-                "class_name": "BasicShuffle",
-                "description": "Random shuffle",
-                "parameters": {},
-            }
-        ]
-
-        response = authenticated_client.get("/workshop/playlist123")
-        assert response.status_code == 200
-        assert b"Workshop Test Playlist" in response.data
-        assert b"Track 1" in response.data
-        assert b"Save to Spotify" in response.data
-
-    @patch("shuffify.routes.get_db_user")
-    @patch("shuffify.routes.AuthService")
-    @patch("shuffify.routes.workshop.PlaylistService")
-    @patch("shuffify.routes.workshop.ShuffleService")
-    def test_workshop_escapes_malicious_track_uri(
-        self,
-        mock_shuffle_svc,
-        mock_playlist_svc,
-        mock_auth_svc,
-        mock_get_db_user,
-        authenticated_client,
-        sample_user,
-    ):
-        """track.uri is JS-escaped (tojson) in onclick handlers — XSS guard."""
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_client.return_value = Mock()
-        mock_auth_svc.get_user_data.return_value = sample_user
-        mock_get_db_user.return_value = Mock(id=1, spotify_id="u1")
-
-        malicious_uri = "spotify:track:x'));alert(document.cookie);//"
-        playlist = Playlist(
-            id="playlist123",
-            name="Workshop Test Playlist",
-            owner_id="user123",
-            description="A test playlist",
-            tracks=[
-                {
-                    "id": "track1",
-                    "name": "Track 1",
-                    "uri": malicious_uri,
-                    "duration_ms": 180000,
-                    "is_local": False,
-                    "artists": ["Artist 1"],
-                    "artist_urls": ["https://open.spotify.com/artist/artist1"],
-                    "album_name": "Album 1",
-                    "album_image_url": "https://example.com/album1.jpg",
-                    "track_url": "https://open.spotify.com/track/track1",
-                }
-            ],
-        )
-        mock_ps_instance = Mock()
-        mock_ps_instance.get_playlist.return_value = playlist
-        mock_playlist_svc.return_value = mock_ps_instance
-        mock_shuffle_svc.list_algorithms.return_value = [
-            {
-                "name": "Basic",
-                "class_name": "BasicShuffle",
-                "description": "Random shuffle",
-                "parameters": {},
-            }
-        ]
-
-        response = authenticated_client.get("/workshop/playlist123")
-        assert response.status_code == 200
-        # tojson JS-escapes the single quote (') rather than HTML-escaping
-        # it (&#39;), so it cannot break out of the onclick JS string.
-        assert b"\\u0027" in response.data
-        # Single-quote-delimited inline handler calls must not appear. (The
-        # data-uri="" attribute legitimately HTML-escapes the quote — that is
-        # the safe attribute context, read back cleanly via element.dataset.)
-        assert b"toggleTrackLock('" not in response.data
-        assert b"deleteTrack('" not in response.data
-
-    @patch("shuffify.routes.get_db_user")
-    @patch("shuffify.routes.AuthService", autospec=True)
-    @patch("shuffify.routes.workshop.PlaylistService")
-    @patch("shuffify.routes.workshop.ShuffleService")
-    def test_workshop_renders_when_spotify_profile_is_unavailable(
-        self,
-        mock_shuffle_svc,
-        mock_playlist_svc,
-        mock_auth_svc,
-        mock_get_db_user,
-        authenticated_client,
-    ):
-        """A failed profile fetch must not 500 an authenticated user.
-
-        require_auth_page swallows SpotifyError from the profile fetch and
-        continues with spotify_profile=None deliberately -- a Spotify hiccup
-        should not bounce an authenticated user back to the login page. Every
-        profile dereference on the page has to survive the None that produces.
-        """
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_api.return_value = Mock()
-        mock_auth_svc.get_user_data.side_effect = SpotifyError(
-            "Spotify profile fetch failed"
-        )
-        mock_get_db_user.return_value = Mock(id=1, spotify_id="u1")
-
-        mock_ps_instance = Mock()
-        mock_ps_instance.get_playlist.return_value = _make_mock_playlist()
-        mock_playlist_svc.return_value = mock_ps_instance
-
-        mock_shuffle_svc.list_algorithms.return_value = [
-            {
-                "name": "Basic",
-                "class_name": "BasicShuffle",
-                "description": "Random shuffle",
-                "parameters": {},
-            }
-        ]
-
-        response = authenticated_client.get("/workshop/playlist123")
-        assert response.status_code == 200
-        assert b"Workshop Test Playlist" in response.data
-        # tojson on an unguarded Undefined raises TypeError, which reaches the
-        # generic 500 page. null is the honest value for "current user
-        # unknown", and the one consumer (the isNonOwned ownership check)
-        # degrades to treating playlists as not-yours rather than crashing.
-        assert b"currentUserId: null" in response.data
-
-    @patch("shuffify.routes.get_db_user")
-    @patch("shuffify.routes.AuthService", autospec=True)
-    @patch("shuffify.routes.workshop.PlaylistService")
-    @patch("shuffify.routes.workshop.ShuffleService")
-    def test_workshop_emits_the_real_user_id_when_profile_is_available(
-        self,
-        mock_shuffle_svc,
-        mock_playlist_svc,
-        mock_auth_svc,
-        mock_get_db_user,
-        authenticated_client,
-        sample_user,
-    ):
-        """The null-guard must not cost the real id.
-
-        The other half of the pair. Asserting only the None case is satisfied
-        by deleting the line or hardcoding null, which would break the
-        ownership check for every user whose profile loaded fine.
-        """
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_api.return_value = Mock()
-        mock_auth_svc.get_user_data.return_value = sample_user
-        mock_get_db_user.return_value = Mock(id=1, spotify_id="u1")
-
-        mock_ps_instance = Mock()
-        mock_ps_instance.get_playlist.return_value = _make_mock_playlist()
-        mock_playlist_svc.return_value = mock_ps_instance
-
-        mock_shuffle_svc.list_algorithms.return_value = [
-            {
-                "name": "Basic",
-                "class_name": "BasicShuffle",
-                "description": "Random shuffle",
-                "parameters": {},
-            }
-        ]
-
-        response = authenticated_client.get("/workshop/playlist123")
-        assert response.status_code == 200
-        assert b'currentUserId: "user123"' in response.data
-
-    @patch("shuffify.routes.workshop.PlaylistPreferenceService")
-    @patch("shuffify.routes.get_db_user")
-    @patch("shuffify.routes.AuthService", autospec=True)
-    @patch("shuffify.routes.workshop.PlaylistService")
-    @patch("shuffify.routes.workshop.ShuffleService")
-    def test_workshop_names_its_neighbouring_playlists(
-        self,
-        mock_shuffle_svc,
-        mock_playlist_svc,
-        mock_auth_svc,
-        mock_get_db_user,
-        mock_preferences,
-        authenticated_client,
-        sample_user,
-    ):
-        """The previous and next links name their playlists from the route, escaped, so the
-        page reads no playlists on load to name them; a neighbour without a name keeps the
-        plain label, and the first playlist has no previous link."""
-        self._logged_in(mock_auth_svc, mock_get_db_user, sample_user)
-        mock_preferences.get_user_preferences.return_value = []
-        mock_ps_instance = Mock()
-        mock_ps_instance.get_playlist.return_value = _make_mock_playlist()
-        mock_playlist_svc.return_value = mock_ps_instance
-        mock_shuffle_svc.list_algorithms.return_value = [
-            {"name": "Basic", "class_name": "BasicShuffle", "description": "Random shuffle", "parameters": {}}
-        ]
-
-        mock_ps_instance.get_user_playlists.return_value = [
-            {"id": "earlier", "name": "Earlier <b>Mix</b>"},
-            {"id": "playlist123", "name": "Workshop Test Playlist"},
-            {"id": "later", "name": "Later & Loud"},
-        ]
-        html = authenticated_client.get("/workshop/playlist123").get_data(as_text=True)
-        assert 'aria-label="Previous playlist: Earlier &lt;b&gt;Mix&lt;/b&gt;"' in html
-        assert 'aria-label="Next playlist: Later &amp; Loud"' in html
-        # Playlist details repeats them as links with the same names.
-        assert ">Previous playlist: Earlier &lt;b&gt;Mix&lt;/b&gt;</a>" in html
-        assert ">Next playlist: Later &amp; Loud</a>" in html
-        assert "<b>Mix</b>" not in html
-
-        mock_ps_instance.get_user_playlists.return_value = [
-            {"id": "playlist123", "name": "Workshop Test Playlist"},
-            {"id": "later"},
-        ]
-        html = authenticated_client.get("/workshop/playlist123").get_data(as_text=True)
-        assert 'id="workshop-prev-playlist"' not in html
-        assert 'aria-label="Next playlist"' in html
-        assert ">Next playlist</a>" in html
-
-    @staticmethod
-    def _logged_in(mock_auth_svc, mock_get_db_user, sample_user):
-        mock_auth_svc.validate_session_token.return_value = True
-        mock_auth_svc.get_authenticated_api.return_value = Mock()
-        mock_auth_svc.get_user_data.return_value = sample_user
-        mock_get_db_user.return_value = Mock(id=1, spotify_id="u1")
-
-    @pytest.mark.parametrize(
-        ("error", "message"),
-        [
-            (
-                PlaylistNotFoundError("Playlist not found: playlist123"),
-                "That playlist doesn't exist or was deleted.",
-            ),
-            (
-                PlaylistAccessError("Spotify refused this request for the playlist."),
-                "You can only open your own or collaborative playlists in the Workshop.",
-            ),
-            (
-                PlaylistError("Failed to fetch playlist: Server error 503 after 5 attempts"),
-                "Couldn't load that playlist from Spotify. Please try again.",
-            ),
-        ],
-    )
-    @patch("shuffify.routes.get_db_user")
-    @patch("shuffify.routes.AuthService", autospec=True)
-    @patch("shuffify.routes.workshop.PlaylistService")
-    def test_a_playlist_it_cannot_load_keeps_the_user_logged_in(
-        self,
-        mock_playlist_svc,
-        mock_auth_svc,
-        mock_get_db_user,
-        authenticated_client,
-        sample_user,
-        error,
-        message,
-    ):
-        """A missing playlist, someone else's, or a Spotify outage is not an
-        expired session: back to the Workshop hub, still logged in,
-        with a message that fits."""
-        self._logged_in(mock_auth_svc, mock_get_db_user, sample_user)
-        mock_playlist_svc.return_value.get_playlist.side_effect = error
-
-        response = authenticated_client.get("/workshop/playlist123")
-
-        assert response.status_code == 302
-        assert response.headers["Location"].endswith("/workshop")
-        with authenticated_client.session_transaction() as sess:
-            assert "spotify_token" in sess
-            assert sess["_flashes"] == [("error", message)]
-
-    @patch("shuffify.routes.get_db_user")
-    @patch("shuffify.routes.AuthService", autospec=True)
-    @patch("shuffify.routes.workshop.PlaylistService")
-    def test_a_session_spotify_refuses_still_logs_the_user_out(
-        self,
-        mock_playlist_svc,
-        mock_auth_svc,
-        mock_get_db_user,
-        authenticated_client,
-        sample_user,
-    ):
-        """A token Spotify refuses, after a refresh that failed, is the one
-        failure that ends the session."""
-        self._logged_in(mock_auth_svc, mock_get_db_user, sample_user)
-        mock_playlist_svc.return_value.get_playlist.side_effect = SpotifyTokenExpiredError(
-            "Token expired or invalid"
-        )
-
-        response = authenticated_client.get("/workshop/playlist123")
-
-        assert response.status_code == 200
-        assert b"Your session has expired. Please log in again." in response.data
-        with authenticated_client.session_transaction() as sess:
-            assert "spotify_token" not in sess
 
 
 # =============================================================================
@@ -412,7 +89,7 @@ class TestWorkshopPreviewShuffle:
 
         # Send tracks from client (no API call)
         response = authenticated_client.post(
-            "/workshop/playlist123/preview-shuffle",
+            api_path("/workshop/playlist123/preview-shuffle"),
             data=json.dumps(
                 {
                     "algorithm": "BasicShuffle",
@@ -430,7 +107,7 @@ class TestWorkshopPreviewShuffle:
     def test_preview_shuffle_requires_auth(self, client):
         """Unauthenticated preview should return 401."""
         response = client.post(
-            "/workshop/playlist123/preview-shuffle",
+            api_path("/workshop/playlist123/preview-shuffle"),
             data=json.dumps({"algorithm": "BasicShuffle"}),
             content_type="application/json",
         )
@@ -454,7 +131,7 @@ class TestWorkshopPreviewShuffle:
         mock_get_db_user.return_value = mock_user
 
         response = authenticated_client.post(
-            "/workshop/playlist123/preview-shuffle",
+            api_path("/workshop/playlist123/preview-shuffle"),
             data="not valid json",
             content_type="application/json",
         )
@@ -468,6 +145,14 @@ class TestWorkshopPreviewShuffle:
 
 class TestWorkshopCommit:
     """The routes validate input and retain structured target outcomes."""
+
+    @pytest.fixture
+    def provider(self):
+        from types import SimpleNamespace
+
+        from tests.services.test_live_executor_outcomes import MutableSpotify, uri
+
+        return MutableSpotify(SimpleNamespace(spotify_id="user123"), playlist123=[uri(1), uri(1), uri(2)])
 
     @pytest.fixture
     def authorized(self):
@@ -504,7 +189,7 @@ class TestWorkshopCommit:
             ) as service,
         ):
             response = authenticated_client.post(
-                "/workshop/playlist123/commit",
+                api_path("/workshop/playlist123/commit"),
                 json={"baseline_track_uris": [], "track_uris": []},
             )
         assert response.status_code == status
@@ -518,31 +203,40 @@ class TestWorkshopCommit:
 
     @pytest.mark.parametrize("status", ["saved", "already_applied"])
     def test_commit_serializes_confirmed_revision(
-        self, authenticated_client, authorized, status
+        self, auth_client, provider, status
     ):
-        from shuffify.services.workshop_commit_service import WorkshopTargetResult
+        from tests.queued_operations import post_and_run, scoped_history
+        from tests.services.test_live_executor_outcomes import uri
 
-        service, _ = authorized
-        uris = ["spotify:track:" + "a" * 22]
-        service.return_value.commit.return_value = WorkshopTargetResult(
-            status,
-            "Confirmed",
-            extra={"saved_track_uris": uris},
-        )
-        response = authenticated_client.post(
-            "/workshop/playlist123/commit",
-            json={"baseline_track_uris": [], "track_uris": uris},
-        )
+        before, uris = [uri(1), uri(1), uri(2)], [uri(2), uri(1), uri(1)]
+        baseline = before
+        if status == "already_applied":
+            provider.playlists["playlist123"] = list(uris)
+            baseline = [uri(3)]  # Already-applied takes precedence over stale baseline.
+        with patch("shuffify.routes.require_auth", autospec=True, side_effect=AssertionError("Admission used Spotify")):
+            response = post_and_run(
+                auth_client, provider, api_path("/workshop/playlist123/commit"),
+                json={"baseline_track_uris": baseline, "track_uris": uris},
+            )
+        assert response.accepted.status_code == 202
         assert response.status_code == 200
-        assert response.get_json()["saved_track_uris"] == uris
-        assert service.return_value.commit.call_args.args[3:] == ([], uris)
+        assert response.operation["state"] == "succeeded"
+        body = response.get_json()
+        assert body["target_status"] == status
+        assert body["saved_track_uris"] == body["current_track_uris"] == uris
+        assert [track["uri"] for track in body["current_tracks"]] == uris
+        assert body["confirmed_batches"] == body["total_batches"] == (1 if status == "saved" else 0)
+        assert body["representable"] is True
+        assert body["loaded_at"]
+        assert scoped_history(auth_client, "playlist123")["states"] == ([before, uris] if status == "saved" else [uris])
+        assert provider.writes == ([("update", "playlist123", uris)] if status == "saved" else [])
 
     def test_missing_baseline_is_explicit_and_never_calls_service(
         self, authenticated_client, authorized
     ):
         service, _ = authorized
         response = authenticated_client.post(
-            "/workshop/playlist123/commit", json={"track_uris": []}
+            api_path("/workshop/playlist123/commit"), json={"track_uris": []}
         )
         assert response.status_code == 400
         body = response.get_json()
@@ -568,7 +262,7 @@ class TestWorkshopCommit:
     ):
         service, _ = authorized
         response = authenticated_client.post(
-            "/workshop/playlist123/commit", json=payload
+            api_path("/workshop/playlist123/commit"), json=payload
         )
         assert response.status_code == 400
         body = response.get_json()
@@ -583,7 +277,7 @@ class TestWorkshopCommit:
     ):
         service, _ = authorized
         response = authenticated_client.post(
-            "/workshop/playlist123/commit",
+            api_path("/workshop/playlist123/commit"),
             data="{invalid",
             content_type="application/json",
         )
@@ -595,36 +289,102 @@ class TestWorkshopCommit:
         assert body["retryable"] is True
         service.assert_not_called()
 
-    @pytest.mark.parametrize(
-        "status,code,http",
-        [
-            ("not_written", "stale_draft", 409),
-            ("not_written", "operation_in_progress", 409),
-            ("partial", "partial_write", 502),
-            ("unknown", "write_unverified", 502),
-        ],
-    )
-    def test_failure_outcomes_are_not_flattened(
-        self, authenticated_client, authorized, status, code, http
-    ):
-        from shuffify.services.workshop_commit_service import WorkshopTargetResult
+    def test_stale_draft_outcome_is_not_flattened(self, auth_client, provider):
+        from tests.queued_operations import post_and_run
+        from tests.services.test_live_executor_outcomes import uri
 
-        service, _ = authorized
-        service.return_value.commit.return_value = WorkshopTargetResult(
-            status,
-            "Draft retained",
-            http,
-            code,
-            True,
+        response = post_and_run(
+            auth_client, provider, api_path("/workshop/playlist123/commit"),
+            json={"baseline_track_uris": [uri(3)], "track_uris": [uri(2), uri(1)]},
         )
-        response = authenticated_client.post(
-            "/workshop/playlist123/commit",
-            json={"baseline_track_uris": [], "track_uris": []},
+        assert response.accepted.status_code == 202
+        assert response.operation["state"] == "failed"
+        body = response.get_json()
+        assert body["error_code"] == "stale_draft"
+        assert body["target_status"] == "not_written"
+        assert body["requires_refresh"] is True
+        assert body["current_track_uris"] == [uri(1), uri(1), uri(2)]
+        assert "saved_track_uris" not in body
+        assert provider.writes == []
+
+    def test_active_target_is_rejected_with_its_existing_operation_id(self, auth_client, provider):
+        from tests.services.test_live_executor_outcomes import uri
+
+        body = {"baseline_track_uris": [uri(1), uri(1), uri(2)], "track_uris": []}
+        first = auth_client.post(api_path("/workshop/playlist123/commit"), json=body)
+        second = auth_client.post(api_path("/workshop/playlist123/commit"), json=body)
+        assert first.status_code == 202
+        assert second.status_code == 409
+        assert second.get_json()["error_code"] == "playlist_busy"
+        assert second.get_json()["operation_id"] == first.get_json()["operation"]["id"]
+        assert provider.writes == []
+
+    def test_partial_target_result_retains_counts_after_worker_rollback(self, auth_client, provider):
+        from shuffify.spotify.exceptions import SpotifyWriteRejectedError
+        from tests.queued_operations import post_and_run, scoped_history
+        from tests.services.test_live_executor_outcomes import uri
+
+        before, desired = [uri(1), uri(1), uri(2)], [uri(3)] * 101
+
+        def reject(*args):
+            raise SpotifyWriteRejectedError("Fictional second-batch rejection")
+
+        provider.faults[("add", "playlist123")] = reject
+        response = post_and_run(
+            auth_client, provider, api_path("/workshop/playlist123/commit"),
+            json={"baseline_track_uris": before, "track_uris": desired},
         )
-        assert response.status_code == http
-        assert response.get_json()["error_code"] == code
-        assert response.get_json()["target_status"] == status
-        assert "saved_track_uris" not in response.get_json()
+        assert response.accepted.status_code == 202
+        assert response.operation["state"] == "rolled_back"
+        body = response.get_json()
+        assert body["target_status"] == "partial"
+        assert body["error_code"] == "partial_write"
+        assert body["confirmed_batches"] == 1
+        assert body["total_batches"] == 2
+        assert "saved_track_uris" not in body
+        assert provider.playlists["playlist123"] == before
+        assert provider.writes == [("update", "playlist123", desired[:100]), ("add", "playlist123", desired[100:]),
+                                   ("update", "playlist123", before)]
+        assert scoped_history(auth_client, "playlist123") is None
+
+    def test_unknown_target_outcome_requires_review_without_replaying_write(self, auth_client, provider):
+        from shuffify.spotify.exceptions import SpotifyWriteUnverifiedError
+        from tests.queued_operations import post_and_run, scoped_history
+        from tests.services.test_live_executor_outcomes import uri
+
+        def unknown(*args):
+            raise SpotifyWriteUnverifiedError("Fictional missing acknowledgment")
+
+        provider.faults[("update", "playlist123")] = unknown
+        response = post_and_run(
+            auth_client, provider, api_path("/workshop/playlist123/commit"),
+            json={"baseline_track_uris": [uri(1), uri(1), uri(2)], "track_uris": []},
+        )
+        assert response.accepted.status_code == 202
+        assert response.operation["state"] == "needs_attention"
+        body = response.get_json()
+        assert body["target_status"] == "unknown"
+        assert body["error_code"] == "needs_attention"
+        assert body["confirmed_batches"] == 0
+        assert body["total_batches"] == 1
+        assert "saved_track_uris" not in body
+        assert len(provider.writes) == 1
+        assert scoped_history(auth_client, "playlist123") is None
+
+    def test_empty_draft_dispatches_a_real_put_in_worker(self, auth_client, provider):
+        from tests.queued_operations import post_and_run
+        from tests.services.test_live_executor_outcomes import uri
+
+        response = post_and_run(
+            auth_client, provider,
+            api_path("/workshop/playlist123/commit"),
+            json={"baseline_track_uris": [uri(1), uri(1), uri(2)], "track_uris": []},
+        )
+        assert response.accepted.status_code == 202
+        assert response.get_json()["target_status"] == "saved"
+        assert response.get_json()["saved_track_uris"] == []
+        assert response.get_json()["confirmed_batches"] == 1
+        assert provider.writes == [("update", "playlist123", [])]
 
     @pytest.mark.parametrize(
         "error,status",
@@ -635,16 +395,31 @@ class TestWorkshopCommit:
         ],
     )
     def test_existing_permission_and_auth_handling(
-        self, authenticated_client, authorized, error, status
+        self, auth_client, provider, error, status
     ):
-        service, _ = authorized
-        service.return_value.commit.side_effect = error
-        response = authenticated_client.post(
-            "/workshop/playlist123/commit",
-            json={"baseline_track_uris": [], "track_uris": []},
+        from tests.queued_operations import post_and_run
+        from tests.services.test_live_executor_outcomes import uri
+
+        if status == 403:
+            provider.owner = "another-user"
+        else:
+            provider.read_failure = error
+        response = post_and_run(
+            auth_client, provider,
+            api_path("/workshop/playlist123/commit"),
+            json={"baseline_track_uris": [uri(1), uri(1), uri(2)], "track_uris": []},
         )
-        assert response.status_code == status
-        assert "target_status" not in (response.get_json() or {})
+        assert response.accepted.status_code == 202
+        assert response.operation["state"] == "failed"
+        body = response.get_json()
+        assert body["success"] is False
+        assert "saved_track_uris" not in body
+        if status == 503:
+            assert body["error_code"] == "upstream_read_failed"
+            assert body["target_status"] == "not_written"
+        else:
+            assert "target_status" not in body
+        assert provider.writes == []
 
     def test_current_state_serializes_read_only_result(
         self, authenticated_client, authorized
@@ -659,7 +434,7 @@ class TestWorkshopCommit:
         )
         with authenticated_client.session_transaction() as session:
             session["retained_draft"] = ["draft"]
-        response = authenticated_client.get("/workshop/playlist123/current-state")
+        response = authenticated_client.get(api_path("/workshop/playlist123/current-state"))
         assert response.status_code == 200
         assert response.get_json()["current_track_uris"] == []
         service.return_value.commit.assert_not_called()
@@ -669,8 +444,8 @@ class TestWorkshopCommit:
     @pytest.mark.parametrize(
         "method,path",
         [
-            ("post", "/workshop/playlist123/commit"),
-            ("get", "/workshop/playlist123/current-state"),
+            ("post", api_path("/workshop/playlist123/commit")),
+            ("get", api_path("/workshop/playlist123/current-state")),
         ],
     )
     def test_requires_auth(self, client, method, path):

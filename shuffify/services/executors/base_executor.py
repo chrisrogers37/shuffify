@@ -661,10 +661,7 @@ class JobExecutorService:
         drip_count: int = None,
         review=None,
     ) -> dict:
-        """Run an inline (schedule-less) drip through the full executor safety
-        rails, so a manual "Drip Now" behaves like a scheduled drip instead of
-        a hand-rolled ``Schedule(id=0)`` that bypassed the lock / execution
-        record / rollback.
+        """Run a manual drip with locking, execution recording, and rollback.
 
         Uses a *transient* Schedule (never persisted); the JobExecution is
         recorded with a null ``schedule_id``.

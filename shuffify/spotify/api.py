@@ -14,6 +14,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from .auth import SpotifyAuthManager, TokenInfo
+from .deadline import check_deadline
 from .error_handling import api_error_handler
 from .exceptions import (
     SpotifyAPIError,
@@ -25,6 +26,7 @@ from .exceptions import (
     SpotifyWriteRejectedError,
 )
 from .http_client import SpotifyHTTPClient
+from .observation import observed_mutation
 
 if TYPE_CHECKING:
     from .cache import SpotifyCache
@@ -158,6 +160,7 @@ class SpotifyAPI:
         # it instead of refreshing again.
         if refreshed_at_init:
             self._notify_token_refresh()
+        check_deadline()
 
     def _notify_token_refresh(self) -> None:
         """Invoke the on_token_refresh callback with the current token.
@@ -182,6 +185,7 @@ class SpotifyAPI:
         """
         self._token_info = self._auth_manager.refresh_token(self._token_info)
         self._notify_token_refresh()
+        check_deadline()
         return self._token_info.access_token
 
     @property
@@ -211,6 +215,7 @@ class SpotifyAPI:
         self._token_info = self._auth_manager.ensure_valid_token(self._token_info)
         self._http.update_token(self._token_info.access_token)
         self._notify_token_refresh()
+        check_deadline()
 
     def _get_user_id(self) -> str:
         """Resolve the authenticated account; never infer it from a playlist."""
@@ -403,6 +408,7 @@ class SpotifyAPI:
         return tracks
 
     @api_error_handler
+    @observed_mutation("replace")
     def update_playlist_tracks(self, playlist_id: str, track_uris: List[str]) -> bool:
         """
         Replace all tracks in a playlist with a new list.
@@ -490,15 +496,19 @@ class SpotifyAPI:
         self._ensure_valid_token()
 
         tracks = []
+        from shuffify.services.operations.control import propagate_control
+
         for uri in track_uris:
             match = _TRACK_URI.fullmatch(uri)
             if not match:
                 continue
             try:
                 track = self._http.get(f"/tracks/{match.group(1)}")
-            except SpotifyNotFoundError:
+            except SpotifyNotFoundError as error:
+                propagate_control(error)
                 continue
             except SpotifyAPIError as e:
+                propagate_control(e)
                 if not tracks:
                     raise
                 logger.warning(
@@ -514,6 +524,7 @@ class SpotifyAPI:
         return tracks
 
     @api_error_handler
+    @observed_mutation("add")
     def playlist_add_items(
         self,
         playlist_id: str,
@@ -579,6 +590,7 @@ class SpotifyAPI:
         return True
 
     @api_error_handler
+    @observed_mutation("remove")
     def playlist_remove_items(self, playlist_id: str, track_uris: List[str]) -> bool:
         """
         Remove specific tracks from a playlist.
@@ -646,6 +658,7 @@ class SpotifyAPI:
         return True
 
     @api_error_handler
+    @observed_mutation("create")
     def create_user_playlist(
         self,
         name: str,
@@ -684,6 +697,7 @@ class SpotifyAPI:
         return result
 
     @api_error_handler
+    @observed_mutation("details")
     def update_playlist_details(
         self,
         playlist_id: str,
@@ -816,6 +830,18 @@ class SpotifyAPI:
 
         return features
 
+    def dispatch_journaled_batch(self, method: str, path: str, body: Any) -> Any:
+        """Dispatch one frozen batch through the active mutation observer."""
+        from .observation import current_observer
+
+        if current_observer() is None:
+            raise SpotifyAPIError("A journaled batch requires an active mutation observer")
+        return self._http._request(method, path, json=body)
+
+    def close(self) -> None:
+        """Release this client's transport while retaining the shared connection pool."""
+        self._http.close()
+
     # =========================================================================
     # Search Operations
     # =========================================================================
@@ -832,7 +858,7 @@ class SpotifyAPI:
 
         Args:
             query: Search query string.
-            limit: Maximum number of results (1-50, default 10).
+            limit: Maximum number of results (1-10, default 10).
             skip_cache: If True, bypass cache and fetch fresh data.
 
         Returns:
@@ -845,7 +871,7 @@ class SpotifyAPI:
         self._ensure_valid_token()
 
         # Clamp limit to Spotify's allowed range
-        limit = max(1, min(limit, 50))
+        limit = max(1, min(limit, 10))
 
         # Check cache first
         if self._cache and not skip_cache:
@@ -900,7 +926,7 @@ class SpotifyAPI:
 
         Args:
             query: Search query string.
-            limit: Maximum number of results (1-50, default 10).
+            limit: Maximum number of results (1-10, default 10).
             offset: Result offset for pagination (default 0).
             market: ISO 3166-1 alpha-2 country code.
             skip_cache: If True, bypass cache and fetch fresh data.
@@ -914,7 +940,7 @@ class SpotifyAPI:
         self._ensure_valid_token()
 
         # Clamp limit to Spotify's maximum
-        limit = max(1, min(limit, 50))
+        limit = max(1, min(limit, 10))
         offset = max(0, offset)
 
         # Check cache first

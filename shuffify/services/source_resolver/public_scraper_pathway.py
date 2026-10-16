@@ -7,6 +7,7 @@ arrays that Spotify embeds in server-rendered HTML.
 
 import json
 import logging
+import math
 import random
 import re
 import time
@@ -16,7 +17,17 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
+from shuffify.services.operations.control import propagate_control
+from shuffify.spotify.deadline import (
+    SpotifyDeadlineError,
+    bounded_sleep,
+    check_deadline,
+    remaining_seconds,
+    remaining_timeout,
+)
 from shuffify.spotify.endpoints import OPEN_BASE_URL
+from shuffify.spotify.exceptions import SpotifyRateLimitError
+from shuffify.spotify.transport import request_with_deadline
 
 from .base import ResolveResult, find_nested_key
 
@@ -60,7 +71,7 @@ TRANSIENT_STATUS_CODES = frozenset({429, 502, 503, 504})
 PERMANENT_STATUS_CODES = frozenset({403, 404, 410})
 MAX_ATTEMPTS = 3
 BACKOFF_BASE = 1.0  # seconds — doubled each attempt
-MAX_BACKOFF = 30  # seconds — ceiling for any single sleep
+MAX_BACKOFF = 30  # seconds — ceiling for fallback backoff without a workflow budget
 
 # ---------------------------------------------------------------------------
 # Cache configuration
@@ -258,19 +269,24 @@ class PublicScraperPathway:
         caller can skip the cache write.
         """
         last_error: Optional[str] = None
-        timeout = _get_request_timeout()
+        default_timeout = _get_request_timeout()
 
         for attempt in range(MAX_ATTEMPTS):
+            timeout = remaining_timeout(default_timeout)
             try:
-                resp = requests.get(
-                    url,
+                resp = request_with_deadline(
+                    requests.get, "GET", url,
                     timeout=timeout,
                     headers=REQUEST_HEADERS,
                 )
+            except (SpotifyDeadlineError, SpotifyRateLimitError):
+                raise
             except (
                 requests.Timeout,
                 requests.ConnectionError,
             ) as e:
+                propagate_control(e)
+                check_deadline()
                 last_error = f"{type(e).__name__}: {e}"
                 logger.warning(
                     "%s scrape network error for %s (attempt %d/%d): %s",
@@ -289,6 +305,7 @@ class PublicScraperPathway:
                     error=last_error,
                 )
             except Exception as e:
+                propagate_control(e)
                 # Non-retryable client-side error (e.g. bad URL,
                 # bad headers). Surface immediately.
                 logger.warning(
@@ -304,12 +321,13 @@ class PublicScraperPathway:
                 )
 
             status = resp.status_code
+            if status != 429:
+                check_deadline()
 
             if status == 200:
-                return ScrapeOutcome(
-                    uris=_extract_uris(resp.text),
-                    confirmed=True,
-                )
+                uris = _extract_uris(resp.text)
+                check_deadline()
+                return ScrapeOutcome(uris=uris, confirmed=True)
 
             if status in PERMANENT_STATUS_CODES:
                 logger.warning(
@@ -335,11 +353,19 @@ class PublicScraperPathway:
                     MAX_ATTEMPTS,
                 )
                 if attempt < MAX_ATTEMPTS - 1:
-                    _sleep_with_backoff(
-                        attempt,
-                        retry_after=resp.headers.get("Retry-After"),
-                    )
+                    try:
+                        _sleep_with_backoff(attempt, retry_after=resp.headers.get("Retry-After"))
+                    except SpotifyDeadlineError as error:
+                        if status == 429:
+                            raise SpotifyRateLimitError(
+                                "Spotify public page rate limit exceeds the remaining request deadline.",
+                                retry_after=_retry_delay(resp.headers.get("Retry-After")),
+                            ) from error
+                        raise
                     continue
+                retry_after = _retry_delay(resp.headers.get("Retry-After"))
+                if status == 429 and retry_after is not None:
+                    raise SpotifyRateLimitError("Spotify public page is rate limited.", retry_after=retry_after)
                 return ScrapeOutcome(
                     uris=[],
                     confirmed=False,
@@ -395,6 +421,7 @@ class PublicScraperPathway:
                 return None
             return row.track_uris
         except Exception as e:
+            propagate_control(e)
             logger.warning("Scraper cache read error: %s", e)
             return None
 
@@ -442,6 +469,7 @@ class PublicScraperPathway:
 
             db.session.commit()
         except Exception as e:
+            propagate_control(e)
             logger.warning("Scraper cache write error: %s", e)
             # Roll back so the session stays usable for
             # subsequent operations within the same request /
@@ -452,6 +480,7 @@ class PublicScraperPathway:
             try:
                 db.session.rollback()
             except Exception as rollback_err:
+                propagate_control(rollback_err)
                 logger.warning(
                     "Scraper cache rollback failed: %s",
                     rollback_err,
@@ -487,23 +516,33 @@ def _get_request_timeout() -> int:
 # ======================================================================
 
 
-def _sleep_with_backoff(attempt: int, retry_after: Optional[str] = None) -> None:
-    """Sleep before the next retry attempt.
+def _retry_delay(value: Optional[str]) -> float | None:
+    """Parse a finite Retry-After duration without shortening the provider's wait."""
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(seconds):
+        return None
+    return max(0.0, seconds)
 
-    Honors a server-provided ``Retry-After`` value (seconds) when present
-    and parseable; otherwise uses exponential backoff (``BACKOFF_BASE``
-    doubled per attempt). Adds 0–0.5s of jitter so a burst of concurrent
-    raids doesn't thunder against Spotify in lockstep, and caps any
-    single sleep at ``MAX_BACKOFF`` to keep worst-case latency bounded.
-    """
-    base = BACKOFF_BASE * (2**attempt)
-    if retry_after:
-        try:
-            base = float(retry_after)
-        except (TypeError, ValueError):
-            pass
-    delay = min(base, MAX_BACKOFF) + random.uniform(0, 0.5)
-    time.sleep(delay)
+
+def _sleep_with_backoff(attempt: int, retry_after: Optional[str] = None) -> None:
+    """Honor the provider's full wait only when the workflow budget permits it."""
+    fallback = min(BACKOFF_BASE * (2**attempt), MAX_BACKOFF)
+    provider_delay = _retry_delay(retry_after)
+    if provider_delay is not None and provider_delay > MAX_BACKOFF and remaining_seconds() is None:
+        raise SpotifyRateLimitError("Spotify public page is rate limited.", retry_after=provider_delay)
+    delay = max(fallback, provider_delay or 0) + random.uniform(0, 0.5)
+    try:
+        bounded_sleep(delay, sleep=time.sleep)
+    except SpotifyDeadlineError as error:
+        if provider_delay is not None:
+            raise SpotifyRateLimitError(
+                "Spotify public page rate limit exceeds the remaining request deadline.",
+                retry_after=provider_delay,
+            ) from error
+        raise
 
 
 # ======================================================================

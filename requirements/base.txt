@@ -9,7 +9,7 @@ redis>=8.1.0
 Flask-SQLAlchemy>=3.1.1
 Flask-Migrate>=4.1.0
 psycopg2-binary>=2.9.13
-APScheduler>=3.11.3
+APScheduler>=3.11.3,<4
 Flask-Limiter>=4.1.1
 
 # --- Security: explicit floors for transitive deps with known CVEs ---

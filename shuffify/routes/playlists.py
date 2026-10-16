@@ -1,5 +1,5 @@
 """
-Playlist API routes: fetch, refresh, and query playlists.
+Playlist summaries and reviewed live playlist actions.
 """
 
 import logging
@@ -7,15 +7,15 @@ import logging
 from flask import jsonify, request, session
 
 from shuffify.routes import (
+    api_bp,
     context_preflight,
     json_error,
     json_reply,
-    json_success,
-    main,
     no_store,
     require_auth_and_db,
+    require_session_and_db,
 )
-from shuffify.schemas import PlaylistQueryParams
+from shuffify.routes.queue import enqueue_command
 from shuffify.services import PlaylistError, PlaylistService
 from shuffify.services.live_action_context_service import (
     INSPECTION_KINDS,
@@ -38,80 +38,19 @@ from shuffify.services.live_review_bindings import (
     invalid_binding_result,
     request_binding,
 )
-from shuffify.services.live_review_context import context_unavailable
+from shuffify.services.live_review_context import context_unavailable, failure_rejected, read_failure
+from shuffify.services.operations.commands.schemas import VisibilityCommand
+from shuffify.services.operations.history import HistoryStore, get_history_scope
+from shuffify.services.page_context_service import playlist_row
 from shuffify.services.playlist_preference_service import (
     PlaylistPreferenceService,
 )
-from shuffify.spotify.api import playlist_item_count
+from shuffify.services.state_service import StateError
 
 logger = logging.getLogger(__name__)
 
 
-@main.route("/refresh-playlists", methods=["POST"])
-@require_auth_and_db
-def refresh_playlists(api=None, user=None):
-    """Refresh playlists from Spotify without losing undo state."""
-    try:
-        playlist_service = PlaylistService(api)
-        playlists = playlist_service.get_user_playlists(
-            skip_cache=True
-        )
-
-        logger.info(
-            f"Refreshed {len(playlists)} playlists from Spotify"
-        )
-        return json_success(
-            "Playlists refreshed successfully.",
-            playlists=playlists,
-        )
-    except PlaylistError as e:
-        logger.error("Failed to refresh playlists: %s", e)
-        return json_error(
-            "Failed to refresh playlists. Please try again.",
-            500,
-        )
-    except Exception as e:
-        logger.error(
-            "Unexpected error refreshing playlists: %s "
-            "[type=%s]",
-            e,
-            type(e).__name__,
-            exc_info=True,
-        )
-        return json_error(
-            "An unexpected error occurred while refreshing "
-            "playlists. Please try again.",
-            500,
-        )
-
-
-@main.route("/playlist/<playlist_id>")
-@require_auth_and_db
-def get_playlist(playlist_id, api=None, user=None):
-    """Get playlist data with optional audio features."""
-    query_params = PlaylistQueryParams(
-        features=request.args.get("features", "false")
-    )
-
-    playlist_service = PlaylistService(api)
-    playlist = playlist_service.get_playlist(
-        playlist_id, query_params.features
-    )
-    return jsonify(playlist.to_dict())
-
-
-@main.route("/playlist/<playlist_id>/stats")
-@require_auth_and_db
-def get_playlist_stats(
-    playlist_id, api=None, user=None
-):
-    """Get playlist audio feature statistics."""
-    playlist_service = PlaylistService(api)
-    stats = playlist_service.get_playlist_stats(playlist_id)
-    return jsonify(stats)
-
-
-@main.route("/api/user-playlists")
+@api_bp.route("/user-playlists")
 @require_auth_and_db
 def api_user_playlists(api=None, user=None):
     """Return the user's editable playlists as JSON; ``?refresh=1`` skips the cache."""
@@ -138,18 +77,7 @@ def api_user_playlists(api=None, user=None):
         except Exception:
             pass  # Fall back to default order
 
-        result = []
-        for p in playlists:
-            result.append({
-                "id": p["id"],
-                "name": p["name"],
-                "track_count": playlist_item_count(p),
-                "image_url": (
-                    p["images"][0]["url"]
-                    if p.get("images")
-                    else None
-                ),
-            })
+        result = [playlist_row(playlist) for playlist in playlists]
 
         logger.debug(f"API returned {len(result)} playlists")
         return jsonify({"success": True, "playlists": result})
@@ -174,36 +102,31 @@ def _visibility_preflight(message, status_code):
     ))
 
 
-@main.route(
+@api_bp.route(
     "/playlist/<playlist_id>/toggle-visibility",
     methods=["POST"],
 )
-@require_auth_and_db(on_preflight_error=_visibility_preflight)
+@require_session_and_db(on_preflight_error=_visibility_preflight)
 def toggle_visibility(
-    playlist_id, api=None, user=None
+    playlist_id, user=None
 ):
-    """Apply explicit visibility intent and return fresh metadata verification."""
+    """Queue explicit visibility intent for worker authorization and verification."""
     data = request.get_json(silent=True)
     try:
         binding = request_binding(request, "privacy")
     except ReviewBindingError:
         return _visibility_response(invalid_binding_result("privacy"))
     public = data.get("public") if isinstance(data, dict) else None
-    try:
-        result = LiveMetadataService(api).set_visibility(
-            playlist_id, user, public=public,
-            reviewed_scope=binding["reviewed_scope"] if binding else None,
-        )
-    except Exception:
-        logger.exception("Visibility outcome unavailable for %s", playlist_id)
-        result = direct_rejected_result(
-            "privacy", error_code="outcome_unavailable", http_status=502, unknown=True,
-            message="The visibility change could not be verified. Check the playlist before another change.",
-        )
-    return _visibility_response(result)
+    if type(public) is not bool:
+        return _visibility_response(direct_rejected_result(
+            "privacy", error_code="invalid_public", http_status=400,
+            message="The 'public' field must be true or false.",
+        ))
+    command = VisibilityCommand(playlist_id=playlist_id, public=public, reviewed=binding)
+    return enqueue_command(user, "visibility", command.model_dump(mode="json"), lambda _storage: (command, None))
 
 
-@main.route("/playlist/<playlist_id>/live-context", methods=["POST"])
+@api_bp.route("/playlist/<playlist_id>/live-context", methods=["POST"])
 @no_store
 @require_auth_and_db(on_preflight_error=context_preflight())
 def live_context(playlist_id, api=None, user=None):
@@ -211,7 +134,13 @@ def live_context(playlist_id, api=None, user=None):
     # Read first: an oversized body must reach the 413 handler, not the fallback below.
     body = request.get_json(silent=True)
     try:
-        reply = LiveActionContextService(api).resolve(playlist_id, user, session, body)
+        history = session
+        if isinstance(body, dict) and body.get("kind") == "undo":
+            history = HistoryStore().session_for(user.id, get_history_scope(session), [playlist_id],
+                                                 legacy=session.get("playlist_states"))
+        reply = LiveActionContextService(api).resolve(playlist_id, user, history, body)
+    except StateError as error:
+        reply = failure_rejected(context_kind(body), read_failure(error))
     except Exception:
         logger.exception("Live action review unavailable for %s", playlist_id)
         reply = context_unavailable(context_kind(body))
@@ -225,7 +154,7 @@ def _inspection_preflight(message, status_code):
     ))
 
 
-@main.route("/playlist/<playlist_id>/inspect-live", methods=["POST"])
+@api_bp.route("/playlist/<playlist_id>/inspect-live", methods=["POST"])
 @no_store
 @require_auth_and_db(on_preflight_error=_inspection_preflight)
 def inspect_live(playlist_id, api=None, user=None):

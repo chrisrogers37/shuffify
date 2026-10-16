@@ -1,0 +1,534 @@
+[
+  {
+    "path": "/api/activity",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.activity_context"
+  },
+  {
+    "path": "/api/library",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.library_context"
+  },
+  {
+    "path": "/api/operations/<int:operation_id>",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.operation_status"
+  },
+  {
+    "path": "/api/operations/<int:operation_id>/restore",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.operation_restore_admit"
+  },
+  {
+    "path": "/api/operations/<int:operation_id>/restore-context",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.operation_restore_context"
+  },
+  {
+    "path": "/api/playlist-preferences/<playlist_id>/toggle-hidden",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.toggle_playlist_hidden"
+  },
+  {
+    "path": "/api/playlist-preferences/<playlist_id>/toggle-pinned",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.toggle_playlist_pinned"
+  },
+  {
+    "path": "/api/playlist-preferences/order",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.save_playlist_order"
+  },
+  {
+    "path": "/api/playlist-preferences/reset",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.reset_playlist_preferences"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/drip-now",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.drip_now"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/inspect-live",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.inspect_live"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/live-context",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.live_context"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/pair",
+    "methods": [
+      "DELETE"
+    ],
+    "endpoint": "api.delete_pair"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/pair",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.get_pair"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/pair",
+    "methods": [
+      "PATCH"
+    ],
+    "endpoint": "api.update_pair"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/pair",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.create_pair"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/pair/archive",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.archive_tracks"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/pair/archive-tracks",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.list_archive_tracks"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/pair/finalize-restore",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.finalize_restore"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/pair/unarchive",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.unarchive_tracks"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/pending-raids",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.pending_raids_list"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/pending-raids/dismiss",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.pending_raids_dismiss"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/pending-raids/dismiss-all",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.pending_raids_dismiss_all"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/pending-raids/finalize",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.pending_raids_finalize"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/raid-add-url",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.raid_add_url"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/raid-and-drip",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.raid_and_drip"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/raid-link",
+    "methods": [
+      "DELETE"
+    ],
+    "endpoint": "api.raid_link_delete"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/raid-link",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.raid_link_create"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/raid-link",
+    "methods": [
+      "PUT"
+    ],
+    "endpoint": "api.raid_link_update"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/raid-now",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.raid_now"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/raid-source-count",
+    "methods": [
+      "PUT"
+    ],
+    "endpoint": "api.raid_source_count_update"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/raid-status",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.raid_status"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/raid-unwatch",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.raid_unwatch"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/routines/activate",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.routine_activate"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/routines/context",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.routine_context"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/routines/review",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.routine_review"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/setup/context",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.playlist_setup_context"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/setup/impact",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.playlist_setup_impact"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/setup/playlists",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.playlist_setup_playlists"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/setup/settings",
+    "methods": [
+      "PUT"
+    ],
+    "endpoint": "api.playlist_setup_settings"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/setup/spotify-playlists",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.playlist_setup_create_playlist"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/snapshots",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.list_snapshots"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/snapshots",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.create_manual_snapshot"
+  },
+  {
+    "path": "/api/playlist/<playlist_id>/toggle-visibility",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.toggle_visibility"
+  },
+  {
+    "path": "/api/routines",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.routines_context"
+  },
+  {
+    "path": "/api/routines/<int:schedule_id>/state",
+    "methods": [
+      "PUT"
+    ],
+    "endpoint": "api.routine_state"
+  },
+  {
+    "path": "/api/schedules/<int:schedule_id>",
+    "methods": [
+      "DELETE"
+    ],
+    "endpoint": "api.delete_schedule"
+  },
+  {
+    "path": "/api/schedules/<int:schedule_id>/history",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.schedule_history"
+  },
+  {
+    "path": "/api/schedules/<int:schedule_id>/run",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.run_schedule_now"
+  },
+  {
+    "path": "/api/schedules/<int:schedule_id>/run-context",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.run_schedule_context"
+  },
+  {
+    "path": "/api/schedules/latest-results",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.latest_schedule_results"
+  },
+  {
+    "path": "/api/session",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.session_context"
+  },
+  {
+    "path": "/api/settings",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.get_settings"
+  },
+  {
+    "path": "/api/settings",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.update_settings"
+  },
+  {
+    "path": "/api/shuffle/<playlist_id>",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.shuffle"
+  },
+  {
+    "path": "/api/snapshots/<int:snapshot_id>",
+    "methods": [
+      "DELETE"
+    ],
+    "endpoint": "api.delete_snapshot"
+  },
+  {
+    "path": "/api/snapshots/<int:snapshot_id>",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.view_snapshot"
+  },
+  {
+    "path": "/api/snapshots/<int:snapshot_id>/restore",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.restore_snapshot"
+  },
+  {
+    "path": "/api/snapshots/<int:snapshot_id>/restore-context",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.snapshot_restore_context"
+  },
+  {
+    "path": "/api/undo/<playlist_id>",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.undo"
+  },
+  {
+    "path": "/api/user-playlists",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.api_user_playlists"
+  },
+  {
+    "path": "/api/workshop/<playlist_id>",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.workshop_context"
+  },
+  {
+    "path": "/api/workshop/<playlist_id>/commit",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.workshop_commit"
+  },
+  {
+    "path": "/api/workshop/<playlist_id>/current-state",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.workshop_current_state"
+  },
+  {
+    "path": "/api/workshop/<playlist_id>/locks",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.get_track_locks"
+  },
+  {
+    "path": "/api/workshop/<playlist_id>/locks/toggle",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.toggle_track_lock"
+  },
+  {
+    "path": "/api/workshop/<playlist_id>/locks/unlock-all",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.unlock_all_tracks"
+  },
+  {
+    "path": "/api/workshop/<playlist_id>/preview-shuffle",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.workshop_preview_shuffle"
+  },
+  {
+    "path": "/api/workshop/<playlist_id>/sessions",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.list_workshop_sessions"
+  },
+  {
+    "path": "/api/workshop/<playlist_id>/sessions",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.save_workshop_session"
+  },
+  {
+    "path": "/api/workshop/<playlist_id>/source-context",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.workshop_source_context"
+  },
+  {
+    "path": "/api/workshop/load-external-playlist",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.workshop_load_external_playlist"
+  },
+  {
+    "path": "/api/workshop/search",
+    "methods": [
+      "POST"
+    ],
+    "endpoint": "api.workshop_search"
+  },
+  {
+    "path": "/api/workshop/sessions/<int:session_id>",
+    "methods": [
+      "DELETE"
+    ],
+    "endpoint": "api.delete_workshop_session"
+  },
+  {
+    "path": "/api/workshop/sessions/<int:session_id>",
+    "methods": [
+      "GET"
+    ],
+    "endpoint": "api.load_workshop_session"
+  },
+  {
+    "path": "/api/workshop/sessions/<int:session_id>",
+    "methods": [
+      "PUT"
+    ],
+    "endpoint": "api.update_workshop_session"
+  }
+]

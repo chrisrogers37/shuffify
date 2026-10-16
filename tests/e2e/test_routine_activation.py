@@ -1,5 +1,6 @@
 """Reviewed activation against real PostgreSQL and the fake-only harness scheduler."""
 
+import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
@@ -13,6 +14,8 @@ from sqlalchemy.pool import NullPool
 from config import HarnessConfig
 from tests.e2e.conftest import APP, hold_playlist_lock, pid
 from tests.e2e.test_live_operation_outcomes import _registration
+from tests.paths import api_path
+from tests.routine_flow import add_playlist_source
 
 TARGET = pid("alice-morning-mix")
 OTHER = pid("alice-long-haul")
@@ -105,7 +108,7 @@ def _parallel_activations(alice, submissions):
             http.cookies.update(alice.http.cookies)
             http.headers.update(alice.http.headers)
             barrier.wait(timeout=10)
-            response = http.post(f"{APP}/playlist/{target}/routines/activate", json=body, timeout=30)
+            response = http.post((APP + api_path(f'/playlist/{target}/routines/activate')), json=body, timeout=30)
             return response.status_code, response.json()
 
     with ThreadPoolExecutor(max_workers=len(submissions)) as pool:
@@ -139,11 +142,9 @@ def test_cross_target_same_key_loser_rolls_back_its_schedule(alice, fake):
 
 def test_stale_dependencies_and_changed_key_payload_do_not_write(alice, fake):
     body = _review(alice, "harness-stale")
-    alice.ok("post", f"/playlist/{TARGET}/raid-watch", json={
-        "source_playlist_id": SOURCE, "source_playlist_name": "Bob's Finds", "auto_schedule": False,
-    })
+    add_playlist_source(alice, TARGET, SOURCE)
     baseline = _counts()
-    response = alice.post(f"/playlist/{TARGET}/routines/activate", json=body)
+    response = alice.post(api_path(f"/playlist/{TARGET}/routines/activate"), json=body)
     assert response.status_code == 409
     assert response.json()["error_code"] == "prerequisites_changed"
     assert _counts() == baseline
@@ -151,25 +152,31 @@ def test_stale_dependencies_and_changed_key_payload_do_not_write(alice, fake):
     accepted = _activate(alice, body)
     changed = deepcopy(body)
     changed["definition"]["algorithm_params"]["keep_first"] = 1
-    response = alice.post(f"/playlist/{TARGET}/routines/activate", json=changed)
+    response = alice.post(api_path(f"/playlist/{TARGET}/routines/activate"), json=changed)
     assert response.status_code == 409
     assert response.json()["error_code"] == "request_key_conflict"
     assert _counts() == tuple(n + 1 for n in baseline)
     alice.ok("delete", f"/schedules/{accepted['schedule_id']}")
 
 
-@pytest.mark.parametrize("method,suffix,body", [
-    ("put", "", {"schedule_value": "weekly"}),
-    ("post", "/toggle", {}),
-    ("delete", "", {}),
-])
-def test_legacy_mutators_share_the_activation_target_lock(alice, fake, method, suffix, body):
-    accepted = _activate(alice, _review(alice, "legacy-lock"))
+@pytest.mark.parametrize("action", ["edit", "pause", "delete"])
+def test_exact_routine_mutators_share_the_activation_target_lock(alice, fake, action):
+    accepted = _activate(alice, _review(alice, "mutation-lock"))
     sid = accepted["schedule_id"]
     registered = _registration(sid)
+    edit = _review(alice, "locked-edit", definition={
+        "timing": {"kind": "interval", "interval": "weekly", "timezone": "UTC"},
+    }, schedule_id=sid, expected_revision=accepted["schedule_revision"])
     try:
         with _hold_configuration_lock(TARGET):
-            response = alice.request(method.upper(), f"/schedules/{sid}{suffix}", json=body)
+            if action == "edit":
+                response = alice.post(api_path(f"/playlist/{TARGET}/routines/activate"), json=edit)
+            elif action == "pause":
+                response = alice.request("PUT", api_path(f"/routines/{sid}/state"), json={
+                    "desired_enabled": False, "expected_revision": accepted["schedule_revision"],
+                })
+            else:
+                response = alice.request("DELETE", api_path(f"/schedules/{sid}"))
         assert response.status_code == 409, response.text
         assert response.json()["error_code"] == "playlist_busy"
         current = alice.ok("get", f"/playlist/{TARGET}/routines/context")["routines"]
@@ -181,36 +188,60 @@ def test_legacy_mutators_share_the_activation_target_lock(alice, fake, method, s
 
 
 @pytest.mark.parametrize("suffix,body", [
-    ("raid-watch", {"source_playlist_id": SOURCE, "auto_schedule": True}),
-    ("raid-watch-search", {"search_query": "jazz", "auto_schedule": True}),
+    ("setup/settings", {"op": "add_playlist_source", "playlist_id": SOURCE}),
+    ("setup/settings", {"op": "add_search_source", "search_query": "jazz"}),
     ("raid-link", {"raid_playlist_id": OTHER, "create_new": False}),
     ("pair", {"archive_playlist_id": OTHER, "archive_playlist_name": "Archive", "create_new": False}),
     ("raid-link", {"create_new": True}),
     ("pair", {"create_new": True}),
 ])
-def test_legacy_prerequisite_writes_wait_for_activation_lock(alice, fake, suffix, body):
+def test_prerequisite_writes_wait_for_activation_lock(alice, fake, suffix, body):
     before = alice.ok("get", f"/playlist/{TARGET}/routines/context")
     counts = _counts()
     spotify = fake.playlist(TARGET)
     playlist_ids = {item["id"] for item in fake.playlists()}
+    if suffix == "setup/settings":
+        context = alice.ok("get", f"/playlist/{TARGET}/setup/context")["context"]
+        reviewed = {
+            "configuration_revision": context["configuration_revision"],
+            "section_digests": context["section_digests"], "changes": [body],
+        }
+        impact = alice.ok("post", f"/playlist/{TARGET}/setup/impact", json=reviewed)
+        body = {**reviewed, "acknowledgment": impact["acknowledgment"]}
     with _hold_configuration_lock(TARGET):
-        response = alice.post(f"/playlist/{TARGET}/{suffix}", json=body)
-    assert response.status_code == 409, response.text
-    assert response.json()["error_code"] == "playlist_busy"
-    after = alice.ok("get", f"/playlist/{TARGET}/routines/context")
-    assert after["dependency_revision"] == before["dependency_revision"]
+        response = alice.request("PUT" if suffix == "setup/settings" else "POST",
+                                 api_path(f"/playlist/{TARGET}/{suffix}"), json=body)
+        if suffix in {"pair", "raid-link"}:
+            assert response.status_code == 202, response.text
+            operation_id = response.json()["operation_id"]
+            # The worker must wait/defer before authentication or any creation.
+            time.sleep(2.2)
+            pending = alice.get(response.headers["Location"]).json()["operation"]
+            assert pending["id"] == operation_id and pending["state"] in {"queued", "running"}
+            assert pending["result"] is None
+            assert {item["id"] for item in fake.playlists()} == playlist_ids
+        else:
+            assert response.status_code == 409, response.text
+            assert response.json()["error_code"] == "playlist_busy"
+    if suffix in {"pair", "raid-link"}:
+        completed = alice.wait_operation(response.headers["Location"], operation_id)
+        assert completed["state"] == "succeeded", completed
+        assert completed["result"]["success"] is True
+    else:
+        after = alice.ok("get", f"/playlist/{TARGET}/routines/context")
+        assert after["dependency_revision"] == before["dependency_revision"]
+        assert {item["id"] for item in fake.playlists()} == playlist_ids
     assert _counts() == counts
     assert fake.playlist(TARGET) == spotify
-    assert {item["id"] for item in fake.playlists()} == playlist_ids
 
 
 def test_state_and_compatible_settings_remain_available_during_execution(alice, fake):
     accepted = _activate(alice, _review(alice, "execution-independent-state"))
     sid = accepted["schedule_id"]
-    alice.ok("post", f"/playlist/{TARGET}/raid-link", json={
+    alice.write(f"/playlist/{TARGET}/raid-link", json={
         "raid_playlist_id": OTHER, "create_new": False,
     })
-    alice.ok("post", f"/playlist/{TARGET}/pair", json={
+    alice.write(f"/playlist/{TARGET}/pair", json={
         "archive_playlist_id": pid("alice-morning-archive"),
         "archive_playlist_name": "Archive", "create_new": False,
     })
@@ -226,8 +257,13 @@ def test_state_and_compatible_settings_remain_available_during_execution(alice, 
             })
             assert resumed["state"] == "Active"
             for enabled in (False, True):
-                legacy = alice.ok("put", f"/schedules/{sid}", json={"is_enabled": enabled})
-                assert legacy["schedule"]["is_enabled"] is enabled
+                retired = alice.request("PUT", api_path(f"/schedules/{sid}"), json={"is_enabled": enabled})
+                assert retired.status_code == 405
+                assert retired.json()["error_code"] == "method_not_allowed"
+            current = alice.ok("get", f"/playlist/{TARGET}/routines/context")["routines"]
+            exact = next(row for row in current if row["schedule_id"] == sid)
+            assert exact["schedule_revision"] == resumed["schedule_revision"]
+            assert exact["schedule"]["is_enabled"] is True
             link = alice.ok("put", f"/playlist/{TARGET}/raid-link", json={
                 "drip_count": 7, "drip_enabled": True,
             })["raid_link"]

@@ -6,13 +6,15 @@ not provide a conditional replacement, so external edits can still race us.
 
 import logging
 import re
-from dataclasses import dataclass, field
+from copy import deepcopy
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from shuffify.enums import ActivityType, SnapshotType
 from shuffify.services.activity_log_service import ActivityLogService
+from shuffify.services.operations.control import propagate_control
 from shuffify.services.playlist_lock import playlist_lock
 from shuffify.services.playlist_service import PlaylistAccessError, PlaylistService
 from shuffify.services.playlist_snapshot_service import PlaylistSnapshotService
@@ -49,6 +51,8 @@ class ObservedPlaylist:
     track_uris: tuple[str, ...]
     tracks: tuple[dict, ...]
     loaded_at: str
+    snapshot_id: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def response_fields(self) -> dict:
         return {
@@ -111,6 +115,7 @@ class WorkshopCommitService:
         except (SpotifyAuthError, PlaylistAccessError):
             raise
         except Exception as error:
+            propagate_control(error)
             self._log_failure("read", playlist_id, error)
             return self._read_failed()
 
@@ -122,41 +127,12 @@ class WorkshopCommitService:
         baseline_track_uris: list[str],
         track_uris: list[str],
     ) -> WorkshopTargetResult:
-        # Callers cannot mutate the revision being compared or saved.
-        baseline, desired = tuple(baseline_track_uris), tuple(track_uris)
         try:
             with playlist_lock(playlist_id, timeout_s=_LOCK_WAIT_SECONDS) as acquired:
                 if not acquired:
                     return self._busy()
-                observed, failure = self._fresh_read(playlist_id, user)
-                if failure:
-                    return failure
-
-                if observed.track_uris == desired:
-                    return self._confirmed(
-                        "already_applied",
-                        playlist_id,
-                        user,
-                        session,
-                        observed,
-                        observed,
-                        0,
-                    )
-                if observed.track_uris != baseline:
-                    return WorkshopTargetResult(
-                        "not_written",
-                        "Spotify changed since this draft was loaded. Your draft is "
-                        "still here. Review the current playlist before saving.",
-                        409,
-                        "stale_draft",
-                        True,
-                        extra=observed.response_fields(),
-                    )
-
-                self._snapshot(user.id, playlist_id, observed)
-                return self._write_and_verify(
-                    playlist_id, user, session, observed, desired
-                )
+                prepared = self.prepare_commit(playlist_id, user, baseline_track_uris, track_uris)
+                return self.apply_prepared(prepared, user, session)
         except SpotifyForbiddenError as error:
             raise PlaylistAccessError(
                 "Spotify refused access to this playlist."
@@ -164,6 +140,7 @@ class WorkshopCommitService:
         except (SpotifyAuthError, PlaylistAccessError):
             raise
         except Exception as error:
+            propagate_control(error)
             # This boundary covers failure to acquire the coordination resource.
             # Every dispatched write is classified inside _write_and_verify.
             self._log_failure("coordination", playlist_id, error)
@@ -175,6 +152,92 @@ class WorkshopCommitService:
                 retryable=True,
             )
 
+    def prepare_commit(self, playlist_id, user, baseline_track_uris, track_uris):
+        """Read and calculate a complete JSON action without performing any effects.
+
+        The lock is owned by the caller. Each occurrence's track representation
+        is frozen separately, including added_at; URI-indexed reconstruction
+        would lose the provenance of duplicates.
+        """
+        baseline, desired = tuple(baseline_track_uris), tuple(track_uris)
+        try:
+            observed, failure = self._fresh_read(playlist_id, user)
+        except SpotifyForbiddenError as error:
+            raise PlaylistAccessError("Spotify refused access to this playlist.") from error
+        prepared = {
+            "version": 1, "kind": "workshop_commit", "target_id": playlist_id,
+            "before": None, "desired_track_uris": list(desired), "changed": False,
+            "initial_outcome": None, "initial_result": None,
+        }
+        if failure:
+            prepared["initial_result"] = asdict(failure)
+            return prepared
+        prepared["before"] = {
+            "name": observed.name, "track_uris": list(observed.track_uris),
+            "tracks": deepcopy(list(observed.tracks)), "loaded_at": observed.loaded_at,
+            "snapshot_id": observed.snapshot_id, "metadata": deepcopy(observed.metadata),
+        }
+        if observed.track_uris == desired:
+            prepared["initial_outcome"] = "already_applied"
+        elif observed.track_uris != baseline:
+            prepared["initial_result"] = asdict(WorkshopTargetResult(
+                "not_written",
+                "Spotify changed since this draft was loaded. Your draft is "
+                "still here. Review the current playlist before saving.",
+                409, "stale_draft", True, extra=observed.response_fields(),
+            ))
+        else:
+            prepared["initial_outcome"] = "saved"
+            prepared["changed"] = True
+        return prepared
+
+    def apply_prepared(self, prepared, user, session, *, execution=None):
+        """Apply an immutable action, retaining its original before on recovery."""
+        if prepared["initial_result"] is not None:
+            return WorkshopTargetResult(**deepcopy(prepared["initial_result"]))
+        frozen = prepared["before"]
+        before = ObservedPlaylist(
+            name=frozen["name"], track_uris=tuple(frozen["track_uris"]),
+            tracks=tuple(deepcopy(frozen["tracks"])), loaded_at=frozen["loaded_at"],
+            snapshot_id=frozen["snapshot_id"], metadata=deepcopy(frozen["metadata"]),
+        )
+        playlist_id, desired = prepared["target_id"], tuple(prepared["desired_track_uris"])
+        if not prepared["changed"]:
+            observed = before
+            if execution is not None:
+                execution.check_pending_control()
+                verified = self._verified_result("already_applied", desired, 0)
+                observed, failure = self._fresh_read(playlist_id, user)
+                if failure:
+                    return failure
+                if observed.track_uris != desired:
+                    return self._unknown(0, 0, observed.response_fields())
+                execution.protect_verified("direct.publication.v1", verified)
+            return self._confirmed(
+                "already_applied", playlist_id, user, session, before, observed, 0, execution=execution,
+            )
+        plan_id, snapshot = None, None
+        if execution is None:
+            self._snapshot(user.id, playlist_id, before)
+        else:
+            execution.check_pending_control()
+            plan_id = execution.journal.ensure_replace(playlist_id, desired, expected_baseline={
+                "track_uris": list(before.track_uris), "snapshot_id": before.snapshot_id,
+                "metadata": deepcopy(before.metadata),
+            })
+            snapshot = self._optional_local_step(execution, "snapshot", lambda bookkeeping: bookkeeping.snapshot(
+                playlist_id, before.name, list(before.track_uris), SnapshotType.AUTO_PRE_COMMIT,
+                "Before workshop commit", auto=True,
+            ))
+        result = self._write_and_verify(
+            playlist_id, user, session, before, desired, execution=execution, plan_id=plan_id,
+        )
+        if snapshot is not None:
+            result = replace(result, extra={**result.extra, "bookkeeping": {
+                **result.extra.get("bookkeeping", {}), "snapshot": snapshot["status"],
+            }})
+        return result
+
     def _fresh_read(self, playlist_id, user):
         """Return (observed, None), or (None, a not-written result) on failure."""
         try:
@@ -184,6 +247,7 @@ class WorkshopCommitService:
         except (SpotifyAuthError, PlaylistAccessError, SpotifyForbiddenError):
             raise
         except Exception as error:
+            propagate_control(error)
             self._log_failure("read", playlist_id, error)
             return None, self._read_failed()
 
@@ -261,6 +325,8 @@ class WorkshopCommitService:
             track_uris=tuple(track["uri"] for track in tracks),
             tracks=tuple(tracks),
             loaded_at=datetime.now(timezone.utc).isoformat(),
+            snapshot_id=snapshot_id,
+            metadata={name: deepcopy(before.get(name)) for name in ("name", "public", "description")},
         )
 
     @staticmethod
@@ -293,12 +359,20 @@ class WorkshopCommitService:
             "track_url": (track.get("external_urls") or {}).get("spotify", ""),
         }
 
-    def _write_and_verify(self, playlist_id, user, session, before, desired):
+    def _write_and_verify(self, playlist_id, user, session, before, desired, *, execution=None, plan_id=None):
         total = max(1, (len(desired) + _BATCH_SIZE - 1) // _BATCH_SIZE)
+        if execution is not None:
+            total = len(execution.journal.doc["plans"][plan_id]["batches"])
+        verified = self._verified_result("saved", desired, total)
         try:
             self.playlists.update_playlist_tracks(playlist_id, list(desired))
+            if execution is not None:
+                execution.check_pending_control()
         except SpotifyPartialBatchError as error:
+            propagate_control(error)
             self._log_failure("write", playlist_id, error)
+            if execution is not None:
+                return self._journal_partial(execution, plan_id) or self._first_write_failure(error.cause, total)
             if error.completed_batches:
                 return WorkshopTargetResult(
                     "partial",
@@ -311,20 +385,50 @@ class WorkshopCommitService:
                 )
             return self._first_write_failure(error.cause, total)
         except (SpotifyAuthError, SpotifyForbiddenError):
+            partial = self._journal_partial(execution, plan_id)
+            if partial is not None:
+                return partial
             raise
         except Exception as error:
+            propagate_control(error)
             self._log_failure("write", playlist_id, error)
-            return self._first_write_failure(error, total)
+            return self._journal_partial(execution, plan_id) or self._first_write_failure(error, total)
 
         try:
             observed = self._read_current(playlist_id, user.spotify_id)
         except Exception as error:
+            propagate_control(error)
             self._log_failure("verification", playlist_id, error)
             return self._unknown(total, total)
         if observed.track_uris != desired:
             return self._unknown(total, total, observed.response_fields())
+        if execution is not None:
+            execution.protect_verified("direct.publication.v1", verified)
         return self._confirmed(
-            "saved", playlist_id, user, session, before, observed, total
+            "saved", playlist_id, user, session, before, observed, total, execution=execution,
+        )
+
+    @staticmethod
+    def _verified_result(status, desired, batches):
+        """Prepare a public fallback before the provider's verification boundary."""
+        return WorkshopTargetResult(
+            status, "Playlist contents were verified on Spotify.",
+            confirmed_batches=batches, total_batches=batches,
+            extra={"saved_track_uris": list(desired), "current_track_uris": list(desired),
+                   "representable": True, "bookkeeping": {"history": "unknown"}},
+        ).to_dict()
+
+    @staticmethod
+    def _journal_partial(execution, plan_id):
+        if execution is None:
+            return None
+        batches = execution.journal.doc["plans"][plan_id]["batches"]
+        confirmed = sum(item["state"] == "acknowledged" for item in batches)
+        if not confirmed:
+            return None
+        return WorkshopTargetResult(
+            "partial", "Spotify received part of this save. Check the playlist before trying again.",
+            502, "partial_write", True, confirmed, len(batches),
         )
 
     def _first_write_failure(self, error, total):
@@ -345,9 +449,49 @@ class WorkshopCommitService:
         return self._unknown(0, total)
 
     @staticmethod
-    def _confirmed(status, playlist_id, user, session, before, observed, batches):
+    def _confirmed(status, playlist_id, user, session, before, observed, batches, *, execution=None):
         before_uris, saved_uris = list(before.track_uris), list(observed.track_uris)
         extra = {**observed.response_fields(), "saved_track_uris": saved_uris}
+        if execution is not None:
+            execution.protect_verified("direct.publication.v1", WorkshopTargetResult(
+                status, "Playlist contents were verified on Spotify.",
+                confirmed_batches=batches, total_batches=batches,
+                extra={**extra, "bookkeeping": {"history": "unknown"}},
+            ).to_dict())
+            execution.check_pending_control()
+            facts = {}
+            try:
+                # One assignment keeps a failed history calculation from
+                # publishing a partially advanced pointer.
+                state = StateService.record_verified_change(
+                    session, playlist_id, before_uris=before_uris, after_uris=saved_uris,
+                )
+                extra["playlist_state"] = state.to_dict()
+                facts["history"] = "confirmed"
+            except Exception as error:
+                propagate_control(error)
+                execution.mark_history_unconfirmed()
+                facts["history"] = "failed"
+                WorkshopCommitService._log_failure("history", playlist_id, error)
+            locks = WorkshopCommitService._optional_local_step(
+                execution, "locks", lambda bookkeeping: bookkeeping.reconcile_locks(playlist_id, saved_uris),
+            )
+            facts["locks"] = locks["status"]
+            if status == "saved":
+                activity = WorkshopCommitService._optional_local_step(
+                    execution, "activity", lambda bookkeeping: bookkeeping.activity(
+                        ActivityType.WORKSHOP_COMMIT,
+                        f"Committed workshop changes to '{observed.name}'",
+                        playlist_id=playlist_id, playlist_name=observed.name,
+                        metadata={"track_count": len(observed.track_uris)},
+                    ),
+                )
+                facts["activity"] = activity["status"]
+            extra["bookkeeping"] = facts
+            return WorkshopTargetResult(
+                status, "Playlist saved to Spotify!" if status == "saved" else "This order is already on Spotify.",
+                confirmed_batches=batches, total_batches=batches, extra=extra,
+            )
         # Bookkeeping cannot turn a verified Spotify save into a retry prompt.
         try:
             state = StateService.ensure_playlist_initialized(
@@ -375,6 +519,7 @@ class WorkshopCommitService:
                     metadata={"track_count": len(observed.track_uris)},
                 )
         except Exception as error:
+            propagate_control(error)
             WorkshopCommitService._log_failure("bookkeeping", playlist_id, error)
         return WorkshopTargetResult(
             status,
@@ -389,6 +534,21 @@ class WorkshopCommitService:
         )
 
     @staticmethod
+    def _optional_local_step(execution, name, callback):
+        from shuffify.services.operations.bookkeeping import OperationBookkeeping
+
+        def record(session):
+            bookkeeping = OperationBookkeeping(session, execution.user.id, execution.lease.operation_id)
+
+            def effect():
+                value = callback(bookkeeping)
+                return {"status": "skipped" if value is None else "completed", "value": value}
+
+            return bookkeeping.optional(effect, fallback={"status": "failed", "value": None})
+
+        return execution.local_step(f"workshop.{name}.v1", record)
+
+    @staticmethod
     def _snapshot(user_id, playlist_id, observed):
         try:
             if PlaylistSnapshotService.is_auto_snapshot_enabled(user_id):
@@ -401,6 +561,7 @@ class WorkshopCommitService:
                     trigger_description="Before workshop commit",
                 )
         except Exception as error:
+            propagate_control(error)
             WorkshopCommitService._log_failure("snapshot", playlist_id, error)
 
     @staticmethod

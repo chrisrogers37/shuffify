@@ -7,7 +7,6 @@ import pytest
 from shuffify.enums import ActivityType
 from shuffify.models.db import ActivityLog, PlaylistPair, RaidPlaylistLink, Schedule, UpstreamSource, User
 from shuffify.routes import json_reply
-from shuffify.routes.playlist_setup import page_variables, return_link
 from shuffify.services import playlist_setup_service as setup
 from shuffify.services.playlist_lock import playlist_lock
 from shuffify.spotify.exceptions import (
@@ -19,6 +18,7 @@ from shuffify.spotify.exceptions import (
     SpotifyWriteRejectedError,
     SpotifyWriteUnverifiedError,
 )
+from tests.paths import api_path
 from tests.playlist_setup_fixtures import (
     TARGET,
     SetupSpotify,
@@ -28,12 +28,13 @@ from tests.playlist_setup_fixtures import (
     add_source,
     assert_never_scheduled,
 )
+from tests.queued_operations import post_and_run
 
 pytestmark = pytest.mark.usefixtures("no_scraping")
 
 BASE = f"/playlist/{TARGET}/setup"
-CONTEXT, IMPACT, SETTINGS = f"{BASE}/context", f"{BASE}/impact", f"{BASE}/settings"
-CREATE, PLAYLISTS = f"{BASE}/spotify-playlists", f"{BASE}/playlists"
+CONTEXT, IMPACT, SETTINGS = api_path(f"{BASE}/context"), api_path(f"{BASE}/impact"), api_path(f"{BASE}/settings")
+CREATE, PLAYLISTS = api_path(f"{BASE}/spotify-playlists"), api_path(f"{BASE}/playlists")
 
 
 @pytest.fixture
@@ -89,13 +90,8 @@ def test_every_endpoint_refuses_a_signed_out_request_with_an_error_code(db_app, 
     assert response.status_code == 401
     assert response.get_json() == {
         "success": False, "error_code": "authentication_required", "message": "Please log in first.",
+        "category": "error",
     }
-
-
-def test_the_page_redirects_a_signed_out_browser(db_app):
-    with db_app.test_client() as client:
-        response = client.get(BASE)
-    assert response.status_code == 302 and response.headers["Location"].endswith("/")
 
 
 @pytest.mark.parametrize("path", [CONTEXT, PLAYLISTS])
@@ -118,7 +114,9 @@ def test_the_context_answers_the_service_context(auth_client, api, user, schedul
     with as_user(api):
         response = auth_client.get(CONTEXT)
     body = response.get_json()
-    assert response.status_code == 200 and set(body) == {"success", "context"} and body["success"] is True
+    assert response.status_code == 200 and set(body) == {"success", "context", "return_target"}
+    assert body["success"] is True
+    assert body["return_target"] == "playlist"
     assert body["context"]["target"] == {"id": TARGET, "name": "Morning Mix"}
     assert body["context"]["sources"][0]["name"] == "Indie Finds"
     assert api.writes == [] and ActivityLog.query.count() == 0
@@ -130,21 +128,27 @@ def test_the_context_answers_the_service_context(auth_client, api, user, schedul
     ("foreign", 403, "access_denied", "You can only set up your own or collaborative playlists."),
 ])
 def test_a_target_the_user_cannot_edit_is_refused_everywhere(auth_client, api, target, status, code, message):
-    expected = {"success": False, "error_code": code, "message": message}
+    expected = {"success": False, "error_code": code, "message": message, "category": "error"}
     revision = "a" * 64
     with as_user(api):
         responses = [
-            auth_client.get(f"/playlist/{target}/setup/context"),
-            auth_client.post(f"/playlist/{target}/setup/impact", json={
+            auth_client.get(api_path(f"/playlist/{target}/setup/context")),
+            auth_client.post(api_path(f"/playlist/{target}/setup/impact"), json={
                 "configuration_revision": revision, "changes": [{"op": "unlink_collection"}],
             }),
-            auth_client.put(f"/playlist/{target}/setup/settings", json={
+            auth_client.put(api_path(f"/playlist/{target}/setup/settings"), json={
                 "configuration_revision": revision, "changes": [{"op": "unlink_collection"}], "acknowledgment": {},
             }),
-            auth_client.post(f"/playlist/{target}/setup/spotify-playlists", json={"purpose": "archive", "name": "A"}),
         ]
+        created = post_and_run(auth_client, api, api_path(f"/playlist/{target}/setup/spotify-playlists"),
+                               json={"purpose": "archive", "name": "A"})
     for response in responses:
         assert (response.status_code, response.get_json()) == (status, expected)
+    assert created.status_code == 200 and created.accepted.status_code == 202
+    assert {key: created.get_json()[key] for key in ("success", "error_code", "message")} == {
+        key: expected[key] for key in ("success", "error_code", "message")
+    }
+    assert created.get_json()["http_status"] == status
     assert api.writes == []
 
 
@@ -189,6 +193,7 @@ def test_a_body_that_is_not_a_json_object_is_an_invalid_request(auth_client, api
     assert response.status_code == 400
     assert response.get_json() == {
         "success": False, "error_code": "invalid_request", "message": "Request body must be a JSON object.",
+        "category": "error",
     }
     assert api.writes == []
 
@@ -219,6 +224,7 @@ def test_field_errors_answer_invalid_changes(auth_client, api, user):
     assert response.status_code == 400
     assert response.get_json() == {
         "success": False, "error_code": "invalid_changes", "message": "Some changes need attention. Nothing was saved.",
+        "category": "error",
         "errors": [
             {"index": 0, "field": "playlist_id", "message": "Already a source"},
             {"index": 1, "field": "playlist_id", "message": "You can only use your own or collaborative playlists"},
@@ -335,7 +341,7 @@ def test_a_save_while_the_target_is_locked_is_busy(auth_client, api, monkeypatch
         owner.result()
     assert response.status_code == 409
     assert response.get_json() == {
-        "success": False, "error_code": "playlist_busy", "retryable": True,
+        "success": False, "error_code": "playlist_busy", "retryable": True, "category": "error",
         "message": "A routine or save is running on this playlist. Try again when it finishes.",
     }
     assert UpstreamSource.query.count() == 0
@@ -369,15 +375,19 @@ def test_csrf_refuses_writes_and_reviews_before_anything_runs(
         spy.assert_not_called()
 
 
-def test_a_valid_csrf_token_reaches_the_view(csrf_client, csrf_headers, db_app, api):
+def test_a_valid_csrf_token_reaches_the_view(csrf_client, csrf_headers, db_app, api, sample_token):
     from shuffify.services.user_service import UserService
 
     user = UserService.upsert_from_spotify({"id": "user123", "display_name": "Test User", "images": []}).user
+    with csrf_client.session_transaction() as session:
+        session["spotify_token"] = sample_token
+        session["user_data"] = {"id": "user123"}
     with as_user(api), patch("shuffify.routes.get_db_user", return_value=user):
-        response = csrf_client.post(
+        response = post_and_run(csrf_client, api,
             CREATE, json={"purpose": "archive", "name": "Old Mix"}, headers=csrf_headers("valid")
         )
-    assert response.status_code == 201 and response.get_json()["playlist"]["name"] == "Old Mix"
+    assert response.status_code == 200 and response.accepted.status_code == 202
+    assert response.get_json()["playlist"]["name"] == "Old Mix"
 
 
 # --- Spotify creation ---------------------------------------------------------------------
@@ -385,7 +395,7 @@ def test_a_valid_csrf_token_reaches_the_view(csrf_client, csrf_headers, db_app, 
 
 def create(client, api, purpose="collection", name="  New Finds  "):
     with as_user(api):
-        return client.post(CREATE, json={"purpose": purpose, "name": name})
+        return post_and_run(client, api, CREATE, json={"purpose": purpose, "name": name})
 
 
 def creations(api):
@@ -397,32 +407,51 @@ def test_creation_makes_one_private_playlist_with_the_exact_name_and_never_links
     auth_client, api, user, purpose, scheduler_spies
 ):
     response = create(auth_client, api, purpose)
-    assert response.status_code == 201
-    assert response.get_json() == {
+    assert response.status_code == 200 and response.accepted.status_code == 202
+    reply = response.get_json()
+    assert {key: reply[key] for key in ("success", "outcome", "playlist", "privacy_confirmed")} == {
         "success": True, "outcome": "created", "playlist": {"id": "Created1", "name": "New Finds"},
         "privacy_confirmed": True,
     }
     assert api.writes == [
         ("create_user_playlist", "New Finds", False, setup.DESCRIPTIONS[purpose]),
-        ("update_playlist_details", "Created1", {"public": False}),
     ]
     activity = ActivityLog.query.one()
     assert (activity.activity_type, activity.playlist_id) == (ActivityType.PLAYLIST_SETUP_CREATE, TARGET)
-    assert activity.metadata_json == {"purpose": purpose, "playlist_id": "Created1", "privacy_confirmed": True}
+    assert activity.metadata_json == {"purpose": purpose, "playlist_id": "Created1", "privacy_confirmed": True,
+                                      "operation_id": response.operation["id"]}
     assert RaidPlaylistLink.query.count() == PlaylistPair.query.count() == Schedule.query.count() == 0
     assert_never_scheduled(scheduler_spies)
 
 
-def test_a_privacy_or_activity_failure_after_creation_still_reports_the_playlist(auth_client, api):
-    api.privacy_failure = SpotifyWriteUnverifiedError("lost")
-    # ActivityLogService.log swallows its own failure when it commits.
+def test_an_optional_activity_failure_retains_verified_creation(auth_client, api):
     with patch("shuffify.services.activity_log_service.ActivityLog", side_effect=RuntimeError("log down")):
         response = create(auth_client, api)
-    assert response.status_code == 201
-    assert response.get_json() == {
+    assert response.status_code == 200 and response.accepted.status_code == 202
+    assert response.operation["state"] == "succeeded"
+    reply = response.get_json()
+    assert {key: reply[key] for key in ("success", "outcome", "playlist", "privacy_confirmed")} == {
         "success": True, "outcome": "created", "playlist": {"id": "Created1", "name": "New Finds"},
-        "privacy_confirmed": False,
+        "privacy_confirmed": True,
     }
+
+
+def test_a_privacy_failure_retains_created_identity_without_claiming_private(auth_client, api):
+    original = api.create_user_playlist
+
+    def public(name, **kwargs):
+        return {**original(name, **kwargs), "public": True}
+
+    api.create_user_playlist = public
+    api.privacy_failure = SpotifyWriteUnverifiedError("lost")
+    response = create(auth_client, api)
+    assert response.status_code == 200 and response.accepted.status_code == 202
+    assert response.operation["state"] == "needs_attention"
+    reply = response.get_json()
+    assert reply["outcome"] == "created" and reply["playlist"]["id"] == "Created1"
+    assert reply["privacy_confirmed"] is False and reply["creation_unknown"] is False
+    assert len(creations(api)) == 1
+    assert RaidPlaylistLink.query.count() == PlaylistPair.query.count() == 0
 
 
 @pytest.mark.parametrize("purpose, seed, code", [
@@ -438,7 +467,7 @@ def test_an_existing_link_or_pair_is_reported_before_any_spotify_write(auth_clie
     assert reply["playlist"]["id"] == expected_id
     assert creations(api) == [] and api.writes == []
     other = "archive" if purpose == "collection" else "collection"
-    assert create(auth_client, api, other).status_code == 201
+    assert create(auth_client, api, other).status_code == 200
 
 
 UNKNOWN = ("We could not confirm whether the playlist was created. "
@@ -449,11 +478,9 @@ UNKNOWN = ("We could not confirm whether the playlist was created. "
     (SpotifyWriteUnverifiedError("timed out"), 502, "creation_unknown", "unknown"),
     (SpotifyForbiddenError("API error 403: Insufficient client scope"), 422, "creation_refused", "refused"),
     (SpotifyWriteRejectedError("API error 400: Bad name"), 422, "creation_refused", "refused"),
-    (SpotifyRateLimitError("slow", retry_after=12), 429, "rate_limited", "rate_limited"),
-    (SpotifyQuotaExceededError("quota", retry_after=3600), 429, "rate_limited", "rate_limited"),
-    (SpotifyTokenExpiredError("expired"), 500, "creation_failed", "unknown"),
-    (SpotifyAPIError("Unexpected error: boom"), 500, "creation_failed", "unknown"),
-    (RuntimeError("boom"), 500, "creation_failed", "unknown"),
+    (SpotifyTokenExpiredError("expired"), 401, "authentication_required", "refused"),
+    (SpotifyAPIError("Unexpected error: boom"), 502, "creation_unknown", "unknown"),
+    (RuntimeError("boom"), 502, "creation_unknown", "unknown"),
 ])
 def test_each_creation_failure_maps_to_its_outcome_and_is_never_retried(
     auth_client, api, failure, status, code, outcome
@@ -461,16 +488,39 @@ def test_each_creation_failure_maps_to_its_outcome_and_is_never_retried(
     api.create_failure = failure
     response = create(auth_client, api)
     reply = response.get_json()
-    assert (response.status_code, reply["success"], reply["error_code"], reply["outcome"]) == (
+    assert response.status_code == 200 and response.accepted.status_code == 202
+    assert (reply["http_status"], reply["success"], reply["error_code"], reply["outcome"]) == (
         status, False, code, outcome)
     assert len(creations(api)) == 1 and ActivityLog.query.count() == 0
     if outcome == "unknown":
         assert reply["message"] == UNKNOWN
     if outcome == "refused":
-        assert reply["reason"] == str(failure)
-    if outcome == "rate_limited":
-        assert response.headers["Retry-After"] == str(failure.retry_after)
-        assert reply["retry_after"] == failure.retry_after
+        assert str(failure) not in reply["message"]
+        assert "reason" not in reply
+
+
+@pytest.mark.parametrize("failure", [
+    SpotifyRateLimitError("slow", retry_after=12),
+    SpotifyQuotaExceededError("quota", retry_after=3600),
+])
+def test_creation_defers_the_original_operation_until_the_retry_deadline(auth_client, api, failure):
+    from datetime import datetime, timezone
+
+    from shuffify.services.operations.repository import OperationRepository
+
+    api.create_failure = failure
+    before = datetime.now(timezone.utc)
+    response = create(auth_client, api)
+    assert response.status_code == 200 and response.accepted.status_code == 202
+    assert response.operation["state"] == "running" and response.get_json() is None
+    repository = OperationRepository()
+    stored = repository.get(response.operation["id"])
+    document = stored.journal
+    deferred = next(item for plan in document["plans"] for item in plan["batches"]
+                    if item.get("next_attempt_at"))
+    assert datetime.fromisoformat(deferred["next_attempt_at"]) > before
+    assert stored.lease_owner is None and stored.lease_expires_at > before
+    assert len(creations(api)) == 1 and ActivityLog.query.count() == 0
 
 
 @pytest.mark.parametrize("answer", [{}, {"id": ""}, {"id": 5}, [], None, "Created"])
@@ -482,14 +532,15 @@ def test_a_creation_answer_without_an_id_is_unknown(auth_client, api, answer):
     api.create_user_playlist = answered
     response = create(auth_client, api)
     reply = response.get_json()
-    assert (response.status_code, reply["error_code"], reply["outcome"], reply["message"]) == (
+    assert response.status_code == 200 and response.accepted.status_code == 202
+    assert (reply["http_status"], reply["error_code"], reply["outcome"], reply["message"]) == (
         502, "creation_unknown", "unknown", UNKNOWN)
     assert ("update_playlist_details",) not in [call[:1] for call in api.calls]
 
 
 def test_creation_is_limited_to_ten_a_minute(auth_client, api):
     statuses = [create(auth_client, api, name=f"Mix {index}").status_code for index in range(11)]
-    assert statuses == [201] * 10 + [429]
+    assert statuses == [200] * 10 + [429]
     assert len(creations(api)) == 10
 
 
@@ -522,94 +573,3 @@ def test_owned_playlists_include_hidden_ones_and_refresh_skips_the_cache(auth_cl
 
 
 # --- The page -----------------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("value, href, label", [
-    (None, f"/workshop/{TARGET}", "Back to playlist"),
-    (f"/workshop/{TARGET}", f"/workshop/{TARGET}", "Back to playlist"),
-    ("/schedules", "/schedules", "Back to routines"),
-    ("/", "/", "Back to Library"),
-    ("/workshop/other", f"/workshop/{TARGET}", "Back to playlist"),
-    ("https://evil.example/", f"/workshop/{TARGET}", "Back to playlist"),
-    ("//evil.example/schedules", f"/workshop/{TARGET}", "Back to playlist"),
-    ("/schedules?next=https://evil.example", f"/workshop/{TARGET}", "Back to playlist"),
-    ("/schedules/", f"/workshop/{TARGET}", "Back to playlist"),
-    ("javascript:alert(1)", f"/workshop/{TARGET}", "Back to playlist"),
-    ("", f"/workshop/{TARGET}", "Back to playlist"),
-])
-def test_the_return_link_accepts_only_allowlisted_internal_paths(db_app, value, href, label):
-    with db_app.test_request_context():
-        assert return_link(TARGET, value) == {"href": href, "label": label}
-
-
-def test_page_variables_hold_the_context_urls_return_link_and_section(db_app):
-    context = {"target": {"id": TARGET, "name": "Morning Mix"}, "version": 1}
-    with db_app.test_request_context():
-        variables = page_variables(TARGET, context, section="archive", return_to="/schedules")
-        default = page_variables(TARGET, context, section="routines")
-    assert set(variables) == {"target", "setup_context", "setup_urls", "return_link", "section"}
-    assert variables["target"] == {"id": TARGET, "name": "Morning Mix"} and variables["setup_context"] is context
-    assert variables["setup_urls"] == {
-        "context": CONTEXT, "impact": IMPACT, "settings": SETTINGS, "create": CREATE, "playlists": PLAYLISTS,
-    }
-    assert variables["return_link"] == {"href": "/schedules", "label": "Back to routines"}
-    assert variables["section"] == "archive" and default["section"] == "sources"
-    assert default["return_link"] == {"href": f"/workshop/{TARGET}", "label": "Back to playlist"}
-
-
-def test_the_page_renders_the_setup_template_with_exactly_its_variables(auth_client, api, user, scheduler_spies):
-    add_source(user, "ext1")
-    with as_user(api), patch("shuffify.routes.playlist_setup.render_template", return_value="setup page") as render:
-        response = auth_client.get(f"{BASE}?section=collection&return=/")
-    assert response.status_code == 200 and response.get_data(as_text=True) == "setup page"
-    (template,), variables = render.call_args
-    assert template == "playlist_setup.html"
-    assert set(variables) == {"target", "setup_context", "setup_urls", "return_link", "section"}
-    assert variables["target"] == {"id": TARGET, "name": "Morning Mix"}
-    assert variables["setup_context"]["sources"][0]["playlist_id"] == "ext1"
-    assert variables["return_link"] == {"href": "/", "label": "Back to Library"}
-    assert variables["section"] == "collection"
-    assert api.writes == [] and ActivityLog.query.count() == 0
-    assert_never_scheduled(scheduler_spies)
-
-
-def test_the_page_renders_the_real_template_with_its_context_and_return_link(auth_client, api, user, scheduler_spies):
-    """The route and the template agree: one h1 naming the playlist, the return link, the section and
-    the context the page script reads, rendered with nothing written."""
-    add_source(user, "ext1")
-    with as_user(api):
-        response = auth_client.get(f"{BASE}?section=archive&return=/schedules")
-    html = response.get_data(as_text=True)
-    assert response.status_code == 200
-    assert "<title>Playlist setup · Morning Mix - Shuffify</title>" in html
-    assert html.count("<h1") == 1 and "Playlist setup · Morning Mix</h1>" in html
-    assert 'id="setup-back" href="/schedules"' in html and "Back to routines</a>" in html
-    assert 'data-setup-section="archive"' in html
-    assert '"playlist_id": "ext1"' in html and '"configuration_revision": "' in html
-    assert response.headers.get("Content-Security-Policy")
-    assert api.writes == [] and ActivityLog.query.count() == 0
-    assert_never_scheduled(scheduler_spies)
-
-
-@pytest.mark.parametrize("target, failure, message", [
-    ("missing", None, "That playlist doesn't exist or was deleted."),
-    ("foreign", None, "You can only open your own or collaborative playlists in the Workshop."),
-    (TARGET, SpotifyAPIError("down"), "Couldn't load that playlist from Spotify. Please try again."),
-])
-def test_a_playlist_that_cannot_be_set_up_redirects_to_the_workshop_hub(auth_client, api, target, failure, message):
-    if failure:
-        api.read_failures[target] = failure
-    with as_user(api):
-        response = auth_client.get(f"/playlist/{target}/setup")
-    assert response.status_code == 302 and response.headers["Location"].endswith("/workshop")
-    with auth_client.session_transaction() as session:
-        assert dict(session["_flashes"]) == {"error": message}
-
-
-def test_an_ended_session_opening_the_page_returns_to_login(auth_client, api):
-    api.read_failures[TARGET] = SpotifyTokenExpiredError("expired")
-    with as_user(api), patch("shuffify.routes.playlist_setup.render_template") as render:
-        auth_client.get(BASE)
-    with auth_client.session_transaction() as session:
-        assert "spotify_token" not in session
-    assert render.call_count == 0

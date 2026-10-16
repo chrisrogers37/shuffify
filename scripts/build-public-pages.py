@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 """Generate committed legal HTML from shared shell macros and literal legal copy.
 
-Run with the existing Python environment, before rebuilding Tailwind CSS:
+Run with the existing Python environment:
     python scripts/build-public-pages.py
     python scripts/build-public-pages.py --check
 
-The routes continue serving these files verbatim. No app initialization, network,
-or runtime template rendering is needed for generation or verification.
+The generated public documents use canonical asset inputs. No app initialization,
+network or application templates are needed for generation or verification.
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
-from markupsafe import Markup
+from markupsafe import Markup, escape
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PAGE_TITLES = {
@@ -23,18 +24,14 @@ PAGE_TITLES = {
 }
 # A committed artifact must not drift when the clock crosses into a new year.
 COPYRIGHT_YEAR = 2026
+DEFAULT_CONTACT_ADDRESS = "christophertrogers37@gmail.com"
 
 
 def render_public_pages(repo_root: Path | None = None) -> dict[str, str]:
     """Render the static artifacts without Flask or hidden template globals."""
     repo_root = REPO_ROOT if repo_root is None else repo_root
     environment = Environment(
-        loader=FileSystemLoader(
-            [
-                repo_root / "assets" / "design" / "templates",
-                repo_root / "shuffify" / "templates",
-            ]
-        ),
+        loader=FileSystemLoader(repo_root / "assets" / "design" / "templates"),
         autoescape=True,
         undefined=StrictUndefined,
         keep_trailing_newline=True,
@@ -42,11 +39,13 @@ def render_public_pages(repo_root: Path | None = None) -> dict[str, str]:
     template = environment.get_template("legal.html.j2")
     pages = {}
     for name, title in PAGE_TITLES.items():
-        # These repository-owned fragments are literal HTML, not templates.
-        # Only their markup is trusted; shell parameters remain autoescaped.
+        # Repository-owned markup is literal; the build-time address is escaped
+        # before it enters the trusted fragment.
         legal_copy = (repo_root / "assets" / "legal" / f"{name}.html").read_text(
             encoding="utf-8"
         )
+        contact_address = os.environ.get("CONTACT_ADDRESS") or DEFAULT_CONTACT_ADDRESS
+        legal_copy = legal_copy.replace("CONTACT_ADDRESS", str(escape(contact_address)))
         pages[name] = template.render(
             title=title,
             current_page=name,
@@ -66,6 +65,19 @@ def main(argv: list[str] | None = None) -> int:
         "--check", action="store_true", help="verify committed pages without writing"
     )
     args = parser.parse_args(argv)
+    if args.check:
+        unresolved = [
+            path.relative_to(REPO_ROOT)
+            for path in sorted((REPO_ROOT / "shuffify" / "static" / "public").glob("*.html"))
+            if b"CONTACT_ADDRESS" in path.read_bytes()
+        ]
+        if unresolved:
+            print(
+                "build-public-pages: FAIL -- unresolved CONTACT_ADDRESS in: "
+                + ", ".join(str(path) for path in unresolved),
+                file=sys.stderr,
+            )
+            return 1
     stale = []
     for name, html in render_public_pages().items():
         output = REPO_ROOT / "shuffify" / "static" / "public" / f"{name}.html"

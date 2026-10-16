@@ -1,0 +1,1013 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/LibraryContext",
+  "definitions": {
+    "LibraryContext": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "message": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "const": "success"
+        },
+        "sections": {
+          "type": "object",
+          "properties": {
+            "favorites": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/LibraryRow"
+              }
+            },
+            "playlists": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/LibraryRow"
+              }
+            },
+            "hidden": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/LibraryRow"
+              }
+            }
+          },
+          "required": [
+            "favorites",
+            "playlists",
+            "hidden"
+          ],
+          "additionalProperties": false,
+          "description": "Arrays retain preference order; the three section names are fixed."
+        },
+        "algorithms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Algorithm"
+          }
+        },
+        "shuffle_defaults": {
+          "$ref": "#/definitions/ShuffleDefaults"
+        },
+        "greeting": {
+          "$ref": "#/definitions/LibraryGreeting"
+        },
+        "dashboard": {
+          "$ref": "#/definitions/Dashboard"
+        }
+      },
+      "required": [
+        "algorithms",
+        "dashboard",
+        "greeting",
+        "sections",
+        "shuffle_defaults",
+        "success"
+      ],
+      "additionalProperties": false
+    },
+    "LibraryRow": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "image_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "track_count": {
+          "$ref": "#/definitions/Count"
+        },
+        "spotify_url": {
+          "type": "string"
+        },
+        "public": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "pinned": {
+          "type": "boolean"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "can_undo": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "can_undo",
+        "hidden",
+        "id",
+        "image_url",
+        "name",
+        "pinned",
+        "public",
+        "spotify_url",
+        "track_count"
+      ],
+      "additionalProperties": false
+    },
+    "Count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "Algorithm": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "class_name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/AlgorithmParameter"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "class_name",
+        "description",
+        "parameters"
+      ],
+      "additionalProperties": false
+    },
+    "AlgorithmParameter": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/NumberParameter"
+        },
+        {
+          "$ref": "#/definitions/StringParameter"
+        }
+      ]
+    },
+    "NumberParameter": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "integer",
+            "float"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "default": {
+          "type": "number"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "description",
+        "default"
+      ],
+      "additionalProperties": false
+    },
+    "StringParameter": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "default": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "description",
+        "default",
+        "options"
+      ],
+      "additionalProperties": false
+    },
+    "ShuffleDefaults": {
+      "type": "object",
+      "properties": {
+        "algorithm": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "params": {
+          "$ref": "#/definitions/ShuffleParams"
+        }
+      },
+      "required": [
+        "algorithm",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "ShuffleParams": {
+      "type": "object",
+      "properties": {
+        "keep_first": {
+          "$ref": "#/definitions/Count"
+        },
+        "section_count": {
+          "$ref": "#/definitions/Count"
+        },
+        "shuffle_percentage": {
+          "type": "number"
+        },
+        "shuffle_location": {
+          "type": "string",
+          "enum": [
+            "front",
+            "back"
+          ]
+        },
+        "min_spacing": {
+          "$ref": "#/definitions/Count"
+        },
+        "jitter": {
+          "$ref": "#/definitions/Count"
+        },
+        "shuffle_within_albums": {
+          "type": "string",
+          "enum": [
+            "no",
+            "yes"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "LibraryGreeting": {
+      "type": "object",
+      "properties": {
+        "is_new_user": {
+          "type": "boolean"
+        },
+        "is_returning_user": {
+          "type": "boolean"
+        },
+        "display_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "activity_since_last_login_count": {
+          "$ref": "#/definitions/Count"
+        }
+      },
+      "required": [
+        "is_new_user",
+        "is_returning_user",
+        "display_name",
+        "activity_since_last_login_count"
+      ],
+      "additionalProperties": false
+    },
+    "Dashboard": {
+      "type": "object",
+      "properties": {
+        "is_returning_user": {
+          "type": "boolean"
+        },
+        "recent_activity": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Activity"
+          }
+        },
+        "activity_since_last_login": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Activity"
+          }
+        },
+        "activity_since_last_login_count": {
+          "$ref": "#/definitions/Count"
+        },
+        "quick_stats": {
+          "$ref": "#/definitions/QuickStats"
+        },
+        "active_schedules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Schedule"
+          }
+        },
+        "recent_job_executions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ActivityExecution"
+          }
+        }
+      },
+      "required": [
+        "is_returning_user",
+        "recent_activity",
+        "activity_since_last_login",
+        "activity_since_last_login_count",
+        "quick_stats",
+        "active_schedules",
+        "recent_job_executions"
+      ],
+      "additionalProperties": false
+    },
+    "Activity": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "user_id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "activity_type": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "playlist_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "playlist_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/JsonRecord"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "triggered_by": {
+          "$ref": "#/definitions/TriggeredBy"
+        }
+      },
+      "required": [
+        "id",
+        "user_id",
+        "activity_type",
+        "description",
+        "playlist_id",
+        "playlist_name",
+        "metadata",
+        "created_at",
+        "triggered_by"
+      ],
+      "additionalProperties": false
+    },
+    "DatabaseId": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "JsonRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/JsonValue"
+      },
+      "description": "Extensible metadata and preferences intentionally retain arbitrary JSON values."
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        }
+      ]
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "An ISO 8601 timestamp supplied by the server."
+    },
+    "TriggeredBy": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "manual",
+        "scheduler",
+        null
+      ]
+    },
+    "QuickStats": {
+      "type": "object",
+      "properties": {
+        "total_shuffles": {
+          "$ref": "#/definitions/Count"
+        },
+        "total_scheduled_runs": {
+          "$ref": "#/definitions/Count"
+        },
+        "total_snapshots": {
+          "$ref": "#/definitions/Count"
+        },
+        "active_schedule_count": {
+          "$ref": "#/definitions/Count"
+        }
+      },
+      "required": [
+        "total_shuffles",
+        "total_scheduled_runs",
+        "total_snapshots",
+        "active_schedule_count"
+      ],
+      "additionalProperties": false
+    },
+    "Schedule": {
+      "type": "object",
+      "properties": {
+        "job_type": {
+          "$ref": "#/definitions/JobType"
+        },
+        "target_playlist_id": {
+          "type": "string"
+        },
+        "target_playlist_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_playlist_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "algorithm_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "algorithm_params": {
+          "$ref": "#/definitions/JsonRecord",
+          "description": "Persisted routines retain parameters from custom or unavailable algorithms."
+        },
+        "schedule_type": {
+          "type": "string",
+          "enum": [
+            "interval",
+            "cron"
+          ]
+        },
+        "schedule_value": {
+          "type": "string"
+        },
+        "timezone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "user_id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "is_enabled": {
+          "type": "boolean"
+        },
+        "last_run_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "last_status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "algorithm_name",
+        "algorithm_params",
+        "created_at",
+        "id",
+        "is_enabled",
+        "job_type",
+        "last_error",
+        "last_run_at",
+        "last_status",
+        "schedule_type",
+        "schedule_value",
+        "source_playlist_ids",
+        "target_playlist_id",
+        "target_playlist_name",
+        "timezone",
+        "updated_at",
+        "user_id"
+      ],
+      "additionalProperties": false
+    },
+    "JobType": {
+      "type": "string",
+      "enum": [
+        "raid",
+        "shuffle",
+        "raid_and_shuffle",
+        "raid_and_drip",
+        "rotate",
+        "drip"
+      ]
+    },
+    "ActivityExecution": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "schedule_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DatabaseId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "tracks_added": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tracks_total": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error_message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result_detail": {
+          "$ref": "#/definitions/ExecutionDetail"
+        },
+        "schedule_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "job_type": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/JobType"
+            },
+            {
+              "type": "string",
+              "const": "unknown"
+            }
+          ]
+        },
+        "triggered_by": {
+          "$ref": "#/definitions/TriggeredBy",
+          "description": "Null means no persisted origin is known; readers must never guess an origin."
+        }
+      },
+      "required": [
+        "completed_at",
+        "error_message",
+        "id",
+        "job_type",
+        "result_detail",
+        "schedule_id",
+        "schedule_name",
+        "started_at",
+        "status",
+        "tracks_added",
+        "tracks_total",
+        "triggered_by"
+      ],
+      "additionalProperties": false
+    },
+    "ExecutionDetail": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/UnavailableExecutionDetail"
+        },
+        {
+          "$ref": "#/definitions/AvailableExecutionDetail"
+        }
+      ]
+    },
+    "UnavailableExecutionDetail": {
+      "type": "object",
+      "properties": {
+        "detail_status": {
+          "type": "string",
+          "const": "unavailable"
+        },
+        "version": {
+          "type": "null"
+        },
+        "steps": {
+          "type": "null"
+        }
+      },
+      "required": [
+        "detail_status",
+        "version",
+        "steps"
+      ],
+      "additionalProperties": false
+    },
+    "AvailableExecutionDetail": {
+      "type": "object",
+      "properties": {
+        "detail_status": {
+          "type": "string",
+          "const": "available"
+        },
+        "version": {
+          "type": "number",
+          "const": 1
+        },
+        "operation": {
+          "$ref": "#/definitions/JobType"
+        },
+        "execution_id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "partial",
+            "unknown"
+          ]
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ExecutionStep"
+          },
+          "minItems": 1,
+          "maxItems": 4
+        },
+        "run_state": {
+          "type": "string",
+          "enum": [
+            "running",
+            "finished"
+          ]
+        },
+        "resource_ids": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string"
+            },
+            "collection": {
+              "type": "string"
+            },
+            "archive": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "execution_record": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "unknown"
+          ]
+        }
+      },
+      "required": [
+        "detail_status",
+        "version",
+        "operation",
+        "execution_id",
+        "outcome",
+        "steps"
+      ],
+      "additionalProperties": false
+    },
+    "ExecutionStep": {
+      "type": "object",
+      "properties": {
+        "step": {
+          "$ref": "#/definitions/ExecutionStepName"
+        },
+        "status": {
+          "$ref": "#/definitions/ExecutionStepStatus"
+        },
+        "counts": {
+          "$ref": "#/definitions/ExecutionCounts"
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ExecutionResourceFact"
+          },
+          "maxItems": 12
+        },
+        "bookkeeping": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ExecutionBookkeepingFact"
+          },
+          "maxItems": 12
+        }
+      },
+      "required": [
+        "step",
+        "status",
+        "resources",
+        "bookkeeping"
+      ],
+      "additionalProperties": false
+    },
+    "ExecutionStepName": {
+      "type": "string",
+      "enum": [
+        "raid",
+        "shuffle",
+        "rotate",
+        "drip"
+      ]
+    },
+    "ExecutionStepStatus": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "partial",
+        "unknown",
+        "failed",
+        "restored",
+        "not_started",
+        "pending"
+      ]
+    },
+    "ExecutionCounts": {
+      "type": "object",
+      "properties": {
+        "tracks_collected": {
+          "$ref": "#/definitions/Count"
+        },
+        "tracks_moved_to_target": {
+          "$ref": "#/definitions/Count"
+        },
+        "tracks_removed_from_collection": {
+          "$ref": "#/definitions/Count"
+        },
+        "tracks_reordered": {
+          "$ref": "#/definitions/Count"
+        },
+        "tracks_archived": {
+          "$ref": "#/definitions/Count"
+        },
+        "tracks_returned": {
+          "$ref": "#/definitions/Count"
+        },
+        "archive_overlaps_removed": {
+          "$ref": "#/definitions/Count"
+        },
+        "tracks_removed_from_target": {
+          "$ref": "#/definitions/Count"
+        },
+        "tracks_removed_from_archive": {
+          "$ref": "#/definitions/Count"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExecutionResourceFact": {
+      "type": "object",
+      "properties": {
+        "resource": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/FactStatus"
+        },
+        "phase": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ExecutionStepName"
+            },
+            {
+              "type": "string",
+              "const": "archive_purge"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "target",
+            "collection",
+            "archive"
+          ]
+        },
+        "mutation_type": {
+          "type": "string",
+          "enum": [
+            "track_order",
+            "track_membership"
+          ]
+        },
+        "affected_count": {
+          "$ref": "#/definitions/Count"
+        },
+        "dispatched": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "resource",
+        "status",
+        "dispatched"
+      ],
+      "additionalProperties": false
+    },
+    "FactStatus": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "failed",
+        "unknown",
+        "restored",
+        "not_required"
+      ]
+    },
+    "ExecutionBookkeepingFact": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "pending_stage",
+            "pending_promotion",
+            "pending_restore",
+            "execution_record"
+          ]
+        },
+        "status": {
+          "$ref": "#/definitions/FactStatus"
+        },
+        "resource": {
+          "type": "string"
+        },
+        "affected_count": {
+          "$ref": "#/definitions/Count"
+        }
+      },
+      "required": [
+        "kind",
+        "status"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "success": true,
+  "category": "success",
+  "playlists": [
+    {
+      "id": "alice-mix",
+      "name": "Alice mix",
+      "image_url": "https://images.example.invalid/alice-mix.jpg",
+      "track_count": 3,
+      "spotify_url": "https://spotify.example.invalid/playlist/alice-mix"
+    }
+  ]
+}

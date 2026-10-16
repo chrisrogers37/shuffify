@@ -1,0 +1,12 @@
+{
+  "reviewed": {
+    "version": 1,
+    "reviewed_scope": "1a1a618556ed4dc8c8134813fb02f4eae75a6303721a2663370f2ca69883ccc6",
+    "reviewed_resources": [
+      {
+        "playlist_id": "target",
+        "digest": "e01278282ffaaa50475679eea0e84d69d4a9b5c0afecbf318b6f3f11bd60bca2"
+      }
+    ]
+  }
+}

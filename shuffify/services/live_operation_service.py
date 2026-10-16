@@ -105,10 +105,10 @@ def rejected_result(
 
 # Immediate executor endpoints and the live-operation kind each reports.
 LIVE_ENDPOINT_KINDS = {
-    "main.raid_now": "raid",
-    "main.drip_now": "drip",
-    "main.raid_and_drip": "raid_and_drip",
-    "main.run_schedule_now": "schedule",
+    "api.raid_now": "raid",
+    "api.drip_now": "drip",
+    "api.raid_and_drip": "raid_and_drip",
+    "api.run_schedule_now": "schedule",
 }
 
 
@@ -428,6 +428,9 @@ class LiveOperation:
         land is then watched for a while and restored again whenever it
         changes.
         """
+        from shuffify.services.operations.control import guard_legacy_compensation
+
+        guard_legacy_compensation()
         candidates = [r for r in self.step_resources(self.step) if r["dispatched"] and r["status"] != "failed"]
         playlist_ids = list(dict.fromkeys(r["resource"] for r in candidates))
         if not playlist_ids:
@@ -470,6 +473,9 @@ class LiveOperation:
 
     def _restore(self, playlist_id, baseline):
         """Write ``baseline`` back if the playlist differs, and return the verified observation."""
+        from shuffify.services.operations.control import guard_legacy_compensation
+
+        guard_legacy_compensation()
         before = self.read(playlist_id)
         if list(before.track_uris) != baseline:
             self.api.update_playlist_tracks(playlist_id, baseline)
@@ -489,6 +495,9 @@ class LiveOperation:
         changes it meanwhile is reverted too, such as an edit made in Spotify
         or a write to a playlist this run does not lock.
         """
+        from shuffify.services.operations.control import guard_legacy_compensation
+
+        guard_legacy_compensation()
         checks = current_app.config.get("ROLLBACK_SETTLE_CHECKS", 0)
         seconds = current_app.config.get("ROLLBACK_SETTLE_SECONDS", 0)
         for _ in range(checks):
@@ -520,10 +529,10 @@ class LiveOperation:
 
 
 DIRECT_ENDPOINT_KINDS = {
-    "main.shuffle": "shuffle",
-    "main.undo": "undo",
-    "main.restore_snapshot": "snapshot_restore",
-    "main.toggle_visibility": "privacy",
+    "api.shuffle": "shuffle",
+    "api.undo": "undo",
+    "api.restore_snapshot": "snapshot_restore",
+    "api.toggle_visibility": "privacy",
 }
 
 

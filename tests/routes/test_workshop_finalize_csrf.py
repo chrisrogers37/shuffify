@@ -5,11 +5,11 @@ from unittest.mock import Mock, patch
 import pytest
 
 from shuffify.services.workshop_finalize_service import WorkshopFinalizeResult
+from tests.paths import api_path
 
 A = "spotify:track:" + "a" * 22
 FINALIZERS = [
     ("pending-raids/finalize", "promoted_count", "raid_panel", "finalize_raids"),
-    ("pending-raids/finalize-all", "promoted_count", "raid_panel", "finalize_raids"),
     ("pair/archive", "archived_count", "playlist_pairs", "append_archive"),
     ("pair/finalize-restore", "restored_count", "playlist_pairs", "finalize_restore"),
 ]
@@ -51,7 +51,7 @@ def test_actual_csrf_rejection_preserves_source_contract(
         ) as transition,
     ):
         response = csrf_client.post(
-            f"/playlist/target/{path}",
+            api_path(f"/playlist/target/{path}"),
             json=captured_payload(inspect_only),
             headers=csrf_headers(token_state),
         )
@@ -86,7 +86,7 @@ def test_actual_csrf_rejection_preserves_source_contract(
 
 
 @pytest.mark.parametrize("path,count_key,module,method", FINALIZERS)
-def test_valid_csrf_still_allows_the_existing_finalizer_dispatch(
+def test_valid_csrf_allows_readonly_finalizer_inspection(
     csrf_client,
     csrf_headers,
     path,
@@ -98,6 +98,7 @@ def test_valid_csrf_still_allows_the_existing_finalizer_dispatch(
         "source123", "Source", "not_required", "Already verified", extra={count_key: 1}
     )
     with (
+        patch("shuffify.routes.is_authenticated", return_value=True),
         patch("shuffify.routes.require_auth", return_value=Mock()),
         patch("shuffify.routes.get_db_user", return_value=Mock(id=1)),
         patch(f"shuffify.routes.{module}.WorkshopFinalizeService") as service,
@@ -105,8 +106,8 @@ def test_valid_csrf_still_allows_the_existing_finalizer_dispatch(
         finalize = getattr(service.return_value, method)
         finalize.return_value = expected
         response = csrf_client.post(
-            f"/playlist/target/{path}",
-            json=captured_payload(False),
+            api_path(f"/playlist/target/{path}"),
+            json=captured_payload(True),
             headers=csrf_headers("valid"),
         )
     assert response.status_code == 200
@@ -117,9 +118,9 @@ def test_valid_csrf_still_allows_the_existing_finalizer_dispatch(
 @pytest.mark.parametrize(
     "path",
     [
-        "/workshop/target/commit",
-        "/playlist/target/pending-raids/dismiss",
-        "/playlist/target/pair/unarchive",
+        api_path("/workshop/target/commit"),
+        api_path("/playlist/target/pending-raids/dismiss"),
+        api_path("/playlist/target/pair/unarchive"),
     ],
 )
 @pytest.mark.parametrize("token_state", ["missing", "expired"])
@@ -133,12 +134,19 @@ def test_other_json_routes_keep_generic_csrf_response(
     assert response.get_json() == {
         "success": False,
         "category": "error",
+        "error_code": "invalid_request",
         "message": "Your request could not be verified. Please refresh the page and try again.",
     }
 
 
-def test_generic_form_csrf_still_renders_html(csrf_client):
+def test_logout_csrf_rejection_returns_json_error(csrf_client):
     response = csrf_client.post("/logout", headers={"Accept": "text/html"})
     assert response.status_code == 400
-    assert response.content_type.startswith("text/html")
-    assert b"Your request could not be verified" in response.data
+    assert response.content_type.startswith("application/json")
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.get_json() == {
+        "success": False,
+        "category": "error",
+        "error_code": "invalid_request",
+        "message": "Your request could not be verified. Please refresh the page and try again.",
+    }

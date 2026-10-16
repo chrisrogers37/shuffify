@@ -13,6 +13,7 @@ the fake's own state (``/_fake/playlists/{id}``), not in what the app reports.
 import os
 import re
 import socket
+import time
 from contextlib import contextmanager
 from urllib.parse import urljoin
 
@@ -38,7 +39,7 @@ def pid(key: str) -> str:
 
 
 def greets(html: str, display_name: str) -> bool:
-    """The dashboard greets the user by name: "Welcome back, ..." or
+    """Library greets the user by name: "Welcome back, ..." or
     "Welcome to Shuffify, ...", whichever it decides they are."""
     return re.search(rf"Welcome[^<]*{re.escape(display_name)}", html) is not None
 
@@ -137,13 +138,15 @@ class App:
         assert callback, "the fake's consent did not redirect back to the app"
         landed = self.request("GET", callback, allow_redirects=False)
         home_url = urljoin(callback, landed.headers.get("Location", ""))
-        assert home_url == f"{APP}/", f"/callback sent the browser to {home_url!r}, not the dashboard"
-        home = self.request("GET", "/").text
-        assert greets(home, display_name), "the dashboard does not greet the user who logged in"
-        token = re.search(r'<meta name="csrf-token" content="([^"]+)"', home)
-        assert token, "the logged-in page carries no CSRF token"
-        # Flask-WTF reads the token from this header, as the app's own JS sends it.
-        self.http.headers["X-CSRFToken"] = token.group(1)
+        assert home_url == f"{APP}/", f"/callback sent the browser to {home_url!r}, not the frontend"
+        response = self.request("GET", "/api/session")
+        assert response.status_code == 200, response.text
+        session = response.json()
+        assert session["signed_in"] is True and session["user"]["id"] == user
+        assert session["user"]["display_name"] == display_name
+        token = session.get("csrf_token")
+        assert isinstance(token, str) and token, "the signed-in JSON session carries no CSRF token"
+        self.http.headers["X-CSRFToken"] = token
 
     def get(self, path: str, **kwargs) -> requests.Response:
         return self.request("GET", path, **kwargs)
@@ -153,11 +156,69 @@ class App:
 
     def ok(self, method: str, path: str, **kwargs) -> dict:
         """A JSON call that must succeed; its body."""
-        resp = self.request(method.upper(), path, **kwargs)
+        from tests.paths import api_path
+
+        resp = self.request(method.upper(), api_path(path), **kwargs)
         assert resp.status_code == 200, f"{method.upper()} {path}: {resp.status_code} {resp.text[:500]}"
         body = resp.json()
         assert body.get("success") is not False, f"{method.upper()} {path}: {body}"
         return body
+
+    def wait_operation(self, location: str, operation_id: int, *, timeout=150) -> dict:
+        """Poll one accepted receipt through terminal completion without replaying its POST."""
+        assert location.endswith(f"/api/operations/{operation_id}"), location
+        deadline = time.monotonic() + timeout
+        while True:
+            response = self.get(location)
+            assert response.status_code == 200, f"GET {location}: {response.status_code} {response.text[:500]}"
+            body = response.json()
+            assert body["success"] is True
+            operation = body["operation"]
+            assert operation["id"] == operation_id
+            if operation["state"] in {"succeeded", "failed", "rolled_back", "needs_attention"}:
+                return operation
+            assert time.monotonic() < deadline, f"Operation {operation_id} did not finish: {operation}"
+            time.sleep(0.05)
+
+    def queued(self, path: str, **kwargs) -> dict:
+        """Accept a writer exactly once, then return its authoritative final operation DTO."""
+        from tests.paths import api_path
+
+        response = self.post(api_path(path), **kwargs)
+        assert response.status_code == 202, f"POST {path}: {response.status_code} {response.text[:500]}"
+        body = response.json()
+        assert body["success"] is True
+        operation_id = body["operation"]["id"]
+        assert body["operation_id"] == operation_id
+        assert "Location" in response.headers
+        return self.wait_operation(response.headers["Location"], operation_id)
+
+    def write(self, path: str, **kwargs) -> dict:
+        """Run a successful queued writer and retain the existing rich service result."""
+        operation = self.queued(path, **kwargs)
+        assert operation["state"] == "succeeded", operation
+        result = operation["result"]
+        assert isinstance(result, dict) and result.get("success") is not False, operation
+        return result
+
+
+def wait_for_queued_operations(*, timeout=45):
+    """Wait for detached test operations before resetting their database and provider state."""
+    HarnessConfig.assert_safe()
+    engine = create_engine(HarnessConfig.SQLALCHEMY_DATABASE_URI, poolclass=NullPool)
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            with engine.connect() as connection:
+                active = connection.execute(text(
+                    "SELECT id, state FROM job_executions WHERE state IN ('queued', 'running', 'compensating')"
+                )).all()
+            if not active:
+                return
+            assert time.monotonic() < deadline, f"Queued operations still active before harness reset: {active}"
+            time.sleep(.05)
+    finally:
+        engine.dispose()
 
 
 @pytest.fixture
@@ -166,6 +227,7 @@ def fake():
     fails if the app made any call that departs from Spotify's documentation
     while it ran."""
     f = Fake()
+    wait_for_queued_operations()
     reset_harness()
     before = len(f.violations())
     yield f
@@ -173,6 +235,8 @@ def fake():
     try:
         # A test that failed with a write held must not have it answered later, inside the next test's seed.
         f.release()
+        wait_for_queued_operations()
+        new = f.violations()[before:]
         reset_harness()
     finally:
         assert new == [], "the app sent Spotify something it does not document"

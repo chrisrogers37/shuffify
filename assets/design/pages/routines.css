@@ -26,7 +26,7 @@
   .sh-routine-goals button, .sh-routine-result-actions a { min-height: var(--sh-space-control); }
   .sh-routine-group { display: grid; gap: var(--sh-space-3); border-top: 1px solid var(--sh-border); padding-top: var(--sh-space-5); }
   .sh-routine-group[hidden] { display: none; }
-  .sh-routine-list { padding-left: var(--sh-space-5); list-style: disc; overflow-wrap: anywhere; }
+  .sh-routine-source-summary { padding-left: var(--sh-space-5); list-style: disc; overflow-wrap: anywhere; }
   .sh-routine-candidates { display: grid; gap: var(--sh-space-3); }
   .sh-routine-candidate { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sh-space-3); padding: var(--sh-space-3); border: 1px solid var(--sh-border); border-radius: var(--sh-radius-control); }
   .sh-routine-candidate p { overflow-wrap: anywhere; }

@@ -547,6 +547,15 @@ class TestStripPiiFreeText:
 class TestKnownSecretScrubbing:
     """Exact-value redaction of secrets the process already holds."""
 
+    def test_worker_control_token_is_redacted_from_free_text(self):
+        class Cfg(_FakeConfig):
+            WORKER_CONTROL_TOKEN = "private-worker-control-token"
+
+        _register_sentry_secret_values(Cfg)
+
+        event = {"logentry": {"message": "failed using private-worker-control-token"}}
+        assert "private-worker-control-token" not in _strip_pii(event, hint=None)["logentry"]["message"]
+
     def test_client_secret_is_redacted_from_free_text(self):
         class Cfg(_FakeConfig):
             SPOTIFY_CLIENT_SECRET = "s3cr3t-client-value"

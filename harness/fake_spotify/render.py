@@ -3,9 +3,9 @@
 Field sets follow Spotify's OpenAPI schema (shapes.json) as a Development Mode
 app sees it: the fields Spotify withholds from those apps
 (user ``country``/``email``/``product``/..., track and album
-``available_markets``, track ``popularity``) are left out. Every href, page
-link and ``external_urls`` entry points at the fake's own origin, and images
-are data: URIs, so nothing a client follows leaves the machine.
+``available_markets``, track ``popularity``) are left out. API and paging
+links use the fake's origin, and images are data: URIs. Display backlinks
+retain Spotify's public HTTPS origin; guarded clients do not follow them.
 """
 
 import base64
@@ -35,7 +35,7 @@ class Renderer:
     def _ref(self, kind: str, id_: str, collection: str) -> dict:
         """The fields every Spotify object reference carries."""
         return {
-            "external_urls": {"spotify": f"{self.origin}/{kind}/{id_}"},
+            "external_urls": {"spotify": f"https://open.spotify.com/{kind}/{id_}"},
             "href": f"{self.api}/{collection}/{id_}",
             "id": id_,
             "type": kind,

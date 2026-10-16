@@ -11,7 +11,7 @@
     {
       "call": "PUT /playlists/{canary}",
       "body": {
-        "description": "Checked by the shuffify canary"
+        "description": "Playlist details updated by the API replay check"
       },
       "status": 200,
       "no_body": true

@@ -1,5 +1,5 @@
 """
-Core routes: home page, static pages, health check, authentication.
+OAuth authentication and process health routes.
 """
 
 import hmac
@@ -9,174 +9,42 @@ from datetime import datetime, timezone
 
 from flask import (
     current_app,
-    flash,
     jsonify,
     redirect,
-    render_template,
     request,
-    send_from_directory,
     session,
-    url_for,
 )
 
 from shuffify.enums import ActivityType
 from shuffify.routes import (
-    clear_session_and_show_login,
+    auth_bp,
     get_db_user,
-    is_authenticated,
     log_activity,
-    main,
+    site_bp,
 )
 from shuffify.services import (
     AuthenticationError,
     AuthService,
-    DashboardService,
     LoginHistoryService,
-    PlaylistError,
-    PlaylistService,
-    ShuffleService,
     UserService,
-    UserSettingsService,
 )
-from shuffify.services.playlist_preference_service import (
-    PlaylistPreferenceService,
-)
+from shuffify.services.auth_notice import auth_notice
 
 logger = logging.getLogger(__name__)
 
-# Messages for the ``error`` code Spotify appends to the OAuth callback. Only
-# these app-authored strings are displayed; the query string's free-text
-# ``error_description`` is not.
-_OAUTH_ERROR_MESSAGES = {
-    "access_denied": "Spotify access was not granted, so you have not been logged in.",
-}
-_OAUTH_ERROR_DEFAULT = "Spotify sign-in did not complete. Please try again."
+
+def _auth_notice(code):
+    """Store one authored OAuth notice for the session API."""
+    if auth_notice(code) is not None:
+        session["auth_notice"] = code
 
 
 # =============================================================================
-# Public Routes
+# Process Health
 # =============================================================================
 
 
-def _previous_login_at(db_user):
-    """When the user logged in before this session's login, as the callback
-    recorded it: None on their first visit. The user row's last_login_at is
-    this session's login by now, so it is only the fallback: for a session from
-    before the callback recorded it, or one whose upsert failed (when the row
-    still holds the previous login)."""
-    if "previous_login_at" in session:
-        stored = session["previous_login_at"]
-        return datetime.fromisoformat(stored) if stored else None
-    return getattr(db_user, "last_login_at", None)
-
-
-@main.route("/")
-def index():
-    """Home page - shows login or dashboard based on auth state."""
-    try:
-        logger.debug("Index route accessed")
-
-        if not is_authenticated():
-            logger.debug("No valid token, showing login page")
-            # A token that fails validation would hide the consent form and
-            # the login button, so drop it with the user data it came with.
-            session.pop("spotify_token", None)
-            session.pop("user_data", None)
-            return render_template("index.html")
-
-        try:
-            api = AuthService.get_authenticated_api(session["spotify_token"])
-            user = AuthService.get_user_data(api)
-
-            playlist_service = PlaylistService(api)
-            playlists = playlist_service.get_user_playlists()
-
-            algorithms = ShuffleService.list_algorithms()
-
-            # Fetch personalized dashboard data (non-blocking)
-            dashboard_data = {}
-            shuffle_defaults = {"algorithm": None, "params": {}}
-            db_user = None
-            preferences = {}
-            favorite_playlists = []
-            visible_playlists = playlists
-            hidden_playlists = []
-            try:
-                db_user = get_db_user()
-                if db_user:
-                    dashboard_data = DashboardService.get_dashboard_data(
-                        user_id=db_user.id,
-                        last_login_at=_previous_login_at(db_user),
-                    )
-                    preferences = PlaylistPreferenceService.get_user_preferences(
-                        db_user.id
-                    )
-                    if preferences:
-                        (
-                            favorite_playlists,
-                            visible_playlists,
-                            hidden_playlists,
-                        ) = PlaylistPreferenceService.apply_preferences(
-                            playlists, preferences
-                        )
-            except Exception as e:
-                logger.warning(
-                    "Failed to load dashboard data: "
-                    "%s. Rendering without "
-                    "personalization.",
-                    e,
-                )
-
-            # A settings failure must not hide playlists or discard other
-            # dashboard personalization. No default means choose each time.
-            if db_user:
-                try:
-                    shuffle_defaults = (
-                        UserSettingsService.get_default_shuffle_settings(db_user.id)
-                    )
-                except Exception as e:
-                    logger.warning("Failed to load default shuffle settings: %s", e)
-
-            logger.debug(f"User {user.get('display_name', 'Unknown')} loaded dashboard")
-            return render_template(
-                "dashboard.html",
-                favorite_playlists=favorite_playlists,
-                playlists=visible_playlists,
-                hidden_playlists=hidden_playlists,
-                user=user,
-                algorithms=algorithms,
-                dashboard=dashboard_data,
-                preferences=preferences,
-                shuffle_defaults=shuffle_defaults,
-            )
-
-        except (AuthenticationError, PlaylistError) as e:
-            logger.error(f"Error loading dashboard: {e}")
-            return clear_session_and_show_login(
-                "Your session has expired. Please log in again."
-            )
-
-    except Exception as e:
-        logger.error(
-            f"Unexpected error in index route: {e}",
-            exc_info=True,
-        )
-        return clear_session_and_show_login()
-
-
-@main.route("/terms")
-def terms():
-    """Terms of Service page."""
-    return send_from_directory("static/public", "terms.html")
-
-
-@main.route("/privacy")
-def privacy():
-    """Privacy Policy page."""
-    return send_from_directory("static/public", "privacy.html")
-
-
-@main.route("/health")
+@site_bp.route("/health")
 def health():
     """Health check endpoint for Docker and monitoring."""
     from shuffify import is_db_available
@@ -199,18 +67,14 @@ def health():
 # =============================================================================
 
 
-@main.route("/login")
+@auth_bp.route("/login")
 def login():
     """Initiate Spotify OAuth flow."""
     try:
         # Check for legal consent
         if not request.args.get("legal_consent"):
-            flash(
-                "You must agree to the Terms of Service and "
-                "Privacy Policy to use Shuffify.",
-                "error",
-            )
-            return redirect(url_for("main.index"))
+            _auth_notice("consent_required")
+            return redirect("/")
 
         # Clear any existing session data
         session.pop("spotify_token", None)
@@ -226,14 +90,11 @@ def login():
 
     except AuthenticationError as e:
         logger.error(f"Login error: {e}")
-        flash(
-            "An error occurred during login. Please try again.",
-            "error",
-        )
-        return redirect(url_for("main.index"))
+        _auth_notice("login_failed")
+        return redirect("/")
 
 
-@main.route("/callback")
+@auth_bp.route("/callback")
 def callback():
     """Handle OAuth callback from Spotify."""
     logger.debug(
@@ -247,29 +108,23 @@ def callback():
     error = request.args.get("error")
     if error:
         logger.error("OAuth error: %r", error[:100])
-        flash(_OAUTH_ERROR_MESSAGES.get(error, _OAUTH_ERROR_DEFAULT), "error")
-        return redirect(url_for("main.index"))
+        _auth_notice("access_denied" if error == "access_denied" else "oauth_failed")
+        return redirect("/")
 
     # Get authorization code
     code = request.args.get("code")
     if not code:
         logger.error("No authorization code in callback")
-        flash(
-            "No authorization code received from Spotify. Please try again.",
-            "error",
-        )
-        return redirect(url_for("main.index"))
+        _auth_notice("missing_code")
+        return redirect("/")
 
     # Validate CSRF state parameter
     callback_state = request.args.get("state")
     stored_state = session.pop("oauth_state", None)
     if not stored_state or not hmac.compare_digest(stored_state, callback_state or ""):
         logger.error("OAuth state mismatch: possible CSRF attack")
-        flash(
-            "Authentication failed due to a security check. Please try again.",
-            "error",
-        )
-        return redirect(url_for("main.index"))
+        _auth_notice("invalid_state")
+        return redirect("/")
 
     try:
         # Exchange code for token
@@ -353,7 +208,7 @@ def callback():
             f"{user_data.get('display_name', 'Unknown')} "
             f"authenticated successfully"
         )
-        return redirect(url_for("main.index"))
+        return redirect("/")
 
     except AuthenticationError as e:
         if "not registered" in str(e):
@@ -362,14 +217,11 @@ def callback():
             logger.error(f"Authentication failed: {e}")
         session.pop("spotify_token", None)
         session.pop("user_data", None)
-        flash(
-            "Error connecting to Spotify. Please try again.",
-            "error",
-        )
-        return redirect(url_for("main.index"))
+        _auth_notice("authentication_failed")
+        return redirect("/")
 
 
-@main.route("/logout", methods=["POST"])
+@auth_bp.route("/logout", methods=["POST"])
 def logout():
     """Clear session and log out.
 
@@ -405,4 +257,4 @@ def logout():
         logger.warning("Failed to record logout: %s", e)
 
     session.clear()
-    return redirect(url_for("main.index"))
+    return redirect("/")

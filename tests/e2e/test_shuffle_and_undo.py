@@ -20,31 +20,31 @@ def test_login_lists_the_playlists_alice_can_edit(alice, fake):
 def test_each_algorithm_reorders_the_playlist_and_undo_restores_it(alice, fake, algorithm):
     before = fake.uris(LONG_HAUL)
 
-    body = alice.ok("post", f"/shuffle/{LONG_HAUL}", data={"algorithm": algorithm})
+    body = alice.write(f"/shuffle/{LONG_HAUL}", data={"algorithm": algorithm})
     after = fake.uris(LONG_HAUL)
     assert sorted(after) == sorted(before), "a shuffle added or lost tracks"
     assert after != before, f"{algorithm} reported {body.get('message')!r} but left the order as it was"
     assert [t["uri"] for t in body["playlist"]["tracks"]] == after
 
-    alice.ok("post", f"/undo/{LONG_HAUL}")
+    alice.write(f"/undo/{LONG_HAUL}")
     assert fake.uris(LONG_HAUL) == before
 
 
 def test_undo_walks_back_through_several_shuffles(alice, fake):
     orders = [fake.uris(LONG_HAUL)]
     for algorithm in ("BasicShuffle", "ArtistSpacingShuffle"):
-        alice.ok("post", f"/shuffle/{LONG_HAUL}", data={"algorithm": algorithm})
+        alice.write(f"/shuffle/{LONG_HAUL}", data={"algorithm": algorithm})
         orders.append(fake.uris(LONG_HAUL))
     assert len({tuple(o) for o in orders}) == 3
 
     for expected in reversed(orders[:-1]):
-        alice.ok("post", f"/undo/{LONG_HAUL}")
+        alice.write(f"/undo/{LONG_HAUL}")
         assert fake.uris(LONG_HAUL) == expected
 
 
 def test_a_playlist_alice_cannot_edit_is_refused_and_left_alone(alice, fake):
     bobs = pid("bob-finds")
     before = fake.uris(bobs)
-    resp = alice.post(f"/shuffle/{bobs}", data={"algorithm": "BasicShuffle"})
-    assert resp.status_code == 403 and resp.json().get("success") is False
+    operation = alice.queued(f"/shuffle/{bobs}", data={"algorithm": "BasicShuffle"})
+    assert operation["state"] == "failed" and operation["result"]["success"] is False
     assert fake.uris(bobs) == before

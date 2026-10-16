@@ -8,9 +8,9 @@ and pinning.
 import logging
 
 from shuffify.routes import (
+    api_bp,
     json_error,
     json_success,
-    main,
     require_auth_and_db,
     validate_json,
 )
@@ -25,8 +25,8 @@ from shuffify.services.playlist_preference_service import (
 logger = logging.getLogger(__name__)
 
 
-@main.route(
-    "/api/playlist-preferences/order",
+@api_bp.route(
+    "/playlist-preferences/order",
     methods=["POST"],
 )
 @require_auth_and_db
@@ -51,8 +51,8 @@ def save_playlist_order(api=None, user=None):
         )
 
 
-@main.route(
-    "/api/playlist-preferences/"
+@api_bp.route(
+    "/playlist-preferences/"
     "<playlist_id>/toggle-hidden",
     methods=["POST"],
 )
@@ -81,8 +81,8 @@ def toggle_playlist_hidden(
         )
 
 
-@main.route(
-    "/api/playlist-preferences/"
+@api_bp.route(
+    "/playlist-preferences/"
     "<playlist_id>/toggle-pinned",
     methods=["POST"],
 )
@@ -116,8 +116,8 @@ def toggle_playlist_pinned(
         )
 
 
-@main.route(
-    "/api/playlist-preferences/reset",
+@api_bp.route(
+    "/playlist-preferences/reset",
     methods=["POST"],
 )
 @require_auth_and_db

@@ -1,0 +1,329 @@
+.sh-workshop-page {
+  padding-block: var(--sh-space-8);
+  min-height: 65vh;
+}
+.sh-workshop-content {
+  min-width: 0;
+}
+.sh-workshop-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sh-space-4);
+  margin-bottom: var(--sh-space-8);
+}
+.sh-workshop-header h1 {
+  margin: 0;
+}
+.sh-workshop-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-family: var(--sh-font-ui);
+  font-size: var(--sh-type-caption);
+  color: var(--sh-muted);
+}
+.sh-workshop-action-buttons,
+.sh-workshop-neighbors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sh-space-2);
+}
+.sh-workshop-tracks-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sh-space-4);
+}
+.sh-workshop-track-list {
+  list-style: none;
+  padding: 0;
+  margin-block: var(--sh-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sh-space-3);
+}
+.sh-workshop-track {
+  border: 1px solid var(--sh-border);
+  border-radius: var(--sh-radius-panel);
+  background: var(--sh-surface);
+  padding: var(--sh-space-4);
+  min-width: 0;
+}
+.sh-workshop-track-main {
+  display: grid;
+  grid-template-columns: 2ch 92px minmax(0, 1fr) auto;
+  gap: var(--sh-space-4);
+  align-items: start;
+}
+.sh-workshop-track .sh-artwork {
+  width: 92px;
+  margin: 0;
+  gap: var(--sh-space-3);
+}
+.sh-workshop-track .sh-artwork figcaption {
+  gap: var(--sh-space-3);
+  font-size: var(--sh-type-caption);
+}
+.sh-workshop-track .sh-artwork figcaption a {
+  overflow-wrap: anywhere;
+}
+.sh-workshop-track-copy h3 {
+  font-size: var(--sh-type-body);
+  margin: 0 0 var(--sh-space-2);
+}
+.sh-workshop-track-copy p {
+  margin: 0 0 var(--sh-space-2);
+  overflow-wrap: anywhere;
+}
+.sh-workshop-position {
+  font-family: var(--sh-font-ui);
+  color: var(--sh-muted);
+}
+.sh-workshop-row-controls {
+  display: flex;
+  gap: var(--sh-space-2);
+  flex-wrap: wrap;
+}
+.sh-workshop-row-actions {
+  border-top: 1px solid var(--sh-border);
+  margin-top: var(--sh-space-4);
+  padding-top: var(--sh-space-4);
+}
+.sh-workshop-move-form {
+  display: flex;
+  gap: var(--sh-space-3);
+  align-items: end;
+  flex-wrap: wrap;
+  margin-top: var(--sh-space-4);
+}
+.sh-workshop-move-form .sh-field {
+  flex: 1;
+  min-width: 120px;
+  max-width: 260px;
+}
+.sh-workshop-draft-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sh-space-4);
+  background: var(--sh-base);
+  border-top: 1px solid var(--sh-border);
+  padding: var(--sh-space-4) 0;
+  margin-top: var(--sh-space-8);
+}
+.sh-workshop-draft-footer p {
+  margin: 0;
+}
+.sh-workshop-panel-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sh-space-4);
+}
+.sh-workshop-panel-stack h3 {
+  margin: 0;
+}
+.sh-workshop-panel-stack p {
+  margin: 0;
+}
+.sh-workshop-summary {
+  display: flex;
+  gap: var(--sh-space-4);
+  flex-wrap: wrap;
+}
+.sh-workshop-summary dd {
+  margin: 0;
+  font-family: var(--sh-font-ui);
+}
+.sh-workshop-order ol {
+  padding: 0;
+  list-style: none;
+  max-height: 26rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.sh-workshop-order li {
+  border-bottom: 1px solid var(--sh-border);
+  padding: var(--sh-space-2) 0;
+  overflow-wrap: anywhere;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sh-space-1);
+}
+.sh-workshop-order small {
+  color: var(--sh-muted);
+}
+.sh-workshop-compare {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sh-space-4);
+}
+.sh-workshop-details summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.sh-workshop-details pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--sh-type-caption);
+}
+.sh-workshop-drafts,
+.sh-workshop-picker {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sh-space-4);
+}
+.sh-workshop-drafts li {
+  border-top: 1px solid var(--sh-border);
+  padding-block: var(--sh-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sh-space-3);
+}
+.sh-workshop-notice {
+  padding: var(--sh-space-3);
+  border-left: 3px solid var(--sh-accent);
+}
+@media (width<768px) {
+  .sh-workshop-track-main {
+    grid-template-columns: 2ch 92px minmax(0, 1fr);
+    gap: var(--sh-space-2);
+  }
+  .sh-workshop-row-controls {
+    grid-column: 2/-1;
+  }
+  .sh-workshop-draft-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sh-workshop-draft-footer .sh-workshop-action-buttons > * {
+    flex: 1;
+  }
+  .sh-workshop-header > .sh-workshop-action-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sh-workshop-header > .sh-workshop-action-buttons > * {
+    min-width: 0;
+  }
+  .sh-workshop-draft-footer {
+    gap: var(--sh-space-2);
+    padding-block: var(--sh-space-3);
+  }
+  .sh-workshop-track {
+    padding: var(--sh-space-3);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sh-workshop-page * {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+.sh-workshop-track .sh-artwork-frame {
+  width: 92px;
+  height: 92px;
+  aspect-ratio: 1;
+}
+.sh-workshop-track .sh-artwork-image {
+  width: 92px;
+  height: 92px;
+  min-height: 0;
+  object-fit: contain;
+}
+.sh-workshop-track .sh-artwork-missing {
+  font-size: var(--sh-type-caption);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.sh-workshop-track figcaption a {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.sh-workshop-track .sh-spotify-logo {
+  margin-block: 12px;
+}
+.sh-workshop-track .sh-artwork {
+  padding: 0;
+}
+.sh-workshop-panel-stack form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sh-space-3);
+}
+/* Keep attribution beside the track copy, preserving the existing compact row recipe. */
+.sh-workshop-track-main {
+  grid-template-columns: 2ch 64px minmax(0, 1fr) auto;
+  row-gap: var(--sh-space-2);
+}
+.sh-workshop-track .sh-artwork {
+  display: contents;
+}
+.sh-workshop-track .sh-artwork-frame {
+  grid-column: 2;
+  grid-row: 1;
+  width: 64px;
+  height: 64px;
+}
+.sh-workshop-track .sh-artwork-image {
+  width: 64px;
+  height: 64px;
+}
+.sh-workshop-track-copy {
+  grid-column: 3;
+  grid-row: 1;
+}
+.sh-workshop-row-controls {
+  grid-column: 4;
+  grid-row: 1;
+}
+.sh-workshop-track figcaption {
+  grid-column: 3/-1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--sh-space-3);
+  margin: 0;
+  flex-wrap: wrap;
+}
+.sh-workshop-track figcaption a {
+  overflow-wrap: anywhere;
+  min-width: 44px;
+}
+.sh-workshop-track .sh-spotify-logo {
+  flex: none;
+}
+@media (width<768px) {
+  .sh-workshop-track-main {
+    grid-template-columns: 2ch 64px minmax(0, 1fr);
+  }
+  .sh-workshop-track figcaption {
+    grid-column: 2/-1;
+  }
+  .sh-workshop-row-controls {
+    grid-column: 2/-1;
+    grid-row: 3;
+  }
+}
+.sh-workshop-track .sh-spotify-logo {
+  height: 24px;
+  width: 80px;
+  object-fit: contain;
+}
+
+.sh-workshop-navigation-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--sh-space-2);
+}

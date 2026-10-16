@@ -132,13 +132,15 @@ def test_invalid_zone_and_cron_are_rejected():
         normalize_timing({"kind": "advanced", "expression": "60 9 * * *"})
 
 
-def test_legacy_numeric_weekdays_and_calendar_three_day_stay_raw(monkeypatch):
+def test_legacy_numeric_weekdays_and_calendar_three_day_stay_raw():
     from types import SimpleNamespace
 
-    monkeypatch.setattr("shuffify.scheduler.get_scheduler", lambda: SimpleNamespace(timezone="America/Chicago"))
-    monday = serialize_timing(SimpleNamespace(schedule_type="cron", schedule_value="0 9 * * 0", timezone=None))
-    tuesday = serialize_timing(SimpleNamespace(schedule_type="cron", schedule_value="0 9 * * 1", timezone=None))
-    calendar = serialize_timing(SimpleNamespace(schedule_type="cron", schedule_value="0 9 */3 * *", timezone=None))
+    monday = serialize_timing(SimpleNamespace(schedule_type="cron", schedule_value="0 9 * * 0", timezone=None),
+                              effective_timezone="America/Chicago")
+    tuesday = serialize_timing(SimpleNamespace(schedule_type="cron", schedule_value="0 9 * * 1", timezone=None),
+                               effective_timezone="America/Chicago")
+    calendar = serialize_timing(SimpleNamespace(schedule_type="cron", schedule_value="0 9 */3 * *", timezone=None),
+                                effective_timezone="America/Chicago")
     assert monday["text"] == "Every Monday at 09:00 America/Chicago"
     assert tuesday["text"] == "Every Tuesday at 09:00 America/Chicago"
     assert monday["kind"] == tuesday["kind"] == "advanced"

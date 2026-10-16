@@ -1,13 +1,11 @@
-import atexit
 import logging
 import os
 import re
-import secrets
 from typing import Optional
 from urllib.parse import unquote, urlsplit
 
 import redis
-from flask import Flask, Request, current_app, g, request
+from flask import Flask, Request, current_app, request
 from flask_limiter import Limiter
 from flask_migrate import Migrate
 from flask_session import Session
@@ -302,7 +300,8 @@ def _verify_schema_at_head(migrations_dir):
     message = (
         "Database schema is not at Alembic head: current=%s, head=%s. "
         "The app does not apply migrations at startup; apply them "
-        "with 'flask db upgrade', or set %s=true to start anyway and serve "
+        "with 'SCHEDULER_ENABLED=false SHUFFIFY_MIGRATION_STEP=1 flask db upgrade', "
+        "or set %s=true to start anyway and serve "
         "against the current schema."
         % (
             current or "none (database never migrated)",
@@ -507,6 +506,7 @@ _SENTRY_SECRET_CONFIG_ATTRS = (
     "SECRET_KEY",
     "TOKEN_ENCRYPTION_KEY",
     "TOKEN_ENCRYPTION_KEY_FALLBACKS",
+    "WORKER_CONTROL_TOKEN",
 )
 
 # Config attributes holding a URL whose password component is a secret. The
@@ -517,6 +517,7 @@ _SENTRY_SECRET_URL_CONFIG_ATTRS = (
     "SQLALCHEMY_DATABASE_URI",
     "DATABASE_URL",
     "REDIS_URL",
+    "WORKER_CONTROL_URL",
 )
 
 # A secret shorter than this is not safe to substring-match: a three-character
@@ -803,16 +804,8 @@ def _init_sentry(config_class):
 
 
 def _apply_security_headers(app):
-    """Register CSP nonce generation and security headers."""
+    """Protect backend responses with the shared same-origin asset policy."""
     from shuffify.spotify.endpoints import ACCOUNTS_BASE_URL
-
-    @app.before_request
-    def _generate_csp_nonce():
-        g.csp_nonce = secrets.token_urlsafe(32)
-
-    @app.context_processor
-    def _inject_csp_nonce():
-        return {"csp_nonce": getattr(g, "csp_nonce", "")}
 
     @app.after_request
     def set_security_headers(response):
@@ -827,35 +820,16 @@ def _apply_security_headers(app):
         # Control referrer information leakage
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
-        nonce = getattr(g, "csp_nonce", "")
-
-        # Content Security Policy — nonce-based, no unsafe-inline
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            # The one external script, SortableJS, is permitted by its exact
-            # file path rather than by host, and is also pinned by SRI at its
-            # script tag -- bump the version in both places together. Tailwind
-            # is compiled into static/css at build time, so no CDN serves it.
-            f"script-src 'self' https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js 'nonce-{nonce}'; "
-            f"style-src 'self' 'nonce-{nonce}'; "
-            # Spotify serves cover art from many scdn.co subdomains, not just
-            # i: an auto-generated four-up mosaic comes from mosaic.scdn.co,
-            # editorial art from thisis-images, daily-mix, newjams-images,
-            # lineup-images, charts-images and seeded-session-images. The set
-            # is open-ended, so scdn.co is wildcarded, as spotifycdn.com is.
+            "script-src 'self'; "
+            "style-src 'self'; "
             "img-src 'self' https://*.scdn.co https://*.spotifycdn.com data:; "
-            "connect-src 'self'; "
+            "connect-src 'self' https://*.scdn.co https://*.spotifycdn.com; "
             "font-src 'self'; "
             "object-src 'none'; "
             "frame-ancestors 'none'; "
             "base-uri 'self'; "
-            # The login form GETs /login, which 302s to Spotify's authorize
-            # endpoint. form-action is enforced against every hop of a
-            # submission chain, so the same-origin action passes and the
-            # cross-origin redirect is blocked unless the OAuth host is listed
-            # here. Scoped to the authorize host only; this is a targeted
-            # allowance for a known destination, not a relaxation of the
-            # injection protections in style-src/script-src.
             f"form-action 'self' {ACCOUNTS_BASE_URL}"
         )
 
@@ -905,8 +879,8 @@ class BoundedRequest(Request):
         Request.max_content_length.fset(self, value)  # a view can still set its own
 
 
-def create_app(config_name=None):
-    """Create and configure the Flask application."""
+def create_app(config_name=None, *, start_scheduler=True):
+    """Create the API application; start_scheduler is a compatibility argument only."""
     if config_name is None:
         config_name = os.getenv("APP_CONFIG", "production")
 
@@ -937,11 +911,19 @@ def create_app(config_name=None):
     # the WSGI app on construction.
     _init_sentry(config[config_name])
 
-    app = Flask(__name__)
+    app = Flask(__name__, template_folder=None)
     app.request_class = BoundedRequest
     app.config.from_object(config[config_name])
 
     # Trust one level of proxy so request.remote_addr reflects the real client IP.
+    public_origin = app.config.get("PUBLIC_ORIGIN", "")
+    if public_origin:
+        from shuffify.csrf_origin import CanonicalCsrfOrigin
+
+        app.wsgi_app = CanonicalCsrfOrigin(
+            app.wsgi_app, public_origin,
+            app.config.get("WTF_CSRF_METHODS", {"POST", "PUT", "PATCH", "DELETE"}),
+        )
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     # Log important config values
@@ -958,9 +940,11 @@ def create_app(config_name=None):
     _init_database(app)
 
     # Register blueprints
-    from shuffify.routes import main as main_blueprint
+    from shuffify.routes import api_bp, auth_bp, site_bp
 
-    app.register_blueprint(main_blueprint)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(site_bp)
+    app.register_blueprint(api_bp)
 
     # Apply rate limits to auth endpoints.
     # Traditional account lockout does not apply: this is an
@@ -969,32 +953,32 @@ def create_app(config_name=None):
     # appropriate brute-force protection for OAuth flows.
     if _limiter is not None:
         try:
-            app.view_functions["main.login"] = _limiter.limit("10/minute")(
-                app.view_functions["main.login"]
+            app.view_functions["auth.login"] = _limiter.limit("10/minute")(
+                app.view_functions["auth.login"]
             )
-            app.view_functions["main.callback"] = _limiter.limit("10/minute")(
-                app.view_functions["main.callback"]
+            app.view_functions["auth.callback"] = _limiter.limit("10/minute")(
+                app.view_functions["auth.callback"]
             )
             # Resource-intensive endpoints
-            app.view_functions["main.shuffle"] = _limiter.limit("5/minute")(
-                app.view_functions["main.shuffle"]
+            app.view_functions["api.shuffle"] = _limiter.limit("5/minute")(
+                app.view_functions["api.shuffle"]
             )
-            app.view_functions["main.workshop_commit"] = _limiter.limit("10/minute")(
-                app.view_functions["main.workshop_commit"]
+            app.view_functions["api.workshop_commit"] = _limiter.limit("10/minute")(
+                app.view_functions["api.workshop_commit"]
             )
-            app.view_functions["main.run_schedule_now"] = _limiter.limit("5/minute")(
-                app.view_functions["main.run_schedule_now"]
+            app.view_functions["api.run_schedule_now"] = _limiter.limit("5/minute")(
+                app.view_functions["api.run_schedule_now"]
             )
             # Each call creates a playlist in the user's Spotify library.
-            app.view_functions["main.playlist_setup_create_playlist"] = _limiter.limit("10/minute")(
-                app.view_functions["main.playlist_setup_create_playlist"]
+            app.view_functions["api.playlist_setup_create_playlist"] = _limiter.limit("10/minute")(
+                app.view_functions["api.playlist_setup_create_playlist"]
             )
             logger.info(
                 "Rate limits applied: /login=10/min, "
-                "/callback=10/min, /shuffle=5/min, "
-                "/workshop/commit=10/min, "
-                "/schedules/*/run=5/min, "
-                "/playlist/*/setup/spotify-playlists=10/min"
+                "/callback=10/min, /api/shuffle=5/min, "
+                "/api/workshop/commit=10/min, "
+                "/api/schedules/*/run=5/min, "
+                "/api/playlist/*/setup/spotify-playlists=10/min"
             )
         except Exception as e:
             logger.warning("Failed to apply rate limits: %s", e)
@@ -1004,28 +988,20 @@ def create_app(config_name=None):
 
     register_error_handlers(app)
 
-    # Templates render raw Spotify playlist objects, which carry the track
-    # count under "tracks" or "items"; read it in either shape.
-    from shuffify.spotify.api import playlist_item_count
+    from shuffify.request_deadline import register_spotify_deadline
 
-    app.add_template_filter(playlist_item_count, "item_count")
+    register_spotify_deadline(app)
 
     # Register operational CLI commands
     from shuffify.cli import register_cli
 
     register_cli(app)
 
-    # Initialize APScheduler (after all extensions)
-    if app.config.get("SCHEDULER_ENABLED", True):
-        from shuffify.scheduler import init_scheduler, shutdown_scheduler
+    # API construction never starts a scheduler; the worker owns its memory jobs.
+    # Retain start_scheduler as a compatibility argument for existing launchers.
+    from shuffify.services.schedule_notifications import install_schedule_notifications
 
-        scheduler = init_scheduler(app)
-        if scheduler:
-            app.extensions["scheduler"] = scheduler
-        # Bound now, and only where a scheduler can exist: importing the
-        # scheduler module from inside an exit hook fails once threading has
-        # shut down.
-        atexit.register(shutdown_scheduler)
+    install_schedule_notifications()
 
     _apply_security_headers(app)
 

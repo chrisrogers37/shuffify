@@ -459,6 +459,8 @@ class Schedule(db.Model):
         default=IntervalValue.DAILY,
     )
     is_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    # A precise eligibility floor, independent of execution bookkeeping.
+    definition_changed_at = db.Column(UTCDateTime, nullable=True)
     last_run_at = db.Column(UTCDateTime, nullable=True)
     last_status = db.Column(db.String(20), nullable=True)
     last_error = db.Column(db.Text, nullable=True)
@@ -466,6 +468,12 @@ class Schedule(db.Model):
         UTCDateTime,
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
+    )
+    # Initial catch-up eligibility never moves with execution bookkeeping.
+    recovery_start_at = db.Column(
+        UTCDateTime,
+        nullable=True,
+        default=lambda context: context.get_current_parameters().get("created_at") or datetime.now(timezone.utc),
     )
     updated_at = db.Column(
         UTCDateTime,
@@ -582,6 +590,19 @@ class JobExecution(db.Model):
     error_message = db.Column(db.Text, nullable=True)
     result_json = db.Column(db.JSON, nullable=True)
 
+    # Queue fields are optional so existing execution writers retain their schema contract.
+    kind = db.Column(db.String(80), nullable=True)
+    user_id = db.Column(db.Integer, nullable=True)
+    targets = db.Column(db.JSON, nullable=True)
+    payload = db.Column(db.JSON, nullable=True)
+    state = db.Column(db.String(32), nullable=True)
+    journal = db.Column(db.JSON, nullable=True)
+    lease_owner = db.Column(db.String(128), nullable=True)
+    lease_expires_at = db.Column(UTCDateTime, nullable=True)
+    heartbeat_at = db.Column(UTCDateTime, nullable=True)
+    request_key = db.Column(db.String(128), nullable=True)
+    scheduled_for = db.Column(UTCDateTime, nullable=True)
+
     # Relationships
     schedule = db.relationship(
         "Schedule",
@@ -591,6 +612,9 @@ class JobExecution(db.Model):
     __table_args__ = (
         db.Index("ix_job_executions_status", "status"),
         db.Index("ix_job_executions_started_at", "started_at"),
+        db.Index("uq_job_executions_schedule_fire", "schedule_id", "scheduled_for", unique=True),
+        db.Index("uq_job_executions_user_request", "user_id", "request_key", unique=True),
+        db.Index("ix_job_executions_queue_lease", "state", "lease_expires_at"),
     )
 
     def to_dict(self) -> Dict[str, Any]:

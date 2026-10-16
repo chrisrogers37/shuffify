@@ -4,24 +4,18 @@ Flask routes package for Shuffify.
 This module handles HTTP requests and responses only.
 All business logic is delegated to the services layer.
 
-The single `main` Blueprint is split across feature modules for
-navigability. All modules import `main` from this package and
-register routes on it.
+Feature modules register JSON endpoints on ``api_bp``, OAuth endpoints
+on ``auth_bp``, and health on ``site_bp``.
 """
 
 import functools
 import logging
-from datetime import datetime, timezone
 
 from flask import (
     Blueprint,
-    flash,
     jsonify,
-    redirect,
-    render_template,
     request,
     session,
-    url_for,
 )
 from pydantic import ValidationError
 
@@ -36,21 +30,11 @@ from shuffify.services import (
 )
 from shuffify.services.live_operation_service import preflight_error_code
 from shuffify.services.live_review_context import context_rejected
-from shuffify.spotify.exceptions import SpotifyError
 
 logger = logging.getLogger(__name__)
-main = Blueprint("main", __name__)
-
-
-# =============================================================================
-# Template Context Processors
-# =============================================================================
-
-
-@main.context_processor
-def inject_current_year():
-    """Make current year available to all templates."""
-    return {"current_year": datetime.now(timezone.utc).year}
+api_bp = Blueprint("api", __name__, url_prefix="/api")
+auth_bp = Blueprint("auth", __name__)
+site_bp = Blueprint("site", __name__)
 
 
 # =============================================================================
@@ -80,14 +64,6 @@ def require_auth():
         )
     except AuthenticationError:
         return None
-
-
-def clear_session_and_show_login(message: str = None):
-    """Clear session and return to login page with optional message."""
-    session.clear()
-    if message:
-        flash(message, "error")
-    return render_template("index.html")
 
 
 def json_error(message: str, status_code: int = 400) -> tuple:
@@ -158,7 +134,7 @@ def require_auth_and_db(f=None, *, on_preflight_error=None):
 
     Usage::
 
-        @main.route("/endpoint")
+        @api_bp.route("/endpoint")
         @require_auth_and_db
         def my_route(api=None, user=None):
             # api and user are guaranteed non-None here
@@ -193,6 +169,28 @@ def require_auth_and_db(f=None, *, on_preflight_error=None):
     return decorated_function
 
 
+def require_session_and_db(view=None, *, on_preflight_error=None):
+    """Authorize queue requests from the session and database without Spotify I/O."""
+    if view is None:
+        return functools.partial(require_session_and_db, on_preflight_error=on_preflight_error)
+    preflight_error = on_preflight_error or json_error
+
+    @functools.wraps(view)
+    def authorized(*args, **kwargs):
+        if not is_authenticated():
+            return preflight_error("Please log in first.", 401)
+        from shuffify import is_db_available
+
+        if not is_db_available():
+            return preflight_error("Database is unavailable.", 503)
+        user = get_db_user()
+        if user is None:
+            return preflight_error("User not found.", 401)
+        return view(*args, user=user, **kwargs)
+
+    return authorized
+
+
 def json_reply(reply):
     """A service's ``(payload, status)`` or ``(payload, status, headers)`` reply as a JSON response."""
     payload, status_code, *headers = reply
@@ -216,76 +214,10 @@ def no_store(view):
 
     The app's after_request hook sends ``Cache-Control: no-store`` for marked
     views, so CSRF, oversize, preflight and unexpected failures are covered too.
-    Apply it between ``@main.route`` and the view's other decorators.
+    Apply it between ``@api_bp.route`` and the view's other decorators.
     """
     view.no_store = True
     return view
-
-
-def require_auth_page(f):
-    """
-    Decorator that enforces authentication for HTML **page** routes.
-
-    The page counterpart to :func:`require_auth_and_db`. Both guard the same
-    three conditions; they differ only in how they answer a failure, which is
-    the whole point: a browser navigating to a page must be redirected to the
-    login page, whereas the JSON decorator answers with a 401 body that a
-    browser renders as raw JSON.
-
-    Injects three keyword arguments:
-
-    ``api``
-        Authenticated ``SpotifyAPI`` -- same name and type as
-        :func:`require_auth_and_db` injects, so a route can move between the
-        two decorators without its body changing.
-    ``user``
-        The database ``User`` row, likewise matching the JSON decorator.
-    ``spotify_profile``
-        The Spotify profile ``dict`` (``id``, ``display_name``, ``images``).
-        Page templates render this; the database row does not carry it.
-
-    Usage::
-
-        @main.route("/page")
-        @require_auth_page
-        def my_page(api=None, user=None, spotify_profile=None):
-            return render_template("page.html", user=spotify_profile)
-    """
-
-    @functools.wraps(f)
-    def decorated_function(*args, **kwargs):
-        api = require_auth()
-        if not api:
-            return redirect(url_for("main.index"))
-
-        from shuffify import is_db_available
-
-        if not is_db_available():
-            flash(
-                "The database is temporarily unavailable. Please try again shortly.",
-                "error",
-            )
-            return redirect(url_for("main.index"))
-
-        user = get_db_user()
-        if not user:
-            flash("Please log in again to continue.", "error")
-            return redirect(url_for("main.index"))
-
-        try:
-            spotify_profile = AuthService.get_user_data(api)
-        except SpotifyError:
-            # The profile is presentation data, not an authorization signal --
-            # a Spotify hiccup here should not bounce an authenticated user
-            # back to the login page.
-            spotify_profile = None
-
-        kwargs["api"] = api
-        kwargs["user"] = user
-        kwargs["spotify_profile"] = spotify_profile
-        return f(*args, **kwargs)
-
-    return decorated_function
 
 
 def get_db_user():
@@ -410,8 +342,9 @@ def load_schedule_context(db_user):
 # =============================================================================
 
 from shuffify.routes import (  # noqa: E402, F401
-    activity,
+    contexts,
     core,
+    operations,
     playlist_pairs,
     playlist_preferences,
     playlist_setup,

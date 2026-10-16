@@ -2,8 +2,7 @@
 Scheduler service for CRUD operations on Schedule models.
 
 Handles creating, reading, updating, and deleting scheduled job
-configurations. Does NOT execute jobs -- that is handled by
-JobExecutorService.
+configurations. The worker admits due runs into the durable operation queue.
 """
 
 import logging
@@ -129,13 +128,12 @@ class SchedulerService:
         timezone: Optional[str] = None,
     ) -> Schedule:
         """
-        Create a new scheduled job and register it with APScheduler.
+        Save a schedule and request a worker refresh.
 
         Args:
-            register: Register the job with APScheduler after creation (the
-                default). Pass ``False`` for bulk/startup paths that register
-                jobs separately, so an enabled schedule is never left without a
-                running job.
+            register: Send an additional best-effort refresh hint after creation.
+                Transactional definition notifications are always published;
+                registration is reported separately from worker memory.
 
         Raises:
             ScheduleError: If creation fails.
@@ -219,7 +217,7 @@ class SchedulerService:
         schedule_id: int, user_id: int
     ) -> None:
         """
-        Delete a schedule and its execution history, retaining snapshots.
+        Delete a schedule and legacy history, retaining durable receipts and snapshots.
 
         Raises:
             ScheduleNotFoundError: If not found.
@@ -230,12 +228,17 @@ class SchedulerService:
                 # Saved playlists outlive the execution history. Clear only links
                 # to this schedule's executions before deleting those rows.
                 execution_ids = db.select(JobExecution.id).where(
-                    JobExecution.schedule_id == schedule_id
+                    JobExecution.schedule_id == schedule_id, JobExecution.kind.is_(None),
                 )
                 PlaylistSnapshot.query.filter(
                     PlaylistSnapshot.job_execution_id.in_(execution_ids)
                 ).update({PlaylistSnapshot.job_execution_id: None}, synchronize_session="fetch")
-                JobExecution.query.filter_by(schedule_id=schedule_id).delete()
+                JobExecution.query.filter_by(schedule_id=schedule_id).filter(
+                    JobExecution.kind.is_not(None),
+                ).update({JobExecution.schedule_id: None}, synchronize_session="fetch")
+                JobExecution.query.filter_by(schedule_id=schedule_id).filter(
+                    JobExecution.kind.is_(None),
+                ).delete(synchronize_session="fetch")
                 db.session.delete(schedule)
                 # Bulk UPDATE/DELETE execute immediately, so the transaction guard
                 # must include them as well as the final commit.
@@ -251,7 +254,7 @@ class SchedulerService:
                 ) from error
 
             logger.info("Success: delete schedule %s", schedule_id)
-            # Remove the APScheduler job only after the DB delete commits, so a
+            # Remove the worker registration only after the DB delete commits, so a
             # failed delete never orphans a schedule row with no running job.
             SchedulerService._remove_apscheduler_job(schedule_id)
 
@@ -331,12 +334,10 @@ class SchedulerService:
 
     @staticmethod
     def _sync_apscheduler_job(schedule) -> None:
-        """Register (enabled) or unregister (disabled) the schedule's
-        APScheduler job so the running jobs always match the DB state.
+        """Request a worker refresh after the committed state change.
 
-        Best-effort: a scheduler error is logged, not raised — the database is
-        the source of truth and enabled jobs re-register on next startup.
-        Imported lazily to avoid a circular import with ``shuffify.scheduler``.
+        This hint never claims registration succeeded. Transactional database
+        notifications and reconnect refresh cover an unavailable private listener.
         """
         try:
             from shuffify.scheduler import (
@@ -348,23 +349,23 @@ class SchedulerService:
                 add_job_for_schedule(schedule)
             else:
                 remove_job_for_schedule(schedule.id)
-        except Exception as e:
+        except Exception as error:
             logger.warning(
-                "APScheduler sync failed for schedule %s: %s",
+                "Worker scheduler refresh unavailable for schedule %s (%s)",
                 getattr(schedule, "id", "?"),
-                e,
+                type(error).__name__,
             )
 
     @staticmethod
     def _remove_apscheduler_job(schedule_id: int) -> None:
-        """Remove a schedule's APScheduler job (best-effort)."""
+        """Request a worker refresh after deletion (best-effort)."""
         try:
             from shuffify.scheduler import remove_job_for_schedule
 
             remove_job_for_schedule(schedule_id)
-        except Exception as e:
+        except Exception as error:
             logger.warning(
-                "APScheduler job removal failed for schedule %s: %s",
+                "Worker scheduler removal hint unavailable for schedule %s (%s)",
                 schedule_id,
-                e,
+                type(error).__name__,
             )

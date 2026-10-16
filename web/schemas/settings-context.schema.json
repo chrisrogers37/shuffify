@@ -1,0 +1,286 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/SettingsContext",
+  "definitions": {
+    "SettingsContext": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "message": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "const": "success"
+        },
+        "settings": {
+          "$ref": "#/definitions/UserSettings"
+        },
+        "algorithms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Algorithm"
+          }
+        },
+        "algorithm_options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AlgorithmOption"
+          }
+        }
+      },
+      "required": [
+        "algorithm_options",
+        "algorithms",
+        "settings",
+        "success"
+      ],
+      "additionalProperties": false,
+      "description": "GET and POST /api/settings return this same complete context."
+    },
+    "UserSettings": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "user_id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "default_algorithm": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "default_algorithm_params": {
+          "$ref": "#/definitions/JsonRecord",
+          "description": "Stored preferences retain parameters from custom or unavailable algorithms."
+        },
+        "theme": {
+          "$ref": "#/definitions/Theme"
+        },
+        "notifications_enabled": {
+          "type": "boolean"
+        },
+        "auto_snapshot_enabled": {
+          "type": "boolean"
+        },
+        "max_snapshots_per_playlist": {
+          "$ref": "#/definitions/SnapshotLimit"
+        },
+        "dashboard_show_recent_activity": {
+          "type": "boolean"
+        },
+        "extra": {
+          "$ref": "#/definitions/JsonRecord"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "user_id",
+        "default_algorithm",
+        "default_algorithm_params",
+        "theme",
+        "notifications_enabled",
+        "auto_snapshot_enabled",
+        "max_snapshots_per_playlist",
+        "dashboard_show_recent_activity",
+        "extra",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": false
+    },
+    "DatabaseId": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "JsonRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/JsonValue"
+      },
+      "description": "Extensible metadata and preferences intentionally retain arbitrary JSON values."
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        }
+      ]
+    },
+    "Theme": {
+      "type": "string",
+      "enum": [
+        "light",
+        "dark",
+        "system"
+      ]
+    },
+    "SnapshotLimit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "An ISO 8601 timestamp supplied by the server."
+    },
+    "Algorithm": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "class_name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/AlgorithmParameter"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "class_name",
+        "description",
+        "parameters"
+      ],
+      "additionalProperties": false
+    },
+    "AlgorithmParameter": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/NumberParameter"
+        },
+        {
+          "$ref": "#/definitions/StringParameter"
+        }
+      ]
+    },
+    "NumberParameter": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "integer",
+            "float"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "default": {
+          "type": "number"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "description",
+        "default"
+      ],
+      "additionalProperties": false
+    },
+    "StringParameter": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "default": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "description",
+        "default",
+        "options"
+      ],
+      "additionalProperties": false
+    },
+    "AlgorithmOption": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "label"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

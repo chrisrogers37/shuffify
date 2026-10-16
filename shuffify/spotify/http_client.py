@@ -10,11 +10,13 @@ import os
 import threading
 import time
 from typing import Any, Callable, Dict, List, Optional
+from urllib.parse import urlsplit
 
 import requests
 from requests.adapters import HTTPAdapter
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
+from .deadline import SpotifyDeadlineError, bounded_sleep, check_deadline, remaining_timeout
 from .endpoints import API_BASE_URL
 from .exceptions import (
     SpotifyAPIError,
@@ -22,10 +24,13 @@ from .exceptions import (
     SpotifyNotFoundError,
     SpotifyQuotaExceededError,
     SpotifyRateLimitError,
+    SpotifyReadTransientError,
     SpotifyTokenExpiredError,
     SpotifyWriteRejectedError,
     SpotifyWriteUnverifiedError,
 )
+from .observation import current_observer
+from .transport import DeadlineHTTPAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +100,7 @@ def get_shared_adapter() -> HTTPAdapter:
     pid = os.getpid()
     with _adapter_lock:
         if _shared_adapter is None or _shared_adapter_pid != pid:
-            _shared_adapter = HTTPAdapter(
+            _shared_adapter = DeadlineHTTPAdapter(
                 pool_connections=POOL_CONNECTIONS,
                 pool_maxsize=POOL_MAXSIZE,
             )
@@ -229,6 +234,21 @@ class SpotifyHTTPClient:
         url = f"{BASE_URL}{path}"
         return self._request_url(method, url, params=params, json=json)
 
+    def _perform_request(self, method, url, **kwargs):
+        """Fence and observe each actual mutation attempt without observing reads."""
+        observer = current_observer() if method != "GET" else None
+        if observer is None:
+            return self._session.request(method, url, **kwargs)
+        path = urlsplit(url).path.removeprefix(urlsplit(BASE_URL).path.rstrip("/"))
+        ticket = observer.before_http(method, path, kwargs.get("json"))
+        try:
+            response = self._session.request(method, url, **kwargs)
+        except Exception as error:
+            observer.http_failed(ticket, error)
+            raise
+        observer.after_http(ticket, response)
+        return response
+
     def _request_url(
         self,
         method: str,
@@ -247,24 +267,31 @@ class SpotifyHTTPClient:
         attempt = 0
 
         while attempt <= MAX_RETRIES:
+            timeout = remaining_timeout(REQUEST_TIMEOUT)
             try:
-                response = self._session.request(
+                response = self._perform_request(
                     method,
                     url,
                     params=params,
                     json=json,
-                    timeout=REQUEST_TIMEOUT,
+                    timeout=timeout,
                 )
 
-                # --- Success ---
                 status = response.status_code
+                if method == "GET" and status != 429:
+                    check_deadline()
+
+                # --- Success ---
                 if 200 <= status < 300:
                     # Nothing to parse: a 204, or a write Spotify documents
                     # without a body (Change Playlist Details answers 200).
                     if status == 204 or (method != "GET" and not response.content):
                         return None
                     try:
-                        return response.json()
+                        data = response.json()
+                        if method == "GET":
+                            check_deadline()
+                        return data
                     except ValueError:
                         # Empty or not JSON where data was due. A write is
                         # not retried: Spotify may already have applied it.
@@ -276,7 +303,7 @@ class SpotifyHTTPClient:
                                 f"Spotify answered {status} with a body that is not JSON"
                             )
                         if attempt >= MAX_RETRIES:
-                            raise SpotifyAPIError(
+                            raise SpotifyReadTransientError(
                                 f"Spotify answered {status} with an unreadable body "
                                 f"after {MAX_RETRIES + 1} attempts"
                             )
@@ -288,7 +315,7 @@ class SpotifyHTTPClient:
                             MAX_RETRIES + 1,
                             delay,
                         )
-                        time.sleep(delay)
+                        bounded_sleep(delay, sleep=time.sleep)
                         attempt += 1
                         continue
 
@@ -300,9 +327,12 @@ class SpotifyHTTPClient:
                             new_token = self._on_token_refresh()
                             self.update_token(new_token)
                             token_refreshed = True
-                            attempt = 0  # reset retry budget after refresh
+                            attempt = 0  # refresh restarts attempts, never the shared deadline
                             continue
+                        except (SpotifyDeadlineError, SpotifyRateLimitError):
+                            raise
                         except Exception as e:
+                            check_deadline()
                             logger.error("Token refresh failed: %s", e)
                     raise SpotifyTokenExpiredError("Token expired or invalid")
 
@@ -337,7 +367,13 @@ class SpotifyHTTPClient:
                         MAX_RETRIES + 1,
                         delay,
                     )
-                    time.sleep(delay)
+                    try:
+                        bounded_sleep(delay, sleep=time.sleep)
+                    except SpotifyDeadlineError as error:
+                        raise SpotifyRateLimitError(
+                            "Spotify rate limit exceeds the remaining request deadline.",
+                            retry_after=retry_after,
+                        ) from error
                     attempt += 1
                     continue
 
@@ -349,7 +385,7 @@ class SpotifyHTTPClient:
                             "its outcome is unverified"
                         )
                     if attempt >= MAX_RETRIES:
-                        raise SpotifyAPIError(
+                        raise SpotifyReadTransientError(
                             f"Server error {response.status_code} "
                             f"after {MAX_RETRIES + 1} attempts"
                         )
@@ -361,7 +397,7 @@ class SpotifyHTTPClient:
                         MAX_RETRIES + 1,
                         delay,
                     )
-                    time.sleep(delay)
+                    bounded_sleep(delay, sleep=time.sleep)
                     attempt += 1
                     continue
 
@@ -387,7 +423,7 @@ class SpotifyHTTPClient:
                         "Spotify write lost its response; its outcome is unverified"
                     ) from e
                 if attempt >= MAX_RETRIES:
-                    raise SpotifyAPIError(
+                    raise SpotifyReadTransientError(
                         f"Network error after {MAX_RETRIES + 1} attempts: {e}"
                     )
                 delay = _calculate_backoff_delay(attempt)
@@ -398,7 +434,7 @@ class SpotifyHTTPClient:
                     delay,
                     e,
                 )
-                time.sleep(delay)
+                bounded_sleep(delay, sleep=time.sleep)
                 attempt += 1
 
             except (

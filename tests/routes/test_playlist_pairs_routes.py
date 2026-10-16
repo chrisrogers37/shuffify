@@ -10,6 +10,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from shuffify.services.workshop_finalize_service import WorkshopFinalizeResult
+from tests.paths import api_path
+from tests.playlist_setup_fixtures import SetupSpotify
+from tests.queued_operations import post_and_run
 
 # =============================================================================
 # Authentication Tests
@@ -23,7 +26,7 @@ class TestPairAuthRequired:
     def test_get_pair_unauth(self, mock_auth, db_app):
         mock_auth.return_value = None
         with db_app.test_client() as client:
-            resp = client.get("/playlist/p1/pair")
+            resp = client.get(api_path("/playlist/p1/pair"))
             assert resp.status_code == 401
 
     @patch("shuffify.routes.require_auth")
@@ -31,7 +34,7 @@ class TestPairAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/playlist/p1/pair",
+                api_path("/playlist/p1/pair"),
                 json={"create_new": True},
             )
             assert resp.status_code == 401
@@ -40,7 +43,7 @@ class TestPairAuthRequired:
     def test_delete_pair_unauth(self, mock_auth, db_app):
         mock_auth.return_value = None
         with db_app.test_client() as client:
-            resp = client.delete("/playlist/p1/pair")
+            resp = client.delete(api_path("/playlist/p1/pair"))
             assert resp.status_code == 401
 
     @patch("shuffify.routes.require_auth")
@@ -50,7 +53,7 @@ class TestPairAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/playlist/p1/pair/archive",
+                api_path("/playlist/p1/pair/archive"),
                 json={"track_uris": ["spotify:track:x"]},
             )
             assert resp.status_code == 401
@@ -62,7 +65,7 @@ class TestPairAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/playlist/p1/pair/unarchive",
+                api_path("/playlist/p1/pair/unarchive"),
                 json={"track_uris": ["spotify:track:x"]},
             )
             assert resp.status_code == 401
@@ -81,7 +84,7 @@ class TestGetPair:
         self, mock_auth, auth_client
     ):
         mock_auth.return_value = MagicMock()
-        resp = auth_client.get("/playlist/p1/pair")
+        resp = auth_client.get(api_path("/playlist/p1/pair"))
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["success"] is True
@@ -102,7 +105,7 @@ class TestCreatePairRoute:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/pair",
+            api_path("/playlist/p1/pair"),
             json={"create_new": False},
         )
         assert resp.status_code == 400
@@ -113,7 +116,7 @@ class TestCreatePairRoute:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/playlist/p1/pair",
+            api_path("/playlist/p1/pair"),
             data="not json",
             content_type="text/plain",
         )
@@ -126,25 +129,25 @@ class TestCreatePairRoute:
         """A lost answer from Spotify leaves the archive playlist's existence unknown."""
         from shuffify.models.db import PlaylistPair
         from shuffify.services.playlist_setup_service import CREATION_UNKNOWN
-        from shuffify.spotify.api import SpotifyAPI
         from shuffify.spotify.exceptions import SpotifyWriteUnverifiedError
 
-        api = MagicMock(spec=SpotifyAPI)
-        api.create_user_playlist.side_effect = SpotifyWriteUnverifiedError("timed out")
+        api = SetupSpotify(playlists={"p1": {"name": "Mix"}})
+        api.create_failure = SpotifyWriteUnverifiedError("timed out")
         mock_auth.return_value = api
 
-        resp = auth_client.post(
-            "/playlist/p1/pair",
+        resp = post_and_run(auth_client, api,
+            api_path("/playlist/p1/pair"),
             json={"create_new": True, "production_playlist_name": "Mix"},
         )
 
-        assert resp.status_code == 502
+        assert resp.status_code == 200 and resp.accepted.status_code == 202
+        assert resp.operation["state"] == "needs_attention"
         data = resp.get_json()
         assert data["success"] is False
         assert data["error_code"] == "creation_unknown"
         assert data["outcome"] == "unknown"
         assert data["message"] == CREATION_UNKNOWN
-        api.create_user_playlist.assert_called_once()
+        assert len([call for call in api.calls if call[0] == "create_user_playlist"]) == 1
         assert PlaylistPair.query.count() == 0
 
     @patch("shuffify.routes.require_auth")
@@ -154,25 +157,28 @@ class TestCreatePairRoute:
         """An empty 2xx from Spotify may still have created the archive playlist."""
         from shuffify.models.db import PlaylistPair
         from shuffify.services.playlist_setup_service import CREATION_UNKNOWN
-        from shuffify.spotify.api import SpotifyAPI
+        api = SetupSpotify(playlists={"p1": {"name": "Mix"}})
 
-        api = MagicMock(spec=SpotifyAPI)
-        api.create_user_playlist.return_value = None
+        def no_id(name, public=False, description=""):
+            api.calls.append(("create_user_playlist", name, public, description))
+
+        api.create_user_playlist = no_id
         mock_auth.return_value = api
 
-        resp = auth_client.post(
-            "/playlist/p1/pair",
+        resp = post_and_run(auth_client, api,
+            api_path("/playlist/p1/pair"),
             json={"create_new": True, "production_playlist_name": "Mix"},
         )
 
-        assert resp.status_code == 502
+        assert resp.status_code == 200 and resp.accepted.status_code == 202
+        assert resp.operation["state"] == "needs_attention"
         data = resp.get_json()
         assert data["success"] is False
         assert data["error_code"] == "creation_unknown"
         assert data["outcome"] == "unknown"
         assert data["message"] == CREATION_UNKNOWN
-        api.create_user_playlist.assert_called_once()
-        api.update_playlist_details.assert_not_called()
+        assert len([call for call in api.calls if call[0] == "create_user_playlist"]) == 1
+        assert not [call for call in api.calls if call[0] == "update_playlist_details"]
         assert PlaylistPair.query.count() == 0
 
 
@@ -191,7 +197,7 @@ class TestUpdatePairAuth:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.patch(
-                "/playlist/p1/pair",
+                api_path("/playlist/p1/pair"),
                 json={"auto_archive_on_remove": True},
             )
             assert resp.status_code == 401
@@ -206,7 +212,7 @@ class TestUpdatePairValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.patch(
-            "/playlist/p1/pair",
+            api_path("/playlist/p1/pair"),
             json={},
         )
         assert resp.status_code == 400
@@ -217,7 +223,7 @@ class TestUpdatePairValidation:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.patch(
-            "/playlist/p1/pair",
+            api_path("/playlist/p1/pair"),
             data="not json",
             content_type="text/plain",
         )
@@ -240,7 +246,7 @@ class TestUpdatePairValidation:
             PlaylistPairNotFoundError("No pair found")
         )
         resp = auth_client.patch(
-            "/playlist/p1/pair",
+            api_path("/playlist/p1/pair"),
             json={"auto_archive_on_remove": True},
         )
         assert resp.status_code == 404
@@ -261,7 +267,7 @@ class TestFinalizeRestoreAuth:
         mock_auth.return_value = None
         with db_app.test_client() as client:
             resp = client.post(
-                "/playlist/p1/pair/finalize-restore",
+                api_path("/playlist/p1/pair/finalize-restore"),
                 json={
                     "track_uris": [
                         "spotify:track:"
@@ -302,9 +308,12 @@ class TestArchiveFinalizers:
         finalize = getattr(service.return_value, method)
         finalize.return_value = result
         with patch("shuffify.routes.playlist_pairs.log_activity") as activity:
-            response = auth_client.post(f"/playlist/p1/pair/{endpoint}", json=payload)
+            response = auth_client.post(api_path(f"/playlist/p1/pair/{endpoint}"), json=payload)
         assert response.status_code == http_status
-        assert response.json == result.to_dict()
+        expected = result.to_dict()
+        if not expected["success"]:
+            expected["category"] = "error"
+        assert response.json == expected
         service.assert_called_once_with(auth.return_value)
         assert finalize.call_args.args[0] == "p1"
         assert finalize.call_args.kwargs == payload
@@ -317,7 +326,7 @@ class TestArchiveFinalizers:
     @patch("shuffify.routes.playlist_pairs.WorkshopFinalizeService")
     @patch("shuffify.routes.require_auth")
     def test_incomplete_captured_task_rejected(self, auth, service, auth_client, endpoint, payload):
-        response = auth_client.post(f"/playlist/p1/pair/{endpoint}", json=payload)
+        response = auth_client.post(api_path(f"/playlist/p1/pair/{endpoint}"), json=payload)
         assert response.status_code == 400
         assert response.json["status"] == "failed"
         assert response.json["retryable"] is False

@@ -1,0 +1,82 @@
+{
+  "success": true,
+  "category": "success",
+  "playlist": {
+    "id": "alice-mix",
+    "name": "Alice mix",
+    "owner_id": "alice",
+    "description": "A fixture playlist",
+    "total_tracks": 1,
+    "public": false,
+    "audio_features": {}
+  },
+  "tracks": [
+    {
+      "id": "sample-one",
+      "name": "Sample Song One",
+      "uri": "spotify:track:sample-one",
+      "duration_ms": 180000,
+      "is_local": false,
+      "added_at": "2026-01-01T12:00:00+00:00",
+      "artists": [
+        "Sample Artist",
+        null
+      ],
+      "artist_urls": [
+        "https://spotify.example.invalid/artist/sample-artist",
+        null
+      ],
+      "album_name": "Sample Album",
+      "album_image_url": "https://images.example.invalid/sample-album.jpg",
+      "track_url": "https://spotify.example.invalid/track/sample-one"
+    }
+  ],
+  "algorithms": [
+    {
+      "name": "Basic",
+      "class_name": "BasicShuffle",
+      "description": "Shuffle all tracks while keeping a chosen starting group.",
+      "parameters": {
+        "keep_first": {
+          "type": "integer",
+          "description": "Number of tracks to keep at start",
+          "default": 0,
+          "min": 0
+        }
+      }
+    }
+  ],
+  "upstream_sources": {
+    "alice-mix": [
+      {
+        "id": 1,
+        "user_id": 1,
+        "target_playlist_id": "alice-mix",
+        "source_playlist_id": "bob-mix",
+        "source_url": null,
+        "source_type": "own",
+        "source_name": "Bob mix",
+        "search_query": null,
+        "last_resolved_at": "2026-01-01T12:00:00+00:00",
+        "last_resolve_pathway": "spotify",
+        "last_resolve_status": "success",
+        "last_track_count": 3,
+        "raid_count": 5,
+        "created_at": "2026-01-01T12:00:00+00:00"
+      }
+    ]
+  },
+  "previous": null,
+  "next": {
+    "id": "bob-mix",
+    "name": "Bob mix"
+  },
+  "recently_loaded": [
+    {
+      "id": "bob-mix",
+      "name": "Bob mix",
+      "owner_id": "bob",
+      "track_count": null
+    }
+  ]
+}

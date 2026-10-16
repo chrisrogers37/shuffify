@@ -1,0 +1,165 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/SessionContext",
+  "definitions": {
+    "SessionContext": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SignedOutSession"
+        },
+        {
+          "$ref": "#/definitions/SignedInSession"
+        }
+      ]
+    },
+    "SignedOutSession": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "message": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "const": "success"
+        },
+        "signed_in": {
+          "type": "boolean",
+          "const": false
+        },
+        "user": {
+          "type": "null"
+        },
+        "notice": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AuthNotice"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "notice",
+        "signed_in",
+        "success",
+        "user"
+      ],
+      "additionalProperties": false
+    },
+    "AuthNotice": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "$ref": "#/definitions/AuthNoticeCode"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "error",
+            "success",
+            "info"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "category",
+        "message"
+      ],
+      "additionalProperties": false,
+      "description": "A fixed-map notice is consumed from the session once. No OAuth query text is returned."
+    },
+    "AuthNoticeCode": {
+      "type": "string",
+      "enum": [
+        "access_denied",
+        "oauth_failed",
+        "missing_code",
+        "invalid_state",
+        "authentication_failed",
+        "consent_required",
+        "login_failed"
+      ]
+    },
+    "SignedInSession": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "message": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "const": "success"
+        },
+        "signed_in": {
+          "type": "boolean",
+          "const": true
+        },
+        "user": {
+          "$ref": "#/definitions/SessionUser"
+        },
+        "csrf_token": {
+          "type": "string",
+          "description": "Present only when signed in; never persisted in fixtures or logs from real sessions."
+        },
+        "notice": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AuthNotice"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "csrf_token",
+        "notice",
+        "signed_in",
+        "success",
+        "user"
+      ],
+      "additionalProperties": false
+    },
+    "SessionUser": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "display_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "display_name",
+        "image_url"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

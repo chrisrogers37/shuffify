@@ -7,6 +7,8 @@ Covers authentication, validation, happy paths for all
 
 from unittest.mock import MagicMock, patch
 
+from tests.paths import api_path
+
 # =============================================================
 # Authentication Tests
 # =============================================================
@@ -22,7 +24,7 @@ class TestAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as c:
             resp = c.post(
-                "/api/playlist-preferences/order",
+                api_path("/api/playlist-preferences/order"),
                 json={"playlist_ids": ["a"]},
             )
             assert resp.status_code == 401
@@ -34,8 +36,8 @@ class TestAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as c:
             resp = c.post(
-                "/api/playlist-preferences/"
-                "pl1/toggle-hidden"
+                api_path("/api/playlist-preferences/"
+                "pl1/toggle-hidden")
             )
             assert resp.status_code == 401
 
@@ -46,8 +48,8 @@ class TestAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as c:
             resp = c.post(
-                "/api/playlist-preferences/"
-                "pl1/toggle-pinned"
+                api_path("/api/playlist-preferences/"
+                "pl1/toggle-pinned")
             )
             assert resp.status_code == 401
 
@@ -56,7 +58,7 @@ class TestAuthRequired:
         mock_auth.return_value = None
         with db_app.test_client() as c:
             resp = c.post(
-                "/api/playlist-preferences/reset"
+                api_path("/api/playlist-preferences/reset")
             )
             assert resp.status_code == 401
 
@@ -75,7 +77,7 @@ class TestSaveOrder:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/api/playlist-preferences/order",
+            api_path("/api/playlist-preferences/order"),
             json={
                 "playlist_ids": ["pl1", "pl2", "pl3"]
             },
@@ -91,7 +93,7 @@ class TestSaveOrder:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/api/playlist-preferences/order",
+            api_path("/api/playlist-preferences/order"),
             data="not json",
             content_type="text/plain",
         )
@@ -103,7 +105,7 @@ class TestSaveOrder:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/api/playlist-preferences/order",
+            api_path("/api/playlist-preferences/order"),
             json={"playlist_ids": []},
         )
         assert resp.status_code == 400
@@ -114,7 +116,7 @@ class TestSaveOrder:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/api/playlist-preferences/order",
+            api_path("/api/playlist-preferences/order"),
             json={
                 "playlist_ids": ["valid", "in valid!"]
             },
@@ -136,8 +138,8 @@ class TestToggleHidden:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/api/playlist-preferences/"
-            "pl1/toggle-hidden"
+            api_path("/api/playlist-preferences/"
+            "pl1/toggle-hidden")
         )
         assert resp.status_code == 200
         data = resp.get_json()
@@ -150,12 +152,12 @@ class TestToggleHidden:
     ):
         mock_auth.return_value = MagicMock()
         auth_client.post(
-            "/api/playlist-preferences/"
-            "pl1/toggle-hidden"
+            api_path("/api/playlist-preferences/"
+            "pl1/toggle-hidden")
         )
         resp = auth_client.post(
-            "/api/playlist-preferences/"
-            "pl1/toggle-hidden"
+            api_path("/api/playlist-preferences/"
+            "pl1/toggle-hidden")
         )
         data = resp.get_json()
         assert data["is_hidden"] is False
@@ -175,8 +177,8 @@ class TestTogglePinned:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/api/playlist-preferences/"
-            "pl1/toggle-pinned"
+            api_path("/api/playlist-preferences/"
+            "pl1/toggle-pinned")
         )
         assert resp.status_code == 200
         data = resp.get_json()
@@ -200,11 +202,11 @@ class TestReset:
         mock_auth.return_value = MagicMock()
         # Save some prefs first
         auth_client.post(
-            "/api/playlist-preferences/order",
+            api_path("/api/playlist-preferences/order"),
             json={"playlist_ids": ["pl1", "pl2"]},
         )
         resp = auth_client.post(
-            "/api/playlist-preferences/reset"
+            api_path("/api/playlist-preferences/reset")
         )
         assert resp.status_code == 200
         data = resp.get_json()
@@ -217,7 +219,7 @@ class TestReset:
     ):
         mock_auth.return_value = MagicMock()
         resp = auth_client.post(
-            "/api/playlist-preferences/reset"
+            api_path("/api/playlist-preferences/reset")
         )
         data = resp.get_json()
         assert data["success"] is True

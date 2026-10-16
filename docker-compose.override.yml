@@ -1,7 +1,12 @@
-# Dev override — mounts host source for live-reload.
-# Auto-loaded by `docker-compose up`. Skipped in prod with:
-#   docker-compose -f docker-compose.yml up -d
+# Mount source in both local application processes.
+# Omit this file by explicitly selecting docker-compose.yml for an image-only run.
 services:
-  app:
+  api:
+    volumes:
+      - .:/app
+  worker:
+    volumes:
+      - .:/app
+  migrate:
     volumes:
       - .:/app

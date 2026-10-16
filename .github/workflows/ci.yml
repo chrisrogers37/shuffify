@@ -11,15 +11,15 @@ concurrency:
 
 jobs:
   css:
-    name: Tailwind stylesheet up to date
+    name: Public document stylesheet up to date
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       # The compiled stylesheet is committed, so a deploy never depends on a
-      # build-time download. This fails when a template changed without a
+      # build-time download. This fails when a canonical public source changed without a
       # rebuild, which would otherwise ship stale CSS silently.
-      - name: Verify committed CSS matches templates
+      - name: Verify committed CSS matches public sources
         run: ./scripts/build-css.sh --check
 
   backend:
@@ -33,6 +33,7 @@ jobs:
       SPOTIFY_CLIENT_SECRET: test_client_secret
       SPOTIFY_REDIRECT_URI: http://localhost:8000/callback
       SECRET_KEY: ci-test-secret-key
+      CONTACT_ADDRESS: christophertrogers37@gmail.com
     steps:
       - uses: actions/checkout@v4
 
@@ -47,6 +48,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements/dev.txt
+
+      - name: Verify committed legal pages
+        run: python scripts/build-public-pages.py --check
 
       - name: Lint (ruff)
         # The whole tree, tests included. Local virtualenvs are excluded in

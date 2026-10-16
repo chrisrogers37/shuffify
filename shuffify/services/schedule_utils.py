@@ -135,14 +135,11 @@ def schedule_revision(schedule):
     })
 
 
-def serialize_timing(schedule):
+def serialize_timing(schedule, *, effective_timezone=None):
     """Describe stored timing without changing legacy expressions or zones."""
     zone = getattr(schedule, "timezone", None)
     if zone is None:
-        from shuffify.scheduler import get_scheduler
-
-        scheduler = get_scheduler()
-        zone = str(scheduler.timezone) if scheduler is not None else None
+        zone = effective_timezone
     kind = "advanced"
     editable = {}
     value = schedule.schedule_value
@@ -193,11 +190,6 @@ def operation_label(job_type):
 
 def timing_text(schedule_type, schedule_value, timezone_name="UTC"):
     """When a routine runs, in words; timing this cannot state exactly is shown as custom."""
-    if timezone_name is None:
-        from shuffify.scheduler import get_scheduler
-
-        scheduler = get_scheduler()
-        timezone_name = str(scheduler.timezone) if scheduler is not None else None
     value = str(schedule_value or "").strip()
     if schedule_type == ScheduleType.INTERVAL:
         return INTERVALS.get(value, f"Custom timing ({value})")

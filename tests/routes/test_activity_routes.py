@@ -1,134 +1,39 @@
-"""
-Tests for the /activity route.
+"""Activity JSON reads preserve owned stats, rich details, and bounded queries."""
 
-Covers authentication gating and rendering with mocked service layer.
-"""
-
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from shuffify.models.db import User, db
+from shuffify.models.db import User
 
 
-@pytest.fixture
-def test_user(db_app):
-    """Create a test user."""
-    with db_app.app_context():
-        user = User(
-            spotify_id="activity_test_user",
-            display_name="Activity Test User",
-        )
-        db.session.add(user)
-        db.session.commit()
-        return user
+def test_activity_context_requires_authentication(client):
+    response = client.get("/api/activity")
+    assert response.status_code == 401
+    assert response.json["success"] is False
 
 
-@pytest.fixture
-def auth_client(db_app, test_user):
-    """Authenticated test client with mocked Spotify auth."""
-    with db_app.test_client() as client:
-        with client.session_transaction() as sess:
-            sess["spotify_token"] = {
-                "access_token": "test_token",
-                "token_type": "Bearer",
-                "expires_in": 3600,
-                "refresh_token": "test_refresh",
-            }
-            sess["user_data"] = {
-                "id": "activity_test_user",
-                "display_name": "Activity Test User",
-                "images": [],
-            }
-        yield client
-
-
-class TestActivityRoute:
-    """Tests for GET /activity."""
-
-    def test_redirects_when_not_authenticated(self, db_app):
-        """Unauthenticated users get 302 or 401."""
-        with db_app.test_client() as client:
-            response = client.get("/activity")
-            assert response.status_code in (302, 401)
-
-    @patch("shuffify.routes.activity.DashboardService")
-    @patch("shuffify.routes.activity.ActivityLogService")
-    @patch("shuffify.routes.AuthService")
-    def test_renders_activity_page(
-        self,
-        mock_auth,
-        mock_activity_svc,
-        mock_dash_svc,
-        auth_client,
-        test_user,
-    ):
-        """Authenticated user sees the activity page."""
-        mock_client = MagicMock()
-        mock_auth.get_authenticated_client.return_value = mock_client
-        mock_auth.get_user_data.return_value = {
-            "id": "activity_test_user",
-            "display_name": "Activity Test User",
-            "images": [],
-        }
-        mock_auth.validate_session_token.return_value = True
-
-        mock_dash_svc.get_quick_stats.return_value = {
-            "total_shuffles": 0,
-            "total_raids": 0,
-        }
-        mock_activity_svc.get_recent.return_value = []
-        mock_dash_svc.get_recent_executions.return_value = []
-
-        response = auth_client.get("/activity")
-        assert response.status_code == 200
-        assert b"Recent routine runs" in response.data
-        assert b"App activity" in response.data
-        assert b"js/routine-results.js" in response.data
-        assert b"js/activity.js" in response.data
-        mock_activity_svc.get_recent.assert_called_once()
-        mock_dash_svc.get_recent_executions.assert_called_once()
-        assert mock_activity_svc.get_recent.call_args.kwargs == {"limit": 100}
-        assert mock_dash_svc.get_recent_executions.call_args.kwargs == {"limit": 20}
-        assert (mock_activity_svc.get_recent.call_args.args[0] ==
-                mock_dash_svc.get_recent_executions.call_args.args[0])
-
-    @patch("shuffify.routes.activity.DashboardService")
-    @patch("shuffify.routes.activity.ActivityLogService")
-    @patch("shuffify.routes.AuthService")
-    def test_passes_stats_and_activities_to_template(
-        self,
-        mock_auth,
-        mock_activity_svc,
-        mock_dash_svc,
-        auth_client,
-        test_user,
-    ):
-        """Route passes stats, activities, and executions to template."""
-        mock_client = MagicMock()
-        mock_auth.get_authenticated_client.return_value = mock_client
-        mock_auth.get_user_data.return_value = {
-            "id": "activity_test_user",
-            "display_name": "Activity Test User",
-            "images": [],
-        }
-        mock_auth.validate_session_token.return_value = True
-
-        fake_stats = {"total_shuffles": 42, "total_raids": 7}
-        fake_activities = [
-            {"activity_type": "shuffle", "description": "Shuffled playlist"},
-        ]
-        fake_executions = [
-            {"id": 1, "status": "success"},
-        ]
-
-        mock_dash_svc.get_quick_stats.return_value = fake_stats
-        mock_activity_svc.get_recent.return_value = fake_activities
-        mock_dash_svc.get_recent_executions.return_value = fake_executions
-
-        response = auth_client.get("/activity")
-        assert response.status_code == 200
-
-        mock_activity_svc.get_recent.assert_called_once()
-        mock_dash_svc.get_quick_stats.assert_called_once()
-        mock_dash_svc.get_recent_executions.assert_called_once()
+@pytest.mark.parametrize("populated", [False, True])
+def test_activity_context_preserves_stats_records_and_owned_read_limits(auth_client, populated):
+    user_id = User.query.filter_by(spotify_id="user123").one().id
+    stats = {"total_shuffles": 42, "total_raids": 7}
+    activities = [{"activity_type": "shuffle", "description": "Shuffled playlist", "metadata": {}}] if populated else []
+    executions = [{"id": 1, "status": "success", "result_detail": {"version": 1}}] if populated else []
+    with patch("shuffify.routes.require_auth", autospec=True, return_value=object()), patch(
+        "shuffify.routes.contexts.DashboardService.get_quick_stats", autospec=True, return_value=stats
+    ) as read_stats, patch(
+        "shuffify.routes.contexts.ActivityLogService.get_recent", autospec=True, return_value=activities
+    ) as read_activity, patch(
+        "shuffify.routes.contexts.DashboardService.get_recent_executions", autospec=True, return_value=executions
+    ) as read_executions:
+        response = auth_client.get("/api/activity")
+    assert response.status_code == 200
+    assert response.json["stats"] == stats
+    assert len(response.json["activities"]) == len(activities)
+    assert len(response.json["executions"]) == len(executions)
+    if populated:
+        assert response.json["activities"][0]["description"] == "Shuffled playlist"
+        assert response.json["executions"][0]["result_detail"] == {"version": 1}
+    read_stats.assert_called_once_with(user_id)
+    read_activity.assert_called_once_with(user_id, limit=100)
+    read_executions.assert_called_once_with(user_id, limit=20)

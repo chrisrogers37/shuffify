@@ -1,0 +1,521 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/WorkshopContext",
+  "definitions": {
+    "WorkshopContext": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "message": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "const": "success"
+        },
+        "playlist": {
+          "$ref": "#/definitions/WorkshopPlaylist"
+        },
+        "tracks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/WorkshopTrack"
+          }
+        },
+        "algorithms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Algorithm"
+          }
+        },
+        "upstream_sources": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/UpstreamSource"
+            }
+          }
+        },
+        "previous": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PlaylistRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "next": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PlaylistRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "recently_loaded": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RecentlyLoadedPlaylist"
+          },
+          "maxItems": 10
+        }
+      },
+      "required": [
+        "algorithms",
+        "next",
+        "playlist",
+        "previous",
+        "recently_loaded",
+        "success",
+        "tracks",
+        "upstream_sources"
+      ],
+      "additionalProperties": false
+    },
+    "WorkshopPlaylist": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "owner_id": {
+          "type": "string"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "total_tracks": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "public": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "audio_features": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JsonRecord"
+          },
+          "description": "Spotify audio feature fields are an intentionally extensible record."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "owner_id",
+        "description",
+        "total_tracks",
+        "public",
+        "audio_features"
+      ],
+      "additionalProperties": false
+    },
+    "Count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "JsonRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/JsonValue"
+      },
+      "description": "Extensible metadata and preferences intentionally retain arbitrary JSON values."
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JsonValue"
+          }
+        }
+      ]
+    },
+    "WorkshopTrack": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "uri": {
+          "type": "string"
+        },
+        "duration_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "is_local": {
+          "type": "boolean"
+        },
+        "added_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "artists": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "artist_urls": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "album_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "album_image_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "track_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "uri",
+        "duration_ms",
+        "is_local",
+        "added_at",
+        "artists",
+        "artist_urls",
+        "album_name",
+        "album_image_url",
+        "track_url"
+      ],
+      "additionalProperties": false
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "An ISO 8601 timestamp supplied by the server."
+    },
+    "Algorithm": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "class_name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/AlgorithmParameter"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "class_name",
+        "description",
+        "parameters"
+      ],
+      "additionalProperties": false
+    },
+    "AlgorithmParameter": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/NumberParameter"
+        },
+        {
+          "$ref": "#/definitions/StringParameter"
+        }
+      ]
+    },
+    "NumberParameter": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "integer",
+            "float"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "default": {
+          "type": "number"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "description",
+        "default"
+      ],
+      "additionalProperties": false
+    },
+    "StringParameter": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "default": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "description",
+        "default",
+        "options"
+      ],
+      "additionalProperties": false
+    },
+    "UpstreamSource": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "user_id": {
+          "$ref": "#/definitions/DatabaseId"
+        },
+        "target_playlist_id": {
+          "type": "string"
+        },
+        "source_playlist_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "own",
+            "external",
+            "search_query"
+          ]
+        },
+        "source_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "search_query": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_resolved_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "last_resolve_pathway": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_resolve_status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_track_count": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "raid_count": {
+          "$ref": "#/definitions/Count"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "user_id",
+        "target_playlist_id",
+        "source_playlist_id",
+        "source_url",
+        "source_type",
+        "source_name",
+        "search_query",
+        "last_resolved_at",
+        "last_resolve_pathway",
+        "last_resolve_status",
+        "last_track_count",
+        "raid_count",
+        "created_at"
+      ],
+      "additionalProperties": false
+    },
+    "DatabaseId": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "PlaylistRef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "RecentlyLoadedPlaylist": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "owner_id": {
+          "type": "string"
+        },
+        "track_count": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "owner_id",
+        "track_count"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -7,6 +7,7 @@ import pytest
 from shuffify.models.db import ActivityLog, RoutineActivationReceipt, Schedule, User
 from shuffify.services import playlist_setup_service as setup_service
 from shuffify.services.scheduler_service import ScheduleBusyError, SchedulerService
+from tests.paths import api_path
 from tests.playlist_setup_fixtures import SetupSpotify
 
 BASE = "/playlist/target/routines"
@@ -24,8 +25,8 @@ def user(auth_client):
 
 def test_context_and_review_are_read_only(auth_client, user, api):
     with patch("shuffify.routes.require_auth", return_value=api):
-        context = auth_client.get(f"{BASE}/context")
-        review = auth_client.post(f"{BASE}/review", json={
+        context = auth_client.get(api_path(f"{BASE}/context"))
+        review = auth_client.post(api_path(f"{BASE}/review"), json={
             "request_key": "review-1",
             "definition": {
                 "job_type": "shuffle", "algorithm_name": "BasicShuffle",
@@ -42,8 +43,8 @@ def test_context_and_review_are_read_only(auth_client, user, api):
 
 
 @pytest.mark.parametrize("path,method", [
-    (f"{BASE}/context", "get"), (f"{BASE}/review", "post"),
-    (f"{BASE}/activate", "post"), ("/routines/1/state", "put"),
+    (api_path(f"{BASE}/context"), "get"), (api_path(f"{BASE}/review"), "post"),
+    (api_path(f"{BASE}/activate"), "post"), (api_path("/routines/1/state"), "put"),
 ])
 def test_signed_out_requests_are_refused(db_app, path, method):
     with db_app.test_client() as client:
@@ -54,12 +55,14 @@ def test_signed_out_requests_are_refused(db_app, path, method):
 
 def test_wire_contract_rejects_unknown_and_untyped_values(auth_client, api):
     with patch("shuffify.routes.require_auth", return_value=api):
-        extra = auth_client.post(f"{BASE}/review", json={
+        extra = auth_client.post(api_path(f"{BASE}/review"), json={
             "request_key": "one", "definition": {"job_type": "shuffle", "algorithm_name": "BasicShuffle",
                                                     "timing": {"kind": "interval", "interval": "daily"}},
             "unreviewed_switch": True,
         })
-        untyped = auth_client.put("/routines/1/state", json={"desired_enabled": "false", "expected_revision": "a" * 64})
+        untyped = auth_client.put(
+            api_path("/routines/1/state"), json={"desired_enabled": "false", "expected_revision": "a" * 64},
+        )
     assert extra.status_code == untyped.status_code == 400
     assert extra.get_json()["field_errors"][0]["path"] == "unreviewed_switch"
     assert untyped.get_json()["field_errors"][0]["path"] == "desired_enabled"
@@ -69,11 +72,11 @@ def test_context_and_review_each_use_one_setup_snapshot(auth_client, api):
     with patch("shuffify.routes.require_auth", return_value=api), patch.object(
         setup_service, "read_state", wraps=setup_service.read_state
     ) as read_state:
-        context = auth_client.get(f"{BASE}/context")
+        context = auth_client.get(api_path(f"{BASE}/context"))
         assert context.status_code == 200, context.get_json()
         assert read_state.call_count == 1
         read_state.reset_mock()
-        review = auth_client.post(f"{BASE}/review", json={
+        review = auth_client.post(api_path(f"{BASE}/review"), json={
             "request_key": "same-snapshot",
             "definition": {"job_type": "shuffle", "algorithm_name": "BasicShuffle",
                            "timing": {"kind": "interval", "interval": "daily"}},
@@ -89,17 +92,15 @@ def test_context_and_review_each_use_one_setup_snapshot(auth_client, api):
 ])
 def test_target_errors_match_setup(auth_client, api, target, status, code):
     with patch("shuffify.routes.require_auth", return_value=api):
-        response = auth_client.get(f"/playlist/{target}/routines/context")
+        response = auth_client.get(api_path(f"/playlist/{target}/routines/context"))
     assert response.status_code == status
     assert response.get_json()["error_code"] == code
 
 
 @pytest.mark.parametrize("method,path,body,service_method", [
-    ("put", "/schedules/1", {"schedule_value": "weekly"}, "update_schedule"),
-    ("post", "/schedules/1/toggle", None, "toggle_schedule"),
-    ("delete", "/schedules/1", None, "delete_schedule"),
+    ("delete", api_path("/schedules/1"), None, "delete_schedule"),
 ])
-def test_legacy_schedule_busy_reply(auth_client, api, method, path, body, service_method):
+def test_delete_schedule_busy_reply(auth_client, api, method, path, body, service_method):
     with patch("shuffify.routes.require_auth", return_value=api), patch.object(
         SchedulerService, service_method, side_effect=ScheduleBusyError("A routine is using this playlist. Try again.")
     ):

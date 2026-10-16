@@ -11,9 +11,9 @@ def test_composite_late_failure_keeps_collected_step_in_exact_history(alice, fak
     original = fake.uris(TARGET)
     try:
         fake.arm(operation="DELETE /playlists/{playlist_id}/items", kind="quota", playlist_id=collection)
-        response = alice.post(f"/schedules/{sid}/run")
-        assert response.status_code == 502, response.text
-        body = response.json()
+        operation = alice.queued(f"/schedules/{sid}/run")
+        assert operation["state"] == "rolled_back", operation
+        body = operation["result"]
         detail = body["result"]["result_detail"]
         execution_id = body["result"]["execution_id"]
         history = alice.ok("get", f"/schedules/{sid}/history")["history"]
@@ -35,17 +35,16 @@ def test_composite_late_failure_keeps_collected_step_in_exact_history(alice, fak
 
 def test_closed_drip_gate_is_saved_as_not_started(alice, fake):
     collection = _collection(alice)
-    alice.ok("post", f"/playlist/{TARGET}/raid-now", json={})
-    alice.ok("put", f"/playlist/{TARGET}/raid-link", json={"drip_enabled": False})
+    alice.write(f"/playlist/{TARGET}/raid-now", json={})
+    alice.ok("put", f"/playlist/{TARGET}/raid-link", json={"drip_enabled": True})
     schedule = _create_schedule(alice, "drip", TARGET)
     sid = schedule["id"]
+    alice.ok("put", f"/playlist/{TARGET}/raid-link", json={"drip_enabled": False})
     before = (fake.playlist(TARGET), fake.playlist(collection))
     try:
-        response = alice.post(f"/schedules/{sid}/run")
-        # The legacy manual-run envelope refuses the closed gate with 409;
-        # its exact execution record must still describe a skipped step.
-        assert response.status_code == 409, response.text
-        body = response.json()
+        operation = alice.queued(f"/schedules/{sid}/run")
+        assert operation["state"] == "failed", operation
+        body = operation["result"]
         detail = body["result"]["result_detail"]
         history = alice.ok("get", f"/schedules/{sid}/history")["history"]
         assert history[0]["id"] == detail["execution_id"]
@@ -69,7 +68,7 @@ def test_empty_collection_drip_records_proven_zero_counts(alice, fake):
     sid = schedule["id"]
     original = fake.playlist(TARGET)
     try:
-        run = alice.ok("post", f"/schedules/{sid}/run")
+        run = alice.write(f"/schedules/{sid}/run")
         detail = run["result"]["result_detail"]
         assert detail["steps"][0]["status"] == "complete"
         assert detail["steps"][0]["counts"] == {

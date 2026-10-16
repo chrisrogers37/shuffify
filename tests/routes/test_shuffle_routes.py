@@ -1,5 +1,6 @@
 """Legacy form adapters exercised with complete mutable Spotify responses."""
 
+import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -17,6 +18,8 @@ from shuffify.spotify.exceptions import (
     SpotifyWriteRejectedError,
     SpotifyWriteUnverifiedError,
 )
+from tests.paths import api_path
+from tests.queued_operations import post_and_run, run_operation, scoped_history
 from tests.services.test_live_executor_outcomes import MutableSpotify, uri
 
 
@@ -34,7 +37,7 @@ def snapshots():
 @pytest.mark.parametrize("endpoint", ["shuffle", "undo"])
 def test_unauth_returns_direct_outcome_without_identity(db_app, endpoint):
     with patch("shuffify.routes.require_auth", return_value=None), db_app.test_client() as client:
-        response = client.post(f"/{endpoint}/playlist123")
+        response = client.post(api_path(f"/{endpoint}/playlist123"))
     data = response.get_json()
     assert response.status_code == 401
     assert data["operation"]["resources"] == []
@@ -45,8 +48,9 @@ def test_unauth_returns_direct_outcome_without_identity(db_app, endpoint):
 def test_shuffle_rejects_non_editable_playlist(auth_client, api):
     api.owner = "someone_else"
     with patch("shuffify.routes.require_auth", return_value=api):
-        response = auth_client.post("/shuffle/playlist123", data={"algorithm": "BasicShuffle"})
-    assert response.status_code == 403
+        response = post_and_run(auth_client, api, api_path("/shuffle/playlist123"), data={"algorithm": "BasicShuffle"})
+    assert response.status_code == 200
+    assert response.operation["state"] == "failed"
     assert response.get_json()["operation"]["aggregate_status"] == "partial"
     assert api.writes == []
 
@@ -58,7 +62,9 @@ def test_successful_form_shuffle_preserves_legacy_fields_and_parameters(auth_cli
             "shuffify.services.live_playlist_service.ShuffleService.execute", return_value=[uri(2), uri(1)]
         ) as execute,
     ):
-        response = auth_client.post("/shuffle/playlist123", data={"algorithm": "BasicShuffle", "keep_first": "1"})
+        response = post_and_run(auth_client, api,
+            api_path("/shuffle/playlist123"), data={"algorithm": "BasicShuffle", "keep_first": "1"},
+        )
     data = response.get_json()
     assert response.status_code == 200
     assert data["success"] is True
@@ -74,7 +80,7 @@ def test_nochange_shuffle_is_verified_informational_success(auth_client, api):
         patch("shuffify.routes.require_auth", return_value=api),
         patch("shuffify.services.live_playlist_service.ShuffleService.execute", return_value=[uri(1), uri(2)]),
     ):
-        response = auth_client.post("/shuffle/playlist123", data={"algorithm": "BasicShuffle"})
+        response = post_and_run(auth_client, api, api_path("/shuffle/playlist123"), data={"algorithm": "BasicShuffle"})
     data = response.get_json()
     assert response.status_code == 200
     assert data["success"] is True
@@ -89,7 +95,7 @@ def test_nochange_shuffle_is_verified_informational_success(auth_client, api):
 @pytest.mark.parametrize("body", [{"algorithm": "NotReal"}, {"algorithm": "BasicShuffle", "keep_first": "invalid"}])
 def test_invalid_form_has_known_nonretryable_direct_rejection(auth_client, api, body):
     with patch("shuffify.routes.require_auth", return_value=api):
-        response = auth_client.post("/shuffle/playlist123", data=body)
+        response = post_and_run(auth_client, api, api_path("/shuffle/playlist123"), data=body)
     assert response.status_code == 400
     assert response.get_json()["operation"]["retryable"] is False
     assert api.writes == []
@@ -127,8 +133,19 @@ def test_rejected_undo_preserves_exact_revision_for_explicit_retry(auth_client, 
 
     api.faults[("update", "playlist123")] = rejected
     with patch("shuffify.routes.require_auth", return_value=api):
-        response = auth_client.post("/undo/playlist123")
-        assert response.status_code == status
+        response = post_and_run(auth_client, api, api_path("/undo/playlist123"))
+        assert response.status_code == 200
+        if status == 429 and error_type is SpotifyRateLimitError:
+            assert response.operation["state"] == "running"
+            assert response.get_json() is None
+            assert scoped_history(auth_client, "playlist123")["current_index"] == 2
+            assert api.writes == [("update", "playlist123", states[1])]
+            time.sleep(1.05)
+            response = run_operation(auth_client, api, response.operation["id"], response.accepted)
+            assert response.operation["state"] == "succeeded"
+            assert response.get_json()["playlist_state"]["current_index"] == 1
+            assert api.writes == [("update", "playlist123", states[1]), ("update", "playlist123", states[1])]
+            return
         data = response.get_json()
         assert data["success"] is False
         assert data["operation"]["aggregate_status"] == "partial"
@@ -139,7 +156,7 @@ def test_rejected_undo_preserves_exact_revision_for_explicit_retry(auth_client, 
         assert "private" not in str(data)
         with auth_client.session_transaction() as session:
             assert StateService.get_state_info(session, "playlist123")["current_index"] == 2
-        response = auth_client.post("/undo/playlist123")
+        response = post_and_run(auth_client, api, api_path("/undo/playlist123"))
     assert response.status_code == 200
     assert response.get_json()["playlist_state"]["current_index"] == 1
     assert api.writes == [("update", "playlist123", states[1]), ("update", "playlist123", states[1])]
@@ -162,8 +179,9 @@ def test_uncertain_undo_never_consumes_or_replays_history(auth_client, api, erro
 
     api.faults[("update", "playlist123")] = unknown
     with patch("shuffify.routes.require_auth", return_value=api):
-        response = auth_client.post("/undo/playlist123")
-    assert response.status_code == 502
+        response = post_and_run(auth_client, api, api_path("/undo/playlist123"))
+    assert response.status_code == 200
+    assert response.operation["state"] == "needs_attention"
     assert response.get_json()["success"] is False
     assert response.get_json()["operation"]["aggregate_status"] == "unknown"
     with auth_client.session_transaction() as session:

@@ -24,6 +24,7 @@ from shuffify.models.db import PlaylistPair, RaidPlaylistLink, Schedule, db
 from shuffify.schemas.playlist_setup_requests import DRIP_COUNT_RANGE, RAID_COUNT_RANGE, is_playlist_id
 from shuffify.services import signed_digest
 from shuffify.services.activity_log_service import ActivityLogService
+from shuffify.services.api_response import busy_error
 from shuffify.services.base import ensure_private, safe_commit
 from shuffify.services.live_review_bindings import fingerprint
 from shuffify.services.live_review_scope import (
@@ -1108,10 +1109,10 @@ class PlaylistSetupService:
         """Apply acknowledged changes under the target lock in one transaction; never schedules anything."""
         with playlist_lock(target_id, timeout_s=LOCK_WAIT_S) as execution_acquired:
             if not execution_acquired:
-                return refusal("playlist_busy", 409, BUSY, retryable=True)
+                return busy_error(BUSY)
             with playlist_configuration_lock(target_id, timeout_s=LOCK_WAIT_S) as configuration_acquired:
                 if not configuration_acquired:
-                    return refusal("playlist_busy", 409, BUSY, retryable=True)
+                    return busy_error(BUSY)
                 outcome = _save_locked(api, user, target_id, request)
         if not isinstance(outcome, _Saved):
             return outcome

@@ -1,7 +1,7 @@
 """
 Tests for playlist routes.
 
-Tests cover refresh-playlists, get-playlist, get-stats,
+Tests cover Library refresh, get-playlist, get-stats,
 and user-playlists API.
 """
 
@@ -9,132 +9,49 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.paths import api_path
+from tests.queued_operations import post_and_run
 from tests.services.test_live_metadata_service import MetadataSpotify
 
 
-class TestRefreshPlaylists:
-    """Tests for POST /refresh-playlists."""
+class TestLibraryRefresh:
+    """GET /api/library?refresh=1 refreshes the Library's ordered sections."""
 
-    @patch("shuffify.routes.require_auth")
+    @patch("shuffify.routes.require_auth", return_value=None)
     def test_unauth_returns_401(self, mock_auth, db_app):
-        mock_auth.return_value = None
         with db_app.test_client() as client:
-            resp = client.post("/refresh-playlists")
-            assert resp.status_code == 401
+            response = client.get(api_path("/library?refresh=1"))
+        assert response.status_code == 401
 
-    @patch("shuffify.routes.playlists.PlaylistService")
+    @patch("shuffify.services.PlaylistService.get_user_playlists", autospec=True)
     @patch("shuffify.routes.require_auth")
-    def test_success_returns_playlists(
-        self, mock_auth, mock_ps_class, auth_client
-    ):
-        mock_auth.return_value = MagicMock()
-        mock_ps = MagicMock()
-        mock_ps.get_user_playlists.return_value = [
-            {"id": "p1", "name": "Playlist 1"}
-        ]
-        mock_ps_class.return_value = mock_ps
+    def test_success_returns_playlist_sections(self, mock_auth, read_playlists, auth_client):
+        from shuffify.spotify.api import SpotifyAPI
 
-        resp = auth_client.post("/refresh-playlists")
-        assert resp.status_code == 200
-        data = resp.get_json()
+        mock_auth.return_value = MagicMock(spec=SpotifyAPI)
+        read_playlists.return_value = [{"id": "p1", "name": "Playlist 1", "images": [], "public": True}]
+
+        response = auth_client.get(api_path("/library?refresh=1"))
+
+        assert response.status_code == 200
+        data = response.get_json()
         assert data["success"] is True
-        assert len(data["playlists"]) == 1
-        mock_ps.get_user_playlists.assert_called_once_with(
-            skip_cache=True
-        )
+        assert [row["id"] for row in data["sections"]["playlists"]] == ["p1"]
+        assert read_playlists.call_args.kwargs == {"skip_cache": True}
 
-    @patch("shuffify.routes.playlists.PlaylistService")
+    @patch("shuffify.services.PlaylistService.get_user_playlists", autospec=True)
     @patch("shuffify.routes.require_auth")
-    def test_playlist_error_returns_500(
-        self, mock_auth, mock_ps_class, auth_client
-    ):
+    def test_playlist_error_returns_500(self, mock_auth, read_playlists, auth_client):
         from shuffify.services import PlaylistError
+        from shuffify.spotify.api import SpotifyAPI
 
-        mock_auth.return_value = MagicMock()
-        mock_ps = MagicMock()
-        mock_ps.get_user_playlists.side_effect = (
-            PlaylistError("fail")
-        )
-        mock_ps_class.return_value = mock_ps
+        mock_auth.return_value = MagicMock(spec=SpotifyAPI)
+        read_playlists.side_effect = PlaylistError("API unavailable")
 
-        resp = auth_client.post("/refresh-playlists")
-        assert resp.status_code == 500
+        response = auth_client.get(api_path("/library?refresh=1"))
 
-
-class TestGetPlaylist:
-    """Tests for GET /playlist/<playlist_id>."""
-
-    @patch("shuffify.routes.require_auth")
-    def test_unauth_returns_401(self, mock_auth, db_app):
-        mock_auth.return_value = None
-        with db_app.test_client() as client:
-            resp = client.get("/playlist/p1")
-            assert resp.status_code == 401
-
-    @patch("shuffify.routes.playlists.PlaylistService")
-    @patch("shuffify.routes.require_auth")
-    def test_returns_playlist_dict(
-        self, mock_auth, mock_ps_class, auth_client
-    ):
-        mock_auth.return_value = MagicMock()
-        mock_playlist = MagicMock()
-        mock_playlist.to_dict.return_value = {
-            "id": "p1",
-            "name": "My Playlist",
-        }
-        mock_ps = MagicMock()
-        mock_ps.get_playlist.return_value = mock_playlist
-        mock_ps_class.return_value = mock_ps
-
-        resp = auth_client.get("/playlist/p1")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["id"] == "p1"
-
-    @patch("shuffify.routes.playlists.PlaylistService")
-    @patch("shuffify.routes.require_auth")
-    def test_features_param_passed_through(
-        self, mock_auth, mock_ps_class, auth_client
-    ):
-        mock_auth.return_value = MagicMock()
-        mock_playlist = MagicMock()
-        mock_playlist.to_dict.return_value = {"id": "p1"}
-        mock_ps = MagicMock()
-        mock_ps.get_playlist.return_value = mock_playlist
-        mock_ps_class.return_value = mock_ps
-
-        auth_client.get("/playlist/p1?features=true")
-        mock_ps.get_playlist.assert_called_once_with(
-            "p1", True
-        )
-
-
-class TestGetPlaylistStats:
-    """Tests for GET /playlist/<playlist_id>/stats."""
-
-    @patch("shuffify.routes.require_auth")
-    def test_unauth_returns_401(self, mock_auth, db_app):
-        mock_auth.return_value = None
-        with db_app.test_client() as client:
-            resp = client.get("/playlist/p1/stats")
-            assert resp.status_code == 401
-
-    @patch("shuffify.routes.playlists.PlaylistService")
-    @patch("shuffify.routes.require_auth")
-    def test_returns_stats(
-        self, mock_auth, mock_ps_class, auth_client
-    ):
-        mock_auth.return_value = MagicMock()
-        mock_ps = MagicMock()
-        mock_ps.get_playlist_stats.return_value = {
-            "avg_tempo": 120.0
-        }
-        mock_ps_class.return_value = mock_ps
-
-        resp = auth_client.get("/playlist/p1/stats")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert "avg_tempo" in data
+        assert response.status_code == 500
+        assert response.get_json()["success"] is False
 
 
 class TestApiUserPlaylists:
@@ -144,7 +61,7 @@ class TestApiUserPlaylists:
     def test_unauth_returns_401(self, mock_auth, db_app):
         mock_auth.return_value = None
         with db_app.test_client() as client:
-            resp = client.get("/api/user-playlists")
+            resp = client.get(api_path("/api/user-playlists"))
             assert resp.status_code == 401
 
     @patch("shuffify.routes.playlists.PlaylistService")
@@ -166,7 +83,7 @@ class TestApiUserPlaylists:
         ]
         mock_ps_class.return_value = mock_ps
 
-        resp = auth_client.get("/api/user-playlists")
+        resp = auth_client.get(api_path("/api/user-playlists"))
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["success"] is True
@@ -189,7 +106,7 @@ class TestApiUserPlaylists:
         ]
         mock_ps_class.return_value = mock_ps
 
-        resp = auth_client.get("/api/user-playlists")
+        resp = auth_client.get(api_path("/api/user-playlists"))
         assert resp.get_json()["playlists"][0]["track_count"] == 10
 
     @patch("shuffify.routes.playlists.PlaylistService")
@@ -208,7 +125,7 @@ class TestApiUserPlaylists:
         ]
         mock_ps_class.return_value = mock_ps
 
-        resp = auth_client.get("/api/user-playlists")
+        resp = auth_client.get(api_path("/api/user-playlists"))
         data = resp.get_json()
         assert data["playlists"][0]["image_url"] is None
 
@@ -226,7 +143,7 @@ class TestApiUserPlaylists:
         )
         mock_ps_class.return_value = mock_ps
 
-        resp = auth_client.get("/api/user-playlists")
+        resp = auth_client.get(api_path("/api/user-playlists"))
         assert resp.status_code == 500
 
     @pytest.mark.parametrize(("query", "skip_cache"), [
@@ -263,7 +180,7 @@ class TestVisibilityOutcomes:
         with auth_client.session_transaction() as sess:
             sess["playlist_states"] = history
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post("/playlist/p1/toggle-visibility", json={"public": public})
+            resp = post_and_run(auth_client, api, api_path("/playlist/p1/toggle-visibility"), json={"public": public})
         data = resp.get_json()
         assert resp.status_code == 200
         assert data["success"] is True
@@ -281,7 +198,7 @@ class TestVisibilityOutcomes:
     def test_strict_validation_precedes_any_spotify_call(self, auth_client, body):
         api = MetadataSpotify()
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post("/playlist/p1/toggle-visibility", json=body)
+            resp = post_and_run(auth_client, api, api_path("/playlist/p1/toggle-visibility"), json=body)
         data = resp.get_json()
         assert resp.status_code == 400
         assert data["success"] is False
@@ -291,7 +208,7 @@ class TestVisibilityOutcomes:
     def test_noop_retains_success_with_zero_writes(self, auth_client):
         api = MetadataSpotify(True)
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post("/playlist/p1/toggle-visibility", json={"public": True})
+            resp = post_and_run(auth_client, api, api_path("/playlist/p1/toggle-visibility"), json={"public": True})
         data = resp.get_json()
         assert resp.status_code == 200
         assert data["success"] is True
@@ -302,15 +219,16 @@ class TestVisibilityOutcomes:
         api = MetadataSpotify()
         api.owner = "not-the-user"
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post("/playlist/p1/toggle-visibility", json={"public": True})
+            resp = post_and_run(auth_client, api, api_path("/playlist/p1/toggle-visibility"), json={"public": True})
         data = resp.get_json()
-        assert resp.status_code == 403
+        assert resp.status_code == 200
+        assert resp.operation["state"] == "failed"
         assert data["success"] is False
         assert data["operation"]["aggregate_status"] == "partial"
         assert data["operation"]["resources"] == []
         assert api.writes == []
 
-    def test_write_loss_retains_actual_intent_and_never_offers_replay(self, auth_client):
+    def test_write_loss_keeps_intent_and_journals_compensation_without_offering_replay(self, auth_client):
         api = MetadataSpotify()
 
         def lose_reply(_api):
@@ -318,17 +236,20 @@ class TestVisibilityOutcomes:
 
         api.after_write = lose_reply
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post("/playlist/p1/toggle-visibility", json={"public": True})
+            resp = post_and_run(auth_client, api, api_path("/playlist/p1/toggle-visibility"), json={"public": True})
         data = resp.get_json()
-        assert resp.status_code == 502
+        assert resp.status_code == 200
+        assert resp.operation["state"] == "needs_attention"
         assert data["success"] is False
         assert data["operation"]["aggregate_status"] == "unknown"
         assert data["operation"]["retryable"] is False
         entry = data["operation"]["resources"][0]
         assert entry["desired_metadata"] == {"public": True}
         assert "current_metadata" not in entry
-        assert api.public is True
-        assert api.writes == [("p1", True)]
+        # A worker can reconcile its applied intent and journal a restoration.
+        # This fake loses that response too, so the receipt still requires review.
+        assert api.public is False
+        assert api.writes == [("p1", True), ("p1", False)]
         assert "private Spotify detail" not in str(data)
         assert "public" not in data
         assert not {"execution_id", "started_at", "execution_state"} & data.keys()
@@ -337,12 +258,22 @@ class TestVisibilityOutcomes:
         api = MetadataSpotify()
         api.after_write = lambda fake: setattr(fake, "public", False)
         with patch("shuffify.routes.require_auth", return_value=api):
-            resp = auth_client.post("/playlist/p1/toggle-visibility", json={"public": True})
+            resp = post_and_run(auth_client, api, api_path("/playlist/p1/toggle-visibility"), json={"public": True})
         data = resp.get_json()
-        assert resp.status_code == 502
+        assert resp.status_code == 200
         assert data["success"] is False
-        assert data["operation"]["resources"][0]["current_metadata"] == {"public": False}
+        assert resp.operation["state"] == "needs_attention"
+        assert resp.operation["recovery"]["reason"] == "external_edit"
+        entry = data["operation"]["resources"][0]
+        assert entry["status"] == "unknown"
+        assert entry["baseline_metadata"] == {"public": False}
+        assert entry["desired_metadata"] == {"public": True}
+        # The changed snapshot cannot prove which writer produced its metadata.
+        # Retain the original intent, then require a fresh explicit observation.
+        assert "current_metadata" not in entry
         assert "public" not in data
+        assert api.public is False
+        assert api.writes == [("p1", True)]
 
     @pytest.mark.parametrize("status,missing_user", [(401, False), (503, False), (401, True)])
     def test_preflight_error_omits_execution_identity(self, auth_client, status, missing_user):
@@ -352,7 +283,7 @@ class TestVisibilityOutcomes:
         ), patch("shuffify.is_db_available", return_value=status != 503), patch(
             "shuffify.routes.get_db_user", return_value=None
         ), patch("shuffify.routes.playlists.LiveMetadataService") as service:
-            resp = auth_client.post("/playlist/p1/toggle-visibility", json={"public": True})
+            resp = post_and_run(auth_client, api, api_path("/playlist/p1/toggle-visibility"), json={"public": True})
         service.assert_not_called()
         data = resp.get_json()
         assert resp.status_code == status
