@@ -173,6 +173,9 @@ class Config:
     SESSION_COOKIE_SAMESITE = "Lax"  # More permissive for OAuth flows
     SESSION_COOKIE_SECURE = True
 
+    # Browser-facing origin when an HTTPS proxy rewrites the backend Host.
+    PUBLIC_ORIGIN = os.getenv("PUBLIC_ORIGIN", "")
+
     # The largest body accepted other than a form, which is held to Flask's
     # MAX_FORM_MEMORY_SIZE (shuffify.BoundedRequest). A body that declares a
     # bigger length gets a 413 before it is read; one sent without a length
@@ -312,6 +315,7 @@ class TestConfig(Config):
     TESTING = True
     WTF_CSRF_ENABLED = False
     SESSION_COOKIE_SECURE = False
+    PUBLIC_ORIGIN = ""
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     SCHEDULER_ENABLED = False
     # Unit tests that roll back an unconfirmed write don't wait; the settle tests turn it on.
@@ -339,6 +343,7 @@ class HarnessConfig(Config):
     MIGRATE_ON_STARTUP = False
     # Served over plain http://localhost.
     SESSION_COOKIE_SECURE = False
+    PUBLIC_ORIGIN = ""
     # No defaults: harness.sh always sets both, and a missing value must fail
     # assert_safe rather than fall back to something nobody chose.
     REDIS_URL = os.getenv("REDIS_URL", "")

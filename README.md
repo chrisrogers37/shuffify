@@ -89,6 +89,16 @@ Flask serves the JSON API, OAuth endpoints and health checks. Product pages are
 rendered by `web/`; there are no server-rendered application templates. Run
 `npm ci`, `npm test` and `npm run build` from `web/` for the frontend.
 
+When an HTTPS frontend proxies the API through a different backend hostname,
+set `PUBLIC_ORIGIN` on the API to the browser-facing HTTPS origin, for example
+`https://app.example.invalid`. Include a port only when it is nonstandard; do
+not include credentials, a path, query or fragment. Invalid values prevent app
+startup. This pins unsafe requests to the configured origin after proxy
+reconstruction while keeping Flask-WTF token and strict referrer checks enabled.
+It never authorizes an origin from client-supplied forwarded headers. Read
+requests and their redirects retain their normal host behavior. An unset value
+keeps the existing single-origin behavior; local tests and the harness ignore it.
+
 Legal copy is canonical in `assets/legal/`. The frontend prerenders that copy
 for `/terms` and `/privacy`. The explicit-input shell in
 `assets/design/templates/` also generates committed public legal documents for

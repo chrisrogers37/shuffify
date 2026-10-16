@@ -916,6 +916,14 @@ def create_app(config_name=None, *, start_scheduler=True):
     app.config.from_object(config[config_name])
 
     # Trust one level of proxy so request.remote_addr reflects the real client IP.
+    public_origin = app.config.get("PUBLIC_ORIGIN", "")
+    if public_origin:
+        from shuffify.csrf_origin import CanonicalCsrfOrigin
+
+        app.wsgi_app = CanonicalCsrfOrigin(
+            app.wsgi_app, public_origin,
+            app.config.get("WTF_CSRF_METHODS", {"POST", "PUT", "PATCH", "DELETE"}),
+        )
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     # Log important config values
