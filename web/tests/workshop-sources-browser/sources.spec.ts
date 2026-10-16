@@ -802,3 +802,86 @@ test("read retry re-enables after the complete hint but waits for an explicit cl
     2,
   );
 });
+
+test("verified manual Add refreshes the displayed target only from matching fresh Spotify tracks", async ({ page }) => {
+  const { workshopTrack } = await import("../../src/fixtures/workshop");
+  await start(page);
+  const tracks = [workshopTrack(3), workshopTrack(2), workshopTrack(1), workshopTrack(1)];
+  const order = tracks.map((track) => track.uri);
+  const operation = {
+    id: 6999, kind: "drip_now", state: "succeeded", targets: ["target", "collection"],
+    started_at: null, completed_at: null, progress: {},
+    recovery: {available: false, action: null, reason: null},
+    result: {success: true, message: "The manual Add was verified.", operation: {aggregate_status: "complete", resources: [{
+      resource: "target", status: "complete", verification: "ordered", current_track_uris: order, desired_track_uris: order,
+    }], bookkeeping: []}},
+  };
+  let writes = 0, reads = 0;
+  await page.route("**/api/playlist/target/drip-now", async (route) => {
+    writes++;
+    await route.fulfill({status: 202, headers: {Location: "/api/operations/6999"},
+      json: {success: true, operation_id: 6999, operation}});
+  });
+  await page.route("**/api/workshop/target/current-state", async (route) => {
+    reads++;
+    await route.fulfill({json: {success: true, representable: true, loaded_at: "2026-10-15T12:00:00Z",
+      current_track_uris: order, current_tracks: tracks}});
+  });
+  await open(page, "Inbox");
+  await panel(page).getByRole("button", {name: "Add collected tracks now", exact: true}).click();
+  await panel(page).getByRole("button", {name: "Run reviewed action", exact: true}).click();
+  await expect(panel(page).getByRole("heading", {name: "Operation #6999 · succeeded", exact: true})).toBeVisible();
+  await close(page);
+  await expect(page.locator("[data-occurrence]")).toHaveCount(4);
+  await expect(page.locator("[data-occurrence] h3")).toHaveText(tracks.map((track) => track.name));
+  expect(writes).toBe(1);
+  expect(reads).toBe(1);
+  await expect(page.getByRole("button", {name: "Review & save", exact: true})).toBeDisabled();
+});
+
+
+for (const state of ["queued", "succeeded", "failed"] as const) {
+  test(`reviewed target name and exact identity remain visible with a ${state} live-action receipt`, async ({ page }) => {
+    const calls = await start(page);
+    const operation = {
+      id: 7201,
+      kind: "raid_now",
+      state,
+      targets: ["target", "collection"],
+      started_at: null,
+      completed_at: null,
+      progress: {},
+      result: state === "queued" ? null : {
+        success: state === "succeeded",
+        message: state === "succeeded" ? "Collection completed." : "Collection failed after review.",
+      },
+      recovery: { available: false, action: null, reason: null },
+    };
+    let writes = 0;
+    await page.route("**/api/playlist/target/raid-now", async (route) => {
+      writes++;
+      await route.fulfill({
+        status: 202,
+        headers: { Location: "/api/operations/7201" },
+        json: { success: true, operation_id: operation.id, operation },
+      });
+    });
+    await page.route("**/api/operations/7201", async (route) => {
+      await route.fulfill({ json: { success: true, operation } });
+    });
+    await open(page, "Inbox");
+    await panel(page).getByRole("button", { name: "Collect for review", exact: true }).click();
+    await expect(panel(page)).toContainText("Evening Collection");
+    expect(writes).toBe(0);
+    await panel(page).getByRole("button", { name: "Run reviewed action", exact: true }).click();
+    await expect(panel(page).getByRole("heading", { name: `Operation #7201 · ${state}`, exact: true })).toBeVisible();
+    const reviewed = panel(page).getByRole("region", { name: "Reviewed target", exact: true });
+    await expect(reviewed).toBeVisible();
+    await expect(reviewed.getByRole("heading", { name: "Reviewed target", exact: true })).toBeVisible();
+    await expect(reviewed.getByText("Evening Collection · target", { exact: true })).toBeVisible();
+    expect(writes).toBe(1);
+    expect(calls.filter((call) => call.path.endsWith("/live-context"))).toHaveLength(1);
+    expect(calls.filter((call) => call.path.endsWith("/current-state"))).toHaveLength(0);
+    await expect(panel(page).getByRole("button", { name: "Run reviewed action", exact: true })).toHaveCount(0);
+  });
+}

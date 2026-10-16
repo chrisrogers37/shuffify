@@ -715,3 +715,185 @@ test("confirmed archive cleanup invalidates its cache and a later fresh occurren
   await h.t.loadArchive();
   assert.equal(h.t.visibleArchive().length, 1);
 });
+
+async function targetRunHarness(kind = "drip", currentRead = null) {
+  const store = operationStore();
+  const op = {
+    id: 901, kind: kind === "schedule" ? "schedule_run" : "drip_now",
+    state: "queued", targets: ["target", "collection"], started_at: null,
+    completed_at: null, progress: {}, result: null,
+    recovery: { available: false, action: null, reason: null },
+  };
+  const tracks = [context().tracks[1], context().tracks[0]];
+  const order = tracks.map((track) => track.uri);
+  const h = await harness((path) => {
+    if (path.endsWith("/live-context") || path.endsWith("/run-context")) return json({success: true, context: {
+      kind, target: {id: "target", name: "Target"}, review_binding: {scope: "a".repeat(64)},
+      resources: [{resource: "target", domain: "spotify", access: "write"}], steps: [kind === "schedule" ? "rotate" : "drip"],
+    }});
+    if (path.endsWith("/drip-now") || path.endsWith("/run")) return json({success: true, operation_id: op.id, operation: op}, 202,
+      {Location: `/api/operations/${op.id}`});
+    if (path.endsWith("/current-state")) return currentRead ? currentRead() : json({success: true, representable: true,
+      loaded_at: "2026-10-15T12:00:00Z", current_track_uris: order, current_tracks: tracks});
+    return null;
+  }, store);
+  await h.t.initialize();
+  assert.equal(await h.t.prepareRun(kind, kind === "schedule" ? 12 : undefined), true);
+  await h.t.runReviewed();
+  const done = { ...op, state: "succeeded", result: {success: true, operation: {aggregate_status: "complete", resources: [{
+    resource: "target", status: "complete", current_track_uris: order, desired_track_uris: order, verification: "ordered",
+  }], bookkeeping: []}}};
+  return {...h, store, op, done, tracks, order};
+}
+for (const kind of ["drip", "schedule"]) {
+  test(`verified ${kind === "schedule" ? "Rotate" : "Drip"} refreshes the exact target baseline only after a matching fresh read`, async () => {
+    const h = await targetRunHarness(kind);
+    assert.equal(h.calls.filter((call) => call.path.endsWith("/current-state")).length, 0);
+    h.store.accept(h.done);
+    await tick(); await tick();
+    assert.deepEqual(h.c.getSnapshot().baseline.map((row) => row.uri), h.order);
+    assert.deepEqual(h.c.getSnapshot().working.map((row) => row.uri), h.order);
+    assert.equal(h.calls.filter((call) => call.path.endsWith("/current-state")).length, 1);
+    h.store.accept({...h.done});
+    await tick();
+    assert.equal(h.calls.filter((call) => call.path.endsWith("/current-state")).length, 1);
+  });
+}
+
+test("a live target result never adopts an external order that changed after verification", async () => {
+  const h = await targetRunHarness("drip", () => json({success: true, representable: true,
+    loaded_at: "2026-10-15T12:00:00Z", current_track_uris: context().tracks.map((track) => track.uri),
+    current_tracks: context().tracks}));
+  const baseline = h.c.getSnapshot().baseline;
+  h.store.accept(h.done);
+  await tick(); await tick();
+  assert.deepEqual(h.c.getSnapshot().baseline, baseline);
+  assert.match(h.t.getSnapshot().error, /Spotify has changed again/);
+  assert.equal(h.t.getSnapshot().actions[0].operation.id, h.op.id);
+});
+
+test("a newer local edit wins a race with the live target refresh", async () => {
+  let resolveRead;
+  const h = await targetRunHarness("drip", () => new Promise((resolve) => { resolveRead = resolve; }));
+  const baseline = h.c.getSnapshot().baseline;
+  h.store.accept(h.done);
+  await tick();
+  assert.equal(typeof resolveRead, "function");
+  assert.equal(h.c.appendTracks([context().tracks[0]], {mode: "append", origin: "catalog"}), true);
+  const local = h.c.getSnapshot().working;
+  resolveRead(json({success: true, representable: true, loaded_at: "2026-10-15T12:00:00Z",
+    current_track_uris: h.order, current_tracks: h.tracks}));
+  await tick(); await tick();
+  assert.deepEqual(h.c.getSnapshot().baseline, baseline);
+  assert.deepEqual(h.c.getSnapshot().working, local);
+});
+
+for (const [state, aggregate] of [["needs_attention", "unknown"], ["failed", "partial"], ["succeeded", "unknown"]]) {
+  test(`live ${state}/${aggregate} retains uncertainty without a fresh baseline adoption`, async () => {
+    const h = await targetRunHarness();
+    const baseline = h.c.getSnapshot().baseline;
+    h.store.accept({...h.done, state, result: {...h.done.result, operation: {...h.done.result.operation, aggregate_status: aggregate}}});
+    await tick(); await tick();
+    assert.deepEqual(h.c.getSnapshot().baseline, baseline);
+    assert.equal(h.calls.filter((call) => call.path.endsWith("/current-state")).length, 0);
+  });
+}
+
+test("a failed current read retains the verified live receipt without repeating its command", async () => {
+  const h = await targetRunHarness("drip", () => Promise.reject(Error("offline")));
+  const baseline = h.c.getSnapshot().baseline;
+  h.store.accept(h.done);
+  await tick(); await tick();
+  assert.deepEqual(h.c.getSnapshot().baseline, baseline);
+  assert.equal(h.t.getSnapshot().actions[0].phase, "complete");
+  assert.match(h.t.getSnapshot().error, /completed, but its current target could not be read/);
+  assert.equal(h.calls.filter((call) => call.path.endsWith("/drip-now")).length, 1);
+});
+
+
+async function collectReconciliationHarness() {
+  const store = operationStore();
+  const op = {
+    id: 1001,
+    kind: "raid_now",
+    state: "queued",
+    targets: ["target", "collection"],
+    started_at: null,
+    completed_at: null,
+    progress: {},
+    result: null,
+    recovery: { available: false, action: null, reason: null },
+  };
+  const h = await harness((path) => {
+    if (path.endsWith("/live-context")) return json({
+      success: true,
+      context: {
+        kind: "raid",
+        target: { id: "target", name: "Target" },
+        review_binding: { scope: "a".repeat(64) },
+        resources: [
+          { resource: "target", domain: "spotify", access: "read" },
+          { resource: "collection", domain: "spotify", access: "write" },
+        ],
+        steps: ["raid"],
+      },
+    });
+    if (path.endsWith("/raid-now")) return json({
+      success: true, operation_id: op.id, operation: op,
+    }, 202, { Location: `/api/operations/${op.id}` });
+    if (path.includes("/source-context?")) return json({
+      success: true, target: { id: "target", name: "Target" }, raid: null, archive: null,
+    });
+    return null;
+  }, store);
+  await h.t.initialize();
+  const before = h.c.getSnapshot();
+  const draft = before.working.slice(1).map((row) => row.uri);
+  assert.equal(h.c.replaceDraftOrder(draft, { expectedRevision: before.revision }), true);
+  assert.equal(await h.t.prepareRun("raid"), true);
+  assert.equal(await h.t.runReviewed(), true);
+  assert.equal(h.c.permission("review").allowed, false);
+  assert.equal(h.c.getSnapshot().retainedSourceWork[0].status, "accepted");
+  return { ...h, store, op, draft };
+}
+
+test("completed Collect reconciles retained source work before reviewing the unchanged local draft", async () => {
+  const h = await collectReconciliationHarness();
+  const revision = h.c.getSnapshot().sourceRevision;
+  const done = { ...h.op, state: "succeeded", result: { success: true } };
+  h.store.accept(done);
+  assert.equal(h.t.getSnapshot().actions[0].phase, "complete");
+  assert.deepEqual(h.c.getSnapshot().retainedSourceWork, []);
+  assert.equal(h.c.hasRetainedSourceWork(), false);
+  assert.equal(h.c.permission("review").allowed, true);
+  assert.deepEqual(h.c.getSnapshot().working.map((row) => row.uri), h.draft);
+  assert.equal(h.c.getSnapshot().sourceRevision, revision);
+  const review = await h.c.prepareReview();
+  assert.deepEqual(review.body.track_uris, h.draft);
+  assert.equal(h.c.reviewIsCurrent(), true);
+  h.store.accept({ ...done, id: 2001 });
+  h.store.accept({ ...done });
+  assert.equal(h.c.getSnapshot().sourceRevision, revision);
+  assert.equal(h.c.reviewIsCurrent(), true);
+  assert.equal(h.calls.filter((call) => call.path.endsWith("/raid-now")).length, 1);
+});
+
+for (const [state, result] of [
+  ["failed", { success: false }],
+  ["needs_attention", { success: false }],
+  ["succeeded", { success: false }],
+  ["succeeded", null],
+]) {
+  test(`Collect ${state}/${result?.success ?? "missing"} keeps its reconciled failed source work blocking a fresh save`, async () => {
+    const h = await collectReconciliationHarness();
+    h.store.accept({ ...h.op, state, result });
+    assert.equal(h.t.getSnapshot().actions[0].phase, "failed");
+    assert.equal(h.c.getSnapshot().retainedSourceWork[0].status, "failed");
+    assert.equal(h.c.getSnapshot().retainedSourceWork[0].operationId, h.op.id);
+    assert.equal(h.c.permission("review").allowed, false);
+    await assert.rejects(h.c.prepareReview(), /retained source work/);
+    assert.deepEqual(h.c.getSnapshot().working.map((row) => row.uri), h.draft);
+    assert.equal(h.calls.filter((call) => call.path.endsWith("/raid-now")).length, 1);
+    assert.equal(h.calls.filter((call) => call.path.includes("/source-context?")).length, 0);
+  });
+}

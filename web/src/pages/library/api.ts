@@ -372,11 +372,25 @@ export async function inspectCurrent(
   id: string,
   intent: InspectionIntent,
 ): Promise<Inspection> {
+  const body =
+    intent.kind === "privacy"
+      ? {
+          kind: intent.kind,
+          ...(typeof intent.desired_public === "boolean"
+            ? { desired_public: intent.desired_public }
+            : {}),
+        }
+      : {
+          kind: intent.kind,
+          ...(strings(intent.desired_track_uris)
+            ? { desired_track_uris: intent.desired_track_uris }
+            : {}),
+        };
   let data: unknown;
   try {
     const result = await api.request<JsonRecord>(
       `/api/playlist/${encodeURIComponent(id)}/inspect-live`,
-      { method: "POST", json: intent },
+      { method: "POST", json: body },
     );
     if (result.status !== "completed")
       throw new ProtocolError("An inspection cannot accept a write.");

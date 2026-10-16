@@ -674,6 +674,23 @@ export function PlaylistSetupPage() {
             </section>
             {(["collection", "archive"] as const).map((purpose) => {
               const saved = context[purpose],
+                association = changes.find((change) =>
+                  (purpose === "collection"
+                    ? [
+                        "link_collection",
+                        "replace_collection",
+                        "unlink_collection",
+                      ]
+                    : ["pair_archive", "replace_archive", "unpair_archive"]
+                  ).includes(change.op),
+                ),
+                hasAssociation = association
+                  ? association.op !== "unlink_collection" &&
+                    association.op !== "unpair_archive" &&
+                    typeof association.playlist_id === "string" &&
+                    association.playlist_id.length > 0 &&
+                    association.playlist_id !== playlistId
+                  : !!saved,
                 creation = memory(purpose),
                 creationClaim = admissions.conflict([
                   ...spotifyResources(playlistId),
@@ -867,13 +884,15 @@ export function PlaylistSetupPage() {
                       Check creation operation #{entry.id}
                     </Button>
                   )}
-                  {purpose === "collection" && context.collection && (
+                  {purpose === "collection" && hasAssociation && (
                     <>
                       <Toggle
                         label="Enable adding collected tracks"
                         checked={Boolean(
                           changes.find((value) => value.op === "set_drip")
-                            ?.drip_enabled ?? context.collection.drip_enabled,
+                            ?.drip_enabled ??
+                            context.collection?.drip_enabled ??
+                            false,
                         )}
                         onChange={(value) =>
                           stage({ op: "set_drip", drip_enabled: value })
@@ -888,7 +907,9 @@ export function PlaylistSetupPage() {
                             max={50}
                             value={String(
                               changes.find((value) => value.op === "set_drip")
-                                ?.drip_count ?? context.collection!.drip_count,
+                                ?.drip_count ??
+                                context.collection?.drip_count ??
+                                3,
                             )}
                             onChange={(event) =>
                               stage({
@@ -901,12 +922,14 @@ export function PlaylistSetupPage() {
                       </Field>
                     </>
                   )}
-                  {purpose === "archive" && context.archive && (
+                  {purpose === "archive" && hasAssociation && (
                     <Toggle
                       label="Automatically archive tracks removed in Workshop"
                       checked={Boolean(
                         changes.find((value) => value.op === "set_auto_archive")
-                          ?.value ?? context.archive.auto_archive_on_remove,
+                          ?.value ??
+                        context.archive?.auto_archive_on_remove ??
+                        true,
                       )}
                       onChange={(value) =>
                         stage({ op: "set_auto_archive", value })

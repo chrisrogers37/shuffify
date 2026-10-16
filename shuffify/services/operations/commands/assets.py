@@ -142,6 +142,10 @@ class AssetHandler:
                         runtime.journal.observe_resource(resource, expected_baseline=value, scope="metadata")
                 else:
                     before = {}
+                asset_name = (
+                    command.name if command.already_linked
+                    else before[command.asset_playlist_id]["metadata"].get("name")
+                )
                 return {
                     "before": before,
                     "after": before,
@@ -150,7 +154,11 @@ class AssetHandler:
                         "success": True,
                         "outcome": "existing",
                         "creation_unknown": False,
-                        "playlist": {"id": command.asset_playlist_id, "name": command.name},
+                        "playlist": {
+                            "id": command.asset_playlist_id,
+                            "name": asset_name if isinstance(asset_name, str) and asset_name.strip()
+                            else command.asset_playlist_id,
+                        },
                     },
                 }
 

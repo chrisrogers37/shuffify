@@ -309,7 +309,7 @@ test("lost admission blocks random writes; explicit exact retry reuses frozen op
   ).toHaveLength(1);
   expect(
     state.calls.find((call) => call.path.endsWith("/inspect-live"))!.fields,
-  ).toEqual({ kind: "tracks", desired_track_uris: null });
+  ).toEqual({ kind: "tracks" });
   expect(commands(state.calls)).toHaveLength(1);
   await panel.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.getByText(/New Spotify changes are paused/)).toBeVisible();

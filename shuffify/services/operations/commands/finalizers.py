@@ -313,6 +313,28 @@ class FinalizerHandler:
             )
             result.setdefault("database_status", "complete" if accepted else "pending")
             result.setdefault("source_status", "unknown" if command.source_playlist_id else "not_required")
+            batches = [batch for plan in document.get("plans", []) for batch in plan["batches"]]
+            # A reconciled first-write refusal has no provider or local effects.
+            # Keep ambiguous, acknowledged and accepted work on its recovery path.
+            if (
+                state == "failed" and result.get("status") == "failed"
+                and result.get("error_code") == "source_write_rejected"
+                and result.get("success") is False
+                and result.get("affected_count") == result.get(self.count_key) == 0
+                and command.source_playlist_id is not None
+                and all(plan["resource"] == command.source_playlist_id and plan["kind"] == "remove"
+                        for plan in document.get("plans", []))
+                and document.get("status") == "failed" and document.get("phase") == "forward"
+                and not document.get("boundaries", {}).get("accepted")
+                and batches and any(batch["state"] == "rejected" for batch in batches)
+                and all(
+                    batch["state"] == "prepared" and batch.get("attempts") == 0
+                    or batch["state"] == "rejected" and isinstance(batch.get("last_http_status"), int)
+                    and 400 <= batch["last_http_status"] < 500
+                    for batch in batches
+                )
+            ):
+                result.update(source_status="not_started", database_status="not_started")
         # The worker can discover an external edit while publishing a terminal candidate.
         # Its generic attention result cannot retain a complete source DTO/count.
         if state == "needs_attention" and result.get("error_code") not in {

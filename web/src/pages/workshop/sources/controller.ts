@@ -586,6 +586,54 @@ export function createSourcesController(
     }
   }
   const seenOperations = new Map<number, Operation>();
+  const liveTargetBases = new Map<
+    string,
+    { revision: number; configRevision: number; sourceRevision: number; lockRevision: number }
+  >();
+  const refreshedLiveTargets = new Set<number>();
+  async function refreshLiveTarget(action: QueuedAction) {
+    const original = liveTargetBases.get(action.id),
+      op = action.operation,
+      admission = admissions.getSnapshot().get(action.key);
+    if (
+      !original || !op || refreshedLiveTargets.has(op.id) || action.phase !== "complete" ||
+      op.state !== "succeeded" || op.result?.success !== true || !op.targets.includes(c.playlistId) ||
+      admission?.relation !== "original" || admission.operationId !== op.id ||
+      !record(op.result.operation) || op.result.operation.aggregate_status !== "complete"
+    ) return;
+    const facts = records(op.result.operation.resources),
+      target = facts.findLast((resource) => resource.resource === c.playlistId);
+    if (
+      !target || !["complete", "not_required"].includes(String(target.status)) ||
+      target.verification !== "ordered" || !Array.isArray(target.current_track_uris) ||
+      !target.current_track_uris.every((uri) => typeof uri === "string") ||
+      !Array.isArray(target.desired_track_uris) ||
+      JSON.stringify(target.current_track_uris) !== JSON.stringify(target.desired_track_uris)
+    ) return;
+    refreshedLiveTargets.add(op.id);
+    const unchanged = () => {
+      const current = c.getSnapshot();
+      return active() && !c.hasDraft() && current.revision === original.revision &&
+        current.configRevision === original.configRevision && current.sourceRevision === original.sourceRevision &&
+        current.lockRevision === original.lockRevision;
+    };
+    if (!unchanged()) return;
+    if (!(await c.checkCurrent())) {
+      update({
+        error: "The live action completed, but its current target could not be read. Compare Spotify before editing.",
+      });
+      return;
+    }
+    const observation = c.getSnapshot().observation;
+    if (!unchanged() || !observation) return;
+    if (JSON.stringify(observation.track_uris) !== JSON.stringify(target.current_track_uris)) {
+      update({
+        error: "The live action completed, but Spotify has changed again. Compare its current order before editing.",
+      });
+      return;
+    }
+    c.adoptCurrent(observation.id);
+  }
   function reconcile() {
     let changed = false;
     const changedActions = new Set<string>();
@@ -653,6 +701,9 @@ export function createSourcesController(
       update({ actions });
       for (const a of actions) {
         if (changedActions.has(a.id) && a.phase === "complete") {
+          queueMicrotask(() => {
+            void refreshLiveTarget(a);
+          });
           if (a.kind === "pair_create")
             queueMicrotask(() => {
               void loadPair();
@@ -689,12 +740,12 @@ export function createSourcesController(
           ? { archive: initial({ tracks: [], total: 0 }) }
           : {}),
       });
-      stagingListeners.forEach((fn) => fn());
       if (archiveConfirmed)
         queueMicrotask(() => {
           void loadArchive();
         });
     }
+    if (changed || taskChanged) stagingListeners.forEach((fn) => fn());
   }
   const actionClaims = new Map<string, () => void>();
   const liveKinds = new Set([
@@ -1479,6 +1530,16 @@ export function createSourcesController(
         resources,
       }),
     );
+    if (resources.some((resource) =>
+      resource.resource === `playlist:${c.playlistId}` && resource.access === "write",
+    )) {
+      liveTargetBases.set(action.id, {
+        revision: current.revision,
+        configRevision: current.configRevision,
+        sourceRevision: current.sourceRevision,
+        lockRevision: current.lockRevision,
+      });
+    }
     update({ runReview: { ...r, actionId: action.id } });
     return submit(action.id);
   }

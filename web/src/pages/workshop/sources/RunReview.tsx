@@ -15,6 +15,7 @@ export function RunReview({
     r = state.runReview;
   if (!r) return <p>Open a fresh run review.</p>;
   const context = r.context,
+    target = record(context.target) ? context.target : {},
     action = record(context.action) ? context.action : {},
     resources = Array.isArray(context.resources)
       ? records(context.resources)
@@ -30,6 +31,15 @@ export function RunReview({
   return (
     <div className="sh-sources-stack">
       <h3>{r.label}</h3>
+      <section aria-label="Reviewed target">
+        <h4>Reviewed target</h4>
+        <p>
+          {typeof target.name === "string" && target.name.trim()
+            ? target.name
+            : "Name unavailable at review"}{" "}
+          · {String(target.id ?? c.playlistId)}
+        </p>
+      </section>
       <SourceFeedback controller={c} />
       {!receipt && (
         <>

@@ -341,7 +341,10 @@ class RoutineActivationService:
         editable_cache = {}
         for job_type in JobType:
             try:
-                _validate_dependencies(api, user, target_id, state, job_type, editable_cache=editable_cache)
+                _validate_dependencies(
+                    api, user, target_id, state, job_type,
+                    extra_source_ids=[], editable_cache=editable_cache,
+                )
                 capabilities[job_type] = {"available": True, "reason": None}
             except DefinitionError as exc:
                 capabilities[job_type] = {"available": False, "reason": str(exc)}

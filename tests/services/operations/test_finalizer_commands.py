@@ -539,3 +539,85 @@ def test_attention_candidate_recovery_invalidates_source_fact_after_external_edi
     assert len(promotions) == 1
     assert len(cleanup.world.writes) == 1
     assert cleanup.world.playlists["collection"] == edited
+
+
+@pytest.mark.parametrize("shared_source", [False, True])
+@pytest.mark.parametrize("quota", [False, True])
+def test_first_source_refusal_retains_proven_no_effect_facts(cleanup, shared_source, quota):
+    source = "archive" if shared_source else "collection"
+    if shared_source:
+        RaidPlaylistLink.query.one().raid_playlist_id = source
+        db.session.commit()
+    original_target = deepcopy(cleanup.world.playlists["target"])
+    original_source = deepcopy(cleanup.world.playlists[source])
+    rejected = []
+
+    def factory(user):
+        api = cleanup.factory(user)
+        send = api._http._session.request
+
+        def reject(method, url, **kwargs):
+            if method == "DELETE":
+                rejected.append((method, url))
+                response = requests.Response()
+                response.status_code = 429 if quota else 400
+                response._content = b'{"error":{"status":429,"reason":"QUOTA_EXCEEDED"}}' if quota else b"{}"
+                return response
+            return send(method, url, **kwargs)
+
+        api._http._session.request = reject
+        return api
+
+    row = cleanup.enqueue_cleanup(source_playlist_id=source)
+    completed = cleanup.run_cleanup(row, factory)
+    result = completed.journal["result"]
+    assert completed.state == "failed"
+    assert result["error_code"] == "source_write_rejected" and result["retryable"] is True
+    assert result["status"] == "failed" and result["success"] is False
+    assert result["promoted_count"] == result["affected_count"] == 0
+    assert len(rejected) == 1 and cleanup.world.writes == []
+    assert cleanup.world.playlists["target"] == original_target
+    assert cleanup.world.playlists[source] == original_source
+    assert PendingRaidTrack.query.filter_by(status="pending").count() == 2
+    assert ActivityLog.query.count() == 0
+    assert completed.journal["boundaries"]["accepted"] == []
+    batches = [batch for plan in completed.journal["plans"] for batch in plan["batches"]]
+    assert [batch["state"] for batch in batches] == ["rejected"]
+    assert batches[0]["last_http_status"] == (429 if quota else 400)
+    assert batches[0].get("terminal_rejection") == ("quota_exceeded" if quota else None)
+    assert result["source_status"] == "not_started"
+    assert result["database_status"] == "not_started"
+
+
+def test_first_quota_refusal_with_external_source_edit_keeps_unknown_facts(cleanup):
+    original_target = deepcopy(cleanup.world.playlists["target"])
+    rejected = []
+
+    def factory(user):
+        api = cleanup.factory(user)
+        send = api._http._session.request
+
+        def reject(method, url, **kwargs):
+            if method == "DELETE":
+                rejected.append((method, url))
+                cleanup.world.playlists["collection"]["track_uris"].append(uri(99))
+                cleanup.world.playlists["collection"]["snapshot_id"] = "external-edit"
+                response = requests.Response()
+                response.status_code = 429
+                response._content = b'{"error":{"status":429,"reason":"QUOTA_EXCEEDED"}}'
+                return response
+            return send(method, url, **kwargs)
+
+        api._http._session.request = reject
+        return api
+
+    completed = cleanup.run_cleanup(cleanup.enqueue_cleanup(), factory)
+    result = completed.journal["result"]
+    assert completed.state == "needs_attention"
+    assert result["status"] == result["source_status"] == "unknown"
+    assert result["retryable"] is False and result["affected_count"] is None
+    assert len(rejected) == 1 and cleanup.world.writes == []
+    assert cleanup.world.playlists["target"] == original_target
+    assert cleanup.world.playlists["collection"]["track_uris"][-1] == uri(99)
+    assert PendingRaidTrack.query.filter_by(status="pending").count() == 2
+    assert ActivityLog.query.count() == 0 and completed.journal["boundaries"]["accepted"] == []

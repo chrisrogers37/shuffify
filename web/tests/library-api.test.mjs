@@ -152,7 +152,7 @@ test("read-only inspection preserves mismatch facts on normalized HTTP502 and ve
             kind: "track_inspection",
             aggregate_status: match ? "complete" : "unknown",
             error_code:
-              body.desired_track_uris === null
+              !Object.hasOwn(body, "desired_track_uris")
                 ? "intent_unavailable"
                 : match
                   ? null

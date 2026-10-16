@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { createRoutinesFixtures } from "../../src/fixtures/routines";
+import seed from "../../fixtures/routines/initial.json" with { type: "json" };
 import session from "../../fixtures/valid/session-signed-in.json" with { type: "json" };
 async function setup(
   page: Page,
@@ -581,4 +582,116 @@ test("unknown manual run asks before leaving and retains the exact original chec
   expect(posts).toHaveLength(2);
   expect(posts[1]?.key).toBe(posts[0]?.key);
   expect(posts[1]?.body).toEqual(posts[0]?.body);
+});
+
+const path = "/api/playlist/target1/setup";
+const adding = "Enable adding collected tracks";
+const archiving = "Automatically archive tracks removed in Workshop";
+async function open(page: Page, linked = false) {
+  const backend = createRoutinesFixtures("routines-happy");
+  const context = structuredClone(seed.setup);
+  if (linked) {
+    context.collection = { ...context.collection, drip_enabled: true, drip_count: 7 };
+    context.archive = { ...context.archive, auto_archive_on_remove: false };
+  }
+  const initial = {
+    ...context,
+    collection: linked ? context.collection : null,
+    archive: linked ? context.archive : null,
+  };
+  const calls: { path: string; method: string; body: Record<string, unknown> | null }[] = [];
+  let saved = false;
+  await page.route("**/api/**", async (route) => {
+    const req = route.request(), url = new URL(req.url()), method = req.method();
+    const target = url.pathname + url.search;
+    const body = req.postData() ? JSON.parse(req.postData()!) : null;
+    calls.push({ path: target, method, body });
+    if (url.pathname === "/api/session") return route.fulfill({ json: session });
+    if (url.pathname === path + "/context" && !saved)
+      return route.fulfill({ json: { success: true, context: initial, return_target: "routines" } });
+    const response = await backend(target, method, {
+      headers: req.headers(),
+      ...(req.postData() ? { body: req.postData()! } : {}),
+    });
+    expect(response, "Every request has an explicit HTTP fixture").not.toBeNull();
+    if (url.pathname === path + "/settings" && method === "PUT") saved = true;
+    await route.fulfill({ status: response!.status, body: await response!.text(), headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  });
+  await page.goto("/playlist/target1/setup?return_target=routines");
+  await expect(page.getByRole("heading", { name: "Playlist setup · Evening collection", exact: true })).toBeVisible();
+  return { calls, initial };
+}
+async function choose(page: Page, purpose: "collection" | "archive", id: string) {
+  await page.getByRole("button", { name: `Refresh my playlists for ${purpose}`, exact: true }).click();
+  await page.getByLabel(`Your playlists for ${purpose}`, { exact: true }).selectOption(id);
+  await page.getByRole("button", { name: `Use existing ${purpose}`, exact: true }).click();
+}
+test("fresh staged collection and archive configure defaults in one acknowledged save and retain them on reopen", async ({ page }, info) => {
+  const { calls, initial } = await open(page);
+  await expect(page.getByLabel(adding, { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel(archiving, { exact: true })).toHaveCount(0);
+  await choose(page, "collection", "choose1");
+  await expect(page.locator("#setup-collection")).toContainText("Saved: Not linked");
+  await expect(page.getByLabel(adding, { exact: true })).not.toBeChecked();
+  await expect(page.getByLabel("Tracks added per run", { exact: true })).toHaveValue("3");
+  await page.getByLabel(adding, { exact: true }).check();
+  await page.getByLabel("Tracks added per run", { exact: true }).fill("4");
+  await choose(page, "archive", "choose2");
+  await expect(page.locator("#setup-archive")).toContainText("Saved: Not linked");
+  await expect(page.getByLabel(archiving, { exact: true })).toBeChecked();
+  await page.getByLabel(archiving, { exact: true }).uncheck();
+  expect(initial.collection).toBeNull();
+  expect(initial.archive).toBeNull();
+  expect(calls.filter((call) => call.method !== "GET")).toEqual([]);
+  const changes = [
+    { op: "link_collection", playlist_id: "choose1" },
+    { op: "set_drip", drip_enabled: true, drip_count: 4 },
+    { op: "pair_archive", playlist_id: "choose2" },
+    { op: "set_auto_archive", value: false },
+  ];
+  await expect(page.getByText("4 of 20 changes staged", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Review playlist settings", exact: true }).click();
+  expect(calls.find((call) => call.path === path + "/impact")?.body?.changes).toEqual(changes);
+  const save = page.getByRole("button", { name: "Save playlist settings", exact: true });
+  await expect(save).toBeDisabled();
+  await page.getByLabel("I understand these settings affect existing routines", { exact: true }).check();
+  await save.click();
+  await expect(page.getByText("0 of 20 changes staged", { exact: true })).toBeVisible();
+  const writes = calls.filter((call) => call.method === "PUT");
+  expect(writes).toHaveLength(1);
+  expect(writes[0]?.path).toBe(path + "/settings");
+  expect(writes[0]?.body).toEqual({
+    configuration_revision: initial.configuration_revision,
+    changes,
+    section_digests: initial.section_digests,
+    acknowledgment: { signature: "fixture-settings-review" },
+  });
+  await info.attach("reviewed-settings-body", {
+    body: JSON.stringify(writes[0]?.body),
+    contentType: "application/json",
+  });
+  await page.reload();
+  await expect(page.getByLabel(adding, { exact: true })).toBeChecked();
+  await expect(page.getByLabel("Tracks added per run", { exact: true })).toHaveValue("4");
+  await expect(page.getByLabel(archiving, { exact: true })).not.toBeChecked();
+  expect(calls.filter((call) => call.method === "PUT")).toHaveLength(1);
+});
+test("replacement keeps saved settings while staged unlink hides controls and undo restores them without a write", async ({ page }) => {
+  const { calls } = await open(page, true);
+  await choose(page, "collection", "choose1");
+  await choose(page, "archive", "choose2");
+  await expect(page.getByLabel(adding, { exact: true })).toBeChecked();
+  await expect(page.getByLabel("Tracks added per run", { exact: true })).toHaveValue("7");
+  await expect(page.getByLabel(archiving, { exact: true })).not.toBeChecked();
+  await page.getByRole("button", { name: "Unlink collection", exact: true }).click();
+  await expect(page.getByLabel(adding, { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Tracks added per run", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Undo Unlink collection", exact: true }).click();
+  await expect(page.getByLabel(adding, { exact: true })).toBeChecked();
+  await expect(page.getByLabel("Tracks added per run", { exact: true })).toHaveValue("7");
+  await page.getByRole("button", { name: "Unlink archive", exact: true }).click();
+  await expect(page.getByLabel(archiving, { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Undo Unpair archive", exact: true }).click();
+  await expect(page.getByLabel(archiving, { exact: true })).not.toBeChecked();
+  expect(calls.filter((call) => call.method !== "GET")).toEqual([]);
 });

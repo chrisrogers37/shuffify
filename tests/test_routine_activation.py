@@ -116,16 +116,44 @@ def _activate(user, api, request, review):
 
 
 @pytest.mark.parametrize("job_type", ["raid", "shuffle", "raid_and_shuffle", "raid_and_drip", "rotate", "drip"])
-def test_review_six_operations_with_saved_dependencies(world, job_type):
+@pytest.mark.parametrize("source_kind", ["search_query", "external"])
+def test_review_six_operations_with_saved_dependencies(world, job_type, source_kind):
     user, api, _ = world
-    add_source(user, query="ambient", kind="search_query")
+    if source_kind == "search_query":
+        add_source(user, query="ambient", kind=source_kind)
+    else:
+        add_source(user, "ext1", kind=source_kind)
     add_link(user, enabled=True)
     add_pair(user)
     before = (Schedule.query.count(), RoutineActivationReceipt.query.count())
+    context, status = RoutineActivationService.context(api, user, "target")
+    assert status == 200, context
+    assert context["capabilities"][job_type] == {"available": True, "reason": None}
+    assert before == (Schedule.query.count(), RoutineActivationReceipt.query.count())
+    assert api.writes == []
     review = _review(user, api, _request(f"key-{job_type}", job_type))
     assert review["definition"]["source_playlist_ids"] == []
     assert review["resource_scope"]["source_ids"]
     assert before == (Schedule.query.count(), RoutineActivationReceipt.query.count())
+    assert api.writes == []
+
+
+@pytest.mark.parametrize("source_ids", ["legacy1", ["invalid/id"], [1], {"id": "legacy1"}])
+def test_activation_rejects_malformed_supplied_legacy_source_ids(world, source_ids):
+    user, api, _ = world
+    add_source(user, query="ambient", kind="search_query")
+    request = _request("invalid-legacy-sources", "raid")
+    review = _review(user, api, request)
+    review["definition"]["source_playlist_ids"] = source_ids
+    api.calls.clear()
+
+    refused, status = _activate(user, api, request, review)
+
+    assert status == 422, refused
+    assert refused["error_code"] == "invalid_definition"
+    assert refused["field_errors"][0]["path"] == "definition.source_playlist_ids"
+    assert Schedule.query.count() == RoutineActivationReceipt.query.count() == 0
+    assert api.calls == []
 
 
 def test_replay_keeps_exact_row_and_later_pause(world):
