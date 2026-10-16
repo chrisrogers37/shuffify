@@ -4,10 +4,9 @@
 const design = require('./assets/design');
 module.exports = {
   content: [
-    "./shuffify/templates/**/*.html",
-    "./shuffify/static/**/*.js",
-    // Served by the /terms and /privacy routes. Outside this glob their
-    // utilities compile to nothing and the pages render unstyled.
+    "./assets/design/templates/**/*.j2",
+    "./assets/legal/**/*.html",
+    // Static legal documents share the canonical design recipes.
     "./shuffify/static/public/**/*.html",
   ],
   theme: {

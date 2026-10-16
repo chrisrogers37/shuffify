@@ -1,26 +1,22 @@
 """
-Workshop routes: playlist workshop page, preview shuffle, commit,
+Workshop API: preview shuffle, commit,
 search, external playlist loading, and session persistence.
 """
 
 import logging
 
-from flask import flash, jsonify, redirect, render_template, request, session, url_for
+from flask import jsonify, request, session
 from pydantic import ValidationError
 
 from shuffify.enums import ActivityType
 from shuffify.error_handlers import format_validation_error
 from shuffify.routes import (
     api_bp,
-    clear_session_and_show_login,
     json_error,
     json_success,
-    load_schedule_context,
     log_activity,
     require_auth_and_db,
-    require_auth_page,
     require_session_and_db,
-    site_bp,
     validate_json,
 )
 from shuffify.routes.queue import capture_direct_history, enqueue_command
@@ -31,10 +27,8 @@ from shuffify.schemas import (
     parse_shuffle_request,
 )
 from shuffify.services import (
-    AuthenticationError,
     PlaylistAccessError,
     PlaylistError,
-    PlaylistNotFoundError,
     PlaylistService,
     ShuffleService,
     WorkshopSessionError,
@@ -43,147 +37,16 @@ from shuffify.services import (
     WorkshopSessionService,
 )
 from shuffify.services.operations.commands.schemas import WorkshopCommitCommand
-from shuffify.services.playlist_preference_service import (
-    PlaylistPreferenceService,
-)
 from shuffify.services.workshop_commit_service import (
     WorkshopCommitService,
     WorkshopTargetResult,
 )
 from shuffify.services.workshop_finalize_service import WorkshopFinalizeService
-from shuffify.spotify.exceptions import SpotifyAuthError
 from shuffify.spotify.url_parser import (
     parse_spotify_playlist_url,
 )
 
 logger = logging.getLogger(__name__)
-
-
-@site_bp.route("/workshop")
-@require_auth_page
-def workshop_hub(api=None, user=None, spotify_profile=None):
-    """Render the Workshop hub with no playlist selected."""
-    algorithms = ShuffleService.list_algorithms()
-    return render_template(
-        "workshop.html",
-        playlist=None,
-        algorithms=algorithms,
-        prev_playlist_id=None,
-        next_playlist_id=None,
-        prev_playlist_name=None,
-        next_playlist_name=None,
-        upstream_sources_json={},
-    )
-
-
-@site_bp.route("/workshop/<playlist_id>")
-@require_auth_page
-def workshop(playlist_id, api=None, user=None, spotify_profile=None):
-    """Render the Playlist Workshop page."""
-    try:
-        playlist_service = PlaylistService(api)
-        playlist = playlist_service.get_playlist(
-            playlist_id, include_features=False
-        )
-
-        algorithms = ShuffleService.list_algorithms()
-
-        upstream_sources_json, _ = (
-            load_schedule_context(user)
-        )
-
-        prev_playlist_id = None
-        next_playlist_id = None
-        # The neighbours' names label the previous/next links (presentation only).
-        playlist_names = {}
-        try:
-            all_playlists = (
-                playlist_service.get_user_playlists()
-            )
-            ordered_ids = [
-                p["id"] for p in all_playlists
-            ]
-            playlist_names = {
-                p["id"]: p.get("name") for p in all_playlists
-            }
-            try:
-                preferences = (
-                    PlaylistPreferenceService
-                    .get_user_preferences(user.id)
-                )
-                if preferences:
-                    favs, visible, _hidden = (
-                        PlaylistPreferenceService
-                        .apply_preferences(
-                            all_playlists, preferences
-                        )
-                    )
-                    ordered_ids = [
-                        p["id"]
-                        for p in favs + visible
-                    ]
-            except Exception as e:
-                logger.debug(
-                    "Could not apply playlist "
-                    "preferences for navigation: %s",
-                    e,
-                )
-
-            if playlist_id in ordered_ids:
-                idx = ordered_ids.index(playlist_id)
-                if idx > 0:
-                    prev_playlist_id = ordered_ids[
-                        idx - 1
-                    ]
-                if idx < len(ordered_ids) - 1:
-                    next_playlist_id = ordered_ids[
-                        idx + 1
-                    ]
-        except Exception as e:
-            logger.debug(
-                "Could not build playlist "
-                "navigation: %s",
-                e,
-            )
-
-        logger.info(
-            f"User {(spotify_profile or {}).get('display_name', 'Unknown')} "
-            f"opened workshop for playlist "
-            f"'{playlist.name}' ({len(playlist)} tracks)"
-        )
-
-        return render_template(
-            "workshop.html",
-            playlist=playlist.to_dict(),
-            user=spotify_profile,
-            algorithms=algorithms,
-            upstream_sources_json=upstream_sources_json,
-            prev_playlist_id=prev_playlist_id,
-            next_playlist_id=next_playlist_id,
-            prev_playlist_name=playlist_names.get(prev_playlist_id),
-            next_playlist_name=playlist_names.get(next_playlist_id),
-        )
-
-    except (AuthenticationError, SpotifyAuthError) as e:
-        logger.error(f"Error loading workshop: {e}")
-        return clear_session_and_show_login(
-            "Your session has expired. Please log in again."
-        )
-    except PlaylistError as e:
-        # A missing playlist, someone else's, or Spotify failing: the
-        # session is fine, so the user stays logged in.
-        logger.warning(f"Could not open playlist {playlist_id} in the workshop: {e}")
-        flash(_unloadable_playlist_message(e), "error")
-        return redirect(url_for("site.workshop_hub"))
-
-
-def _unloadable_playlist_message(error: PlaylistError) -> str:
-    """What to tell the user when the Workshop cannot load a playlist."""
-    if isinstance(error, PlaylistNotFoundError):
-        return "That playlist doesn't exist or was deleted."
-    if isinstance(error, PlaylistAccessError):
-        return "You can only open your own or collaborative playlists in the Workshop."
-    return "Couldn't load that playlist from Spotify. Please try again."
 
 
 @api_bp.route(

@@ -139,8 +139,14 @@ def test_other_json_routes_keep_generic_csrf_response(
     }
 
 
-def test_generic_form_csrf_still_renders_html(csrf_client):
+def test_logout_csrf_rejection_returns_json_error(csrf_client):
     response = csrf_client.post("/logout", headers={"Accept": "text/html"})
     assert response.status_code == 400
-    assert response.content_type.startswith("text/html")
-    assert b"Your request could not be verified" in response.data
+    assert response.content_type.startswith("application/json")
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.get_json() == {
+        "success": False,
+        "category": "error",
+        "error_code": "invalid_request",
+        "message": "Your request could not be verified. Please refresh the page and try again.",
+    }

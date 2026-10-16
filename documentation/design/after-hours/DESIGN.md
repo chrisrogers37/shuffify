@@ -8,7 +8,7 @@ easy to scan. The landing page introduces an asymmetric hero with a playlist
 preview. Every authenticated page must use this exact theme and its shared components.
 There is one product design system; page-specific rules describe composition only.
 
-Pages are built with Flask, Jinja, and Tailwind. Library, Workshop, Routines,
+Pages are built with React, TypeScript, Vite and Tailwind; Flask serves the API. Library, Workshop, Routines,
 Activity, Settings and every authenticated error page share the authenticated
 navigation and task-view infrastructure, and use the full After Hours
 presentation, as do their dynamic dialogs and feedback.
@@ -21,8 +21,8 @@ Authenticated review uses the guarded local fake Spotify harness described in
 ## Tokens
 
 Core utility recipes use the `sh` Tailwind namespace, such as `bg-sh-surface`,
-`text-sh-muted`, and `border-sh-control-border`. Templates use shared
-component classes and layout utilities. The sole token source is `assets/design/tokens.json`.
+`text-sh-muted`, and `border-sh-control-border`. Components use shared
+classes and layout utilities. The sole token source is `assets/design/tokens.json`.
 `assets/design/index.js` derives both Tailwind theme entries and `--sh-*` CSS
 variables from it; never maintain a second set of literal values.
 
@@ -33,15 +33,14 @@ focus and reduced motion belong in `core.css`. Feature component recipes live in
 inside the same core bundle and consume the same tokens. Page files compose recipes.
 HTML/JS and generic CSS may use layout utilities but must not define
 another palette, font or component recipe, or link a second presentation bundle.
-`tests/test_design_surface_contract.py` enforces this for every template and static
-builder, with no exceptions.
+Frontend theme, static-output and browser checks enforce this for public and
+authenticated compositions.
 
-After Hours is the default on every page. `navigation_mode` is independent:
-the landing is always public, and errors preserve their authenticated session
-navigation. Authenticated pages receive `sh-shell sh-app-shell`; public pages
-receive `sh-shell sh-public-shell`. The `sh-document`/`sh-shell` markers scope
-shared scrollbars, focus and motion. `app-feedback.js` supplies text-only
-`showNotification` feedback, and `base.js` uses the same flash recipes.
+After Hours is the default on every page. Public and authenticated layouts
+provide their respective navigation; failures preserve the authenticated
+workspace. The `sh-document`/`sh-shell` markers scope shared scrollbars, focus
+and motion. The common Announcer and feedback components provide text-only
+messages without replacing retained operation facts.
 
 | Role | Value | Use |
 | --- | --- | --- |
@@ -115,28 +114,25 @@ Blocking dialogs use `shadow-sh-modal` with the shared scrim token.
   focus, and reduced-motion treatment.
 - `pages/`: compositions for individual screens. Reuse core components and
   token variables; do not define a second palette or component recipe here.
-- `templates/legal.html.j2`: static legal-page composition, using the same
-  Jinja shell macros as the Flask pages.
+- `templates/legal.html.j2`: static legal-document composition using the
+  explicit-input macros in `templates/macros/public.html.j2`.
 
-`shuffify/templates/macros/design.html` owns the brand, skip link, header, and
-footer markup. `macros/design_states.html` owns error-state presentation.
-`macros/design_showcase.html` owns reusable feature walkthroughs, illustrative
-panels, playlist rows, and labeled flow connectors; their component recipes
-live in `core.css`. `macros/app_ui.html` owns labelled task-panel and modal
-markup. `macros/forms.html` provides shared select and checkbox fields.
-These components accept explicit, escaped inputs. New app compositions must
-reuse the core controls and existing cards/forms/states macros without changing
-their forms, IDs, data attributes, or ARIA contracts. Shared
-scrollbars and interaction states belong in the core, rather than in each page.
+The public macros own the brand, skip link, header and footer markup. Their
+inputs are escaped and do not require Flask. React components own application
+layout, controls, review panels and feedback; they use the same semantic tokens
+and recipes. Shared scrollbars and interaction states belong in the common
+components rather than individual pages.
 
-`assets/tailwind.src.css` imports the module and emits one committed
-`static/css/tailwind.css` bundle. Every page loads that bundle, including
-Terms and Privacy. No other presentation bundle or palette overrides are loaded.
+`assets/tailwind.src.css` builds the committed `static/css/tailwind.css` used by
+the static legal documents. The React application builds its own bundled
+stylesheet from the canonical design inputs. Both use local fonts and official
+Spotify attribution assets.
 
-The legal copy lives in `assets/legal/`. `python scripts/build-public-pages.py`
-generates the checked-in static documents from the shared macros without
-changing their existing Flask routes. Its `--check` mode and pytest detect
-source/output drift. Preserve the literal legal content fragments.
+Legal copy lives in `assets/legal/`. `python scripts/build-public-pages.py`
+generates checked-in static documents without importing the application.
+The frontend prerenders `/terms` and `/privacy` from the same legal copy.
+The generator's `--check` mode and tests detect source/output drift. Preserve
+the literal legal content fragments and escape the build-time contact address.
 
 ## Shared components
 
@@ -239,75 +235,47 @@ the routine overview).
 
 ### Authenticated navigation and Settings
 
-The five destinations are Library (`site.index`), Workshop
-(`site.workshop_hub`), Routines (`site.schedules`), Activity, and Settings.
-Endpoint-based `aria-current="page"` identifies the current destination without
-changing route URLs. At 1024 px and wider, the links appear alongside the brand.
-Below that width, a native `details`/`summary` Menu opens the labelled links in
-document flow and works without JavaScript. Closed Menu links are absent from
-the keyboard sequence. The visible current-destination text stays beside Menu.
+The five destinations are Library (`/`), Workshop (`/workshop`), Routines
+(`/routines`), Activity and Settings. Route-aware `aria-current="page"`
+identifies the current destination. At desktop widths the links appear
+alongside the brand. The narrow layout uses a labelled Menu; closed links are
+absent from the keyboard sequence.
 
-Settings navigates to its dedicated page. The page groups Shuffle defaults, Snapshots &
-History, Library, and Account in a 72ch column. Its form retains the POST action,
-field names, CSRF token, 1–50 snapshot bounds, and native submission. Theme and
-notification choices are unavailable explanatory text, with their saved values
-preserved in hidden fields. Editable checkbox values retain their native
-checked/unchecked behavior. Account contains the CSRF-protected POST logout.
+Settings groups Shuffle defaults, Snapshots & History, Library and Account in
+a 72ch column. The React form reads and writes `/api/settings` with session
+CSRF verification. It preserves field names, native checkbox behavior and the
+1–50 snapshot bounds. Unavailable choices are explanatory text with saved
+preferences retained. Account contains the CSRF-protected POST logout.
 
-`settings.js` enhances that same form: it validates before submitting, snapshots
-FormData before disabling controls during the save, prevents duplicate submits,
-and restores editing when the request finishes. Field errors are associated
-with their input; unsuccessful requests remain visible in a focusable local
-alert with the entered values intact. Success uses shared feedback. An explicitly
-empty default algorithm clears the stored choice; an omitted algorithm in an
-update leaves the stored value unchanged.
+The settings model freezes submitted values before disabling controls and
+prevents duplicate submits. Field errors are associated with their inputs;
+unsuccessful requests retain entered values and a focusable local alert.
+An explicitly empty default algorithm clears the stored choice; an omitted
+algorithm leaves the stored value unchanged.
 
 ### Task panels and navigation hooks
 
-Render `task_panel(panel_id, title, close_label='Close', modal=false)` from
-`macros/app_ui.html`, providing the caller's `body` and `footer` branches. Place
-contextual panels alongside `[data-panel-primary]` inside
-`.sh-workspace[data-panel-workspace]`. Panels start `hidden inert`; their heading
-is the accessible name and receives focus when opened. A closed panel has no
-focusable descendants in the keyboard sequence.
+The common React `TaskPanel` is a labelled contextual region; only its active
+entry is interactive. `useTasks().openTask(task, "replace" | "push")` opens or
+nests a task, and `closeTask(reason)` checks its optional `beforeClose` hook
+before restoring the original trigger or a logical primary-content fallback.
+Each task has an explicit ID, title, content, trigger and fallback. An optional
+actor-scoped `scrollKey` retains scroll position across closure and reopening.
 
-`app-panels.js` loads for authenticated navigation and exposes:
+Below the shared workspace breakpoint, the primary editor is hidden and inert;
+at desktop widths both panes remain available. Resizing preserves inputs and
+preferred scroll positions. Blocking confirmations use `ConfirmDialog`, an
+inert background and contained keyboard focus. Nested tasks preserve their
+parents, while Escape applies to the active task. Close never cancels a
+dispatched business write or clears its recovery state.
 
-| API | Contract |
-| --- | --- |
-| `AppPanels.open(id, {trigger, modal, beforeClose, onClose})` | Returns `Promise<boolean>`; opens one task and checks the active task's close hook before replacement. `trigger` defaults to the active element. |
-| `AppPanels.requestClose(reason='close')` | Returns `Promise<boolean>`; requests dismissal and restores the trigger or a logical primary-content fallback when allowed. |
-| `beforeClose(reason)` | May return or resolve `false` to retain the task. Reasons include `close`, `escape`, `replace`, and `suspend`. |
-| `onClose(reason)` | Called after an allowed close. Consumers retain ownership of values, scroll snapshots, write state, and recovery. |
-| `AppNavigation.addGuard(fn)` | Registers a synchronous or asynchronous navigation guard; returns an unsubscribe function. Returning/resolving `false` cancels navigation. |
-| `AppNavigation.request(detail)` | Returns a boolean or promise for programmatic callers to await before navigating. Dispatches cancellable `app:before-navigate` first. |
-
-A contextual task is a labelled region with no focus trap. Below 1024 px its
-primary editor is hidden/inert; at desktop widths both panes remain available.
-Resizing recomputes layout without rebuilding inputs. The controller preserves
-the panel body's preferred scroll position across responsive clamping and modal
-suspension; restored focus does not scroll that body back to the top. A blocking task uses
-`role="dialog"`, `aria-modal="true"`, an inert background and contained keyboard
-focus. It suspends at most one contextual panel and restores that panel and its
-focus when dismissed. There are no stacked active task drawers. Escape applies
-to the active task and leaves native select behavior alone. Close requests never
-cancel a dispatched business write or clear recovery state; consumers decide
-whether dismissal is allowed.
-
-**Close hooks cannot re-enter panel transitions.** While an asynchronous
-`beforeClose` is pending, calls to `AppPanels.open` or `requestClose` reject rather
-than queue behind the hook and deadlock. A hook may await an external decision,
-but must not call or await those panel methods itself. Return `false`, then let
-the outer action or navigation guard open a confirmation; permit the `suspend`
-reason when that confirmation should temporarily replace the contextual task.
-Consumers must handle rejected transition promises. A rejected hook does not
-permanently disable later transitions.
-
-Same-tab HTTP(S) links and `form[data-app-logout]` pass through navigation guards; normal
-fragment links, downloads and modified/new-tab clicks retain native behavior.
-The guard detail supplies `kind`, `url`, `element`, and `event` for native actions.
-The Workshop unsaved-changes check is attached to this hook, including
-Settings navigation.
+Close hooks must not re-enter task transitions while an asynchronous decision
+is pending. Consumers retain values, write state and operation receipts outside
+panel mounts. The shared `NavigationGuard` covers router changes, same-tab
+links, logout submissions and document unload. Modified/new-tab clicks and
+ordinary fragment navigation retain their native behavior. Feature controllers
+register explicit leave decisions, including Save, Discard and Stay where a
+draft requires resolution.
 
 ### Contrast and focus
 
@@ -357,7 +325,7 @@ tracks must be clearly identified as illustrative data.
 `shuffify/static/images/spotify-logo-white.svg` is the verbatim
 `Full_Logo_White_RGB.svg` entry in Spotify's official logo download. Render it
 through an image element, maintaining its aspect ratio. Do not inline its SVG
-markup into templates.
+markup into components.
 
 ## Self-hosted assets
 
@@ -379,9 +347,8 @@ The two font files total 61,556 bytes. The variable subset URLs come from the
 
 ## Review and checks
 
-Templates and public HTML have no inline style or event-handler attributes.
-Template style and script blocks carry a nonce; presentation CSS and event
-listeners live in static assets. Shell components keep accessible names, visible
+Public HTML and React markup have no inline style or event-handler attributes.
+Scripts and styles use bundled same-origin assets under a strict CSP. Shell components keep accessible names, visible
 focus, focus return, inert backgrounds for open panels, and keyboard navigation.
 Layouts support a 360 px viewport and desktop widths.
 
@@ -396,16 +363,16 @@ across calendar years.
 ### Landing
 
 The illustrative playlist shows five fictional tracks from positions 753–757
-of an 800-track example. Its original order is rendered by Jinja and clearly
+of an 800-track example. Its original order is rendered by the page and clearly
 labeled. JavaScript reveals Preview Shuffle and Undo Changes, reorders those
 same track elements into one illustrative order at positions 1–5, and restores
 the exact original order on Undo. The demo makes no Spotify requests and has
 no autoplay. Controls keep keyboard focus and state changes are announced.
 Reduced motion skips the movement and changes the order immediately; without
 JavaScript the original excerpt stays visible and controls stay hidden. Preserve
-the GET sign-in form's `legal_consent` field, required checkbox, button ID,
-and ARIA label. Consent feedback uses `landing.js` and event listeners;
-its native required validation also works without JavaScript.
+the GET sign-in form's `legal_consent` field, required checkbox and accessible
+label. Consent feedback uses the public page component; native required
+validation also works without JavaScript.
 
 The landing continues below the hero with four sample walkthroughs: Raid
 collects external discoveries into a review inbox/linked Raid playlist; Drip
@@ -438,10 +405,10 @@ source and action without repeating the same playlists in a before/after grid.
 Rotate shows one exchange in two stacked directional rows: saved songs return
 to the everyday playlist, and everyday songs are set aside for another day.
 Each row names both endpoints and the two-song example count. A quiet caption
-says locked favorites stay in place. It uses the shared `playlist_row` macro
+says locked favorites stay in place. It uses the shared playlist-row component
 without duplicating playlists or song tiles. The Drip illustration uses the
-shared mini-playlist and song-tile macros.
-An explicit `cover_palette` macro keeps complete palette class names visible
+shared mini-playlist and song-tile components.
+An explicit shared cover palette keeps complete palette class names visible
 to Tailwind. Both hero artwork tiles and the mini-playlists use this one core
 palette recipe; sizing stays with their respective component recipes.
 The benefits beside these figures are unnumbered. All shared examples use a
@@ -465,13 +432,14 @@ fragment IDs and the underlying application terminology.
 
 ### Error pages
 
-Anonymous generic, 404, and 500 pages use one escaped presentation macro with
-separate status tokens, a dashboard link and a retry action. Their
-composition is part of the shared compiled design bundle and activated only on
-logged-out responses.
+The frontend renders route, context and operation failures through shared
+components with authored messages, explicit retry controls and retained task
+state. The backend returns JSON error envelopes with HTTP status codes and
+protocol headers; it does not render an application error page.
 
 ### Legal pages
 
-Terms and Privacy are static HTML served by their own routes. The shared shell
-and core bundle provide a 72ch reading measure, visible focus, and responsive
-typography. The static documents use no script or inline style/event attributes.
+Terms and Privacy are prerendered frontend routes from the canonical legal
+copy. Generated static public documents provide an independent source/output
+check. The shared design provides a 72ch reading measure, visible focus and
+responsive typography, without inline style or event attributes.

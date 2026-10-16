@@ -1,4 +1,4 @@
-"""Worker history and temporary page reads share confirmed scoped receipts."""
+"""Worker history and JSON context reads share confirmed scoped receipts."""
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import create_autospec, patch
@@ -142,7 +142,7 @@ def test_library_uses_confirmed_history_and_never_rewrites_stale_flask_history(a
     assert other_scope.json["sections"]["playlists"][0]["can_undo"] is False
 
 
-def test_temporary_library_html_reads_authoritative_history_without_session_mirroring(auth_client):
+def test_library_projection_prefers_authoritative_history_without_session_mirroring(auth_client):
     user = User.query.filter_by(spotify_id="user123").one()
     repository, scope = OperationRepository(), get_history_scope({})
     confirmed(repository, user.id, scope)
@@ -154,12 +154,10 @@ def test_temporary_library_html_reads_authoritative_history_without_session_mirr
                                            "owner": {"id": "user123"}, "items": {"total": 1},
                                            "external_urls": {"spotify": "https://example.invalid/playlist"},
                                            "public": False}]
-    with patch("shuffify.routes.core.AuthService.get_authenticated_api", autospec=True, return_value=api), \
-            patch("shuffify.routes.core.AuthService.get_user_data", autospec=True,
-                  return_value={"id": "user123", "display_name": "Test User"}):
-        response = auth_client.get("/")
+    with patch("shuffify.routes.require_auth", autospec=True, return_value=api):
+        response = auth_client.get("/api/library")
     assert response.status_code == 200
-    assert 'class="library-undo sh-button-secondary"' in response.get_data(as_text=True)
+    assert response.json["sections"]["playlists"][0]["can_undo"] is True
     with auth_client.session_transaction() as session:
         assert session["playlist_states"] == {"playlist": saved(["stale"])}
 

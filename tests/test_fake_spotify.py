@@ -254,12 +254,32 @@ class TestSelfCheck:
                           data="{not json", content_type="application/json")
         assert resp.status_code == 400 and resp.get_json()["error"]["message"] == "Error parsing JSON."
 
-    def test_links_never_point_off_the_machine(self, client, alice):
+    def test_api_links_stay_local_and_spotify_backlinks_are_canonical(self, client, alice):
         resp = client.get("/v1/me", headers=alice, base_url="http://api.spotify.com")
         assert resp.status_code == 400
         served = create_app(origin="http://127.0.0.1:8900").test_client()
         me = served.get("/v1/me", headers=token_with("")).get_json()
         assert me["href"] == "http://127.0.0.1:8900/v1/users/alice"
+        assert me["external_urls"]["spotify"] == "https://open.spotify.com/user/alice"
+        playlist_id = pid("alice-long-haul")
+        playlist = served.get(f"/v1/playlists/{playlist_id}", headers=alice).get_json()
+
+        def check_links(value):
+            if isinstance(value, dict):
+                if "external_urls" in value:
+                    assert value["external_urls"]["spotify"] == (
+                        f"https://open.spotify.com/{value['type']}/{value['id']}"
+                    )
+                for key, item in value.items():
+                    if key in {"href", "next", "previous"} and item is not None:
+                        assert item.startswith("http://127.0.0.1:8900/v1/")
+                    check_links(item)
+            elif isinstance(value, list):
+                for item in value:
+                    check_links(item)
+
+        check_links(playlist)
+        assert playlist["items"]["next"]
 
 
 # ---------------------------------------------------------------------------

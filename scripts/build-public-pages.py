@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Generate committed legal HTML from shared shell macros and literal legal copy.
 
-Run with the existing Python environment, before rebuilding Tailwind CSS:
+Run with the existing Python environment:
     python scripts/build-public-pages.py
     python scripts/build-public-pages.py --check
 
-The routes continue serving these files verbatim. No app initialization, network,
-or runtime template rendering is needed for generation or verification.
+The generated public documents use canonical asset inputs. No app initialization,
+network or application templates are needed for generation or verification.
 """
 
 import argparse
@@ -31,12 +31,7 @@ def render_public_pages(repo_root: Path | None = None) -> dict[str, str]:
     """Render the static artifacts without Flask or hidden template globals."""
     repo_root = REPO_ROOT if repo_root is None else repo_root
     environment = Environment(
-        loader=FileSystemLoader(
-            [
-                repo_root / "assets" / "design" / "templates",
-                repo_root / "shuffify" / "templates",
-            ]
-        ),
+        loader=FileSystemLoader(repo_root / "assets" / "design" / "templates"),
         autoescape=True,
         undefined=StrictUndefined,
         keep_trailing_newline=True,

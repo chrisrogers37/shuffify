@@ -1,39 +1,26 @@
 """
-Routine management page, exact deletion, execution and history endpoints.
+Routine management: exact deletion, execution and history JSON endpoints.
 """
 
 import logging
 
 from flask import (
-    flash,
     jsonify,
-    redirect,
-    render_template,
     request,
-    url_for,
 )
 
 from shuffify.enums import ActivityType
 from shuffify.routes import (
     api_bp,
-    clear_session_and_show_login,
     context_preflight,
     json_reply,
     json_success,
     log_activity,
     no_store,
     require_auth_and_db,
-    require_auth_page,
     require_session_and_db,
-    site_bp,
 )
 from shuffify.routes.routine_queue import admit_schedule
-from shuffify.services import (
-    AuthenticationError,
-    PlaylistError,
-    PlaylistService,
-    ScheduleError,
-)
 from shuffify.services.api_response import busy_error
 from shuffify.services.live_executor_context_service import (
     LiveExecutorContextService,
@@ -51,7 +38,6 @@ from shuffify.services.live_review_bindings import (
     review_message,
 )
 from shuffify.services.live_review_context import context_unavailable
-from shuffify.services.routine_activation_service import schedule_payloads
 from shuffify.services.scheduler_service import (
     ScheduleBusyError,
     SchedulerService,
@@ -69,64 +55,6 @@ def latest_schedule_results(api=None, user=None):
         "Latest routine results loaded",
         results=SchedulerService.get_latest_executions(user.id, request.args.get("playlist_id")),
     )
-
-
-@site_bp.route("/schedules")
-@require_auth_page
-def schedules(api=None, user=None, spotify_profile=None):
-    """Render the Schedules management page."""
-    try:
-        db_user = user
-
-        user_schedules = (
-            SchedulerService.get_user_schedules(db_user.id)
-        )
-
-        playlist_service = PlaylistService(api)
-        playlists = playlist_service.get_user_playlists()
-
-        return render_template(
-            "schedules.html",
-            user=spotify_profile,
-            routines=schedule_payloads(user_schedules),
-            playlists=playlists,
-        )
-
-    except AuthenticationError as e:
-        logger.error(
-            "Auth error loading schedules: %s", e
-        )
-        return clear_session_and_show_login(
-            "Your session has expired. "
-            "Please log in again."
-        )
-    except (PlaylistError, ScheduleError) as e:
-        logger.error(
-            "Service error loading schedules page: %s "
-            "[type=%s]",
-            e,
-            type(e).__name__,
-        )
-        flash(
-            "Could not load schedule data. "
-            "Please try again.",
-            "error",
-        )
-        return redirect(url_for("site.index"))
-    except Exception as e:
-        logger.error(
-            "Unexpected error loading schedules page: %s "
-            "[type=%s]",
-            e,
-            type(e).__name__,
-            exc_info=True,
-        )
-        flash(
-            "Something went wrong loading schedules. "
-            "Please try again.",
-            "error",
-        )
-        return redirect(url_for("site.index"))
 
 
 @api_bp.route(

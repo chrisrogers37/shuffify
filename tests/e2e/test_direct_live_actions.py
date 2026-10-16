@@ -1,9 +1,11 @@
 """Direct actions observed through the app and the isolated Spotify fake."""
 
+import re
 import time
 from collections import Counter
 
 import pytest
+from playwright.sync_api import expect
 
 from tests.e2e.conftest import APP, App, hold_playlist_lock, pid
 from tests.e2e.test_pages import CHROMIUM_ARGS, Visit
@@ -15,16 +17,20 @@ LONG_HAUL = pid("alice-long-haul")
 
 def _direct(body, kind):
     assert body["operation"]["kind"] == kind
-    assert not {"execution_id", "started_at", "execution_state", "tracks_added",
-                "tracks_total"}.intersection(body)
+    assert not {"execution_id", "started_at", "execution_state", "tracks_added", "tracks_total"}.intersection(body)
     return body["operation"]
 
 
 def _snapshot(alice, uris):
-    return alice.ok("post", f"/playlist/{TARGET}/snapshots", json={
-        "playlist_name": "Morning Mix", "track_uris": uris,
-        "trigger_description": "Before rearranging",
-    })["snapshot"]["id"]
+    return alice.ok(
+        "post",
+        f"/playlist/{TARGET}/snapshots",
+        json={
+            "playlist_name": "Morning Mix",
+            "track_uris": uris,
+            "trigger_description": "Before rearranging",
+        },
+    )["snapshot"]["id"]
 
 
 def test_direct_shuffle_reads_external_changes_and_undo_preserves_occurrences(alice, fake):
@@ -32,12 +38,19 @@ def test_direct_shuffle_reads_external_changes_and_undo_preserves_occurrences(al
     stale = fake.uris(LONG_HAUL)
     other = App("alice", fake.display_name("alice"))
     external = [stale[-1]] + stale[1:] + [stale[-1]]
-    other.write(f"/workshop/{LONG_HAUL}/commit", json={
-        "baseline_track_uris": stale, "track_uris": external,
-    })
-    body = alice.write(f"/shuffle/{LONG_HAUL}", data={
-        "algorithm": "BasicShuffle",
-    })
+    other.write(
+        f"/workshop/{LONG_HAUL}/commit",
+        json={
+            "baseline_track_uris": stale,
+            "track_uris": external,
+        },
+    )
+    body = alice.write(
+        f"/shuffle/{LONG_HAUL}",
+        data={
+            "algorithm": "BasicShuffle",
+        },
+    )
     operation = _direct(body, "shuffle")
     assert operation["aggregate_status"] == "complete"
     resource = operation["resources"][0]
@@ -57,9 +70,13 @@ def test_snapshot_restore_records_the_actual_before_order_for_undo(alice, fake):
     shuffled = fake.uris(TARGET)
     other = App("alice", fake.display_name("alice"))
     external = [shuffled[-1]] + shuffled[:-2]
-    other.write(f"/workshop/{TARGET}/commit", json={
-        "baseline_track_uris": shuffled, "track_uris": external,
-    })
+    other.write(
+        f"/workshop/{TARGET}/commit",
+        json={
+            "baseline_track_uris": shuffled,
+            "track_uris": external,
+        },
+    )
     restored = alice.write(f"/snapshots/{snapshot_id}/restore")
     operation = _direct(restored, "snapshot_restore")
     assert operation["aggregate_status"] == "complete"
@@ -136,103 +153,76 @@ def direct_browser():
         browser.close()
 
 
+def _panel(page):
+    return page.locator("section.sh-task-panel:not([hidden])")
+
+
 def _choose_shuffle(page, playlist_id):
-    """Pick Basic in the row's Playlist actions, which stay open so Shuffle now and Restore are reachable."""
-    card = page.locator(f'.card-tile[data-playlist-id="{playlist_id}"]')
-    # The child combinator: the shuffle method's own summary inside is a descendant too (Playwright strict mode).
-    card.locator(".library-playlist-actions > summary").click()
-    card.locator(".library-shuffle-summary").click()
-    card.locator(".library-shuffle-method").select_option("BasicShuffle")
-    card.locator(".library-shuffle-done").click()
-    return card
-
-
-def _settled(page, count):
-    page.wait_for_function(
-        "n => PlaylistOperations.getRecords().length === n && !PlaylistOperations.isBusy()", arg=count,
-    )
+    row = page.locator(f'.sh-library-row[data-playlist-id="{playlist_id}"]')
+    details = row.locator(":scope > details")
+    if details.get_attribute("open") is None:
+        details.locator(":scope > summary").click()
+    options = row.locator("details details")
+    if options.get_attribute("open") is None:
+        options.locator(":scope > summary").click()
+    row.get_by_role("combobox", name="Shuffle method", exact=True).select_option("BasicShuffle")
+    return row
 
 
 def _close_result(page):
-    page.locator("#live-operation-panel [data-panel-close]").first.click()
+    _panel(page).get_by_role("button", name="Close", exact=True).click()
 
 
 def _open_review(page, trigger, label=None):
-    """Live actions open a review first; return its final named Run control."""
     trigger.click()
-    page.wait_for_function(
-        "label => { const text = document.getElementById('live-operation-heading').textContent;"
-        " return label ? text === 'Review: ' + label : text.startsWith('Review: '); }",
-        arg=label,
+    run = _panel(page).get_by_role(
+        "button", name=re.compile(r"^(Run (shuffle|restore|visibility change)|Change visibility|Restore snapshot now)$")
     )
-    return page.locator("#live-operation-run")
+    expect(run).to_be_visible()
+    return run
 
 
 def _heading(page, heading):
-    page.wait_for_function(
-        "heading => document.getElementById('live-operation-heading').textContent === heading",
-        arg=heading,
-    )
-
-
-# The Workshop's tools are task panels, #workshop-<tool>-panel: beside the playlist at 1024px and wider, over it
-# below. One panel is open at a time, so a live review, the Save review or another tool replaces the open one;
-# a test that goes back to a tool opens it again.
-def _open_tool(page, tool):
-    """Open a Workshop tool: options, add, inbox, archive, routines, history or details.
-
-    Shuffle options, Add tracks and Inbox have buttons on the page at every width. Archive, Routines, History
-    and Playlist details have them from 1024px; below that they are listed under Playlist tools. Does nothing
-    when the tool is already open. Below 1024px an open tool covers these buttons, so close it first."""
-    panel = page.locator(f"#workshop-{tool}-panel")
-    if panel.is_visible():
-        return
-    button = page.locator("#workshop-details-btn" if tool == "details" else f"#workshop-tool-{tool}")
-    if button.is_visible():
-        button.click()
-    else:
-        page.click("#workshop-tools-btn")
-        page.locator(f'#workshop-tools-panel [data-workshop-tool="{tool}"]').click()
-    panel.wait_for(state="visible")
-
-
-def _open_inbox(page):
-    """Open Inbox, then wait for the raid status that its Collect and Add collected tracks buttons follow."""
-    _open_tool(page, "inbox")
-    page.wait_for_function("() => raidPanel.loaded")
-
-
-def _close_tool(page, tool):
-    """Close a tool with its Close button. Source or Archive setup, opened from Inbox or Archive, returns to it."""
-    panel = page.locator(f"#workshop-{tool}-panel")
-    panel.locator("[data-panel-close]").first.click()
-    panel.wait_for(state="hidden")
+    expect(_panel(page).get_by_role("heading", name=heading, exact=True)).to_be_visible()
 
 
 def _open_row_actions(page, row):
-    """Open one row's Row actions, the single #track-actions group shown inside that row; returns it."""
-    button = row.locator(".track-actions-btn")
-    if button.get_attribute("aria-expanded") != "true":
-        button.click()
-    actions = page.locator("#track-actions")
-    actions.wait_for(state="visible")
-    return actions
+    row.get_by_role("button", name=re.compile("^Actions for ")).click()
+    return row
+
+
+def _settled(page, count=None):
+    status = _panel(page).locator('section[aria-label="Retained operation result"] [role="status"]')
+    expect(status).to_have_text(re.compile(r"^(succeeded|failed|rolled back|needs attention)$"), timeout=150000)
+
+
+def _open_tool(page, tool):
+    from tests.e2e.test_playlist_workspace import _open_tool as open_tool
+
+    open_tool(page, {"details": "Playlist details", "routines": "Routines"}.get(tool, tool))
+
+
+def _close_tool(page, tool=None):
+    from tests.e2e.test_playlist_workspace import _close_tool as close_tool
+
+    close_tool(page)
+
+
+def _open_inbox(page):
+    _open_tool(page, "inbox")
 
 
 def _remove_row(page, index=0):
-    """Remove one row from the draft through its Row actions."""
-    _open_row_actions(page, page.locator("#track-list .track-item").nth(index))
-    page.click('#track-actions [data-row-action="remove"]')
+    from tests.e2e.test_playlist_workspace import _remove_row as remove_row
+
+    remove_row(page, index)
 
 
 def _lose_reply(posted):
-    """Let the app apply the request, then lose its reply before the page reads it."""
-
     def handle(route):
         posted.append(route.request.url)
         response = route.fetch()
         assert response.status == 202
-        # The oracle can retain the receipt that the browser deliberately loses.
         handle.operation_id = response.json()["operation_id"]
         handle.location = response.headers["location"]
         route.fulfill(status=202, content_type="application/json", body="")
@@ -240,9 +230,27 @@ def _lose_reply(posted):
     return handle
 
 
-@pytest.mark.parametrize("width,height", [(1440, 900), (768, 1024), (375, 812)])
+def _run_accepted(page, run, path, alice, *, state="succeeded"):
+    with page.expect_response(lambda r: r.url == APP + path and r.request.method == "POST") as pending:
+        run.click()
+    response = pending.value
+    assert response.status == 202, response.text()
+    accepted = response.json()
+    assert accepted["operation_id"] == accepted["operation"]["id"]
+    operation = alice.wait_operation(response.headers["location"], accepted["operation_id"])
+    assert operation["state"] == state, operation
+    expect(_panel(page)).to_contain_text(state.replace("_", " "), timeout=45000)
+    return operation
+
+
+@pytest.mark.parametrize("width,height", [(1440, 900), (768, 1024), (360, 800)])
 def test_library_shuffle_and_undo_show_verified_results_without_navigation(
-    alice, fake, direct_browser, tmp_path, width, height,
+    alice,
+    fake,
+    direct_browser,
+    tmp_path,
+    width,
+    height,
 ):
     before = fake.uris(TARGET)
     visit = Visit(direct_browser, "desktop")
@@ -254,21 +262,21 @@ def test_library_shuffle_and_undo_show_verified_results_without_navigation(
         visit.log_in()
         card = _choose_shuffle(page, TARGET)
         assert posts == [] and fake.uris(TARGET) == before
-        _open_review(page, card.locator(".library-quick-shuffle")).click()
-        _settled(page, 1)
-        assert page.evaluate("PlaylistOperations.getRecords()[0].complete") is True
-        assert fake.uris(TARGET) != before
-        assert page.url == f"{APP}/"
+        run = _open_review(page, card.get_by_role("button", name=re.compile("^Shuffle now")))
+        first = _run_accepted(page, run, api_path(f"/shuffle/{TARGET}"), alice)
+        assert first["result"]["operation"]["aggregate_status"] == "complete"
+        assert fake.uris(TARGET) != before and Counter(fake.uris(TARGET)) == Counter(before)
+        assert page.url == f"{APP}/library"
         page.screenshot(path=tmp_path / f"library-direct-{width}.png", full_page=True)
         _close_result(page)
-        _open_review(page, card.locator(".library-undo")).click()
-        _settled(page, 2)
-        assert page.evaluate("PlaylistOperations.getRecords()[1].complete") is True
-        assert fake.uris(TARGET) == before
-        context = (APP + api_path(f'/playlist/{TARGET}/live-context'))
-        assert posts == [context, (APP + api_path(f'/shuffle/{TARGET}')), context, (APP + api_path(f'/undo/{TARGET}'))]
-        assert card.locator(".library-shuffle-method").input_value() == "BasicShuffle"
-        assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+        run = _open_review(page, card.get_by_role("button", name="Restore previous saved version now", exact=True))
+        second = _run_accepted(page, run, api_path(f"/undo/{TARGET}"), alice)
+        assert second["id"] != first["id"] and fake.uris(TARGET) == before
+        assert posts.count(APP + api_path(f"/shuffle/{TARGET}")) == 1
+        assert posts.count(APP + api_path(f"/undo/{TARGET}")) == 1
+        _close_result(page)
+        assert card.get_by_role("combobox", name="Shuffle method", exact=True).input_value() == "BasicShuffle"
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         assert visit.problems == []
     finally:
         visit.close()
@@ -279,33 +287,37 @@ def test_lost_library_shuffle_response_blocks_random_replay(alice, fake, direct_
     visit = Visit(direct_browser, "desktop")
     page = visit.page
     posted = []
-    shuffle_url = (APP + api_path(f'/shuffle/{TARGET}'))
-
+    shuffle_url = APP + api_path(f"/shuffle/{TARGET}")
     lost = _lose_reply(posted)
     page.route(shuffle_url, lost)
     try:
         visit.log_in()
         card = _choose_shuffle(page, TARGET)
-        _open_review(page, card.locator(".library-quick-shuffle")).click()
-        _settled(page, 1)
+        _open_review(page, card.get_by_role("button", name=re.compile("^Shuffle now"))).click()
+        expect(_panel(page).get_by_role("button", name="Retry this exact request", exact=True)).to_be_visible()
         assert alice.wait_operation(lost.location, lost.operation_id)["state"] == "succeeded"
         assert fake.uris(TARGET) != before
-        assert page.evaluate("PlaylistOperations.getRecords()[0].aggregate") == "unknown"
-        assert page.evaluate("PlaylistOperations.hasAttention()") is True
         _close_result(page)
-        assert card.locator(".library-quick-shuffle").is_disabled()
-        card.locator(".library-quick-shuffle").dispatch_event("click")
+        shuffle = card.get_by_role("button", name=re.compile("^Shuffle now"))
+        expect(shuffle).to_have_attribute("aria-disabled", "true")
+        shuffle.dispatch_event("click")
         assert posted == [shuffle_url]
-        assert page.evaluate("PlaylistOperations.getRecords().length") == 1
         assert visit.problems == []
     finally:
         visit.close()
 
 
-@pytest.mark.parametrize("width,height", [(1440, 900), (768, 1024), (375, 812)])
+@pytest.mark.parametrize("width,height", [(1440, 900), (768, 1024), (360, 800)])
 def test_workshop_privacy_preserves_draft_and_snapshot_requires_resolution(
-    alice, fake, direct_browser, tmp_path, width, height,
+    alice,
+    fake,
+    direct_browser,
+    tmp_path,
+    width,
+    height,
 ):
+    from tests.e2e.test_playlist_workspace import _uris
+
     original = fake.uris(TARGET)
     desired = list(reversed(original))
     snapshot_id = _snapshot(alice, desired)
@@ -315,176 +327,132 @@ def test_workshop_privacy_preserves_draft_and_snapshot_requires_resolution(
     page.set_viewport_size({"width": width, "height": height})
     posts = []
     page.on("request", lambda req: posts.append(req.url) if req.method == "POST" else None)
-    restore_url = (APP + api_path(f'/snapshots/{snapshot_id}/restore'))
-    draft_state = (
-        "({working:workshopState.workingUris,saved:workshopState.savedUris,"
-        "recovery:workshopState.sourceRecovery})"
-    )
+    restore_path = api_path(f"/snapshots/{snapshot_id}/restore")
     try:
         visit.log_in()
         page.goto(f"{APP}/workshop/{TARGET}", wait_until="networkidle")
         _remove_row(page)
-        draft = page.evaluate(draft_state)
-        # Visibility is metadata only: it is reviewed and runs beside a track draft.
+        draft = _uris(page)
         _open_tool(page, "details")
-        _open_review(page, page.locator("#workshop-visibility-btn")).click()
-        _settled(page, 1)
-        assert page.evaluate("PlaylistOperations.getRecords()[0].complete") is True
+        run = _open_review(page, _panel(page).get_by_role("button", name=re.compile("^Review making playlist ")))
+        _run_accepted(page, run, api_path(f"/playlist/{TARGET}/toggle-visibility"), alice)
         assert fake.playlist(TARGET)["public"] is not was_public
-        assert fake.uris(TARGET) == original
-        assert page.evaluate(draft_state) == draft
-        _close_result(page)
-        restore = page.locator(f'[data-live-operation-key="snapshot_restore:{snapshot_id}"]')
-
-        def choose_restore():
-            # A review or the Save panel replaces History, so each Restore is reached through History again.
-            _open_tool(page, "history")
-            restore.click()
-
-        # A restore writes the drafted tracks, so the draft is settled first. Escape sends nothing.
-        choose_restore()
-        _heading(page, "Save or discard your draft first")
-        assert page.locator("#live-operation-discard").is_visible()
-        assert page.locator("#live-operation-run").inner_text() == "Review & save draft"
+        assert fake.uris(TARGET) == original and _uris(page) == draft
+        _close_tool(page)
+        _open_tool(page, "history")
+        _panel(page).locator(f'[data-snapshot-id="{snapshot_id}"]').get_by_role(
+            "button", name="Restore now", exact=True
+        ).click()
+        dialog = page.get_by_role("dialog", name="Keep your local draft?")
+        expect(dialog.get_by_role("button", name="Review & save", exact=True)).to_be_visible()
         page.screenshot(path=tmp_path / f"restore-draft-conflict-{width}.png", full_page=True)
         page.keyboard.press("Escape")
-        page.wait_for_function("() => !PlaylistOperations.isPreparing()")
-        # Review & save opens the real Save review; backing out of it drops the restore.
-        choose_restore()
-        _heading(page, "Save or discard your draft first")
-        page.click("#live-operation-run")
-        page.locator("#workshop-save-panel").wait_for(state="visible")
-        assert restore_url not in posts and fake.uris(TARGET) == original
-        assert page.evaluate("workshopState.workingUris") == original[1:]
-        page.click("#workshop-review-back")
-        page.wait_for_function("() => !PlaylistOperations.isPreparing()")
-        assert restore_url not in posts
-        # Discarding is local; the restore is then reviewed afresh and still needs its own Run.
-        choose_restore()
-        _heading(page, "Save or discard your draft first")
-        page.click("#live-operation-discard")
-        _heading(page, "Review: Restore saved snapshot now")
-        assert page.evaluate("workshopState.workingUris") == original
-        assert restore_url not in posts
-        page.click("#live-operation-run")
-        _settled(page, 2)
-        assert page.evaluate("PlaylistOperations.getRecords()[1].complete") is True
-        assert page.evaluate("workshopState.workingUris") == desired
-        assert page.evaluate("workshopState.savedUris") == desired
-        assert fake.uris(TARGET) == desired
-        assert page.url == f"{APP}/workshop/{TARGET}"
-        assert page.evaluate(
-            "document.getElementById('live-operation-panel').contains(document.activeElement)"
-        ), page.evaluate("({id:document.activeElement.id,tag:document.activeElement.tagName})")
-        assert posts.count(restore_url) == 1
-        assert (APP + api_path(f'/workshop/{TARGET}/commit')) not in posts
-        assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
-        page.screenshot(path=tmp_path / f"direct-workshop-{width}.png", full_page=True)
+        expect(dialog).to_be_hidden()
+        assert APP + restore_path not in posts and _uris(page) == draft
+        _panel(page).locator(f'[data-snapshot-id="{snapshot_id}"]').get_by_role(
+            "button", name="Restore now", exact=True
+        ).click()
+        dialog.get_by_role("button", name="Discard", exact=True).click()
+        expect(_panel(page).get_by_role("heading", name="Review snapshot restore", exact=True)).to_be_visible()
+        assert _uris(page) == original and APP + restore_path not in posts
+        run = _panel(page).get_by_role("button", name="Restore snapshot now", exact=True)
+        _run_accepted(page, run, restore_path, alice)
+        assert fake.uris(TARGET) == desired and _uris(page) == desired
+        assert posts.count(APP + restore_path) == 1
         assert visit.problems == []
     finally:
         visit.close()
 
 
-def test_snapshot_restore_is_reviewed_against_fresh_spotify_and_refuses_a_later_change(
-    alice, fake, direct_browser,
-):
+def test_snapshot_restore_is_reviewed_against_fresh_spotify_and_refuses_a_later_change(alice, fake, direct_browser):
     original = fake.uris(TARGET)
     desired = list(reversed(original))
     snapshot_id = _snapshot(alice, desired)
     restore_path = api_path(f"/snapshots/{snapshot_id}/restore")
     other = App("alice", fake.display_name("alice"))
-    visit = Visit(direct_browser, "desktop", allowed=[(restore_path, 409)])
+    visit = Visit(direct_browser, "desktop")
     page = visit.page
-    posts = []
-    page.on("request", lambda req: posts.append(req.url) if req.method == "POST" else None)
     try:
         visit.log_in()
         page.goto(f"{APP}/workshop/{TARGET}", wait_until="networkidle")
-        # Another session drops a track after this page loaded: the review reads Spotify, not the page.
-        other.write(f"/workshop/{TARGET}/commit", json={
-            "baseline_track_uris": original, "track_uris": original[1:],
-        })
+        other.write(f"/workshop/{TARGET}/commit", json={"baseline_track_uris": original, "track_uris": original[1:]})
         _open_tool(page, "history")
-        restore = page.locator(f'[data-live-operation-key="snapshot_restore:{snapshot_id}"]')
-        run = _open_review(page, restore, "Restore saved snapshot now")
-        assert "Restoring adds 1 track, changes the order." in page.locator("#live-operation-review").inner_text()
-        # A change after the review is refused before anything is written.
-        other.write(f"/workshop/{TARGET}/commit", json={
-            "baseline_track_uris": original[1:], "track_uris": original[2:],
-        })
-        run.click()
-        _settled(page, 1)
-        record = page.evaluate("PlaylistOperations.getRecords()[0]")
-        assert record["noEffect"] is True and record["operation"]["error_code"] == "resource_changed"
-        assert "Review it again" in page.locator("#live-operation-results").inner_text()
+        restore = (
+            _panel(page)
+            .locator(f'[data-snapshot-id="{snapshot_id}"]')
+            .get_by_role("button", name="Restore now", exact=True)
+        )
+        run = _open_review(page, restore)
+        expect(_panel(page)).to_contain_text("Review snapshot restore")
+        other.write(
+            f"/workshop/{TARGET}/commit", json={"baseline_track_uris": original[1:], "track_uris": original[2:]}
+        )
+        failed = _run_accepted(page, run, restore_path, alice, state="failed")
+        assert failed["result"]["operation"]["error_code"] == "resource_changed"
         assert fake.uris(TARGET) == original[2:]
-        _close_result(page)
-        assert restore.is_enabled()
+        _close_tool(page)
         _open_tool(page, "history")
-        run = _open_review(page, restore, "Restore saved snapshot now")
-        assert "Restoring adds 2 tracks, changes the order." in page.locator("#live-operation-review").inner_text()
-        run.click()
-        _settled(page, 2)
-        assert page.evaluate("PlaylistOperations.getRecords()[1].complete") is True
+        restore = _panel(page).locator(f'[data-snapshot-id="{snapshot_id}"]').get_by_role(
+            "button", name="Restore now", exact=True
+        )
+        expect(restore).to_have_attribute("aria-disabled", "true")
+        expect(_panel(page)).to_contain_text("Reconcile the retained operation")
+        # The failed receipt remains authoritative in this document. A fresh visit reads
+        # the externally changed order before the user reviews a new restoration.
+        page.once("dialog", lambda dialog: dialog.accept())
+        page.reload(wait_until="networkidle")
+        from tests.e2e.test_playlist_workspace import _uris
+
+        assert _uris(page) == original[2:]
+        _open_tool(page, "history")
+        run = _open_review(
+            page,
+            _panel(page)
+            .locator(f'[data-snapshot-id="{snapshot_id}"]')
+            .get_by_role("button", name="Restore now", exact=True),
+        )
+        _run_accepted(page, run, restore_path, alice)
         assert fake.uris(TARGET) == desired
-        assert page.evaluate("workshopState.workingUris") == desired
-        assert posts.count(f"{APP}{restore_path}") == 2
         assert visit.problems == []
     finally:
         visit.close()
 
 
 @pytest.mark.parametrize("kind", ["shuffle", "privacy"])
-def test_first_write_rate_limit_defers_one_browser_operation_until_provider_hint(
-    alice, fake, direct_browser, kind,
-):
+def test_first_write_rate_limit_defers_one_browser_operation_until_provider_hint(alice, fake, direct_browser, kind):
     before = fake.playlist(TARGET)
-    before_uris = fake.uris(TARGET)
     operation = "PUT /playlists/{playlist_id}/items" if kind == "shuffle" else "PUT /playlists/{playlist_id}"
     fake.arm(operation=operation, kind="rate_limit", retry_after=2, playlist_id=TARGET)
-    path = api_path(f"/shuffle/{TARGET}") if kind == "shuffle" else api_path(f"/playlist/{TARGET}/toggle-visibility")
-
+    path = api_path(f"/shuffle/{TARGET}" if kind == "shuffle" else f"/playlist/{TARGET}/toggle-visibility")
     visit = Visit(direct_browser, "desktop")
     page = visit.page
-    responses = []
-    page.on("response", lambda response: responses.append(response.status) if response.url == APP + path else None)
+    replies = []
+    page.on("response", lambda r: replies.append(r.status) if r.url == APP + path else None)
     try:
         visit.log_in()
-        if kind == "shuffle":
-            card = _choose_shuffle(page, TARGET)
-            action = card.locator(".library-quick-shuffle")
-        else:
-            page.goto(f"{APP}/workshop/{TARGET}", wait_until="networkidle")
-            _remove_row(page)
-            draft = page.evaluate("workshopState.workingUris")
-            action = page.locator("#workshop-visibility-btn")
-
-        def review():
-            # The visibility change is in Playlist details, which a review replaces.
-            if kind == "privacy":
-                _open_tool(page, "details")
-            return _open_review(page, action)
-
-        review().click()
+        row = _choose_shuffle(page, TARGET)
+        trigger = (
+            row.get_by_role("button", name=re.compile("^Shuffle now"))
+            if kind == "shuffle"
+            else row.get_by_role("button", name=re.compile("^Make (private|public) now"))
+        )
+        with page.expect_response(APP + path) as reply:
+            _open_review(page, trigger).click()
+        accepted = reply.value.json()
         deadline = time.monotonic() + 10
         while fake.faults()[0]["fired"] == 0 and time.monotonic() < deadline:
             page.wait_for_timeout(50)
-        assert fake.faults()[0]["fired"] == 1
-        assert responses == [202]
+        assert fake.faults()[0]["fired"] == 1 and replies == [202]
         assert fake.playlist(TARGET) == before
-        assert page.evaluate("PlaylistOperations.isBusy()") is True
-        _settled(page, 1)
-        assert responses == [202], "the browser replayed an accepted writer POST"
-        assert page.evaluate("PlaylistOperations.getRecords()[0].complete") is True
-        assert page.evaluate("PlaylistOperations.getRecords().length") == 1
-        _close_result(page)
-        assert action.is_enabled()
-        if kind == "shuffle":
-            assert fake.uris(TARGET) != before_uris
-        else:
+        active = alice.get(reply.value.headers["location"]).json()["operation"]
+        assert active["id"] == accepted["operation_id"] and active["state"] in {"queued", "running"}
+        assert alice.wait_operation(reply.value.headers["location"], accepted["operation_id"])["state"] == "succeeded"
+        _settled(page)
+        assert replies == [202] and [x["fired"] for x in fake.faults()] == [1]
+        if kind == "privacy":
             assert fake.playlist(TARGET) == {**before, "public": not before["public"]}
-            assert page.evaluate("workshopState.workingUris") == draft
-        assert [fault["fired"] for fault in fake.faults()] == [1]
+        else:
+            assert Counter(fake.uris(TARGET)) == Counter(before["uris"]) and fake.uris(TARGET) != before["uris"]
         assert visit.problems == []
     finally:
         visit.close()

@@ -7,7 +7,6 @@ import pytest
 from shuffify.enums import ActivityType
 from shuffify.models.db import ActivityLog, PlaylistPair, RaidPlaylistLink, Schedule, UpstreamSource, User
 from shuffify.routes import json_reply
-from shuffify.routes.playlist_setup import page_variables, return_link
 from shuffify.services import playlist_setup_service as setup
 from shuffify.services.playlist_lock import playlist_lock
 from shuffify.spotify.exceptions import (
@@ -93,12 +92,6 @@ def test_every_endpoint_refuses_a_signed_out_request_with_an_error_code(db_app, 
         "success": False, "error_code": "authentication_required", "message": "Please log in first.",
         "category": "error",
     }
-
-
-def test_the_page_redirects_a_signed_out_browser(db_app):
-    with db_app.test_client() as client:
-        response = client.get(BASE)
-    assert response.status_code == 302 and response.headers["Location"].endswith("/")
 
 
 @pytest.mark.parametrize("path", [CONTEXT, PLAYLISTS])
@@ -580,94 +573,3 @@ def test_owned_playlists_include_hidden_ones_and_refresh_skips_the_cache(auth_cl
 
 
 # --- The page -----------------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("value, href, label", [
-    (None, f"/workshop/{TARGET}", "Back to playlist"),
-    (f"/workshop/{TARGET}", f"/workshop/{TARGET}", "Back to playlist"),
-    ("/schedules", "/schedules", "Back to routines"),
-    ("/", "/", "Back to Library"),
-    ("/workshop/other", f"/workshop/{TARGET}", "Back to playlist"),
-    ("https://evil.example/", f"/workshop/{TARGET}", "Back to playlist"),
-    ("//evil.example/schedules", f"/workshop/{TARGET}", "Back to playlist"),
-    ("/schedules?next=https://evil.example", f"/workshop/{TARGET}", "Back to playlist"),
-    ("/schedules/", f"/workshop/{TARGET}", "Back to playlist"),
-    ("javascript:alert(1)", f"/workshop/{TARGET}", "Back to playlist"),
-    ("", f"/workshop/{TARGET}", "Back to playlist"),
-])
-def test_the_return_link_accepts_only_allowlisted_internal_paths(db_app, value, href, label):
-    with db_app.test_request_context():
-        assert return_link(TARGET, value) == {"href": href, "label": label}
-
-
-def test_page_variables_hold_the_context_urls_return_link_and_section(db_app):
-    context = {"target": {"id": TARGET, "name": "Morning Mix"}, "version": 1}
-    with db_app.test_request_context():
-        variables = page_variables(TARGET, context, section="archive", return_to="/schedules")
-        default = page_variables(TARGET, context, section="routines")
-    assert set(variables) == {"target", "setup_context", "setup_urls", "return_link", "section"}
-    assert variables["target"] == {"id": TARGET, "name": "Morning Mix"} and variables["setup_context"] is context
-    assert variables["setup_urls"] == {
-        "context": CONTEXT, "impact": IMPACT, "settings": SETTINGS, "create": CREATE, "playlists": PLAYLISTS,
-    }
-    assert variables["return_link"] == {"href": "/schedules", "label": "Back to routines"}
-    assert variables["section"] == "archive" and default["section"] == "sources"
-    assert default["return_link"] == {"href": f"/workshop/{TARGET}", "label": "Back to playlist"}
-
-
-def test_the_page_renders_the_setup_template_with_exactly_its_variables(auth_client, api, user, scheduler_spies):
-    add_source(user, "ext1")
-    with as_user(api), patch("shuffify.routes.playlist_setup.render_template", return_value="setup page") as render:
-        response = auth_client.get(f"{BASE}?section=collection&return=/")
-    assert response.status_code == 200 and response.get_data(as_text=True) == "setup page"
-    (template,), variables = render.call_args
-    assert template == "playlist_setup.html"
-    assert set(variables) == {"target", "setup_context", "setup_urls", "return_link", "section"}
-    assert variables["target"] == {"id": TARGET, "name": "Morning Mix"}
-    assert variables["setup_context"]["sources"][0]["playlist_id"] == "ext1"
-    assert variables["return_link"] == {"href": "/", "label": "Back to Library"}
-    assert variables["section"] == "collection"
-    assert api.writes == [] and ActivityLog.query.count() == 0
-    assert_never_scheduled(scheduler_spies)
-
-
-def test_the_page_renders_the_real_template_with_its_context_and_return_link(auth_client, api, user, scheduler_spies):
-    """The route and the template agree: one h1 naming the playlist, the return link, the section and
-    the context the page script reads, rendered with nothing written."""
-    add_source(user, "ext1")
-    with as_user(api):
-        response = auth_client.get(f"{BASE}?section=archive&return=/schedules")
-    html = response.get_data(as_text=True)
-    assert response.status_code == 200
-    assert "<title>Playlist setup · Morning Mix - Shuffify</title>" in html
-    assert html.count("<h1") == 1 and "Playlist setup · Morning Mix</h1>" in html
-    assert 'id="setup-back" href="/schedules"' in html and "Back to routines</a>" in html
-    assert 'data-setup-section="archive"' in html
-    assert '"playlist_id": "ext1"' in html and '"configuration_revision": "' in html
-    assert response.headers.get("Content-Security-Policy")
-    assert api.writes == [] and ActivityLog.query.count() == 0
-    assert_never_scheduled(scheduler_spies)
-
-
-@pytest.mark.parametrize("target, failure, message", [
-    ("missing", None, "That playlist doesn't exist or was deleted."),
-    ("foreign", None, "You can only open your own or collaborative playlists in the Workshop."),
-    (TARGET, SpotifyAPIError("down"), "Couldn't load that playlist from Spotify. Please try again."),
-])
-def test_a_playlist_that_cannot_be_set_up_redirects_to_the_workshop_hub(auth_client, api, target, failure, message):
-    if failure:
-        api.read_failures[target] = failure
-    with as_user(api):
-        response = auth_client.get(f"/playlist/{target}/setup")
-    assert response.status_code == 302 and response.headers["Location"].endswith("/workshop")
-    with auth_client.session_transaction() as session:
-        assert dict(session["_flashes"]) == {"error": message}
-
-
-def test_an_ended_session_opening_the_page_returns_to_login(auth_client, api):
-    api.read_failures[TARGET] = SpotifyTokenExpiredError("expired")
-    with as_user(api), patch("shuffify.routes.playlist_setup.render_template") as render:
-        auth_client.get(BASE)
-    with auth_client.session_transaction() as session:
-        assert "spotify_token" not in session
-    assert render.call_count == 0

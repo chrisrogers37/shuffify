@@ -30,19 +30,26 @@ def client(app):
     return app.test_client()
 
 
-@pytest.mark.parametrize("content_type, accept, says", [
-    ("application/x-www-form-urlencoded", "text/html", b"That request was too large to send."),
-    ("application/x-www-form-urlencoded", "application/json", b'"That request is too large."'),
-    ("multipart/form-data", "text/html", b"That request was too large to send."),
+@pytest.mark.parametrize("content_type, accept", [
+    ("application/x-www-form-urlencoded", "text/html"),
+    ("application/x-www-form-urlencoded", "application/json"),
+    ("multipart/form-data", "text/html"),
 ])
-def test_a_form_over_the_form_limit_is_refused_before_it_is_parsed(app, client, content_type, accept, says):
+def test_a_form_over_the_form_limit_is_refused_before_it_is_parsed(app, client, content_type, accept):
     """Parsed, it would be a 400 for its missing CSRF token."""
     form = {"a": "x" * app.config["MAX_FORM_MEMORY_SIZE"]}
 
     response = client.post("/logout", data=form, content_type=content_type, headers={"Accept": accept})
 
     assert response.status_code == 413
-    assert says in response.data
+    assert response.content_type.startswith("application/json")
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.get_json() == {
+        "success": False,
+        "category": "error",
+        "error_code": "request_too_large",
+        "message": "That request is too large.",
+    }
 
 
 def test_the_largest_workshop_body_is_read(app):

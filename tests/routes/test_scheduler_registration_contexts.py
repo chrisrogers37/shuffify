@@ -1,6 +1,4 @@
-"""Routine page contexts read registration once, and never infer it from enabled rows."""
-
-import pytest
+"""Routine JSON contexts read registration once, never inferring it from enabled rows."""
 
 from shuffify.models.db import Schedule, User, db
 from shuffify.services.routine_activation_service import RoutineActivationService
@@ -28,8 +26,7 @@ def rows():
     return user, schedules
 
 
-@pytest.mark.parametrize("path", ["/api/routines", "/schedules"])
-def test_each_page_list_batches_worker_memory_once(auth_client, context_api, db_app, monkeypatch, path):
+def test_routine_list_batches_worker_memory_once(auth_client, context_api, db_app, monkeypatch):
     context_api.get_user_playlists.return_value = []
     user, schedules = rows()
     calls = []
@@ -39,14 +36,11 @@ def test_each_page_list_batches_worker_memory_once(auth_client, context_api, db_
         return None
 
     monkeypatch.setattr("shuffify.services.worker_control.WorkerControlClient.registrations", unavailable)
-    response = auth_client.get(path)
+    response = auth_client.get("/api/routines")
     assert response.status_code == 200
     assert len(calls) == 1 and set(calls[0]) == {row.id for row in schedules}
-    if path.startswith("/api"):
-        assert all(row["registration"]["status"] == "unavailable" for row in response.json["routines"])
-        assert all(row["state"] == "needs_attention" for row in response.json["routines"])
-    else:
-        assert b"Saved" in response.data
+    assert all(row["registration"]["status"] == "unavailable" for row in response.json["routines"])
+    assert all(row["state"] == "needs_attention" for row in response.json["routines"])
 
 
 def test_setup_context_batches_and_activation_direct_writes_emit_postcommit_hint(

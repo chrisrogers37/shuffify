@@ -119,11 +119,10 @@ AUTHENTICATED_GET_ROUTES = [
     api_path("/api/user-playlists"),
     api_path("/workshop/playlist123"),
     api_path("/playlist/playlist123/routines/context"),
-    "/activity",
-    "/schedules",
-    "/settings",
-    "/workshop",
-    "/workshop/playlist123",
+    "/api/activity",
+    "/api/routines",
+    "/api/settings",
+    "/api/library",
     api_path("/playlist/playlist123/pair"),
 ]
 

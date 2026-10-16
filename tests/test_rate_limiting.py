@@ -118,10 +118,10 @@ class TestRateLimitDoesNotAffectOtherRoutes:
             response = rate_client.get("/health")
             assert response.status_code == 200
 
-    def test_index_not_rate_limited(self, rate_client):
-        """The / endpoint should never return 429."""
+    def test_session_context_not_rate_limited(self, rate_client):
+        """Session reads remain independent of OAuth endpoint limits."""
         for _ in range(30):
-            response = rate_client.get("/")
+            response = rate_client.get("/api/session")
             assert response.status_code != 429
 
 

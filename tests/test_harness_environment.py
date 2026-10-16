@@ -111,6 +111,7 @@ def harness_environment(tmp_path, bash, launcher):
                     fake) start_fake_spotify "$3" ;;
                     api) start_app "$3" ;;
                     worker) start_worker "$3" ;;
+                    frontend) start_frontend "$3" ;;
                     checks) run_checks "$3" ;;
                 esac
             """),
@@ -156,7 +157,7 @@ def run_probe(checkout, environment, entrypoint):
     return json.loads(reports[0])
 
 
-@pytest.mark.parametrize("launcher", ["harness", "fake", "checks", "api", "worker"])
+@pytest.mark.parametrize("launcher", ["harness", "fake", "checks", "api", "worker", "frontend"])
 @pytest.mark.parametrize("location", ["checkout", "ancestor"])
 @pytest.mark.parametrize("entrypoint", ["cli", "app_run"])
 def test_harness_excludes_dotenv_and_shell_variables(tmp_path, bash, launcher, location, entrypoint):

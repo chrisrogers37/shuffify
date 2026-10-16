@@ -6,12 +6,11 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
-from flask import flash, render_template, session
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-TEMPLATES = REPO_ROOT / "shuffify/templates"
 STATIC = REPO_ROOT / "shuffify/static"
 DESIGN = REPO_ROOT / "assets/design"
+TEMPLATES = DESIGN / "templates"
 
 # Only these named outputs are exempt from handwritten-source checks. The
 # theme generator's --check owns the two React outputs and rejects stale,
@@ -140,9 +139,7 @@ def public_violations(html):
     violations += css_violations("\n".join(markup.inline_styles))
     if markup.stylesheets != ["/static/css/tailwind.css"]:
         violations.append(f"non-core stylesheet: {markup.stylesheets}")
-    if set(markup.scripts) - {
-        "/static/js/actions.js", "/static/js/base.js", "/static/js/landing.js"
-    }:
+    if markup.scripts:
         violations.append(f"non-public script: {markup.scripts}")
     return violations
 
@@ -150,7 +147,7 @@ def public_violations(html):
 def test_templates_and_static_builders_cannot_define_migrated_recipes():
     sources = list(TEMPLATES.rglob("*.html"))
     sources += list((REPO_ROOT / "assets").rglob("*.html"))
-    sources += list(DESIGN.glob("templates/*.j2"))
+    sources += list((DESIGN / "templates").rglob("*.j2"))
     sources += list((STATIC / "public").rglob("*.html"))
     sources += [REPO_ROOT / "scripts/build-public-pages.py"]
     for path in sources:
@@ -206,73 +203,6 @@ def test_static_js_cannot_build_new_visual_recipes_outside_core():
         assert not VISUAL_PROPERTY.search(text), path
         for style in STYLE_BLOCK.findall(text):
             assert not css_violations(style), path
-
-
-@pytest.mark.parametrize("token", [None, {"malformed": "nonempty"}])
-def test_landing_intent_wins_over_token_presence(db_app, token):
-    with db_app.test_client() as client:
-        if token:
-            with client.session_transaction() as stored:
-                stored["spotify_token"] = token
-        response = client.get("/")
-    html = response.get_data(as_text=True)
-    assert response.status_code == 200
-    assert '<html lang="en" class="sh-document">' in html
-    assert '<body class="sh-shell sh-public-shell">' in html
-    assert 'aria-label="Public navigation"' in html
-    assert 'data-action-click="ui.settings-sidebar-open"' not in html
-    assert not public_violations(html)
-
-
-def test_authenticated_dashboard_uses_shared_shell(db_app):
-    with db_app.test_request_context("/"):
-        session["spotify_token"] = {
-            "access_token": "valid-fixture", "refresh_token": "fixture-refresh",
-            "expires_at": 4102444800, "token_type": "Bearer",
-        }
-        html = render_template(
-            "dashboard.html", user={"id": "fixture", "display_name": "Fixture"},
-            playlists=[], favorite_playlists=[], hidden_playlists=[], algorithms=[],
-            dashboard={}, preferences={},
-        )
-    assert '<body class="sh-shell sh-app-shell">' in html
-    assert 'href="/static/css/base.css"' not in html
-    assert 'aria-label="Main navigation"' in html
-    assert 'href="/settings"' in html
-    assert 'id="settings-sidebar"' not in html
-    assert 'src="/static/js/app-feedback.js"' in html
-    # Page registrations run while content is parsed, before footer scripts.
-    assert html.index('src="/static/js/app-panels.js"') < html.index("</head>")
-    assert 'aria-label="Public navigation"' not in html
-    assert '<html lang="en" class="sh-document">' in html
-
-
-@pytest.mark.parametrize("template", ["error", "404", "500"])
-@pytest.mark.parametrize("token", [None, {"access_token": "valid-fixture"},
-                                   {"malformed": "nonempty"}])
-def test_errors_share_presentation_and_preserve_session_navigation(db_app, template, token):
-    with db_app.test_request_context("/missing"):
-        if token:
-            session["spotify_token"] = token
-        flash("Fixture notice", "error")
-        html = render_template(f"errors/{template}.html", error_code=400,
-                               error_title="Fixture", error_message="Fixture message")
-    if token:
-        assert '<body class="sh-shell sh-app-shell">' in html
-        assert 'href="/static/css/base.css"' not in html
-        assert 'aria-label="Main navigation"' in html
-        assert 'href="/settings"' in html
-        assert 'id="settings-sidebar"' not in html
-        assert 'aria-label="Public navigation"' not in html
-        assert 'class="sh-toast sh-toast-error fade-out"' in html
-    else:
-        assert '<body class="sh-shell sh-public-shell">' in html
-        assert 'aria-label="Public navigation"' in html
-        assert 'class="sh-toast sh-toast-error fade-out"' in html
-        assert not public_violations(html)
-    if template == "500":
-        assert 'data-action-click="err-001"' in html
-        assert "window.location.reload()" in html
 
 
 @pytest.mark.parametrize("page", ["terms", "privacy"])

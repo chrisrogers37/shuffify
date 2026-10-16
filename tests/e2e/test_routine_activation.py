@@ -172,7 +172,7 @@ def test_exact_routine_mutators_share_the_activation_target_lock(alice, fake, ac
             if action == "edit":
                 response = alice.post(api_path(f"/playlist/{TARGET}/routines/activate"), json=edit)
             elif action == "pause":
-                response = alice.put(api_path(f"/routines/{sid}/state"), json={
+                response = alice.request("PUT", api_path(f"/routines/{sid}/state"), json={
                     "desired_enabled": False, "expected_revision": accepted["schedule_revision"],
                 })
             else:
@@ -257,8 +257,13 @@ def test_state_and_compatible_settings_remain_available_during_execution(alice, 
             })
             assert resumed["state"] == "Active"
             for enabled in (False, True):
-                legacy = alice.ok("put", f"/schedules/{sid}", json={"is_enabled": enabled})
-                assert legacy["schedule"]["is_enabled"] is enabled
+                retired = alice.request("PUT", api_path(f"/schedules/{sid}"), json={"is_enabled": enabled})
+                assert retired.status_code == 405
+                assert retired.json()["error_code"] == "method_not_allowed"
+            current = alice.ok("get", f"/playlist/{TARGET}/routines/context")["routines"]
+            exact = next(row for row in current if row["schedule_id"] == sid)
+            assert exact["schedule_revision"] == resumed["schedule_revision"]
+            assert exact["schedule"]["is_enabled"] is True
             link = alice.ok("put", f"/playlist/{TARGET}/raid-link", json={
                 "drip_count": 7, "drip_enabled": True,
             })["raid_link"]

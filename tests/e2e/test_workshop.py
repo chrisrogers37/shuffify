@@ -1,24 +1,16 @@
-"""The Playlist Workshop: stage track operations and a merge, commit, and
-find exactly the staged order in the fake.
-
-The Workshop page does its edits in the browser and sends the result to
-/workshop/<id>/commit, so these tests stage the same way: read the tracks,
-search and load other playlists through the app's own routes, build the new
-order, commit it.
-"""
+"""Workshop context, exact queued orders, merge reads and session-safe refusals."""
 
 from tests.e2e.conftest import pid
+from tests.paths import api_path
 
 MORNING_MIX = pid("alice-morning-mix")
 ON_REPEAT = pid("alice-on-repeat")
 
 
 def _open_in_workshop(alice, playlist_id):
-    """Open the playlist's Workshop page, then read the order it starts from
-    from the app's playlist API."""
-    resp = alice.get(f"/workshop/{playlist_id}")
-    assert resp.status_code == 200, resp.status_code
-    return [t["uri"] for t in alice.ok("get", f"/playlist/{playlist_id}")["tracks"]]
+    context = alice.ok("get", f"/workshop/{playlist_id}")
+    assert context["playlist"]["id"] == playlist_id
+    return [t["uri"] for t in context["tracks"]]
 
 
 def test_track_operations_commit_exactly_the_staged_order(alice, fake):
@@ -32,8 +24,7 @@ def test_track_operations_commit_exactly_the_staged_order(alice, fake):
     staged.insert(0, staged.pop(10))  # move one to the top
     staged.append(addition)  # add a search result at the end
 
-    body = alice.write(f"/workshop/{MORNING_MIX}/commit",
-                    json={"baseline_track_uris": current, "track_uris": staged})
+    body = alice.write(f"/workshop/{MORNING_MIX}/commit", json={"baseline_track_uris": current, "track_uris": staged})
     assert fake.uris(MORNING_MIX) == staged
     assert body["playlist_state"]["current_index"] >= 1
 
@@ -45,7 +36,8 @@ def test_track_operations_commit_exactly_the_staged_order(alice, fake):
 def test_merging_another_of_her_playlists_in(alice, fake):
     current = _open_in_workshop(alice, MORNING_MIX)
     loaded = alice.ok(
-        "post", "/workshop/load-external-playlist",
+        "post",
+        "/workshop/load-external-playlist",
         json={"url": f"https://open.spotify.com/playlist/{ON_REPEAT}"},
     )
     assert loaded["mode"] == "tracks"
@@ -63,28 +55,24 @@ def test_someone_elses_playlist_opens_in_restricted_mode(alice, fake):
     """Spotify returns another user's playlist without its items or their
     count, so the Workshop offers a search for its tracks."""
     loaded = alice.ok(
-        "post", "/workshop/load-external-playlist",
+        "post",
+        "/workshop/load-external-playlist",
         json={"url": f"https://open.spotify.com/playlist/{pid('bob-finds')}"},
     )
     assert loaded["mode"] == "restricted" and loaded["tracks"] == []
     assert loaded["playlist"]["name"] == loaded["suggested_search"] == "Bob's Finds"
 
-    # Recently Loaded lists it, without a count Spotify never gave.
-    page = alice.get(f"/workshop/{MORNING_MIX}").text
-    assert "Bob&#39;s Finds" in page and "None tracks" not in page
+    recent = alice.ok("get", f"/workshop/{MORNING_MIX}")["recently_loaded"]
+    row = next(row for row in recent if row["id"] == pid("bob-finds"))
+    assert row["name"] == "Bob's Finds" and row["track_count"] is None
 
 
 def test_a_playlist_the_workshop_cannot_open_keeps_her_logged_in(alice, fake):
-    """Someone else's playlist (Spotify refuses its items) and one that does
-    not exist each send her back to the Workshop hub with a message that
-    fits; neither logs her out."""
-    for playlist_id, message in (
-        (pid("bob-finds"), "You can only open your own or collaborative playlists in the Workshop."),
-        ("0" * 22, "exist or was deleted."),
-    ):
-        resp = alice.get(f"/workshop/{playlist_id}", allow_redirects=False)
-        assert resp.status_code == 302, f"{playlist_id}: {resp.status_code}"
-        assert resp.headers["Location"].endswith("/workshop"), resp.headers["Location"]
-        assert message in alice.get("/workshop").text
-        # Still logged in: her own playlist opens, with no detour to the login page.
-        assert alice.get(f"/workshop/{MORNING_MIX}", allow_redirects=False).status_code == 200
+    for playlist_id in (pid("bob-finds"), "0" * 22):
+        response = alice.get(api_path(f"/workshop/{playlist_id}"), allow_redirects=False)
+        assert response.status_code == 404, response.text
+        body = response.json()
+        assert body["success"] is False and body["error_code"] == "not_found"
+        assert body["message"]
+        assert alice.ok("get", "/session")["signed_in"] is True
+        assert _open_in_workshop(alice, MORNING_MIX) == fake.uris(MORNING_MIX)

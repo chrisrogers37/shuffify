@@ -1,6 +1,6 @@
 """Read-only routine review and exact-ID activation routes."""
 
-from flask import abort, render_template, request, url_for
+from flask import abort, request
 from pydantic import ValidationError
 
 from shuffify.error_handlers import format_validation_error
@@ -10,8 +10,6 @@ from shuffify.routes import (
     json_reply,
     no_store,
     require_auth_and_db,
-    require_auth_page,
-    site_bp,
 )
 from shuffify.schemas.routine_requests import (
     RoutineActivateRequest,
@@ -19,31 +17,6 @@ from shuffify.schemas.routine_requests import (
     RoutineStateRequest,
 )
 from shuffify.services.routine_activation_service import RoutineActivationService
-
-
-@site_bp.route("/playlist/<playlist_id>/routines/new", methods=["GET"])
-@no_store
-@require_auth_page
-def routine_setup(playlist_id, api=None, user=None, spotify_profile=None):
-    """Render the guided task; context and exact-row selection are fetched read-only."""
-    requested, origin = _navigation()
-    page = {
-        "ownerId": user.id,
-        "targetId": playlist_id,
-        "requestedScheduleId": requested,
-        "origin": origin,
-        "urls": {
-            "context": url_for("api.routine_context", playlist_id=playlist_id),
-            "review": url_for("api.routine_review", playlist_id=playlist_id),
-            "activate": url_for("api.routine_activate", playlist_id=playlist_id),
-            "state": url_for("api.routine_state", schedule_id=0).removesuffix("/0/state"),
-            "setup": url_for("site.playlist_setup_page", playlist_id=playlist_id),
-            "self": url_for("site.routine_setup", playlist_id=playlist_id),
-            "workshop": url_for("site.workshop", playlist_id=playlist_id),
-            "management": url_for("site.schedules"),
-        },
-    }
-    return render_template("routine_setup.html", routine_page=page, user=spotify_profile)
 
 
 def _navigation():

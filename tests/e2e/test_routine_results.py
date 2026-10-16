@@ -36,9 +36,10 @@ def test_composite_late_failure_keeps_collected_step_in_exact_history(alice, fak
 def test_closed_drip_gate_is_saved_as_not_started(alice, fake):
     collection = _collection(alice)
     alice.write(f"/playlist/{TARGET}/raid-now", json={})
-    alice.ok("put", f"/playlist/{TARGET}/raid-link", json={"drip_enabled": False})
+    alice.ok("put", f"/playlist/{TARGET}/raid-link", json={"drip_enabled": True})
     schedule = _create_schedule(alice, "drip", TARGET)
     sid = schedule["id"]
+    alice.ok("put", f"/playlist/{TARGET}/raid-link", json={"drip_enabled": False})
     before = (fake.playlist(TARGET), fake.playlist(collection))
     try:
         operation = alice.queued(f"/schedules/{sid}/run")

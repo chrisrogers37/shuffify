@@ -1,15 +1,11 @@
 """
-Settings routes: view and update user preferences.
+Settings API: read and update user preferences.
 """
 
 import logging
 
 from flask import (
-    flash,
-    redirect,
-    render_template,
     request,
-    url_for,
 )
 from pydantic import ValidationError
 
@@ -18,16 +14,12 @@ from shuffify.error_handlers import (
 )
 from shuffify.routes import (
     api_bp,
-    clear_session_and_show_login,
     json_error,
     json_success,
     require_auth_and_db,
-    require_auth_page,
-    site_bp,
 )
 from shuffify.schemas import UserSettingsUpdateRequest
 from shuffify.services import (
-    AuthenticationError,
     ShuffleService,
     UserSettingsError,
     UserSettingsService,
@@ -36,65 +28,10 @@ from shuffify.services import (
 logger = logging.getLogger(__name__)
 
 
-@site_bp.route("/settings")
-@require_auth_page
-def settings(api=None, user=None, spotify_profile=None):
-    """Render the user settings page."""
-    try:
-        user_settings = UserSettingsService.get_or_create(user.id)
-        algorithms = ShuffleService.list_algorithms()
-        algorithm_options = [
-            {"value": "", "label": "No default (choose each time)"}
-        ] + [
-            {"value": a["class_name"], "label": a["name"]}
-            for a in algorithms
-        ]
-
-        return render_template(
-            "settings.html",
-            user=spotify_profile,
-            settings=user_settings.to_dict(),
-            algorithms=algorithms,
-            algorithm_options=algorithm_options,
-        )
-
-    except AuthenticationError as e:
-        logger.error("Auth error loading settings page: %s", e)
-        return clear_session_and_show_login(
-            "Your session has expired. "
-            "Please log in again."
-        )
-    except UserSettingsError as e:
-        logger.error(
-            "Settings service error loading settings page: %s",
-            e,
-        )
-        flash(
-            "Could not load your settings. "
-            "Please try again.",
-            "error",
-        )
-        return redirect(url_for("site.index"))
-    except Exception as e:
-        logger.error(
-            "Unexpected error loading settings page: %s "
-            "[type=%s]",
-            e,
-            type(e).__name__,
-            exc_info=True,
-        )
-        flash(
-            "Something went wrong loading settings. "
-            "Please try again.",
-            "error",
-        )
-        return redirect(url_for("site.index"))
-
-
 @api_bp.route("/settings", methods=["GET"])
 @require_auth_and_db
 def get_settings(api=None, user=None):
-    """Read saved settings and the algorithms available to the settings form."""
+    """Read saved settings and available algorithms."""
     return json_success("Settings loaded.", **_settings_context(user))
 
 
@@ -108,15 +45,6 @@ def _settings_context(user, settings=None):
             {"value": algorithm["class_name"], "label": algorithm["name"]} for algorithm in algorithms
         ],
     }
-
-
-@site_bp.route("/settings", methods=["POST"])
-@require_auth_page
-def update_settings_page(api=None, user=None, spotify_profile=None):
-    """Save a native settings form and return to its HTML page with feedback."""
-    _updated, error = _save_settings(user)
-    flash(error or "Settings saved successfully.", "error" if error else "success")
-    return redirect(url_for("site.settings"))
 
 
 @api_bp.route("/settings", methods=["POST"])

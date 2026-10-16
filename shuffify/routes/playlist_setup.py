@@ -1,4 +1,4 @@
-"""Shared playlist setup: the setup page and its JSON endpoints.
+"""Shared playlist setup JSON endpoints.
 
 Reading the context, reviewing changes and listing playlists write nothing.
 Save applies acknowledged changes to the shared configuration; creating a
@@ -6,34 +6,22 @@ Spotify playlist is a separate write that never links, pairs or schedules.
 Neither starts, pauses or changes a routine.
 """
 
-import logging
-
-from flask import abort, flash, redirect, render_template, request, url_for
+from flask import abort, request
 from pydantic import ValidationError
 
 from shuffify.error_handlers import format_validation_error
 from shuffify.routes import (
     api_bp,
-    clear_session_and_show_login,
     json_reply,
     no_store,
     require_auth_and_db,
-    require_auth_page,
     require_session_and_db,
-    site_bp,
 )
 from shuffify.routes.asset_queue import admit_asset
-from shuffify.routes.workshop import _unloadable_playlist_message
 from shuffify.schemas import CreateSetupPlaylistRequest, SetupImpactRequest, SetupSaveRequest
-from shuffify.services import AuthenticationError, PlaylistError
 from shuffify.services.live_operation_service import preflight_error_code
 from shuffify.services.page_context_service import RETURN_TARGETS
 from shuffify.services.playlist_setup_service import PlaylistSetupService, refusal
-from shuffify.spotify.exceptions import SpotifyAuthError, SpotifyError
-
-logger = logging.getLogger(__name__)
-
-SECTIONS = ("sources", "collection", "archive")
 
 
 def _preflight(message, status_code):
@@ -50,64 +38,6 @@ def _body(schema):
         return schema.model_validate(data), None
     except ValidationError as error:
         return None, refusal("invalid_request", 400, f"Validation error: {format_validation_error(error)}")
-
-
-def return_link(target_id, value):
-    """The page's "Back to …" link: an allowlisted internal path, else back to the playlist."""
-    playlist = url_for("site.workshop", playlist_id=target_id)
-    labels = {
-        playlist: "Back to playlist",
-        url_for("site.schedules"): "Back to routines",
-        url_for("site.routine_setup", playlist_id=target_id): "Back to routine",
-        url_for("site.index"): "Back to Library",
-    }
-    destinations = {
-        "playlist": playlist, "routines": url_for("site.schedules"),
-        "routine": url_for("site.routine_setup", playlist_id=target_id), "library": url_for("site.index"),
-    }
-    value = destinations.get(value, value) if isinstance(value, str) else None
-    href = value if isinstance(value, str) and value in labels else playlist
-    return {"href": href, "label": labels[href]}
-
-
-def page_variables(target_id, context, *, section=None, return_to=None):
-    """Everything ``playlist_setup.html`` renders, from a setup context and the page's query arguments."""
-    return {
-        "target": dict(context["target"]),
-        "setup_context": context,
-        "setup_urls": {
-            "context": url_for("api.playlist_setup_context", playlist_id=target_id),
-            "impact": url_for("api.playlist_setup_impact", playlist_id=target_id),
-            "settings": url_for("api.playlist_setup_settings", playlist_id=target_id),
-            "create": url_for("api.playlist_setup_create_playlist", playlist_id=target_id),
-            "playlists": url_for("api.playlist_setup_playlists", playlist_id=target_id),
-        },
-        "return_link": return_link(target_id, return_to),
-        "section": section if section in SECTIONS else "sources",
-    }
-
-
-@site_bp.route("/playlist/<playlist_id>/setup")
-@require_auth_page
-def playlist_setup_page(playlist_id, api=None, user=None, spotify_profile=None):
-    """Set up a playlist's shared sources, collection and archive."""
-    try:
-        context = PlaylistSetupService.get_context(user, playlist_id, api)
-    except (AuthenticationError, SpotifyAuthError) as error:
-        logger.error("Session ended opening playlist setup: %s", error)
-        return clear_session_and_show_login("Your session has expired. Please log in again.")
-    except PlaylistError as error:
-        logger.warning("Could not open setup for playlist %s: %s", playlist_id, error)
-        flash(_unloadable_playlist_message(error), "error")
-        return redirect(url_for("site.workshop_hub"))
-    except SpotifyError as error:
-        logger.warning("Could not read playlist %s for setup: %s", playlist_id, error)
-        flash(_unloadable_playlist_message(PlaylistError(str(error))), "error")
-        return redirect(url_for("site.workshop_hub"))
-    variables = page_variables(
-        playlist_id, context, section=request.args.get("section"), return_to=request.args.get("return")
-    )
-    return render_template("playlist_setup.html", **variables)
 
 
 @api_bp.route("/playlist/<playlist_id>/setup/context")

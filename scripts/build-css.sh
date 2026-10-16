@@ -2,14 +2,14 @@
 # Compile shuffify's Tailwind stylesheet.
 #
 # Uses Tailwind's standalone CLI: a single self-contained binary, no Node and no
-# npm, which is why this repo stays a pure-Python project.
+# npm. The React application builds its own bundled stylesheet in web/.
 #
 # The compiled output is COMMITTED to the repo (shuffify/static/css/tailwind.css).
 # A deploy serves what the repo contains --
 # keeping the artifact in-tree means the deploy never depends on a build-time
 # download, and a reviewer sees the exact CSS that will ship.
 #
-# Run this whenever you change a template, a static .js file, assets/design/, or
+# Run this whenever you change canonical legal HTML, assets/design/, or
 # tailwind.config.js,
 # then commit the regenerated stylesheet. CI fails if you forget (see ci.yml).
 #
@@ -20,7 +20,7 @@ set -euo pipefail
 TAILWIND_VERSION="v3.4.19"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Tailwind resolves the `content` globs in tailwind.config.js relative to the
-# working directory. Running from anywhere else silently matches no templates
+# working directory. Running from anywhere else silently misses the canonical inputs
 # and emits a near-empty stylesheet, so pin the cwd to the repo root.
 cd "${REPO_ROOT}"
 INPUT="${REPO_ROOT}/assets/tailwind.src.css"
@@ -51,7 +51,7 @@ if [[ "${1:-}" == "--check" ]]; then
   "${BIN}" -c "${CONFIG}" -i "${INPUT}" -o "${TMP}" --minify >/dev/null 2>&1
   if ! diff -q "${TMP}" "${OUTPUT}" >/dev/null 2>&1; then
     echo "build-css: FAIL -- ${OUTPUT#"${REPO_ROOT}/"} is stale." >&2
-    echo "           A template, static .js, design source, or config changed without" >&2
+    echo "           A legal document, design source, or config changed without" >&2
     echo "           a rebuild. Run ./scripts/build-css.sh and commit the result." >&2
     exit 1
   fi

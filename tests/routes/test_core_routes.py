@@ -1,9 +1,4 @@
-"""
-Tests for core routes.
-
-Tests cover /, /login, /callback, /logout, /terms, /privacy.
-Health endpoint (/health) is tested in tests/test_health_db.py.
-"""
+"""OAuth consent, callback/session renewal, safe notices, and native logout."""
 
 import logging
 import time
@@ -14,109 +9,11 @@ import pytest
 from tests.paths import api_path
 
 
-class TestIndexRoute:
-    """Tests for GET /."""
-
-    def test_unauthenticated_shows_login_page(self, db_app):
-        """Unauthenticated users see the landing page."""
-        with db_app.test_client() as client:
-            resp = client.get("/")
-            assert resp.status_code == 200
-
-    @patch("shuffify.routes.core.DashboardService")
-    @patch("shuffify.routes.core.ShuffleService")
-    @patch("shuffify.routes.core.PlaylistService")
-    @patch("shuffify.routes.core.AuthService")
-    @patch("shuffify.routes.core.is_authenticated")
-    def test_authenticated_shows_dashboard(
-        self,
-        mock_is_auth,
-        mock_auth_svc,
-        mock_ps_class,
-        mock_shuffle_svc,
-        mock_dash_svc,
-        auth_client,
-    ):
-        mock_is_auth.return_value = True
-        mock_client = MagicMock()
-        mock_auth_svc.get_authenticated_client.return_value = mock_client
-        mock_auth_svc.get_user_data.return_value = {
-            "id": "user123",
-            "display_name": "Test User",
-            "images": [],
-        }
-
-        mock_ps = MagicMock()
-        mock_ps.get_user_playlists.return_value = []
-        mock_ps_class.return_value = mock_ps
-
-        mock_shuffle_svc.list_algorithms.return_value = []
-        mock_dash_svc.get_dashboard_data.return_value = {}
-
-        resp = auth_client.get("/")
-        assert resp.status_code == 200
-
-    @patch("shuffify.routes.core.AuthService")
-    @patch("shuffify.routes.core.is_authenticated")
-    def test_expired_session_clears_and_shows_login(
-        self,
-        mock_is_auth,
-        mock_auth_svc,
-        auth_client,
-    ):
-        from shuffify.services import AuthenticationError
-
-        mock_is_auth.return_value = True
-        mock_auth_svc.get_authenticated_client.side_effect = AuthenticationError(
-            "expired"
-        )
-
-        resp = auth_client.get("/")
-        assert resp.status_code == 200
-
-    def test_unauthenticated_landing_has_shuffle_demo(self, db_app):
-        """Landing page contains the animated shuffle demo component."""
-        with db_app.test_client() as client:
-            resp = client.get("/")
-            html = resp.data.decode()
-            assert resp.status_code == 200
-            assert 'id="shuffle-demo"' in html
-            assert 'id="shuffle-track-list"' in html
-
-    def test_unauthenticated_landing_has_two_column_hero(self, db_app):
-        """Landing page hero uses two-column flex layout."""
-        with db_app.test_client() as client:
-            resp = client.get("/")
-            html = resp.data.decode()
-            assert "lg:flex-row" in html
-            assert "shuffle-demo-card" in html
-
-    def test_invalid_token_is_cleared_so_consent_and_login_show(self, auth_client, invalid_token):
-        """A session token that fails validation is dropped with its user data,
-        so the landing page offers the consent checkbox and the login button."""
-        with auth_client.session_transaction() as sess:
-            sess["spotify_token"] = invalid_token
-        resp = auth_client.get("/")
-        with auth_client.session_transaction() as sess:
-            assert "spotify_token" not in sess
-            assert "user_data" not in sess
-        html = resp.data.decode()
-        assert resp.status_code == 200
-        assert 'id="legal-consent"' in html
-        assert 'id="login-button"' in html
-
-    def test_landing_shows_a_pending_flash(self, db_app):
-        """A message flashed before the redirect home shows on the landing page."""
-        with db_app.test_client() as client:
-            resp = client.get("/login", follow_redirects=True)
-        assert "You must agree to the Terms of Service" in resp.data.decode()
-
-
 class TestLoginRoute:
     """Tests for GET /login."""
 
     def test_missing_legal_consent_redirects(self, db_app):
-        """Login without legal_consent flashes error and redirects."""
+        """Login without legal consent redirects with a one-time authored notice."""
         with db_app.test_client() as client:
             resp = client.get("/login")
             assert resp.status_code == 302
@@ -183,15 +80,11 @@ class TestCallbackRoute:
         """The signed-out session reads one fixed notice without echoing callback query text."""
         with db_app.test_client() as client:
             client.get("/callback", query_string=query)
-            with client.session_transaction() as sess:
-                messages = [message for _, message in sess.get("_flashes", [])]
             first = client.get(api_path("/session")).get_json()
             second = client.get(api_path("/session")).get_json()
-        assert messages, "expected a flashed message for the OAuth error"
-        assert not any(marker in m for m in messages)
         assert first["signed_in"] is False
         assert first["notice"]["code"] == ("access_denied" if query["error"] == "access_denied" else "oauth_failed")
-        assert first["notice"]["message"] in messages
+        assert first["notice"]["message"]
         assert marker not in first["notice"]["message"]
         assert second["notice"] is None
 
@@ -418,115 +311,6 @@ class TestLogoutRoute:
         assert resp.status_code == 405
 
 
-class TestTermsRoute:
-    """Tests for GET /terms."""
-
-    def test_terms_page_returns_200(self, db_app):
-        with db_app.test_client() as client:
-            resp = client.get("/terms")
-            assert resp.status_code == 200
-
-
-class TestPrivacyRoute:
-    """Tests for GET /privacy."""
-
-    def test_privacy_page_returns_200(self, db_app):
-        with db_app.test_client() as client:
-            resp = client.get("/privacy")
-            assert resp.status_code == 200
-
-
-class TestDashboardDisplayNameFallback:
-    """Tests for dashboard rendering when display_name is None."""
-
-    @patch("shuffify.routes.core.DashboardService")
-    @patch("shuffify.routes.core.ShuffleService")
-    @patch("shuffify.routes.core.PlaylistService")
-    @patch("shuffify.routes.core.AuthService")
-    @patch("shuffify.routes.core.is_authenticated")
-    def test_dashboard_renders_without_display_name(
-        self,
-        mock_is_auth,
-        mock_auth_svc,
-        mock_ps_class,
-        mock_shuffle_svc,
-        mock_dash_svc,
-        auth_client,
-    ):
-        """Dashboard shows 'Welcome!' when display_name is None."""
-        mock_is_auth.return_value = True
-        mock_client = MagicMock()
-        mock_auth_svc.get_authenticated_client.return_value = mock_client
-        mock_auth_svc.get_user_data.return_value = {
-            "id": "user_no_name",
-            "display_name": None,
-            "images": [],
-        }
-
-        mock_ps = MagicMock()
-        mock_ps.get_user_playlists.return_value = []
-        mock_ps_class.return_value = mock_ps
-
-        mock_shuffle_svc.list_algorithms.return_value = []
-        mock_dash_svc.get_dashboard_data.return_value = {}
-
-        resp = auth_client.get("/")
-        assert resp.status_code == 200
-        html = resp.data.decode()
-        assert "Welcome!" in html
-        assert "Welcome, None!" not in html
-
-    @patch("shuffify.routes.core.DashboardService")
-    @patch("shuffify.routes.core.ShuffleService")
-    @patch("shuffify.routes.core.PlaylistService")
-    @patch("shuffify.routes.core.AuthService")
-    @patch("shuffify.routes.core.is_authenticated")
-    def test_dashboard_returning_user_without_display_name(
-        self,
-        mock_is_auth,
-        mock_auth_svc,
-        mock_ps_class,
-        mock_shuffle_svc,
-        mock_dash_svc,
-        auth_client,
-    ):
-        """Returning user sees 'Welcome back!' not 'Welcome back, None!'."""
-        mock_is_auth.return_value = True
-        mock_client = MagicMock()
-        mock_auth_svc.get_authenticated_client.return_value = mock_client
-        mock_auth_svc.get_user_data.return_value = {
-            "id": "user_no_name_returning",
-            "display_name": None,
-            "images": [],
-        }
-
-        mock_ps = MagicMock()
-        mock_ps.get_user_playlists.return_value = []
-        mock_ps_class.return_value = mock_ps
-
-        mock_shuffle_svc.list_algorithms.return_value = []
-        mock_dash_svc.get_dashboard_data.return_value = {
-            "is_returning_user": True,
-            "recent_activity": [],
-            "activity_since_last_login": [],
-            "activity_since_last_login_count": 0,
-            "quick_stats": {
-                "total_shuffles": 0,
-                "total_scheduled_runs": 0,
-                "total_snapshots": 0,
-                "active_schedule_count": 0,
-            },
-            "active_schedules": [],
-            "recent_job_executions": [],
-        }
-
-        resp = auth_client.get("/")
-        assert resp.status_code == 200
-        html = resp.data.decode()
-        assert "Welcome back!" in html
-        assert "Welcome back, None!" not in html
-
-
 class TestPreviousLogin:
     """The dashboard's "welcome back" and "since your last visit" count from
     the login before this one, which the callback keeps in the session: by the
@@ -560,43 +344,27 @@ class TestPreviousLogin:
                 first_login = UserService.get_by_spotify_id("first_timer").last_login_at
             assert log_in(client) == first_login.isoformat()
 
-    @pytest.mark.parametrize("stored", [None, "2026-01-02T03:04:05+00:00"])
-    @patch("shuffify.routes.core.DashboardService")
-    @patch("shuffify.routes.core.ShuffleService")
-    @patch("shuffify.routes.core.PlaylistService")
-    @patch("shuffify.routes.core.AuthService", autospec=True)
-    @patch("shuffify.routes.core.is_authenticated")
-    def test_dashboard_counts_from_the_login_before_this_one(
-        self,
-        mock_is_auth,
-        mock_auth_svc,
-        mock_ps_class,
-        mock_shuffle_svc,
-        mock_dash_svc,
-        auth_client,
-        stored,
-    ):
-        from datetime import datetime
-
-        mock_is_auth.return_value = True
-        mock_auth_svc.get_user_data.return_value = {
-            "id": "user123",
-            "display_name": "Test User",
-            "images": [],
-        }
-        mock_ps_class.return_value.get_user_playlists.return_value = []
-        mock_shuffle_svc.list_algorithms.return_value = []
-        mock_dash_svc.get_dashboard_data.return_value = {}
-        with auth_client.session_transaction() as sess:
-            sess["previous_login_at"] = stored
-
-        assert auth_client.get("/").status_code == 200
-
-        expected = datetime.fromisoformat(stored) if stored else None
-        assert mock_dash_svc.get_dashboard_data.call_args.kwargs[
-            "last_login_at"
-        ] == expected
-
 
 # NOTE: /health endpoint tests are in tests/test_health_db.py.
 # No duplicate tests here.
+
+
+@pytest.mark.parametrize("stored", [None, "2026-01-02T03:04:05+00:00"])
+def test_library_counts_from_the_login_before_this_one(auth_client, stored):
+    from datetime import datetime
+
+    from shuffify.models.db import User
+    from shuffify.services.dashboard_service import DashboardService
+
+    user = User.query.filter_by(spotify_id="user123").one()
+    dashboard = DashboardService.get_dashboard_data(user.id)
+    with auth_client.session_transaction() as session:
+        session["previous_login_at"] = stored
+    with patch("shuffify.routes.require_auth", autospec=True, return_value=object()), patch(
+        "shuffify.routes.contexts.PlaylistService", autospec=True
+    ) as playlists, patch(
+        "shuffify.routes.contexts.DashboardService.get_dashboard_data", autospec=True, return_value=dashboard
+    ) as read_dashboard:
+        playlists.return_value.get_user_playlists.return_value = []
+        assert auth_client.get("/api/library").status_code == 200
+    assert read_dashboard.call_args.kwargs["last_login_at"] == (datetime.fromisoformat(stored) if stored else None)

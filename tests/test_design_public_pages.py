@@ -40,12 +40,6 @@ def public_source_tree(tmp_path):
         REPO_ROOT / "assets" / "design" / "templates",
         tmp_path / "assets" / "design" / "templates",
     )
-    macros = tmp_path / "shuffify" / "templates" / "macros"
-    macros.mkdir(parents=True)
-    shutil.copyfile(
-        REPO_ROOT / "shuffify" / "templates" / "macros" / "design.html",
-        macros / "design.html",
-    )
     shutil.copytree(PUBLIC_DIR, tmp_path / "shuffify" / "static" / "public")
     return tmp_path
 
@@ -108,9 +102,9 @@ def test_contact_build_and_check_preserve_legal_copy(
 
 
 @pytest.mark.parametrize("name", LEGAL_COPY_SHA256)
-def test_legal_route_serves_committed_html_verbatim(db_app, name):
+def test_canonical_legal_artifact_is_served_verbatim_as_a_static_asset(db_app, name):
     with db_app.test_client() as client:
-        response = client.get(f"/{name}")
+        response = client.get(f"/static/public/{name}.html")
         assert response.status_code == 200
         assert response.content_type.startswith("text/html")
         assert response.data == (PUBLIC_DIR / f"{name}.html").read_bytes()
@@ -137,11 +131,11 @@ def test_legal_page_has_preserved_metadata_and_static_assets(name, title):
 
 def test_shell_macros_are_pure_and_autoescape_inputs():
     environment = Environment(
-        loader=FileSystemLoader(REPO_ROOT / "shuffify" / "templates"),
+        loader=FileSystemLoader(REPO_ROOT / "assets" / "design" / "templates"),
         undefined=StrictUndefined,
         autoescape=True,
     )
-    macros = environment.get_template("macros/design.html").module
+    macros = environment.get_template("macros/public.html.j2").module
     hostile = '\"><script>alert(1)</script>'
     for html in (
         macros.brand(hostile),

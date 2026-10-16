@@ -38,28 +38,21 @@ def _is_specd(call):
 
 # file -> number of unspec'd stand-ins still to convert. May only decrease.
 # Regenerate with: python -m pytest tests/test_mock_spec_contract.py -q
-BASELINE = {
-    "routes/test_activity_routes.py": 4,
-    "routes/test_core_routes.py": 18,
-    "routes/test_error_page_rendering.py": 4,
-    "routes/test_schedules_routes.py": 5,
-    "routes/test_settings_routes.py": 4,
-    "routes/test_workshop_external_routes.py": 1,
-    "routes/test_workshop_routes.py": 2,
-    "routes/test_workshop_search_routes.py": 1,
-    "services/test_auth_service.py": 23,
-    "services/test_drip_now_no_side_effects.py": 1,
-    "services/test_job_executor_rotate.py": 12,
-    "services/test_job_executor_service.py": 2,
-    "services/test_playlist_lock.py": 1,
-    "services/test_verify_playlist_state.py": 14,
-    "spotify/test_api.py": 37,
-    "spotify/test_api_search.py": 4,
-    "spotify/test_api_write_contracts.py": 18,
-    "templates/test_dashboard_overlay.py": 2,
-    "test_integration.py": 4,
-    "test_rate_limiting.py": 1,
-}
+BASELINE = {'routes/test_core_routes.py': 11,
+ 'routes/test_settings_routes.py': 2,
+ 'routes/test_workshop_external_routes.py': 1,
+ 'routes/test_workshop_search_routes.py': 1,
+ 'services/test_auth_service.py': 23,
+ 'services/test_drip_now_no_side_effects.py': 1,
+ 'services/test_job_executor_rotate.py': 12,
+ 'services/test_job_executor_service.py': 2,
+ 'services/test_playlist_lock.py': 1,
+ 'services/test_verify_playlist_state.py': 14,
+ 'spotify/test_api.py': 37,
+ 'spotify/test_api_search.py': 4,
+ 'spotify/test_api_write_contracts.py': 18,
+ 'test_integration.py': 4,
+ 'test_rate_limiting.py': 1}
 
 
 def _unspecd_by_file():

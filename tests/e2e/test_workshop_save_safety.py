@@ -23,7 +23,8 @@ def _commit(alice, playlist_id, baseline, desired):
 def test_stale_draft_retained_then_manual_new_baseline(alice, fake):
     baseline = fake.uris(MORNING_MIX)
     # Warm cached playlist reads, then save a different revision.
-    alice.ok("get", f"/playlist/{MORNING_MIX}")
+    cached = alice.ok("get", f"/workshop/{MORNING_MIX}")
+    assert [track["uri"] for track in cached["tracks"]] == baseline
     external = baseline[1:] + baseline[:1]
     assert _commit(alice, MORNING_MIX, baseline, external)["state"] == "succeeded"
     before_reconcile = fake.playlist(MORNING_MIX)

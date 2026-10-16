@@ -9,7 +9,7 @@ export default defineConfig({
   reporter: "list",
   outputDir: "test-results/source-lifecycle",
   use: {
-    baseURL: "http://127.0.0.1:55736",
+    baseURL: "http://127.0.0.1:4198",
     browserName: "chromium",
     colorScheme: "dark",
     trace: "retain-on-failure",
@@ -20,8 +20,8 @@ export default defineConfig({
     { name: "sources-1440", use: { viewport: { width: 1440, height: 1000 } } },
   ],
   webServer: {
-    command: "npm run build:fixtures && npm run preview -- --port 55736",
-    url: "http://127.0.0.1:55736",
+    command: "npm run build:fixtures && npm run preview -- --port 4198",
+    url: "http://127.0.0.1:4198",
     reuseExistingServer: false,
     timeout: 120000,
     env: {

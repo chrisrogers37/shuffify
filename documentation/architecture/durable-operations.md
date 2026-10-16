@@ -56,14 +56,6 @@ covers commits whose notification was missed. Known lease and retry deadlines
 arrange their own wake; there is no idle database polling loop. SIGTERM stops
 new claims and allows the active command to settle.
 
-The worker's public `GET /health` reports whether its serving loop is running and
-accepting work. It does not require scheduler leadership: a replacement can
-become healthy while the incumbent drains. Authenticated `/internal/health`
-and registration reads report the actual scheduler leader and registration
-state independently. Only the holder of the scheduler advisory lock installs
-and fires schedules; a healthy standby cannot claim that those schedules are
-registered locally. A stopped or draining worker returns 503.
-
 Before another prepared track batch, an uncached metadata read compares both
 its snapshot and frozen playlist metadata. A mismatch requires a full read;
 initial, recovered and final reconciliation still read complete contents.
@@ -92,6 +84,11 @@ execution bookkeeping leaves it unchanged. Existing rows without that stamp
 use their last update conservatively. Interval eligibility starts one interval
 after creation, retaining the original cadence phase. Pause and Resume cannot
 backfill a slot that predates the current eligible definition.
+
+The worker's public `GET /health` reports a running, non-stopping serving loop.
+A replacement may be healthy while the incumbent holds scheduler leadership.
+Authenticated private health and registration reads report actual leadership
+independently; only the scheduler lock holder installs and fires schedules.
 
 ## History and local effects
 

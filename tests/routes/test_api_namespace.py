@@ -134,17 +134,14 @@ def test_api_normalization_keeps_list_data_and_rejects_non_json_success(app, pay
         assert response.json["success"] is False
 
 
-def test_only_pages_auth_and_health_remain_outside_the_api(app):
+def test_only_oauth_assets_and_health_remain_outside_the_api(app):
     assert {rule.endpoint for rule in app.url_map.iter_rules() if not rule.rule.startswith("/api/")} == {
-        "static", "auth.login", "auth.callback", "auth.logout", "site.index", "site.terms", "site.privacy",
-        "site.health", "site.settings", "site.update_settings_page", "site.schedules", "site.activity",
-        "site.workshop_hub", "site.workshop",
-        "site.playlist_setup_page", "site.routine_setup",
+        "static", "auth.login", "auth.callback", "auth.logout", "site.health",
     }
 
 
-@pytest.mark.parametrize("value,saved,category", [("17", True, "success"), ("invalid", False, "error")])
-def test_native_settings_form_redirects_with_a_flash(auth_client, db_app, value, saved, category):
+@pytest.mark.parametrize("value,saved,status", [("17", True, 200), ("invalid", False, 400)])
+def test_settings_form_encoding_uses_the_same_json_api_contract(auth_client, db_app, value, saved, status):
     from shuffify.models.db import UserSettings
 
     with db_app.app_context():
@@ -152,12 +149,9 @@ def test_native_settings_form_redirects_with_a_flash(auth_client, db_app, value,
     with patch("shuffify.routes.require_auth", return_value=object(), autospec=True), patch(
         "shuffify.routes.AuthService.get_user_data", return_value={"id": "user123"}, autospec=True
     ):
-        response = auth_client.post("/settings", data={"max_snapshots_per_playlist": value})
-    assert response.status_code == 302
-    assert response.mimetype == "text/html"
-    assert response.headers["Location"] == "/settings"
-    with auth_client.session_transaction() as session:
-        assert session["_flashes"][-1][0] == category
+        response = auth_client.post("/api/settings", data={"max_snapshots_per_playlist": value})
+    assert response.status_code == status
+    assert_envelope(response)
     with db_app.app_context():
         settings = UserSettings.query.first()
         assert settings.max_snapshots_per_playlist == (17 if saved else before)

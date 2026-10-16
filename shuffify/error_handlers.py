@@ -7,7 +7,7 @@ service-layer exceptions and Pydantic validation errors.
 
 import logging
 
-from flask import current_app, jsonify, render_template, request
+from flask import current_app, jsonify, request
 from pydantic import ValidationError
 from werkzeug.exceptions import HTTPException
 
@@ -61,7 +61,9 @@ logger = logging.getLogger(__name__)
 
 def json_error_response(message: str, status_code: int, category: str = "error", **extra):
     """Create a standardized JSON error response."""
-    return jsonify(error_payload(message, status_code, category=category, **extra)), status_code
+    response = jsonify(error_payload(message, status_code, category=category, **extra))
+    response.headers["Cache-Control"] = "no-store"
+    return response, status_code
 
 
 def is_api_request():
@@ -399,41 +401,6 @@ def handle_spotify_error(error: SpotifyError):
 # =============================================================================
 
 
-def wants_json() -> bool:
-    """Whether this request should be answered with JSON rather than a page.
-
-    One predicate for every HTTP handler below, the CSRF handler included,
-    so a browser navigation gets a page and an API client gets JSON.
-
-    Every branch needs a positive signal to choose JSON; anything else gets
-    a page. A client sending `*/*` (curl, the test client, most SDKs)
-    expresses no preference and gets a page. Only a client that ranks
-    `application/json` strictly above `text/html` is asking for JSON.
-    """
-    if is_api_request():
-        return True
-    if request.is_json:
-        return True
-    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-        return True
-
-    accept = request.accept_mimetypes
-    return accept["application/json"] > accept["text/html"]
-
-
-def _html_error(title: str, message: str, status_code: int):
-    """Render the generic error page for a browser navigation."""
-    return (
-        render_template(
-            "errors/error.html",
-            error_code=status_code,
-            error_title=title,
-            error_message=message,
-        ),
-        status_code,
-    )
-
-
 # Review endpoints and the kind each reports before its body can be read.
 _REVIEW_ENDPOINT_KINDS = {
     "api.live_context": "live_context",
@@ -525,21 +492,12 @@ def handle_csrf_error(error):
         "Your request could not be verified. "
         "Please refresh the page and try again."
     )
-    if wants_json():
-        return json_error_response(message, 400)
-    return _html_error("Request could not be verified", message, 400)
+    return json_error_response(message, 400)
 
 
 def handle_bad_request(error):
     """Handle 400 Bad Request."""
-    message = "Bad request."
-    if wants_json():
-        return json_error_response(message, 400)
-    return _html_error(
-        "Bad request",
-        "We could not make sense of that request.",
-        400,
-    )
+    return json_error_response("Bad request.", 400)
 
 
 def handle_request_too_large(error):
@@ -560,39 +518,21 @@ def handle_request_too_large(error):
     )
     if review:
         return review
-    message = "That request is too large."
-    if wants_json():
-        return json_error_response(message, 413)
-    return _html_error(
-        "Request too large",
-        "That request was too large to send.",
-        413,
-    )
+    return json_error_response("That request is too large.", 413)
 
 
 def handle_unauthorized(error):
     """Handle 401 Unauthorized."""
-    message = "Please log in first."
-    if wants_json():
-        return json_error_response(message, 401)
-    return _html_error(
-        "Please log in",
-        "You need to be signed in to see that page.",
-        401,
-    )
+    return json_error_response("Please log in first.", 401)
 
 
 def handle_not_found(error):
-    """Handle 404 Not Found."""
-    if wants_json():
-        return json_error_response("Resource not found.", 404)
-    return render_template("errors/404.html"), 404
+    """Handle 404 Not Found without a server-rendered page."""
+    return json_error_response("Resource not found.", 404)
 
 
 def handle_http_error(error):
     """Preserve HTTP status and protocol headers while formatting API failures."""
-    if not wants_json():
-        return error.get_response()
     response, status = json_error_response(error.description, error.code)
     for key, value in error.get_headers():
         if key.lower() not in ("content-type", "content-length"):
@@ -601,10 +541,8 @@ def handle_http_error(error):
 
 
 def handle_unexpected_error(error):
-    """Format unexpected API exceptions while preserving Flask's page error flow."""
-    if is_api_request():
-        return handle_internal_error(error)
-    raise error
+    """Keep unexpected backend failures in the authored JSON envelope."""
+    return handle_internal_error(error)
 
 
 def handle_internal_error(error):
@@ -617,10 +555,7 @@ def handle_internal_error(error):
         type(error).__name__,
         exc_info=True,
     )
-    if wants_json():
-        return json_error_response("An unexpected error occurred.", 500)
-    # Render HTML error page for browser navigation
-    return render_template("errors/500.html"), 500
+    return json_error_response("An unexpected error occurred.", 500)
 
 
 # =============================================================================

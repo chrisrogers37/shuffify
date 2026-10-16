@@ -11,15 +11,15 @@ concurrency:
 
 jobs:
   css:
-    name: Tailwind stylesheet up to date
+    name: Public document stylesheet up to date
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       # The compiled stylesheet is committed, so a deploy never depends on a
-      # build-time download. This fails when a template changed without a
+      # build-time download. This fails when a canonical public source changed without a
       # rebuild, which would otherwise ship stale CSS silently.
-      - name: Verify committed CSS matches templates
+      - name: Verify committed CSS matches public sources
         run: ./scripts/build-css.sh --check
 
   backend:

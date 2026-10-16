@@ -145,7 +145,8 @@ class TestCreateApp:
             assert {"auth", "site", "api"} <= app.blueprints.keys()
             # Check that routes are registered
             rules = [rule.rule for rule in app.url_map.iter_rules()]
-            assert "/" in rules
+            assert "/api/session" in rules
+            assert "/" not in rules
             assert "/health" in rules
 
     def test_create_app_debug_adds_no_cache_headers(self):
@@ -585,52 +586,27 @@ class TestSecurityHeaders:
         csp = client.get("/health").headers["Content-Security-Policy"]
         assert "default-src 'self'" in csp
 
-    def test_csp_uses_nonce_not_unsafe_inline(self, client):
-        """CSP should use nonce-based policy, not unsafe-inline."""
+    def test_csp_allows_no_inline_script_or_nonce_exception(self, client):
         csp = client.get("/health").headers["Content-Security-Policy"]
         assert "'unsafe-inline'" not in csp
-        assert "'nonce-" in csp
+        assert "'nonce-" not in csp
 
-    def test_csp_nonce_differs_per_request(self, client):
-        """Each request should get a unique CSP nonce."""
-        import re
-
+    def test_static_csp_is_consistent_across_requests(self, client):
         csp1 = client.get("/health").headers["Content-Security-Policy"]
         csp2 = client.get("/health").headers["Content-Security-Policy"]
-        nonces1 = re.findall(r"'nonce-([^']+)'", csp1)
-        nonces2 = re.findall(r"'nonce-([^']+)'", csp2)
-        assert nonces1
-        assert nonces2
-        assert nonces1[0] != nonces2[0]
+        assert csp1 == csp2
+        assert "script-src 'self'" in csp1
 
-    def test_csp_nonce_in_script_and_style_src(self, client):
-        """CSP nonce should appear in both script-src and style-src."""
-        import re
-
+    def test_csp_script_and_style_sources_are_self_only(self, client):
         csp = client.get("/health").headers["Content-Security-Policy"]
-        nonces = re.findall(r"'nonce-([^']+)'", csp)
-        # Same nonce used for both directives
-        assert len(nonces) == 2
-        assert nonces[0] == nonces[1]
+        directives = {part.strip().split()[0]: part.strip().split()[1:] for part in csp.split(";") if part.strip()}
+        assert directives["script-src"] == directives["style-src"] == ["'self'"]
 
-    def test_csp_script_src_pins_external_scripts_to_files(self, client):
-        """An external script source names one file, never a whole host.
-
-        A host-only source permits every file that host serves. The one
-        external script (SortableJS, also pinned by SRI at its tag) is
-        permitted by its exact path instead.
-        """
-        from urllib.parse import urlsplit
-
+    def test_csp_script_src_permits_no_external_script_host(self, client):
         csp = client.get("/health").headers["Content-Security-Policy"]
         script_src = next(d.split()[1:] for d in csp.split(";") if d.strip().startswith("script-src"))
         external = [s for s in script_src if s.startswith("http")]
-        assert external, "expected the SortableJS source in script-src"
-        for source in external:
-            path = urlsplit(source).path
-            assert path and not path.endswith("/"), (
-                f"script-src permits everything under {source!r}; pin the exact file"
-            )
+        assert external == []
 
     def test_csp_script_src_does_not_allow_tailwind_cdn(self, client):
         """Tailwind is compiled to static/css and is never fetched.

@@ -39,7 +39,7 @@ def pid(key: str) -> str:
 
 
 def greets(html: str, display_name: str) -> bool:
-    """The dashboard greets the user by name: "Welcome back, ..." or
+    """Library greets the user by name: "Welcome back, ..." or
     "Welcome to Shuffify, ...", whichever it decides they are."""
     return re.search(rf"Welcome[^<]*{re.escape(display_name)}", html) is not None
 
@@ -138,13 +138,15 @@ class App:
         assert callback, "the fake's consent did not redirect back to the app"
         landed = self.request("GET", callback, allow_redirects=False)
         home_url = urljoin(callback, landed.headers.get("Location", ""))
-        assert home_url == f"{APP}/", f"/callback sent the browser to {home_url!r}, not the dashboard"
-        home = self.request("GET", "/").text
-        assert greets(home, display_name), "the dashboard does not greet the user who logged in"
-        token = re.search(r'<meta name="csrf-token" content="([^"]+)"', home)
-        assert token, "the logged-in page carries no CSRF token"
-        # Flask-WTF reads the token from this header, as the app's own JS sends it.
-        self.http.headers["X-CSRFToken"] = token.group(1)
+        assert home_url == f"{APP}/", f"/callback sent the browser to {home_url!r}, not the frontend"
+        response = self.request("GET", "/api/session")
+        assert response.status_code == 200, response.text
+        session = response.json()
+        assert session["signed_in"] is True and session["user"]["id"] == user
+        assert session["user"]["display_name"] == display_name
+        token = session.get("csrf_token")
+        assert isinstance(token, str) and token, "the signed-in JSON session carries no CSRF token"
+        self.http.headers["X-CSRFToken"] = token
 
     def get(self, path: str, **kwargs) -> requests.Response:
         return self.request("GET", path, **kwargs)

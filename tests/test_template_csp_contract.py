@@ -1,24 +1,4 @@
-"""What CSP forbids in templates: inline event handlers and style attributes.
-
-A CSP nonce authorises an **element**, never an **attribute**. `style-src` and
-`script-src` carry a nonce and no `unsafe-inline`, so two things are inert no
-matter how correct they look in the markup:
-
-* `on*` event handler attributes
-* `style` attributes
-
-This is one contract for both, so the next person who adds either one finds
-out from a test rather than from the live site.
-
-The failure mode being guarded is silent by construction: the browser drops
-the declaration and renders on. Nothing errors, nothing logs, and the page
-looks plausible while a thumbnail renders blank or a button does nothing.
-
-**The JS/CSSOM path is deliberately allowed.** `el.style.transform = '...'`
-and `el.classList.add(...)` are not blocked and are the supported way to style
-dynamically. Only the *attribute* is forbidden — including one written into an
-HTML string that later reaches `innerHTML`.
-"""
+"""Static HTML and backend responses enforce a strict external-script CSP."""
 
 import re
 from html.parser import HTMLParser
@@ -28,15 +8,13 @@ from urllib.parse import urlsplit
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-TEMPLATE_DIR = REPO_ROOT / "shuffify" / "templates"
-# Served by the /terms and /privacy routes with the same CSP, but outside
-# templates/, so the checks scan this directory explicitly.
+# Canonical static legal artifacts are checked alongside the frontend HTML entry.
 PUBLIC_DIR = REPO_ROOT / "shuffify" / "static" / "public"
 JS_DIR = REPO_ROOT / "shuffify" / "static" / "js"
 
-# A <style> block is nonced and legitimate, and its CSS body can mention
-# `style="..."` in prose. Strip those regions before scanning so documentation
-# of the rule does not trip the rule. <script> blocks are NOT stripped: a
+# A <style> block's CSS body can mention `style="..."` in prose. Strip those
+# regions for attribute scanning; the executable-element guard checks the
+# block itself. <script> blocks are NOT stripped: a
 # `style=` written into an HTML string there becomes a real attribute the
 # moment it is assigned to innerHTML.
 STYLE_BLOCK = re.compile(r"<style\b.*?</style>", re.DOTALL | re.IGNORECASE)
@@ -71,7 +49,7 @@ def _strip_js_comments(text: str) -> str:
 
 
 def _templates():
-    return sorted(TEMPLATE_DIR.rglob("*.html")) + sorted(PUBLIC_DIR.rglob("*.html"))
+    return sorted(PUBLIC_DIR.rglob("*.html")) + [REPO_ROOT / "web" / "index.html"]
 
 
 def _html_sources():
@@ -111,7 +89,7 @@ def test_no_style_attribute(path):
         f"{_rel(path)} declares style via an attribute, "
         "which CSP drops silently:\n"
         + "\n".join(f"  line {n}: {t}" for n, t in hits)
-        + "\nPut the declaration in the nonced <style> block as a class, or "
+        + "\nPut the declaration in the external stylesheet as a class, or "
         "set it from JS (el.style.x / classList) — the CSSOM path is allowed."
     )
 
@@ -124,8 +102,7 @@ def test_no_inline_event_handler(path):
         f"{_rel(path)} declares an inline event handler, "
         "which CSP drops silently:\n"
         + "\n".join(f"  line {n}: {t}" for n, t in hits)
-        + '\nUse the delegated dispatcher: data-action-click="..." plus a '
-        "handler registered in static/js/actions.js."
+        + "\nUse React event handlers instead of HTML event attributes."
     )
 
 
@@ -165,9 +142,8 @@ def test_the_guard_can_actually_see_a_violation():
 
 
 # The two attribute checks above say nothing about whether a page's scripts
-# run: an external script needs its host in script-src, and an inline script
-# needs the request nonce, which a static public page cannot carry. The checks
-# below cover both.
+# run: an external script needs its host in script-src, and the policy refuses
+# inline scripts. The checks below cover both.
 SCRIPT_SRC_URL = re.compile(r"""<script[^>]*\bsrc\s*=\s*["'](https?://[^"']+)""", re.I)
 
 
@@ -182,11 +158,11 @@ class _ExecutableElements(HTMLParser):
             self.inline.append((tag, attrs.get("nonce")))
 
 
-@pytest.mark.parametrize("path", sorted(TEMPLATE_DIR.rglob("*.html")), ids=lambda p: p.name)
-def test_template_inline_elements_bind_the_request_nonce(path):
+@pytest.mark.parametrize("path", _templates(), ids=lambda p: p.name)
+def test_static_documents_have_no_inline_executable_elements(path):
     elements = _ExecutableElements()
     elements.feed(path.read_text())
-    assert all(nonce == "{{ csp_nonce }}" for _, nonce in elements.inline), _rel(path)
+    assert not elements.inline, _rel(path)
 
 
 def test_csp_source_guard_covers_js_builders_and_unquoted_attributes(tmp_path):
@@ -194,7 +170,7 @@ def test_csp_source_guard_covers_js_builders_and_unquoted_attributes(tmp_path):
     source.write_text('target.innerHTML = `<div STYLE=color:red ONCLICK=go()>x</div>`;')
     assert _offending_lines(source, STYLE_ATTR)
     assert _offending_lines(source, HANDLER_ATTR)
-    assert JS_DIR / "routine-management.js" in _html_sources()
+    assert PUBLIC_DIR / "terms.html" in _html_sources()
 
 
 def test_csp_guard_cannot_hide_attributes_with_urls_comments_or_allowed_words(tmp_path):
@@ -234,29 +210,15 @@ def test_static_script_guard_rejects_even_multiline_fixed_nonces(monkeypatch, tm
 
 def test_static_script_guard_allows_external_script(tmp_path):
     source = tmp_path / "public.html"
-    source.write_text('<script\n src="/static/js/landing.js"></script>')
+    source.write_text('<script\n src="/assets/app.js"></script>')
     test_static_public_pages_have_no_inline_script(source)
 
 
-def test_rendered_inline_script_uses_the_response_csp_nonce(db_app):
-    from flask import render_template
-
-    @db_app.route("/test-design-nonce")
-    def nonce_page():
-        return render_template("errors/500.html")
-
-    with db_app.test_client() as client:
-        first = client.get("/test-design-nonce")
-        second = client.get("/test-design-nonce")
-    nonces = []
-    for response in [first, second]:
-        nonce = re.search(r"'nonce-([^']+)'", response.headers["Content-Security-Policy"])[1]
-        elements = _ExecutableElements()
-        elements.feed(response.get_data(as_text=True))
-        assert elements.inline, "The retry registration must exercise an inline script"
-        assert all(value == nonce for _, value in elements.inline)
-        nonces.append(nonce)
-    assert nonces[0] != nonces[1], "A fixed or reused nonce must fail the rendered guard"
+def test_backend_csp_does_not_authorize_inline_script_or_style(db_app):
+    response = db_app.test_client().get("/api/session")
+    policy = response.headers["Content-Security-Policy"]
+    assert "script-src 'self'" in policy and "style-src 'self'" in policy
+    assert "'nonce-" not in policy and "'unsafe-inline'" not in policy
 
 
 def _csp_script_src_sources():
@@ -268,7 +230,7 @@ def _csp_script_src_sources():
         "this check silently permits everything if that regex stops matching"
     )
     sources = {t for t in m.group(1).split() if t.startswith("http")}
-    assert sources, "script-src names no external source; expected at least one"
+    assert "'self'" in m.group(1).rstrip("; ").split()
     return sources
 
 
@@ -314,11 +276,7 @@ def test_external_scripts_are_permitted_by_script_src(path):
     "path", sorted(PUBLIC_DIR.rglob("*.html")), ids=lambda p: p.name
 )
 def test_static_public_pages_have_no_inline_script(path):
-    """These files are sent verbatim -- nothing can stamp a nonce into them.
-
-    A template can carry `<script nonce="{{ csp_nonce }}">`. A static file has
-    no render step, so every inline script in one is unconditionally refused.
-    """
+    """The static documents cannot execute inline scripts under the shipped policy."""
     elements = _ExecutableElements()
     elements.feed(path.read_text(encoding="utf-8"))
     bad = [nonce for tag, nonce in elements.inline if tag == "script"]

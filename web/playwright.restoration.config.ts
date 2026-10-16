@@ -10,7 +10,7 @@ export default defineConfig({
   reporter: "list",
   outputDir: "./test-results/restoration",
   use: {
-    baseURL: "http://127.0.0.1:55746",
+    baseURL: "http://127.0.0.1:4297",
     browserName: "chromium",
     colorScheme: "dark",
     trace: "retain-on-failure",
@@ -24,8 +24,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run build && npm run preview -- --port 55746",
-    url: "http://127.0.0.1:55746/activity",
+    command: "npm run build && npm run preview -- --port 4297",
+    url: "http://127.0.0.1:4297/activity",
     reuseExistingServer: false,
     timeout: 120000,
     env: {

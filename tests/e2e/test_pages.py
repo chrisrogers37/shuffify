@@ -2,15 +2,14 @@
 
 Headless Chromium (Playwright) visits each page logged out, then as alice,
 logged in the way a person does: the landing page's consent box and button,
-then the fake's consent page. The dashboard, schedules and activity are
+then the fake's consent page. Library, Routines and Activity are
 visited both before and after a shuffle and a schedule are made. Every visit
 must:
 
 - answer with the expected status, at the URL asked for, with no redirect,
   server or script;
 - log no console error and throw no uncaught exception (the browser reports
-  a CSP violation as a console error); the one exception is the console line
-  Chromium writes for the missing page's own 404;
+  a CSP violation as a console error);
 - have every request it makes succeed;
 - at phone widths, not scroll sideways: 360px, the most common Android
   width, and 280px, a folding phone's cover screen.
@@ -23,10 +22,8 @@ hostname and every IP address but 127.0.0.1; it has no proxy, and pages
 have no WebRTC. Within 127.0.0.1, every request is routed through a handler
 that lets only the app and the fake through and reports anything else; a
 page's WebSockets are reported without being opened, and any that open
-anyway (a worker's) are reported too; service workers are blocked. The one
-script the app loads from a CDN is served from a copy in harness/vendor/
-instead; the page pins it by subresource integrity, so
-the browser refuses the copy unless its bytes are exactly the published ones.
+anyway (a worker's) are reported too; service workers are blocked. Scripts,
+styles and fonts come from the production React build on the app origin.
 """
 
 from pathlib import Path
@@ -34,7 +31,6 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import sync_playwright
 
-from harness.vendor import CDN_COPIES
 from tests.e2e.conftest import APP, FAKE, greets, pid
 from tests.routine_flow import create_routine
 
@@ -53,15 +49,15 @@ CHROMIUM_ARGS = [
     # WebRTC would send UDP straight to an IP literal, past the resolver.
     "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
 ]
-MISSING = "/no-such-page"  # the one page expected to answer 404
+MISSING = "/no-such-page"  # The React router renders the missing-route state.
 LOGGED_OUT = {"landing": "/", "terms": "/terms", "privacy": "/privacy", "not-found": MISSING}
 # Before anything is made, apart from the log-in entries in the activity.
-BEFORE = {"dashboard-before": "/", "schedules-before": "/schedules", "activity-before": "/activity"}
+BEFORE = {"library-before": "/library", "routines-before": "/routines", "activity-before": "/activity"}
 LOGGED_IN = {
-    "dashboard": "/",
+    "library": "/library",
     "workshop-hub": "/workshop",
     "workshop": f"/workshop/{pid('alice-morning-mix')}",
-    "schedules": "/schedules",
+    "routines": "/routines",
     "settings": "/settings",
     "activity": "/activity",
     "not-found": MISSING,
@@ -107,8 +103,6 @@ class Visit:
         url = route.request.url
         if url.startswith((f"{APP}/", f"{FAKE}/")):
             route.continue_()
-        elif url in CDN_COPIES:
-            route.fulfill(path=CDN_COPIES[url])
         else:
             self._problem(f"tried to reach {url}")
             route.abort()
@@ -136,21 +130,25 @@ class Visit:
         self.page.click("#login-button")
         self.page.wait_for_url(f"{FAKE}/authorize*")
         self.page.click(f"a.user[data-user={user}]")
-        self.page.wait_for_url(f"{APP}/")
-        assert greets(self.page.content(), "Alice Harness"), "the dashboard does not greet the user who logged in"
+        self.page.wait_for_url(f"{APP}/library")
+        self.page.get_by_role("heading", name="Your playlists", exact=True).wait_for()
+        self.page.locator(".sh-library-greeting").wait_for()
+        assert greets(self.page.content(), "Alice Harness"), "the Library does not greet the user who logged in"
 
     def check(self, pages: dict) -> None:
         for name, path in pages.items():
             self.current = name
             url = f"{APP}{path}"
             response = self.page.goto(url, wait_until="networkidle")
-            expected = 404 if path == MISSING else 200
+            expected = 200
             if response.status != expected:
                 self._problem(f"answered {response.status}, not {expected}")
             if response.request.redirected_from is not None or response.url != url:
                 self._problem(f"the server redirected it to {response.url}")
             elif self.page.url != url:
                 self._problem(f"a script sent it on to {self.page.url}")
+            if path == MISSING:
+                self.page.get_by_role("heading", name="That page could not be found.").wait_for()
             if self.viewport != "desktop":
                 overflow = self.page.evaluate(
                     "document.documentElement.scrollWidth - document.documentElement.clientWidth"
@@ -180,7 +178,7 @@ def test_logged_out_pages(visit):
 def test_logged_in_pages(visit, alice):
     visit.log_in()
     visit.check(BEFORE)
-    # Something on the activity and schedules pages: a shuffle and a schedule.
+    # Populate Activity and Routines with a shuffle and a saved routine.
     alice.write(f"/shuffle/{pid('alice-morning-mix')}", data={"algorithm": "BasicShuffle"})
     create_routine(alice, pid("alice-long-haul"))
     visit.check(LOGGED_IN)

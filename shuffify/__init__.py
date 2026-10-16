@@ -1,12 +1,11 @@
 import logging
 import os
 import re
-import secrets
 from typing import Optional
 from urllib.parse import unquote, urlsplit
 
 import redis
-from flask import Flask, Request, current_app, g, request
+from flask import Flask, Request, current_app, request
 from flask_limiter import Limiter
 from flask_migrate import Migrate
 from flask_session import Session
@@ -805,16 +804,8 @@ def _init_sentry(config_class):
 
 
 def _apply_security_headers(app):
-    """Register CSP nonce generation and security headers."""
+    """Protect backend responses with the shared same-origin asset policy."""
     from shuffify.spotify.endpoints import ACCOUNTS_BASE_URL
-
-    @app.before_request
-    def _generate_csp_nonce():
-        g.csp_nonce = secrets.token_urlsafe(32)
-
-    @app.context_processor
-    def _inject_csp_nonce():
-        return {"csp_nonce": getattr(g, "csp_nonce", "")}
 
     @app.after_request
     def set_security_headers(response):
@@ -829,35 +820,16 @@ def _apply_security_headers(app):
         # Control referrer information leakage
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
-        nonce = getattr(g, "csp_nonce", "")
-
-        # Content Security Policy — nonce-based, no unsafe-inline
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            # The one external script, SortableJS, is permitted by its exact
-            # file path rather than by host, and is also pinned by SRI at its
-            # script tag -- bump the version in both places together. Tailwind
-            # is compiled into static/css at build time, so no CDN serves it.
-            f"script-src 'self' https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js 'nonce-{nonce}'; "
-            f"style-src 'self' 'nonce-{nonce}'; "
-            # Spotify serves cover art from many scdn.co subdomains, not just
-            # i: an auto-generated four-up mosaic comes from mosaic.scdn.co,
-            # editorial art from thisis-images, daily-mix, newjams-images,
-            # lineup-images, charts-images and seeded-session-images. The set
-            # is open-ended, so scdn.co is wildcarded, as spotifycdn.com is.
+            "script-src 'self'; "
+            "style-src 'self'; "
             "img-src 'self' https://*.scdn.co https://*.spotifycdn.com data:; "
-            "connect-src 'self'; "
+            "connect-src 'self' https://*.scdn.co https://*.spotifycdn.com; "
             "font-src 'self'; "
             "object-src 'none'; "
             "frame-ancestors 'none'; "
             "base-uri 'self'; "
-            # The login form GETs /login, which 302s to Spotify's authorize
-            # endpoint. form-action is enforced against every hop of a
-            # submission chain, so the same-origin action passes and the
-            # cross-origin redirect is blocked unless the OAuth host is listed
-            # here. Scoped to the authorize host only; this is a targeted
-            # allowance for a known destination, not a relaxation of the
-            # injection protections in style-src/script-src.
             f"form-action 'self' {ACCOUNTS_BASE_URL}"
         )
 
@@ -939,7 +911,7 @@ def create_app(config_name=None, *, start_scheduler=True):
     # the WSGI app on construction.
     _init_sentry(config[config_name])
 
-    app = Flask(__name__)
+    app = Flask(__name__, template_folder=None)
     app.request_class = BoundedRequest
     app.config.from_object(config[config_name])
 
@@ -1011,12 +983,6 @@ def create_app(config_name=None, *, start_scheduler=True):
     from shuffify.request_deadline import register_spotify_deadline
 
     register_spotify_deadline(app)
-
-    # Templates render raw Spotify playlist objects, which carry the track
-    # count under "tracks" or "items"; read it in either shape.
-    from shuffify.spotify.api import playlist_item_count
-
-    app.add_template_filter(playlist_item_count, "item_count")
 
     # Register operational CLI commands
     from shuffify.cli import register_cli
