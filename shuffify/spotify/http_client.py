@@ -329,7 +329,7 @@ class SpotifyHTTPClient:
                             token_refreshed = True
                             attempt = 0  # refresh restarts attempts, never the shared deadline
                             continue
-                        except (SpotifyDeadlineError, SpotifyRateLimitError):
+                        except (SpotifyDeadlineError, SpotifyRateLimitError, SpotifyReadTransientError):
                             raise
                         except Exception as e:
                             check_deadline()

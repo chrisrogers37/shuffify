@@ -34,6 +34,36 @@ def failing_read(_runtime, _target):
     raise SpotifyReadTransientError('Private provider outage')
 
 
+def fail_journal_read(runtime, message):
+    runtime.journal._read_call(
+        lambda _resource: (_ for _ in ()).throw(SpotifyReadTransientError(message)), PLAYLIST,
+    )
+
+
+def fail_recovery_reads_after_first_effect(monkeypatch, world):
+    original = OperationRuntime.read_resource
+
+    def read(runtime, target):
+        attempts = runtime.journal.doc.get('read_retry', {}).get('attempts', 0)
+        if (world.calls and runtime.journal.doc.get('phase') == 'forward'
+                and not runtime.journal.doc.get('compensation_retry_started')
+                and attempts < 8):
+            raise SpotifyReadTransientError('Private provider outage')
+        return original(runtime, target)
+
+    monkeypatch.setattr(OperationRuntime, 'read_resource', read)
+
+
+def seed_seven_prior_read_failures(runtime):
+    now = datetime.now(timezone.utc)
+    runtime.journal.doc['read_retry'] = {
+        'next_attempt_at': (now - timedelta(seconds=1)).isoformat(),
+        'first_deferred_at': now.isoformat(), 'phase': runtime.journal.doc['phase'], 'attempts': 7,
+        'deadline_expiries': 0, 'error_code': 'read_temporarily_unavailable',
+    }
+    runtime.journal._save()
+
+
 def replacement(runtime):
     return runtime.step('replace', lambda: {'success': runtime.api.update_playlist_tracks(PLAYLIST, AFTER)})
 
@@ -51,6 +81,37 @@ def test_read_deferral_counter_and_first_time_survive_new_worker_instances(termi
         assert datetime.fromisoformat(first).tzinfo is not None
         make_due(terminal, row.id)
     assert terminal.world.calls == 0
+
+
+def test_successful_safe_reads_reset_consecutive_failure_budget_across_workers(terminal):
+    from shuffify.services.operations.journal import OperationDeferred
+
+    outcomes = [False, True] * 8 + [True]
+
+    def handler(runtime):
+        # Keep one operation alive while successive worker instances encounter
+        # transient read failures separated by successful reads.
+        while outcomes:
+            succeeded = outcomes.pop(0)
+            try:
+                runtime.journal._read_call(
+                    lambda _resource: (_ for _ in ()).throw(SpotifyReadTransientError("temporary"))
+                    if not succeeded else {"ok": True},
+                    PLAYLIST,
+                )
+            except OperationDeferred:
+                raise
+        return {"success": True}
+
+    row = terminal.accept()
+    for _ in range(9):
+        finished = terminal.build(handler).run_once(row.id)
+        if not finished:
+            make_due(terminal, row.id)
+
+    completed = terminal.repository.get(row.id)
+    assert finished is True and completed.state == "succeeded"
+    assert "read_retry" not in completed.journal or completed.journal["read_retry"].get("attempts", 0) == 0
 
 
 @pytest.mark.parametrize('failure,limit', [(SpotifyReadTransientError, 8), (SpotifyDeadlineError, 3)])
@@ -104,12 +165,12 @@ def test_a_long_retry_hint_cannot_schedule_past_the_elapsed_budget(terminal, ret
 
 
 def test_exhausted_forward_reads_can_still_compensate_acknowledged_effects(terminal, monkeypatch):
-    attempts = []
+    fail_recovery_reads_after_first_effect(monkeypatch, terminal.world)
 
     def handler(runtime):
-        replacement(runtime)
-        attempts.append(True)
-        raise SpotifyReadTransientError('Post-write read outage')
+        if not terminal.world.calls:
+            replacement(runtime)
+        fail_journal_read(runtime, 'Post-write read outage')
 
     row = terminal.accept()
     for attempt in range(1, 9):
@@ -124,28 +185,31 @@ def test_exhausted_forward_reads_can_still_compensate_acknowledged_effects(termi
     assert terminal.accept().id != row.id
 
 
-def test_exhaustion_retains_an_accepted_prefix_without_claiming_it_was_rolled_back(composite):
+def test_successful_reconciliation_resets_retry_budget_without_rolling_back_accepted_prefix(composite):
     from tests.services.operations.test_composite_runtime import BEFORE, COLLECTED, collect
 
     repository, operation_id, world, build, expire = composite
+    collected = []
 
     def handler(runtime):
-        collect(runtime)
-        runtime.journal.begin_step('next')
-        raise SpotifyReadTransientError('The next unaccepted read is unavailable')
+        if not collected:
+            collect(runtime)
+            runtime.journal.begin_step('next')
+            collected.append(True)
+        fail_journal_read(runtime, 'The next unaccepted read is unavailable')
 
-    for attempt in range(1, 9):
+    for _attempt in range(1, 9):
         finished = build(handler).run_once(operation_id)
-        if attempt < 8:
-            assert finished is False
-            row = repository.get(operation_id)
-            document = deepcopy(row.journal)
-            document['read_retry']['next_attempt_at'] = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
-            with repository.engine.begin() as connection:
-                connection.execute(update(JobExecution).where(JobExecution.id == operation_id).values(journal=document))
-            expire()
+        assert finished is False
+        row = repository.get(operation_id)
+        document = deepcopy(row.journal)
+        document['read_retry']['next_attempt_at'] = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+        with repository.engine.begin() as connection:
+            connection.execute(update(JobExecution).where(JobExecution.id == operation_id).values(journal=document))
+        expire()
     completed = repository.get(operation_id)
-    assert finished is True and completed.state == 'failed'
+    assert completed.state == 'running' and completed.completed_at is None
+    assert completed.journal['read_retry']['attempts'] == 1
     assert world.uris == [BEFORE, COLLECTED] and world.calls == 1
     assert len(completed.journal['boundaries']['accepted']) == 1
 
@@ -153,19 +217,37 @@ def test_exhaustion_retains_an_accepted_prefix_without_claiming_it_was_rolled_ba
 def test_permanent_compensation_read_outage_releases_without_unproved_rollback(terminal, monkeypatch):
     def handler(runtime):
         replacement(runtime)
+        now = datetime.now(timezone.utc)
+        runtime.journal.doc['read_retry'] = {
+            'next_attempt_at': (now + timedelta(seconds=60)).isoformat(),
+            'first_deferred_at': now.isoformat(), 'phase': 'forward', 'attempts': 7,
+            'deadline_expiries': 0, 'error_code': 'read_temporarily_unavailable',
+        }
+        runtime.journal._save()
         raise ValueError('Start compensation after an acknowledged write')
 
     original = OperationRuntime.read_resource
+    original_snapshot = OperationRuntime.read_snapshot
 
     def read(runtime, target):
         if runtime.get_journal().get('runtime', {}).get('failure'):
             raise SpotifyReadTransientError('Compensation read outage')
         return original(runtime, target)
 
+    def read_snapshot(runtime, target):
+        if runtime.get_journal().get('runtime', {}).get('failure'):
+            raise SpotifyReadTransientError('Compensation read outage')
+        return original_snapshot(runtime, target)
+
     monkeypatch.setattr(OperationRuntime, 'read_resource', read)
+    monkeypatch.setattr(OperationRuntime, 'read_snapshot', read_snapshot)
     row = terminal.accept()
     for attempt in range(1, 9):
         finished = terminal.build(handler).run_once(row.id)
+        if attempt == 1:
+            pending = terminal.repository.get(row.id)
+            assert finished is False and pending.state == 'compensating'
+            assert pending.journal['read_retry']['attempts'] == 1
         if attempt < 8:
             assert finished is False
             make_due(terminal, row.id)
@@ -197,20 +279,21 @@ def test_terminal_read_deferrals_are_bounded_without_replaying_verified_writes(t
     assert terminal.accept().id != row.id
 
 
-def test_exhaustion_preserves_fresh_verified_publication_protection(terminal):
+def test_exhaustion_preserves_fresh_verified_publication_protection(terminal, monkeypatch):
+    verified_once = []
+
     def handler(runtime):
-        runtime.journal.begin_step('verified')
-        replacement(runtime)
-        runtime.journal.verify_step('verified')
-        runtime.protect_verified('verified', {'success': True})
-        raise SpotifyReadTransientError('Read outage after verified publication boundary')
+        if not verified_once:
+            runtime.journal.begin_step('verified')
+            replacement(runtime)
+            runtime.journal.verify_step('verified')
+            runtime.protect_verified('verified', {'success': True})
+            verified_once.append(True)
+            seed_seven_prior_read_failures(runtime)
+        fail_journal_read(runtime, 'Read outage after verified publication boundary')
 
     row = terminal.accept()
-    for attempt in range(1, 9):
-        finished = terminal.build(handler).run_once(row.id)
-        if attempt < 8:
-            assert finished is False
-            make_due(terminal, row.id)
+    finished = terminal.build(handler).run_once(row.id)
     completed = terminal.repository.get(row.id)
     assert finished is True and completed.state == 'needs_attention'
     assert terminal.world.uris == AFTER and terminal.world.calls == 1
@@ -222,20 +305,21 @@ def test_exhaustion_preserves_fresh_verified_publication_protection(terminal):
 def test_crash_after_abort_preserves_verified_read_exhaustion_but_keeps_domain_rollback(
     terminal, monkeypatch, reason,
 ):
+    verified_once = []
+
     def handler(runtime):
-        runtime.journal.begin_step('verified')
-        replacement(runtime)
-        runtime.journal.verify_step('verified')
-        runtime.protect_verified('verified', {'success': True})
+        if not verified_once:
+            runtime.journal.begin_step('verified')
+            replacement(runtime)
+            runtime.journal.verify_step('verified')
+            runtime.protect_verified('verified', {'success': True})
+            verified_once.append(True)
         if reason == 'read_retry_exhausted':
-            raise SpotifyReadTransientError('Post-proof outage')
+            seed_seven_prior_read_failures(runtime)
+            fail_journal_read(runtime, 'Post-proof outage')
         runtime.journal.request_abort('domain_failed')
 
     row = terminal.accept()
-    if reason == 'read_retry_exhausted':
-        for _ in range(7):
-            assert terminal.build(handler).run_once(row.id) is False
-            make_due(terminal, row.id)
     checkpoint, stopped = terminal.repository.checkpoint, []
 
     def stop_after_abort(lease, document, **kwargs):

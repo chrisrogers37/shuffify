@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from shuffify.models.db import User
 from shuffify.services.token_service import TokenService
+from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.auth import SpotifyAuthManager, TokenInfo
 from shuffify.spotify.credentials import SpotifyCredentials
 from shuffify.spotify.exceptions import SpotifyReadTransientError, SpotifyTokenError
@@ -82,6 +83,49 @@ def test_invalid_grant_remains_an_auth_failure(monkeypatch):
     )
     with pytest.raises(SpotifyTokenError):
         manager.refresh_token(TokenInfo('expired', 'Bearer', 0, refresh_token='fake-refresh'))
+
+
+def test_401_refresh_503_defers_worker_instead_of_needs_attention(db_app, terminal, monkeypatch):
+    from datetime import datetime, timezone
+
+    with Session(terminal.repository.engine) as storage, storage.begin():
+        storage.get(User, terminal.user_id).encrypted_refresh_token = TokenService.encrypt_token('fake-refresh')
+
+    credentials = SpotifyCredentials('fake-id', 'fake-secret', 'http://localhost/callback')
+    manager = SpotifyAuthManager(credentials)
+    monkeypatch.setattr('shuffify.spotify.auth.requests.post', lambda *a, **kw: response(503, {
+        'error_description': 'Temporary refresh outage',
+    }))
+
+    def rejected_api_request(self, method, url, **kwargs):
+        if method == 'POST':
+            return response(503, {'error_description': 'Temporary refresh outage'})
+        assert method == 'GET'
+        return response(401, {'error': {'message': 'expired access token'}})
+
+    monkeypatch.setattr('requests.sessions.Session.request', rejected_api_request)
+
+    def api_factory(_user):
+        return SpotifyAPI(
+            TokenInfo('stale-but-clock-valid', 'Bearer', datetime.now(timezone.utc).timestamp() + 3600,
+                      refresh_token='fake-refresh'),
+            auth_manager=manager,
+            auto_refresh=True,
+        )
+
+    def worker():
+        return OperationWorker(
+            db_app, repository=terminal.repository,
+            handlers={'example': lambda runtime: runtime.api.get_playlist('A' * 22)},
+            api_factory=api_factory, heartbeat_interval=0,
+        )
+
+    row = terminal.accept()
+    assert worker().run_once(row.id) is False
+    pending = terminal.repository.get(row.id)
+    assert pending.state == 'running' and pending.completed_at is None
+    assert pending.journal['read_retry']['next_attempt_at']
+    assert pending.journal.get('runtime', {}).get('terminal_recovery_attempts', 0) == 0
 
 
 def test_refresh_503_during_terminal_verification_defers_without_attention_or_replay(db_app, terminal, monkeypatch):

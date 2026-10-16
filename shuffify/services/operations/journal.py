@@ -254,7 +254,7 @@ class DurableJournal:
                 raise JournalError("A retry deadline must include its timezone")
             if due > now:
                 deadlines.append(due)
-        for step in self._plans():
+        for step in (() if self.doc.get("compensation_retry_started") else self._plans()):
             for item in step["batches"]:
                 if item["state"] == "rejected" and item.get("next_attempt_at"):
                     due = datetime.fromisoformat(item["next_attempt_at"])
@@ -278,7 +278,7 @@ class DurableJournal:
         self._progress()
         owned = {"version", "phase", "status", "resources", "plans", "compensation", "compensation_resources",
                  "choices", "recovery", "observations", "progress", "abort", "boundaries",
-                 "compensation_scope", "read_retry"}
+                 "compensation_scope", "compensation_retry_started", "read_retry"}
         latest = self.get_journal() or {}
         self._check_publication(latest)
         for key, value in latest.items():
@@ -364,9 +364,13 @@ class DurableJournal:
         self._defer_if_needed()
         try:
             check_deadline()
-            return read(resource)
+            result = read(resource)
         except Exception as error:
             self.defer_read(error)
+        if self.doc.get("read_retry"):
+            self.doc.pop("read_retry")
+            self._save()
+        return result
 
     def _read(self, resource, *, scope=None):
         scope = scope or self.doc["resources"].get(resource, {}).get("scope", "tracks")
@@ -716,11 +720,19 @@ class DurableJournal:
         return conflict or self.outcome()
 
     def compensate(self):
-        self._defer_if_needed()
         if self.doc["phase"] == "compensating":
+            self._defer_if_needed()
             return self.resume()
         if self.doc["status"] == "needs_attention":
             return self.outcome()
+        # Compensation starts its own bounded outage window. Persist this
+        # transition before reconciling so a deferred reconciliation keeps its
+        # compensation budget across worker replacement.
+        if not self.doc.get("compensation_retry_started"):
+            self.doc.pop("read_retry", None)
+            self.doc["compensation_retry_started"] = True
+            self._save()
+        self._defer_if_needed()
         conflict = self._reconcile()
         if conflict:
             return conflict
@@ -728,6 +740,7 @@ class DurableJournal:
         boundaries = self.doc.get("boundaries")
         if boundaries is not None and not self.compensation_has_effects():
             self.doc.update(status="failed", compensation_scope=scope)
+            self.doc.pop("compensation_retry_started", None)
             self._save()
             return self.outcome()
         selected = self.doc["plans"][scope["start"]:scope["end"]]
@@ -759,6 +772,7 @@ class DurableJournal:
                           "desired": desired, "batches": replacement + metadata, "batches_done": 0})
         self.doc.update(phase="compensating", status="ready", compensation=plans, compensation_resources=resources,
                         compensation_scope=scope)
+        self.doc.pop("compensation_retry_started", None)
         self._save()
         return self.resume()
 

@@ -80,10 +80,10 @@ test("one private worker starts the real command processor and receives time to 
 
 test("both processes share durable infrastructure and reference credentials without putting values in the graph", () => {
   for (const service of [api, worker]) {
-    assert.equal(
-      service.variables.DATABASE_URL.resource,
-      resources.get("postgres").address,
-    );
+    assert.deepEqual(service.variables.DATABASE_URL, {
+      type: "sharedReference",
+      name: "DATABASE_URL",
+    });
     assert.equal(
       service.variables.REDIS_URL.resource,
       resources.get("redis").address,
@@ -107,8 +107,16 @@ test("both processes share durable infrastructure and reference credentials with
     api.variables.WORKER_CONTROL_URL.value,
     "http://${{worker.RAILWAY_PRIVATE_DOMAIN}}:5001",
   );
-  assert.equal(resources.get("postgres").engine, "postgres");
+  assert.equal(resources.get("postgres"), undefined);
   assert.equal(resources.get("redis").engine, "redis");
+});
+
+test("split API requires the owner-supplied browser origin", () => {
+  assert.deepEqual(api.variables.PUBLIC_ORIGIN, {
+    type: "sharedReference",
+    name: "PUBLIC_ORIGIN",
+  });
+  assert.equal(worker.variables.PUBLIC_ORIGIN, undefined);
 });
 
 
@@ -184,13 +192,15 @@ test("native CLI evaluation emits no graph when owner source inputs are missing 
 
 test("an injected shared-reference context is preserved", async () => {
   const original = createRailwayContext({environment: "verification"});
-  const names = ["SECRET_KEY", "TOKEN_ENCRYPTION_KEY", "SPOTIFY_CLIENT_ID",
+  const names = ["DATABASE_URL", "SECRET_KEY", "TOKEN_ENCRYPTION_KEY", "SPOTIFY_CLIENT_ID",
     "SPOTIFY_CLIENT_SECRET", "SPOTIFY_REDIRECT_URI", "WORKER_CONTROL_TOKEN"];
   const shared = Object.fromEntries(names.map(name => [name, {
     type: "sharedReference", name: `provided_${name}`,
   }]));
+  shared.PUBLIC_ORIGIN = { type: "sharedReference", name: "provided_PUBLIC_ORIGIN" };
   const injected = await evaluate(sourceInputs, {...original, shared});
   for (const service of injected.resources.filter(resource => ["api", "worker"].includes(resource.name))) {
     for (const name of names) assert.equal(service.variables[name], shared[name]);
   }
+  assert.equal(injected.resources.find(resource => resource.name === "api").variables.PUBLIC_ORIGIN, shared.PUBLIC_ORIGIN);
 });

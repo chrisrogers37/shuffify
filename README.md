@@ -90,14 +90,16 @@ rendered by `web/`; there are no server-rendered application templates. Run
 `npm ci`, `npm test` and `npm run build` from `web/` for the frontend.
 
 When an HTTPS frontend proxies the API through a different backend hostname,
-set `PUBLIC_ORIGIN` on the API to the browser-facing HTTPS origin, for example
-`https://app.example.invalid`. Include a port only when it is nonstandard; do
+set `PUBLIC_ORIGIN` on the API to the browser-facing HTTPS origin. The current
+split deployment uses `https://shuffify-v2.vercel.app`; use a future custom
+domain only at its cutover. Include a port only when it is nonstandard; do
 not include credentials, a path, query or fragment. Invalid values prevent app
 startup. This pins unsafe requests to the configured origin after proxy
 reconstruction while keeping Flask-WTF token and strict referrer checks enabled.
 It never authorizes an origin from client-supplied forwarded headers. Read
-requests and their redirects retain their normal host behavior. An unset value
-keeps the existing single-origin behavior; local tests and the harness ignore it.
+requests and their redirects retain their normal host behavior. The production
+split API refuses to start without `PUBLIC_ORIGIN`; development, the harness,
+and the private worker do not require it.
 
 Legal copy is canonical in `assets/legal/`. The frontend prerenders that copy
 for `/terms` and `/privacy`. The explicit-input shell in
@@ -125,12 +127,24 @@ The Railway infrastructure definition and setup instructions are in [.railway/RE
 
 | Service | Required environment variable names |
 | --- | --- |
-| API and worker | `APP_CONFIG`, `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`, `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI`, `WORKER_CONTROL_TOKEN`, `SCHEDULER_ENABLED`, `SCHEDULER_TIMEZONE` |
-| API | `PORT`, `SHUFFIFY_PROCESS_ROLE`, `WORKER_CONTROL_URL` |
+| API and worker | `APP_CONFIG`, `DATABASE_URL` (required owner-set direct, unpooled Neon URL), `REDIS_URL`, `SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`, `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI`, `WORKER_CONTROL_TOKEN`, `SCHEDULER_ENABLED`, `SCHEDULER_TIMEZONE` |
+| API pre-deploy migration | `DATABASE_URL` (inherits the API's required owner-set direct, unpooled Neon URL) |
+| API | `PORT`, `SHUFFIFY_PROCESS_ROLE`, `WORKER_CONTROL_URL`, `PUBLIC_ORIGIN` (required owner-set browser-facing origin) |
 | Worker | `PORT`, `SHUFFIFY_PROCESS_ROLE`, `WORKER_CONTROL_HOST`, `WORKER_CONTROL_PORT` |
 | Frontend build | `RAILWAY_API_URL`; optional `CONTACT_ADDRESS` override |
 
 Keep the OAuth callback on the public frontend origin. API rewrites preserve the same-origin session and CSRF flow. Public legal content receives its contact address at build time. Store credentials in the hosting platforms and keep environment files out of Git and build artifacts.
+
+Railway does not provision PostgreSQL for this deployment. Point staging at a
+dedicated nonproduction branch in the existing Neon project `shuffify-db`; a
+backup branch is not staging, and staging must never use production. Verify
+branch identity from Neon metadata before any migration. Staging upgrades run
+in the API pre-deploy step. Production migrations run only during the planned
+cutover window. The existing live Railway PostgreSQL resource must remain
+until its later retirement/cutover; this IaC definition may propose deleting
+it, so do not apply such a plan. Check the Neon project and branch in the owner
+console before setting `DATABASE_URL`.
+See [.railway/README.md](.railway/README.md) for the Railway setup steps.
 
 For local containers, set the shared environment names in `.env`; `DATABASE_URL` must use the `db` service hostname and `REDIS_URL` must use `redis`. The PostgreSQL image provides TLS for the production configuration. Build the image and start `db redis`, then bootstrap a fresh empty database explicitly with `docker compose --profile migration run --rm -e SCHEDULER_ENABLED=false -e SHUFFIFY_MIGRATION_STEP=1 migrate flask create-schema`. Run `docker compose --profile migration run --rm migrate` before `docker compose up -d api worker`. The migration profile runs only when selected. The development override mounts source into both application processes; the production override starts image-only services when selected with the base file explicitly.
 

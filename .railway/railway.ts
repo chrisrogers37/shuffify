@@ -1,4 +1,4 @@
-import { createRailwayContext, defineRailway, github, postgres, project, redis, service } from "railway/iac";
+import { createRailwayContext, defineRailway, github, project, redis, service } from "railway/iac";
 
 function configuredGitSource() {
   const env = (globalThis as typeof globalThis & {
@@ -34,11 +34,10 @@ export default defineRailway((rawContext) => {
   const source = configuredGitSource();
   // Native CLI evaluation supplies {}; preserve complete SDK-injected contexts.
   const ctx = rawContext.shared ? rawContext : createRailwayContext(rawContext);
-  const database = postgres("postgres");
   const cache = redis("redis");
   const shared = {
     APP_CONFIG: "production",
-    DATABASE_URL: database.env.DATABASE_URL,
+    DATABASE_URL: ctx.shared.DATABASE_URL,
     REDIS_URL: cache.env.REDIS_URL,
     SECRET_KEY: ctx.shared.SECRET_KEY,
     TOKEN_ENCRYPTION_KEY: ctx.shared.TOKEN_ENCRYPTION_KEY,
@@ -84,10 +83,11 @@ export default defineRailway((rawContext) => {
     },
     env: {
       ...shared,
+      PUBLIC_ORIGIN: ctx.shared.PUBLIC_ORIGIN,
       SHUFFIFY_PROCESS_ROLE: "api",
       PORT: "8000",
       WORKER_CONTROL_URL: "http://${{worker.RAILWAY_PRIVATE_DOMAIN}}:5001",
     },
   });
-  return project("shuffify-v2", { resources: [database, cache, worker, api] });
+  return project("shuffify-v2", { resources: [cache, worker, api] });
 });
