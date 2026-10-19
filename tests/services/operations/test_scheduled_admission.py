@@ -8,7 +8,10 @@ import pytest
 from shuffify.models.db import JobExecution, Schedule, User, db
 from shuffify.services.operations.repository import OperationRepository
 
-NOW = datetime(2026, 10, 15, 12, 30, tzinfo=timezone.utc)
+# Nine hours behind the real clock, on the minute. The code under test reads
+# this clock but APScheduler's own loop reads the real one, so a slot due at NOW
+# has already passed for APScheduler and the next daily slot has not.
+NOW = (datetime.now(timezone.utc) - timedelta(hours=9)).replace(second=0, microsecond=0)
 
 
 def module():

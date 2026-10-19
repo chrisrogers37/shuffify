@@ -59,7 +59,7 @@ def test_restart_recovers_one_daily_slot_inside_grace_and_deduplicates(
     schedule, db_app, scheduler_clock, monkeypatch, cadence
 ):
     schedule.schedule_type = cadence
-    schedule.schedule_value = "daily" if cadence == "interval" else "30 12 * * *"
+    schedule.schedule_value = "daily" if cadence == "interval" else f"{NOW.minute} {NOW.hour} * * *"
     schedule.updated_at = schedule.created_at
     schedule.definition_changed_at = schedule.created_at
     db.session.commit()
@@ -128,7 +128,7 @@ def test_restart_never_backfills_a_slot_before_current_definition_became_eligibl
     schedule, db_app, scheduler_clock, floor_kind
 ):
     schedule.schedule_type = "cron"
-    schedule.schedule_value = "30 12 * * *"
+    schedule.schedule_value = f"{NOW.minute} {NOW.hour} * * *"
     schedule.updated_at = schedule.created_at
     schedule.definition_changed_at = schedule.created_at
     floor = NOW + timedelta(minutes=1)
@@ -245,6 +245,8 @@ def test_recovery_at_exact_grace_boundary_admits_original_due(schedule, db_app, 
 def test_recovery_across_dst_fold_advances_by_utc_instant(schedule):
     schedule.schedule_type, schedule.schedule_value = "cron", "30 1 * * *"
     schedule.timezone = "America/New_York"
+    # The fold below is a fixed date; the fixture's timestamps follow the clock.
+    schedule.created_at = schedule.recovery_start_at = datetime(2026, 10, 1, tzinfo=timezone.utc)
     schedule.definition_changed_at = schedule.created_at
     cadence = build_cadence(schedule)
 
