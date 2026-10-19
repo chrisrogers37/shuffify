@@ -18,4 +18,4 @@ Flask-Limiter>=4.1.1
 werkzeug>=3.1.9
 urllib3>=2.8.0
 certifi>=2026.7.22
-MarkupSafe>=3.0.3
+MarkupSafe>=3.0.4
