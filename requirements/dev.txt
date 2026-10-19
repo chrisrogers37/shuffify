@@ -14,17 +14,9 @@ playwright==1.56.0
 # ruff handles lint and import sorting; config in pyproject.toml.
 ruff==0.16.10
 black>=26.5.1
-mypy==2.4.0
 
-# Security & Quality
-safety>=3.8.1
-# safety's own dependencies, floored at releases with security fixes.
-authlib>=1.8.0
-nltk>=3.10.3
-bandit==1.9.4
-
-# Development
-ipython==9.17.1
+# scripts/extract-spotify-shapes.py
+PyYAML>=6.0.3
 # python-dotenv version is inherited from base.txt
 
 # Observability (mirrors prod.txt so tests can patch sentry_sdk)
