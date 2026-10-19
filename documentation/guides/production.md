@@ -95,7 +95,8 @@ There is no rollback to it:
 
 `.railway/railway.ts` keeps declaring the `postgres` resource, wired to no
 service, so `railway config plan` never proposes deleting it by omission.
-Retiring it takes the `SHUFFIFY_RAILWAY_RETIRE_POSTGRES=1` opt-in.
+Retiring it takes the `SHUFFIFY_RAILWAY_RETIRE_POSTGRES=1` opt-in. The commands
+below need Railway CLI 5.42.1 or newer (`brew upgrade railway`).
 
 1. **Take a final dump.** The database still holds data. It has no public address, so add one for the dump: Railway → `postgres` → Settings → Networking → TCP Proxy. The server runs PostgreSQL 18, so use an 18 client:
    ```sh
