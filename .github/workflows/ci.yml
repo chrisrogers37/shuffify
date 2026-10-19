@@ -130,6 +130,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements/dev.txt
 
+      # The harness builds the React frontend, which requires Node 24.
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
       - name: Harness setup
         run: scripts/harness.sh setup --quick
 
