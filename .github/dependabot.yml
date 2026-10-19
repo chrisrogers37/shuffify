@@ -20,10 +20,6 @@ updates:
           - "pytest*"
           - "ruff"
           - "black"
-          - "mypy"
-          - "safety"
-          - "bandit"
-          - "ipython"
         update-types:
           - "minor"
           - "patch"
@@ -41,3 +37,37 @@ updates:
         update-types:
           - "minor"
           - "patch"
+
+  # Frontend and Railway configuration packages
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+  - package-ecosystem: "npm"
+    directory: "/.railway"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+
+  # Workflow actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"

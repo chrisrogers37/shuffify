@@ -198,29 +198,22 @@ def _init_token_encryption(app):
     """Initialize Fernet token encryption service."""
     from shuffify.services.token_service import TokenService
 
-    try:
-        TokenService.initialize(
-            app.config["SECRET_KEY"],
-            token_encryption_key=app.config.get("TOKEN_ENCRYPTION_KEY"),
-            fallback_keys=app.config.get("TOKEN_ENCRYPTION_KEY_FALLBACKS") or (),
-        )
-        logger.info("Token encryption service initialized")
-    except Exception as e:
-        if app.config.get("TOKEN_ENCRYPTION_KEY"):
-            # An explicitly configured key that cannot be used is an
-            # operator error — fail the boot rather than run with
-            # token encryption silently disabled.
-            raise
+    key = app.config.get("TOKEN_ENCRYPTION_KEY")
+    if not key:
         logger.warning(
-            "Token encryption init failed: %s. "
-            "Scheduled operations will be unavailable.",
-            e,
+            "TOKEN_ENCRYPTION_KEY is not set; refresh tokens cannot be "
+            "stored and scheduled operations will be unavailable."
         )
+        return
+    # A configured key that cannot be used is an operator error: fail the
+    # boot rather than run with token encryption silently disabled.
+    TokenService.initialize(key)
+    logger.info("Token encryption service initialized")
 
 
-# Break-glass override for the production schema guard. When set, the
-# entrypoint tolerates a failed upgrade and the app factory downgrades the
-# schema-drift check from a startup failure to an ERROR log. It exists so a
+# Break-glass override for the production schema guard. When set, the app
+# factory downgrades the schema-drift check from a startup failure to an ERROR
+# log. It exists so a
 # misfiring guard can be cleared from the platform console in one restart,
 # rather than blocking every deploy until a code change ships.
 SCHEMA_DRIFT_OVERRIDE_VAR = "SHUFFIFY_ALLOW_SCHEMA_DRIFT"
@@ -505,7 +498,6 @@ _SENTRY_SECRET_CONFIG_ATTRS = (
     "SPOTIFY_CLIENT_SECRET",
     "SECRET_KEY",
     "TOKEN_ENCRYPTION_KEY",
-    "TOKEN_ENCRYPTION_KEY_FALLBACKS",
     "WORKER_CONTROL_TOKEN",
 )
 

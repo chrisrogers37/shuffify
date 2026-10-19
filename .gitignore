@@ -80,3 +80,6 @@ htmlcov/
 # Jupyter Notebooks
 *.ipynb
 test_notebook.ipynb
+
+# Vercel CLI project link (the Vercel project root is web/)
+.vercel/

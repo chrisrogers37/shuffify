@@ -5,9 +5,9 @@ Handles user creation, retrieval, and the upsert-on-login pattern.
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from shuffify.models.db import User, db
 from shuffify.services.base import safe_commit
@@ -35,30 +35,6 @@ class UpsertResult:
     is_new: bool
     # When the user logged in before this login; None on their first.
     previous_login_at: Optional[datetime] = None
-
-
-@dataclass
-class ReencryptionResult:
-    """Outcome of a bulk refresh-token re-encryption pass.
-
-    In dry-run mode ``reencrypted`` means "would be re-encrypted".
-    """
-
-    already_current: int = 0
-    reencrypted: int = 0
-    failed_spotify_ids: List[str] = field(default_factory=list)
-
-    @property
-    def failed(self) -> int:
-        return len(self.failed_spotify_ids)
-
-    @property
-    def total(self) -> int:
-        return (
-            self.already_current
-            + self.reencrypted
-            + self.failed
-        )
 
 
 class UserService:
@@ -251,72 +227,3 @@ class UserService:
             f"{user.spotify_id}",
             UserServiceError,
         )
-
-    @staticmethod
-    def reencrypt_all_refresh_tokens(
-        dry_run: bool = False,
-    ) -> ReencryptionResult:
-        """
-        Re-encrypt every stored refresh token under the
-        primary key.
-
-        Backs the `flask rotate-token-encryption` command.
-        Tokens already on the primary key are left
-        untouched, so the operation is safely re-runnable.
-        Tokens no configured key can decrypt are reported
-        and never modified — a failed row keeps its
-        ciphertext so a later key configuration can still
-        recover it. Rotation happens inside the crypto
-        layer; plaintext tokens are never materialized
-        here.
-
-        Args:
-            dry_run: When True, report what would change
-                without writing anything.
-        """
-        from shuffify.services.token_service import (
-            TokenEncryptionError,
-            TokenService,
-        )
-
-        users = User.query.filter(
-            User.encrypted_refresh_token.isnot(None)
-        ).all()
-
-        result = ReencryptionResult()
-
-        for user in users:
-            if TokenService.is_encrypted_with_primary(
-                user.encrypted_refresh_token
-            ):
-                result.already_current += 1
-                continue
-
-            try:
-                rotated = TokenService.rotate_token(
-                    user.encrypted_refresh_token
-                )
-            except TokenEncryptionError:
-                logger.warning(
-                    "Cannot re-encrypt refresh token for "
-                    "user %s: no configured key decrypts "
-                    "it",
-                    user.spotify_id,
-                )
-                result.failed_spotify_ids.append(
-                    user.spotify_id
-                )
-                continue
-
-            if not dry_run:
-                user.encrypted_refresh_token = rotated
-            result.reencrypted += 1
-
-        if not dry_run and result.reencrypted:
-            safe_commit(
-                f"re-encrypt {result.reencrypted} "
-                f"refresh token(s) under the primary key",
-                UserServiceError,
-            )
-
-        return result

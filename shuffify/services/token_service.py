@@ -1,27 +1,15 @@
 """
 Token encryption service for secure refresh token storage.
 
-Fernet encryption behind a MultiFernet chain: TOKEN_ENCRYPTION_KEY is
-the primary (encrypting) key when set, with a SECRET_KEY-derived
-legacy key as the fallback primary otherwise; TOKEN_ENCRYPTION_KEY_FALLBACKS
-entries and the legacy key are accepted for decryption only.
+Fernet encryption with the dedicated TOKEN_ENCRYPTION_KEY.
 """
 
-import base64
 import logging
-from functools import lru_cache
-from typing import Optional, Sequence
+from typing import Optional
 
-from cryptography.fernet import Fernet, InvalidToken, MultiFernet
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.fernet import Fernet, InvalidToken
 
 logger = logging.getLogger(__name__)
-
-# Salt for the legacy SECRET_KEY derivation. It must not change, so tokens
-# encrypted under the legacy scheme remain decryptable through the
-# fallback chain.
-_SALT = b"shuffify-refresh-token-encryption-v1"
 
 _NOT_INITIALIZED = "TokenService not initialized. Call initialize() first."
 
@@ -30,22 +18,6 @@ class TokenEncryptionError(Exception):
     """Raised when token encryption or decryption fails."""
 
     pass
-
-
-@lru_cache(maxsize=8)
-def _derive_legacy_key(secret_key: str) -> bytes:
-    """Derive the legacy Fernet key from SECRET_KEY via PBKDF2.
-
-    Cached: 480k PBKDF2 iterations cost ~0.1s per call, and the
-    derivation is a pure function of the secret.
-    """
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=_SALT,
-        iterations=480_000,
-    )
-    return base64.urlsafe_b64encode(kdf.derive(secret_key.encode("utf-8")))
 
 
 def _fernet_from_key(key: str, source: str) -> Fernet:
@@ -63,79 +35,38 @@ def _fernet_from_key(key: str, source: str) -> Fernet:
 class TokenService:
     """Service for encrypting and decrypting Spotify refresh tokens."""
 
-    _multi_fernet: Optional[MultiFernet] = None
-    _primary: Optional[Fernet] = None
+    _fernet: Optional[Fernet] = None
 
     @classmethod
-    def initialize(
-        cls,
-        secret_key: str,
-        token_encryption_key: Optional[str] = None,
-        fallback_keys: Sequence[str] = (),
-    ) -> None:
+    def initialize(cls, token_encryption_key: str) -> None:
         """
-        Initialize the Fernet cipher chain.
+        Initialize the Fernet cipher.
 
         Must be called once during app startup (in create_app).
 
         Args:
-            secret_key: The Flask app's SECRET_KEY string. Always
-                required — the legacy key derived from it keeps tokens
-                encrypted under that key decryptable.
-            token_encryption_key: Dedicated raw Fernet key used to
-                encrypt. When None, encryption falls back to the
-                SECRET_KEY-derived key (legacy behavior).
-            fallback_keys: Retired Fernet keys accepted for
-                decryption only, so TOKEN_ENCRYPTION_KEY itself can
-                rotate without invalidating stored tokens.
+            token_encryption_key: Raw Fernet key that encrypts and
+                decrypts stored refresh tokens.
 
         Raises:
-            TokenEncryptionError: If any key is missing or malformed.
+            TokenEncryptionError: If the key is missing or malformed.
         """
-        if not secret_key:
-            raise TokenEncryptionError("SECRET_KEY is required for token encryption")
-
-        try:
-            legacy = Fernet(_derive_legacy_key(secret_key))
-        except Exception as e:
-            logger.error(f"Failed to initialize TokenService: {e}")
-            raise TokenEncryptionError(f"Failed to derive encryption key: {e}")
-
-        if token_encryption_key:
-            primary = _fernet_from_key(token_encryption_key, "TOKEN_ENCRYPTION_KEY")
-        else:
-            logger.warning(
-                "TOKEN_ENCRYPTION_KEY is not set; deriving the token "
-                "encryption key from SECRET_KEY. Rotating SECRET_KEY "
-                "will invalidate all stored refresh tokens."
+        if not token_encryption_key:
+            raise TokenEncryptionError(
+                "TOKEN_ENCRYPTION_KEY is required for token encryption"
             )
-            primary = legacy
-
-        chain = [primary]
-        chain += [
-            _fernet_from_key(key, "TOKEN_ENCRYPTION_KEY_FALLBACKS entry")
-            for key in fallback_keys
-        ]
-        if primary is not legacy:
-            chain.append(legacy)
-
-        cls._primary = primary
-        cls._multi_fernet = MultiFernet(chain)
+        cls._fernet = _fernet_from_key(token_encryption_key, "TOKEN_ENCRYPTION_KEY")
         logger.info("TokenService initialized successfully")
 
     @classmethod
     def _require_init(cls) -> None:
-        if cls._multi_fernet is None:
+        if cls._fernet is None:
             raise TokenEncryptionError(_NOT_INITIALIZED)
 
     @classmethod
     def encrypt_token(cls, plaintext_token: str) -> str:
         """
         Encrypt a refresh token for database storage.
-
-        Always encrypts with the primary key, so every write moves a
-        token onto the current key regardless of what it was
-        previously encrypted with.
 
         Args:
             plaintext_token: The plaintext Spotify refresh token.
@@ -152,7 +83,7 @@ class TokenService:
             raise TokenEncryptionError("Cannot encrypt empty token")
 
         try:
-            encrypted = cls._multi_fernet.encrypt(plaintext_token.encode("utf-8"))
+            encrypted = cls._fernet.encrypt(plaintext_token.encode("utf-8"))
             return encrypted.decode("utf-8")
         except Exception as e:
             logger.error(f"Token encryption failed: {e}")
@@ -161,8 +92,7 @@ class TokenService:
     @classmethod
     def decrypt_token(cls, encrypted_token: str) -> str:
         """
-        Decrypt a refresh token retrieved from the database, trying
-        every key in the configured chain.
+        Decrypt a refresh token retrieved from the database.
 
         Args:
             encrypted_token: The base64-encoded encrypted token string.
@@ -179,81 +109,26 @@ class TokenService:
             raise TokenEncryptionError("Cannot decrypt empty token")
 
         try:
-            decrypted = cls._multi_fernet.decrypt(encrypted_token.encode("utf-8"))
+            decrypted = cls._fernet.decrypt(encrypted_token.encode("utf-8"))
             return decrypted.decode("utf-8")
         except InvalidToken:
             logger.error(
-                "Token decryption failed: invalid token or no "
-                "configured key can decrypt it"
+                "Token decryption failed: invalid token or a different key"
             )
             raise TokenEncryptionError(
                 "Decryption failed: token is corrupted or was "
-                "encrypted with a key that is no longer configured"
+                "encrypted with a different key"
             )
         except Exception as e:
             logger.error(f"Token decryption failed: {e}")
             raise TokenEncryptionError(f"Decryption failed: {e}")
 
     @classmethod
-    def rotate_token(cls, encrypted_token: str) -> str:
-        """
-        Re-encrypt a stored token under the primary key without
-        exposing the plaintext to the caller.
-
-        Args:
-            encrypted_token: Ciphertext under any configured key.
-
-        Returns:
-            Ciphertext under the primary key.
-
-        Raises:
-            TokenEncryptionError: If no configured key can decrypt
-                the token.
-        """
-        cls._require_init()
-
-        if not encrypted_token:
-            raise TokenEncryptionError("Cannot rotate empty token")
-
-        try:
-            rotated = cls._multi_fernet.rotate(encrypted_token.encode("utf-8"))
-            return rotated.decode("utf-8")
-        except InvalidToken:
-            raise TokenEncryptionError(
-                "Rotation failed: token is corrupted or was "
-                "encrypted with a key that is no longer configured"
-            )
-        except Exception as e:
-            logger.error(f"Token rotation failed: {e}")
-            raise TokenEncryptionError(f"Rotation failed: {e}")
-
-    @classmethod
-    def is_encrypted_with_primary(cls, encrypted_token: str) -> bool:
-        """
-        Check whether a stored token is encrypted under the primary
-        key (as opposed to a fallback or the legacy derived key).
-
-        Used by the re-encryption command to tell tokens already on
-        the primary key from ones still pending.
-
-        Raises:
-            TokenEncryptionError: If the service is not initialized.
-        """
-        cls._require_init()
-
-        try:
-            cls._primary.decrypt(encrypted_token.encode("utf-8"))
-            return True
-        except Exception:
-            return False
-
-    @classmethod
     def is_initialized(cls) -> bool:
         """Check if the TokenService has been initialized."""
-        return cls._multi_fernet is not None
+        return cls._fernet is not None
 
     @classmethod
     def reset(cls) -> None:
         """Clear cipher state (test isolation helper)."""
-        cls._multi_fernet = None
-        cls._primary = None
+        cls._fernet = None

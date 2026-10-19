@@ -1,6 +1,7 @@
 """Split production API configuration requires its browser-facing origin."""
 
 import pytest
+from cryptography.fernet import Fernet
 
 from config import validate_required_env_vars
 
@@ -12,6 +13,7 @@ def set_production_credentials(monkeypatch):
     monkeypatch.setenv(
         "DATABASE_URL", "postgresql+psycopg2://fixture@localhost/shuffify"
     )
+    monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode())
     monkeypatch.delenv("PUBLIC_ORIGIN", raising=False)
 
 
@@ -61,3 +63,23 @@ def test_production_split_services_require_owner_database_url(monkeypatch, role)
 
     with pytest.raises(ValueError, match="DATABASE_URL"):
         validate_required_env_vars("production")
+
+
+@pytest.mark.parametrize("role", ["api", "worker"])
+def test_production_split_services_require_token_encryption_key(monkeypatch, role):
+    set_production_credentials(monkeypatch)
+    monkeypatch.delenv("TOKEN_ENCRYPTION_KEY", raising=False)
+    monkeypatch.setenv("SHUFFIFY_PROCESS_ROLE", role)
+    if role == "api":
+        monkeypatch.setenv("PUBLIC_ORIGIN", "https://shuffify.app")
+
+    with pytest.raises(ValueError, match="TOKEN_ENCRYPTION_KEY"):
+        validate_required_env_vars("production")
+
+
+def test_production_migration_does_not_require_token_encryption_key(monkeypatch):
+    set_production_credentials(monkeypatch)
+    monkeypatch.delenv("TOKEN_ENCRYPTION_KEY", raising=False)
+    monkeypatch.setenv("SHUFFIFY_PROCESS_ROLE", "migration")
+
+    validate_required_env_vars("production")
