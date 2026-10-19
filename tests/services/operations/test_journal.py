@@ -232,6 +232,47 @@ def test_rate_limit_defers_the_http_loop_immediately_and_can_resume_when_due():
     assert len(world.writes) == 1
 
 
+def test_compensation_waits_for_a_rejected_forward_batch_retry_hint():
+    from datetime import datetime, timedelta, timezone
+
+    from shuffify.services.operations.journal import OperationDeferred
+
+    world = World([uri(1)])
+    journal = world.journal()
+    journal.freeze_replace("target", [uri(index) for index in range(2, 152)])
+    client = SpotifyHTTPClient("fixture-token")
+    client._session.request = lambda *args, **kwargs: SimpleNamespace(
+        status_code=429, headers={"Retry-After": "120"},
+    )
+    dispatched = []
+
+    def first_batch_lands_then_rate_limited(method, path, body):
+        dispatched.append(method)
+        if len(dispatched) == 1:
+            return world.dispatch(method, path, body)
+        return client._request(method, path, json=body)
+
+    journal.dispatch = first_batch_lands_then_rate_limited
+    with pytest.raises(OperationDeferred):
+        journal.resume()
+    batches = world.saved["plans"][0]["batches"]
+    assert [item["state"] for item in batches] == ["acknowledged", "rejected"]
+    writes = deepcopy(world.writes)
+    world.trace = []
+
+    with pytest.raises(OperationDeferred) as deferred:
+        world.journal().compensate()
+    assert deferred.value.next_attempt_at.isoformat() == batches[1]["next_attempt_at"]
+    assert not any(point.startswith(("read.", "spotify.")) for point in world.trace)
+    assert world.writes == writes and world.saved["phase"] == "forward"
+
+    world.saved["plans"][0]["batches"][1]["next_attempt_at"] = (
+        datetime.now(timezone.utc) - timedelta(seconds=1)
+    ).isoformat()
+    assert world.journal().compensate()["state"] == "rolled_back"
+    assert world.playlists["target"]["track_uris"] == [uri(1)]
+
+
 def test_changed_item_content_with_the_old_snapshot_cannot_acknowledge_a_lost_response():
     from tests.services.operations.test_crash_recovery import Crash
 

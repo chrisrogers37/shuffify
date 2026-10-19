@@ -258,7 +258,16 @@ class DurableJournal:
                 raise JournalError("A retry deadline must include its timezone")
             if due > now:
                 deadlines.append(due)
-        for step in (() if self.doc.get("compensation_retry_started") else self._plans()):
+        deadlines += self._rejected_batch_deadlines(
+            () if self.doc.get("compensation_retry_started") else self._plans(), now,
+        )
+        if deadlines:
+            raise OperationDeferred(max(deadlines))
+
+    @staticmethod
+    def _rejected_batch_deadlines(steps, now):
+        deadlines = []
+        for step in steps:
             for item in step["batches"]:
                 if item["state"] == "rejected" and item.get("next_attempt_at"):
                     due = datetime.fromisoformat(item["next_attempt_at"])
@@ -266,8 +275,7 @@ class DurableJournal:
                         raise JournalError("A retry deadline must include its timezone")
                     if due > now:
                         deadlines.append(due)
-        if deadlines:
-            raise OperationDeferred(max(deadlines))
+        return deadlines
 
     def _progress(self):
         batches = [item for step in self._plans() for item in step["batches"]]
@@ -785,6 +793,11 @@ class DurableJournal:
             return self.resume()
         if self.doc["status"] == "needs_attention":
             return self.outcome()
+        # A rejected forward batch's retry hint fences rollback I/O too: wait
+        # for it before any compensation read or write.
+        pending = self._rejected_batch_deadlines(self.doc["plans"], datetime.now(timezone.utc))
+        if pending:
+            raise OperationDeferred(max(pending))
         # Compensation starts its own bounded outage window. Persist this
         # transition before reconciling so a deferred reconciliation keeps its
         # compensation budget across worker replacement.
