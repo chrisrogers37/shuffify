@@ -16,7 +16,7 @@ jobs:
       SPOTIFY_REDIRECT_URI: http://localhost:8000/callback
       SECRET_KEY: ci-test-secret-key
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5

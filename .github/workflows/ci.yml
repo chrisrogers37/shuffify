@@ -14,7 +14,7 @@ jobs:
     name: Public document stylesheet up to date
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The compiled stylesheet is committed, so a deploy never depends on a
       # build-time download. This fails when a canonical public source changed without a
@@ -35,7 +35,7 @@ jobs:
       SECRET_KEY: ci-test-secret-key
       CONTACT_ADDRESS: christophertrogers37@gmail.com
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -116,7 +116,7 @@ jobs:
           --health-cmd "redis-cli ping"
           --health-interval 5s --health-timeout 5s --health-retries 12
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
