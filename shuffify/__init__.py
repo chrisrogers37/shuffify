@@ -211,9 +211,9 @@ def _init_token_encryption(app):
     logger.info("Token encryption service initialized")
 
 
-# Break-glass override for the production schema guard. When set, the
-# entrypoint tolerates a failed upgrade and the app factory downgrades the
-# schema-drift check from a startup failure to an ERROR log. It exists so a
+# Break-glass override for the production schema guard. When set, the app
+# factory downgrades the schema-drift check from a startup failure to an ERROR
+# log. It exists so a
 # misfiring guard can be cleared from the platform console in one restart,
 # rather than blocking every deploy until a code change ships.
 SCHEMA_DRIFT_OVERRIDE_VAR = "SHUFFIFY_ALLOW_SCHEMA_DRIFT"

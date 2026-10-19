@@ -2,8 +2,8 @@
 
 OAuth lives at `/login`, `/callback`, and `/logout`; `/health` reports service
 health. Feature JSON lives under `/api`, uses the success/error envelope, and
-sends `Cache-Control: no-store`. HTML page routes remain available alongside the
-API contexts.
+sends `Cache-Control: no-store`. The React frontend serves every product page;
+Flask has no HTML page routes.
 
 ## Page contexts
 

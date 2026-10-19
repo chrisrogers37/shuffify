@@ -1,6 +1,6 @@
 # Reviewed operation restoration
 
-This backend contract supports a separate, explicitly reviewed operation. It does not rerun the original action. No frontend control is added by this package.
+This backend contract supports a separate, explicitly reviewed operation. It does not rerun the original action. The React frontend's restoration controls use it.
 
 ## Read the review
 

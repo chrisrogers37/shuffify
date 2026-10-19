@@ -66,7 +66,7 @@ def validate_required_env_vars(config_name=None):
             )
         # The split Railway API sits behind Vercel, whose browser-facing HTTPS
         # origin differs from the API host. Requiring it only for the API keeps
-        # private workers and single-origin production deployments unchanged.
+        # private workers unchanged.
         if process_role == "api" and not os.getenv("PUBLIC_ORIGIN"):
             raise ValueError(
                 "PUBLIC_ORIGIN is required for the production API behind the split frontend"
@@ -236,7 +236,6 @@ class Config:
     # Application settings
     DEBUG = False
     PORT = int(os.getenv("PORT", 8000))
-    HOST = os.getenv("HOST", "0.0.0.0")
 
     # Sentry observability (no-op when SENTRY_DSN is empty)
     SENTRY_DSN = os.getenv("SENTRY_DSN", "")

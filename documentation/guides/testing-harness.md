@@ -423,16 +423,10 @@ The browser reaches nothing off this machine:
   reported without being opened, and any that open anyway (a worker's) are
   reported too; service workers are blocked.
 
-The one script the app loads from a CDN, SortableJS on the Workshop page, is
-served instead from the copy in `harness/vendor/` (kept byte for byte by
-`.gitattributes`). The page pins it by subresource integrity, so the browser
-refuses the copy unless its bytes are the published ones.
-`tests/test_harness_vendor.py`, in the unit suite, parses every template and
-public page and requires each script tag from another origin to carry an
-integrity hash in an algorithm browsers enforce (`sha256`, `sha384` or
-`sha512`; Chromium loads a script with any other unchecked) and to have a
-vendored copy with exactly that hash. A version bump in a template fails it
-until the new version is vendored.
+No page loads a script from another origin: the React app bundles its
+dependencies, SortableJS included. `tests/test_harness_vendor.py`, in the unit
+suite, parses the frontend entry and the public pages and requires every script
+to come from the app's own origin.
 
 ## CI
 

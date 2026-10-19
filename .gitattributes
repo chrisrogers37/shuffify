@@ -1,2 +1,0 @@
-# Vendored third-party files are pinned by hash: never convert line endings.
-harness/vendor/** -text
