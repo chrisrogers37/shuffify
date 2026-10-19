@@ -15,6 +15,8 @@ from tests.services.operations.test_worker_finalization import AFTER, BEFORE, Ha
 from tests.services.operations.test_worker_finalization import terminal as terminal
 from tests.services.operations.test_worker_journal_integration import PLAYLIST, ProcessStopped
 
+OTHER = 'B' * 22
+
 
 def make_due(case, operation_id, *, first_deferred_at=None):
     """Advance the queue's persisted due time without deleting retry history."""
@@ -112,6 +114,51 @@ def test_successful_safe_reads_reset_consecutive_failure_budget_across_workers(t
     completed = terminal.repository.get(row.id)
     assert finished is True and completed.state == "succeeded"
     assert "read_retry" not in completed.journal or completed.journal["read_retry"].get("attempts", 0) == 0
+
+
+def test_unrelated_successful_reads_cannot_reset_a_failing_reads_budget(terminal):
+    def handler(runtime):
+        runtime.journal._read_call(lambda _resource: {'ok': True}, OTHER)
+        fail_journal_read(runtime, 'This playlist read keeps failing')
+
+    row = terminal.accept()
+    for attempt in range(1, 9):
+        finished = terminal.build(handler).run_once(row.id)
+        if attempt < 8:
+            assert finished is False
+            make_due(terminal, row.id)
+    assert finished is True
+    completed = terminal.repository.get(row.id)
+    assert completed.state == 'failed' and completed.completed_at is not None
+    assert completed.journal['result']['error_code'] == 'read_retry_exhausted'
+    assert terminal.world.calls == 0
+    assert terminal.accept().id != row.id
+
+
+def test_reads_that_fail_in_turn_stop_deferring_at_the_phase_cap(terminal):
+    runs = []
+
+    def handler(runtime):
+        # Each failing read succeeds on the next run, so no single read
+        # exhausts its own budget; only the phase total can end the outage.
+        runs.append(True)
+        healthy, failing = (OTHER, PLAYLIST) if len(runs) % 2 else (PLAYLIST, OTHER)
+        runtime.journal._read_call(lambda _resource: {'ok': True}, healthy)
+        runtime.journal._read_call(
+            lambda _resource: (_ for _ in ()).throw(SpotifyReadTransientError('Alternating outage')), failing,
+        )
+
+    row = terminal.accept()
+    for attempt in range(1, 25):
+        finished = terminal.build(handler).run_once(row.id)
+        if attempt < 24:
+            assert finished is False
+            make_due(terminal, row.id)
+    assert finished is True
+    completed = terminal.repository.get(row.id)
+    assert completed.state == 'failed' and completed.completed_at is not None
+    assert completed.journal['result']['error_code'] == 'read_retry_exhausted'
+    assert terminal.accept().id != row.id
 
 
 @pytest.mark.parametrize('failure,limit', [(SpotifyReadTransientError, 8), (SpotifyDeadlineError, 3)])

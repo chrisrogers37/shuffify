@@ -24,6 +24,10 @@ from .recovery import reconcile_resource
 READ_DEFERRAL_LIMIT = 8
 READ_DEFERRAL_WINDOW_SECONDS = 15 * 60
 READ_DEADLINE_LIMIT = 3
+# Successful reads release only their own budget, so reads that fail in turn
+# could otherwise defer forever. Nothing but a new phase resets this total.
+PHASE_DEFERRAL_LIMIT = 24
+READ_BUDGET_FIELDS = ("attempts", "first_deferred_at", "deadline_expiries")
 
 
 class JournalError(RuntimeError):
@@ -278,7 +282,7 @@ class DurableJournal:
         self._progress()
         owned = {"version", "phase", "status", "resources", "plans", "compensation", "compensation_resources",
                  "choices", "recovery", "observations", "progress", "abort", "boundaries",
-                 "compensation_scope", "compensation_retry_started", "read_retry"}
+                 "compensation_scope", "compensation_retry_started", "read_retry", "read_deferrals"}
         latest = self.get_journal() or {}
         self._check_publication(latest)
         for key, value in latest.items():
@@ -308,8 +312,23 @@ class DurableJournal:
                    for step in document.get("plans", []) + document.get("compensation", [])
                    for item in step.get("batches", []))
 
-    def defer_read(self, error):
-        """Persist a safe read's retry deadline without changing the mutation direction."""
+    def _retry_phase(self):
+        # Compensation, including the reconciliation that plans it, owns a
+        # budget separate from the forward direction's.
+        if self.doc["phase"] == "compensating" or self.doc.get("compensation_retry_started"):
+            return "compensation"
+        return "forward"
+
+    def _read_key(self, kind, *parts):
+        return ":".join([self._retry_phase(), kind, *map(str, parts)])
+
+    def defer_read(self, error, key=None):
+        """Persist a safe read's retry deadline without changing the mutation direction.
+
+        Each failing read keeps its own budget, keyed by phase and resource or
+        batch, until that same read succeeds. A failure raised outside a keyed
+        read shares the phase's operation key.
+        """
         from .control import read_retry_delay
 
         if isinstance(error, OperationDeferred):
@@ -318,12 +337,25 @@ class DurableJournal:
         if delay is None:
             raise error
         now = datetime.now(timezone.utc)
+        key = key or self._read_key("operation")
         previous = self.doc.get("read_retry", {})
-        first = datetime.fromisoformat(previous["first_deferred_at"]) if previous.get("first_deferred_at") else now
+        parked = deepcopy(previous.get("parked", {}))
+        held = {name: previous[name] for name in READ_BUDGET_FIELDS if name in previous}
+        # A budget persisted before reads were keyed belongs to the next failing read.
+        holder = previous.get("key", key)
+        if held and holder != key:
+            parked[holder] = held
+            held = {}
+        budget = held or parked.pop(key, {})
+        first = datetime.fromisoformat(budget["first_deferred_at"]) if budget.get("first_deferred_at") else now
         if first.tzinfo is None:
             raise JournalError("A retry start must include its timezone")
-        attempts, deadlines = previous.get("attempts", 0), previous.get("deadline_expiries", 0)
+        attempts, deadlines = budget.get("attempts", 0), budget.get("deadline_expiries", 0)
         if type(attempts) is not int or attempts < 0 or type(deadlines) is not int or deadlines < 0:
+            raise JournalError("A retry counter must be a nonnegative integer")
+        totals = self.doc.get("read_deferrals", {})
+        deferrals = totals.get("count", 0) if totals.get("phase") == self._retry_phase() else 0
+        if type(deferrals) is not int or deferrals < 0:
             raise JournalError("A retry counter must be a nonnegative integer")
         current, seen = error, set()
         while current is not None and id(current) not in seen:
@@ -338,15 +370,43 @@ class DurableJournal:
         due = now + timedelta(seconds=min(delay, max(0, (cutoff - now).total_seconds())))
         if previous.get("next_attempt_at"):
             due = min(cutoff, max(due, datetime.fromisoformat(previous["next_attempt_at"])))
-        self.doc["read_retry"] = {"next_attempt_at": due.isoformat(), "phase": self.doc["phase"],
+        self.doc["read_retry"] = {"key": key, "next_attempt_at": due.isoformat(), "phase": self.doc["phase"],
                                   "attempts": attempts + 1, "first_deferred_at": first.isoformat(),
                                   "deadline_expiries": deadlines,
                                   "error_code": "read_rate_limited" if isinstance(error, SpotifyRateLimitError)
                                   else "read_temporarily_unavailable"}
-        if attempts + 1 >= READ_DEFERRAL_LIMIT or deadlines >= READ_DEADLINE_LIMIT or now >= cutoff:
+        if parked:
+            self.doc["read_retry"]["parked"] = parked
+        self.doc["read_deferrals"] = {"phase": self._retry_phase(), "count": deferrals + 1}
+        if (attempts + 1 >= READ_DEFERRAL_LIMIT or deadlines >= READ_DEADLINE_LIMIT or now >= cutoff
+                or deferrals + 1 >= PHASE_DEFERRAL_LIMIT):
             self._exhaust_read_retry()
         self._save()
         raise OperationDeferred(due) from error
+
+    def _release_read_budget(self, key):
+        """Release the budget of the read that just succeeded, and nothing else."""
+        retry = self.doc.get("read_retry")
+        if not retry:
+            return
+        # Failures raised outside a keyed read, and budgets persisted before
+        # reads were keyed, cannot be matched to one read: any successful read
+        # releases them. The phase total still bounds their deferrals.
+        released = {key, self._read_key("operation")}
+        parked = {name: budget for name, budget in retry.get("parked", {}).items() if name not in released}
+        if retry.get("key", key) in released:
+            remaining = {"parked": parked} if parked else None
+        else:
+            remaining = {name: value for name, value in retry.items() if name != "parked"}
+            if parked:
+                remaining["parked"] = parked
+        if remaining == retry:
+            return
+        if remaining is None:
+            self.doc.pop("read_retry")
+        else:
+            self.doc["read_retry"] = remaining
+        self._save()
 
     def _exhaust_read_retry(self):
         retry = self.doc["read_retry"]
@@ -366,10 +426,8 @@ class DurableJournal:
             check_deadline()
             result = read(resource)
         except Exception as error:
-            self.defer_read(error)
-        if self.doc.get("read_retry"):
-            self.doc.pop("read_retry")
-            self._save()
+            self.defer_read(error, self._read_key("resource", resource))
+        self._release_read_budget(self._read_key("resource", resource))
         return result
 
     def _read(self, resource, *, scope=None):
@@ -665,9 +723,10 @@ class DurableJournal:
             return conflict
         self.doc["status"] = "running"
         for step in self._plans():
-            for item in step["batches"]:
+            for position, item in enumerate(step["batches"]):
                 if item["state"] == "acknowledged":
                     continue
+                batch_key = self._read_key("batch", step["id"], position)
                 resource = step["resource"]
                 if resource is not None:
                     observed = self._before_batch(step, item)
@@ -679,7 +738,7 @@ class DurableJournal:
                 try:
                     check_deadline()
                 except SpotifyDeadlineError as error:
-                    self.defer_read(error)
+                    self.defer_read(error, batch_key)
                 prior_state, prior_attempts = item["state"], item["attempts"]
                 item.update(state="dispatched", dispatched_at=datetime.now(timezone.utc).isoformat())
                 self._save()
@@ -692,7 +751,7 @@ class DurableJournal:
                     if item["attempts"] == prior_attempts:
                         item["state"] = prior_state
                         self._save()
-                        self.defer_read(error)
+                        self.defer_read(error, batch_key)
                     raise
                 except (SpotifyAuthError, SpotifyForbiddenError, SpotifyNotFoundError,
                         SpotifyRateLimitError, SpotifyWriteRejectedError):
@@ -702,6 +761,7 @@ class DurableJournal:
                     raise
                 finally:
                     self.active_batch = None
+                self._release_read_budget(batch_key)
         conflict = self._reconcile(on_verified=on_verified)
         if conflict:
             return conflict
@@ -730,6 +790,7 @@ class DurableJournal:
         # compensation budget across worker replacement.
         if not self.doc.get("compensation_retry_started"):
             self.doc.pop("read_retry", None)
+            self.doc.pop("read_deferrals", None)
             self.doc["compensation_retry_started"] = True
             self._save()
         self._defer_if_needed()
