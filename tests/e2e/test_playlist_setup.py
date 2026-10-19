@@ -72,6 +72,36 @@ def _sent(s):
     return [(method, path) for method, path, _ in s.sent]
 
 
+def _settled(page, action, quiet=0.5, timeout=15):
+    """Run the action, then wait until the requests it led to have finished and none follow for a moment.
+
+    The next navigation would cancel any still running, and the session counts a cancelled request as a failure."""
+    running = set()
+
+    def started(request):
+        running.add(request)
+
+    def ended(request):
+        running.discard(request)
+
+    page.on("request", started)
+    page.on("requestfinished", ended)
+    page.on("requestfailed", ended)
+    try:
+        action()
+        quiet_since = time.monotonic()
+        deadline = quiet_since + timeout
+        while time.monotonic() - quiet_since < quiet:
+            page.wait_for_timeout(50)
+            if running:
+                quiet_since = time.monotonic()
+            assert time.monotonic() < deadline, f"requests still running: {sorted(r.url for r in running)}"
+    finally:
+        page.remove_listener("request", started)
+        page.remove_listener("requestfinished", ended)
+        page.remove_listener("requestfailed", ended)
+
+
 def _add_by_link(page, playlist_id):
     page.get_by_label("Add by playlist link or ID", exact=True).fill(f"https://open.spotify.com/playlist/{playlist_id}")
     page.get_by_role("button", name="Add source", exact=True).click()
@@ -422,12 +452,12 @@ def test_the_workshop_opens_playlist_setup_and_returns_to_the_workshop(alice, fa
     page = s.page
     for tool, setup in (("Inbox", "Source setup"), ("Archive", "Archive setup")):
         page.goto(WORKSHOP, wait_until="networkidle")
-        _open_tool(page, tool)
+        _settled(page, lambda: _open_tool(page, tool))
         _panel(page).get_by_role("button", name=setup, exact=True).click()
-        _panel(page).get_by_role("link", name="Playlist setup", exact=True).click()
+        _settled(page, _panel(page).get_by_role("link", name="Playlist setup", exact=True).click)
         expect(page).to_have_url(re.compile(rf"{re.escape(SETUP)}\?return_target=playlist$"))
         assert parse_qs(urlsplit(page.url).query) == {"return_target": ["playlist"]}
-        page.get_by_role("link", name="Back to playlist", exact=True).click()
+        _settled(page, page.get_by_role("link", name="Back to playlist", exact=True).click)
         expect(page).to_have_url(WORKSHOP)
     assert s.sent == [] and fake.playlists() == spotify and _context(alice) == saved
     s.assert_clean()
