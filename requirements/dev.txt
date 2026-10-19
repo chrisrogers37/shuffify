@@ -20,4 +20,4 @@ PyYAML>=6.0.3
 # python-dotenv version is inherited from base.txt
 
 # Observability (mirrors prod.txt so tests can patch sentry_sdk)
-sentry-sdk>=2.71.0,<3.0
+sentry-sdk>=2.72.0,<3.0
