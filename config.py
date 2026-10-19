@@ -1,8 +1,10 @@
+import base64
 import os
 import secrets
 import sys
 from urllib.parse import urlsplit
 
+from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 
 # Don't load .env when running under pytest — test fixtures control the
@@ -37,11 +39,6 @@ def _resolve_database_url(fallback: str) -> str:
     return url
 
 
-def _split_csv(raw: str) -> list:
-    """Split a comma-separated env value into a clean list."""
-    return [item.strip() for item in raw.split(",") if item.strip()]
-
-
 def validate_required_env_vars(config_name=None):
     """Validate that all required environment variables are present.
 
@@ -60,6 +57,12 @@ def validate_required_env_vars(config_name=None):
             raise ValueError(
                 "DATABASE_URL is required for the production API and worker; "
                 "set the owner-managed database URL"
+            )
+        # Both processes read stored refresh tokens; without the key every
+        # login would silently skip storing one.
+        if process_role in {"api", "worker"} and not os.getenv("TOKEN_ENCRYPTION_KEY"):
+            raise ValueError(
+                "TOKEN_ENCRYPTION_KEY is required for the production API and worker"
             )
         # The split Railway API sits behind Vercel, whose browser-facing HTTPS
         # origin differs from the API host. Requiring it only for the API keeps
@@ -154,15 +157,9 @@ class Config:
 
     SECRET_KEY = os.environ.get("SECRET_KEY")
 
-    # Dedicated Fernet key for refresh-token encryption. When unset,
-    # the key is derived from SECRET_KEY (legacy scheme — rotating
-    # SECRET_KEY then invalidates all stored tokens). FALLBACKS is a
-    # comma-separated list of retired keys accepted for decryption
-    # during a key-rotation window.
+    # Fernet key that encrypts stored refresh tokens. Required for the
+    # production API and worker.
     TOKEN_ENCRYPTION_KEY = os.environ.get("TOKEN_ENCRYPTION_KEY")
-    TOKEN_ENCRYPTION_KEY_FALLBACKS = _split_csv(
-        os.environ.get("TOKEN_ENCRYPTION_KEY_FALLBACKS", "")
-    )
 
     SESSION_COOKIE_NAME = os.getenv("SESSION_COOKIE_NAME", "shuffify_session")
     SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
@@ -297,6 +294,8 @@ class DevConfig(Config):
 
     CONFIG_NAME = "development"
     SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_hex(32)
+    # Without a configured key, stored tokens last as long as the process.
+    TOKEN_ENCRYPTION_KEY = os.getenv("TOKEN_ENCRYPTION_KEY") or Fernet.generate_key().decode()
     DEBUG = True
     TESTING = True
     SESSION_COOKIE_SECURE = False
@@ -320,9 +319,9 @@ class TestConfig(Config):
     CONFIG_NAME = "testing"
     SECRET_KEY = "test-secret-key"
     # Pinned so tests are hermetic regardless of developer env: never an
-    # exported key, Redis or Sentry project.
-    TOKEN_ENCRYPTION_KEY = None
-    TOKEN_ENCRYPTION_KEY_FALLBACKS = []
+    # exported key, Redis or Sentry project. The token key is a fixed
+    # test-only value.
+    TOKEN_ENCRYPTION_KEY = base64.urlsafe_b64encode(b"shuffify-test-token-key-32-bytes").decode()
     REDIS_URL = "redis://localhost:6379/0"
     SENTRY_DSN = ""
     TESTING = True
