@@ -12,3 +12,6 @@ accesslog = "-"
 # PATH_INFO excludes OAuth callback queries and request headers.
 access_log_format = '"%(m)s %(U)s %(H)s" %(s)s %(b)s %(L)s'
 errorlog = "-"
+# The platform manages the process; nothing uses gunicornc. Its default socket
+# lives under $HOME, which the container's nobody user cannot create.
+control_socket_disable = True

@@ -2,8 +2,11 @@
 
 import os
 import runpy
+import socket
 import subprocess
 import sys
+import time
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -63,6 +66,48 @@ def test_api_uses_the_bounded_gthread_configuration_without_preload(monkeypatch)
         "preload_app": False,
     }
     assert config["bind"] == "0.0.0.0:8456"
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores the unwritable home directory")
+def test_api_server_clean_start_logs_no_error_with_an_unwritable_home(tmp_path):
+    # The container runs as nobody, whose home directory cannot be written.
+    home = tmp_path / "home"
+    home.mkdir(mode=0o500)
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    (app_dir / "hello.py").write_text(
+        "def app(environ, start_response):\n"
+        "    start_response('200 OK', [('Content-Type', 'text/plain')])\n"
+        "    return [b'ok']\n"
+    )
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    env = {name: value for name, value in os.environ.items() if name != "XDG_RUNTIME_DIR"}
+    env.update(HOME=str(home), PORT=str(port))
+    process = subprocess.Popen(
+        [sys.executable, "-m", "gunicorn", "--config", str(ROOT / "gunicorn.conf.py"),
+         "--chdir", str(app_dir), "hello:app"],
+        env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+    )
+    try:
+        deadline = time.monotonic() + 20
+        while True:
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=1) as response:
+                    assert response.status == 200
+                    break
+            except OSError:
+                if time.monotonic() > deadline or process.poll() is not None:
+                    pytest.fail("The API server did not start")
+                time.sleep(0.1)
+        # Startup failures in background threads are logged within moments.
+        time.sleep(1)
+    finally:
+        process.terminate()
+        output, _ = process.communicate(timeout=20)
+    assert "Booting worker" in output
+    assert "[ERROR]" not in output, output
 
 
 @pytest.mark.parametrize(
