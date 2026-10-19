@@ -141,9 +141,8 @@ A new nonproduction environment needs its own Neon branch: a backup branch is
 not staging, and staging must never use production. Check the Neon project and
 branch in the owner console before setting `DATABASE_URL`.
 [Production](documentation/guides/production.md) describes what runs where, the
-backups, how to roll back and how to retire the Railway PostgreSQL that is
-still kept. See [.railway/README.md](.railway/README.md) for the Railway setup
-steps.
+backups and how to roll back. See [.railway/README.md](.railway/README.md) for
+the Railway setup steps.
 
 For local containers, set the shared environment names in `.env`; `DATABASE_URL` must use the `db` service hostname and `REDIS_URL` must use `redis`. The PostgreSQL image provides TLS for the production configuration. Build the image and start `db redis`, then bootstrap a fresh empty database explicitly with `docker compose --profile migration run --rm -e SCHEDULER_ENABLED=false -e SHUFFIFY_MIGRATION_STEP=1 migrate flask create-schema`. Run `docker compose --profile migration run --rm migrate` before `docker compose up -d api worker`. The migration profile runs only when selected. The development override mounts source into both application processes; the production override starts image-only services when selected with the base file explicitly.
 

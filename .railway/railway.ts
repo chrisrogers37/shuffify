@@ -1,4 +1,4 @@
-import { createRailwayContext, defineRailway, github, postgres, project, redis, service } from "railway/iac";
+import { createRailwayContext, defineRailway, github, project, redis, service } from "railway/iac";
 
 function authoringEnvironment() {
   return (globalThis as typeof globalThis & {
@@ -32,18 +32,6 @@ function configuredGitSource() {
     throw new Error("SHUFFIFY_RAILWAY_GITHUB_BRANCH must be a valid Git branch name.");
   }
   return github(repo, { branch });
-}
-
-// The pre-Neon Railway PostgreSQL holds rollback data and no service reads it.
-// It stays declared, wired to nothing, so a plan never deletes it by omission;
-// retiring it takes SHUFFIFY_RAILWAY_RETIRE_POSTGRES=1.
-function retainedDatabases() {
-  const retire = authoringEnvironment().SHUFFIFY_RAILWAY_RETIRE_POSTGRES;
-  if (retire === "1") return [];
-  if (retire) {
-    throw new Error("SHUFFIFY_RAILWAY_RETIRE_POSTGRES must be 1 to retire the Railway PostgreSQL resource, or unset to keep it.");
-  }
-  return [postgres("postgres")];
 }
 
 export default defineRailway((rawContext) => {
@@ -105,5 +93,5 @@ export default defineRailway((rawContext) => {
       WORKER_CONTROL_URL: "http://${{worker.RAILWAY_PRIVATE_DOMAIN}}:5001",
     },
   });
-  return project("shuffify-v2", { resources: [cache, worker, api, ...retainedDatabases()] });
+  return project("shuffify-v2", { resources: [cache, worker, api] });
 });

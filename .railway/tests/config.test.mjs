@@ -6,8 +6,7 @@ import definition from "../railway.ts";
 
 const repoInput = "SHUFFIFY_RAILWAY_GITHUB_REPO";
 const branchInput = "SHUFFIFY_RAILWAY_GITHUB_BRANCH";
-const retireInput = "SHUFFIFY_RAILWAY_RETIRE_POSTGRES";
-const authoringInputs = [repoInput, branchInput, retireInput];
+const authoringInputs = [repoInput, branchInput];
 const sourceInputs = {
   [repoInput]: "example-owner/example-repo",
   [branchInput]: "release/reviewed-source",
@@ -111,38 +110,8 @@ test("both processes share durable infrastructure and reference credentials with
   assert.equal(resources.get("redis").engine, "redis");
 });
 
-function references(service, resource) {
-  return Object.values(service.variables ?? {}).some((value) => value?.resource === resource.address);
-}
-
-test("evaluating without the retirement opt-in keeps the Railway PostgreSQL resource, wired to no service", () => {
-  const retained = resources.get("postgres");
-  assert.equal(retained?.engine, "postgres");
-  assert.equal(retained.image, "ghcr.io/railwayapp-templates/postgres-ssl:18");
-  for (const service of [api, worker]) assert.equal(references(service, retained), false);
-});
-
-test("only SHUFFIFY_RAILWAY_RETIRE_POSTGRES=1 drops the Railway PostgreSQL resource", async () => {
-  const retired = await evaluate({ ...sourceInputs, [retireInput]: "1" });
-  assert.equal(retired.resources.find((resource) => resource.name === "postgres"), undefined);
-  assert.deepEqual(
-    retired.resources.map((resource) => resource.name).sort(),
-    plan.resources.map((resource) => resource.name).filter((name) => name !== "postgres").sort(),
-  );
-  const unset = await evaluate({ ...sourceInputs, [retireInput]: "" });
-  assert.ok(unset.resources.some((resource) => resource.name === "postgres"));
-  for (const value of ["0", "true", "yes", " 1", "1 "]) {
-    await assert.rejects(evaluate({ ...sourceInputs, [retireInput]: value }), /SHUFFIFY_RAILWAY_RETIRE_POSTGRES/);
-  }
-});
-
-test("native CLI evaluation keeps the Railway PostgreSQL resource unless retirement is opted into", () => {
-  const kept = nativeEvaluation(sourceInputs);
-  assert.equal(kept.status, 0, kept.stderr);
-  assert.ok(JSON.parse(kept.stdout).resources.some((resource) => resource.name === "postgres"));
-  const retired = nativeEvaluation({ ...sourceInputs, [retireInput]: "1" });
-  assert.equal(retired.status, 0, retired.stderr);
-  assert.ok(!JSON.parse(retired.stdout).resources.some((resource) => resource.name === "postgres"));
+test("the project declares only the cache and the two services, so no plan recreates the retired Railway PostgreSQL", () => {
+  assert.deepEqual(plan.resources.map((resource) => resource.name).sort(), ["api", "redis", "worker"]);
 });
 
 test("split API requires the owner-supplied browser origin", () => {
