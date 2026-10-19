@@ -21,6 +21,7 @@ import pytest
 import redis
 import requests
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.pool import NullPool
 
 from config import HarnessConfig
@@ -81,6 +82,15 @@ class Fake:
         return self._get("faults")
 
 
+# The app's tables, Alembic's row aside, in the order the reset locks them.
+APP_TABLES = (
+    "SELECT string_agg(format('%I.%I', schemaname, tablename), ', ' ORDER BY tablename) FROM pg_tables "
+    "WHERE schemaname = 'public' AND tablename <> 'alembic_version'"
+)
+DEADLOCK_DETECTED = "40P01"
+RESET_ATTEMPTS = 5
+
+
 def reset_harness() -> None:
     """Back to the seed: the app's tables emptied (Alembic's row aside), its
     Spotify cache and rate-limit counters in Redis cleared, then the fake.
@@ -96,14 +106,22 @@ def reset_harness() -> None:
 
     engine = create_engine(HarnessConfig.SQLALCHEMY_DATABASE_URI, poolclass=NullPool)
     try:
-        with engine.begin() as conn:
-            conn.execute(text("SET LOCAL lock_timeout = '10s'"))
-            tables = conn.execute(text(
-                "SELECT string_agg(format('%I.%I', schemaname, tablename), ', ') FROM pg_tables "
-                "WHERE schemaname = 'public' AND tablename <> 'alembic_version'"
-            )).scalar_one()
-            assert tables, "the harness database has no tables to reset: has setup run its migrations?"
-            conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+        # A request the last test's page left in flight can hold a table the
+        # TRUNCATE has yet to lock while it waits for one the TRUNCATE holds.
+        # PostgreSQL then ends one of them as a deadlock; when it ends the
+        # TRUNCATE, the request finishes and the reset runs again.
+        for attempt in range(1, RESET_ATTEMPTS + 1):
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text("SET LOCAL lock_timeout = '10s'"))
+                    tables = conn.execute(text(APP_TABLES)).scalar_one()
+                    assert tables, "the harness database has no tables to reset: has setup run its migrations?"
+                    conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+                break
+            except OperationalError as error:
+                if getattr(error.orig, "pgcode", None) != DEADLOCK_DETECTED or attempt == RESET_ATTEMPTS:
+                    raise
+                time.sleep(0.2 * attempt)
     finally:
         engine.dispose()
 
