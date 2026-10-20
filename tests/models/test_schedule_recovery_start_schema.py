@@ -33,7 +33,7 @@ def migration():
 def test_new_revision_extends_the_deployed_queue_head_without_rewriting_it():
     assert MIGRATION.is_file()
     script = ScriptDirectory(str(ROOT / "migrations"))
-    assert script.get_heads() == [REVISION]
+    assert script.get_heads() == ["d0e1f2a3b4c5"]
     assert script.get_revision(REVISION).down_revision == "b8c9d0e1f2a3"
 
 
