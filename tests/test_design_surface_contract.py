@@ -2,21 +2,17 @@
 
 import os
 import re
-from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-STATIC = REPO_ROOT / "shuffify/static"
 DESIGN = REPO_ROOT / "assets/design"
-TEMPLATES = DESIGN / "templates"
 
 # Only these named outputs are exempt from handwritten-source checks. The
 # theme generator's --check owns the two React outputs and rejects stale,
 # missing and obsolete output; no directory-wide generated exemption exists.
 GENERATED_CSS = {
-    Path("shuffify/static/css/tailwind.css"),
     Path("web/src/design/generated/theme.css"),
     Path("web/src/design/generated/recipes.css"),
 }
@@ -93,7 +89,7 @@ def react_css_violations(text):
 
 
 def visual_utilities(text):
-    # Inspect class tokens even inside JS HTML builders and Jinja alternatives.
+    # Inspect class tokens wherever they appear, including markup fragments.
     tokens = re.findall(r"[\w:/\[\]#().%-]+", COMMENTS.sub("", text))
     bad = []
     for token in tokens:
@@ -105,59 +101,17 @@ def visual_utilities(text):
     return bad
 
 
-class PublicMarkup(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.stylesheets = []
-        self.scripts = []
-        self.classes = []
-        self.inline_styles = []
-        self._in_style = False
-
-    def handle_starttag(self, tag, attrs):
-        attrs = dict(attrs)
-        self.classes.extend(attrs.get("class", "").split())
-        if tag == "link" and attrs.get("rel") == "stylesheet":
-            self.stylesheets.append(attrs.get("href"))
-        if tag == "script" and "src" in attrs:
-            self.scripts.append(attrs["src"])
-        self._in_style = tag == "style" or self._in_style
-
-    def handle_endtag(self, tag):
-        if tag == "style":
-            self._in_style = False
-
-    def handle_data(self, data):
-        if self._in_style:
-            self.inline_styles.append(data)
-
-
-def public_violations(html):
-    markup = PublicMarkup()
-    markup.feed(html)
-    violations = visual_utilities(" ".join(markup.classes))
-    violations += css_violations("\n".join(markup.inline_styles))
-    if markup.stylesheets != ["/static/css/tailwind.css"]:
-        violations.append(f"non-core stylesheet: {markup.stylesheets}")
-    if markup.scripts:
-        violations.append(f"non-public script: {markup.scripts}")
-    return violations
-
-
-def test_templates_and_static_builders_cannot_define_migrated_recipes():
-    sources = list(TEMPLATES.rglob("*.html"))
-    sources += list((REPO_ROOT / "assets").rglob("*.html"))
-    sources += list((DESIGN / "templates").rglob("*.j2"))
-    sources += list((STATIC / "public").rglob("*.html"))
-    sources += [REPO_ROOT / "scripts/build-public-pages.py"]
+def test_legal_copy_cannot_define_migrated_recipes():
+    sources = list((REPO_ROOT / "assets").rglob("*.html"))
+    assert sources, "The canonical legal copy must be scanned"
     for path in sources:
         text = path.read_text()
         for style in STYLE_BLOCK.findall(text):
             assert not CORE_DEFINITION.search(style), path
             assert not css_violations(style), path
         assert not visual_utilities(text), (path, visual_utilities(text))
-        # CSS literals/font assignments embedded by a static builder also
-        # fall outside core, even if no <style> tag encloses them.
+        # CSS literals/font assignments in the copy also fall outside core,
+        # even if no <style> tag encloses them.
         assert not LITERAL_COLOR.search(COMMENTS.sub("", text)), path
         assert not re.search(r"font-family\s*:|fontFamily\s*[=:]", text), path
 
@@ -189,58 +143,9 @@ def test_generic_css_cannot_add_palette_fonts_or_component_recipes():
             assert not violations, (path, violations)
 
 
-def test_static_js_cannot_build_new_visual_recipes_outside_core():
-    for path in (STATIC / "js").rglob("*.js"):
-        text = COMMENTS.sub("", path.read_text())
-        assert not visual_utilities(text), (path, visual_utilities(text))
-        assert not LITERAL_COLOR.search(text), path
-        assert not re.search(
-            r"(?:\.style\.(?:background\w*|color|font\w*|border\w*|boxShadow)|"
-            r"fontFamily|\.style\.cssText)\s*=|"
-            r"\.style\.setProperty\(\s*['\"](?:--sh-|color|background|font|border)",
-            text
-        ), path
-        assert not VISUAL_PROPERTY.search(text), path
-        for style in STYLE_BLOCK.findall(text):
-            assert not css_violations(style), path
-
-
-@pytest.mark.parametrize("page", ["terms", "privacy"])
-def test_legal_surfaces_use_the_same_public_bundle(page):
-    html = (STATIC / "public" / f"{page}.html").read_text()
-    assert 'class="sh-document"' in html
-    assert not public_violations(html)
-
-
-@pytest.mark.parametrize("mutation", [
-    '<style>button { background: var(--sh-accent); }</style>',
-    '<style>.fresh { font-family: "Other Font"; }</style>',
-    '<style>body { color: #ff0000; }</style>',
-    '<link rel="stylesheet" href="/static/css/extra.css">',
-    '<button class="bg-red-500 font-bold rounded-lg">New recipe</button>',
-])
-def test_public_guard_detects_in_memory_mutations(mutation):
-    html = '<link rel="stylesheet" href="/static/css/tailwind.css">' + mutation
-    assert public_violations(html)
-
-
 def test_composition_layout_is_permitted():
     assert not css_violations('.composition { display: grid; gap: 10px; width: 100%; }')
     assert not visual_utilities('sh-button flex flex-col lg:flex-row gap-4 text-center')
-
-
-@pytest.mark.parametrize("source", [
-    'node.innerHTML = `<button class="bg-red-500">Go</button>`;',
-    'node.style.fontFamily = "Different Font";',
-    'node.style.setProperty("color", "red");',
-    'const markup = `<style>button { background: var(--sh-accent); }</style>`;',
-])
-def test_js_builder_guard_detects_new_source_files(monkeypatch, tmp_path, source):
-    (tmp_path / "js").mkdir()
-    (tmp_path / "js" / "new-public-builder.js").write_text(source)
-    monkeypatch.setattr(__name__ + ".STATIC", tmp_path)
-    with pytest.raises(AssertionError):
-        test_static_js_cannot_build_new_visual_recipes_outside_core()
 
 
 def test_generic_css_guard_detects_new_source_files(monkeypatch, tmp_path):

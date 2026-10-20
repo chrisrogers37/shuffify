@@ -4,7 +4,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PAGES = [ROOT / "web" / "index.html", *(ROOT / "shuffify" / "static" / "public").glob("*.html")]
+PAGES = [ROOT / "web" / "index.html"]
 
 
 class Scripts(HTMLParser):
@@ -18,7 +18,6 @@ class Scripts(HTMLParser):
 
 
 def test_every_application_script_is_external_and_same_origin():
-    assert PAGES
     found = []
     for page in PAGES:
         parser = Scripts()

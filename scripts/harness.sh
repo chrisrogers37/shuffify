@@ -7,9 +7,8 @@
 # head when it does -- with everything on this machine.
 #
 #   scripts/harness.sh setup [--quick]  idempotent: deps, services, migrations,
-#                                       artifact checks, lint + tests, then
-#                                       (re)start the app and check it. --quick
-#                                       skips the artifact checks, lint, tests.
+#                                       lint + tests, then (re)start the app and
+#                                       check it. --quick skips lint and tests.
 #   scripts/harness.sh e2e [pytest args] the behaviour tests (tests/e2e) against
 #                                       the running app and fake Spotify
 #   scripts/harness.sh down             stop the app and services (data kept)
@@ -464,7 +463,7 @@ start_app() {
 }
 
 build_frontend() {
-  local py="$1" want contact
+  local want
   command -v npm >/dev/null || die "Node 24 and npm are required for the React harness"
   [[ "$(node -p 'process.versions.node.split(".")[0]')" == 24 ]] || die "the React harness requires Node 24"
   want="$(sha256sum web/package-lock.json | cut -d' ' -f1)"
@@ -473,9 +472,8 @@ build_frontend() {
     npm --prefix web ci --no-audit --no-fund
     echo "${want}" > "${STATE}/frontend-deps.sha"
   fi
-  contact="$("${py}" -c 'import runpy; print(runpy.run_path("scripts/build-public-pages.py")["DEFAULT_CONTACT_ADDRESS"])')"
   log "building the production React app"
-  CONTACT_ADDRESS="${CONTACT_ADDRESS:-${contact}}" npm --prefix web run build
+  npm --prefix web run build
 }
 
 start_frontend() {
@@ -555,13 +553,10 @@ check_app() {
 }
 
 # ---------------------------------------------------------------------------
-# Checks that mirror CI's backend and css jobs
+# Checks that mirror CI's backend job
 # ---------------------------------------------------------------------------
 run_checks() {
   local py="$1"
-  log "checking generated artifacts"
-  "${py}" scripts/build-public-pages.py --check
-  ./scripts/build-css.sh --check
   log "ruff check ."
   "$(dirname "${py}")/ruff" check .
   log "migration chain integrity"
@@ -588,7 +583,7 @@ cmd_setup() {
   ensure_secrets "${py}"
   start_services "${py}"
   migrate "${py}"
-  build_frontend "${py}"
+  build_frontend
   if (( ! quick )); then
     run_checks "${py}"
   fi

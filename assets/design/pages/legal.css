@@ -1,5 +1,5 @@
 @layer components {
-/* Static legal pages share the public shell through tailwind.css. */
+/* The legal pages share the public shell. */
 .legal-page {
     padding-block: var(--sh-space-10) var(--sh-space-16);
 }

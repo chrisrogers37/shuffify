@@ -23,11 +23,12 @@ Authenticated review uses the guarded local fake Spotify harness described in
 Core utility recipes use the `sh` Tailwind namespace, such as `bg-sh-surface`,
 `text-sh-muted`, and `border-sh-control-border`. Components use shared
 classes and layout utilities. The sole token source is `assets/design/tokens.json`.
-`assets/design/index.js` derives both Tailwind theme entries and `--sh-*` CSS
-variables from it; never maintain a second set of literal values.
+`web/scripts/generate-theme.mjs` derives both the Tailwind theme entries and the
+`--sh-*` CSS variables from it into `web/src/design/generated/theme.css`; never
+maintain a second set of literal values.
 
-The adapter fails on unknown spacing aliases, invalid font families, or missing
-font assets outside the self-hosted fonts directory. Shared recipes, scrollbars,
+The generator fails on unknown spacing aliases and on font sources that are not
+existing self-hosted font files. Shared recipes, scrollbars,
 focus and reduced motion belong in `core.css`. Feature component recipes live in
 `components/library.css`, `components/workspace.css`, and `components/routines.css`
 inside the same core bundle and consume the same tokens. Page files compose recipes.
@@ -108,31 +109,25 @@ Blocking dialogs use `shadow-sh-modal` with the shared scrim token.
 
 - `tokens.json`: colors, fonts, type, spacing, radii, shadows, motion, and the
   fictional preview palette. Edit each value once.
-- `index.js`: dependency-free adapter consumed by the existing standalone
-  Tailwind CLI. It exposes the same values as utilities and CSS variables.
 - `core.css`: shell, typography, surfaces, controls, navigation, feedback,
   focus, and reduced-motion treatment.
 - `pages/`: compositions for individual screens. Reuse core components and
   token variables; do not define a second palette or component recipe here.
-- `templates/legal.html.j2`: static legal-document composition using the
-  explicit-input macros in `templates/macros/public.html.j2`.
 
-The public macros own the brand, skip link, header and footer markup. Their
-inputs are escaped and do not require Flask. React components own application
-layout, controls, review panels and feedback; they use the same semantic tokens
-and recipes. Shared scrollbars and interaction states belong in the common
-components rather than individual pages.
+React components own the brand, skip link, header and footer markup in the
+shared shells, as well as application layout, controls, review panels and
+feedback; they use the same semantic tokens and recipes. Shared scrollbars and
+interaction states belong in the common components rather than individual pages.
 
-`assets/tailwind.src.css` builds the committed `static/css/tailwind.css` used by
-the static legal documents. The React application builds its own bundled
-stylesheet from the canonical design inputs. Both use local fonts and official
-Spotify attribution assets.
+`assets/tailwind.src.css` lists the shared design sources. The frontend's theme
+generator composes them into `web/src/design/generated/recipes.css`, and the
+React application builds its own bundled stylesheet from the canonical design
+inputs, using local fonts and official Spotify attribution assets.
 
-Legal copy lives in `assets/legal/`. `python scripts/build-public-pages.py`
-generates checked-in static documents without importing the application.
-The frontend prerenders `/terms` and `/privacy` from the same legal copy.
-The generator's `--check` mode and tests detect source/output drift. Preserve
-the literal legal content fragments and escape the build-time contact address.
+Legal copy lives in `assets/legal/`. The frontend prerenders `/terms` and
+`/privacy` from it, and `tests/test_legal_copy_pin.py` fails when the copy
+changes without its pinned hash being updated. Preserve the literal legal
+content fragments and escape the build-time contact address.
 
 ## Shared components
 
@@ -329,7 +324,8 @@ markup into components.
 
 ## Self-hosted assets
 
-The fonts load from `/static/fonts/`, satisfying `font-src 'self'` with no runtime
+The fonts are self-hosted: `shuffify/static/fonts/` holds the canonical files and the
+frontend build serves them from `/fonts/`, satisfying `font-src 'self'` with no runtime
 font-service request and no new package dependency. Both use `font-display: swap`.
 The Latin subsets cover the public interface; unsupported glyphs use the fallback.
 Original SIL Open Font License notices ship beside each font.
@@ -352,11 +348,10 @@ Scripts and styles use bundled same-origin assets under a strict CSP. Shell comp
 focus, focus return, inert backgrounds for open panels, and keyboard navigation.
 Layouts support a 360 px viewport and desktop widths.
 
-Legal copy lives in `assets/legal/*.html`; the legal shell lives in
-`assets/design/templates/legal.html.j2` and the shared shell macros. Public HTML
-and `static/css/tailwind.css` are generated artifacts. The legal generator's
-`COPYRIGHT_YEAR` is an explicit maintenance value, keeping output deterministic
-across calendar years.
+Legal copy lives in `assets/legal/*.html`; `LegalPage` renders it inside the
+shared `PublicShell`. The footer's `copyrightYear`, in
+`web/src/pages/public/meta.ts`, is an explicit maintenance value, keeping
+prerendered output deterministic across calendar years.
 
 ## Public pages
 
@@ -440,6 +435,6 @@ protocol headers; it does not render an application error page.
 ### Legal pages
 
 Terms and Privacy are prerendered frontend routes from the canonical legal
-copy. Generated static public documents provide an independent source/output
-check. The shared design provides a 72ch reading measure, visible focus and
+copy, which a hash pin keeps from changing unintentionally. The shared design
+provides a 72ch reading measure, visible focus and
 responsive typography, without inline style or event attributes.

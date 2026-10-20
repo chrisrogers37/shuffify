@@ -609,7 +609,7 @@ class TestSecurityHeaders:
         assert external == []
 
     def test_csp_script_src_does_not_allow_tailwind_cdn(self, client):
-        """Tailwind is compiled to static/css and is never fetched.
+        """Tailwind is compiled into the frontend bundle and is never fetched.
 
         An allow-list entry no template uses is standing permission for a
         host that has no reason to execute here.
