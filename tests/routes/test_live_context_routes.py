@@ -10,11 +10,11 @@ from werkzeug.exceptions import InternalServerError
 from shuffify.models.db import ActivityLog, JobExecution, PlaylistSnapshot
 from shuffify.services.live_review_bindings import scope_fingerprint
 from shuffify.spotify.exceptions import SpotifyError
+from tests.mutable_spotify import MutableSpotify, uri
 from tests.paths import api_path
 from tests.queued_operations import post_and_run
 from tests.queued_operations import scoped_history as history
 from tests.routes.live_review_helpers import binding_bundle, post_context, seed_history
-from tests.services.test_live_executor_outcomes import MutableSpotify, uri
 from tests.services.test_live_metadata_service import MetadataSpotify
 
 TARGET = "playlist123"

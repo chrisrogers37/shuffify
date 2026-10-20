@@ -8,7 +8,7 @@ import pytest
 from shuffify.models.db import ActivityLog, JobExecution
 from shuffify.services.live_playlist_service import LivePlaylistService
 from shuffify.services.user_service import UserService
-from tests.services.test_live_executor_outcomes import MutableSpotify, uri
+from tests.mutable_spotify import MutableSpotify, uri
 
 
 @pytest.fixture

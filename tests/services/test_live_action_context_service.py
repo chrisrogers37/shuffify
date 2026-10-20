@@ -32,7 +32,7 @@ from shuffify.spotify.exceptions import (
     SpotifyNotFoundError,
     SpotifyTokenExpiredError,
 )
-from tests.services.test_live_executor_outcomes import MutableSpotify, uri
+from tests.mutable_spotify import MutableSpotify, uri
 from tests.services.test_live_metadata_service import MISSING, OWNER, MetadataSpotify
 from tests.services.test_live_playlist_service import seed_history
 

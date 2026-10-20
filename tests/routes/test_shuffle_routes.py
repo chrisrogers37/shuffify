@@ -18,9 +18,9 @@ from shuffify.spotify.exceptions import (
     SpotifyWriteRejectedError,
     SpotifyWriteUnverifiedError,
 )
+from tests.mutable_spotify import MutableSpotify, uri
 from tests.paths import api_path
 from tests.queued_operations import post_and_run, run_operation, scoped_history
-from tests.services.test_live_executor_outcomes import MutableSpotify, uri
 
 
 @pytest.fixture

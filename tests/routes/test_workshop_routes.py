@@ -150,7 +150,7 @@ class TestWorkshopCommit:
     def provider(self):
         from types import SimpleNamespace
 
-        from tests.services.test_live_executor_outcomes import MutableSpotify, uri
+        from tests.mutable_spotify import MutableSpotify, uri
 
         return MutableSpotify(SimpleNamespace(spotify_id="user123"), playlist123=[uri(1), uri(1), uri(2)])
 
@@ -205,8 +205,8 @@ class TestWorkshopCommit:
     def test_commit_serializes_confirmed_revision(
         self, auth_client, provider, status
     ):
+        from tests.mutable_spotify import uri
         from tests.queued_operations import post_and_run, scoped_history
-        from tests.services.test_live_executor_outcomes import uri
 
         before, uris = [uri(1), uri(1), uri(2)], [uri(2), uri(1), uri(1)]
         baseline = before
@@ -290,8 +290,8 @@ class TestWorkshopCommit:
         service.assert_not_called()
 
     def test_stale_draft_outcome_is_not_flattened(self, auth_client, provider):
+        from tests.mutable_spotify import uri
         from tests.queued_operations import post_and_run
-        from tests.services.test_live_executor_outcomes import uri
 
         response = post_and_run(
             auth_client, provider, api_path("/workshop/playlist123/commit"),
@@ -308,7 +308,7 @@ class TestWorkshopCommit:
         assert provider.writes == []
 
     def test_active_target_is_rejected_with_its_existing_operation_id(self, auth_client, provider):
-        from tests.services.test_live_executor_outcomes import uri
+        from tests.mutable_spotify import uri
 
         body = {"baseline_track_uris": [uri(1), uri(1), uri(2)], "track_uris": []}
         first = auth_client.post(api_path("/workshop/playlist123/commit"), json=body)
@@ -321,8 +321,8 @@ class TestWorkshopCommit:
 
     def test_partial_target_result_retains_counts_after_worker_rollback(self, auth_client, provider):
         from shuffify.spotify.exceptions import SpotifyWriteRejectedError
+        from tests.mutable_spotify import uri
         from tests.queued_operations import post_and_run, scoped_history
-        from tests.services.test_live_executor_outcomes import uri
 
         before, desired = [uri(1), uri(1), uri(2)], [uri(3)] * 101
 
@@ -349,8 +349,8 @@ class TestWorkshopCommit:
 
     def test_unknown_target_outcome_requires_review_without_replaying_write(self, auth_client, provider):
         from shuffify.spotify.exceptions import SpotifyWriteUnverifiedError
+        from tests.mutable_spotify import uri
         from tests.queued_operations import post_and_run, scoped_history
-        from tests.services.test_live_executor_outcomes import uri
 
         def unknown(*args):
             raise SpotifyWriteUnverifiedError("Fictional missing acknowledgment")
@@ -372,8 +372,8 @@ class TestWorkshopCommit:
         assert scoped_history(auth_client, "playlist123") is None
 
     def test_empty_draft_dispatches_a_real_put_in_worker(self, auth_client, provider):
+        from tests.mutable_spotify import uri
         from tests.queued_operations import post_and_run
-        from tests.services.test_live_executor_outcomes import uri
 
         response = post_and_run(
             auth_client, provider,
@@ -397,8 +397,8 @@ class TestWorkshopCommit:
     def test_existing_permission_and_auth_handling(
         self, auth_client, provider, error, status
     ):
+        from tests.mutable_spotify import uri
         from tests.queued_operations import post_and_run
-        from tests.services.test_live_executor_outcomes import uri
 
         if status == 403:
             provider.owner = "another-user"

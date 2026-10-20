@@ -16,9 +16,9 @@ from shuffify.services.playlist_snapshot_service import (
 )
 from shuffify.services.user_service import UserService
 from shuffify.spotify.api import SpotifyAPI
+from tests.mutable_spotify import MutableSpotify, uri
 from tests.paths import api_path
 from tests.queued_operations import post_and_run, scoped_history
-from tests.services.test_live_executor_outcomes import MutableSpotify, uri
 
 
 class TestListSnapshots:
