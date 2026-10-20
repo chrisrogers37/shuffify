@@ -39,11 +39,8 @@ from shuffify.services.dashboard_service import (
     DashboardService,
 )
 
-# Job Executor Service
-from shuffify.services.executors import (
-    JobExecutionError,
-    JobExecutorService,
-)
+# Job execution errors
+from shuffify.services.executors import JobExecutionError
 
 # Login History Service
 from shuffify.services.login_history_service import (
@@ -208,8 +205,7 @@ __all__ = [
     "RoutineActivationService",
     "ScheduleError",
     "ScheduleNotFoundError",
-    # Job Executor Service
-    "JobExecutorService",
+    # Job execution errors
     "JobExecutionError",
     # Login History Service
     "LoginHistoryService",

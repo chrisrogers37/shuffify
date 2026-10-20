@@ -27,7 +27,6 @@ from shuffify.models.db import (
     User,
     db,
 )
-from shuffify.services.executors import JobExecutorService
 from shuffify.services.live_review_scope import ReviewedInputChanged
 from shuffify.services.operations.commands.registry import COMMAND_HANDLERS
 from shuffify.services.operations.repository import OperationRepository
@@ -832,28 +831,12 @@ def before_step(step, change):
 
 
 @contextmanager
-def lock_wait(change, on=1, *, legacy=False):
+def lock_wait(change, on=1):
     """Change configuration after queue admission while the worker acquires reservations."""
     if on == 2:
         with before_step("drip", change):
             yield
         return
-    if legacy:
-        from shuffify.services.executors import base_executor
-
-        real = base_executor.playlist_lock
-
-        @contextmanager
-        def waiting(*args, **kwargs):
-            with real(*args, **kwargs) as acquired:
-                change()
-                yield acquired
-
-        with patch.object(base_executor, "playlist_lock", waiting):
-            yield
-        return
-    from shuffify.services.operations.repository import OperationRepository
-
     real = OperationRepository.target_locks
 
     @contextmanager
@@ -1045,15 +1028,6 @@ def test_a_scheduled_fire_refuses_a_routine_retargeted_after_it_was_admitted(wor
     assert operation.journal["result"]["error_code"] == "configuration_changed"
     assert workshop.api.writes == []
     assert db.session.get(JobExecution, fire.operation_id, populate_existing=True).status == "failed"
-
-
-def test_scheduled_runs_refuse_a_retargeted_routine_too(workshop):
-    workshop.api.playlists["target"] = [uri(1), uri(2)]
-    row = routine(workshop.user, JobType.SHUFFLE, is_enabled=True)
-    with lock_wait(lambda: edit(workshop, row, "target"), legacy=True):
-        JobExecutorService.execute(row.id)
-    assert JobExecution.query.one().status == "failed"
-    assert workshop.api.writes == []
 
 
 @pytest.mark.parametrize("job_type,step", [(JobType.SHUFFLE, "shuffle"), (JobType.RAID_AND_SHUFFLE, "shuffle")])

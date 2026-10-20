@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 # The JobExecution that auto-snapshots created in the current execution context
 # should be tagged with, so rollback restores only that job's snapshots rather
-# than every snapshot in a time window. Set by
-# JobExecutorService._run_job for the duration of a job.
+# than every snapshot in a time window. Durable operations pass
+# ``job_execution_id`` to create_snapshot explicitly; nothing sets this now.
 _current_job_execution_id = contextvars.ContextVar(
     "shuffify_current_job_execution_id", default=None
 )

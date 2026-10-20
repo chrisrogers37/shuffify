@@ -301,7 +301,7 @@ class ReviewedRun:
         if steps is None:
             raise ReviewChanged()
         # A Raid + Drip's raid child also reads the link its Drip child will consume. read_inputs re-reads
-        # every row (populate_existing), as _bind_review re-reads the Schedule: nothing compares as cached.
+        # every row (populate_existing), as the runner re-reads the Schedule: nothing compares as cached.
         rows = read_inputs(DIRECT_STEPS[self.kind] if self.kind == "raid_and_drip" else steps, schedule.user_id, target)
         parts = routine_parts(schedule, steps, rows)
         if self.kind == "schedule":

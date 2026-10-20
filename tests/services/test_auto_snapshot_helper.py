@@ -1,8 +1,8 @@
 """Guards on PlaylistSnapshotService.auto_snapshot_if_enabled, which the
-executors share: the user's setting, a non-empty track list, and a snapshot
+live actions share: the user's setting, a non-empty track list, and a snapshot
 failure never taking down the operation it protects.
 
-The executor tests mock this helper out, so these are where the guards are
+The live action tests mock this helper out, so these are where the guards are
 actually proved.
 """
 
@@ -91,58 +91,3 @@ class TestAutoSnapshotIfEnabled:
             result = PlaylistSnapshotService.auto_snapshot_if_enabled(**ARGS)
 
         assert result is None
-
-
-class TestScheduledShuffleSnapshotType:
-    """A scheduled shuffle must label its snapshot like an interactive one.
-
-    routes/shuffle.py writes AUTO_PRE_SHUFFLE and every sibling executor writes
-    its own AUTO_PRE_*. The snapshot list renders the generic
-    SCHEDULED_PRE_EXECUTION as "Auto-backup" rather than "Pre-Shuffle", so the
-    scheduled shuffle writes AUTO_PRE_SHUFFLE too, and one operation keeps one
-    label whatever triggered it.
-    """
-
-    def test_scheduled_shuffle_uses_auto_pre_shuffle(self):
-        from unittest.mock import MagicMock
-
-        from shuffify.services.executors import shuffle_executor
-
-        schedule = MagicMock()
-        schedule.user_id = 1
-        schedule.target_playlist_id = "pl1"
-        schedule.target_playlist_name = "Mine"
-
-        with patch.object(
-            shuffle_executor, "PlaylistSnapshotService"
-        ) as snap:
-            shuffle_executor._auto_snapshot_before_shuffle(
-                schedule, [{"uri": "spotify:track:1"}], "BasicShuffle"
-            )
-
-        kwargs = snap.auto_snapshot_if_enabled.call_args.kwargs
-        assert kwargs["snapshot_type"] == SnapshotType.AUTO_PRE_SHUFFLE
-
-    def test_every_executor_uses_its_own_auto_pre_type(self):
-        """No executor may fall back to the generic scheduled type.
-
-        Walks the AST rather than grepping, so a comment that mentions the
-        name is not read as a violation.
-        """
-        import ast
-        import pathlib
-
-        import shuffify.services.executors as pkg
-
-        root = pathlib.Path(pkg.__file__).parent
-        offenders = []
-        for name in ("raid", "drip", "shuffle", "rotate"):
-            tree = ast.parse((root / f"{name}_executor.py").read_text())
-            for node in ast.walk(tree):
-                if (
-                    isinstance(node, ast.Attribute)
-                    and node.attr == "SCHEDULED_PRE_EXECUTION"
-                ):
-                    offenders.append(name)
-
-        assert offenders == []
