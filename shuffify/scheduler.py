@@ -6,7 +6,7 @@ cover lost hints.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Dict, Tuple
 
 from shuffify.enums import IntervalValue, ScheduleType
@@ -14,20 +14,6 @@ from shuffify.services.schedule_utils import schedule_revision
 from shuffify.services.worker_control import WorkerControlClient
 
 logger = logging.getLogger(__name__)
-
-
-def init_scheduler(app):
-    """Compatibility entry point; app construction never starts a scheduler."""
-    return None
-
-
-def get_scheduler():
-    """No scheduler belongs to the API process."""
-    return None
-
-
-def shutdown_scheduler():
-    """The worker lifecycle owns scheduler shutdown."""
 
 
 def add_job_for_schedule(schedule):
@@ -127,50 +113,3 @@ def _parse_schedule(schedule_type: str, schedule_value: str) -> Tuple[str, Dict]
     else:
         logger.warning(f"Unknown schedule_type '{schedule_type}', defaulting to daily")
         return "interval", {"days": 1}
-
-
-def _cleanup_stale_executions(max_age_minutes: int = 30):
-    """
-    Mark stuck 'running' execution records as failed.
-
-    On startup, any execution still marked 'running' from a
-    prior crash is stale. Mark it failed so the UI doesn't show
-    perpetually-running jobs.
-    """
-    try:
-        from shuffify.models.db import JobExecution
-
-        # Durable operations have leases and recovery. A legacy startup sweep
-        # must never complete a live or recoverable worker execution.
-        stale = JobExecution.query.filter_by(status="running").filter(JobExecution.kind.is_(None)).all()
-
-        if not stale:
-            return
-
-        now = datetime.now(timezone.utc)
-        cleaned = 0
-        for execution in stale:
-            started = execution.started_at
-            # Ensure timezone-aware comparison
-            if started.tzinfo is None:
-                started = started.replace(tzinfo=timezone.utc)
-            age_minutes = (now - started).total_seconds() / 60
-            if age_minutes > max_age_minutes:
-                execution.status = "failed"
-                execution.completed_at = now
-                execution.error_message = (
-                    "Marked as failed: stale execution from prior process"
-                )
-                cleaned += 1
-
-        if cleaned:
-            from shuffify.models.db import db
-
-            db.session.commit()
-            logger.info(
-                "Cleaned up %d stale execution records",
-                cleaned,
-            )
-
-    except Exception as e:
-        logger.warning("Failed to clean up stale executions: %s", e)

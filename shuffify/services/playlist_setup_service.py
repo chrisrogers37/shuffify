@@ -210,7 +210,7 @@ def read_state(user_id, target_id):
 
     The link, pair and sources (ordered by id) are the rows a Collect run reads
     (live_review_scope.read_inputs). Routines are every job type on the target,
-    as ``SchedulerService.get_schedules_for_playlist`` selects them, ordered by id.
+    ordered by id.
     """
     rows = read_inputs(("raid",), user_id, target_id)
     with fresh_reads():

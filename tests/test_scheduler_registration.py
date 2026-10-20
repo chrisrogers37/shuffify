@@ -33,7 +33,6 @@ def test_matching_registration_is_memory_observed_and_never_a_local_job(schedule
     schedule.algorithm_params = {'keep_first': 2}
     assert scheduler_module.get_schedule_registration(schedule)['status'] == 'needs_attention'
     assert calls == [[schedule.id], [schedule.id]]
-    assert scheduler_module.get_scheduler() is None
 
 
 @pytest.mark.parametrize('bad', ['missing', 'paused', 'stale', 'naive', 'malformed', 'zone'])

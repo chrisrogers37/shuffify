@@ -1,6 +1,5 @@
 """Worker history and JSON context reads share confirmed scoped receipts."""
 
-from datetime import datetime, timedelta, timezone
 from unittest.mock import create_autospec, patch
 
 import pytest
@@ -182,22 +181,6 @@ def test_schedule_delete_detaches_active_and_confirmed_durable_operations(histor
     assert repository.get(active.id).lease_owner == lease.owner
     assert repository.get(receipt_id).schedule_id is None
     assert store.load(user.id, scope, "playlist")[1] == receipt_id
-
-
-def test_legacy_stale_cleanup_cannot_complete_a_live_durable_operation(history_queue):
-    from shuffify.scheduler import _cleanup_stale_executions
-
-    repository, _store, user = history_queue
-    operation, lease = enqueue(repository, user.id)
-    old = datetime.now(timezone.utc) - timedelta(hours=2)
-    db.session.execute(db.update(JobExecution).where(JobExecution.id == operation.id).values(started_at=old))
-    db.session.commit()
-    _cleanup_stale_executions(max_age_minutes=30)
-    row = repository.get(operation.id)
-    assert row.state == "running"
-    assert row.status == "running"
-    assert row.completed_at is None
-    assert repository.renew(lease).lease_owner == lease.owner
 
 
 def test_retention_protects_active_work_and_its_referenced_history_revision(history_queue):

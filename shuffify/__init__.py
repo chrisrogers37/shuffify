@@ -871,8 +871,8 @@ class BoundedRequest(Request):
         Request.max_content_length.fset(self, value)  # a view can still set its own
 
 
-def create_app(config_name=None, *, start_scheduler=True):
-    """Create the API application; start_scheduler is a compatibility argument only."""
+def create_app(config_name=None):
+    """Create the API application."""
     if config_name is None:
         config_name = os.getenv("APP_CONFIG", "production")
 
@@ -990,7 +990,6 @@ def create_app(config_name=None, *, start_scheduler=True):
     register_cli(app)
 
     # API construction never starts a scheduler; the worker owns its memory jobs.
-    # Retain start_scheduler as a compatibility argument for existing launchers.
     from shuffify.services.schedule_notifications import install_schedule_notifications
 
     install_schedule_notifications()

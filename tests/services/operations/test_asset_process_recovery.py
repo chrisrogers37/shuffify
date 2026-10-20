@@ -31,7 +31,7 @@ from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.auth import TokenInfo
 from shuffify.worker import OperationWorker
 from tests.services.operations.test_creation_executor import CreationWorld
-app = create_app('testing', start_scheduler=False)
+app = create_app('testing')
 statefile, mode, operation_id = Path(sys.argv[2]), sys.argv[3], int(sys.argv[4])
 world = CreationWorld(ignored_private=True)
 saved = json.loads(statefile.read_text())

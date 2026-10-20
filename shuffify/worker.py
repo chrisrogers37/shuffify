@@ -622,7 +622,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     from shuffify import create_app
 
-    app = create_app(start_scheduler=False)
+    app = create_app()
     from shuffify.services.operations.commands.registry import COMMAND_HANDLERS
 
     runner = OperationWorker(app, handlers=COMMAND_HANDLERS)

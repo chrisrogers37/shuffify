@@ -1,15 +1,11 @@
-"""Pure timing compatibility and API-safe scheduler lifecycle.
+"""Pure timing compatibility and the API-safe worker refresh hint.
 
 Memory registration/leadership/event coverage lives with WorkerScheduler tests;
 exact fire admission tests replace synchronous scheduled execution coverage.
 """
 
-from datetime import datetime, timezone
-
-import pytest
-
 import shuffify.scheduler as scheduler_module
-from shuffify.scheduler import _cleanup_stale_executions, _parse_schedule
+from shuffify.scheduler import _parse_schedule
 
 
 class TestParseScheduleInterval:
@@ -99,117 +95,9 @@ class TestParseScheduleUnknown:
         assert kwargs == {"days": 1}
 
 
-@pytest.mark.parametrize('enabled', [True, False])
-@pytest.mark.parametrize('reloader', [None, 'true', 'false'])
-def test_web_scheduler_entry_points_never_construct_jobs(app, monkeypatch, enabled, reloader):
-    app.config['SCHEDULER_ENABLED'] = enabled
-    if reloader is not None:
-        monkeypatch.setenv('WERKZEUG_RUN_MAIN', reloader)
-    assert scheduler_module.init_scheduler(app) is None
-    assert scheduler_module.get_scheduler() is None
-    scheduler_module.shutdown_scheduler()
-
-
 def test_web_refresh_is_only_a_bounded_hint(app_ctx, monkeypatch):
     calls = []
     monkeypatch.setattr(scheduler_module.WorkerControlClient, 'poke', lambda self: calls.append(True))
     scheduler_module.add_job_for_schedule(object())
     scheduler_module.remove_job_for_schedule(42)
     assert calls == [True, True]
-
-
-class TestStaleCleanup:
-    """Tests for _cleanup_stale_executions."""
-
-    def test_cleans_old_running_records(self, db_app):
-        """Stale running records should be marked failed."""
-        from datetime import timedelta
-
-        from shuffify.models.db import (
-            JobExecution,
-            Schedule,
-            User,
-            db,
-        )
-
-        user = User(
-            spotify_id="test_user",
-            display_name="Test",
-        )
-        db.session.add(user)
-        db.session.flush()
-
-        schedule = Schedule(
-            user_id=user.id,
-            job_type="shuffle",
-            target_playlist_id="pl1",
-            target_playlist_name="Test Playlist",
-            schedule_type="interval",
-            schedule_value="daily",
-        )
-        db.session.add(schedule)
-        db.session.flush()
-
-        # Create a stale execution (started 60 min ago)
-        stale_exec = JobExecution(
-            schedule_id=schedule.id,
-            started_at=(
-                datetime.now(timezone.utc)
-                - timedelta(minutes=60)
-            ),
-            status="running",
-        )
-        db.session.add(stale_exec)
-        db.session.commit()
-
-        _cleanup_stale_executions(max_age_minutes=30)
-
-        db.session.refresh(stale_exec)
-        assert stale_exec.status == "failed"
-        assert "stale" in stale_exec.error_message.lower()
-
-    def test_leaves_recent_running_records(self, db_app):
-        """Recent running records should not be cleaned."""
-        from datetime import timedelta
-
-        from shuffify.models.db import (
-            JobExecution,
-            Schedule,
-            User,
-            db,
-        )
-
-        user = User(
-            spotify_id="test_user2",
-            display_name="Test2",
-        )
-        db.session.add(user)
-        db.session.flush()
-
-        schedule = Schedule(
-            user_id=user.id,
-            job_type="shuffle",
-            target_playlist_id="pl2",
-            target_playlist_name="Test Playlist 2",
-            schedule_type="interval",
-            schedule_value="daily",
-        )
-        db.session.add(schedule)
-        db.session.flush()
-
-        # Create a recent execution (started 5 min ago)
-        recent_exec = JobExecution(
-            schedule_id=schedule.id,
-            started_at=(
-                datetime.now(timezone.utc)
-                - timedelta(minutes=5)
-            ),
-            status="running",
-        )
-        db.session.add(recent_exec)
-        db.session.commit()
-
-        _cleanup_stale_executions(max_age_minutes=30)
-
-        db.session.refresh(recent_exec)
-        assert recent_exec.status == "running"

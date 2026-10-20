@@ -36,7 +36,6 @@ SCHEDULER_PATHS = [
     (SchedulerService, "create_schedule"),
     (SchedulerService, "update_schedule"),
     (SchedulerService, "delete_schedule"),
-    (SchedulerService, "toggle_schedule"),
     (SchedulerService, "_sync_apscheduler_job"),
     (SchedulerService, "_remove_apscheduler_job"),
     (RaidSyncService, "watch_playlist"),
