@@ -34,11 +34,6 @@ class TestArtistSpacingShuffleProperties:
         assert params["min_spacing"]["default"] == 1
         assert params["min_spacing"]["min"] == 1
 
-    def test_requires_features_is_false(self):
-        """Should not require audio features."""
-        algo = ArtistSpacingShuffle()
-        assert algo.requires_features is False
-
 
 class TestArtistSpacingShuffleShuffle:
     """Tests for ArtistSpacingShuffle.shuffle method."""

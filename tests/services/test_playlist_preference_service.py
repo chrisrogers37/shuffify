@@ -194,9 +194,9 @@ class TestToggleHidden:
         assert result is True
 
         pref = (
-            PlaylistPreferenceService.get_preference(
-                test_user.id, "pl1"
-            )
+            PlaylistPreferenceService.get_user_preferences(
+                test_user.id
+            ).get("pl1")
         )
         assert pref is not None
         assert pref.is_hidden is True
@@ -236,9 +236,9 @@ class TestToggleHidden:
             test_user.id, "pl1"
         )
         pref = (
-            PlaylistPreferenceService.get_preference(
-                other_user.id, "pl1"
-            )
+            PlaylistPreferenceService.get_user_preferences(
+                other_user.id
+            ).get("pl1")
         )
         assert pref is None
 

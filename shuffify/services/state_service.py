@@ -266,45 +266,6 @@ class StateService:
         return previous_uris
 
     @staticmethod
-    def revert_undo(session: Dict[str, Any], playlist_id: str) -> None:
-        """
-        Revert an undo operation (if the Spotify update failed).
-
-        Args:
-            session: The Flask session object.
-            playlist_id: The Spotify playlist ID.
-        """
-        state = StateService.get_playlist_state(session, playlist_id)
-        if not state:
-            return
-
-        # Move back forward
-        if state.current_index < len(state.states) - 1:
-            state.current_index += 1
-            session[PLAYLIST_STATES_KEY][playlist_id] = state.to_dict()
-            session.modified = True
-            logger.warning(f"Reverted undo for playlist {playlist_id}")
-
-    @staticmethod
-    def get_state_info(
-        session: Dict[str, Any], playlist_id: str
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Get state information for a playlist (for API responses).
-
-        Args:
-            session: The Flask session object.
-            playlist_id: The Spotify playlist ID.
-
-        Returns:
-            Dictionary with state info, or None if no state.
-        """
-        state = StateService.get_playlist_state(session, playlist_id)
-        if not state:
-            return None
-        return state.to_dict()
-
-    @staticmethod
     def ensure_playlist_initialized(
         session: Dict[str, Any], playlist_id: str, current_uris: List[str]
     ) -> PlaylistState:

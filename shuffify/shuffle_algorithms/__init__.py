@@ -22,11 +22,6 @@ class ShuffleAlgorithm(Protocol):
         """Parameters that can be configured for this algorithm."""
         ...
 
-    @property
-    def requires_features(self) -> bool:
-        """Whether this algorithm requires audio features to work."""
-        ...
-
     def shuffle(
         self,
         tracks: List[Dict[str, Any]],

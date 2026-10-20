@@ -128,40 +128,6 @@ class TestPlaylistFeatures:
         playlist = Playlist(id="p1", name="Test", owner_id="u1")
         assert playlist.has_features() is False
 
-    def test_get_feature_stats_computes_correctly(self):
-        features = {
-            "t1": {"tempo": 100.0, "energy": 0.5, "valence": 0.3, "danceability": 0.6},
-            "t2": {"tempo": 140.0, "energy": 0.9, "valence": 0.7, "danceability": 0.8},
-        }
-        playlist = Playlist(
-            id="p1", name="Test", owner_id="u1", audio_features=features
-        )
-        stats = playlist.get_feature_stats()
-
-        assert stats["tempo"]["min"] == 100.0
-        assert stats["tempo"]["max"] == 140.0
-        assert stats["tempo"]["avg"] == 120.0
-        assert stats["energy"]["min"] == 0.5
-        assert stats["energy"]["max"] == 0.9
-        assert stats["energy"]["avg"] == pytest.approx(0.7)
-
-    def test_get_feature_stats_empty_features(self):
-        playlist = Playlist(id="p1", name="Test", owner_id="u1")
-        assert playlist.get_feature_stats() == {}
-
-    def test_get_feature_stats_partial_features(self):
-        """Test when some tracks have features and others don't."""
-        features = {
-            "t1": {"tempo": 120.0, "energy": 0.5},
-            # Missing valence and danceability
-        }
-        playlist = Playlist(
-            id="p1", name="Test", owner_id="u1", audio_features=features
-        )
-        stats = playlist.get_feature_stats()
-        assert "tempo" in stats
-        assert stats["tempo"]["avg"] == 120.0
-
 
 class TestPlaylistSerialization:
     """Test to_dict and string representation."""

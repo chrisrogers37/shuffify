@@ -7,10 +7,7 @@ Mirrors PlaylistPairService for the upstream raid direction.
 import logging
 
 from shuffify.models.db import RaidPlaylistLink, db
-from shuffify.services.base import (
-    commit_or_stage,
-    create_private_playlist,
-)
+from shuffify.services.base import commit_or_stage
 from shuffify.services.playlist_lock import locked_commit_target
 
 logger = logging.getLogger(__name__)
@@ -93,15 +90,6 @@ class RaidLinkService:
         ).first()
 
     @staticmethod
-    def get_links_for_user(user_id):
-        """Get all raid links for a user."""
-        return RaidPlaylistLink.query.filter_by(
-            user_id=user_id,
-        ).order_by(
-            RaidPlaylistLink.created_at.desc()
-        ).all()
-
-    @staticmethod
     @locked_commit_target("target_playlist_id")
     def update_link(user_id, target_playlist_id, *, commit=True, **kwargs):
         """Update a raid link's settings.
@@ -150,21 +138,6 @@ class RaidLinkService:
             f"delete raid link for "
             f"{target_playlist_id} (user {user_id})",
             RaidLinkError,
-        )
-
-    @staticmethod
-    def create_raid_playlist(api, name):
-        """Create a new private Spotify playlist for raids.
-
-        Returns (playlist_id, playlist_name).
-        """
-        return create_private_playlist(
-            api,
-            name,
-            suffix="Raids",
-            description=(
-                "Raid staging playlist for incoming tracks"
-            ),
         )
 
     @staticmethod

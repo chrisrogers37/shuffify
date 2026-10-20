@@ -9,7 +9,6 @@ its caller's transaction and lets errors propagate.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from shuffify.models.db import ActivityLog, db
@@ -126,81 +125,3 @@ class ActivityLogService:
                 e,
             )
             return []
-
-    @staticmethod
-    def get_activity_since(
-        user_id: int,
-        since: datetime,
-    ) -> List[ActivityLog]:
-        """
-        Get all activity for a user since a given datetime.
-
-        Args:
-            user_id: The internal database user ID.
-            since: The datetime cutoff (UTC).
-
-        Returns:
-            List of ActivityLog instances, most recent first.
-        """
-        try:
-            return (
-                ActivityLog.query.filter(
-                    ActivityLog.user_id == user_id,
-                    ActivityLog.created_at >= since,
-                )
-                .order_by(ActivityLog.created_at.desc())
-                .all()
-            )
-        except Exception as e:
-            logger.warning(
-                "Failed to get activity since "
-                "%s for user %s: %s",
-                since,
-                user_id,
-                e,
-            )
-            return []
-
-    @staticmethod
-    def get_activity_summary(
-        user_id: int,
-        days: int = 30,
-    ) -> Dict[str, int]:
-        """
-        Get aggregated activity counts by type for a user.
-
-        Args:
-            user_id: The internal database user ID.
-            days: Number of days to look back.
-
-        Returns:
-            Dictionary mapping activity_type to count.
-        """
-        try:
-            since = datetime.now(
-                timezone.utc
-            ) - timedelta(days=days)
-            results = (
-                db.session.query(
-                    ActivityLog.activity_type,
-                    db.func.count(ActivityLog.id),
-                )
-                .filter(
-                    ActivityLog.user_id == user_id,
-                    ActivityLog.created_at >= since,
-                )
-                .group_by(ActivityLog.activity_type)
-                .all()
-            )
-            return {
-                activity_type: count
-                for activity_type, count in results
-            }
-        except Exception as e:
-            logger.warning(
-                "Failed to get activity summary "
-                "for user %s: %s",
-                user_id,
-                e,
-            )
-            return {}

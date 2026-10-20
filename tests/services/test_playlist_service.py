@@ -1,7 +1,7 @@
 """
 Tests for PlaylistService.
 
-Tests cover playlist retrieval, updates, and validation.
+Tests cover playlist retrieval and updates.
 """
 
 
@@ -308,32 +308,6 @@ class TestPlaylistServiceGetPlaylistSummary:
         mock_spotify_api.get_playlist_tracks.assert_not_called()
 
 
-class TestPlaylistServiceGetPlaylistStats:
-    """Tests for get_playlist_stats method."""
-
-    def test_get_playlist_stats_success(self, mock_spotify_api, sample_audio_features):
-        """Should return feature statistics."""
-        service = PlaylistService(mock_spotify_api)
-
-        stats = service.get_playlist_stats('playlist123')
-
-        assert 'tempo' in stats
-        assert 'energy' in stats
-        assert 'valence' in stats
-        assert 'danceability' in stats
-
-    def test_get_playlist_stats_includes_min_max_avg(self, mock_spotify_api):
-        """Stats should include min, max, and avg for each feature."""
-        service = PlaylistService(mock_spotify_api)
-
-        stats = service.get_playlist_stats('playlist123')
-
-        for feature in ['tempo', 'energy', 'valence', 'danceability']:
-            assert 'min' in stats[feature]
-            assert 'max' in stats[feature]
-            assert 'avg' in stats[feature]
-
-
 class TestPlaylistServiceUpdatePlaylistTracks:
     """Tests for update_playlist_tracks method."""
 
@@ -403,25 +377,3 @@ class TestPlaylistServiceGetTrackUris:
         result = service.get_track_uris('playlist123')
 
         assert result == []
-
-
-class TestPlaylistServiceValidatePlaylistHasTracks:
-    """Tests for validate_playlist_has_tracks method."""
-
-    def test_validate_playlist_has_tracks_success(self, mock_spotify_api):
-        """Should not raise for playlist with tracks."""
-        service = PlaylistService(mock_spotify_api)
-        playlist = service.get_playlist('playlist123')
-
-        # Should not raise
-        service.validate_playlist_has_tracks(playlist)
-
-    def test_validate_playlist_has_tracks_empty(self, mock_spotify_api):
-        """Should raise PlaylistError for empty playlist."""
-        mock_spotify_api.get_playlist_tracks.return_value = []
-        service = PlaylistService(mock_spotify_api)
-        playlist = service.get_playlist('playlist123')
-
-        with pytest.raises(PlaylistError) as exc_info:
-            service.validate_playlist_has_tracks(playlist)
-        assert "has no tracks" in str(exc_info.value)

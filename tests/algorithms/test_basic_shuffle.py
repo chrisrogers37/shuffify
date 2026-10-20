@@ -35,11 +35,6 @@ class TestBasicShuffleProperties:
         assert params['keep_first']['default'] == 0
         assert params['keep_first']['min'] == 0
 
-    def test_requires_features_is_false(self):
-        """Should not require audio features."""
-        algo = BasicShuffle()
-        assert algo.requires_features is False
-
 
 class TestBasicShuffleShuffle:
     """Tests for BasicShuffle.shuffle method."""

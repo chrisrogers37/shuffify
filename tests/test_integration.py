@@ -383,22 +383,17 @@ class TestFullFlowIntegration:
             assert len(shuffled_uris) == 10
             assert shuffled_uris[:2] == current_uris[:2]  # First 2 preserved
 
-            # 6. Exercise the change check. Whether it reports a change
-            #    depends on the unseeded shuffle, so there is nothing to
-            #    assert here -- shuffle_changed_order has its own tests.
-            ShuffleService.shuffle_changed_order(current_uris, shuffled_uris)
-
-            # 7. Record new state
+            # 6. Record new state
             StateService.record_new_state(mock_session, 'playlist123', shuffled_uris)
 
-            # 8. Verify can undo
+            # 7. Verify can undo
             assert StateService.can_undo(mock_session, 'playlist123')
 
-            # 9. Undo
+            # 8. Undo
             restored = StateService.undo(mock_session, 'playlist123')
             assert restored == current_uris
 
-            # 10. Verify cannot undo further
+            # 9. Verify cannot undo further
             assert not StateService.can_undo(mock_session, 'playlist123')
 
 

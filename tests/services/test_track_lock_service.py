@@ -1,10 +1,10 @@
 """
 Tests for TrackLockService.
 
-Covers toggle_lock, set_lock, unlock, bulk_unlock,
+Covers toggle_lock, unlock, bulk_unlock,
 get_locks_for_playlist, get_locked_positions,
-get_locked_uris, is_locked, cleanup_expired,
-update_positions_after_reorder, and safe_reconcile_positions.
+get_locked_uris, update_positions_after_reorder,
+and safe_reconcile_positions.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -48,6 +48,26 @@ TRACK_B = "spotify:track:trackB"
 TRACK_C = "spotify:track:trackC"
 
 
+def add_lock(user, track_uri, position, tier):
+    """Arrange a lock row directly; a standard lock expires on schedule."""
+    expires_at = None
+    if tier == LockTier.STANDARD:
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            days=TrackLock.STANDARD_EXPIRY_DAYS
+        )
+    db.session.add(
+        TrackLock(
+            user_id=user.id,
+            spotify_playlist_id=PLAYLIST_ID,
+            track_uri=track_uri,
+            position=position,
+            lock_tier=tier,
+            expires_at=expires_at,
+        )
+    )
+    db.session.commit()
+
+
 class TestToggleLock:
     """Tests for toggle_lock (cycle: unlocked -> standard -> super -> unlocked)."""
 
@@ -89,9 +109,9 @@ class TestToggleLock:
         )
         assert result is None
 
-        assert not TrackLockService.is_locked(
-            test_user.id, PLAYLIST_ID, TRACK_A
-        )
+        assert TrackLockService.get_locked_uris(
+            test_user.id, PLAYLIST_ID
+        ) == set()
 
     def test_toggle_expired_lock_creates_new_standard(
         self, app_ctx, test_user
@@ -116,57 +136,18 @@ class TestToggleLock:
         assert result["lock_tier"] == LockTier.STANDARD
 
 
-class TestSetLock:
-    """Tests for set_lock."""
-
-    def test_set_standard_lock(self, app_ctx, test_user):
-        result = TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_A,
-            0, LockTier.STANDARD,
-        )
-        assert result["lock_tier"] == LockTier.STANDARD
-        assert result["expires_at"] is not None
-
-    def test_set_super_lock(self, app_ctx, test_user):
-        result = TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_A,
-            0, LockTier.SUPER,
-        )
-        assert result["lock_tier"] == LockTier.SUPER
-        assert result["expires_at"] is None
-
-    def test_update_existing_lock(self, app_ctx, test_user):
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_A,
-            0, LockTier.STANDARD,
-        )
-        result = TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_A,
-            0, LockTier.SUPER,
-        )
-        assert result["lock_tier"] == LockTier.SUPER
-
-        locks = TrackLockService.get_locks_for_playlist(
-            test_user.id, PLAYLIST_ID
-        )
-        assert len(locks) == 1
-
-
 class TestUnlock:
     """Tests for unlock and bulk_unlock."""
 
     def test_unlock_existing(self, app_ctx, test_user):
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_A,
-            0, LockTier.STANDARD,
-        )
+        add_lock(test_user, TRACK_A, 0, LockTier.STANDARD)
         removed = TrackLockService.unlock(
             test_user.id, PLAYLIST_ID, TRACK_A
         )
         assert removed is True
-        assert not TrackLockService.is_locked(
-            test_user.id, PLAYLIST_ID, TRACK_A
-        )
+        assert TrackLockService.get_locked_uris(
+            test_user.id, PLAYLIST_ID
+        ) == set()
 
     def test_unlock_nonexistent_returns_false(
         self, app_ctx, test_user
@@ -177,35 +158,23 @@ class TestUnlock:
         assert removed is False
 
     def test_bulk_unlock_all(self, app_ctx, test_user):
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_A,
-            0, LockTier.STANDARD,
-        )
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_B,
-            1, LockTier.SUPER,
-        )
+        add_lock(test_user, TRACK_A, 0, LockTier.STANDARD)
+        add_lock(test_user, TRACK_B, 1, LockTier.SUPER)
         count = TrackLockService.bulk_unlock(
             test_user.id, PLAYLIST_ID
         )
         assert count == 2
 
     def test_bulk_unlock_specific(self, app_ctx, test_user):
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_A,
-            0, LockTier.STANDARD,
-        )
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_B,
-            1, LockTier.SUPER,
-        )
+        add_lock(test_user, TRACK_A, 0, LockTier.STANDARD)
+        add_lock(test_user, TRACK_B, 1, LockTier.SUPER)
         count = TrackLockService.bulk_unlock(
             test_user.id, PLAYLIST_ID, [TRACK_A]
         )
         assert count == 1
-        assert TrackLockService.is_locked(
-            test_user.id, PLAYLIST_ID, TRACK_B
-        )
+        assert TrackLockService.get_locked_uris(
+            test_user.id, PLAYLIST_ID
+        ) == {TRACK_B}
 
 
 class TestGetLocks:
@@ -214,10 +183,7 @@ class TestGetLocks:
     def test_get_locks_excludes_expired(
         self, app_ctx, test_user
     ):
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_A,
-            0, LockTier.SUPER,
-        )
+        add_lock(test_user, TRACK_A, 0, LockTier.SUPER)
         # Create an expired lock directly
         expired_lock = TrackLock(
             user_id=test_user.id,
@@ -240,110 +206,36 @@ class TestGetLocks:
     def test_get_locked_positions(
         self, app_ctx, test_user
     ):
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_A,
-            0, LockTier.STANDARD,
-        )
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_B,
-            3, LockTier.SUPER,
-        )
+        add_lock(test_user, TRACK_A, 0, LockTier.STANDARD)
+        add_lock(test_user, TRACK_B, 3, LockTier.SUPER)
         positions = TrackLockService.get_locked_positions(
             test_user.id, PLAYLIST_ID
         )
         assert positions == {0: TRACK_A, 3: TRACK_B}
 
     def test_get_locked_uris(self, app_ctx, test_user):
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_A,
-            0, LockTier.STANDARD,
-        )
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_B,
-            1, LockTier.SUPER,
-        )
+        add_lock(test_user, TRACK_A, 0, LockTier.STANDARD)
+        add_lock(test_user, TRACK_B, 1, LockTier.SUPER)
         uris = TrackLockService.get_locked_uris(
             test_user.id, PLAYLIST_ID
         )
         assert uris == {TRACK_A, TRACK_B}
 
-    def test_is_locked(self, app_ctx, test_user):
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_A,
-            0, LockTier.STANDARD,
-        )
-        assert TrackLockService.is_locked(
-            test_user.id, PLAYLIST_ID, TRACK_A
-        )
-        assert not TrackLockService.is_locked(
-            test_user.id, PLAYLIST_ID, TRACK_B
-        )
-
     def test_locks_isolated_between_users(
         self, app_ctx, test_user, other_user
     ):
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_A,
-            0, LockTier.STANDARD,
-        )
-        assert not TrackLockService.is_locked(
-            other_user.id, PLAYLIST_ID, TRACK_A
-        )
-
-
-class TestCleanupExpired:
-    """Tests for cleanup_expired."""
-
-    def test_deletes_expired_standard_locks(
-        self, app_ctx, test_user
-    ):
-        # Active standard lock
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_A,
-            0, LockTier.STANDARD,
-        )
-        # Expired standard lock
-        expired = TrackLock(
-            user_id=test_user.id,
-            spotify_playlist_id=PLAYLIST_ID,
-            track_uri=TRACK_B,
-            position=1,
-            lock_tier=LockTier.STANDARD,
-            expires_at=datetime.now(timezone.utc)
-            - timedelta(days=1),
-        )
-        db.session.add(expired)
-        db.session.commit()
-
-        count = TrackLockService.cleanup_expired()
-        assert count == 1
-        assert TrackLockService.is_locked(
-            test_user.id, PLAYLIST_ID, TRACK_A
-        )
-
-    def test_super_locks_not_deleted(
-        self, app_ctx, test_user
-    ):
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_A,
-            0, LockTier.SUPER,
-        )
-        count = TrackLockService.cleanup_expired()
-        assert count == 0
+        add_lock(test_user, TRACK_A, 0, LockTier.STANDARD)
+        assert TrackLockService.get_locked_uris(
+            other_user.id, PLAYLIST_ID
+        ) == set()
 
 
 class TestUpdatePositions:
     """Tests for update_positions_after_reorder."""
 
     def test_updates_positions(self, app_ctx, test_user):
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_A,
-            0, LockTier.STANDARD,
-        )
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_B,
-            1, LockTier.SUPER,
-        )
+        add_lock(test_user, TRACK_A, 0, LockTier.STANDARD)
+        add_lock(test_user, TRACK_B, 1, LockTier.SUPER)
 
         # Reverse order
         new_order = [TRACK_B, TRACK_A]
@@ -362,14 +254,8 @@ class TestUpdatePositions:
     def test_deletes_orphaned_locks(
         self, app_ctx, test_user
     ):
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_A,
-            0, LockTier.STANDARD,
-        )
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_B,
-            1, LockTier.SUPER,
-        )
+        add_lock(test_user, TRACK_A, 0, LockTier.STANDARD)
+        add_lock(test_user, TRACK_B, 1, LockTier.SUPER)
 
         # Track B removed from playlist
         new_order = [TRACK_A]
@@ -377,12 +263,9 @@ class TestUpdatePositions:
             test_user.id, PLAYLIST_ID, new_order
         )
 
-        assert TrackLockService.is_locked(
-            test_user.id, PLAYLIST_ID, TRACK_A
-        )
-        assert not TrackLockService.is_locked(
-            test_user.id, PLAYLIST_ID, TRACK_B
-        )
+        assert TrackLockService.get_locked_uris(
+            test_user.id, PLAYLIST_ID
+        ) == {TRACK_A}
 
     def test_no_locks_returns_zero(
         self, app_ctx, test_user
@@ -402,14 +285,8 @@ class TestSafeReconcilePositions:
     def test_reconciles_positions_like_update_positions_after_reorder(
         self, app_ctx, test_user
     ):
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_A,
-            0, LockTier.STANDARD,
-        )
-        TrackLockService.set_lock(
-            test_user.id, PLAYLIST_ID, TRACK_B,
-            1, LockTier.SUPER,
-        )
+        add_lock(test_user, TRACK_A, 0, LockTier.STANDARD)
+        add_lock(test_user, TRACK_B, 1, LockTier.SUPER)
 
         TrackLockService.safe_reconcile_positions(
             test_user.id, PLAYLIST_ID, [TRACK_B, TRACK_A]

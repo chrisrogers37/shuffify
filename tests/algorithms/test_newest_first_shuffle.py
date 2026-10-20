@@ -35,11 +35,6 @@ class TestNewestFirstShuffleProperties:
         assert params["jitter"]["min"] == 1
         assert params["jitter"]["max"] == 50
 
-    def test_requires_features_is_false(self):
-        """Should not require audio features."""
-        algo = NewestFirstShuffle()
-        assert algo.requires_features is False
-
 
 class TestNewestFirstShuffleSorting:
     """Tests for date-based sorting behavior."""

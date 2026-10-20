@@ -33,10 +33,6 @@ class ArtistSpacingShuffle(ShuffleAlgorithm):
             }
         }
 
-    @property
-    def requires_features(self) -> bool:
-        return False
-
     def _get_artist_name(self, track: Dict[str, Any]) -> str:
         """Extract the primary artist name from a track."""
         artists = track.get("artists", [])

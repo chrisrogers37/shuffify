@@ -27,10 +27,6 @@ class BasicShuffle(ShuffleAlgorithm):
             }
         }
 
-    @property
-    def requires_features(self) -> bool:
-        return False
-
     def shuffle(
         self,
         tracks: List[Dict[str, Any]],

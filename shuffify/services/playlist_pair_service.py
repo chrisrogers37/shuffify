@@ -5,10 +5,7 @@ Service for managing playlist pairs (production + archive).
 import logging
 
 from shuffify.models.db import PlaylistPair, db
-from shuffify.services.base import (
-    commit_or_stage,
-    create_private_playlist,
-)
+from shuffify.services.base import commit_or_stage
 from shuffify.services.playlist_lock import locked_commit_target
 
 logger = logging.getLogger(__name__)
@@ -193,40 +190,3 @@ class PlaylistPairService:
             production_playlist_id,
         )
         return len(track_uris)
-
-    @staticmethod
-    def remove_from_archive(api, archive_playlist_id, track_uris):
-        """Remove tracks from archive playlist only.
-
-        Unlike unarchive_tracks(), does NOT add to production.
-        Used after workshop commit has already added the tracks.
-        Returns the number of tracks removed.
-        """
-        if not track_uris:
-            return 0
-
-        api.playlist_remove_items(
-            archive_playlist_id, track_uris
-        )
-
-        logger.info(
-            "Removed %d tracks from archive %s",
-            len(track_uris),
-            archive_playlist_id,
-        )
-        return len(track_uris)
-
-    @staticmethod
-    def create_archive_playlist(api, name):
-        """Create a new private Spotify playlist for archiving.
-
-        Returns (playlist_id, playlist_name).
-        """
-        return create_private_playlist(
-            api,
-            name,
-            suffix="Archive",
-            description=(
-                "Archive playlist for removed tracks"
-            ),
-        )

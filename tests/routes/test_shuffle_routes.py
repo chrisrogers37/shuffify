@@ -149,7 +149,7 @@ def test_rejected_undo_preserves_exact_revision_for_explicit_retry(auth_client, 
         assert data["operation"]["resources"][0]["dispatched"] is True
         assert "private" not in str(data)
         with auth_client.session_transaction() as session:
-            assert StateService.get_state_info(session, "playlist123")["current_index"] == 2
+            assert StateService.get_playlist_state(session, "playlist123").current_index == 2
         response = post_and_run(auth_client, api, api_path("/undo/playlist123"))
     assert response.status_code == 200
     assert response.get_json()["playlist_state"]["current_index"] == 1
@@ -179,5 +179,5 @@ def test_uncertain_undo_never_consumes_or_replays_history(auth_client, api, erro
     assert response.get_json()["success"] is False
     assert response.get_json()["operation"]["aggregate_status"] == "unknown"
     with auth_client.session_transaction() as session:
-        assert StateService.get_state_info(session, "playlist123")["current_index"] == 2
+        assert StateService.get_playlist_state(session, "playlist123").current_index == 2
     assert len(api.writes) == 1

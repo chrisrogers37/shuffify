@@ -6,10 +6,9 @@ and entity ownership verification. Used across all service modules.
 """
 
 import logging
-from typing import Optional, Tuple, Type
+from typing import Optional, Type
 
 from shuffify.models.db import User, db
-from shuffify.spotify.exceptions import SpotifyWriteUnverifiedError
 
 logger = logging.getLogger(__name__)
 
@@ -153,44 +152,3 @@ def ensure_private(api, playlist_id: str) -> bool:
         )
         return False
     return True
-
-
-def create_private_playlist(
-    api,
-    base_name: str,
-    suffix: str,
-    description: str,
-) -> Tuple[str, str]:
-    """
-    Create a private Spotify playlist with a standard naming
-    convention: ``{base_name} [{suffix}]``.
-
-    Works around a Spotify API quirk where ``public=False`` on
-    create may be ignored if the user's account defaults to
-    public: ``ensure_private`` forces private visibility, and a
-    failure there is logged without failing the creation.
-
-    Returns:
-        (playlist_id, playlist_name) tuple.
-
-    Raises:
-        SpotifyWriteUnverifiedError: Spotify's answer was lost or
-            carried no playlist ID, so the playlist may exist.
-    """
-    playlist_name = f"{base_name} [{suffix}]"
-    result = api.create_user_playlist(
-        playlist_name,
-        public=False,
-        description=description,
-    )
-    playlist_id = result.get("id") if isinstance(result, dict) else None
-    if not isinstance(playlist_id, str) or not playlist_id:
-        # Spotify answered without a usable ID, so the playlist may exist unseen.
-        raise SpotifyWriteUnverifiedError("Spotify answered a playlist creation without an ID")
-    ensure_private(api, playlist_id)
-    logger.info(
-        "Created playlist '%s' (%s)",
-        playlist_name,
-        playlist_id,
-    )
-    return playlist_id, playlist_name

@@ -36,11 +36,6 @@ class TestAlbumSequenceShuffleProperties:
         assert "yes" in params["shuffle_within_albums"]["options"]
         assert "no" in params["shuffle_within_albums"]["options"]
 
-    def test_requires_features_is_false(self):
-        """Should not require audio features."""
-        algo = AlbumSequenceShuffle()
-        assert algo.requires_features is False
-
 
 class TestAlbumSequenceShuffleShuffle:
     """Tests for AlbumSequenceShuffle.shuffle method."""

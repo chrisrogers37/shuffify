@@ -25,7 +25,7 @@ from werkzeug.serving import make_server
 
 from harness.fake_spotify import create_app, spotify_id, tokens
 from shuffify.routes.playlist_pairs import PLAYLIST_ITEM_FIELDS
-from shuffify.services.base import create_private_playlist
+from shuffify.services.base import ensure_private
 from shuffify.services.playlist_service import PlaylistAccessError, PlaylistService, scrape_playlist_metadata
 from shuffify.services.source_resolver import public_scraper_pathway
 from shuffify.services.source_resolver.public_scraper_pathway import PublicScraperPathway
@@ -294,17 +294,19 @@ def test_change_details_is_a_success_with_no_body(api, store):
 
 
 def test_create_a_private_playlist_without_stalling(api, store):
-    """The create-then-force-private sequence shuffify uses for archives.
+    """The create-then-force-private sequence shuffify uses for new playlists.
 
-    Its follow-up "force private" PUT is the call above. create_private_playlist
+    Its follow-up "force private" PUT is the call above. ensure_private
     catches every exception, so only the fixture's backoff check would notice
     it retrying.
     """
     started = time.monotonic()
-    playlist_id, name = create_private_playlist(api, "Morning Mix", "Archive", "Archived tracks")
+    created = api.create_user_playlist("Morning Mix [Archive]", public=False, description="Archived tracks")
+    playlist_id = created["id"]
+    assert ensure_private(api, playlist_id) is True
     assert time.monotonic() - started < 5
     playlist = store.playlists[playlist_id]
-    assert (playlist.name, playlist.owner, playlist.public) == (name, "alice", False)
+    assert (playlist.name, playlist.owner, playlist.public) == ("Morning Mix [Archive]", "alice", False)
 
 
 # ---------------------------------------------------------------------------

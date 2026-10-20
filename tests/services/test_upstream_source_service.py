@@ -202,26 +202,6 @@ class TestUpstreamSourceServiceDelete:
 class TestUpstreamSourceServiceLimits:
     """Tests for source count limits."""
 
-    def test_count_sources(self, app_ctx):
-        """Should count sources per target."""
-        UpstreamSourceService.add_source(
-            "user123", "target_1", "src_a"
-        )
-        UpstreamSourceService.add_source(
-            "user123", "target_1", "src_b"
-        )
-        count = UpstreamSourceService.count_sources(
-            "user123", "target_1"
-        )
-        assert count == 2
-
-    def test_count_sources_empty(self, app_ctx):
-        """Should return 0 for no sources."""
-        count = UpstreamSourceService.count_sources(
-            "user123", "target_1"
-        )
-        assert count == 0
-
     def test_add_source_at_limit_raises(self, app_ctx):
         """Should raise UpstreamSourceLimitError at limit."""
         limit = (
@@ -329,9 +309,9 @@ class TestStagedWrites:
             search = UpstreamSourceService.add_search_source("user123", "t1", "lofi", commit=False)
         commit.assert_not_called()
         assert source.id is not None and search.id is not None
-        assert UpstreamSourceService.count_sources("user123", "t1") == 2
+        assert len(UpstreamSourceService.list_sources("user123", "t1")) == 2
         db.session.rollback()
-        assert UpstreamSourceService.count_sources("user123", "t1") == 0
+        assert UpstreamSourceService.list_sources("user123", "t1") == []
 
     def test_staged_count_and_delete_flush_without_committing(self, app_ctx):
         user = User.query.filter_by(spotify_id="user123").one()
@@ -341,7 +321,7 @@ class TestStagedWrites:
             assert staged.raid_count == 9
             assert UpstreamSourceService.delete_source(source.id, "user123", "t1", commit=False) is True
         commit.assert_not_called()
-        assert UpstreamSourceService.count_sources("user123", "t1") == 0
+        assert UpstreamSourceService.list_sources("user123", "t1") == []
         db.session.rollback()
         assert db.session.get(UpstreamSource, source.id).raid_count == 5
 
@@ -350,6 +330,6 @@ class TestStagedWrites:
             UpstreamSourceService.add_source("user123", "t1", f"s{index}", commit=False)
         with pytest.raises(UpstreamSourceLimitError):
             UpstreamSourceService.add_search_source("user123", "t1", "one too many", commit=False)
-        assert UpstreamSourceService.count_sources("user123", "t1") == 10
+        assert len(UpstreamSourceService.list_sources("user123", "t1")) == 10
         db.session.rollback()
-        assert UpstreamSourceService.count_sources("user123", "t1") == 0
+        assert UpstreamSourceService.list_sources("user123", "t1") == []

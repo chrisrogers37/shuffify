@@ -2,7 +2,7 @@
 Tests for PlaylistPairService.
 
 Tests cover CRUD operations for playlist pairs, archive/unarchive
-track logic, archive playlist creation, and to_dict serialization.
+track logic, and to_dict serialization.
 """
 
 from unittest.mock import MagicMock, patch
@@ -49,10 +49,6 @@ def mock_api():
     api = MagicMock(spec=SpotifyAPI)
     api.playlist_add_items.return_value = None
     api.playlist_remove_items.return_value = None
-    api.create_user_playlist.return_value = {
-        "id": "new_archive_id",
-        "name": "My Playlist [Archive]",
-    }
     return api
 
 
@@ -320,83 +316,6 @@ class TestUnarchiveTracks:
         )
         assert count == 0
         mock_api.playlist_add_items.assert_not_called()
-
-
-# =============================================================================
-# Remove From Archive (finalize restore)
-# =============================================================================
-
-
-class TestRemoveFromArchive:
-    """Tests for PlaylistPairService.remove_from_archive."""
-
-    def test_remove_success(self, mock_api):
-        uris = ["spotify:track:a1b2c3d4e5f6g7h8i9j0k1"]
-        count = PlaylistPairService.remove_from_archive(
-            mock_api, "arch1", uris
-        )
-        assert count == 1
-        mock_api.playlist_remove_items \
-            .assert_called_once_with("arch1", uris)
-
-    def test_remove_does_not_add_to_production(
-        self, mock_api
-    ):
-        uris = ["spotify:track:a1b2c3d4e5f6g7h8i9j0k1"]
-        PlaylistPairService.remove_from_archive(
-            mock_api, "arch1", uris
-        )
-        mock_api.playlist_add_items.assert_not_called()
-
-    def test_remove_empty_list(self, mock_api):
-        count = PlaylistPairService.remove_from_archive(
-            mock_api, "arch1", []
-        )
-        assert count == 0
-        mock_api.playlist_remove_items.assert_not_called()
-
-    def test_remove_multiple_tracks(self, mock_api):
-        uris = [
-            "spotify:track:a1b2c3d4e5f6g7h8i9j0k1",
-            "spotify:track:b2c3d4e5f6g7h8i9j0k1l2",
-            "spotify:track:c3d4e5f6g7h8i9j0k1l2m3",
-        ]
-        count = PlaylistPairService.remove_from_archive(
-            mock_api, "arch1", uris
-        )
-        assert count == 3
-        mock_api.playlist_remove_items \
-            .assert_called_once_with("arch1", uris)
-
-
-# =============================================================================
-# Create Archive Playlist
-# =============================================================================
-
-
-class TestCreateArchivePlaylist:
-    """Tests for PlaylistPairService.create_archive_playlist."""
-
-    def test_create_success(self, mock_api):
-        pid, pname = PlaylistPairService.create_archive_playlist(
-            mock_api, "My Playlist"
-        )
-        assert pid == "new_archive_id"
-        assert pname == "My Playlist [Archive]"
-        mock_api.create_user_playlist.assert_called_once_with(
-            "My Playlist [Archive]",
-            public=False,
-            description="Archive playlist for removed tracks",
-        )
-
-    def test_create_api_error(self, mock_api):
-        mock_api.create_user_playlist.side_effect = Exception(
-            "API error"
-        )
-        with pytest.raises(Exception, match="API error"):
-            PlaylistPairService.create_archive_playlist(
-                mock_api, "Test"
-            )
 
 
 # =============================================================================

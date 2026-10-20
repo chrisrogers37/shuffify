@@ -40,26 +40,6 @@ def _create_redis_client(redis_url: str) -> redis.Redis:
     return redis.from_url(redis_url, decode_responses=False)
 
 
-def get_redis_client() -> Optional[redis.Redis]:
-    """
-    Get the global Redis client for caching.
-
-    Returns:
-        Redis client if configured, None otherwise.
-    """
-    return _redis_client
-
-
-def get_limiter() -> Optional[Limiter]:
-    """
-    Get the global Flask-Limiter instance.
-
-    Returns:
-        Limiter instance if initialized, None otherwise.
-    """
-    return _limiter
-
-
 def get_spotify_cache():
     """
     Get a SpotifyCache instance for Spotify API caching.

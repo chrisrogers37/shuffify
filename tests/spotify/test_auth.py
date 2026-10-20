@@ -449,32 +449,6 @@ class TestSpotifyAuthManagerEnsureValidToken:
         assert not result.is_expired
 
 
-class TestSpotifyAuthManagerValidateToken:
-    """Tests for validate_token method."""
-
-    def test_validate_token_returns_true_for_valid(
-        self, auth_manager, valid_token_data
-    ):
-        """Should return True for valid token structure."""
-        result = auth_manager.validate_token(valid_token_data)
-        assert result is True
-
-    def test_validate_token_returns_false_for_none(self, auth_manager):
-        """Should return False for None."""
-        result = auth_manager.validate_token(None)
-        assert result is False
-
-    def test_validate_token_returns_false_for_empty_dict(self, auth_manager):
-        """Should return False for empty dict."""
-        result = auth_manager.validate_token({})
-        assert result is False
-
-    def test_validate_token_returns_false_for_missing_fields(self, auth_manager):
-        """Should return False for missing required fields."""
-        result = auth_manager.validate_token({"token_type": "Bearer"})
-        assert result is False
-
-
 class TestSpotifyAuthManagerRevokeToken:
     """Tests for revoke_token method (RFC 7009 best-effort)."""
 

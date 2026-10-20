@@ -30,10 +30,6 @@ class AlbumSequenceShuffle(ShuffleAlgorithm):
             }
         }
 
-    @property
-    def requires_features(self) -> bool:
-        return False
-
     def _get_album_name(self, track: Dict[str, Any]) -> str:
         """Extract album name from a track."""
         album = track.get("album")

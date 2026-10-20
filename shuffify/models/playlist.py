@@ -88,36 +88,6 @@ class Playlist:
         """Check if features were loaded."""
         return bool(self.audio_features)
 
-    def get_feature_stats(self) -> Dict[str, Any]:
-        """Aggregate simple statistics over key audio features."""
-        if not self.audio_features:
-            return {}
-
-        feature_keys = ["tempo", "energy", "valence", "danceability"]
-        stats = {
-            key: {"min": float("inf"), "max": float("-inf"), "sum": 0}
-            for key in feature_keys
-        }
-        count = 0
-
-        for features in self.audio_features.values():
-            count += 1
-            for key in feature_keys:
-                if key in features:
-                    value = features[key]
-                    stats[key]["min"] = min(stats[key]["min"], value)
-                    stats[key]["max"] = max(stats[key]["max"], value)
-                    stats[key]["sum"] += value
-
-        if count == 0:
-            return {}
-
-        for key in stats:
-            stats[key]["avg"] = stats[key]["sum"] / count
-            del stats[key]["sum"]
-
-        return stats
-
     def to_dict(self) -> Dict[str, Any]:
         """Convert Playlist to dictionary."""
         return {

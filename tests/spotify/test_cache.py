@@ -417,66 +417,6 @@ class TestSpotifyCacheInvalidation:
         assert result is False
 
 
-class TestSpotifyCacheClearAll:
-    """Test clear all cache operation."""
-
-    def test_clear_all_success(self):
-        """Test clearing all cache entries."""
-        mock_redis = Mock(spec=redis.Redis)
-        # Simulate scan returning keys then stopping
-        mock_redis.scan.side_effect = [
-            (123, [b'shuffify:cache:user:1', b'shuffify:cache:playlist:1']),
-            (0, [b'shuffify:cache:tracks:1']),  # cursor=0 means done
-        ]
-
-        cache = SpotifyCache(mock_redis)
-        result = cache.clear_all()
-
-        assert result is True
-        assert mock_redis.delete.call_count == 2
-
-    def test_clear_all_empty(self):
-        """Test clearing empty cache."""
-        mock_redis = Mock(spec=redis.Redis)
-        mock_redis.scan.return_value = (0, [])
-
-        cache = SpotifyCache(mock_redis)
-        result = cache.clear_all()
-
-        assert result is True
-        mock_redis.delete.assert_not_called()
-
-    def test_clear_all_redis_error(self):
-        """Test handling Redis error on clear."""
-        mock_redis = Mock(spec=redis.Redis)
-        mock_redis.scan.side_effect = redis.RedisError("Connection failed")
-
-        cache = SpotifyCache(mock_redis)
-        result = cache.clear_all()
-
-        assert result is False
-
-
-class TestSpotifyCacheConnection:
-    """Test cache connection checks."""
-
-    def test_is_connected_true(self):
-        """Test is_connected returns True when connected."""
-        mock_redis = Mock(spec=redis.Redis)
-        mock_redis.ping.return_value = True
-
-        cache = SpotifyCache(mock_redis)
-        assert cache.is_connected() is True
-
-    def test_is_connected_false(self):
-        """Test is_connected returns False when disconnected."""
-        mock_redis = Mock(spec=redis.Redis)
-        mock_redis.ping.side_effect = redis.RedisError("Connection failed")
-
-        cache = SpotifyCache(mock_redis)
-        assert cache.is_connected() is False
-
-
 # =============================================================================
 # Additional Edge Case Tests for Full Coverage
 # =============================================================================

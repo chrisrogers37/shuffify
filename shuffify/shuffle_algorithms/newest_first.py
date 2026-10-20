@@ -39,10 +39,6 @@ class NewestFirstShuffle(ShuffleAlgorithm):
             }
         }
 
-    @property
-    def requires_features(self) -> bool:
-        return False
-
     def _parse_added_at(self, value: Optional[str]) -> datetime:
         """Parse ISO 8601 added_at timestamp.
 
