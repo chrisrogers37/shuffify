@@ -307,18 +307,32 @@ def test_a_lost_acknowledgment_fence_is_not_swallowed_by_api_or_service(kind, mo
     assert runtime.history == {}
 
 
-def test_a_known_first_batch_rejection_retains_zero_effect_retryable_facts(monkeypatch):
-    from shuffify.spotify.exceptions import SpotifyWriteRejectedError
+@pytest.mark.parametrize(
+    ('error_name', 'status'),
+    [
+        ('SpotifyTokenExpiredError', 401),
+        ('SpotifyForbiddenError', 403),
+        ('SpotifyNotFoundError', 404),
+        ('SpotifyQuotaExceededError', 429),
+        ('SpotifyWriteRejectedError', 502),
+    ],
+)
+def test_a_known_first_batch_rejection_retains_zero_effect_retryable_facts(monkeypatch, error_name, status):
+    from shuffify.spotify import exceptions
 
+    rejection = getattr(exceptions, error_name)('private provider detail')
     world = World([uri(1), uri(2)])
     world.playlists['target']['metadata']['description'] = None
     api, runtime = api_for(world), Runtime(world)
-    runtime.journal.dispatch = lambda *args: (_ for _ in ()).throw(SpotifyWriteRejectedError('known rejection'))
+    runtime.journal.dispatch = lambda *args: (_ for _ in ()).throw(rejection)
     monkeypatch.setattr(
         'shuffify.services.live_playlist_service.ShuffleService.execute', lambda *a, **k: [uri(2), uri(1)])
     with runtime.journal.observe():
         result = LivePlaylistService(api).shuffle('target', runtime.user, runtime.history,
                                                 algorithm='BasicShuffle', params={}, runtime=runtime)
+    assert result['http_status'] == status
+    assert result['operation']['error_code'] == 'write_rejected'
+    assert 'private' not in str(result)
     assert result['operation']['aggregate_status'] == 'partial'
     assert result['operation']['retryable'] is True
     resource = result['operation']['resources'][0]
