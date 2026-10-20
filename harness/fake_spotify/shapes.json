@@ -306,23 +306,6 @@
         "429": "TooManyRequests"
       }
     },
-    "GET /audio-features": {
-      "deprecated": true,
-      "scopes": [],
-      "query": {
-        "ids": {
-          "type": "string",
-          "required": true
-        }
-      },
-      "body": null,
-      "responses": {
-        "200": "ManyAudioFeatures",
-        "401": "Unauthorized",
-        "403": "Forbidden",
-        "429": "TooManyRequests"
-      }
-    },
     "GET /search": {
       "deprecated": false,
       "scopes": [],
@@ -437,72 +420,6 @@
         },
         "uri": {
           "type": "string"
-        }
-      }
-    },
-    "AudioFeaturesObject": {
-      "type": "object",
-      "properties": {
-        "acousticness": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 1.0
-        },
-        "analysis_url": {
-          "type": "string"
-        },
-        "danceability": {
-          "type": "number"
-        },
-        "duration_ms": {
-          "type": "integer"
-        },
-        "energy": {
-          "type": "number"
-        },
-        "id": {
-          "type": "string"
-        },
-        "instrumentalness": {
-          "type": "number"
-        },
-        "key": {
-          "$ref": "Key"
-        },
-        "liveness": {
-          "type": "number"
-        },
-        "loudness": {
-          "$ref": "Loudness"
-        },
-        "mode": {
-          "$ref": "Mode"
-        },
-        "speechiness": {
-          "type": "number"
-        },
-        "tempo": {
-          "$ref": "Tempo"
-        },
-        "time_signature": {
-          "$ref": "TimeSignature"
-        },
-        "track_href": {
-          "type": "string"
-        },
-        "type": {
-          "type": "string",
-          "enum": [
-            "audio_features"
-          ]
-        },
-        "uri": {
-          "type": "string"
-        },
-        "valence": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
         }
       }
     },
@@ -729,31 +646,6 @@
         "url",
         "width"
       ]
-    },
-    "Key": {
-      "type": "integer",
-      "minimum": -1,
-      "maximum": 11
-    },
-    "Loudness": {
-      "type": "number"
-    },
-    "ManyAudioFeatures": {
-      "type": "object",
-      "properties": {
-        "audio_features": {
-          "type": "array",
-          "items": {
-            "$ref": "AudioFeaturesObject"
-          }
-        }
-      },
-      "required": [
-        "audio_features"
-      ]
-    },
-    "Mode": {
-      "type": "integer"
     },
     "NarratorObject": {
       "type": "object",
@@ -1772,14 +1664,6 @@
         "type",
         "uri"
       ]
-    },
-    "Tempo": {
-      "type": "number"
-    },
-    "TimeSignature": {
-      "type": "integer",
-      "minimum": 3,
-      "maximum": 7
     },
     "TooManyRequests": {
       "type": "object",

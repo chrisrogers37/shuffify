@@ -1,5 +1,5 @@
 import random
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from . import ShuffleAlgorithm
 from .utils import extract_uris
@@ -37,7 +37,6 @@ class PercentageShuffle(ShuffleAlgorithm):
     def shuffle(
         self,
         tracks: List[Dict[str, Any]],
-        features: Optional[Dict[str, Dict[str, Any]]] = None,
         **kwargs,
     ) -> List[str]:
         """
@@ -45,7 +44,6 @@ class PercentageShuffle(ShuffleAlgorithm):
 
         Args:
             tracks: List of track dictionaries from Spotify API
-            features: Optional dictionary of track URIs to audio features (unused in percentage shuffle)
             **kwargs: Additional parameters
                 - shuffle_percentage: Percentage of tracks to shuffle (0-100)
                 - shuffle_location: Location to shuffle ('front' or 'back')

@@ -147,24 +147,6 @@ class ShuffleRequest(BaseModel):
         return {name: getattr(self, name) for name in param_names}
 
 
-class PlaylistQueryParams(BaseModel):
-    """Query parameters for playlist endpoints."""
-
-    features: bool = Field(
-        default=False, description="Whether to include audio features for tracks"
-    )
-
-    @field_validator("features", mode="before")
-    @classmethod
-    def parse_bool(cls, v: Any) -> bool:
-        """Parse boolean from string query parameter."""
-        if isinstance(v, bool):
-            return v
-        if isinstance(v, str):
-            return v.lower() in ("true", "t", "yes", "y", "1")
-        return bool(v)
-
-
 def parse_shuffle_request(form_data: Dict[str, Any]) -> ShuffleRequest:
     """
     Parse and validate shuffle request from form data.

@@ -61,7 +61,7 @@ def page_reads(monkeypatch):
         calls.append(skip_cache)
         return copy.deepcopy(playlists)
 
-    def load_playlist(_service, playlist_id, include_features=False):
+    def load_playlist(_service, playlist_id):
         if playlist_id not in {row["id"] for row in playlists}:
             raise PlaylistNotFoundError("Playlist not found.")
         return Playlist(

@@ -143,22 +143,6 @@ def sample_track_uris(sample_tracks):
     return [track["uri"] for track in sample_tracks]
 
 
-@pytest.fixture
-def sample_audio_features():
-    """Sample audio features for tracks."""
-    return {
-        f"track{i}": {
-            "tempo": 120.0 + i,
-            "energy": 0.5 + (i * 0.05),
-            "valence": 0.6 + (i * 0.03),
-            "danceability": 0.7 + (i * 0.02),
-            "acousticness": 0.3,
-            "instrumentalness": 0.1,
-        }
-        for i in range(1, 11)
-    }
-
-
 # =============================================================================
 # Mock Fixtures
 # =============================================================================
@@ -170,7 +154,6 @@ def mock_spotify_api(
     sample_playlists,
     sample_playlist_data,
     sample_tracks,
-    sample_audio_features,
 ):
     """A mock SpotifyAPI with pre-configured responses."""
     mock = Mock()
@@ -180,7 +163,6 @@ def mock_spotify_api(
     mock.get_user_playlists.return_value = sample_playlists
     mock.get_playlist.return_value = sample_playlist_data
     mock.get_playlist_tracks.return_value = sample_tracks
-    mock.get_audio_features.return_value = sample_audio_features
     mock.update_playlist_tracks.return_value = True
     return mock
 

@@ -139,27 +139,3 @@ class RaidLinkService:
             f"{target_playlist_id} (user {user_id})",
             RaidLinkError,
         )
-
-    @staticmethod
-    def remove_tracks_from_raid_playlist(
-        api, user_id, target_playlist_id, uris,
-    ):
-        """Remove tracks from the raid Spotify playlist.
-
-        Best-effort: logs warning on failure.
-        """
-        link = RaidLinkService.get_link_for_playlist(
-            user_id, target_playlist_id
-        )
-        if not link:
-            return
-
-        try:
-            api.playlist_remove_items(
-                link.raid_playlist_id, uris
-            )
-        except Exception as e:
-            logger.warning(
-                "Failed to remove tracks from raid "
-                "playlist: %s", e
-            )

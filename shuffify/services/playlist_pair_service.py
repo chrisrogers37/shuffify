@@ -27,7 +27,7 @@ class PlaylistPairExistsError(PlaylistPairError):
 
 
 class PlaylistPairService:
-    """Manages playlist pair CRUD and archive/unarchive operations.
+    """Manages playlist pair CRUD.
 
     Mutators take a keyword-only ``commit``: ``commit=False`` stages the change
     (it flushes, lets errors propagate and leaves the transaction to the caller),
@@ -142,51 +142,3 @@ class PlaylistPairService:
             f"{production_playlist_id} (user {user_id})",
             PlaylistPairError,
         )
-
-    @staticmethod
-    def archive_tracks(api, archive_playlist_id, track_uris):
-        """Add tracks to the archive playlist on Spotify.
-
-        Returns the number of tracks added.
-        """
-        if not track_uris:
-            return 0
-
-        api.playlist_add_items(archive_playlist_id, track_uris)
-
-        logger.info(
-            "Archived %d tracks to %s",
-            len(track_uris),
-            archive_playlist_id,
-        )
-        return len(track_uris)
-
-    @staticmethod
-    def unarchive_tracks(
-        api,
-        production_playlist_id,
-        archive_playlist_id,
-        track_uris,
-    ):
-        """Move tracks from archive back to production.
-
-        Adds to production, removes from archive.
-        Returns the number of tracks moved.
-        """
-        if not track_uris:
-            return 0
-
-        api.playlist_add_items(
-            production_playlist_id, track_uris
-        )
-        api.playlist_remove_items(
-            archive_playlist_id, track_uris
-        )
-
-        logger.info(
-            "Unarchived %d tracks from %s to %s",
-            len(track_uris),
-            archive_playlist_id,
-            production_playlist_id,
-        )
-        return len(track_uris)

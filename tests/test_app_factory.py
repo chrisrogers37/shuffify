@@ -252,7 +252,6 @@ class TestGetSpotifyCache:
         app.config["CACHE_DEFAULT_TTL"] = 300
         app.config["CACHE_PLAYLIST_TTL"] = 120  # Custom TTL
         app.config["CACHE_USER_TTL"] = 600
-        app.config["CACHE_AUDIO_FEATURES_TTL"] = 86400
 
         with app.app_context():
             result = shuffify.get_spotify_cache()
@@ -296,7 +295,6 @@ class TestConfigIntegration:
         assert hasattr(Config, "CACHE_KEY_PREFIX")
         assert hasattr(Config, "CACHE_PLAYLIST_TTL")
         assert hasattr(Config, "CACHE_USER_TTL")
-        assert hasattr(Config, "CACHE_AUDIO_FEATURES_TTL")
 
     def test_production_config_requires_redis_url(self):
         """Production config should have REDIS_URL from environment."""

@@ -1,5 +1,5 @@
 import random
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from . import ShuffleAlgorithm
 from .utils import extract_uris, split_keep_first
@@ -30,7 +30,6 @@ class BasicShuffle(ShuffleAlgorithm):
     def shuffle(
         self,
         tracks: List[Dict[str, Any]],
-        features: Optional[Dict[str, Dict[str, Any]]] = None,
         **kwargs
     ) -> List[str]:
         """
@@ -38,7 +37,6 @@ class BasicShuffle(ShuffleAlgorithm):
 
         Args:
             tracks: List of track dictionaries from Spotify API
-            features: Optional dictionary of track URIs to audio features (unused in basic shuffle)
             **kwargs: Additional parameters
                 - keep_first: Number of tracks to keep at start
 

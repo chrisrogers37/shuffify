@@ -204,12 +204,3 @@ class TestBasicShuffleEdgeCases:
         # Should have at least some unique orderings
         unique_results = set(results)
         assert len(unique_results) > 1
-
-    def test_features_parameter_is_ignored(self, algorithm):
-        """Should ignore features parameter (not used by basic shuffle)."""
-        tracks = [{'uri': f'spotify:track:{i}'} for i in range(5)]
-        features = {'track0': {'tempo': 120}}
-
-        result = algorithm.shuffle(tracks, features=features)
-
-        assert len(result) == 5

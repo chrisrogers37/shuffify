@@ -168,7 +168,7 @@ hosts at one origin. It answers every call shuffify makes:
 | Spotify host | Paths |
 |---|---|
 | `accounts.spotify.com` | `/authorize` (a page to pick a seeded user), `/api/token` |
-| `api.spotify.com` | `/v1/me`, `/v1/me/playlists` (GET, POST), `/v1/playlists/{id}` (GET, PUT), `/v1/playlists/{id}/items` (GET, POST, PUT, DELETE), `/v1/tracks/{id}`, `/v1/audio-features`, `/v1/search` |
+| `api.spotify.com` | `/v1/me`, `/v1/me/playlists` (GET, POST), `/v1/playlists/{id}` (GET, PUT), `/v1/playlists/{id}/items` (GET, POST, PUT, DELETE), `/v1/tracks/{id}`, `/v1/search` |
 | `open.spotify.com` | `/embed/playlist/{id}`, `/playlist/{id}` (the scraper's pages) |
 
 Its rule: **shuffify decides which calls it serves, Spotify's documentation
@@ -181,7 +181,7 @@ because a fake built that way agrees with the app's mistakes.
   descriptions or values), their scopes and whether each is deprecated, out
   of Spotify's published OpenAPI schema into
   `harness/fake_spotify/shapes.json`, which is committed. A test fails if
-  shuffify calls a deprecated operation other than `/audio-features`.
+  shuffify calls a deprecated operation.
   - The fake models a Development Mode app, so the fields Spotify removed
     for those apps are left out (`DEV_MODE_REMOVED` in `shapes.py`).
   - Where Spotify is known to differ from its schema, `shapes.py` corrects
@@ -215,13 +215,13 @@ because a fake built that way agrees with the app's mistakes.
     for must be one the schema lists for that operation;
   - redirect URIs follow Spotify's rule: HTTPS, or HTTP on a
     loopback IP literal, and never `localhost`, even when registered;
-  - `/audio-features` is a 403, as it is for Development Mode apps;
   - every href and `next` link stays on the fake's own origin, and images are
     `data:` URIs, so nothing a client follows leaves the machine.
 - **Profile.** It models a Spotify Development Mode app: the field changes
   for those apps apply, and the endpoints removed for them
-  (`POST /users/{id}/playlists`, `GET /tracks`) are not served. A call to one
-  is recorded as a violation.
+  (`POST /users/{id}/playlists`, `GET /tracks`) are not served. Nor is
+  `GET /audio-features`, which Spotify withholds from them and shuffify does
+  not call. A call to one is recorded as a violation.
 - **The real client is held to it.** `tests/test_fake_spotify_client_contract.py`
   runs shuffify's own `SpotifyAuthManager`, `SpotifyAPI` and scraper, unmocked,
   against the fake on a loopback socket, with every Spotify URL shuffify

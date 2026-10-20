@@ -55,7 +55,6 @@ class NewestFirstShuffle(ShuffleAlgorithm):
     def shuffle(
         self,
         tracks: List[Dict[str, Any]],
-        features: Optional[Dict[str, Dict[str, Any]]] = None,
         **kwargs,
     ) -> List[str]:
         """
@@ -66,7 +65,6 @@ class NewestFirstShuffle(ShuffleAlgorithm):
 
         Args:
             tracks: List of track dictionaries from Spotify API.
-            features: Unused.
             **kwargs: Additional parameters.
                 - jitter: Window size for local shuffling (default 5).
 

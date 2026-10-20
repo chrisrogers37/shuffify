@@ -228,7 +228,7 @@ def test_someone_elses_playlist_is_a_summary_without_tracks(api):
     """The Workshop's restricted mode: the tracks are withheld, the summary is not."""
     service = PlaylistService(api)
     with pytest.raises(PlaylistAccessError):
-        service.get_playlist(pid("bob-finds"), include_features=False)
+        service.get_playlist(pid("bob-finds"))
     summary = service.get_playlist_summary(pid("bob-finds"))
     assert summary.name == "Bob's Finds"
     assert summary.owner_id == "bob"
@@ -245,11 +245,6 @@ def test_get_tracks_one_by_one_skipping_ids_spotify_cannot_find(api, store):
     uris = [t.uri for t in store.catalog[:3]]
     found = api.get_tracks([uris[0], "spotify:track:0000000000000000000000", *uris[1:]])
     assert [t["uri"] for t in found] == uris
-
-
-def test_audio_features_are_refused_to_a_development_mode_app(api, store):
-    with pytest.raises(SpotifyAPIError, match="403"):
-        api.get_audio_features([store.catalog[0].id])
 
 
 def test_search(api, store):

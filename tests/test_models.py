@@ -24,18 +24,15 @@ class TestPlaylistConstruction:
 
     def test_create_playlist_with_all_fields(self):
         tracks = [{"id": "t1", "uri": "spotify:track:t1", "name": "Track 1"}]
-        features = {"t1": {"tempo": 120.0, "energy": 0.8}}
         playlist = Playlist(
             id="abc123",
             name="Full Playlist",
             owner_id="user1",
             description="A test playlist",
             tracks=tracks,
-            audio_features=features,
         )
         assert playlist.description == "A test playlist"
         assert len(playlist.tracks) == 1
-        assert "t1" in playlist.audio_features
 
     def test_empty_id_raises_value_error(self):
         with pytest.raises(ValueError, match="Playlist ID is required"):
@@ -112,23 +109,6 @@ class TestPlaylistTrackOperations:
         assert names == ["Track 1", "Track 2", "Track 3"]
 
 
-class TestPlaylistFeatures:
-    """Test audio feature methods."""
-
-    def test_has_features_true(self):
-        playlist = Playlist(
-            id="p1",
-            name="Test",
-            owner_id="u1",
-            audio_features={"t1": {"tempo": 120.0}},
-        )
-        assert playlist.has_features() is True
-
-    def test_has_features_false(self):
-        playlist = Playlist(id="p1", name="Test", owner_id="u1")
-        assert playlist.has_features() is False
-
-
 class TestPlaylistSerialization:
     """Test to_dict and string representation."""
 
@@ -140,7 +120,6 @@ class TestPlaylistSerialization:
             owner_id="u1",
             description="desc",
             tracks=tracks,
-            audio_features={"t1": {"tempo": 120}},
         )
         d = playlist.to_dict()
         assert d["id"] == "p1"
@@ -148,7 +127,7 @@ class TestPlaylistSerialization:
         assert d["owner_id"] == "u1"
         assert d["description"] == "desc"
         assert len(d["tracks"]) == 1
-        assert "t1" in d["audio_features"]
+        assert d["audio_features"] == {}
 
     def test_to_dict_with_defaults(self):
         playlist = Playlist(id="p1", name="Test", owner_id="u1")

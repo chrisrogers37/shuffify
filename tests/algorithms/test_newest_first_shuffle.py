@@ -295,19 +295,6 @@ class TestNewestFirstShuffleEdgeCases:
         result = algorithm.shuffle(tracks)
         assert len(result) == 2
 
-    def test_features_parameter_is_ignored(self, algorithm):
-        """Should ignore features parameter."""
-        tracks = [
-            {
-                "uri": f"spotify:track:{i}",
-                "added_at": f"2025-0{i + 1}-01T00:00:00Z",
-            }
-            for i in range(5)
-        ]
-        features = {"track0": {"tempo": 120}}
-        result = algorithm.shuffle(tracks, features=features)
-        assert len(result) == 5
-
     def test_mixed_timezone_formats(self, algorithm):
         """Should handle both Z and +00:00 timezone formats."""
         tracks = [

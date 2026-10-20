@@ -156,30 +156,12 @@ class TestPlaylistServiceGetPlaylist:
         """Should return Playlist model instance."""
         service = PlaylistService(mock_spotify_api)
 
-        result = service.get_playlist('playlist123', include_features=False)
+        result = service.get_playlist('playlist123')
 
         assert isinstance(result, Playlist)
         assert result.id == 'playlist123'
         assert result.name == 'My Test Playlist'
         assert len(result.tracks) == len(sample_tracks)
-
-    def test_get_playlist_with_features(self, mock_spotify_api, sample_audio_features):
-        """Should include audio features when requested."""
-        service = PlaylistService(mock_spotify_api)
-
-        result = service.get_playlist('playlist123', include_features=True)
-
-        assert result.has_features()
-        mock_spotify_api.get_audio_features.assert_called_once()
-
-    def test_get_playlist_without_features(self, mock_spotify_api):
-        """Should not fetch features when not requested."""
-        service = PlaylistService(mock_spotify_api)
-
-        result = service.get_playlist('playlist123', include_features=False)
-
-        assert not result.has_features()
-        mock_spotify_api.get_audio_features.assert_not_called()
 
     def test_get_playlist_empty_id(self, mock_spotify_api):
         """Should raise PlaylistNotFoundError for empty ID."""

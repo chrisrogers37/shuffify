@@ -226,7 +226,6 @@ class ShuffleAlgorithm(Protocol):
     @property
     def parameters(self) -> dict: ...
     def shuffle(self, tracks: List[Dict[str, Any]],
-                features: Optional[Dict[str, Dict[str, Any]]] = None,
                 **kwargs) -> List[str]: ...
 ```
 
@@ -268,7 +267,7 @@ To create a new shuffle algorithm:
 1. Create a new Python file in this directory (e.g., `my_algorithm.py`)
 2. Implement the `ShuffleAlgorithm` protocol:
    ```python
-   from typing import List, Dict, Any, Optional
+   from typing import List, Dict, Any
    from . import ShuffleAlgorithm
 
    class MyAlgorithm(ShuffleAlgorithm):
@@ -293,7 +292,6 @@ To create a new shuffle algorithm:
            }
 
        def shuffle(self, tracks: List[Dict[str, Any]],
-                   features: Optional[Dict[str, Dict[str, Any]]] = None,
                    **kwargs) -> List[str]:
            """Returns list of track URIs in new order."""
            # Your logic here

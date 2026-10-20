@@ -62,11 +62,6 @@ class TestApiCallSites:
         """Guard the check above against passing because it found nothing."""
         assert len(_api_call_sites()) >= 10
 
-    def test_get_track_audio_features_is_not_called(self):
-        """The audio-features method is ``get_audio_features``, under no other name."""
-        assert "get_track_audio_features" not in _api_call_sites()
-        assert hasattr(SpotifyAPI, "get_audio_features")
-
 
 class TestInjectedClient:
     def test_require_auth_returns_a_spotify_api(self, app, sample_token):

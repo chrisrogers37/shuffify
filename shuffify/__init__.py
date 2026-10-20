@@ -70,7 +70,6 @@ def get_spotify_cache():
             default_ttl=config.get("CACHE_DEFAULT_TTL", 300),
             playlist_ttl=config.get("CACHE_PLAYLIST_TTL", 60),
             user_ttl=config.get("CACHE_USER_TTL", 600),
-            audio_features_ttl=config.get("CACHE_AUDIO_FEATURES_TTL", 86400),
         )
     except RuntimeError:
         # Not in Flask context - use defaults

@@ -1,7 +1,7 @@
 """
 Tests for request validation schemas.
 
-Tests Pydantic models for shuffle requests and query parameters.
+Tests Pydantic models for shuffle requests.
 """
 
 import pytest
@@ -12,7 +12,6 @@ from shuffify.schemas import (
     BasicShuffleParams,
     ExternalPlaylistRequest,
     PercentageShuffleParams,
-    PlaylistQueryParams,
     ShuffleRequest,
     WorkshopCommitRequest,
     parse_shuffle_request,
@@ -251,57 +250,6 @@ class TestParseShuffleRequest:
             "0": "spotify:track:abc",
             "3": "spotify:track:xyz",
         }
-
-
-class TestPlaylistQueryParams:
-    """Tests for PlaylistQueryParams schema."""
-
-    def test_default_features_false(self):
-        """Test that features defaults to False."""
-        params = PlaylistQueryParams()
-        assert params.features is False
-
-    def test_features_true_string(self):
-        """Test parsing 'true' string."""
-        params = PlaylistQueryParams(features="true")
-        assert params.features is True
-
-    def test_features_false_string(self):
-        """Test parsing 'false' string."""
-        params = PlaylistQueryParams(features="false")
-        assert params.features is False
-
-    def test_features_yes_string(self):
-        """Test parsing 'yes' string."""
-        params = PlaylistQueryParams(features="yes")
-        assert params.features is True
-
-    def test_features_1_string(self):
-        """Test parsing '1' string."""
-        params = PlaylistQueryParams(features="1")
-        assert params.features is True
-
-    def test_features_0_string(self):
-        """Test parsing '0' string."""
-        params = PlaylistQueryParams(features="0")
-        assert params.features is False
-
-    def test_features_bool_true(self):
-        """Test passing actual boolean True."""
-        params = PlaylistQueryParams(features=True)
-        assert params.features is True
-
-    def test_features_bool_false(self):
-        """Test passing actual boolean False."""
-        params = PlaylistQueryParams(features=False)
-        assert params.features is False
-
-    def test_features_case_insensitive(self):
-        """Test that boolean parsing is case insensitive."""
-        assert PlaylistQueryParams(features="TRUE").features is True
-        assert PlaylistQueryParams(features="True").features is True
-        assert PlaylistQueryParams(features="YES").features is True
-        assert PlaylistQueryParams(features="Y").features is True
 
 
 class TestBasicShuffleParams:

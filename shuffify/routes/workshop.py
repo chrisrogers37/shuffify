@@ -235,9 +235,7 @@ def _load_playlist_by_url(api, ext_request, current_user_id=None):
     try:
         playlist_service = PlaylistService(api)
         try:
-            playlist = playlist_service.get_playlist(
-                playlist_id, include_features=False
-            )
+            playlist = playlist_service.get_playlist(playlist_id)
             # Non-owned playlists that report tracks but return none.
             is_restricted = (
                 len(playlist.tracks) == 0

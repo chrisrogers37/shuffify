@@ -44,7 +44,6 @@ OPERATIONS = [
     ("DELETE", "/playlists/{playlist_id}/items"),
     ("POST", "/me/playlists"),
     ("GET", "/tracks/{id}"),
-    ("GET", "/audio-features"),
     ("GET", "/search"),
 ]
 

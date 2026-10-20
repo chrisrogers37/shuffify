@@ -1,11 +1,11 @@
 """
 Tests for PlaylistPairService.
 
-Tests cover CRUD operations for playlist pairs, archive/unarchive
-track logic, and to_dict serialization.
+Tests cover CRUD operations for playlist pairs and to_dict
+serialization.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -16,7 +16,6 @@ from shuffify.services.playlist_pair_service import (
     PlaylistPairService,
 )
 from shuffify.services.user_service import UserService
-from shuffify.spotify.api import SpotifyAPI
 
 
 @pytest.fixture
@@ -41,15 +40,6 @@ def user2(db_app):
             "images": [],
         })
         yield result.user
-
-
-@pytest.fixture
-def mock_api():
-    """Mock SpotifyAPI client."""
-    api = MagicMock(spec=SpotifyAPI)
-    api.playlist_add_items.return_value = None
-    api.playlist_remove_items.return_value = None
-    return api
 
 
 # =============================================================================
@@ -249,73 +239,6 @@ class TestDeletePair:
             PlaylistPairService.delete_pair(
                 user2.id, "prod1"
             )
-
-
-# =============================================================================
-# Archive Tracks
-# =============================================================================
-
-
-class TestArchiveTracks:
-    """Tests for PlaylistPairService.archive_tracks."""
-
-    def test_archive_success(self, mock_api):
-        uris = ["spotify:track:a1b2c3d4e5f6g7h8i9j0k1"]
-        count = PlaylistPairService.archive_tracks(
-            mock_api, "arch1", uris
-        )
-        assert count == 1
-        mock_api.playlist_add_items.assert_called_once_with(
-            "arch1", uris
-        )
-
-    def test_archive_empty_list(self, mock_api):
-        count = PlaylistPairService.archive_tracks(
-            mock_api, "arch1", []
-        )
-        assert count == 0
-        mock_api.playlist_add_items.assert_not_called()
-
-    def test_archive_large_batch(self, mock_api):
-        uris = [
-            f"spotify:track:{'x' * 22}"
-            for _ in range(150)
-        ]
-        count = PlaylistPairService.archive_tracks(
-            mock_api, "arch1", uris
-        )
-        assert count == 150
-        mock_api.playlist_add_items.assert_called_once_with(
-            "arch1", uris
-        )
-
-
-# =============================================================================
-# Unarchive Tracks
-# =============================================================================
-
-
-class TestUnarchiveTracks:
-    """Tests for PlaylistPairService.unarchive_tracks."""
-
-    def test_unarchive_success(self, mock_api):
-        uris = ["spotify:track:a1b2c3d4e5f6g7h8i9j0k1"]
-        count = PlaylistPairService.unarchive_tracks(
-            mock_api, "prod1", "arch1", uris
-        )
-        assert count == 1
-        mock_api.playlist_add_items.assert_called_once_with(
-            "prod1", uris
-        )
-        mock_api.playlist_remove_items \
-            .assert_called_once_with("arch1", uris)
-
-    def test_unarchive_empty_list(self, mock_api):
-        count = PlaylistPairService.unarchive_tracks(
-            mock_api, "prod1", "arch1", []
-        )
-        assert count == 0
-        mock_api.playlist_add_items.assert_not_called()
 
 
 # =============================================================================

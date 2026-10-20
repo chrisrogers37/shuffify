@@ -80,13 +80,6 @@
       "scenario": "development-mode-fields"
     },
     {
-      "id": "dev-mode.audio-features-refused",
-      "summary": "Audio features are a 403 for a Development Mode app.",
-      "source": "https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api",
-      "label": "docs-only",
-      "scenario": "audio-features"
-    },
-    {
       "id": "dev-mode.removed-endpoints",
       "summary": "The endpoints removed for Development Mode apps (Get Several Tracks, Create Playlist for a user ID) are not served; the fake answers 404.",
       "source": "https://developer.spotify.com/documentation/web-api/references/changes/february-2026",

@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Playlist:
-    """Represents a Spotify playlist with tracks and optional audio features."""
+    """Represents a Spotify playlist with its tracks."""
 
     id: str
     name: str
@@ -18,6 +18,8 @@ class Playlist:
     total_tracks: Optional[int] = None
     public: Optional[bool] = None
     tracks: List[Dict[str, Any]] = field(default_factory=list)
+    # Always empty: shuffify reads no audio features. to_dict keeps the key
+    # because the Workshop context contract requires it.
     audio_features: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -30,9 +32,8 @@ class Playlist:
         cls,
         api: "SpotifyAPI",
         playlist_id: str,
-        include_features: bool = False,
     ) -> "Playlist":
-        """Load a playlist and optionally its audio features."""
+        """Load a playlist and its tracks."""
         playlist_data = api.get_playlist(playlist_id)
         raw_tracks = api.get_playlist_tracks(playlist_id)
 
@@ -63,12 +64,6 @@ class Playlist:
                 }
             )
 
-        audio_features = {}
-        if include_features and tracks:
-            track_ids = [track["id"] for track in tracks]
-            if track_ids:
-                audio_features = api.get_audio_features(track_ids)
-
         return cls(
             id=playlist_data["id"],
             name=playlist_data["name"],
@@ -77,16 +72,11 @@ class Playlist:
             total_tracks=playlist_item_count(playlist_data, default=None),
             public=playlist_data.get("public"),
             tracks=tracks,
-            audio_features=audio_features,
         )
 
     def get_track_uris(self) -> List[str]:
         """Return all track URIs."""
         return [track["uri"] for track in self.tracks if track.get("uri")]
-
-    def has_features(self) -> bool:
-        """Check if features were loaded."""
-        return bool(self.audio_features)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert Playlist to dictionary."""
