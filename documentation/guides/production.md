@@ -9,7 +9,7 @@ previous platform is gone.
 | Piece | Where | Details |
 | --- | --- | --- |
 | Domain | DigitalOcean DNS, zone `shuffify.app` | Apex `A` records `216.150.1.1` and `216.150.16.1` (TTL 300) point at Vercel. The zone has no MX, TXT or `www` records. |
-| Frontend | Vercel project `shuffify-v2` (team `chrisrogers37`) | Root `web/`, build `npm run build:vercel`, production branch `main`. Serves the React app and forwards `/api`, `/login`, `/callback`, `/logout` and `/health` to the URL in `RAILWAY_API_URL`. |
+| Frontend | Vercel project `shuffify` (team `chrisrogers37`), domains `shuffify.app` and `shuffify.vercel.app` | Root `web/`, build `npm run build:vercel`, production branch `main`. Serves the React app and forwards `/api`, `/login`, `/callback`, `/logout` and `/health` to the URL in `RAILWAY_API_URL`. |
 | API | Railway project `shuffify-v2`, environment `production`, service `api` | Public at `https://api-production-391dd.up.railway.app`. Each deployment runs `scripts/pre-deploy.sh` (Alembic upgrade) first; a failure blocks it. |
 | Worker | Same environment, service `worker` | Private. One replica owns queued Spotify writes and the scheduler. |
 | Redis | Same environment, service `redis` | Sessions and worker coordination. |
