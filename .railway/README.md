@@ -4,7 +4,7 @@ Install the pinned authoring dependencies with `npm ci --prefix .railway` and ch
 
 The configuration declares the API, worker and Redis resources. Both application services require the owner-set shared `DATABASE_URL`; the API's pre-deploy migration receives that same variable. It is the direct, unpooled URL of the Neon project `shuffify-db`, branch `production`, so the worker can use PostgreSQL `LISTEN` and scheduler advisory locks. There is no SQLite fallback or database autoprovisioning in this Railway layout.
 
-The configuration also keeps declaring the `postgres` resource that held these services' data before the move to Neon. No service references it, and a plan therefore never deletes it by omission. Retiring it is a deliberate step: evaluate the configuration with `SHUFFIFY_RAILWAY_RETIRE_POSTGRES=1`, after taking the final dump described in [Retiring the Railway PostgreSQL](../documentation/guides/production.md#retiring-the-railway-postgresql). Any other value of that input stops evaluation.
+The Railway PostgreSQL that held these services' data before the move to Neon was deleted on 2026-10-19, and the configuration no longer declares it. `railway config plan` still proposes an explicit restart policy for `api` and `worker` (`ON_FAILURE`, 10 retries). Those are Railway's defaults, which Railway reports as unset, so applying that plan only redeploys both services; nothing else should appear.
 
 There is no staging environment. A new nonproduction environment needs its own Neon branch in `shuffify-db` (a backup branch is not staging) and must never use the production URL. Verify the branch identity from Neon metadata before any migration.
 

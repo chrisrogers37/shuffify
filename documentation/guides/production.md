@@ -14,7 +14,6 @@ previous platform is gone.
 | Worker | Same environment, service `worker` | Private. One replica owns queued Spotify writes and the scheduler. |
 | Redis | Same environment, service `redis` | Sessions and worker coordination. |
 | Database | Neon project `shuffify-db` (`proud-dew-57305636`), branch `production` (`br-snowy-bird-ai3vjw7w`), database `neondb` | The API, its pre-deploy migration and the worker use the branch's direct (unpooled) endpoint. Schema head `c9d0e1f2a3b4`. |
-| Retained database | Same Railway environment, service `postgres` | The database these services used before the move to Neon, about 860 MB. No service references it. See [Retiring the Railway PostgreSQL](#retiring-the-railway-postgresql). |
 
 Railway builds the API and worker from `main` of `chrisrogers37/shuffify`.
 
@@ -42,7 +41,9 @@ unsafe requests only from that origin.
   - the original users and routines, with routines enabled
   - refresh tokens that the current encryption key cannot read
 - **Point-in-time history:** Neon's history of `production`, within the project's retention window.
-- **Retained Railway PostgreSQL:** kept until it is retired (below).
+- **Retired Railway PostgreSQL:** a final dump, taken on 2026-10-19 before the database was deleted and
+  kept by the owner outside the repository. It restores cleanly into PostgreSQL 18 with the source's
+  17 tables and 5 rows.
 
 ## Rolling back
 
@@ -91,30 +92,8 @@ There is no rollback to it:
 - the DigitalOcean app was destroyed on 2026-10-18
 - its repository is archived as `chrisrogers37/shuffify-v1`
 
-## Retiring the Railway PostgreSQL
+## Retired Railway PostgreSQL
 
-`.railway/railway.ts` keeps declaring the `postgres` resource, wired to no
-service, so `railway config plan` never proposes deleting it by omission.
-Retiring it takes the `SHUFFIFY_RAILWAY_RETIRE_POSTGRES=1` opt-in. The commands
-below need Railway CLI 5.42.1 or newer (`brew upgrade railway`).
-
-1. **Take a final dump.** The database still holds data. It has no public address, so add one for the dump: Railway → `postgres` → Settings → Networking → TCP Proxy. The server runs PostgreSQL 18, so use an 18 client:
-   ```sh
-   brew install postgresql@18
-   railway link --project shuffify-v2 --environment production
-   PG18="$(brew --prefix postgresql@18)/bin"
-   DATABASE_PUBLIC_URL="$(railway variable list --service postgres --environment production --kv \
-     | sed -n 's/^DATABASE_PUBLIC_URL=//p')"
-   "$PG18/pg_dump" --format=custom --no-owner \
-     --file "railway-postgres-final-$(date +%F).dump" "$DATABASE_PUBLIC_URL"
-   "$PG18/pg_restore" --list railway-postgres-final-*.dump | head
-   ```
-   Keep the dump somewhere durable, then remove the TCP proxy.
-2. **Preview the retirement.** From the repository root:
-   ```sh
-   SHUFFIFY_RAILWAY_RETIRE_POSTGRES=1 SHUFFIFY_RAILWAY_GITHUB_REPO=chrisrogers37/shuffify \
-     SHUFFIFY_RAILWAY_GITHUB_BRANCH=main railway config plan
-   ```
-   The plan must show `Delete database postgres`. As of 2026-10-18 it also sets an explicit restart policy on `api` and `worker` (`ON_FAILURE`, 10 retries); nothing else should appear.
-3. **Apply.** Run the same command with `railway config apply`.
-4. **Remove the declaration.** In a pull request, remove `retainedDatabases` from `.railway/railway.ts` so later plans do not recreate the database.
+The Railway PostgreSQL these services used before the move to Neon was deleted on
+2026-10-19, after the final dump listed under [Backups](#backups). No service used it.
+`.railway/railway.ts` no longer declares it, so no plan recreates it.
