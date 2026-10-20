@@ -11,6 +11,7 @@ import pytest
 from shuffify.services.operations.journal import NeedsAttention, OperationDeferred
 from shuffify.services.source_resolver.base import ResolveResult
 from shuffify.spotify.api import SpotifyAPI
+from shuffify.spotify.exceptions import SpotifyAPIError
 from shuffify.spotify.http_client import SpotifyHTTPClient
 from tests.services.operations.test_crash_recovery import Crash, World, uri
 
@@ -183,6 +184,49 @@ def test_collect_allows_a_collection_archive_alias_without_losing_its_exclusion(
     assert set(result['before']) == {'target', 'collection'}
     assert result['choices']['selected_uris'] == [uri(5)]
     assert world.playlists['collection']['track_uris'] == [uri(2), uri(5)]
+
+
+def staged_by_collect(raid, world, monkeypatch, values, get_tracks):
+    """The tracks a Collect stages for `values`, with the metadata lookup replaced by `get_tracks`."""
+    monkeypatch.setattr(raid, 'SourceResolver', lambda **kwargs: SimpleNamespace(
+        resolve=lambda source, api: ResolveResult(values, 'fixture', True),
+    ))
+    config = raid.RaidConfig(1, 'target', 'collection',
+                             sources=(raid.RaidSource(1, 'own', 'first', 'First', raid_count=100),))
+    runtime = Runtime(world)
+    runtime.api.get_tracks = get_tracks
+    with runtime.journal.observe():
+        prepared = raid.prepare_raid(runtime, config, prepare_key='raid.v1')
+    return prepared['local_actions']['pending_stage']['tracks']
+
+
+def test_collect_looks_up_metadata_for_only_the_first_cap_and_stages_the_rest_by_uri(world, monkeypatch):
+    raid, _ = modules()
+    cap = raid.MAX_METADATA_LOOKUPS
+    values = [uri(100 + index) for index in range(cap + 10)]
+    lookups = []
+
+    def get_tracks(batch):
+        lookups.append(list(batch))
+        return [{'uri': value, 'name': 'Looked up', 'artists': []} for value in batch]
+
+    staged = staged_by_collect(raid, world, monkeypatch, values, get_tracks)
+    assert lookups == [values[:cap]]
+    assert [track['uri'] for track in staged] == values
+    assert all(track['name'] == 'Looked up' for track in staged[:cap])
+    assert all('name' not in track for track in staged[cap:])
+    assert all(track['source_name'] == 'First' for track in staged)
+
+
+def test_collect_stages_every_track_by_uri_when_the_metadata_lookup_fails(world, monkeypatch):
+    raid, _ = modules()
+    values = [uri(100), uri(101)]
+
+    def get_tracks(batch):
+        raise SpotifyAPIError('down')
+
+    staged = staged_by_collect(raid, world, monkeypatch, values, get_tracks)
+    assert staged == [{'uri': value, 'source_playlist_id': 'first', 'source_name': 'First'} for value in values]
 
 
 def test_drip_samples_once_before_existing_target_filter_and_removes_every_selected_occurrence(world, monkeypatch):

@@ -4,7 +4,7 @@ Tests for TrackLockService.
 Covers toggle_lock, set_lock, unlock, bulk_unlock,
 get_locks_for_playlist, get_locked_positions,
 get_locked_uris, is_locked, cleanup_expired,
-and update_positions_after_reorder.
+update_positions_after_reorder, and safe_reconcile_positions.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -394,3 +394,28 @@ class TestUpdatePositions:
             )
         )
         assert updated == 0
+
+
+class TestSafeReconcilePositions:
+    """The bookkeeping wrapper a verified save calls reconciles like the plain call."""
+
+    def test_reconciles_positions_like_update_positions_after_reorder(
+        self, app_ctx, test_user
+    ):
+        TrackLockService.set_lock(
+            test_user.id, PLAYLIST_ID, TRACK_A,
+            0, LockTier.STANDARD,
+        )
+        TrackLockService.set_lock(
+            test_user.id, PLAYLIST_ID, TRACK_B,
+            1, LockTier.SUPER,
+        )
+
+        TrackLockService.safe_reconcile_positions(
+            test_user.id, PLAYLIST_ID, [TRACK_B, TRACK_A]
+        )
+
+        positions = TrackLockService.get_locked_positions(
+            test_user.id, PLAYLIST_ID
+        )
+        assert positions == {0: TRACK_B, 1: TRACK_A}

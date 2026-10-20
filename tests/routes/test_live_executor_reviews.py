@@ -5,6 +5,7 @@ run compares its review with the current state is exercised where it happens.
 """
 
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -28,14 +29,18 @@ from shuffify.models.db import (
 )
 from shuffify.services.executors import JobExecutorService
 from shuffify.services.live_review_scope import ReviewedInputChanged
+from shuffify.services.operations.commands.registry import COMMAND_HANDLERS
+from shuffify.services.operations.repository import OperationRepository
 from shuffify.services.playlist_snapshot_service import PlaylistSnapshotService
+from shuffify.services.scheduled_admission import admit_scheduled, build_cadence
 from shuffify.services.source_resolver import SourceResolver
 from shuffify.services.source_resolver.direct_api_pathway import DirectAPIPathway
 from shuffify.services.upstream_source_service import UpstreamSourceService
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 from shuffify.spotify.exceptions import SpotifyAPIError, SpotifyNotFoundError
+from shuffify.worker import OperationWorker
 from tests.paths import api_path
-from tests.queued_operations import post_and_run, run_operation, scoped_history
+from tests.queued_operations import post_and_run, run_operation, scoped_history, worker_api
 from tests.routes.live_review_helpers import binding_bundle, history, post_context, seed_history, serving
 from tests.routes.test_live_raid_outcomes import MutableSpotify, uri
 
@@ -1021,6 +1026,25 @@ def test_every_routine_run_refuses_a_target_changed_while_it_waited(workshop):
     assert db.session.get(JobExecution, data["result"]["execution_id"]).status == "failed"
     # The step never started; its fact names the playlist this run locked, never the new target.
     assert data["operation"]["resources"] == [unstarted_target("shuffle", None)]
+
+
+def test_a_scheduled_fire_refuses_a_routine_retargeted_after_it_was_admitted(workshop, sample_token):
+    workshop.api.playlists["target"] = [uri(1), uri(2)]
+    row = routine(workshop.user, JobType.SHUFFLE, is_enabled=True)
+    fire = admit_scheduled(OperationRepository(), row.id, build_cadence(row).fingerprint, datetime.now(timezone.utc))
+    assert fire.state == "admitted"
+    worker = OperationWorker(
+        workshop.client.application, handlers=COMMAND_HANDLERS, heartbeat_interval=0,
+        api_factory=lambda user: worker_api(workshop.api, sample_token),
+    )
+    with lock_wait(lambda: edit(workshop, row, "target")):
+        assert worker.run_once(fire.operation_id) is True
+    operation = OperationRepository().get(fire.operation_id)
+    assert (operation.kind, operation.state) == ("schedule_run", "failed")
+    assert operation.payload["command"]["triggered_by"] == "scheduler"
+    assert operation.journal["result"]["error_code"] == "configuration_changed"
+    assert workshop.api.writes == []
+    assert db.session.get(JobExecution, fire.operation_id, populate_existing=True).status == "failed"
 
 
 def test_scheduled_runs_refuse_a_retargeted_routine_too(workshop):

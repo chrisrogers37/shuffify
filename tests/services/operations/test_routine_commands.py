@@ -12,6 +12,7 @@ import requests
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from shuffify.enums import SnapshotType
 from shuffify.models.db import (
     ActivityLog,
     JobExecution,
@@ -26,9 +27,11 @@ from shuffify.models.db import (
 )
 from shuffify.services.operations.commands.routine_capture import capture_direct, capture_schedule
 from shuffify.services.operations.repository import OperationRepository
+from shuffify.services.source_resolver.base import ResolveResult
 from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.auth import TokenInfo
 from shuffify.worker import OperationWorker
+from tests.playlist_setup_fixtures import collect_sources
 from tests.services.operations.test_crash_recovery import Crash, World, uri
 
 
@@ -130,7 +133,8 @@ def routine(db_app, sample_token, monkeypatch):
         api._http._session.request = send
         return api
 
-    def enqueue(kind="raid", *, direct=False, enabled=True, origin="manual", params=None, reviewed=None):
+    def enqueue(kind="raid", *, direct=False, enabled=True, origin="manual", params=None, reviewed=None,
+                source_ids=None):
         if direct:
             with Session(db.engine) as storage:
                 command = capture_direct(storage, user.id, "target", kind, reviewed=reviewed)
@@ -142,7 +146,7 @@ def routine(db_app, sample_token, monkeypatch):
                 job_type=kind,
                 algorithm_name="BasicShuffle",
                 algorithm_params=params or {},
-                source_playlist_ids=[],
+                source_playlist_ids=source_ids or [],
                 is_enabled=enabled,
                 schedule_type="interval",
                 schedule_value="daily",
@@ -832,6 +836,43 @@ def test_accepted_collect_receipt_exactly_identifies_staged_rows_and_source_trac
     assert source.last_resolve_pathway == "direct_api"
 
 
+def test_collect_resolves_the_owners_saved_sources_for_its_target_then_each_unsaved_extra_once(routine, monkeypatch):
+    from shuffify.services.operations.executors import raid
+
+    other = User(spotify_id="other-owner")
+    db.session.add(other)
+    db.session.commit()
+    db.session.add_all([
+        UpstreamSource(user_id=routine.user.id, target_playlist_id="target", source_type="search_query",
+                       search_query="ambient", source_name="Ambient", raid_count=3),
+        UpstreamSource(user_id=routine.user.id, target_playlist_id="elsewhere", source_type="own",
+                       source_playlist_id="neighbour", source_name="Neighbour"),
+        UpstreamSource(user_id=routine.user.id, target_playlist_id="elsewhere", source_type="search_query",
+                       search_query="rock", source_name="Rock"),
+        UpstreamSource(user_id=other.id, target_playlist_id="target", source_type="own",
+                       source_playlist_id="foreign", source_name="Foreign"),
+    ])
+    db.session.commit()
+    resolved = []
+
+    class Resolver:
+        def __init__(self, **kwargs):
+            pass
+
+        def resolve(self, source, api):
+            resolved.append((source.source_type, source.source_playlist_id, source.search_query, source.raid_count))
+            return ResolveResult([], "fixture", True)
+
+    monkeypatch.setattr(raid, "SourceResolver", Resolver)
+    row, _ = routine.enqueue("raid", source_ids=["source", "extra", "extra"])
+    assert routine.run(row).state == "succeeded"
+    expected = [("own", "source", None, 2), ("search_query", None, "ambient", 3), ("external", "extra", None, 5)]
+    assert resolved == expected
+    # The setup tests assert what a run would use through this oracle, so it must agree with the worker.
+    oracle = collect_sources(db.session.get(Schedule, row.schedule_id))
+    assert [(s.source_type, s.source_playlist_id, s.search_query, s.raid_count) for s in oracle] == expected
+
+
 @pytest.mark.parametrize(
     "kind,destinations",
     [
@@ -847,6 +888,35 @@ def test_automatic_snapshot_destinations_match_the_step_not_readonly_inputs(rout
     snapshots = PlaylistSnapshot.query.all()
     assert {item.playlist_id for item in snapshots} == destinations
     assert len(snapshots) == len(destinations)
+
+
+@pytest.mark.parametrize("origin", ["manual", "scheduler"])
+@pytest.mark.parametrize(
+    "kind,label",
+    [
+        ("raid", SnapshotType.AUTO_PRE_RAID),
+        ("drip", SnapshotType.AUTO_PRE_DRIP),
+        ("rotate", SnapshotType.AUTO_PRE_ROTATE),
+        ("shuffle", SnapshotType.AUTO_PRE_SHUFFLE),
+    ],
+)
+def test_automatic_snapshots_are_labelled_by_their_step_whoever_started_the_run(routine, kind, label, origin):
+    params = {"target_size": 3, "rotation_count": 1} if kind == "rotate" else {}
+    row, _ = routine.enqueue(kind, origin=origin, params=params)
+    assert routine.run(row).state == "succeeded"
+    snapshots = PlaylistSnapshot.query.all()
+    assert snapshots
+    assert {item.snapshot_type for item in snapshots} == {label}
+
+
+def test_each_step_of_a_composite_snapshots_under_its_own_label(routine):
+    row, _ = routine.enqueue("raid_and_shuffle")
+    assert routine.run(row).state == "succeeded"
+    assert {(item.playlist_id, item.snapshot_type) for item in PlaylistSnapshot.query.all()} == {
+        ("target", SnapshotType.AUTO_PRE_RAID),
+        ("collection", SnapshotType.AUTO_PRE_RAID),
+        ("target", SnapshotType.AUTO_PRE_SHUFFLE),
+    }
 
 
 def test_each_step_exposes_its_own_outcome_code_and_preserves_known_bookkeeping_failure(routine, monkeypatch):

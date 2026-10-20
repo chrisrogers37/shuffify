@@ -15,7 +15,6 @@ from shuffify.models.db import ActivityLog, PlaylistPair, RaidPlaylistLink, Sche
 from shuffify.schemas import SetupImpactRequest, SetupSaveRequest
 from shuffify.services import activity_log_service
 from shuffify.services import playlist_setup_service as setup
-from shuffify.services.executors.raid_executor import _load_sources
 from shuffify.services.live_review_scope import STEP_ROWS
 from shuffify.services.playlist_lock import playlist_configuration_lock, playlist_lock
 from shuffify.services.playlist_service import PlaylistAccessError, PlaylistNotFoundError
@@ -30,6 +29,7 @@ from tests.playlist_setup_fixtures import (
     add_routine,
     add_source,
     assert_never_scheduled,
+    collect_sources,
 )
 
 pytestmark = pytest.mark.usefixtures("no_scraping")
@@ -672,7 +672,7 @@ def test_removing_a_source_prunes_it_from_every_raid_family_routine_and_nothing_
     assert {schedule.id: definition(schedule) for schedule in (first, second, unrelated, shuffle)} == before
     assert Schedule.query.count() == 5 and UpstreamSource.query.count() == 0
     for schedule in (first, second, unrelated):
-        loaded = _load_sources(routine_ids(schedule), user.id, TARGET)
+        loaded = collect_sources(schedule)
         assert "ext1" not in [s.source_playlist_id for s in loaded]
     assert reply["context"]["state_digest"] == reviewed["expected_state_digest"]
     assert reply["configuration_revision"] == reply["context"]["configuration_revision"] == revision(user)
@@ -709,12 +709,12 @@ def test_removing_a_routine_only_source_prunes_it_so_no_raid_resurrects_it(user,
     first = add_routine(user, "raid", ["ghost", "ext1"])
     second = add_routine(user, "raid_and_shuffle", ["ghost"])
     add_source(user, "ext1")
-    assert [s.source_playlist_id for s in _load_sources(routine_ids(second), user.id, TARGET)] == ["ext1", "ghost"]
+    assert [s.source_playlist_id for s in collect_sources(second)] == ["ext1", "ghost"]
     reviewed, (reply, status) = saved(api, user, {"op": "remove_routine_source", "playlist_id": "ghost"})
     assert status == 200 and reply["affected_schedule_ids"] == [first.id, second.id]
     assert routine_ids(first) == ["ext1"] and routine_ids(second) == []
     for schedule in (first, second):
-        assert [s.source_playlist_id for s in _load_sources(routine_ids(schedule), user.id, TARGET)] == ["ext1"]
+        assert [s.source_playlist_id for s in collect_sources(schedule)] == ["ext1"]
     assert reply["context"]["routine_only_sources"] == []
     assert reply["context"]["state_digest"] == reviewed["expected_state_digest"]
     assert_never_scheduled(scheduler_spies)
