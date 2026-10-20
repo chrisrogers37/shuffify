@@ -22,6 +22,50 @@ jobs:
       - name: Verify committed CSS matches public sources
         run: ./scripts/build-css.sh --check
 
+  frontend:
+    name: Frontend and Railway config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            .railway/package-lock.json
+
+      # The React app: generated sources up to date, its unit tests, then the
+      # typecheck, build and prerender Vercel runs, and the checks on that output.
+      - name: Install web dependencies
+        run: npm ci --prefix web
+
+      - name: Generated web sources up to date
+        run: |
+          npm --prefix web run schemas:check
+          npm --prefix web run theme:check
+          npm --prefix web run public:check
+
+      - name: Web tests
+        run: npm --prefix web test
+
+      - name: Web build
+        run: npm --prefix web run build
+
+      - name: Web static output tests
+        run: npm --prefix web run test:static
+
+      # The service definition `railway config plan` evaluates.
+      - name: Install Railway config dependencies
+        run: npm ci --prefix .railway
+
+      - name: Railway config typecheck and tests
+        run: |
+          npm --prefix .railway run typecheck
+          npm --prefix .railway test
+
   backend:
     name: Backend lint & tests
     runs-on: ubuntu-latest
