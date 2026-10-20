@@ -45,9 +45,3 @@ def propagate_control(error):
         observer.defer_read(error)
     if observer is not None and hasattr(observer, 'check_pending_control'):
         observer.check_pending_control()
-
-
-def guard_legacy_compensation():
-    observer = current_observer()
-    if observer is not None and hasattr(observer, 'request_abort'):
-        observer.request_abort('legacy_compensation_requested')

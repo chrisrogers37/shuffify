@@ -42,8 +42,8 @@ def nothing_mutates(db_app):
     """No review may shuffle, snapshot, lock or record anything."""
     with (
         patch("shuffify.services.live_playlist_service.ShuffleService.execute") as execute,
-        patch("shuffify.services.playlist_snapshot_service.PlaylistSnapshotService.auto_snapshot_if_enabled") as snap,
-        patch("shuffify.services.live_playlist_service.playlist_lock") as lock,
+        patch("shuffify.services.playlist_snapshot_service.PlaylistSnapshotService.create_snapshot") as snap,
+        patch("shuffify.services.playlist_lock._target_lock") as lock,
     ):
         yield
         execute.assert_not_called()

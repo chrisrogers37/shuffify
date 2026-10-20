@@ -27,7 +27,6 @@ from shuffify.models.db import (
     User,
     db,
 )
-from shuffify.services.live_review_scope import ReviewedInputChanged
 from shuffify.services.operations.commands.registry import COMMAND_HANDLERS
 from shuffify.services.operations.repository import OperationRepository
 from shuffify.services.playlist_snapshot_service import PlaylistSnapshotService
@@ -83,10 +82,10 @@ def workshop(raid_target):
     db.session.add(pair)
     db.session.commit()
     api = Spotify()
-    with serving(api) as auto_snapshot, patch("shuffify.scheduler.add_job_for_schedule") as register:
+    with serving(api), patch("shuffify.scheduler.add_job_for_schedule") as register:
         yield SimpleNamespace(
             client=raid_target.client, api=api, user=user, link=raid_target.link, pair=pair,
-            source=raid_target.source, register=register, auto_snapshot=auto_snapshot,
+            source=raid_target.source, register=register,
         )
 
 
@@ -1423,11 +1422,6 @@ def test_stale_snapshot_review_never_snapshots_writes_or_moves_history(workshop,
     assert (body["operation"]["error_code"], body["operation"]["retryable"]) == (code, False)
     assert not {"execution_id", "started_at", "execution_state"} & body.keys()
     assert workshop.api.writes == []
-    workshop.auto_snapshot.assert_not_called()
+    assert PlaylistSnapshot.query.count() == 2  # only the two saved ones; no automatic snapshot
     assert scoped_history(workshop.client, "target") == SAVED_HISTORY
     assert ActivityLog.query.count() == 0
-
-
-def test_reviewed_input_change_is_a_runtime_error_the_runner_records(workshop):
-    # The executors' consumption checks raise this before dispatch; the runner records the failure.
-    assert issubclass(ReviewedInputChanged, RuntimeError)

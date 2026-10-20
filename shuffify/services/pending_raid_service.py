@@ -7,10 +7,10 @@ Spotify) or dismisses them from the workshop Track Inbox.
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import List
 
 from shuffify.enums import PendingRaidStatus
-from shuffify.models.db import PendingRaidTrack, db
+from shuffify.models.db import PendingRaidTrack
 from shuffify.services.base import safe_commit
 
 logger = logging.getLogger(__name__)
@@ -22,91 +22,6 @@ class PendingRaidSelectionError(ValueError):
 
 class PendingRaidService:
     """CRUD operations for pending raid tracks."""
-
-    @staticmethod
-    def stage_tracks(
-        user_id: int,
-        target_playlist_id: str,
-        tracks: List[Dict[str, Any]],
-        source_playlist_id: Optional[str] = None,
-        source_name: Optional[str] = None,
-    ) -> int:
-        """
-        Bulk-insert pending tracks with deduplication.
-
-        Returns the number of newly staged tracks.
-        """
-        # Collect all candidate URIs from the batch
-        candidate_uris = [
-            t.get("uri") for t in tracks if t.get("uri")
-        ]
-        if not candidate_uris:
-            return 0
-
-        # One query finds every existing URI, rather than one query per track
-        existing_uris = set(
-            row[0]
-            for row in db.session.query(
-                PendingRaidTrack.track_uri
-            )
-            .filter(
-                PendingRaidTrack.user_id == user_id,
-                PendingRaidTrack.target_playlist_id
-                == target_playlist_id,
-                PendingRaidTrack.track_uri.in_(
-                    candidate_uris
-                ),
-            )
-            .all()
-        )
-
-        staged = 0
-        for track in tracks:
-            uri = track.get("uri")
-            if not uri or uri in existing_uris:
-                continue
-
-            artists = track.get("artists", [])
-            if isinstance(artists, list):
-                artists = ", ".join(artists)
-
-            pending = PendingRaidTrack(
-                user_id=user_id,
-                target_playlist_id=target_playlist_id,
-                track_uri=uri,
-                track_name=track.get("name", "Unknown"),
-                track_artists=artists,
-                track_album=track.get("album_name", ""),
-                track_image_url=track.get(
-                    "album_image_url", ""
-                ),
-                track_duration_ms=track.get(
-                    "duration_ms"
-                ),
-                source_playlist_id=track.get(
-                    "source_playlist_id", source_playlist_id
-                ),
-                source_name=track.get("source_name", source_name),
-                status=PendingRaidStatus.PENDING,
-            )
-            db.session.add(pending)
-            existing_uris.add(uri)
-            staged += 1
-
-        if staged > 0:
-            safe_commit(
-                f"stage {staged} tracks for user "
-                f"{user_id}",
-            )
-            logger.info(
-                "Staged %d tracks for user %d, "
-                "playlist %s",
-                staged,
-                user_id,
-                target_playlist_id,
-            )
-
-        return staged
 
     @staticmethod
     def list_pending(

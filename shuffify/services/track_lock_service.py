@@ -362,47 +362,9 @@ class TrackLockService:
         return updated
 
     # ---------------------------------------------------------
-    # Graceful-fallback helpers for callers (executors, routes)
-    # that should never crash when lock queries fail.
+    # Graceful-fallback helper for callers that should never
+    # crash when the lock update fails.
     # ---------------------------------------------------------
-
-    @staticmethod
-    def safe_get_locked_positions(
-        user_id: int,
-        playlist_id: str,
-    ) -> Dict[int, str]:
-        """get_locked_positions with graceful fallback to {}."""
-        try:
-            return TrackLockService.get_locked_positions(
-                user_id, playlist_id
-            )
-        except Exception as e:
-            db.session.rollback()
-            logger.warning(
-                "Failed to query track locks for "
-                "%s: %s — proceeding without locks",
-                playlist_id, e,
-            )
-            return {}
-
-    @staticmethod
-    def safe_get_locked_uris(
-        user_id: int,
-        playlist_id: str,
-    ) -> Set[str]:
-        """get_locked_uris with graceful fallback to empty set."""
-        try:
-            return TrackLockService.get_locked_uris(
-                user_id, playlist_id
-            )
-        except Exception as e:
-            db.session.rollback()
-            logger.warning(
-                "Failed to query track locks for "
-                "%s: %s — proceeding without locks",
-                playlist_id, e,
-            )
-            return set()
 
     @staticmethod
     def safe_reconcile_positions(

@@ -1,12 +1,12 @@
 """Reviewed scope of Workshop and routine executor actions.
 
-A review (``live_executor_context_service``) and its run (inside the executor's
-target lock, again before each step, and where a step consumes a link, pair or
-count) derive every fingerprinted input through these helpers, so the two
-sides cannot drift. Each reader returns fresh rows and raises on a database
-failure; a failed read never stands in for an absent link, no sources or no
-locks. Names, timestamps, ``last_*``, ``is_enabled``, schedule timing, pending
-rows and random track choices are deliberately not inputs.
+A review (``live_executor_context_service``) and its run (the worker's
+``routine_capture.require_review`` when it binds the command) derive every
+fingerprinted input through these helpers, so the two sides cannot drift. Each
+reader returns fresh rows and raises on a database failure; a failed read never
+stands in for an absent link, no sources or no locks. Names, timestamps,
+``last_*``, ``is_enabled``, schedule timing, pending rows and random track
+choices are deliberately not inputs.
 """
 
 import json
@@ -18,7 +18,6 @@ from sqlalchemy.orm import Session
 
 from shuffify.enums import JobType, RotationMode
 from shuffify.models.db import UpstreamSource
-from shuffify.services.live_operation_service import current_operation
 from shuffify.services.live_review_bindings import fingerprint, scope_fingerprint
 from shuffify.services.playlist_pair_service import PlaylistPairService
 from shuffify.services.raid_link_service import RaidLinkService
@@ -43,10 +42,6 @@ DIRECT_DRIP_PARAMS = {"force": True}
 
 class ReviewChanged(Exception):
     """A run's recomputed scope is not the reviewed one."""
-
-
-class ReviewedInputChanged(RuntimeError):
-    """A reviewed link, pair or count changed before the step consuming it dispatched."""
 
 
 class InvalidSettings(ValueError):
@@ -128,7 +123,7 @@ def _converted(convert, *args):
         raise InvalidSettings(str(error)) from error
 
 
-# The rows each step consumes; locks are read fail-closed (never the safe_* fallbacks).
+# The rows each step consumes; locks are read fail-closed: a failed read raises, it is never an empty lock set.
 STEP_ROWS = {
     "raid": ("link", "pair", "sources"), "drip": ("link",), "shuffle": ("locks",), "rotate": ("pair", "locked"),
 }
@@ -243,10 +238,6 @@ def routine_parts(schedule, steps, rows=None):
     }
 
 
-def step_part(step, schedule):
-    return routine_parts(schedule, (step,))[step]
-
-
 def direct_parts(kind, rows, extras):
     """A Collect, Drip or Raid + Drip request's parts: its explicit extras and a forced Drip."""
     return {
@@ -276,61 +267,3 @@ def schedule_scope(schedule_id, job_type, target_id, parts):
         target_id,
         {"schedule_id": schedule_id, "job_type": str(job_type), "target_id": target_id, "steps": parts},
     )
-
-
-class ReviewedRun:
-    """One reviewed executor invocation and how its run recomputes the reviewed scope.
-
-    The runner calls ``bind`` inside the target lock, before any record or
-    dispatch. A Raid + Drip review is shared by both children: the raid child
-    compares the combined scope and keeps the drip part's digest, which
-    ``drip_child`` gives the drip child to compare again inside its own lock.
-    """
-
-    def __init__(self, kind, scope):
-        self.kind, self.scope = kind, scope
-        self.drip_digest = None
-
-    def drip_child(self):
-        return ReviewedRun("raid_and_drip:drip", self.drip_digest)
-
-    def bind(self, schedule):
-        """The step parts this run is bound to; raises ReviewChanged when the scope differs."""
-        target = schedule.target_playlist_id
-        steps = JOB_STEPS.get(schedule.job_type)
-        if steps is None:
-            raise ReviewChanged()
-        # A Raid + Drip's raid child also reads the link its Drip child will consume. read_inputs re-reads
-        # every row (populate_existing), as the runner re-reads the Schedule: nothing compares as cached.
-        rows = read_inputs(DIRECT_STEPS[self.kind] if self.kind == "raid_and_drip" else steps, schedule.user_id, target)
-        parts = routine_parts(schedule, steps, rows)
-        if self.kind == "schedule":
-            actual = schedule_scope(schedule.id, schedule.job_type, target, parts)
-        elif self.kind == "raid_and_drip:drip":
-            actual = part_digest("drip", parts["drip"])
-        elif self.kind == "raid_and_drip":
-            # The drip child runs later, under its own lock, as an explicit forced Drip.
-            drip = build_part("drip", rows, params=DIRECT_DRIP_PARAMS)
-            actual = direct_scope(self.kind, target, {**parts, "drip": drip})
-            if actual == self.scope:
-                self.drip_digest = part_digest("drip", drip)
-        else:
-            actual = direct_scope(self.kind, target, parts)
-        if self.scope is None or actual != self.scope:
-            raise ReviewChanged()
-        return parts
-
-
-def require_reviewed(key, value):
-    """Fail the current reviewed step, before it dispatches, when an input it consumes changed.
-
-    Steps with no reviewed part, and inputs outside the step's reviewed part, pass unchecked.
-    """
-    operation = current_operation()
-    part = (operation.reviewed_parts or {}).get(operation.step) if operation else None
-    if part is None or key not in part:
-        return
-    actual = link_ref(value) if key == "link" else pair_ref(value) if key == "pair" else value
-    if actual != part[key]:
-        operation.error_code = "resource_changed"
-        raise ReviewedInputChanged(f"The reviewed {key} changed before this step ran")

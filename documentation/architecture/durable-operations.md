@@ -45,10 +45,9 @@ Confirmed prefixes can continue from the journal. A dispatched request observed
 at its baseline is ambiguous without a settlement guarantee and requires review.
 An external edit produces `needs_attention`; the worker does not overwrite it.
 Failures that require restoration persist their abort direction before separate
-journaled compensation starts. Legacy compensation loops cannot run under the
-durable observer. Rate-limit rejections persist their retry deadline, release
-the lease, and resume the same operation when due. Other ready targets continue
-while one operation is deferred.
+journaled compensation starts. Rate-limit rejections persist their retry
+deadline, release the lease, and resume the same operation when due. Other ready
+targets continue while one operation is deferred.
 
 The worker drains at startup and after PostgreSQL notifications. A dedicated
 `LISTEN` connection also wakes the worker after registration or reconnect, which

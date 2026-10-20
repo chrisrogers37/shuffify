@@ -1,9 +1,9 @@
 """Source resolver — orchestrates pathways in priority order."""
 
 import logging
-from typing import Any, List, Optional, Set
+from typing import Any, List, Optional
 
-from .base import ResolveAllResult, ResolvePathway, ResolveResult
+from .base import ResolvePathway, ResolveResult
 from .direct_api_pathway import DirectAPIPathway
 from .public_scraper_pathway import PublicScraperPathway
 from .search_pathway import SearchPathway
@@ -103,32 +103,4 @@ class SourceResolver:
             pathway_name="none",
             success=False,
             error_message="All pathways exhausted",
-        )
-
-    def resolve_all(
-        self,
-        sources: List[Any],
-        api: Any = None,
-        exclude_uris: Optional[Set[str]] = None,
-    ) -> ResolveAllResult:
-        """Resolve all sources, deduplicating against exclude_uris."""
-        if exclude_uris is None:
-            exclude_uris = set()
-
-        seen: Set[str] = set(exclude_uris)
-        new_uris: List[str] = []
-        source_results = []
-
-        for source in sources:
-            result = self.resolve(source, api=api)
-            source_results.append((source, result))
-
-            for uri in result.track_uris:
-                if uri not in seen:
-                    seen.add(uri)
-                    new_uris.append(uri)
-
-        return ResolveAllResult(
-            new_uris=new_uris,
-            source_results=source_results,
         )

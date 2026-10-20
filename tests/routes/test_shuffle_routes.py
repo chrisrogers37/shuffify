@@ -28,12 +28,6 @@ def api():
     return MutableSpotify(SimpleNamespace(spotify_id="user123"), playlist123=[uri(1), uri(2)])
 
 
-@pytest.fixture(autouse=True)
-def snapshots():
-    with patch("shuffify.services.live_playlist_service.PlaylistSnapshotService.auto_snapshot_if_enabled"):
-        yield
-
-
 @pytest.mark.parametrize("endpoint", ["shuffle", "undo"])
 def test_unauth_returns_direct_outcome_without_identity(db_app, endpoint):
     with patch("shuffify.routes.require_auth", return_value=None), db_app.test_client() as client:
