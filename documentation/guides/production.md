@@ -13,7 +13,7 @@ previous platform is gone.
 | API | Railway project `shuffify-v2`, environment `production`, service `api` | Public at `https://api-production-391dd.up.railway.app`. Each deployment runs `scripts/pre-deploy.sh` (Alembic upgrade) first; a failure blocks it. |
 | Worker | Same environment, service `worker` | Private. One replica owns queued Spotify writes and the scheduler. |
 | Redis | Same environment, service `redis` | Sessions and worker coordination. |
-| Database | Neon project `shuffify-db` (`proud-dew-57305636`), branch `production` (`br-snowy-bird-ai3vjw7w`), database `neondb` | The API, its pre-deploy migration and the worker use the branch's direct (unpooled) endpoint. Schema head `c9d0e1f2a3b4`. |
+| Database | Neon project `shuffify-db` (`proud-dew-57305636`), branch `production` (`br-snowy-bird-ai3vjw7w`), database `neondb` | The API, its pre-deploy migration and the worker use the branch's direct (unpooled) endpoint. Schema head `d0e1f2a3b4c5`. |
 
 Railway builds the API and worker from `main` of `chrisrogers37/shuffify`.
 
@@ -53,7 +53,11 @@ unsafe requests only from that origin.
 - **API and worker:** in Railway, redeploy each service's previous successful deployment, or revert the change on `main`.
   - The API refuses to start unless the schema is exactly at its own Alembic head.
   - A rollback across a migration therefore also needs the matching schema change.
-  - Every release since the cutover uses head `c9d0e1f2a3b4`.
+  - Releases before #62 use head `c9d0e1f2a3b4`. From #62 on they use `d0e1f2a3b4c5`, which drops v1's
+    `apscheduler_jobs` table. To roll back to a release before #62, first step the schema back. From a checkout of a
+    later release, with the repository's virtualenv active, run it with the API's variables:
+    `railway run --service api --environment production -- env FLASK_APP=run.py SCHEDULER_ENABLED=false SHUFFIFY_MIGRATION_STEP=1 flask db downgrade c9d0e1f2a3b4`.
+    That downgrade changes only the recorded revision.
 
 ### Recent data changes
 
@@ -64,7 +68,9 @@ npx neonctl branches restore production '^self@2026-10-20T12:00:00Z' \
   --project-id proud-dew-57305636 --preserve-under-name production-before-restore
 ```
 
-Connections drop briefly and the API reconnects. Redeploy the worker afterwards.
+Connections drop briefly and the API reconnects. Then redeploy the API, then the worker. If the restore point
+predates a migration, the API's pre-deploy step upgrades the schema again. The worker has no pre-deploy step
+and refuses to start on an older schema.
 
 ### Back to the pre-cutover snapshot
 
@@ -81,7 +87,7 @@ This discards everything since 2026-10-17.
    psql "$(npx neonctl connection-string production --project-id proud-dew-57305636 --database-name neondb)" \
      -c "BEGIN; UPDATE users SET encrypted_refresh_token = NULL; UPDATE schedules SET is_enabled = false; COMMIT;"
    ```
-4. Redeploy the API. Its pre-deploy step upgrades the schema from `f7a8b9c0d1e2` to `c9d0e1f2a3b4`.
+4. Redeploy the API. Its pre-deploy step upgrades the schema from `f7a8b9c0d1e2` to `d0e1f2a3b4c5`.
 5. Redeploy the worker.
 6. Users sign in again with Spotify and re-enable their routines.
 
