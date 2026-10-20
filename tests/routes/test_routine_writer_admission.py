@@ -34,11 +34,7 @@ def forbid_spotify(monkeypatch):
         pytest.fail("A routine admission must never authenticate, resolve sources, or contact Spotify")
 
     for name in ("shuffify.routes.require_auth", "shuffify.services.AuthService.get_authenticated_api",
-                 "shuffify.spotify.api.SpotifyAPI.__init__", "requests.sessions.Session.request",
-                 "shuffify.services.executors.JobExecutorService.execute_now",
-                 "shuffify.services.raid_sync_service.RaidSyncService.raid_now",
-                 "shuffify.services.raid_sync_service.RaidSyncService.drip_now",
-                 "shuffify.services.raid_sync_service.RaidSyncService.raid_and_drip_now"):
+                 "shuffify.spotify.api.SpotifyAPI.__init__", "requests.sessions.Session.request"):
         monkeypatch.setattr(name, forbidden)
 
 

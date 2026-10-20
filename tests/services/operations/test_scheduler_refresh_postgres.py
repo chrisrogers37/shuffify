@@ -128,7 +128,6 @@ def test_real_memory_fire_enqueues_exact_due_without_auth_or_legacy_execution(
         raise AssertionError("Scheduled fire must only admit a command")
 
     monkeypatch.setattr("shuffify.spotify.api.SpotifyAPI.__init__", forbidden)
-    monkeypatch.setattr("shuffify.services.executors.base_executor.JobExecutorService.execute", forbidden)
     monkeypatch.setattr("shuffify.services.worker_control.WorkerControlClient.poke", lambda self: False)
     schedule = make_schedule(postgres_repository)
     due = datetime.now(timezone.utc) + timedelta(milliseconds=100)

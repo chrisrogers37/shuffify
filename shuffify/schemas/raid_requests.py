@@ -4,7 +4,7 @@ Pydantic schemas for raid panel API endpoints.
 
 from typing import List, Optional
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, field_validator
 
 from shuffify.enums import IntervalValue
 from shuffify.services.schedule_utils import (
@@ -73,55 +73,6 @@ class WatchPlaylistRequest(BaseModel):
         return v
 
 
-class WatchSearchQueryRequest(BaseModel):
-    """Request to watch a search query as a raid source."""
-
-    model_config = {"extra": "ignore"}
-
-    search_query: str
-    source_name: Optional[str] = None
-    auto_schedule: bool = True
-    schedule_value: str = "daily"
-    schedule_time: Optional[str] = None
-
-    @field_validator("search_query")
-    @classmethod
-    def validate_search_query(cls, v):
-        v = v.strip()
-        if not v:
-            raise ValueError(
-                "search_query must not be empty"
-            )
-        if len(v) > 500:
-            raise ValueError(
-                "search_query must be 500 chars or fewer"
-            )
-        return v
-
-    @field_validator("schedule_value")
-    @classmethod
-    def validate_schedule_value(cls, v):
-        v = v.strip().lower()
-        valid = [e.value for e in IntervalValue]
-        if v not in valid:
-            raise ValueError(
-                f"schedule_value must be one of: "
-                f"{', '.join(valid)}"
-            )
-        return v
-
-    @field_validator("schedule_time")
-    @classmethod
-    def validate_schedule_time(cls, v):
-        if v is not None:
-            v = v.strip()
-            if not _TIME_RE.match(v):
-                raise ValueError(
-                    "schedule_time must be HH:MM format"
-                )
-        return v
-
-
 class UnwatchPlaylistRequest(BaseModel):
     """Request to remove a source from the watch list."""
 
@@ -163,99 +114,6 @@ class AddRaidUrlRequest(BaseModel):
         if parse_spotify_playlist_url(v) is None:
             raise ValueError(
                 "Invalid Spotify playlist URL"
-            )
-        return v
-
-    @field_validator("schedule_value")
-    @classmethod
-    def validate_schedule_value(cls, v):
-        v = v.strip().lower()
-        valid = [e.value for e in IntervalValue]
-        if v not in valid:
-            raise ValueError(
-                f"schedule_value must be one of: "
-                f"{', '.join(valid)}"
-            )
-        return v
-
-    @field_validator("schedule_time")
-    @classmethod
-    def validate_schedule_time(cls, v):
-        if v is not None:
-            v = v.strip()
-            if not _TIME_RE.match(v):
-                raise ValueError(
-                    "schedule_time must be HH:MM format"
-                )
-        return v
-
-
-class UpdateRaidScheduleRequest(BaseModel):
-    """Request to update a raid schedule."""
-
-    model_config = {"extra": "ignore"}
-
-    schedule_value: Optional[str] = None
-    schedule_time: Optional[str] = None
-    is_enabled: Optional[bool] = None
-
-    @field_validator("schedule_value")
-    @classmethod
-    def validate_schedule_value(cls, v):
-        if v is not None:
-            v = v.strip().lower()
-            valid = [e.value for e in IntervalValue]
-            if v not in valid:
-                raise ValueError(
-                    f"schedule_value must be one of: "
-                    f"{', '.join(valid)}"
-                )
-        return v
-
-    @field_validator("schedule_time")
-    @classmethod
-    def validate_schedule_time(cls, v):
-        if v is not None:
-            v = v.strip()
-            if v and not _TIME_RE.match(v):
-                raise ValueError(
-                    "schedule_time must be HH:MM format"
-                )
-            if not v:
-                return None
-        return v
-
-    @model_validator(mode="after")
-    def at_least_one_field(self):
-        if (
-            self.schedule_value is None
-            and self.schedule_time is None
-            and self.is_enabled is None
-        ):
-            raise ValueError(
-                "At least one field must be provided"
-            )
-        return self
-
-
-class CreateRaidScheduleRequest(BaseModel):
-    """Request to create a raid/drip schedule from the panel."""
-
-    model_config = {"extra": "ignore"}
-
-    job_type: str
-    schedule_value: str = "daily"
-    schedule_time: Optional[str] = None
-    source_playlist_ids: Optional[List[str]] = None
-
-    @field_validator("job_type")
-    @classmethod
-    def validate_job_type(cls, v):
-        valid = {"raid", "drip", "raid_and_drip"}
-        if v not in valid:
-            raise ValueError(
-                "job_type must be one of: "
-                "{}".format(", ".join(sorted(valid)))
             )
         return v
 

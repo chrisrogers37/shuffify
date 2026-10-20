@@ -598,8 +598,8 @@ class SpotifyAPI:
         Note: Spotify silently no-ops on URIs that aren't on
         the playlist. This method only raises on HTTP-level
         failures; "URI was on the playlist but didn't get
-        removed" is caught by `verify_playlist_state`, not
-        here.
+        removed" is caught by the read-back that verifies a
+        durable operation's write, not here.
 
         Args:
             playlist_id: The Spotify playlist ID.

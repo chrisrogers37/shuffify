@@ -1,264 +1,74 @@
 """
-Unit tests for verify_playlist_state and
-PlaylistVerificationError.
+Unit tests for PlaylistVerificationError.
 
 Covers:
-  - Exact match returns the actual URI list
-  - Count drift raises with structured missing/extra
-  - URI substitution (same count, wrong members) raises
-  - Duplicates honored — multiset semantics, not set
-  - Paginated re-fetch via mocked api.get_playlist_tracks
-  - skip_cache=True is forwarded to the API call
-  - Empty expected + empty actual is a clean pass
-  - exception attributes carry playlist_id / phase / schedule_id
+  - Count drift reports structured missing/extra
+  - URI substitution (same count, wrong members) reports both sides
+  - Duplicates honored -- multiset semantics, not set
+  - Order alone is not a divergence
+  - Exception attributes carry playlist_id / phase / schedule_id
+  - The message carries the expected, actual, missing and extra counts
 """
 
-from unittest.mock import MagicMock
-
-import pytest
-
-from shuffify.services.executors import (
-    PlaylistVerificationError,
-    verify_playlist_state,
-)
-from shuffify.spotify.api import SpotifyAPI
+from shuffify.services.executors import PlaylistVerificationError
 
 
-def _tracks(uris):
-    return [{"uri": u, "name": u} for u in uris]
+def _error(expected, actual, *, playlist_id="p1", schedule_id=42, phase="swap"):
+    return PlaylistVerificationError(playlist_id, expected, actual, schedule_id, phase)
 
 
-class TestVerifyPlaylistStateMatch:
-    def test_exact_match_returns_actual_uris(self):
-        api = MagicMock()
-        api.get_playlist_tracks.return_value = _tracks(
-            ["u1", "u2", "u3"]
-        )
+class TestPlaylistVerificationErrorDivergence:
+    def test_count_drift_reports_missing(self):
+        error = _error(["u1", "u2", "u3"], ["u1", "u2"])
 
-        result = verify_playlist_state(
-            api, "p1", ["u1", "u2", "u3"], 42, "test",
-        )
+        assert error.missing == ["u3"]
+        assert error.extra == []
+        assert error.playlist_id == "p1"
+        assert error.phase == "swap"
+        assert error.schedule_id == 42
 
-        assert result == ["u1", "u2", "u3"]
+    def test_count_drift_reports_extra(self):
+        error = _error(["u1", "u2"], ["u1", "u2", "u3", "u4"])
 
-    def test_empty_expected_and_actual_passes(self):
-        api = MagicMock()
-        api.get_playlist_tracks.return_value = []
+        assert sorted(error.extra) == ["u3", "u4"]
+        assert error.missing == []
 
-        result = verify_playlist_state(
-            api, "p1", [], 42, "empty",
-        )
-
-        assert result == []
-
-    def test_order_does_not_matter_for_match(self):
-        """Multiset compare ignores order."""
-        api = MagicMock()
-        api.get_playlist_tracks.return_value = _tracks(
-            ["u3", "u1", "u2"]
-        )
-
-        # No raise — same multiset.
-        verify_playlist_state(
-            api, "p1", ["u1", "u2", "u3"], 42, "test",
-        )
-
-    def test_skip_cache_is_forwarded(self):
-        api = MagicMock()
-        api.get_playlist_tracks.return_value = _tracks(
-            ["u1"]
-        )
-
-        verify_playlist_state(
-            api, "p1", ["u1"], 42, "test",
-        )
-
-        api.get_playlist_tracks.assert_called_once_with(
-            "p1", skip_cache=True,
-        )
-
-
-class TestVerifyPlaylistStateDivergence:
-    def test_count_drift_raises_with_missing(self):
-        api = MagicMock()
-        api.get_playlist_tracks.return_value = _tracks(
-            ["u1", "u2"]
-        )
-
-        with pytest.raises(PlaylistVerificationError) as ex:
-            verify_playlist_state(
-                api, "p1",
-                ["u1", "u2", "u3"], 42, "swap",
-            )
-
-        assert ex.value.missing == ["u3"]
-        assert ex.value.extra == []
-        assert ex.value.playlist_id == "p1"
-        assert ex.value.phase == "swap"
-        assert ex.value.schedule_id == 42
-
-    def test_count_drift_raises_with_extra(self):
-        api = MagicMock()
-        api.get_playlist_tracks.return_value = _tracks(
-            ["u1", "u2", "u3", "u4"]
-        )
-
-        with pytest.raises(PlaylistVerificationError) as ex:
-            verify_playlist_state(
-                api, "p1",
-                ["u1", "u2"], 42, "swap",
-            )
-
-        assert sorted(ex.value.extra) == ["u3", "u4"]
-        assert ex.value.missing == []
-
-    def test_uri_substitution_raises(self):
-        """Same count, different members — a count-only
-        verifier would silently pass.
-        Multiset compare catches it.
+    def test_uri_substitution_reports_both_sides(self):
+        """Same count, different members -- a count-only verifier would
+        silently pass. Multiset compare catches it.
         """
-        api = MagicMock()
-        api.get_playlist_tracks.return_value = _tracks(
-            ["u1", "u2", "u4"]  # u3 → u4
-        )
+        error = _error(["u1", "u2", "u3"], ["u1", "u2", "u4"])  # u3 -> u4
 
-        with pytest.raises(PlaylistVerificationError) as ex:
-            verify_playlist_state(
-                api, "p1",
-                ["u1", "u2", "u3"], 42, "swap",
-            )
-
-        assert ex.value.missing == ["u3"]
-        assert ex.value.extra == ["u4"]
+        assert error.missing == ["u3"]
+        assert error.extra == ["u4"]
 
     def test_duplicates_in_expected_must_match_actual(self):
-        """Multiset semantics: 2 copies expected, 1 actual
-        is a missing.
-        """
-        api = MagicMock()
-        api.get_playlist_tracks.return_value = _tracks(
-            ["u1", "u2"]
-        )
+        """Multiset semantics: 2 copies expected, 1 actual is a missing."""
+        error = _error(["u1", "u1", "u2"], ["u1", "u2"], phase="shuffle")
 
-        with pytest.raises(PlaylistVerificationError) as ex:
-            verify_playlist_state(
-                api, "p1",
-                ["u1", "u1", "u2"], 42, "shuffle",
-            )
-
-        assert ex.value.missing == ["u1"]
-        assert ex.value.extra == []
+        assert error.missing == ["u1"]
+        assert error.extra == []
 
     def test_duplicates_in_actual_count_as_extra(self):
         """1 copy expected, 2 actual is an extra."""
-        api = MagicMock()
-        api.get_playlist_tracks.return_value = _tracks(
-            ["u1", "u1", "u2"]
-        )
+        error = _error(["u1", "u2"], ["u1", "u1", "u2"], phase="shuffle")
 
-        with pytest.raises(PlaylistVerificationError) as ex:
-            verify_playlist_state(
-                api, "p1",
-                ["u1", "u2"], 42, "shuffle",
-            )
+        assert error.missing == []
+        assert error.extra == ["u1"]
 
-        assert ex.value.missing == []
-        assert ex.value.extra == ["u1"]
+    def test_order_alone_reports_nothing_missing_or_extra(self):
+        """Multiset compare ignores order."""
+        error = _error(["u1", "u2", "u3"], ["u3", "u1", "u2"])
+
+        assert error.missing == []
+        assert error.extra == []
 
     def test_exception_message_contains_counts(self):
-        api = MagicMock()
-        api.get_playlist_tracks.return_value = _tracks(
-            ["u1", "u2"]
-        )
+        message = str(_error(["u1", "u2", "u3"], ["u1", "u2"]))
 
-        with pytest.raises(PlaylistVerificationError) as ex:
-            verify_playlist_state(
-                api, "p1",
-                ["u1", "u2", "u3"], 42, "swap",
-            )
-
-        msg = str(ex.value)
-        assert "expected 3 tracks" in msg
-        assert "got 2" in msg
-        assert "missing 1" in msg
-        assert "Schedule 42" in msg
-        assert "swap" in msg
-
-
-class TestVerifyPlaylistStateOrdered:
-    """Order-sensitive verification (ordered=True) for shuffle and drip
-    target checks. A shuffle that didn't reorder, or a drip that appended
-    instead of prepended, has the right multiset but the wrong sequence and
-    must be caught."""
-
-    def test_ordered_rejects_reordering_with_same_multiset(self):
-        api = MagicMock()
-        api.get_playlist_tracks.return_value = _tracks(
-            ["u1", "u2", "u3"]
-        )
-
-        with pytest.raises(PlaylistVerificationError):
-            verify_playlist_state(
-                api, "p1", ["u3", "u2", "u1"], 42, "shuffle",
-                ordered=True,
-            )
-
-    def test_ordered_passes_on_exact_sequence(self):
-        api = MagicMock()
-        api.get_playlist_tracks.return_value = _tracks(
-            ["u1", "u2", "u3"]
-        )
-
-        result = verify_playlist_state(
-            api, "p1", ["u1", "u2", "u3"], 42, "shuffle",
-            ordered=True,
-        )
-
-        assert result == ["u1", "u2", "u3"]
-
-    def test_default_mode_still_ignores_order(self):
-        """Default (ordered=False) keeps multiset semantics so raid/rotate
-        verification paths are unaffected."""
-        api = MagicMock()
-        api.get_playlist_tracks.return_value = _tracks(
-            ["u3", "u1", "u2"]
-        )
-
-        # No raise — multiset matches.
-        verify_playlist_state(
-            api, "p1", ["u1", "u2", "u3"], 42, "raid",
-        )
-
-
-class TestVerifyPlaylistStateAPIResilience:
-    def test_handles_none_returned_from_api(self):
-        """Some Spotify cache miss paths can yield None;
-        treat as empty.
-        """
-        api = MagicMock()
-        api.get_playlist_tracks.return_value = None
-
-        result = verify_playlist_state(
-            api, "p1", [], 42, "test",
-        )
-
-        assert result == []
-
-    def test_filters_tracks_without_uri(self):
-        """Spotify can return placeholder items missing a
-        URI (e.g. local tracks). Those don't count toward
-        the actual set.
-        """
-        api = MagicMock(spec=SpotifyAPI)
-        api.get_playlist_tracks.return_value = [
-            {"uri": "u1", "name": "u1"},
-            {"uri": None, "name": "local"},
-            {"name": "broken"},
-            {"uri": "u2", "name": "u2"},
-        ]
-
-        result = verify_playlist_state(
-            api, "p1", ["u1", "u2"], 42, "test",
-        )
-
-        assert result == ["u1", "u2"]
+        assert "expected 3 tracks" in message
+        assert "got 2" in message
+        assert "missing 1" in message
+        assert "extra 0" in message
+        assert "Schedule 42" in message
+        assert "swap" in message

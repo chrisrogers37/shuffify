@@ -8,12 +8,14 @@ fixture would reach every test: a setup test module opts in with
 
 import importlib
 from contextlib import ExitStack
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy.orm import Session
 
 from shuffify.models.db import PlaylistPair, RaidPlaylistLink, Schedule, UpstreamSource, db
-from shuffify.services import JobExecutorService, RaidSyncService, SchedulerService
+from shuffify.services import RaidSyncService, SchedulerService
 from shuffify.spotify.exceptions import SpotifyNotFoundError
 
 TARGET = "target"
@@ -29,7 +31,7 @@ PLAYLISTS = {
     "collab": {"name": "Shared Collab", "owner": "friend", "collaborative": True},
     "foreign": {"name": "Not Mine", "owner": "stranger"},
 }
-# Every path that creates, syncs, enables, disables, deletes or runs a job.
+# Every path that creates, syncs, enables, disables or deletes a scheduled job.
 SCHEDULER_PATHS = [
     ("shuffify.scheduler", "add_job_for_schedule"),
     ("shuffify.scheduler", "remove_job_for_schedule"),
@@ -39,13 +41,7 @@ SCHEDULER_PATHS = [
     (SchedulerService, "_sync_apscheduler_job"),
     (SchedulerService, "_remove_apscheduler_job"),
     (RaidSyncService, "watch_playlist"),
-    (RaidSyncService, "watch_search_query"),
     (RaidSyncService, "unwatch_playlist"),
-    (JobExecutorService, "execute"),
-    (JobExecutorService, "execute_now"),
-    (JobExecutorService, "_run_job"),
-    (JobExecutorService, "execute_raid_for_user"),
-    (JobExecutorService, "execute_drip_for_user"),
 ]
 
 
@@ -128,7 +124,7 @@ def no_scraping():
 
 @pytest.fixture
 def scheduler_spies():
-    """Mocks over every scheduling, sync, watch and executor path; a test asserts none was called."""
+    """Mocks over every scheduling, sync and watch path; a test asserts none was called."""
     with ExitStack() as stack:
         spies = {}
         for owner, name in SCHEDULER_PATHS:
@@ -140,6 +136,23 @@ def scheduler_spies():
 def assert_never_scheduled(spies):
     called = [name for name, spy in spies.items() if spy.called]
     assert called == [], f"setup reached scheduling paths: {called}"
+
+
+def collect_sources(schedule):
+    """The sources a saved routine's Collect resolves: what its durable command freezes, as the step builds them.
+
+    The setup tests use this to assert what the next run would really use. It runs the production capture and
+    the step's own source assembly, so it cannot drift from them.
+    """
+    from shuffify.services.operations.commands import routines
+    from shuffify.services.operations.commands.routine_capture import capture_schedule
+    from shuffify.services.operations.executors.raid import _sources
+
+    with Session(db.engine) as storage:
+        command = capture_schedule(storage, schedule.user_id, schedule.id)
+    values = {"command": command.model_dump(mode="json"), "pending_track_uris": []}
+    config = routines._config(SimpleNamespace(user=SimpleNamespace(id=schedule.user_id)), "raid", values)
+    return _sources(config)
 
 
 # --- Seeding --------------------------------------------------------------------

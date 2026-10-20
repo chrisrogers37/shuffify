@@ -2,7 +2,7 @@
 
 import json
 import re
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -161,67 +161,6 @@ class TestStripPii:
     def test_non_dict_event_returns_unchanged(self):
         assert _strip_pii("not a dict", hint=None) == "not a dict"
         assert _strip_pii(None, hint=None) is None
-
-
-# ---------------------------------------------------------------------------
-# _tag_sentry_scope (executor-side tagging)
-# ---------------------------------------------------------------------------
-
-
-class TestTagSentryScope:
-    def test_tags_schedule_context(self):
-        from shuffify.services.executors.base_executor import (
-            _tag_sentry_scope,
-        )
-
-        schedule = MagicMock(
-            job_type="rotate",
-            target_playlist_id="playlist-id",
-            user_id=42,
-        )
-
-        with patch("sentry_sdk.get_current_scope") as mock_scope:
-            scope = MagicMock()
-            mock_scope.return_value = scope
-
-            _tag_sentry_scope(schedule, schedule_id=11)
-
-            scope.set_tag.assert_any_call("schedule_id", 11)
-            scope.set_tag.assert_any_call("job_type", "rotate")
-            scope.set_tag.assert_any_call("playlist_id", "playlist-id")
-            scope.set_user.assert_called_once_with({"id": "42"})
-
-    def test_handles_missing_schedule(self):
-        from shuffify.services.executors.base_executor import (
-            _tag_sentry_scope,
-        )
-
-        with patch("sentry_sdk.get_current_scope") as mock_scope:
-            scope = MagicMock()
-            mock_scope.return_value = scope
-
-            _tag_sentry_scope(None, schedule_id=99)
-
-            scope.set_tag.assert_called_once_with("schedule_id", 99)
-            scope.set_user.assert_not_called()
-
-    def test_silent_when_scope_call_raises(self):
-        """Tagging must never break job execution."""
-        from shuffify.services.executors.base_executor import (
-            _tag_sentry_scope,
-        )
-
-        schedule = MagicMock(
-            job_type="rotate",
-            target_playlist_id="p",
-            user_id=1,
-        )
-        with patch(
-            "sentry_sdk.get_current_scope",
-            side_effect=RuntimeError("boom"),
-        ):
-            # Should not raise.
-            _tag_sentry_scope(schedule, schedule_id=1)
 
 
 # ---------------------------------------------------------------------------

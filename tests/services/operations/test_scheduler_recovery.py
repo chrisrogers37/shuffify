@@ -70,7 +70,6 @@ def test_restart_recovers_one_daily_slot_inside_grace_and_deduplicates(
 
     monkeypatch.setattr("shuffify.spotify.api.SpotifyAPI.__init__", forbidden)
     monkeypatch.setattr("requests.sessions.Session.request", forbidden)
-    monkeypatch.setattr("shuffify.services.executors.base_executor.JobExecutorService.execute", forbidden)
     with runtime(db_app, repository, scheduler_clock) as first:
         assert first.ready.wait(2)
         assert executions(repository) == []

@@ -49,7 +49,6 @@ def test_fire_admits_existing_closed_command_without_auth_or_legacy_executor(sch
     monkeypatch.setattr("shuffify.spotify.api.SpotifyAPI.__init__", forbidden)
     monkeypatch.setattr("shuffify.services.auth_service.AuthService._auth_manager", forbidden)
     monkeypatch.setattr("requests.sessions.Session.request", forbidden)
-    monkeypatch.setattr("shuffify.services.executors.base_executor.JobExecutorService.execute", forbidden)
     repository = OperationRepository()
     result = submit(repository, schedule)
     assert result.state == "admitted"

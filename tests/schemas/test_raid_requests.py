@@ -12,7 +12,6 @@ from shuffify.schemas.raid_requests import (
     AddRaidUrlRequest,
     RaidNowRequest,
     UnwatchPlaylistRequest,
-    UpdateRaidScheduleRequest,
     WatchPlaylistRequest,
 )
 from shuffify.services.schedule_utils import build_cron
@@ -320,60 +319,3 @@ class TestBuildCron:
     def test_unsupported_frequency_raises(self):
         with pytest.raises(ValueError):
             build_cron("every_6h", "12:00")
-
-
-# =============================================================================
-# UpdateRaidScheduleRequest
-# =============================================================================
-
-
-class TestUpdateRaidScheduleRequestValid:
-    """Tests for valid UpdateRaidScheduleRequest."""
-
-    def test_update_frequency(self):
-        req = UpdateRaidScheduleRequest(
-            schedule_value="weekly",
-        )
-        assert req.schedule_value == "weekly"
-
-    def test_update_time(self):
-        req = UpdateRaidScheduleRequest(
-            schedule_time="10:00",
-        )
-        assert req.schedule_time == "10:00"
-
-    def test_update_enabled(self):
-        req = UpdateRaidScheduleRequest(
-            is_enabled=False,
-        )
-        assert req.is_enabled is False
-
-    def test_update_multiple_fields(self):
-        req = UpdateRaidScheduleRequest(
-            schedule_value="daily",
-            schedule_time="08:00",
-            is_enabled=True,
-        )
-        assert req.schedule_value == "daily"
-        assert req.schedule_time == "08:00"
-        assert req.is_enabled is True
-
-
-class TestUpdateRaidScheduleRequestInvalid:
-    """Tests for invalid UpdateRaidScheduleRequest."""
-
-    def test_empty_request_raises(self):
-        with pytest.raises(ValidationError):
-            UpdateRaidScheduleRequest()
-
-    def test_invalid_schedule_value_raises(self):
-        with pytest.raises(ValidationError):
-            UpdateRaidScheduleRequest(
-                schedule_value="every_minute",
-            )
-
-    def test_invalid_time_format_raises(self):
-        with pytest.raises(ValidationError):
-            UpdateRaidScheduleRequest(
-                schedule_time="3pm",
-            )
