@@ -1,6 +1,6 @@
 # Service configuration
 
-Install the pinned authoring dependencies with `npm ci --prefix .railway` and check the file with `npm run --prefix .railway typecheck` and `npm test --prefix .railway`. Railway IaC requires CLI 5.42.1 or newer. Link the project and environment (`railway link --project shuffify-v2 --environment production`) before running `railway config plan`; inspect the complete proposed change before applying it. [Production](../documentation/guides/production.md) describes what runs where, the backups and how to roll back.
+Install the pinned authoring dependencies with `npm ci --prefix .railway` and check the file with `npm run --prefix .railway typecheck` and `npm test --prefix .railway`. Railway IaC requires CLI 5.42.1 or newer. Link the project and environment (`railway link --project shuffify --environment production`) before running `railway config plan`; inspect the complete proposed change before applying it. [Production](../documentation/guides/production.md) describes what runs where, the backups and how to roll back.
 
 The configuration declares the API, worker and Redis resources. Both application services require the owner-set shared `DATABASE_URL`; the API's pre-deploy migration receives that same variable. It is the direct, unpooled URL of the Neon project `shuffify-db`, branch `production`, so the worker can use PostgreSQL `LISTEN` and scheduler advisory locks. There is no SQLite fallback or database autoprovisioning in this Railway layout.
 

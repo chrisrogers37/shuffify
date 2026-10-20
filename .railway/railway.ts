@@ -93,5 +93,5 @@ export default defineRailway((rawContext) => {
       WORKER_CONTROL_URL: "http://${{worker.RAILWAY_PRIVATE_DOMAIN}}:5001",
     },
   });
-  return project("shuffify-v2", { resources: [cache, worker, api] });
+  return project("shuffify", { resources: [cache, worker, api] });
 });
