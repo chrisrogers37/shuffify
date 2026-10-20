@@ -84,16 +84,16 @@ def harness_environment(tmp_path, bash, launcher):
     (state / "secrets.env").write_text("SECRET_KEY=harmless-test-secret\nWORKER_CONTROL_TOKEN=harmless-control-token\n")
     shutil.copytree(REPO_ROOT / "harness" / "netguard", checkout / "harness" / "netguard")
 
-    # run_checks() performs unrelated artifact/lint checks before its env -i.
+    # run_checks() performs unrelated lint and migration checks before its env -i.
     # Stub only those commands; the environment construction stays unchanged.
     bin_dir = checkout / "bin"
     bin_dir.mkdir()
     python = bin_dir / "python"
     python.write_text('#!/bin/sh\ncase "$1" in scripts/*) exit 0 ;; esac\nexec "$HARNESS_TEST_PYTHON" "$@"\n')
     python.chmod(0o755)
-    for command in (bin_dir / "ruff", scripts / "build-css.sh"):
-        command.write_text("#!/bin/sh\nexit 0\n")
-        command.chmod(0o755)
+    ruff = bin_dir / "ruff"
+    ruff.write_text("#!/bin/sh\nexit 0\n")
+    ruff.chmod(0o755)
 
     capture = tmp_path / "command.args"
     result = subprocess.run(

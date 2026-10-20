@@ -70,7 +70,7 @@ shuffify/
 │   ├── models/               # Data models + SQLAlchemy DB models
 │   ├── spotify/              # Modular Spotify client (auth, api, cache)
 │   ├── shuffle_algorithms/   # Shuffle algorithms and their registry
-│   └── static/               # Shared fonts, branding and public legal artifacts
+│   └── static/               # Shared fonts and branding
 ├── web/                      # React application, contracts and frontend checks
 ├── assets/                   # Canonical design and legal sources
 ├── tests/                    # Test suite
@@ -79,7 +79,7 @@ shuffify/
 
 ## Visual design sources
 
-The After Hours design system is shared by the public pages and the React application.
+The After Hours design system styles the whole React application, public pages included.
 Authoritative tokens and recipes live in `assets/design/`; the frontend generates
 its theme from those inputs. See the
 [design system](documentation/design/after-hours/DESIGN.md).
@@ -100,16 +100,13 @@ split API refuses to start without `PUBLIC_ORIGIN`; development, the harness,
 and the private worker do not require it.
 
 Legal copy is canonical in `assets/legal/`. The frontend prerenders that copy
-for `/terms` and `/privacy`. The explicit-input shell in
-`assets/design/templates/` also generates committed public legal documents for
-static verification. After editing its macros or legal copy, run
-`python scripts/build-public-pages.py`, then `./scripts/build-css.sh`.
-Commit generated legal HTML and CSS; their `--check` modes detect drift.
+for `/terms` and `/privacy`, and `tests/test_legal_copy_pin.py` fails when the
+copy changes without its pinned hash being updated.
 
-The static legal generator escapes the `CONTACT_ADDRESS` environment value and
-otherwise uses the owner address, `christophertrogers37@gmail.com`. A generated
-public document containing the unresolved `CONTACT_ADDRESS` marker fails
-verification. Use the same contact value for generation and `--check`.
+The frontend build escapes the `CONTACT_ADDRESS` environment value into that
+copy and otherwise uses the owner address, `christophertrogers37@gmail.com`. An
+unresolved `CONTACT_ADDRESS` marker fails generation and the release build. Use
+the same contact value for `npm run public:generate` and `npm run public:check`.
 
 ## License
 

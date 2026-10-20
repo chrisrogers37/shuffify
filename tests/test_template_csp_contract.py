@@ -8,9 +8,6 @@ from urllib.parse import urlsplit
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-# Canonical static legal artifacts are checked alongside the frontend HTML entry.
-PUBLIC_DIR = REPO_ROOT / "shuffify" / "static" / "public"
-JS_DIR = REPO_ROOT / "shuffify" / "static" / "js"
 
 # A <style> block's CSS body can mention `style="..."` in prose. Strip those
 # regions for attribute scanning; the executable-element guard checks the
@@ -49,12 +46,7 @@ def _strip_js_comments(text: str) -> str:
 
 
 def _templates():
-    return sorted(PUBLIC_DIR.rglob("*.html")) + [REPO_ROOT / "web" / "index.html"]
-
-
-def _html_sources():
-    # HTML builders in shipped JS are subject to the same attribute policy.
-    return _templates() + sorted(JS_DIR.rglob("*.js"))
+    return [REPO_ROOT / "web" / "index.html"]
 
 
 def _rel(path: Path) -> str:
@@ -81,7 +73,7 @@ def _offending_lines(path: Path, pattern: re.Pattern):
     return hits
 
 
-@pytest.mark.parametrize("path", _html_sources(), ids=lambda p: p.name)
+@pytest.mark.parametrize("path", _templates(), ids=lambda p: p.name)
 def test_no_style_attribute(path):
     """`style="..."` is inert under this CSP."""
     hits = _offending_lines(path, STYLE_ATTR)
@@ -94,7 +86,7 @@ def test_no_style_attribute(path):
     )
 
 
-@pytest.mark.parametrize("path", _html_sources(), ids=lambda p: p.name)
+@pytest.mark.parametrize("path", _templates(), ids=lambda p: p.name)
 def test_no_inline_event_handler(path):
     """Inline `on*=` handlers are inert under this CSP."""
     hits = _offending_lines(path, HANDLER_ATTR)
@@ -170,7 +162,6 @@ def test_csp_source_guard_covers_js_builders_and_unquoted_attributes(tmp_path):
     source.write_text('target.innerHTML = `<div STYLE=color:red ONCLICK=go()>x</div>`;')
     assert _offending_lines(source, STYLE_ATTR)
     assert _offending_lines(source, HANDLER_ATTR)
-    assert PUBLIC_DIR / "terms.html" in _html_sources()
 
 
 def test_csp_guard_cannot_hide_attributes_with_urls_comments_or_allowed_words(tmp_path):
@@ -201,17 +192,17 @@ def test_csp_attribute_guard_detects_multiline_mutations(tmp_path, markup, patte
     '<script\n nonce="fixed-pretend-nonce">\nalert(1)\n</script>',
 ])
 def test_static_script_guard_rejects_even_multiline_fixed_nonces(monkeypatch, tmp_path, markup):
-    source = tmp_path / "public.html"
+    source = tmp_path / "index.html"
     source.write_text(markup)
     monkeypatch.setattr(__name__ + ".REPO_ROOT", tmp_path)
-    with pytest.raises(AssertionError, match="inline <script>"):
-        test_static_public_pages_have_no_inline_script(source)
+    with pytest.raises(AssertionError, match="index.html"):
+        test_static_documents_have_no_inline_executable_elements(source)
 
 
 def test_static_script_guard_allows_external_script(tmp_path):
-    source = tmp_path / "public.html"
+    source = tmp_path / "index.html"
     source.write_text('<script\n src="/assets/app.js"></script>')
-    test_static_public_pages_have_no_inline_script(source)
+    test_static_documents_have_no_inline_executable_elements(source)
 
 
 def test_backend_csp_does_not_authorize_inline_script_or_style(db_app):
@@ -269,18 +260,4 @@ def test_external_scripts_are_permitted_by_script_src(path):
         + "\n".join(f"  line {n}: {o}" for n, o in bad)
         + f"\nPermitted: {sorted(allowed)}. Either serve the asset from "
         "'self' at build time or add the host deliberately."
-    )
-
-
-@pytest.mark.parametrize(
-    "path", sorted(PUBLIC_DIR.rglob("*.html")), ids=lambda p: p.name
-)
-def test_static_public_pages_have_no_inline_script(path):
-    """The static documents cannot execute inline scripts under the shipped policy."""
-    elements = _ExecutableElements()
-    elements.feed(path.read_text(encoding="utf-8"))
-    bad = [nonce for tag, nonce in elements.inline if tag == "script"]
-    assert not bad, (
-        f"{_rel(path)} contains an inline <script> that CSP refuses; a static "
-        "file cannot be given a nonce. Serve its script from a same-origin file."
     )

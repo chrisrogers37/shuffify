@@ -33,7 +33,7 @@ The fixture transport fails closed for unknown endpoints and scenarios; it never
 
 `assets/design/tokens.json` in the repository root is authoritative. `npm run theme:generate` creates `src/design/generated/theme.css`, the Tailwind 4 theme, and a compatibility composition of the existing shared design recipes. It also copies local fonts, licenses, the Shuffify mark and the official Spotify logo from `shuffify/static/` into `public/`. `theme:check` rejects stale, missing and obsolete CSS output and stale copied assets. Do not edit generated CSS or copied assets by hand.
 
-The foundation adds `radii.artwork-wide` and explicit existing legacy breakpoints to the shared token source. The old Tailwind 3 adapter remains intact. Artwork uses the two artwork tokens: 4px below the workspace breakpoint and 8px from that breakpoint. The component displays intact artwork with the official Spotify logo and a direct Spotify link. Layout, palette, type, spacing, radii, shadows and motion remain token driven.
+The foundation adds `radii.artwork-wide` and explicit existing legacy breakpoints to the shared token source. Artwork uses the two artwork tokens: 4px below the workspace breakpoint and 8px from that breakpoint. The component displays intact artwork with the official Spotify logo and a direct Spotify link. Layout, palette, type, spacing, radii, shadows and motion remain token driven.
 
 An integration normally reads sources from the parent of `web/`. Standalone review can set `SHUFFIFY_SOURCE_ROOT` and `SHUFFIFY_TOKENS_FILE`; the scratch-only `.foundation-source.json` is not part of the deliverable.
 

@@ -18,7 +18,7 @@ A headless-browser pass over every page is one of them (see
 
 ```bash
 scripts/harness.sh setup          # idempotent: everything below, then (re)start and check the app
-scripts/harness.sh setup --quick  # same, without artifact checks, lint and tests
+scripts/harness.sh setup --quick  # same, without lint and tests
 scripts/harness.sh e2e            # behaviour tests against the running app (pytest args pass through)
 scripts/harness.sh down           # stop the app and services (data is kept)
 scripts/harness.sh status         # what is running, and any blocked connections
@@ -44,8 +44,7 @@ code that is running now.
    stamps it at the migration head and leaves a database that already has a
    revision as it is, then applies migrations with `flask db upgrade`. Both
    run with `SHUFFIFY_MIGRATION_STEP` set for those processes only.
-5. Unless `--quick`: checks the committed public pages and Tailwind
-   stylesheet, runs `ruff check .` and `scripts/check-migration-chain.py`,
+5. Unless `--quick`: runs `ruff check .` and `scripts/check-migration-chain.py`,
    and runs `pytest tests/ -m "not integration"` under `env -i` with
    CI's backend-job values and `FLASK_SKIP_DOTENV=1`, so other shell exports
    and Flask dotenv auto-loading cannot add settings to the suite.
@@ -425,8 +424,8 @@ The browser reaches nothing off this machine:
 
 No page loads a script from another origin: the React app bundles its
 dependencies, SortableJS included. `tests/test_harness_vendor.py`, in the unit
-suite, parses the frontend entry and the public pages and requires every script
-to come from the app's own origin.
+suite, parses the frontend entry and requires every script to come from the
+app's own origin.
 
 ## CI
 

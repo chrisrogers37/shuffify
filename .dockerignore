@@ -46,7 +46,7 @@ documentation
 .DS_Store
 Thumbs.db
 
-# Node (Tailwind tooling)
+# Node tooling and the frontend, which deploys separately
 node_modules
 **/node_modules
 .railway

@@ -1,5 +1,6 @@
-/* Shared design sources are compiled into the committed same-origin stylesheet.
-   Edit assets/design/; never edit shuffify/static/css/tailwind.css directly. */
+/* Lists the shared design sources. web/scripts/generate-theme.mjs composes the
+   @import lines below into web/src/design/generated/recipes.css; edit
+   assets/design/ and regenerate, never the generated output. */
 @import "./design/core.css";
 @import "./design/components/library.css";
 @import "./design/components/workspace.css";
@@ -14,7 +15,3 @@
 @import "./design/pages/setup.css";
 @import "./design/pages/activity.css";
 @import "./design/pages/routines.css";
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
