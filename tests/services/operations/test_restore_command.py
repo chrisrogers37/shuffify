@@ -1,6 +1,5 @@
 """A reviewed child restores only known current effects and resolves its owned parent atomically."""
 
-import time
 from copy import deepcopy
 
 import pytest
@@ -11,7 +10,7 @@ from shuffify.services.operations.history import HistoryStore
 from shuffify.services.operations.restoration import capture_restore
 from shuffify.services.operations.restore_review import build_context, read_metadata, read_tracks
 from shuffify.worker import OperationWorker
-from tests.services.operations.test_crash_recovery import Crash, uri
+from tests.services.operations.test_crash_recovery import Crash, expire_lease, uri
 from tests.services.operations.test_routine_commands import routine as routine
 
 
@@ -131,7 +130,6 @@ def test_verified_restoration_local_failure_never_compensates_and_lost_reply_use
 
 
 def test_crash_after_ack_recovers_same_plan_and_one_required_receipt(restoration, monkeypatch):
-    restoration.repository.lease_seconds = 1
     row = restoration.enqueue_restore()
     original = restoration.repository.checkpoint
     cut = []
@@ -149,7 +147,7 @@ def test_crash_after_ack_recovers_same_plan_and_one_required_receipt(restoration
         patches.setattr(restoration.repository, "checkpoint", crash)
         with pytest.raises(Crash):
             restoration.run_restore(row)
-    time.sleep(1.05)
+    expire_lease(restoration.repository, row.id)
     finished, completed = restoration.run_restore(row)
     assert finished and completed.state == "succeeded"
     assert len(restoration.world.writes) == 1 and ActivityLog.query.count() == 1
@@ -413,7 +411,6 @@ def test_typed_control_during_history_publication_never_compensates_or_repeats_r
     from shuffify.services.operations.repository import LeaseLost
     from shuffify.services.state_service import StateService
 
-    restoration.repository.lease_seconds = 1
     row = restoration.enqueue_restore()
 
     def stop(*args, **kwargs):
@@ -428,7 +425,7 @@ def test_typed_control_during_history_publication_never_compensates_or_repeats_r
     assert pending.state == "running" and not pending.journal.get("compensation")
     assert restoration.world.playlists["target"]["track_uris"] == [uri(1), uri(2), uri(3)]
     assert len(restoration.world.writes) == 1 and ActivityLog.query.count() == 0
-    time.sleep(1.05)
+    expire_lease(restoration.repository, row.id)
     finished, completed = restoration.run_restore(row)
     assert finished and completed.state == "succeeded"
     assert len(restoration.world.writes) == 1 and ActivityLog.query.count() == 1

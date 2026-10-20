@@ -9,7 +9,7 @@ import requests
 from shuffify.models.db import ActivityLog
 from shuffify.services.operations.commands.restore import operation_restore
 from shuffify.worker import OperationWorker
-from tests.services.operations.test_crash_recovery import Crash, uri
+from tests.services.operations.test_crash_recovery import Crash, expire_lease, uri
 from tests.services.operations.test_restore_command import replace_parent
 from tests.services.operations.test_restore_command import restoration as restoration
 from tests.services.operations.test_routine_commands import routine as routine
@@ -66,7 +66,6 @@ def test_every_batch_boundary_restores_the_complete_order_with_duplicates(restor
 @pytest.mark.parametrize("phase", ["ack", "applied_response_lost"])
 def test_each_http_call_cut_recovers_without_repeating_a_confirmed_batch(restoration, monkeypatch, cut, phase):
     expected = parent_order(restoration, 250)
-    restoration.repository.lease_seconds = 1
     row = restoration.enqueue_restore()
     checkpoint, dispatch = restoration.repository.checkpoint, restoration.world.dispatch
     fired, calls = [], []
@@ -94,7 +93,7 @@ def test_each_http_call_cut_recovers_without_repeating_a_confirmed_batch(restora
         patches.setattr(restoration.world, "dispatch", lost)
         with pytest.raises(Crash):
             restoration.run_restore(row, factory(restoration))
-    time.sleep(1.05)
+    expire_lease(restoration.repository, row.id)
     finished, completed = restoration.run_restore(row, factory(restoration))
     assert fired and finished and completed.state == "succeeded"
     assert restoration.world.playlists["target"]["track_uris"] == expected
@@ -178,7 +177,6 @@ def test_failed_later_restore_batch_rolls_back_only_the_child_and_never_resolves
 def test_external_edit_during_terminal_publication_downgrades_current_counts_without_overwrite(
     restoration, monkeypatch
 ):
-    restoration.repository.lease_seconds = 1
     row = restoration.enqueue_restore()
 
     def crash(*args, **kwargs):
@@ -189,7 +187,7 @@ def test_external_edit_during_terminal_publication_downgrades_current_counts_wit
         with pytest.raises(Crash):
             restoration.run_restore(row)
     restoration.world.playlists["target"].update(track_uris=[uri(88)], snapshot_id="external")
-    time.sleep(1.05)
+    expire_lease(restoration.repository, row.id)
     finished, completed = restoration.run_restore(row)
     result = completed.journal["result"]
     assert finished and completed.state == "needs_attention"

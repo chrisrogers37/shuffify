@@ -1,10 +1,13 @@
 """Crash every durable and Spotify boundary, including applied writes with lost responses."""
 
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy import update
 
+from shuffify.models.db import JobExecution
 from shuffify.services.operations.journal import DurableJournal
 from shuffify.spotify.api import SpotifyAPI
 
@@ -15,6 +18,17 @@ class Crash(BaseException):
 
 def uri(index):
     return f"spotify:track:{index:022d}"
+
+
+def expire_lease(repository, operation_id):
+    """Lapse one operation's lease now, so a crashed run is recoverable without waiting on the clock."""
+    with repository.engine.begin() as connection:
+        lapsed = connection.execute(
+            update(JobExecution)
+            .where(JobExecution.id == operation_id)
+            .values(lease_expires_at=datetime.now(timezone.utc) - timedelta(seconds=1))
+        )
+    assert lapsed.rowcount == 1
 
 
 class World:

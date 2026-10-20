@@ -234,13 +234,9 @@ def test_optional_activity_failure_preserves_required_association(asset_operatio
 
 
 def test_terminal_recovery_refuses_intervening_privacy_edit_without_duplicate_activity(asset_operation, monkeypatch):
-    import time
-    from datetime import datetime, timezone
-
-    from tests.services.operations.test_crash_recovery import Crash
+    from tests.services.operations.test_crash_recovery import Crash, expire_lease
 
     case = asset_operation
-    case.repository.lease_seconds = 1
     original = case.repository.finish
 
     def interrupted(*args, **kwargs):
@@ -253,9 +249,7 @@ def test_terminal_recovery_refuses_intervening_privacy_edit_without_duplicate_ac
     assert PlaylistPair.query.count() == ActivityLog.query.count() == 1
     case.world.playlists["created-1"]["metadata"]["public"] = True
     case.world.playlists["created-1"]["snapshot_id"] = "external-edit"
-    until = case.repository.get(row.id).lease_expires_at
-    while datetime.now(timezone.utc) <= until:
-        time.sleep(0.02)
+    expire_lease(case.repository, row.id)
     monkeypatch.setattr(case.repository, "finish", original)
     completed = case.run(row)
     assert completed.state == "needs_attention"
