@@ -53,10 +53,11 @@ unsafe requests only from that origin.
 - **API and worker:** in Railway, redeploy each service's previous successful deployment, or revert the change on `main`.
   - The API refuses to start unless the schema is exactly at its own Alembic head.
   - A rollback across a migration therefore also needs the matching schema change.
-  - Releases from the cutover to 2026-10-20 use head `c9d0e1f2a3b4`; later ones use `d0e1f2a3b4c5`, which drops v1's
-    `apscheduler_jobs` table. Before rolling back past it, run
-    `SCHEDULER_ENABLED=false SHUFFIFY_MIGRATION_STEP=1 flask db downgrade c9d0e1f2a3b4` against production. That
-    downgrade changes only the recorded revision.
+  - Releases before #62 use head `c9d0e1f2a3b4`. From #62 on they use `d0e1f2a3b4c5`, which drops v1's
+    `apscheduler_jobs` table. To roll back to a release before #62, first step the schema back. From a checkout of a
+    later release, with the repository's virtualenv active, run it with the API's variables:
+    `railway run --service api --environment production -- env FLASK_APP=run.py SCHEDULER_ENABLED=false SHUFFIFY_MIGRATION_STEP=1 flask db downgrade c9d0e1f2a3b4`.
+    That downgrade changes only the recorded revision.
 
 ### Recent data changes
 
@@ -67,7 +68,9 @@ npx neonctl branches restore production '^self@2026-10-20T12:00:00Z' \
   --project-id proud-dew-57305636 --preserve-under-name production-before-restore
 ```
 
-Connections drop briefly and the API reconnects. Redeploy the worker afterwards.
+Connections drop briefly and the API reconnects. Then redeploy the API, then the worker. If the restore point
+predates a migration, the API's pre-deploy step upgrades the schema again. The worker has no pre-deploy step
+and refuses to start on an older schema.
 
 ### Back to the pre-cutover snapshot
 
