@@ -2,6 +2,7 @@
 
 import time
 from datetime import timedelta
+from threading import Event
 
 import pytest
 from sqlalchemy.orm import Session
@@ -36,8 +37,14 @@ def test_postgres_leader_replacement_recovers_due_once_and_future_restarts_dedup
     options = dict(
         clock=lambda: scheduler_clock[0], retry_initial=0.005, retry_max=0.01, leader_check_interval=0.01,
     )
+    admitted = Event()
+
+    def on_event(name, _value):
+        if name == "admitted":
+            admitted.set()
+
     first = WorkerScheduler(db_app, repository, **options)
-    second = WorkerScheduler(db_app, repository, **options)
+    second = WorkerScheduler(db_app, repository, event_callback=on_event, **options)
     try:
         first.start()
         assert first.ready.wait(3)
@@ -49,7 +56,7 @@ def test_postgres_leader_replacement_recovers_due_once_and_future_restarts_dedup
         second.start()
         first.close()
         assert second.ready.wait(3)
-        rows = wait_for_fire(repository)
+        rows = wait_for_fire(repository, admitted)
         assert len(rows) == 1
         operation_id = rows[0].id
         assert rows[0].scheduled_for == NOW
