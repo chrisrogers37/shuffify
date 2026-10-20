@@ -15,7 +15,7 @@ from shuffify.services.operations.journal import OperationDeferred
 from shuffify.services.operations.repository import LeaseLost
 from shuffify.services.playlist_lock import playlist_configuration_lock
 from shuffify.worker import OperationWorker
-from tests.services.operations.test_crash_recovery import Crash, uri
+from tests.services.operations.test_crash_recovery import Crash, expire_lease, uri
 from tests.services.operations.test_dismiss_commands import inbox as inbox
 from tests.services.operations.test_routine_commands import routine as routine
 
@@ -79,7 +79,6 @@ def test_optional_activity_failure_does_not_undo_the_required_dismissal(inbox, m
 
 
 def test_crash_after_local_acceptance_resumes_only_the_cleanup_after_actual_lease_expiry(inbox, monkeypatch):
-    inbox.repository.lease_seconds = 1
     original = inbox.repository.local_step
     row = inbox.enqueue_dismiss()
 
@@ -95,7 +94,7 @@ def test_crash_after_local_acceptance_resumes_only_the_cleanup_after_actual_leas
             inbox.run_dismiss(row)
     assert states(inbox) == ["dismissed", "dismissed"]
     assert inbox.factories == [] and inbox.world.writes == []
-    time.sleep(1.05)
+    expire_lease(inbox.repository, row.id)
     completed = inbox.run_dismiss(row)
     assert completed.state == "succeeded"
     assert completed.journal["result"]["dismissed_count"] == 2
@@ -104,7 +103,6 @@ def test_crash_after_local_acceptance_resumes_only_the_cleanup_after_actual_leas
 
 
 def test_partial_cleanup_recovery_keeps_dismissed_rows_and_never_replays_the_acknowledged_batch(inbox, monkeypatch):
-    inbox.repository.lease_seconds = 1
     values = [uri(value) for value in range(1000, 1101)]
     with Session(db.engine) as storage:
         storage.add_all(
@@ -154,7 +152,7 @@ def test_partial_cleanup_recovery_keeps_dismissed_rows_and_never_replays_the_ack
         with pytest.raises(Crash):
             inbox.run_dismiss(row, factory)
     assert len(inbox.world.writes) == 1
-    time.sleep(1.05)
+    expire_lease(inbox.repository, row.id)
     completed = inbox.run_dismiss(row, factory)
     assert completed.state == "succeeded"
     assert completed.journal["result"]["dismissed_count"] == 103
@@ -166,7 +164,6 @@ def test_partial_cleanup_recovery_keeps_dismissed_rows_and_never_replays_the_ack
 
 
 def test_fresh_source_conflict_after_ack_retains_db_receipt_and_never_overwrites(inbox, monkeypatch):
-    inbox.repository.lease_seconds = 1
     original = inbox.repository.checkpoint
     row = inbox.enqueue_dismiss()
 
@@ -182,7 +179,7 @@ def test_fresh_source_conflict_after_ack_retains_db_receipt_and_never_overwrites
             inbox.run_dismiss(row)
     inbox.world.playlists["collection"].update(track_uris=[uri(99)], snapshot_id="external")
     before = deepcopy(inbox.world.playlists)
-    time.sleep(1.05)
+    expire_lease(inbox.repository, row.id)
     completed = inbox.run_dismiss(row)
     result = completed.journal["result"]
     assert completed.state == "needs_attention"
@@ -304,7 +301,6 @@ def test_cleanup_acceptance_outage_preserves_verified_removal_and_dismissed_rows
 
 
 def test_applied_cleanup_response_lost_is_reconciled_without_a_second_delete(inbox, monkeypatch):
-    inbox.repository.lease_seconds = 1
     row = inbox.enqueue_dismiss()
     original = inbox.world.dispatch
 
@@ -318,7 +314,7 @@ def test_applied_cleanup_response_lost_is_reconciled_without_a_second_delete(inb
         patches.setattr(inbox.world, "dispatch", lost)
         with pytest.raises(Crash):
             inbox.run_dismiss(row)
-    time.sleep(1.05)
+    expire_lease(inbox.repository, row.id)
     completed = inbox.run_dismiss(row)
     assert completed.state == "succeeded"
     assert completed.journal["result"]["source_removed_count"] == 2
@@ -336,7 +332,6 @@ def test_empty_dismissal_preserves_zero_count_activity_without_provider_access(i
 
 
 def test_lost_db_acceptance_reply_and_receipt_read_outage_never_authenticate_until_recovery(inbox, monkeypatch):
-    inbox.repository.lease_seconds = 1
     original_step, original_get = inbox.repository.local_step, inbox.repository.get
     unavailable = []
     row = inbox.enqueue_dismiss()
@@ -367,7 +362,7 @@ def test_lost_db_acceptance_reply_and_receipt_read_outage_never_authenticate_unt
     assert states(inbox) == ["dismissed", "dismissed"]
     assert inbox.factories == [] and inbox.world.writes == []
     assert ActivityLog.query.count() == 1
-    time.sleep(1.05)
+    expire_lease(inbox.repository, row.id)
     completed = inbox.run_dismiss(row)
     assert completed.state == "succeeded"
     assert completed.journal["result"]["dismissed_count"] == 2
@@ -376,7 +371,6 @@ def test_lost_db_acceptance_reply_and_receipt_read_outage_never_authenticate_unt
 
 @pytest.mark.parametrize("external_edit", [False, True])
 def test_terminal_reply_loss_revalidates_source_without_repeating_dismissal(inbox, monkeypatch, external_edit):
-    inbox.repository.lease_seconds = 1
     row = inbox.enqueue_dismiss()
 
     def crash(*args, **kwargs):
@@ -389,7 +383,7 @@ def test_terminal_reply_loss_revalidates_source_without_repeating_dismissal(inbo
     if external_edit:
         inbox.world.playlists["collection"].update(track_uris=[uri(99)], snapshot_id="external")
     before = deepcopy(inbox.world.playlists)
-    time.sleep(1.05)
+    expire_lease(inbox.repository, row.id)
     completed = inbox.run_dismiss(row)
     result = completed.journal["result"]
     assert completed.state == ("needs_attention" if external_edit else "succeeded")
