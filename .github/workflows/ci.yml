@@ -81,6 +81,19 @@ jobs:
           # Minimum coverage; ratchet up as coverage improves.
           COV_MIN: '80'
 
+      # PostgreSQL-only behaviour: locks, LISTEN and transactional DDL. Each test
+      # module starts a throwaway server from the runner's PostgreSQL binaries;
+      # without them every test would skip, so their absence fails the step. The
+      # live Spotify scraper checks stay in the on-demand live-integration workflow.
+      - name: PostgreSQL integration tests
+        shell: bash
+        run: |
+          pgbin="$(ls -d /usr/lib/postgresql/*/bin | sort -V | tail -n 1)"
+          test -x "$pgbin/initdb"
+          test -x "$pgbin/pg_ctl"
+          PATH="$pgbin:$PATH" pytest tests/ -m integration -q \
+            --ignore=tests/services/source_resolver/test_live_scraper_validation.py
+
   harness:
     name: Harness (fresh PostgreSQL migrations + app boot)
     runs-on: ubuntu-latest
