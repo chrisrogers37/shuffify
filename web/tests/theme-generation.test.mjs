@@ -101,3 +101,20 @@ test("font tokens must identify existing local bundled font files", async () => 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("font tokens must name at least one non-blank font family", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "shuffify-font-family-"));
+  try {
+    for (const invalid of [[], [""], ["  "], ["DM Sans", ""], [42], "DM Sans"]) {
+      const changed = structuredClone(tokens);
+      changed.fonts.roles.ui.family = invalid;
+      const invalidTokens = join(directory, "tokens.json");
+      await writeFile(invalidTokens, JSON.stringify(changed));
+      const generated = run(directory, true, invalidTokens);
+      assert.equal(generated.status, 1);
+      assert.match(generated.stderr, /Invalid font family: ui/);
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

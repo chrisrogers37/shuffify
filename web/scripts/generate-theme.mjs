@@ -29,6 +29,14 @@ const tokenPath =
     ? resolve(root, local.tokensFile)
     : resolve(source, "assets/design/tokens.json"));
 const tokens = JSON.parse(await readFile(tokenPath, "utf8"));
+for (const [name, font] of Object.entries(tokens.fonts.roles)) {
+  if (
+    !Array.isArray(font.family) ||
+    !font.family.length ||
+    font.family.some((item) => typeof item !== "string" || !item.trim())
+  )
+    throw Error(`Invalid font family: ${name}`);
+}
 const values = {};
 const add = (prefix, group) =>
   Object.entries(group).forEach(([name, value]) => {
