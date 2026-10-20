@@ -44,10 +44,6 @@ from .requests import (
     parse_shuffle_request,
 )
 from .routine_requests import RoutineActivateRequest, RoutineDefinition, RoutineReviewRequest, RoutineStateRequest
-from .schedule_requests import (
-    ScheduleCreateRequest,
-    ScheduleUpdateRequest,
-)
 from .settings_requests import (
     UserSettingsUpdateRequest,
 )
@@ -72,8 +68,6 @@ __all__ = [
     # Utility functions
     "parse_shuffle_request",
     # Schedule schemas
-    "ScheduleCreateRequest",
-    "ScheduleUpdateRequest",
     "RoutineDefinition",
     "RoutineReviewRequest",
     "RoutineActivateRequest",

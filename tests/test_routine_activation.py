@@ -580,7 +580,7 @@ def test_legacy_mutators_hold_target_locks_through_registration(world):
             user.id, "shuffle", "target", "Morning Mix", "interval", "daily", algorithm_name="BasicShuffle"
         )
         SchedulerService.update_schedule(schedule.id, user.id, schedule_value="weekly")
-        SchedulerService.toggle_schedule(schedule.id, user.id)
+        SchedulerService.update_schedule(schedule.id, user.id, is_enabled=False)
         with patch.object(SchedulerService, "_sync_apscheduler_job", side_effect=sync_move):
             SchedulerService.update_schedule(schedule.id, user.id, target_playlist_id="mine1")
     with patch.object(SchedulerService, "_remove_apscheduler_job", side_effect=removed):
@@ -601,7 +601,7 @@ def test_legacy_mutators_return_busy_without_changing_row(file_db_app):
         with app.app_context():
             actions = [
                 lambda: SchedulerService.update_schedule(routine_id, user_id, schedule_value="weekly"),
-                lambda: SchedulerService.toggle_schedule(routine_id, user_id),
+                lambda: SchedulerService.update_schedule(routine_id, user_id, is_enabled=False),
                 lambda: SchedulerService.delete_schedule(routine_id, user_id),
                 lambda: SchedulerService.create_schedule(
                     user_id, "shuffle", "target", "Morning Mix", "interval", "daily",

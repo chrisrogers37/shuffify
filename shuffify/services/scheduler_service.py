@@ -85,20 +85,6 @@ class SchedulerService:
         return schedules
 
     @staticmethod
-    def get_schedules_for_playlist(
-        user_id: int, playlist_id: str
-    ) -> List[Schedule]:
-        """Get all schedules for a specific playlist."""
-        return (
-            Schedule.query.filter_by(
-                user_id=user_id,
-                target_playlist_id=playlist_id,
-            )
-            .order_by(Schedule.created_at.desc())
-            .all()
-        )
-
-    @staticmethod
     def get_schedule(
         schedule_id: int, user_id: int
     ) -> Schedule:
@@ -124,16 +110,13 @@ class SchedulerService:
         source_playlist_ids: Optional[List[str]] = None,
         algorithm_name: Optional[str] = None,
         algorithm_params: Optional[Dict[str, Any]] = None,
-        register: bool = True,
         timezone: Optional[str] = None,
     ) -> Schedule:
         """
         Save a schedule and request a worker refresh.
 
-        Args:
-            register: Send an additional best-effort refresh hint after creation.
-                Transactional definition notifications are always published;
-                registration is reported separately from worker memory.
+        Transactional definition notifications are always published;
+        registration is reported separately from worker memory.
 
         Raises:
             ScheduleError: If creation fails.
@@ -161,8 +144,7 @@ class SchedulerService:
                 f"{job_type} on {target_playlist_name}",
                 ScheduleError,
             )
-            if register:
-                SchedulerService._sync_apscheduler_job(schedule)
+            SchedulerService._sync_apscheduler_job(schedule)
         return schedule
 
     @staticmethod
@@ -257,26 +239,6 @@ class SchedulerService:
             # Remove the worker registration only after the DB delete commits, so a
             # failed delete never orphans a schedule row with no running job.
             SchedulerService._remove_apscheduler_job(schedule_id)
-
-    @staticmethod
-    def toggle_schedule(
-        schedule_id: int, user_id: int
-    ) -> Schedule:
-        """
-        Toggle a schedule's enabled/disabled state.
-
-        Raises:
-            ScheduleNotFoundError: If not found.
-        """
-        with _locked_exact_schedule(schedule_id, user_id) as schedule:
-            schedule.is_enabled = not schedule.is_enabled
-            safe_commit(
-                f"toggle schedule {schedule_id} to "
-                f"{'enabled' if schedule.is_enabled else 'disabled'}",
-                ScheduleError,
-            )
-            SchedulerService._sync_apscheduler_job(schedule)
-        return schedule
 
     @staticmethod
     def get_execution_history(

@@ -229,8 +229,8 @@ class TestActiveSchedules:
             SchedulerService,
         )
 
-        SchedulerService.toggle_schedule(
-            sample_schedule.id, db_user.id
+        SchedulerService.update_schedule(
+            sample_schedule.id, db_user.id, is_enabled=False
         )
         result = DashboardService._get_active_schedules(
             db_user.id

@@ -35,16 +35,6 @@ from tests.playlist_setup_fixtures import (
 pytestmark = pytest.mark.usefixtures("no_scraping")
 
 
-@pytest.fixture(autouse=True)
-def _no_running_scheduler(monkeypatch):
-    """Pin routine timing text to the case with no running scheduler.
-
-    A routine without its own timezone is described in the running scheduler's
-    timezone, so a scheduler another test left running would change the text.
-    """
-    monkeypatch.setattr("shuffify.scheduler.get_scheduler", lambda: None)
-
-
 @pytest.fixture
 def user(db_app):
     return UserService.upsert_from_spotify({"id": "user123", "display_name": "Test User", "images": []}).user

@@ -406,32 +406,6 @@ class TestSchedulerServiceDeleteIntegrity:
         assert [snapshot.job_execution_id for snapshot in snapshots] == records["snapshot_links"]
 
 
-class TestSchedulerServiceToggle:
-    """Tests for toggling schedule state."""
-
-    def test_toggle_disables_enabled(
-        self, db_user, sample_schedule, app_context
-    ):
-        """Should disable an enabled schedule."""
-        assert sample_schedule.is_enabled is True
-        toggled = SchedulerService.toggle_schedule(
-            sample_schedule.id, db_user.id
-        )
-        assert toggled.is_enabled is False
-
-    def test_toggle_enables_disabled(
-        self, db_user, sample_schedule, app_context
-    ):
-        """Should enable a disabled schedule."""
-        SchedulerService.toggle_schedule(
-            sample_schedule.id, db_user.id
-        )
-        toggled = SchedulerService.toggle_schedule(
-            sample_schedule.id, db_user.id
-        )
-        assert toggled.is_enabled is True
-
-
 class TestSchedulerServiceRegistration:
     """CRUD keeps the APScheduler job in sync so an enabled schedule always
     has a running job and a disabled/deleted one never does."""
@@ -451,24 +425,6 @@ class TestSchedulerServiceRegistration:
             )
         mock_add.assert_called_once_with(schedule)
 
-    def test_create_with_register_false_skips(
-        self, db_user, app_context
-    ):
-        with patch(
-            "shuffify.scheduler.add_job_for_schedule"
-        ) as mock_add:
-            SchedulerService.create_schedule(
-                user_id=db_user.id,
-                job_type="shuffle",
-                target_playlist_id="pl_noreg",
-                target_playlist_name="P",
-                schedule_type="interval",
-                schedule_value="daily",
-                algorithm_name="BasicShuffle",
-                register=False,
-            )
-        mock_add.assert_not_called()
-
     def test_delete_removes_job_after_db_delete(
         self, sample_schedule, app_context
     ):
@@ -484,7 +440,7 @@ class TestSchedulerServiceRegistration:
         mock_remove.assert_called_once_with(sid)
         assert Schedule.query.get(sid) is None
 
-    def test_toggle_to_disabled_removes_job(
+    def test_disabling_removes_job(
         self, sample_schedule, app_context
     ):
         with patch(
@@ -492,27 +448,33 @@ class TestSchedulerServiceRegistration:
         ) as mock_remove, patch(
             "shuffify.scheduler.add_job_for_schedule"
         ) as mock_add:
-            result = SchedulerService.toggle_schedule(
-                sample_schedule.id, sample_schedule.user_id
+            result = SchedulerService.update_schedule(
+                sample_schedule.id,
+                sample_schedule.user_id,
+                is_enabled=False,
             )
         assert result.is_enabled is False
         mock_remove.assert_called_once_with(sample_schedule.id)
         mock_add.assert_not_called()
 
-    def test_toggle_to_enabled_adds_job(
+    def test_enabling_adds_job(
         self, sample_schedule, app_context
     ):
-        # Disable first (real call, no scheduler running -> best-effort no-op)
-        SchedulerService.toggle_schedule(
-            sample_schedule.id, sample_schedule.user_id
+        # Disable first (real call; no worker is configured, so the hint is a no-op)
+        SchedulerService.update_schedule(
+            sample_schedule.id,
+            sample_schedule.user_id,
+            is_enabled=False,
         )
         with patch(
             "shuffify.scheduler.remove_job_for_schedule"
         ) as mock_remove, patch(
             "shuffify.scheduler.add_job_for_schedule"
         ) as mock_add:
-            result = SchedulerService.toggle_schedule(
-                sample_schedule.id, sample_schedule.user_id
+            result = SchedulerService.update_schedule(
+                sample_schedule.id,
+                sample_schedule.user_id,
+                is_enabled=True,
             )
         assert result.is_enabled is True
         mock_add.assert_called_once_with(result)

@@ -8,7 +8,6 @@ from sqlalchemy import event, inspect, text
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
-CHANNEL = "shuffify_schedules"
 _FIELDS = frozenset(
     (
         "user_id",

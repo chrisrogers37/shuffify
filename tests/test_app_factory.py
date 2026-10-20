@@ -696,14 +696,12 @@ class TestSecurityHeaders:
         )
 
 
-@pytest.mark.parametrize("start_scheduler", [True, False])
-def test_factory_never_starts_scheduler_even_when_enabled(monkeypatch, start_scheduler):
+def test_factory_never_starts_scheduler_even_when_enabled(monkeypatch):
     from config import TestConfig
     from shuffify import create_app
 
     monkeypatch.setattr(TestConfig, "SCHEDULER_ENABLED", True)
-    monkeypatch.setattr("shuffify.scheduler.init_scheduler", lambda *args: pytest.fail("API started scheduler"))
     monkeypatch.setattr("shuffify.services.worker_scheduler.WorkerScheduler.start",
                         lambda *args: pytest.fail("API started worker scheduler"))
-    app = create_app("testing", start_scheduler=start_scheduler)
+    app = create_app("testing")
     assert "scheduler" not in app.extensions
