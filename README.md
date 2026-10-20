@@ -74,8 +74,7 @@ shuffify/
 ├── web/                      # React application, contracts and frontend checks
 ├── assets/                   # Canonical design and legal sources
 ├── tests/                    # Test suite
-├── Dockerfile                # Defines the application container
-└── docker-compose.yml        # Orchestrates the local Docker environment
+└── Dockerfile                # Defines the application container
 ```
 
 ## Visual design sources
@@ -144,6 +143,6 @@ branch in the owner console before setting `DATABASE_URL`.
 backups and how to roll back. See [.railway/README.md](.railway/README.md) for
 the Railway setup steps.
 
-For local containers, set the shared environment names in `.env`; `DATABASE_URL` must use the `db` service hostname and `REDIS_URL` must use `redis`. The PostgreSQL image provides TLS for the production configuration. Build the image and start `db redis`, then bootstrap a fresh empty database explicitly with `docker compose --profile migration run --rm -e SCHEDULER_ENABLED=false -e SHUFFIFY_MIGRATION_STEP=1 migrate flask create-schema`. Run `docker compose --profile migration run --rm migrate` before `docker compose up -d api worker`. The migration profile runs only when selected. The development override mounts source into both application processes; the production override starts image-only services when selected with the base file explicitly.
+For local development, the [local test harness](documentation/guides/testing-harness.md) runs the API, the operation worker, PostgreSQL, Redis and a fake Spotify on one machine; it runs on Linux only. To run the API alone, copy `.env.example` to `.env`, set the Spotify credentials and run `python run.py`: it uses `DevConfig`, listens on port 8000 (`FLASK_PORT` overrides it), stores data in SQLite unless `DATABASE_URL` is set, and treats Redis as optional (sessions fall back to the filesystem when `REDIS_URL` is unreachable). The API serves no pages, so to use the app, start it with `FLASK_HOST=127.0.0.1 FLASK_PORT=5000 python run.py` (on macOS, AirPlay Receiver holds port 5000 on every interface) and run `npm run dev` in `web/` (Node 24, after `npm ci`), which proxies `/api`, `/login`, `/callback`, `/logout` and `/health` to it. Open `http://127.0.0.1:5173`, not `localhost`, and send Spotify's login back through the dev server: set `SPOTIFY_REDIRECT_URI=http://127.0.0.1:5173/callback` and add that URI to the Spotify app. `npm run dev -- --mode fixture` serves recorded fixtures without an API.
 
 The Vercel project root is `web/`. Its build command generates `.vercel/output/config.json` from `RAILWAY_API_URL` and copies only the built static files. Dynamic API/authentication/health routes precede static files and the SPA fallback, and use `no-store` headers. The API URL must be an HTTPS origin with no credentials or path. Set the API origin and any desired public-contact override in the platform, then build normally; generated output stays outside Git. See [web/README.md](web/README.md) for local routing, security-header and accessibility checks.

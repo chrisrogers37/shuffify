@@ -56,5 +56,4 @@ web
 .flask_session
 
 # Docker
-docker-compose.yml
 Dockerfile

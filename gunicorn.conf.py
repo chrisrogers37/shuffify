@@ -1,4 +1,4 @@
-"""API process settings shared by local containers and Railway."""
+"""Gunicorn settings for the API on Railway and in the container image."""
 
 import os
 
