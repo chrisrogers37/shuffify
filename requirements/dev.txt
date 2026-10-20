@@ -8,16 +8,16 @@ jsonschema==4.26.0
 gunicorn==26.2.0
 # The harness's browser pass (tests/e2e/test_pages.py). Browsers are installed
 # separately: python -m playwright install chromium
-playwright==1.56.0
+playwright==1.64.0
 
 # Code Quality
 # ruff handles lint and import sorting; config in pyproject.toml.
-ruff==0.16.10
-black>=26.5.1
+ruff==0.17.1
+black>=26.10.1
 
 # scripts/extract-spotify-shapes.py
 PyYAML>=6.0.3
 # python-dotenv version is inherited from base.txt
 
 # Observability (mirrors prod.txt so tests can patch sentry_sdk)
-sentry-sdk>=2.71.0,<3.0
+sentry-sdk>=2.72.0,<3.0
