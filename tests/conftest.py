@@ -13,8 +13,15 @@ import pytest
 # tests/network_guard.py keeps every test on this machine; pytester
 # runs the guard's own teardown check in a nested session;
 # tests/playlist_setup_fixtures.py holds the playlist setup tests' fixtures;
+# tests/postgres_server.py provides the test PostgreSQL the integration tests use;
 # tests/fail_on_skip.py adds the --fail-on-skip flag.
-pytest_plugins = ["tests.network_guard", "pytester", "tests.playlist_setup_fixtures", "tests.fail_on_skip"]
+pytest_plugins = [
+    "tests.network_guard",
+    "pytester",
+    "tests.playlist_setup_fixtures",
+    "tests.postgres_server",
+    "tests.fail_on_skip",
+]
 
 # =============================================================================
 # Sample Data Fixtures

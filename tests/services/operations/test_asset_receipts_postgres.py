@@ -11,7 +11,6 @@ from shuffify.services.operations.commands.assets import HANDLERS
 from shuffify.worker import OperationWorker
 from tests.services.operations.test_asset_commands import asset_operation as asset_operation
 from tests.services.operations.test_repository import postgres_repository as postgres_repository
-from tests.services.operations.test_repository import postgres_url as postgres_url
 
 
 def enqueue(case, repository):

@@ -11,7 +11,6 @@ from shuffify.models.db import JobExecution, Schedule, User
 from shuffify.services.scheduled_admission import admit_scheduled, build_cadence
 from shuffify.services.worker_scheduler import WorkerScheduler
 from tests.services.operations.test_repository import postgres_repository as postgres_repository
-from tests.services.operations.test_repository import postgres_url as postgres_url
 from tests.services.operations.test_repository import race
 from tests.services.operations.test_scheduled_admission import NOW
 

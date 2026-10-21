@@ -10,8 +10,6 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 
-from tests.services.operations.test_repository import postgres_url as postgres_url
-
 ROOT = Path(__file__).resolve().parents[2]
 REVISION = "d0e1f2a3b4c5"
 MIGRATION = ROOT / "migrations/versions" / f"{REVISION}_drop_apscheduler_jobs.py"

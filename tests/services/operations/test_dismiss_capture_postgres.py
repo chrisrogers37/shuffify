@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from shuffify.models.db import JobExecution, PendingRaidTrack, RaidPlaylistLink, User
 from shuffify.services.operations.commands.dismiss_capture import capture_dismiss, dismiss_captured
 from tests.services.operations.test_repository import postgres_repository as postgres_repository
-from tests.services.operations.test_repository import postgres_url as postgres_url
 
 URI = "spotify:track:" + "a" * 22
 

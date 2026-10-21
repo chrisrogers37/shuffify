@@ -10,7 +10,6 @@ from shuffify.services.operations.commands.dismissal import pending_dismiss
 from shuffify.worker import OperationWorker
 from tests.services.operations.test_dismiss_commands import inbox as inbox
 from tests.services.operations.test_repository import postgres_repository as postgres_repository
-from tests.services.operations.test_repository import postgres_url as postgres_url
 from tests.services.operations.test_routine_commands import routine as routine
 
 

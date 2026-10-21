@@ -9,9 +9,6 @@ from shuffify.services.operations.wake import PostgresWakeListener
 from tests.services.operations.test_repository import (
     postgres_repository as postgres_repository,
 )
-from tests.services.operations.test_repository import (
-    postgres_url as postgres_url,
-)
 
 
 @pytest.mark.integration

@@ -11,7 +11,6 @@ from shuffify.models.db import JobExecution, PendingRaidTrack, RaidPlaylistLink,
 from shuffify.services.operations.commands.finalizer_capture import capture_raids
 from shuffify.services.operations.commands.finalizers import _commit
 from tests.services.operations.test_repository import postgres_repository as postgres_repository
-from tests.services.operations.test_repository import postgres_url as postgres_url
 
 
 @pytest.mark.integration

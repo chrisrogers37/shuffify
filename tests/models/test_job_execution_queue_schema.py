@@ -2,7 +2,6 @@
 
 import importlib.util
 import io
-import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.schema import CreateIndex
 
 from shuffify.models.db import JobExecution, Schedule, UTCDateTime
+from tests.postgres_server import LOCAL_HOSTS
 
 ROOT = Path(__file__).resolve().parents[2]
 REVISION = "b8c9d0e1f2a3"
@@ -222,14 +222,12 @@ def test_sqlite_upgrade_unique_keys_and_downgrade_preserve_legacy_rows():
         engine.dispose()
 
 
-def test_postgresql_additive_storage_and_null_distinct_keys():
-    url = os.environ.get("SHUFFIFY_TEST_POSTGRES_URL")
-    if not url:
-        pytest.skip("Set SHUFFIFY_TEST_POSTGRES_URL to an isolated local PostgreSQL database")
-    parsed = sa.make_url(url)
+@pytest.mark.integration
+def test_postgresql_additive_storage_and_null_distinct_keys(postgres_url):
+    parsed = sa.make_url(postgres_url)
     assert parsed.get_backend_name() == "postgresql"
-    assert parsed.host in {"localhost", "127.0.0.1", "::1"}, "This test only connects to local PostgreSQL"
-    engine = sa.create_engine(url)
+    assert parsed.host in LOCAL_HOSTS, "This test only connects to local PostgreSQL"
+    engine = sa.create_engine(postgres_url)
     try:
         with engine.connect() as connection:
             transaction = connection.begin()

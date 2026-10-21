@@ -1,14 +1,8 @@
 """Queue admission and lease fencing use independent database transactions."""
 
 import json
-import os
-import shutil
-import socket
-import subprocess
-import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from threading import Barrier
 from uuid import uuid4
 
@@ -220,35 +214,6 @@ def test_result_detail_storage_uses_existing_bounded_projection(repository):
     finished = repository.finish(lease, "succeeded", result={"result_detail": detail})
     assert finished.result_json["execution_id"] == operation.id
     assert "private_baseline" not in finished.result_json
-
-
-@pytest.fixture(scope="module")
-def postgres_url():
-    supplied = os.environ.get("SHUFFIFY_TEST_POSTGRES_URL")
-    if supplied:
-        from sqlalchemy.engine import make_url
-
-        assert make_url(supplied).host in {"localhost", "127.0.0.1", "::1"}, "Use a local PostgreSQL test server."
-        yield supplied
-        return
-    pg_bin = Path(shutil.which("initdb") or "").parent
-    if not (pg_bin / "initdb").is_file() or not (pg_bin / "pg_ctl").is_file():
-        pytest.skip("Local PostgreSQL binaries or SHUFFIFY_TEST_POSTGRES_URL are required.")
-    with tempfile.TemporaryDirectory(prefix="shuffify-queue-pg-") as directory:
-        data = Path(directory) / "data"
-        with socket.socket() as listener:
-            listener.bind(("127.0.0.1", 0))
-            port = listener.getsockname()[1]
-        subprocess.run([str(pg_bin / "initdb"), "-D", str(data), "--auth=trust", "--no-locale", "-E", "UTF8"],
-                       check=True, capture_output=True)
-        subprocess.run([str(pg_bin / "pg_ctl"), "-D", str(data), "-l", str(Path(directory) / "postgres.log"),
-                        "-o", f"-h 127.0.0.1 -p {port} -k {directory}", "-w", "start"],
-                       check=True, capture_output=True)
-        try:
-            yield f"postgresql+psycopg2://{os.environ.get('USER', 'postgres')}@127.0.0.1:{port}/postgres"
-        finally:
-            subprocess.run([str(pg_bin / "pg_ctl"), "-D", str(data), "-m", "immediate", "-w", "stop"],
-                           check=True, capture_output=True)
 
 
 @pytest.fixture
