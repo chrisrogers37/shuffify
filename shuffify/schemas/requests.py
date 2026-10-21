@@ -14,61 +14,6 @@ from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 TRACK_URI_RE = re.compile(r"^spotify:track:[a-zA-Z0-9]{22}$")
 
 
-class ShuffleRequestBase(BaseModel):
-    """Base schema for shuffle requests."""
-
-    algorithm: str = Field(
-        default="BasicShuffle", description="Name of the shuffle algorithm to use"
-    )
-
-    @field_validator("algorithm")
-    @classmethod
-    def validate_algorithm_name(cls, v: str) -> str:
-        """Ensure algorithm name is not empty."""
-        if not v or not v.strip():
-            raise ValueError("Algorithm name cannot be empty")
-        return v.strip()
-
-
-class BasicShuffleParams(BaseModel):
-    """Parameters for BasicShuffle algorithm."""
-
-    keep_first: Annotated[int, Field(ge=0, default=0)] = 0
-
-    class Config:
-        extra = "ignore"
-
-
-class BalancedShuffleParams(BaseModel):
-    """Parameters for BalancedShuffle algorithm."""
-
-    keep_first: Annotated[int, Field(ge=0, default=0)] = 0
-    section_count: Annotated[int, Field(ge=1, le=100, default=4)] = 4
-
-    class Config:
-        extra = "ignore"
-
-
-class StratifiedShuffleParams(BaseModel):
-    """Parameters for StratifiedShuffle algorithm."""
-
-    keep_first: Annotated[int, Field(ge=0, default=0)] = 0
-    section_count: Annotated[int, Field(ge=1, le=100, default=5)] = 5
-
-    class Config:
-        extra = "ignore"
-
-
-class PercentageShuffleParams(BaseModel):
-    """Parameters for PercentageShuffle algorithm."""
-
-    shuffle_percentage: Annotated[float, Field(ge=0.0, le=100.0, default=50.0)] = 50.0
-    shuffle_location: Literal["front", "back"] = "front"
-
-    class Config:
-        extra = "ignore"
-
-
 class ShuffleRequest(BaseModel):
     """
     Complete shuffle request schema.

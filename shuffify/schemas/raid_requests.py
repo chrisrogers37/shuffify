@@ -13,66 +13,6 @@ from shuffify.services.schedule_utils import (
 from shuffify.spotify.url_parser import parse_spotify_playlist_url
 
 
-class WatchPlaylistRequest(BaseModel):
-    """Request to watch a playlist as a raid source."""
-
-    model_config = {"extra": "ignore"}
-
-    source_playlist_id: str
-    source_playlist_name: Optional[str] = None
-    source_url: Optional[str] = None
-    auto_schedule: bool = True
-    schedule_value: str = "daily"
-    schedule_time: Optional[str] = None
-
-    @field_validator("source_playlist_id")
-    @classmethod
-    def validate_source_id(cls, v):
-        v = v.strip()
-        if not v:
-            raise ValueError(
-                "source_playlist_id must not be empty"
-            )
-        return v
-
-    @field_validator("source_playlist_name")
-    @classmethod
-    def validate_source_name(cls, v):
-        if v is not None:
-            v = v.strip()
-            if not v:
-                return None
-            if len(v) > 255:
-                raise ValueError(
-                    "source_playlist_name must be 255 chars "
-                    "or fewer"
-                )
-        return v
-
-    @field_validator("schedule_value")
-    @classmethod
-    def validate_schedule_value(cls, v):
-        v = v.strip().lower()
-        valid = [e.value for e in IntervalValue]
-        if v not in valid:
-            raise ValueError(
-                f"schedule_value must be one of: "
-                f"{', '.join(valid)}"
-            )
-        return v
-
-    @field_validator("schedule_time")
-    @classmethod
-    def validate_schedule_time(cls, v):
-        if v is not None:
-            v = v.strip()
-            if not _TIME_RE.match(v):
-                raise ValueError(
-                    "schedule_time must be HH:MM format"
-                )
-        return v
-
-
 class UnwatchPlaylistRequest(BaseModel):
     """Request to remove a source from the watch list."""
 

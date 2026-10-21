@@ -1,8 +1,8 @@
 """
 Tests for raid panel request validation schemas.
 
-Tests WatchPlaylistRequest, UnwatchPlaylistRequest,
-AddRaidUrlRequest, and RaidNowRequest Pydantic models.
+Tests UnwatchPlaylistRequest, AddRaidUrlRequest,
+and RaidNowRequest Pydantic models.
 """
 
 import pytest
@@ -12,88 +12,8 @@ from shuffify.schemas.raid_requests import (
     AddRaidUrlRequest,
     RaidNowRequest,
     UnwatchPlaylistRequest,
-    WatchPlaylistRequest,
 )
 from shuffify.services.schedule_utils import build_cron
-
-# =============================================================================
-# WatchPlaylistRequest
-# =============================================================================
-
-
-class TestWatchPlaylistRequestValid:
-    """Tests for valid WatchPlaylistRequest payloads."""
-
-    def test_minimal_request(self):
-        req = WatchPlaylistRequest(
-            source_playlist_id="abc123",
-        )
-        assert req.source_playlist_id == "abc123"
-        assert req.auto_schedule is True
-        assert req.schedule_value == "daily"
-
-    def test_full_request(self):
-        req = WatchPlaylistRequest(
-            source_playlist_id="abc123",
-            source_playlist_name="My Source",
-            source_url="https://open.spotify.com/playlist/abc123",
-            auto_schedule=False,
-            schedule_value="weekly",
-        )
-        assert req.source_playlist_name == "My Source"
-        assert req.auto_schedule is False
-
-    def test_valid_schedule_values(self):
-        for val in [
-            "daily", "weekly", "every_6h",
-            "every_12h", "every_3d",
-        ]:
-            req = WatchPlaylistRequest(
-                source_playlist_id="abc",
-                schedule_value=val,
-            )
-            assert req.schedule_value == val
-
-    def test_schedule_value_case_insensitive(self):
-        req = WatchPlaylistRequest(
-            source_playlist_id="abc",
-            schedule_value="DAILY",
-        )
-        assert req.schedule_value == "daily"
-
-    def test_extra_fields_ignored(self):
-        req = WatchPlaylistRequest(
-            source_playlist_id="abc",
-            unknown_field="ignored",
-        )
-        assert req.source_playlist_id == "abc"
-
-    def test_empty_source_name_becomes_none(self):
-        req = WatchPlaylistRequest(
-            source_playlist_id="abc",
-            source_playlist_name="   ",
-        )
-        assert req.source_playlist_name is None
-
-
-class TestWatchPlaylistRequestInvalid:
-    """Tests for invalid WatchPlaylistRequest payloads."""
-
-    def test_missing_source_id_raises(self):
-        with pytest.raises(ValidationError):
-            WatchPlaylistRequest()
-
-    def test_empty_source_id_raises(self):
-        with pytest.raises(ValidationError):
-            WatchPlaylistRequest(source_playlist_id="  ")
-
-    def test_invalid_schedule_value_raises(self):
-        with pytest.raises(ValidationError):
-            WatchPlaylistRequest(
-                source_playlist_id="abc",
-                schedule_value="every_minute",
-            )
-
 
 # =============================================================================
 # UnwatchPlaylistRequest
@@ -211,6 +131,13 @@ class TestAddRaidUrlRequestValid:
             )
             assert req.schedule_value == val
 
+    def test_schedule_value_case_insensitive(self):
+        req = AddRaidUrlRequest(
+            url=_VALID_PLAYLIST_URL,
+            schedule_value="DAILY",
+        )
+        assert req.schedule_value == "daily"
+
     def test_accepts_spotify_uri(self):
         """URI form is accepted by the validator."""
         req = AddRaidUrlRequest(
@@ -273,28 +200,7 @@ class TestAddRaidUrlRequestInvalid:
 
 
 class TestScheduleTime:
-    """Tests for schedule_time on watch requests."""
-
-    def test_watch_with_schedule_time(self):
-        req = WatchPlaylistRequest(
-            source_playlist_id="abc",
-            schedule_value="daily",
-            schedule_time="14:30",
-        )
-        assert req.schedule_time == "14:30"
-
-    def test_watch_time_none_by_default(self):
-        req = WatchPlaylistRequest(
-            source_playlist_id="abc",
-        )
-        assert req.schedule_time is None
-
-    def test_invalid_time_format_raises(self):
-        with pytest.raises(ValidationError):
-            WatchPlaylistRequest(
-                source_playlist_id="abc",
-                schedule_time="2pm",
-            )
+    """Tests for schedule_time on raid URL requests."""
 
     def test_add_url_with_schedule_time(self):
         req = AddRaidUrlRequest(
@@ -302,6 +208,17 @@ class TestScheduleTime:
             schedule_time="09:00",
         )
         assert req.schedule_time == "09:00"
+
+    def test_add_url_time_none_by_default(self):
+        req = AddRaidUrlRequest(url=_VALID_PLAYLIST_URL)
+        assert req.schedule_time is None
+
+    def test_invalid_time_format_raises(self):
+        with pytest.raises(ValidationError):
+            AddRaidUrlRequest(
+                url=_VALID_PLAYLIST_URL,
+                schedule_time="2pm",
+            )
 
 
 class TestBuildCron:

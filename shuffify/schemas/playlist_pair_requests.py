@@ -103,9 +103,5 @@ class _TrackUriListRequest(BaseModel):
         return v
 
 
-class ArchiveTracksRequest(_TrackUriListRequest):
-    """Request to archive tracks to the paired archive playlist."""
-
-
 class UnarchiveTracksRequest(_TrackUriListRequest):
     """Request to unarchive tracks back to production playlist."""

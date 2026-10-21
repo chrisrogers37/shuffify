@@ -8,7 +8,6 @@ from pydantic import ValidationError
 
 from .pending_raid_requests import DismissTracksRequest
 from .playlist_pair_requests import (
-    ArchiveTracksRequest,
     CreatePairRequest,
     UnarchiveTracksRequest,
     UpdatePairRequest,
@@ -25,16 +24,10 @@ from .raid_requests import (
     AddRaidUrlRequest,
     RaidNowRequest,
     UnwatchPlaylistRequest,
-    WatchPlaylistRequest,
 )
 from .requests import (
-    BalancedShuffleParams,
-    BasicShuffleParams,
     ExternalPlaylistRequest,
-    PercentageShuffleParams,
     ShuffleRequest,
-    ShuffleRequestBase,
-    StratifiedShuffleParams,
     WorkshopCommitRequest,
     WorkshopSearchRequest,
     parse_shuffle_request,
@@ -52,11 +45,6 @@ __all__ = [
     "ValidationError",
     # Request schemas
     "ShuffleRequest",
-    "ShuffleRequestBase",
-    "BasicShuffleParams",
-    "BalancedShuffleParams",
-    "StratifiedShuffleParams",
-    "PercentageShuffleParams",
     "WorkshopCommitRequest",
     "WorkshopSearchRequest",
     "ExternalPlaylistRequest",
@@ -74,10 +62,8 @@ __all__ = [
     # Playlist Pair schemas
     "CreatePairRequest",
     "UpdatePairRequest",
-    "ArchiveTracksRequest",
     "UnarchiveTracksRequest",
     # Raid schemas
-    "WatchPlaylistRequest",
     "AddRaidUrlRequest",
     "UnwatchPlaylistRequest",
     "RaidNowRequest",
