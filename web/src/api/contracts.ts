@@ -346,8 +346,8 @@ export interface WorkshopPlaylist {
   description: string | null;
   total_tracks: Count | null;
   public: boolean | null;
-  /** Spotify audio feature fields are an intentionally extensible record. */
-  audio_features: { [track_id: string]: JsonRecord };
+  /** Always empty and never read by the client; the API may omit it. */
+  audio_features?: { [track_id: string]: JsonRecord };
 }
 export interface WorkshopTrack {
   id: string;
