@@ -26,6 +26,7 @@ tests
 harness
 .harness
 pytest.ini
+.test_durations
 .pytest_cache
 .coverage
 htmlcov
