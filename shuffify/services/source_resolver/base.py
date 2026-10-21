@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, List, Optional, Protocol, Tuple
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, List, Optional, Protocol
 
 if TYPE_CHECKING:
     from shuffify.models.db import UpstreamSource
@@ -36,16 +36,6 @@ class ResolveResult:
     partial: bool = False
     applicable: bool = True
     error_message: Optional[str] = None
-
-
-@dataclass
-class ResolveAllResult:
-    """Aggregated result from resolving multiple sources."""
-
-    new_uris: List[str]
-    source_results: List[Tuple[Any, ResolveResult]] = field(
-        default_factory=list
-    )
 
 
 def find_nested_key(data: Any, key: str) -> Any:

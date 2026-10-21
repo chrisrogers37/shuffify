@@ -6,8 +6,8 @@ from unittest.mock import patch
 from shuffify.services.operations.commands.registry import COMMAND_HANDLERS
 from shuffify.services.state_service import StateService
 from shuffify.worker import OperationWorker
+from tests.mutable_spotify import MutableSpotify, uri
 from tests.queued_operations import worker_api
-from tests.services.test_live_executor_outcomes import MutableSpotify, uri
 
 
 def test_undo_review_reads_the_completed_operation_without_polling(auth_client):

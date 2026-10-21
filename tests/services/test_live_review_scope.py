@@ -8,14 +8,10 @@ from sqlalchemy.exc import OperationalError
 
 from shuffify.enums import JobType, RotationMode
 from shuffify.models.db import PlaylistPair, RaidPlaylistLink, Schedule, UpstreamSource, db
-from shuffify.services.live_operation_service import LiveOperation
 from shuffify.services.live_review_scope import (
     DIRECT_DRIP_PARAMS,
     JOB_STEPS,
     STEP_ROWS,
-    ReviewChanged,
-    ReviewedInputChanged,
-    ReviewedRun,
     build_part,
     direct_parts,
     direct_scope,
@@ -25,7 +21,6 @@ from shuffify.services.live_review_scope import (
     effective_drip_count,
     fresh_reads,
     read_inputs,
-    require_reviewed,
     rotation_settings,
     routine_parts,
     schedule_scope,
@@ -230,7 +225,7 @@ def test_unreadable_rows_fail_closed_never_empty(owner, rows):
             read_inputs(steps, owner.id, "target")
 
 
-def test_lock_reads_are_never_the_fail_open_helpers():
+def test_lock_reads_use_the_fail_closed_readers():
     from shuffify.services import live_review_scope
     from shuffify.services.track_lock_service import TrackLockService
 
@@ -244,38 +239,3 @@ def test_schedule_scope_binds_identity_job_and_target():
     assert base == schedule_scope(1, "shuffle", "target", parts)
     assert len({base, schedule_scope(2, "shuffle", "target", parts), schedule_scope(1, "rotate", "target", parts),
                 schedule_scope(1, "shuffle", "other", parts)}) == 4
-
-
-def test_combined_review_keeps_the_drip_part_for_its_child(owner, saved):
-    rows = read_inputs(("raid", "drip"), owner.id, "target")
-    reviewed = direct_scope("raid_and_drip", "target", direct_parts("raid_and_drip", rows, []))
-    review = ReviewedRun("raid_and_drip", reviewed)
-    raid = Schedule(user_id=owner.id, job_type=JobType.RAID, target_playlist_id="target", source_playlist_ids=[])
-    assert set(review.bind(raid)) == {"raid"}
-    drip = Schedule(user_id=owner.id, job_type=JobType.DRIP, target_playlist_id="target",
-                    algorithm_params={"force": True, "drip_count": 2})
-    assert set(review.drip_child().bind(drip)) == {"drip"}
-    drip.algorithm_params = {"force": True, "drip_count": 3}
-    with pytest.raises(ReviewChanged):
-        review.drip_child().bind(drip)
-    # Without a matching raid comparison there is nothing for the child to match.
-    with pytest.raises(ReviewChanged):
-        ReviewedRun("raid_and_drip", "f" * 64).drip_child().bind(drip)
-
-
-def test_consumption_checks_only_bind_reviewed_steps(owner, saved):
-    require_reviewed("link", saved.link)  # No live operation: unchecked.
-    operation = LiveOperation("raid", None, owner)
-    token = operation.activate()
-    try:
-        require_reviewed("link", None)  # A legacy run is unchecked.
-        operation.step = "raid"
-        operation.reviewed_parts = {"raid": {"link": {"id": saved.link.id, "collection_playlist_id": "collection"},
-                                             "pair": None}}
-        require_reviewed("link", saved.link)
-        require_reviewed("count", 9)  # Not an input of this step's part.
-        with pytest.raises(ReviewedInputChanged):
-            require_reviewed("pair", saved.pair)
-        assert operation.error_code == "resource_changed"
-    finally:
-        LiveOperation.reset(token)

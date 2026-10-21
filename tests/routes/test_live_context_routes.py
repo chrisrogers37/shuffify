@@ -7,14 +7,14 @@ import pytest
 from werkzeug.datastructures import MultiDict
 from werkzeug.exceptions import InternalServerError
 
-from shuffify.models.db import ActivityLog, JobExecution
+from shuffify.models.db import ActivityLog, JobExecution, PlaylistSnapshot
 from shuffify.services.live_review_bindings import scope_fingerprint
 from shuffify.spotify.exceptions import SpotifyError
+from tests.mutable_spotify import MutableSpotify, uri
 from tests.paths import api_path
 from tests.queued_operations import post_and_run
 from tests.queued_operations import scoped_history as history
 from tests.routes.live_review_helpers import binding_bundle, post_context, seed_history
-from tests.services.test_live_executor_outcomes import MutableSpotify, uri
 from tests.services.test_live_metadata_service import MetadataSpotify
 
 TARGET = "playlist123"
@@ -42,12 +42,6 @@ def api():
 @pytest.fixture
 def metadata():
     return MetadataSpotify(False)
-
-
-@pytest.fixture(autouse=True)
-def snapshots():
-    with patch("shuffify.services.live_playlist_service.PlaylistSnapshotService.auto_snapshot_if_enabled") as snap:
-        yield snap
 
 
 def as_user(api):
@@ -140,7 +134,7 @@ def test_reviewed_shuffle_runs_the_reviewed_options_once(auth_client, api):
     assert api.writes == [("update", TARGET, [uri(2), uri(2), uri(1)])]
 
 
-def test_options_changed_after_review_dispatch_nothing(auth_client, api, snapshots):
+def test_options_changed_after_review_dispatch_nothing(auth_client, api):
     with as_user(api):
         scope = post_context(auth_client, TARGET, {"kind": "shuffle", "form": SHUFFLE_FORM}).get_json()[
             "context"]["review_binding"]["scope"]
@@ -154,7 +148,7 @@ def test_options_changed_after_review_dispatch_nothing(auth_client, api, snapsho
     assert body["success"] is False
     assert (body["operation"]["error_code"], body["operation"]["retryable"]) == ("review_changed", False)
     execute.assert_not_called()
-    snapshots.assert_not_called()
+    assert PlaylistSnapshot.query.count() == 0
     assert api.writes == []
     assert history(auth_client, TARGET) is None
 
@@ -323,7 +317,7 @@ def test_a_copied_matching_hash_never_authorizes(auth_client, api, metadata, kin
 
 def inspect(client, body):
     with (
-        patch("shuffify.services.live_playlist_service.playlist_lock") as lock,
+        patch("shuffify.services.playlist_lock._target_lock") as lock,
         patch("shuffify.services.live_playlist_service.ShuffleService.execute") as execute,
     ):
         response = client.post(INSPECT, json=body)
@@ -334,7 +328,7 @@ def inspect(client, body):
     return response
 
 
-def test_track_check_reports_a_match_as_an_observation_only(auth_client, api, snapshots):
+def test_track_check_reports_a_match_as_an_observation_only(auth_client, api):
     seed_history(auth_client, TARGET, [[uri(9)], [uri(1), uri(2), uri(2)]])
     before = history(auth_client, TARGET)
     with as_user(api):
@@ -355,7 +349,7 @@ def test_track_check_reports_a_match_as_an_observation_only(auth_client, api, sn
     assert "baseline_track_uris" not in entry
     assert not {"execution_id", "started_at", "execution_state"} & body.keys()
     assert api.writes == []
-    snapshots.assert_not_called()
+    assert PlaylistSnapshot.query.count() == 0
     assert history(auth_client, TARGET) == before
     assert ActivityLog.query.count() == JobExecution.query.count() == 0
 

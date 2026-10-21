@@ -1,14 +1,15 @@
 """
 Tests for PendingRaidService.
 
-Tests cover staging, listing, promoting, dismissing, and
+Tests cover listing, promoting, dismissing, and
 cleanup of pending raid tracks.
 """
 
 import pytest
 
 from shuffify.enums import PendingRaidStatus
-from shuffify.models.db import PendingRaidTrack
+from shuffify.models.db import PendingRaidTrack, db
+from shuffify.services.operations.executors.collect_storage import stage_pending
 from shuffify.services.pending_raid_service import (
     PendingRaidService,
 )
@@ -56,61 +57,10 @@ def sample_tracks():
     ]
 
 
-# =============================================================
-# Stage Tracks
-# =============================================================
-
-
-class TestStage:
-    """Tests for PendingRaidService.stage_tracks."""
-
-    def test_stage_tracks_success(
-        self, user, sample_tracks
-    ):
-        staged = PendingRaidService.stage_tracks(
-            user_id=user.id,
-            target_playlist_id="pl1",
-            tracks=sample_tracks,
-            source_name="My Source",
-        )
-        assert staged == 3
-
-    def test_stage_deduplicates(
-        self, user, sample_tracks
-    ):
-        PendingRaidService.stage_tracks(
-            user_id=user.id,
-            target_playlist_id="pl1",
-            tracks=sample_tracks,
-        )
-        # Stage again — all should be skipped
-        staged = PendingRaidService.stage_tracks(
-            user_id=user.id,
-            target_playlist_id="pl1",
-            tracks=sample_tracks,
-        )
-        assert staged == 0
-
-    def test_stage_skips_no_uri(self, user):
-        staged = PendingRaidService.stage_tracks(
-            user_id=user.id,
-            target_playlist_id="pl1",
-            tracks=[{"name": "No URI"}],
-        )
-        assert staged == 0
-
-    def test_stage_joins_artist_list(
-        self, user, sample_tracks
-    ):
-        PendingRaidService.stage_tracks(
-            user_id=user.id,
-            target_playlist_id="pl1",
-            tracks=sample_tracks,
-        )
-        t = PendingRaidTrack.query.filter_by(
-            track_uri="spotify:track:t2"
-        ).first()
-        assert t.track_artists == "Artist B, Artist C"
+def stage(user, target_playlist_id, tracks):
+    """Stage ``tracks`` as the Collect executor does, and commit them."""
+    stage_pending(db.session, user.id, target_playlist_id, tracks)
+    db.session.commit()
 
 
 # =============================================================
@@ -122,11 +72,7 @@ class TestList:
     """Tests for PendingRaidService.list_pending."""
 
     def test_list_pending(self, user, sample_tracks):
-        PendingRaidService.stage_tracks(
-            user_id=user.id,
-            target_playlist_id="pl1",
-            tracks=sample_tracks,
-        )
+        stage(user, "pl1", sample_tracks)
         pending = PendingRaidService.list_pending(
             user.id, "pl1"
         )
@@ -135,11 +81,7 @@ class TestList:
     def test_list_excludes_promoted(
         self, user, sample_tracks
     ):
-        PendingRaidService.stage_tracks(
-            user_id=user.id,
-            target_playlist_id="pl1",
-            tracks=sample_tracks,
-        )
+        stage(user, "pl1", sample_tracks)
         # Promote one
         track = PendingRaidTrack.query.first()
         PendingRaidService.promote_tracks(
@@ -160,11 +102,7 @@ class TestPromote:
     """Tests for promote_tracks and promote_all."""
 
     def test_promote_tracks(self, user, sample_tracks):
-        PendingRaidService.stage_tracks(
-            user_id=user.id,
-            target_playlist_id="pl1",
-            tracks=sample_tracks,
-        )
+        stage(user, "pl1", sample_tracks)
         all_tracks = PendingRaidTrack.query.all()
         promoted = PendingRaidService.promote_tracks(
             user.id, "pl1", [all_tracks[0].id]
@@ -177,11 +115,7 @@ class TestPromote:
         assert promoted[0].resolved_at is not None
 
     def test_promote_all(self, user, sample_tracks):
-        PendingRaidService.stage_tracks(
-            user_id=user.id,
-            target_playlist_id="pl1",
-            tracks=sample_tracks,
-        )
+        stage(user, "pl1", sample_tracks)
         promoted = PendingRaidService.promote_all(
             user.id, "pl1"
         )
@@ -203,11 +137,7 @@ class TestUnpromote:
     def test_unpromote_reverts_to_pending(
         self, user, sample_tracks
     ):
-        PendingRaidService.stage_tracks(
-            user_id=user.id,
-            target_playlist_id="pl1",
-            tracks=sample_tracks,
-        )
+        stage(user, "pl1", sample_tracks)
         PendingRaidService.promote_all(user.id, "pl1")
         uris = [t["uri"] for t in sample_tracks]
 
@@ -229,11 +159,7 @@ class TestUnpromote:
     def test_unpromote_ignores_non_promoted(
         self, user, sample_tracks
     ):
-        PendingRaidService.stage_tracks(
-            user_id=user.id,
-            target_playlist_id="pl1",
-            tracks=sample_tracks,
-        )
+        stage(user, "pl1", sample_tracks)
         # Don't promote — they're still PENDING
         uris = [t["uri"] for t in sample_tracks]
 
@@ -262,11 +188,7 @@ class TestDismiss:
     """Tests for dismiss_tracks and dismiss_all."""
 
     def test_dismiss_tracks(self, user, sample_tracks):
-        PendingRaidService.stage_tracks(
-            user_id=user.id,
-            target_playlist_id="pl1",
-            tracks=sample_tracks,
-        )
+        stage(user, "pl1", sample_tracks)
         track = PendingRaidTrack.query.first()
         count = PendingRaidService.dismiss_tracks(
             user.id, "pl1", [track.id]
@@ -274,11 +196,7 @@ class TestDismiss:
         assert count == 1
 
     def test_dismiss_all(self, user, sample_tracks):
-        PendingRaidService.stage_tracks(
-            user_id=user.id,
-            target_playlist_id="pl1",
-            tracks=sample_tracks,
-        )
+        stage(user, "pl1", sample_tracks)
         count = PendingRaidService.dismiss_all(
             user.id, "pl1"
         )
@@ -294,11 +212,7 @@ class TestCountsAndCleanup:
     """Tests for get_pending_count and cleanup_resolved."""
 
     def test_pending_count(self, user, sample_tracks):
-        PendingRaidService.stage_tracks(
-            user_id=user.id,
-            target_playlist_id="pl1",
-            tracks=sample_tracks,
-        )
+        stage(user, "pl1", sample_tracks)
         assert PendingRaidService.get_pending_count(
             user.id, "pl1"
         ) == 3
@@ -306,11 +220,7 @@ class TestCountsAndCleanup:
     def test_cleanup_resolved(
         self, user, sample_tracks
     ):
-        PendingRaidService.stage_tracks(
-            user_id=user.id,
-            target_playlist_id="pl1",
-            tracks=sample_tracks,
-        )
+        stage(user, "pl1", sample_tracks)
         PendingRaidService.promote_all(user.id, "pl1")
         removed = PendingRaidService.cleanup_resolved(
             user.id, "pl1"

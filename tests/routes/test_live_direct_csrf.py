@@ -118,7 +118,7 @@ def test_check_csrf_failure_is_unknown_never_a_known_no_effect(csrf_client, csrf
 def test_oversized_review_and_check_bodies_keep_their_contract(auth_client, db_app, path, kind, status, extra):
     from types import SimpleNamespace
 
-    from tests.services.test_live_executor_outcomes import MutableSpotify, uri
+    from tests.mutable_spotify import MutableSpotify, uri
 
     api = MutableSpotify(SimpleNamespace(spotify_id="user123"), target=[uri(1)])
     db_app.config["MAX_CONTENT_LENGTH"] = 64

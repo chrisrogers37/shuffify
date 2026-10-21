@@ -7,6 +7,7 @@ import pytest
 
 from shuffify.enums import PendingRaidStatus
 from shuffify.models.db import ActivityLog, db
+from shuffify.services.operations.executors.collect_storage import stage_pending
 from shuffify.services.pending_raid_service import PendingRaidService
 from shuffify.services.playlist_pair_service import PlaylistPairService
 from shuffify.services.raid_link_service import RaidLinkService
@@ -83,6 +84,12 @@ class SourceAPI:
             ]
 
 
+def stage(user, tracks):
+    """Put ``tracks`` in ``user``'s inbox for "target" as a Collect does, and commit them."""
+    stage_pending(db.session, user.id, "target", tracks)
+    db.session.commit()
+
+
 @pytest.fixture
 def ctx(db_app):
     with db_app.app_context():
@@ -90,11 +97,7 @@ def ctx(db_app):
         api = SourceAPI()
         RaidLinkService.create_link(user.id, "target", "raid")
         PlaylistPairService.create_pair(user.id, "target", "archive")
-        PendingRaidService.stage_tracks(
-            user.id,
-            "target",
-            [{"uri": A, "name": "Track", "source_playlist_id": "discovery"}],
-        )
+        stage(user, [{"uri": A, "name": "Track", "source_playlist_id": "discovery"}])
         record = PendingRaidService.list_pending(user.id, "target")[0]
         yield SimpleNamespace(
             api=api, user=user, record=record, service=WorkshopFinalizeService(api)
@@ -459,9 +462,7 @@ def test_real_finalizer_route_handles_201_captured_records_without_target_rewrit
     ctx, db_app, sample_token, endpoint
 ):
     uris = [f"spotify:track:{index:022d}" for index in range(200)] + [A]
-    PendingRaidService.stage_tracks(
-        ctx.user.id, "target", [{"uri": uri, "name": "Captured track"} for uri in uris]
-    )
+    stage(ctx.user, [{"uri": uri, "name": "Captured track"} for uri in uris])
     records = PendingRaidService.list_pending(ctx.user.id, "target")
     assert len(records) == 201
     ctx.api.playlists["target"] = list(uris)
@@ -681,9 +682,7 @@ def test_already_absent_raid_source_db_completion_still_logs_once(ctx, db_app, s
 
 def test_raid_affected_count_excludes_already_completed_selected_rows(ctx):
     PendingRaidService.complete_finalize([ctx.record])
-    PendingRaidService.stage_tracks(
-        ctx.user.id, "target", [{"uri": B, "name": "Pending"}]
-    )
+    stage(ctx.user, [{"uri": B, "name": "Pending"}])
     pending = PendingRaidService.list_pending(ctx.user.id, "target")[0]
     ctx.api.playlists["raid"] = []
     result = raid(ctx, track_ids=[ctx.record.id, pending.id])

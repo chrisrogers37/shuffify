@@ -18,20 +18,14 @@ from shuffify.spotify.exceptions import (
     SpotifyWriteRejectedError,
     SpotifyWriteUnverifiedError,
 )
+from tests.mutable_spotify import MutableSpotify, uri
 from tests.paths import api_path
 from tests.queued_operations import post_and_run, run_operation, scoped_history
-from tests.services.test_live_executor_outcomes import MutableSpotify, uri
 
 
 @pytest.fixture
 def api():
     return MutableSpotify(SimpleNamespace(spotify_id="user123"), playlist123=[uri(1), uri(2)])
-
-
-@pytest.fixture(autouse=True)
-def snapshots():
-    with patch("shuffify.services.live_playlist_service.PlaylistSnapshotService.auto_snapshot_if_enabled"):
-        yield
 
 
 @pytest.mark.parametrize("endpoint", ["shuffle", "undo"])

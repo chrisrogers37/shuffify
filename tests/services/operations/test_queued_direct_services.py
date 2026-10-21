@@ -307,18 +307,32 @@ def test_a_lost_acknowledgment_fence_is_not_swallowed_by_api_or_service(kind, mo
     assert runtime.history == {}
 
 
-def test_a_known_first_batch_rejection_retains_zero_effect_retryable_facts(monkeypatch):
-    from shuffify.spotify.exceptions import SpotifyWriteRejectedError
+@pytest.mark.parametrize(
+    ('error_name', 'status'),
+    [
+        ('SpotifyTokenExpiredError', 401),
+        ('SpotifyForbiddenError', 403),
+        ('SpotifyNotFoundError', 404),
+        ('SpotifyQuotaExceededError', 429),
+        ('SpotifyWriteRejectedError', 502),
+    ],
+)
+def test_a_known_first_batch_rejection_retains_zero_effect_retryable_facts(monkeypatch, error_name, status):
+    from shuffify.spotify import exceptions
 
+    rejection = getattr(exceptions, error_name)('private provider detail')
     world = World([uri(1), uri(2)])
     world.playlists['target']['metadata']['description'] = None
     api, runtime = api_for(world), Runtime(world)
-    runtime.journal.dispatch = lambda *args: (_ for _ in ()).throw(SpotifyWriteRejectedError('known rejection'))
+    runtime.journal.dispatch = lambda *args: (_ for _ in ()).throw(rejection)
     monkeypatch.setattr(
         'shuffify.services.live_playlist_service.ShuffleService.execute', lambda *a, **k: [uri(2), uri(1)])
     with runtime.journal.observe():
         result = LivePlaylistService(api).shuffle('target', runtime.user, runtime.history,
                                                 algorithm='BasicShuffle', params={}, runtime=runtime)
+    assert result['http_status'] == status
+    assert result['operation']['error_code'] == 'write_rejected'
+    assert 'private' not in str(result)
     assert result['operation']['aggregate_status'] == 'partial'
     assert result['operation']['retryable'] is True
     resource = result['operation']['resources'][0]
@@ -327,3 +341,55 @@ def test_a_known_first_batch_rejection_retains_zero_effect_retryable_facts(monke
     assert resource['affected_count'] == 0
     assert world.writes == []
     assert runtime.history == {}
+
+
+def test_a_no_write_action_whose_confirming_read_is_refused_reports_its_resource_as_failed(monkeypatch):
+    from shuffify.spotify.exceptions import SpotifyNotFoundError
+
+    world = World([uri(1), uri(2)])
+    world.playlists['target']['metadata']['description'] = None
+    api, runtime = api_for(world), Runtime(world)
+    read_page, reads = api.get_playlist_items_raw, []
+
+    def refuse_the_second_read(*args, **kwargs):
+        reads.append(args)
+        if len(reads) > 1:  # The first read prepares the action; the second confirms its outcome.
+            raise SpotifyNotFoundError('private detail')
+        return read_page(*args, **kwargs)
+
+    api.get_playlist_items_raw = refuse_the_second_read
+    monkeypatch.setattr(
+        'shuffify.services.live_playlist_service.ShuffleService.execute', lambda *a, **k: [uri(1), uri(2)])
+    with runtime.journal.observe():
+        result = LivePlaylistService(api).shuffle('target', runtime.user, runtime.history,
+                                                algorithm='BasicShuffle', params={}, runtime=runtime)
+    assert len(reads) == 2
+    assert (result['status'], result['http_status']) == ('failed', 404)
+    operation = result['operation']
+    assert (operation['aggregate_status'], operation['error_code'], operation['retryable']) == (
+        'partial', 'playlist_not_found', False)
+    resource = operation['resources'][0]
+    assert (resource['status'], resource['dispatched'], resource['affected_count']) == ('failed', False, 0)
+    assert (resource['retryable'], resource['error_code']) == (False, 'playlist_not_found')
+    assert 'private' not in str(result)
+    assert world.writes == []
+    assert runtime.history == {}
+    assert runtime.local_calls == []
+
+
+def test_restoring_an_empty_snapshot_is_refused_before_any_read_or_write():
+    world = World([uri(1), uri(2)])
+    api, runtime = api_for(world), Runtime(world)
+    empty = SimpleNamespace(id=17, user_id=runtime.user.id, playlist_id='target', track_uris=[],
+                            to_dict=lambda: {'id': 17, 'playlist_id': 'target', 'track_uris': []})
+    reads = []
+    api.get_playlist = api.get_playlist_items_raw = lambda *args, **kwargs: reads.append(args)
+    with runtime.journal.observe():
+        result = LivePlaylistService(api).restore_snapshot(empty, runtime.user, runtime.history, runtime=runtime)
+    assert (result['status'], result['http_status']) == ('failed', 400)
+    assert result['operation']['error_code'] == 'empty_snapshot'
+    assert result['operation']['resources'] == []
+    assert reads == []
+    assert world.writes == []
+    assert runtime.history == {}
+    assert runtime.local_calls == []

@@ -60,23 +60,6 @@ def test_abort_direction_survives_a_swallowed_exception_and_process_restart():
     assert world.playlists['target']['track_uris'] == [uri(1)]
 
 
-@pytest.mark.parametrize('method,args', [
-    ('compensate', ()), ('_restore', ('target', [])), ('_settle', ('target', [], None)),
-])
-def test_legacy_compensation_requests_abort_before_any_observation_or_sleep(method, args):
-    from types import SimpleNamespace
-
-    from shuffify.services.live_operation_service import LiveOperation
-
-    world = World([uri(1)])
-    operation = LiveOperation('shuffle', SimpleNamespace(), SimpleNamespace(spotify_id='owner'))
-    with world.journal().observe(), pytest.raises(OperationAborted):
-        getattr(operation, method)(*args)
-    assert world.trace == ['checkpoint.before', 'checkpoint.after']
-    assert world.writes == []
-    assert world.saved['abort']['reason'] == 'legacy_compensation_requested'
-
-
 def test_metadata_scope_does_not_treat_a_track_only_snapshot_change_as_a_conflict():
     world = World([uri(1)])
 

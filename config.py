@@ -227,12 +227,6 @@ class Config:
     WORKER_CONTROL_PORT = int(os.getenv("WORKER_CONTROL_PORT", "5001"))
     WORKER_CONTROL_TIMEOUT = float(os.getenv("WORKER_CONTROL_TIMEOUT", "0.5"))
 
-    # After a job's write fails with an unconfirmed outcome, its rollback
-    # re-reads the restored playlist this many times, this many seconds
-    # apart, and restores it again if the delayed write lands.
-    ROLLBACK_SETTLE_CHECKS = 3
-    ROLLBACK_SETTLE_SECONDS = 5
-
     # Application settings
     DEBUG = False
     PORT = int(os.getenv("PORT", 8000))
@@ -329,8 +323,6 @@ class TestConfig(Config):
     PUBLIC_ORIGIN = ""
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     SCHEDULER_ENABLED = False
-    # Unit tests that roll back an unconfirmed write don't wait; the settle tests turn it on.
-    ROLLBACK_SETTLE_CHECKS = 0
 
 
 class HarnessConfig(Config):

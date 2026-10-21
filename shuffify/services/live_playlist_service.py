@@ -7,7 +7,6 @@ from dataclasses import asdict
 
 from shuffify.enums import ActivityType, SnapshotType
 from shuffify.models.playlist import Playlist
-from shuffify.services.activity_log_service import ActivityLogService
 from shuffify.services.live_operation_service import (
     DirectFailure,
     LiveOperation,
@@ -22,9 +21,7 @@ from shuffify.services.live_review_bindings import (
     snapshot_bindings,
     undo_bindings,
 )
-from shuffify.services.playlist_lock import playlist_lock
 from shuffify.services.playlist_service import PlaylistAccessError, PlaylistService
-from shuffify.services.playlist_snapshot_service import PlaylistSnapshotService
 from shuffify.services.shuffle_service import InvalidAlgorithmError, ShuffleService
 from shuffify.services.state_service import (
     AlreadyAtOriginalError,
@@ -40,7 +37,6 @@ from shuffify.spotify.exceptions import (
     SpotifyNotFoundError,
     SpotifyPartialBatchError,
     SpotifyQuotaExceededError,
-    SpotifyRateLimitError,
     SpotifyWriteRejectedError,
 )
 
@@ -56,7 +52,7 @@ class LivePlaylistService:
     def __init__(self, api):
         self.api = api
 
-    def shuffle(self, playlist_id, user, session, *, algorithm, params, reviewed=None, runtime=None):
+    def shuffle(self, playlist_id, user, session, *, algorithm, params, runtime, reviewed=None):
         def select(before):
             # A reviewed run compares inside the lock, before any algorithm or write.
             if reviewed is not None:
@@ -69,21 +65,20 @@ class LivePlaylistService:
                 raise DirectFailure(502, "invalid_shuffle_result", "The shuffle could not be safely applied.")
             return desired, None
 
-        return self._execute("shuffle", playlist_id, user, session, select, algorithm=algorithm, runtime=runtime)
+        return self._execute("shuffle", playlist_id, user, session, select, runtime, algorithm=algorithm)
 
-    def undo(self, playlist_id, user, session, *, reviewed=None, runtime=None, selected=None):
+    def undo(self, playlist_id, user, session, *, runtime, selected, reviewed=None):
         def select(before):
             selection = StateService.peek_undo(session, playlist_id)
             if reviewed is not None:
                 # The server still selects the order; these only prove it is the reviewed one.
                 require_bindings(reviewed, undo_bindings(playlist_id, selection, before.track_uris))
-            if selected is not None:
-                StateService.assert_undo_selection(session, playlist_id, selected)
+            StateService.assert_undo_selection(session, playlist_id, selected)
             return list(selection.desired_uris), selection
 
-        return self._execute("undo", playlist_id, user, session, select, runtime=runtime)
+        return self._execute("undo", playlist_id, user, session, select, runtime)
 
-    def restore_snapshot(self, snapshot, user, session, *, reviewed=None, runtime=None):
+    def restore_snapshot(self, snapshot, user, session, *, runtime, reviewed=None):
         if snapshot.user_id != user.id:
             return direct_rejected_result(
                 "snapshot_restore", error_code="snapshot_not_found", http_status=404, message="Snapshot not found."
@@ -102,99 +97,9 @@ class LivePlaylistService:
                 require_bindings(reviewed, snapshot_bindings(playlist_id, snapshot_id, desired, before.track_uris))
             return desired, None
 
-        result = self._execute("snapshot_restore", playlist_id, user, session, select, runtime=runtime)
+        result = self._execute("snapshot_restore", playlist_id, user, session, select, runtime)
         result.update(playlist_id=playlist_id, snapshot=snapshot_data)
         return result
-
-    def _execute(self, kind, playlist_id, user, session, select, *, algorithm=None, runtime=None):
-        if runtime is not None:
-            return self._execute_durable(kind, playlist_id, user, session, select, algorithm, runtime)
-        operation = LiveOperation(kind, self.api, user)
-        metadata, result = None, {}
-        lock_entered = False
-        try:
-            with playlist_lock(playlist_id, timeout_s=2.0) as acquired:
-                lock_entered = True
-                if not acquired:
-                    return direct_rejected_result(
-                        kind,
-                        error_code="playlist_busy",
-                        http_status=409,
-                        retryable=True,
-                        message="Another action is using this playlist. Try again shortly.",
-                    )
-                try:
-                    metadata = PlaylistService(self.api).validate_user_can_edit(
-                        playlist_id, user.spotify_id, skip_cache=True
-                    )
-                    before = operation.read(playlist_id)
-                    desired, selection = select(before)
-                    desired = list(desired)
-                    self.validate_order(desired)
-                    mutation = track_mutation_type(desired, before.track_uris)
-                    resource = operation.plan(playlist_id, desired, kind, mutation_type=mutation)
-                    if selection is not None:
-                        StateService.assert_undo_selection(session, playlist_id, selection)
-                    changed = desired != list(before.track_uris)
-                    if changed and kind != "undo":
-                        PlaylistSnapshotService.auto_snapshot_if_enabled(
-                            user_id=user.id,
-                            playlist_id=playlist_id,
-                            playlist_name=before.name,
-                            track_uris=list(before.track_uris),
-                            snapshot_type=SnapshotType.AUTO_PRE_SHUFFLE
-                            if kind == "shuffle"
-                            else SnapshotType.AUTO_PRE_COMMIT,
-                            trigger_description=f"Before {algorithm or 'snapshot restore'}",
-                        )
-                    # plan's baseline is not a post-dispatch observation. The writer
-                    # supplies current state only after a complete verification read.
-                    resource.pop("current_track_uris", None)
-                    resource.pop("loaded_at", None)
-                    operation.write("update_playlist_tracks", playlist_id, desired, kind)
-                    after = operation.observed[playlist_id]
-                    resource.update(current_track_uris=list(after.track_uris), loaded_at=after.loaded_at)
-                    result["playlist"] = self._playlist(playlist_id, metadata, after)
-                    self._confirm_history(operation, playlist_id, session, before, after, selection, changed, result)
-                    if changed and kind != "undo":
-                        self._log_activity(kind, user, playlist_id, after, algorithm)
-                    message = self._success_message(kind, changed, selection)
-                    outcome = operation.outcome()
-                    complete = outcome["aggregate_status"] == "complete"
-                    return {
-                        **result,
-                        "status": "success" if complete else "failed",
-                        "http_status": 200 if complete else 502,
-                        "message": message
-                        if complete
-                        else "Playlist contents are verified; saved history needs attention.",
-                        "category": "info" if not changed else "success",
-                        "operation": outcome,
-                    }
-                except Exception as error:
-                    self._propagate_control(error)
-                    return self._failure(operation, playlist_id, metadata, error)
-        except Exception as error:
-            self._propagate_control(error)
-            if not lock_entered:
-                return direct_rejected_result(
-                    kind,
-                    error_code="coordination_failed",
-                    http_status=502,
-                    retryable=True,
-                    message="The playlist could not be locked. This attempt applied no changes.",
-                )
-            # Lock release can fail after a verified write/history update. Preserve
-            # those facts and classify only the run-level coordination as unknown.
-            operation.book("coordination", "unknown", error_code="coordination_failed")
-            operation.error_code = "coordination_failed"
-            return {
-                **result,
-                "status": "failed",
-                "http_status": 502,
-                "message": "Playlist results are retained; coordination could not be confirmed.",
-                "operation": operation.outcome(),
-            }
 
     @staticmethod
     def _propagate_control(error):
@@ -202,13 +107,12 @@ class LivePlaylistService:
 
         propagate_control(error)
 
-    def _execute_durable(self, kind, playlist_id, user, session, select, algorithm, runtime):
+    def _execute(self, kind, playlist_id, user, session, select, runtime, *, algorithm=None):
         """Freeze original observations once; replay only the journaled target effect."""
         from shuffify.services.state_service import UndoSelection
         from shuffify.services.workshop_commit_service import IncompletePlaylistRead, ObservedPlaylist
 
         operation = LiveOperation(kind, self.api, user)
-        metadata = None
         try:
             def prepare():
                 before = operation.read(playlist_id)
@@ -340,7 +244,7 @@ class LivePlaylistService:
 
             runtime.fail_if_verified(error)
             if isinstance(error, NeedsAttention) and operation.resources:
-                error.result = direct_response_payload(self._failure(operation, playlist_id, metadata, error), kind)[0]
+                error.result = direct_response_payload(self._failure(operation, error), kind)[0]
             self._propagate_control(error)
             batches = [item for step in runtime.journal.doc["plans"] for item in step["batches"]]
             if (self._write_rejection(error) is not None and batches
@@ -349,7 +253,7 @@ class LivePlaylistService:
                 operation.error_code, operation.retryable = "write_rejected", True
                 for item in operation.resources:
                     item.update(status="failed", affected_count=0, retryable=True, error_code="write_rejected")
-            return self._failure(operation, playlist_id, metadata, error)
+            return self._failure(operation, error)
 
     @staticmethod
     def _success_message(kind, changed, selection):
@@ -360,7 +264,7 @@ class LivePlaylistService:
         return "This order is already on Spotify."
 
     @staticmethod
-    def _confirm_history(operation, playlist_id, session, before, after, selection, changed, result, runtime=None):
+    def _confirm_history(operation, playlist_id, session, before, after, selection, changed, result, runtime):
         initial = deepcopy(session.get("playlist_states", {}).get(playlist_id))
         if not changed and selection is None:
             book_not_required("session_history", playlist_id, operation)
@@ -378,8 +282,7 @@ class LivePlaylistService:
             operation.book("session_history", "complete", resource=playlist_id, affected_count=1)
         except Exception as error:
             LivePlaylistService._propagate_control(error)
-            if runtime is not None:
-                runtime.mark_history_unconfirmed()
+            runtime.mark_history_unconfirmed()
             logger.warning("Direct action history confirmation failed", exc_info=True)
             unchanged = session.get("playlist_states", {}).get(playlist_id) == initial
             operation.book(
@@ -452,22 +355,21 @@ class LivePlaylistService:
             return 404, "Spotify could not find this playlist. Check that it is available before trying again."
         if isinstance(error, SpotifyQuotaExceededError):
             return 429, "Spotify's request quota has been reached. Try again after the quota resets."
-        if isinstance(error, SpotifyRateLimitError):
-            return 429, "Spotify is limiting requests. Wait a moment before trying again."
         if isinstance(error, SpotifyWriteRejectedError):
             return 502, "Spotify rejected this action before applying changes. Review the action before trying again."
         return None
 
-    def _failure(self, operation, playlist_id, metadata, error):
+    def _failure(self, operation, error):
         logger.warning("Direct %s action did not complete", operation.kind, exc_info=True)
         resources = operation.resources
         dispatched = any(r["dispatched"] for r in resources)
         if dispatched:
             operation.error_code = operation.error_code or "write_unverified"
             outcome = operation.outcome()
-            # The writer proves zero effects before enabling retry. An exception's
-            # type alone cannot establish that, especially after a partial batch
-            # or when a typed rejection occurs during verification of a write.
+            # The journal's batch states prove zero effects before retry is enabled.
+            # An exception's type alone cannot establish that, especially after a
+            # partial batch or when a typed rejection occurs during verification
+            # of a write.
             rejection = self._write_rejection(error) if outcome["retryable"] else None
             message = "The action did not complete. Review the playlist result before another attempt."
             status, message = rejection or (502, message)
@@ -479,29 +381,7 @@ class LivePlaylistService:
                 "operation": outcome,
             }
         status, code, message, retryable = self.preflight_failure(error)
-        if operation.error_code == "resource_changed":
-            status, code, message, retryable = (
-                409,
-                "resource_changed",
-                "Playlist changed. Review its current contents.",
-                True,
-            )
         operation.error_code, operation.retryable = code, retryable
-        if not resources and metadata:
-            operation.resources.append(
-                {
-                    "resource": playlist_id,
-                    "resource_name": metadata.get("name", "Playlist"),
-                    "step": operation.kind,
-                    "mutation_type": "track_order" if operation.kind == "shuffle" else "track_membership",
-                    "status": "failed",
-                    "dispatched": False,
-                    "affected_count": 0,
-                    "retryable": retryable,
-                    "error_code": code,
-                    "verification": "ordered",
-                }
-            )
         for resource in resources:
             resource.update(status="failed", affected_count=0, retryable=retryable, error_code=code)
         return {
@@ -511,24 +391,6 @@ class LivePlaylistService:
             "error": message,
             "operation": operation.outcome(),
         }
-
-    @staticmethod
-    def _log_activity(kind, user, playlist_id, observed, algorithm):
-        try:
-            activity_type = {
-                "shuffle": ActivityType.SHUFFLE,
-                "snapshot_restore": ActivityType.SNAPSHOT_RESTORE,
-            }[kind]
-            ActivityLogService.log(
-                user_id=user.id,
-                activity_type=activity_type,
-                description=f"{kind.replace('_', ' ').capitalize()} completed on '{observed.name}'",
-                playlist_id=playlist_id,
-                playlist_name=observed.name,
-                metadata={"action": kind, "algorithm": algorithm, "track_count": len(observed.track_uris)},
-            )
-        except Exception:
-            logger.warning("Could not record verified direct action Activity", exc_info=True)
 
     def inspect_tracks(self, playlist_id, user, *, desired_track_uris=None):
         operation = LiveOperation("track_inspection", self.api, user)

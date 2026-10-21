@@ -6,7 +6,6 @@ to capture point-in-time snapshots of playlist track orderings and
 restore them later.
 """
 
-import contextvars
 import logging
 from typing import List, Optional
 
@@ -15,28 +14,6 @@ from shuffify.models.db import PlaylistSnapshot, db
 from shuffify.services.base import get_owned_entity, safe_commit
 
 logger = logging.getLogger(__name__)
-
-# The JobExecution that auto-snapshots created in the current execution context
-# should be tagged with, so rollback restores only that job's snapshots rather
-# than every snapshot in a time window. Durable operations pass
-# ``job_execution_id`` to create_snapshot explicitly; nothing sets this now.
-_current_job_execution_id = contextvars.ContextVar(
-    "shuffify_current_job_execution_id", default=None
-)
-
-
-def set_current_job_execution(execution_id):
-    """Tag auto-snapshots created in this context with ``execution_id``.
-
-    Returns a token to pass to :func:`reset_current_job_execution`.
-    """
-    return _current_job_execution_id.set(execution_id)
-
-
-def reset_current_job_execution(token):
-    """Clear the current-job-execution tag (see set_current_job_execution)."""
-    _current_job_execution_id.reset(token)
-
 
 # Default max snapshots if UserSettings is unavailable
 DEFAULT_MAX_SNAPSHOTS_PER_PLAYLIST = 50
@@ -56,46 +33,6 @@ class PlaylistSnapshotNotFoundError(PlaylistSnapshotError):
 
 class PlaylistSnapshotService:
     """Service for managing playlist snapshots."""
-
-    @staticmethod
-    def auto_snapshot_if_enabled(
-        user_id: int,
-        playlist_id: str,
-        playlist_name: str,
-        track_uris: List[str],
-        snapshot_type: str,
-        trigger_description: Optional[str] = None,
-    ) -> Optional[PlaylistSnapshot]:
-        """Snapshot a playlist before an automated write, if the user wants it.
-
-        Every executor needs the same three guards around create_snapshot:
-        the user's auto-snapshot setting, a non-empty track list (an empty
-        snapshot restores nothing), and never letting a snapshot failure take
-        down the operation it protects.
-
-        Returns the snapshot, or None if it was skipped or failed.
-        """
-        try:
-            if not PlaylistSnapshotService.is_auto_snapshot_enabled(user_id):
-                return None
-            if not track_uris:
-                return None
-            return PlaylistSnapshotService.create_snapshot(
-                user_id=user_id,
-                playlist_id=playlist_id,
-                playlist_name=playlist_name,
-                track_uris=track_uris,
-                snapshot_type=snapshot_type,
-                trigger_description=trigger_description,
-            )
-        except Exception as snap_err:
-            logger.warning(
-                "Auto-snapshot for %s before %s failed: %s",
-                playlist_id,
-                snapshot_type,
-                snap_err,
-            )
-            return None
 
     @staticmethod
     def create_snapshot(
@@ -135,10 +72,6 @@ class PlaylistSnapshotService:
         if session is not None and commit:
             raise ValueError("An explicit snapshot session requires commit=False.")
         storage = session if session is not None else db.session
-        # Tag with the current job's execution id (if any) so rollback can
-        # scope to just this job's snapshots.
-        if job_execution_id is None:
-            job_execution_id = _current_job_execution_id.get()
 
         snapshot = PlaylistSnapshot(
             user_id=user_id,
@@ -262,43 +195,6 @@ class PlaylistSnapshotService:
             f"({snapshot.track_count} tracks)"
         )
         return snapshot.track_uris
-
-    @staticmethod
-    def restore_to_playlist(
-        snapshot_id: int,
-        user_id: int,
-        api,
-    ) -> "PlaylistSnapshot":
-        """Restore a snapshot to its source playlist via the
-        Spotify API. Used by the executor rollback path.
-
-        Args:
-            snapshot_id: The snapshot database ID.
-            user_id: The internal database user ID (ownership).
-            api: SpotifyAPI client.
-
-        Returns:
-            The PlaylistSnapshot that was applied (caller can
-            read playlist_id, track_uris, track_count).
-
-        Raises:
-            PlaylistSnapshotNotFoundError: If not found or not
-                owned.
-            Whatever the Spotify API raises on write failure.
-        """
-        snapshot = PlaylistSnapshotService.get_snapshot(
-            snapshot_id, user_id
-        )
-        uris = snapshot.track_uris or []
-        api.update_playlist_tracks(
-            snapshot.playlist_id, uris
-        )
-        logger.info(
-            "Restored snapshot %s to playlist %s "
-            "(%d tracks)",
-            snapshot_id, snapshot.playlist_id, len(uris),
-        )
-        return snapshot
 
     @staticmethod
     def delete_snapshot(

@@ -10,13 +10,11 @@ from tests.paths import api_path
 
 @contextmanager
 def serving(api):
-    """Answer every session and executor Spotify call from ``api``; yields the mocked auto-snapshot."""
+    """Answer every session and executor Spotify call from ``api``."""
     with patch("shuffify.routes.require_auth", return_value=api), patch.object(
         JobExecutorService, "_get_spotify_api", return_value=api,
-    ), patch(
-        "shuffify.services.playlist_snapshot_service.PlaylistSnapshotService.auto_snapshot_if_enabled",
-    ) as auto_snapshot:
-        yield auto_snapshot
+    ):
+        yield
 
 
 def post_context(client, target, body):

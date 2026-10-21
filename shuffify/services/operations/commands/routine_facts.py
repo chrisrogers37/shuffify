@@ -65,7 +65,7 @@ def build_result(runtime, command, state, *, error_code=None, message=None, http
     current = boundaries.get("current")
     kind, target = command.definition.job_type, command.playlist_id
     operation = LiveOperation(kind, None, runtime.user)
-    operation.locked_target, operation.triggered_by = target, command.triggered_by
+    operation.locked_target = target
     operation.error_code = error_code
     operation.book("execution_record", "complete", affected_count=0)
     run_started = prepared.get(BINDING_KEY, {}).get("run_started") is True
