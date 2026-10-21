@@ -19,7 +19,6 @@ updates:
         patterns:
           - "pytest*"
           - "ruff"
-          - "black"
         update-types:
           - "minor"
           - "patch"
