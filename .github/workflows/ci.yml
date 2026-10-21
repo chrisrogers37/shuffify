@@ -103,16 +103,11 @@ jobs:
       - name: Migration chain integrity
         run: python scripts/check-migration-chain.py
 
-      - name: Format check (black)
-        # Non-blocking: ruff is the enforced linter, so this only reports
-        # formatting drift.
-        run: black --check shuffify/
-        continue-on-error: true
-
       # PostgreSQL-only behaviour: locks, LISTEN and transactional DDL. Each test
       # module starts a throwaway server from the runner's PostgreSQL binaries;
-      # without them every test would skip, so their absence fails the step. The
-      # live Spotify scraper checks stay in the on-demand live-integration workflow.
+      # without them every test would skip, so their absence fails the step, as
+      # does any other skip (--fail-on-skip). The live Spotify scraper checks
+      # stay in the on-demand live-integration workflow.
       - name: PostgreSQL integration tests
         shell: bash
         run: |
@@ -120,7 +115,8 @@ jobs:
           test -x "$pgbin/initdb"
           test -x "$pgbin/pg_ctl"
           PATH="$pgbin:$PATH" pytest tests/ -m integration -q \
-            --ignore=tests/services/source_resolver/test_live_scraper_validation.py
+            --ignore=tests/services/source_resolver/test_live_scraper_validation.py \
+            --fail-on-skip
 
   # The rest of the suite (everything but the integration tests) in TEST_SPLITS
   # parallel legs. pytest-split divides it by the recorded test times in
@@ -198,6 +194,10 @@ jobs:
       # cuts the collection order into contiguous chunks and closes a chunk once
       # it holds an equal share of the total time. One test here outweighs two
       # shares, so that algorithm leaves the last legs with nothing to run.
+      #
+      # --fail-on-skip: the path and the marker choose what runs, so a skip at
+      # run time is a missing precondition and fails the leg. The tests of the
+      # other legs are deselected, which is not a skip.
       - name: Run this shard of the tests with coverage
         env:
           COVERAGE_FILE: .coverage.shard-${{ matrix.group }}
@@ -208,7 +208,8 @@ jobs:
             --splits "$TEST_SPLITS" --group "$TEST_GROUP" \
             --splitting-algorithm least_duration \
             --durations-path "durations-shard-$TEST_GROUP.json" \
-            --store-durations --clean-durations
+            --store-durations --clean-durations \
+            --fail-on-skip
 
       # Uploaded only after a green run: a failed leg publishes nothing.
       - name: Upload the collection fingerprint
@@ -253,7 +254,7 @@ jobs:
     env:
       # Minimum coverage of the whole suite, the legs combined; ratchet up as
       # coverage improves.
-      COV_MIN: '80'
+      COV_MIN: '92'
     steps:
       - name: Require the lint job and every test shard to have passed
         env:
@@ -406,9 +407,10 @@ jobs:
       - name: Install headless Chromium
         run: python -m playwright install --with-deps --only-shell chromium
 
+      # --fail-on-skip: every behaviour test must run, the browser pass included.
       - name: Behaviour tests
         timeout-minutes: 30
-        run: scripts/harness.sh e2e
+        run: scripts/harness.sh e2e --fail-on-skip
 
       - name: Page screenshots
         if: always()
