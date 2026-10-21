@@ -57,7 +57,6 @@ export function workshopContext(
       description: "A place for the next arrangement.",
       total_tracks: scenario === "workshop-empty" ? 0 : 3,
       public: false,
-      audio_features: {},
     },
     tracks:
       scenario === "workshop-empty"

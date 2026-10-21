@@ -1,8 +1,8 @@
 """
 Tests for the Playlist data model.
 
-Tests construction, validation, track operations, feature statistics,
-and serialization without requiring Spotify API access.
+Tests construction, validation, track operations, and serialization
+without requiring Spotify API access.
 """
 
 import pytest
@@ -19,7 +19,6 @@ class TestPlaylistConstruction:
         assert playlist.name == "My Playlist"
         assert playlist.owner_id == "user1"
         assert playlist.tracks == []
-        assert playlist.audio_features == {}
         assert playlist.description is None
 
     def test_create_playlist_with_all_fields(self):
@@ -127,14 +126,21 @@ class TestPlaylistSerialization:
         assert d["owner_id"] == "u1"
         assert d["description"] == "desc"
         assert len(d["tracks"]) == 1
-        assert d["audio_features"] == {}
+        assert set(d) == {
+            "id",
+            "name",
+            "owner_id",
+            "description",
+            "total_tracks",
+            "public",
+            "tracks",
+        }
 
     def test_to_dict_with_defaults(self):
         playlist = Playlist(id="p1", name="Test", owner_id="u1")
         d = playlist.to_dict()
         assert d["description"] is None
         assert d["tracks"] == []
-        assert d["audio_features"] == {}
 
     def test_str_representation(self):
         tracks = [{"id": f"t{i}", "uri": f"uri:{i}", "name": f"T{i}"} for i in range(5)]

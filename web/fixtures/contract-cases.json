@@ -54,29 +54,6 @@
     "fixture": "valid/workshop-context.json"
   },
   {
-    "name": "workshop-context-without-audio-features",
-    "schema": "workshop-context",
-    "valid": true,
-    "data": {
-      "success": true,
-      "category": "success",
-      "playlist": {
-        "id": "alice-mix",
-        "name": "Alice mix",
-        "owner_id": "alice",
-        "description": "A fixture playlist",
-        "total_tracks": 0,
-        "public": false
-      },
-      "tracks": [],
-      "algorithms": [],
-      "upstream_sources": {},
-      "previous": null,
-      "next": null,
-      "recently_loaded": []
-    }
-  },
-  {
     "name": "user-playlists-context",
     "schema": "user-playlists-context",
     "valid": true,
@@ -2521,8 +2498,7 @@
         "owner_id": "alice",
         "description": "A fixture playlist",
         "total_tracks": 1,
-        "public": false,
-        "audio_features": {}
+        "public": false
       },
       "tracks": [
         {
@@ -2608,8 +2584,7 @@
         "owner_id": "alice",
         "description": "A fixture playlist",
         "total_tracks": 1,
-        "public": false,
-        "audio_features": {}
+        "public": false
       },
       "tracks": [
         {
@@ -2696,8 +2671,7 @@
         "owner_id": "alice",
         "description": "A fixture playlist",
         "total_tracks": 1,
-        "public": false,
-        "audio_features": {}
+        "public": false
       },
       "tracks": [
         {
@@ -2775,8 +2749,7 @@
         "owner_id": "alice",
         "description": "A fixture playlist",
         "total_tracks": 1,
-        "public": false,
-        "audio_features": {}
+        "public": false
       },
       "tracks": [
         {

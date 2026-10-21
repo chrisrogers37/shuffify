@@ -113,13 +113,6 @@
             "boolean",
             "null"
           ]
-        },
-        "audio_features": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/JsonRecord"
-          },
-          "description": "Always empty and never read by the client; the API may omit it."
         }
       },
       "required": [
@@ -135,41 +128,6 @@
     "Count": {
       "type": "integer",
       "minimum": 0
-    },
-    "JsonRecord": {
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/definitions/JsonValue"
-      },
-      "description": "Extensible metadata and preferences intentionally retain arbitrary JSON values."
-    },
-    "JsonValue": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "number"
-        },
-        {
-          "type": "boolean"
-        },
-        {
-          "type": "null"
-        },
-        {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/JsonValue"
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/JsonValue"
-          }
-        }
-      ]
     },
     "WorkshopTrack": {
       "type": "object",
