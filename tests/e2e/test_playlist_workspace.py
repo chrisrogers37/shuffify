@@ -214,9 +214,12 @@ def test_on_repeat_moves_and_removes_one_occurrence_by_keyboard(fake, open_sessi
     page.keyboard.press("Enter")
     row = page.locator(f'[data-occurrence="{key}"]')
     expect(_rows(page).nth(2)).to_have_attribute("data-occurrence", key)
-    # A move hands focus back to the row's first enabled action on the next frame. Using the position form before
-    # then lets that handoff take focus mid-action: Enter lands on Move up and undoes the move.
+    # A move settles in two steps after the rows change. The next frame hands focus back to the row's first enabled
+    # action, and a separate React task then resets the position field to the new position. Using the position form
+    # before both have landed lets one take over mid-action: Enter lands on Move up and undoes the move, or the reset
+    # rewrites the field between Playwright selecting its text and typing, so the 1 follows the 3 and the row goes last.
     expect(row.get_by_role("button", name="Move up", exact=True)).to_be_focused()
+    expect(row.get_by_label("Move to position", exact=True)).to_have_value("3")
     assert _shown(page)[2] == [key, uri]
     row.get_by_label("Move to position", exact=True).fill("1")
     row.get_by_role("button", name="Move", exact=True).press("Enter")
