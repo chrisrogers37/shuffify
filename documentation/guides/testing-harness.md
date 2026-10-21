@@ -46,7 +46,7 @@ code that is running now.
    run with `SHUFFIFY_MIGRATION_STEP` set for those processes only.
 5. Unless `--quick`: runs `ruff check .` and `scripts/check-migration-chain.py`,
    and runs `pytest tests/ -m "not integration"` under `env -i` with
-   CI's backend-job values and `FLASK_SKIP_DOTENV=1`, so other shell exports
+   the values of CI's backend jobs and `FLASK_SKIP_DOTENV=1`, so other shell exports
    and Flask dotenv auto-loading cannot add settings to the suite.
 6. Starts the fake Spotify on `http://127.0.0.1:8900`, a fresh Gunicorn
    gthread API on `http://127.0.0.1:8000`, and a separate operation worker,
@@ -429,9 +429,92 @@ app's own origin.
 
 ## CI
 
-The `harness` job in `.github/workflows/ci.yml` runs
-`scripts/harness.sh setup --quick` against PostgreSQL 16 and Redis 7 service
-containers (`HARNESS_SERVICES=external`) on every pull request. It proves:
+`.github/workflows/ci.yml` runs on every pull request and on every push to
+`main`. Besides the `Frontend and Railway config` job, it has the backend jobs
+and the harness job below.
+
+### Backend jobs
+
+The backend suite is divided across parallel jobs, so no single job runs all of
+its tests one after another:
+
+| Job | What it does |
+|---|---|
+| `Backend lint and PostgreSQL integration tests` | Once: `ruff check .`, `scripts/check-migration-chain.py`, `black --check` (reports only) and the PostgreSQL integration tests (`-m integration`) |
+| `Backend tests shard 1` ... `Backend tests shard 5` | In parallel, a share of `pytest tests/ -m "not integration"` each |
+| `Backend lint & tests` | The final job: needs both of the above, and keeps the name the single backend job had, because docs and tooling refer to it |
+
+`pytest-split` divides the tests by the recorded times in `.test_durations`, at
+the repository root (`--splits 5 --group N`). It hands the longest tests out
+first, each to the shard with the least time so far
+(`--splitting-algorithm least_duration`). Its default, `duration_based_chunks`,
+cuts the collection order into contiguous chunks and closes a chunk once it
+holds an equal share of the total time, which can leave the last shards empty
+when one test outweighs two shares. One does here: the 1000-track case of
+`test_every_compound_crash_retains_the_accepted_collect_and_only_rolls_back_drip`
+in `tests/services/operations/test_composite_crash_recovery.py` takes more than
+a third of all the test time.
+
+Each test lands in exactly one shard as long as every shard collects the same
+suite, and each shard proves that:
+
+- It first fingerprints the whole suite it collected: the sha256 of the ordered
+  test ids from `pytest --collect-only -qq tests/ -m "not integration"`, checked
+  against pytest's own count. `PYTHONHASHSEED` is fixed so every process agrees
+  on the order. A test id must therefore not change between runs: a parametrize
+  value that embeds something random (a fresh uuid, the time) needs explicit
+  `ids=`.
+- It refuses to run if the number of shards in the matrix is not `TEST_SPLITS`,
+  the value at the top of `ci.yml`. To change the number of shards, change
+  `TEST_SPLITS` and the matrix's `group` list together.
+- It runs its share with coverage written to its own data file and no minimum
+  (it covers only its share), and stores the times of exactly the tests it ran.
+- It uploads the fingerprint (`collection-shard-N`), the coverage data
+  (`coverage-shard-N`) and the times (`durations-shard-N`) as artifacts, kept
+  for seven days. An upload that finds no file fails the shard.
+
+`Backend lint & tests` runs after the lint job and the shards whatever their
+result, and fails unless all of them passed and all five fingerprints are
+identical. It then combines the shards' coverage, writes the combined report to
+the run's summary page, and holds the total to `COV_MIN` (`ci.yml`; raise it as
+coverage improves). The minimum applies to the whole suite and rounds to a whole
+percent, as `pytest --cov-fail-under` did when one job ran everything. It also
+merges the shards' times into the `test-durations` artifact, kept for 30 days;
+that step gates nothing.
+
+The shard holding that longest test cannot finish before the test does, so the
+other four finish well ahead of it. Splitting the test into separately
+collected cases is what would shorten the run further.
+
+To run what one shard ran, run its group against the same `.test_durations`:
+
+```bash
+PYTHONHASHSEED=0 pytest tests/ -m "not integration" \
+  --splits 5 --group 3 --splitting-algorithm least_duration
+```
+
+#### Refreshing `.test_durations`
+
+A test missing from `.test_durations` is given the average time, so stale times
+make the shards uneven but never skip a test. Expect the shard with the longest
+test to run longest; when the other four drift more than about 25% apart,
+refresh the file from the `test-durations` artifact of a run whose
+`Backend lint & tests` passed (the latest on `main`, say):
+
+```bash
+gh run download <run-id> -n test-durations   # writes .test_durations
+```
+
+Commit it at the repository root. To rebuild it from scratch instead, run the
+suite once with `pytest tests/ -m "not integration" --store-durations`; the CI
+artifact is preferable, since it holds times measured on the runners that use
+them.
+
+### Harness job
+
+The `harness` job runs `scripts/harness.sh setup --quick` against
+PostgreSQL 16 and Redis 7 service containers (`HARNESS_SERVICES=external`) on
+every pull request. It proves:
 - `flask create-schema` builds a new PostgreSQL database from the models,
   and `flask db upgrade` runs on it;
 - the app boots on it with the schema gate, Redis sessions and the scheduler
@@ -441,7 +524,7 @@ containers (`HARNESS_SERVICES=external`) on every pull request. It proves:
 - every behaviour test passes (`scripts/harness.sh e2e`), the browser pass
   included, whose screenshots it keeps as the `page-screenshots` artifact.
 
-The backend job already covers lint and tests, including both fake Spotify
+The backend jobs already cover lint and tests, including both fake Spotify
 suites, so this job skips them.
 
 ## Options
