@@ -2,15 +2,13 @@
 Tests for playlist pair request validation schemas.
 
 Tests CreatePairRequest, UpdatePairRequest,
-ArchiveTracksRequest, and UnarchiveTracksRequest
-Pydantic models.
+and UnarchiveTracksRequest Pydantic models.
 """
 
 import pytest
 from pydantic import ValidationError
 
 from shuffify.schemas.playlist_pair_requests import (
-    ArchiveTracksRequest,
     CreatePairRequest,
     UnarchiveTracksRequest,
     UpdatePairRequest,
@@ -80,46 +78,6 @@ class TestCreatePairRequestInvalid:
 
 
 # =============================================================================
-# ArchiveTracksRequest
-# =============================================================================
-
-
-class TestArchiveTracksRequestValid:
-    """Tests for valid ArchiveTracksRequest payloads."""
-
-    def test_valid_uris(self):
-        req = ArchiveTracksRequest(track_uris=[
-            "spotify:track:a1b2c3d4e5f6g7h8i9j0k1",
-            "spotify:track:z9y8x7w6v5u4t3s2r1q0p9",
-        ])
-        assert len(req.track_uris) == 2
-
-    def test_single_uri(self):
-        req = ArchiveTracksRequest(track_uris=[
-            "spotify:track:a1b2c3d4e5f6g7h8i9j0k1",
-        ])
-        assert len(req.track_uris) == 1
-
-
-class TestArchiveTracksRequestInvalid:
-    """Tests for invalid ArchiveTracksRequest payloads."""
-
-    def test_empty_list_raises(self):
-        with pytest.raises(ValidationError):
-            ArchiveTracksRequest(track_uris=[])
-
-    def test_invalid_uri_format_raises(self):
-        with pytest.raises(ValidationError):
-            ArchiveTracksRequest(track_uris=["bad_uri"])
-
-    def test_short_track_id_raises(self):
-        with pytest.raises(ValidationError):
-            ArchiveTracksRequest(
-                track_uris=["spotify:track:short"]
-            )
-
-
-# =============================================================================
 # UnarchiveTracksRequest
 # =============================================================================
 
@@ -133,6 +91,13 @@ class TestUnarchiveTracksRequestValid:
         ])
         assert len(req.track_uris) == 1
 
+    def test_multiple_uris(self):
+        req = UnarchiveTracksRequest(track_uris=[
+            "spotify:track:a1b2c3d4e5f6g7h8i9j0k1",
+            "spotify:track:z9y8x7w6v5u4t3s2r1q0p9",
+        ])
+        assert len(req.track_uris) == 2
+
 
 class TestUnarchiveTracksRequestInvalid:
     """Tests for invalid UnarchiveTracksRequest payloads."""
@@ -145,6 +110,12 @@ class TestUnarchiveTracksRequestInvalid:
         with pytest.raises(ValidationError):
             UnarchiveTracksRequest(
                 track_uris=["not:a:valid:uri"]
+            )
+
+    def test_short_track_id_raises(self):
+        with pytest.raises(ValidationError):
+            UnarchiveTracksRequest(
+                track_uris=["spotify:track:short"]
             )
 
 

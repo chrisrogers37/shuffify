@@ -8,10 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from shuffify.schemas import (
-    BalancedShuffleParams,
-    BasicShuffleParams,
     ExternalPlaylistRequest,
-    PercentageShuffleParams,
     ShuffleRequest,
     WorkshopCommitRequest,
     parse_shuffle_request,
@@ -138,6 +135,22 @@ class TestShuffleRequest:
         error_str = str(exc_info.value).lower()
         assert "front" in error_str or "back" in error_str
 
+    def test_inclusive_range_limits_accepted(self):
+        """Test that the limits of each ranged field are accepted."""
+        low = ShuffleRequest(
+            section_count=1, shuffle_percentage=0.0, shuffle_location="front"
+        )
+        assert low.section_count == 1
+        assert low.shuffle_percentage == 0.0
+        assert low.shuffle_location == "front"
+
+        high = ShuffleRequest(
+            section_count=100, shuffle_percentage=100.0, shuffle_location="back"
+        )
+        assert high.section_count == 100
+        assert high.shuffle_percentage == 100.0
+        assert high.shuffle_location == "back"
+
     def test_algorithm_name_stripped(self):
         """Test that algorithm name is stripped of whitespace."""
         request = ShuffleRequest(algorithm="  BasicShuffle  ")
@@ -250,76 +263,6 @@ class TestParseShuffleRequest:
             "0": "spotify:track:abc",
             "3": "spotify:track:xyz",
         }
-
-
-class TestBasicShuffleParams:
-    """Tests for BasicShuffleParams schema."""
-
-    def test_default_keep_first(self):
-        """Test default keep_first is 0."""
-        params = BasicShuffleParams()
-        assert params.keep_first == 0
-
-    def test_valid_keep_first(self):
-        """Test valid keep_first value."""
-        params = BasicShuffleParams(keep_first=10)
-        assert params.keep_first == 10
-
-    def test_negative_keep_first(self):
-        """Test negative keep_first raises error."""
-        with pytest.raises(ValidationError):
-            BasicShuffleParams(keep_first=-1)
-
-
-class TestBalancedShuffleParams:
-    """Tests for BalancedShuffleParams schema."""
-
-    def test_defaults(self):
-        """Test default values."""
-        params = BalancedShuffleParams()
-        assert params.keep_first == 0
-        assert params.section_count == 4
-
-    def test_valid_section_count(self):
-        """Test valid section_count values."""
-        params = BalancedShuffleParams(section_count=10)
-        assert params.section_count == 10
-
-    def test_boundary_section_count(self):
-        """Test boundary values for section_count."""
-        # Minimum
-        params = BalancedShuffleParams(section_count=1)
-        assert params.section_count == 1
-
-        # Maximum
-        params = BalancedShuffleParams(section_count=100)
-        assert params.section_count == 100
-
-
-class TestPercentageShuffleParams:
-    """Tests for PercentageShuffleParams schema."""
-
-    def test_defaults(self):
-        """Test default values."""
-        params = PercentageShuffleParams()
-        assert params.shuffle_percentage == 50.0
-        assert params.shuffle_location == "front"
-
-    def test_valid_percentage(self):
-        """Test valid percentage values."""
-        params = PercentageShuffleParams(shuffle_percentage=0.0)
-        assert params.shuffle_percentage == 0.0
-
-        params = PercentageShuffleParams(shuffle_percentage=100.0)
-        assert params.shuffle_percentage == 100.0
-
-    def test_valid_locations(self):
-        """Test valid shuffle_location values."""
-        params = PercentageShuffleParams(shuffle_location="front")
-        assert params.shuffle_location == "front"
-
-        params = PercentageShuffleParams(shuffle_location="back")
-        assert params.shuffle_location == "back"
 
 
 class TestWorkshopCommitRequest:

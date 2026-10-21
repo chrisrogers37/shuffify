@@ -119,7 +119,7 @@
           "additionalProperties": {
             "$ref": "#/definitions/JsonRecord"
           },
-          "description": "Spotify audio feature fields are an intentionally extensible record."
+          "description": "Always empty and never read by the client; the API may omit it."
         }
       },
       "required": [
@@ -128,8 +128,7 @@
         "owner_id",
         "description",
         "total_tracks",
-        "public",
-        "audio_features"
+        "public"
       ],
       "additionalProperties": false
     },

@@ -58,7 +58,6 @@ export function parseContext(v: unknown, id: string): WorkshopContext {
     typeof v.playlist.owner_id !== "string" ||
     !nullable(v.playlist.description) ||
     !(v.playlist.public === null || typeof v.playlist.public === "boolean") ||
-    !record(v.playlist.audio_features) ||
     !Array.isArray(v.tracks) ||
     !Array.isArray(v.algorithms) ||
     !record(v.upstream_sources) ||

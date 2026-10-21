@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createApiClient } from "../src/api/client.ts";
+import { context } from "./workshop-data.mjs";
 const uri = (n) => `spotify:track:${String(n).padStart(22, "0")}`;
 const track = (n) => ({
   id: String(n).padStart(22, "0"),
@@ -118,4 +119,23 @@ test("running Workshop fixture has no completed result or timestamp", async () =
     .operation;
   assert.equal(next.state, "succeeded");
   assert.equal(next.result.success, true);
+});
+test("Workshop context loads whether or not its playlist carries audio_features", async () => {
+  const { createWorkshopClient } =
+    await import("../src/pages/workshop/core/client.ts");
+  const load = (playlist) =>
+    createWorkshopClient(
+      createApiClient({
+        transport: async () => json({ ...context(), playlist }),
+      }),
+      "target",
+    ).context();
+  const without = { ...context().playlist };
+  delete without.audio_features;
+  const omitted = await load(without);
+  assert.equal(omitted.playlist.id, "target");
+  assert.equal("audio_features" in omitted.playlist, false);
+  const present = await load({ ...without, audio_features: {} });
+  assert.equal(present.playlist.id, "target");
+  assert.deepEqual(present.playlist.audio_features, {});
 });
