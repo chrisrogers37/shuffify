@@ -195,6 +195,10 @@ def test_morning_mix_previews_keeps_options_adds_a_track_and_saves_once_after_re
     s.assert_clean()
 
 
+def _settle(page):
+    page.evaluate("new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
+
+
 @pytest.mark.parametrize("width,height", SIZES)
 def test_on_repeat_moves_and_removes_one_occurrence_by_keyboard(fake, open_session, width, height):
     unchanged = fake.playlist(ON_REPEAT)
@@ -217,18 +221,22 @@ def test_on_repeat_moves_and_removes_one_occurrence_by_keyboard(fake, open_sessi
     # A move settles in two steps after the rows change. The next frame hands focus back to the control that was used
     # (Move down), and a separate React task then resets the position field to the new position. Using the position
     # form before both have landed lets one take over mid-action: the reset rewrites the field between Playwright
-    # selecting its text and typing, so the 1 follows the 3 and the row goes last.
+    # selecting its text and typing, so the 1 follows the 3 and the row goes last. Two frames pass before each focus
+    # check so it proves the handoff rather than the focus the keypress already left on the control.
+    _settle(page)
     expect(row.get_by_role("button", name="Move down", exact=True)).to_be_focused()
     expect(row.get_by_label("Move to position", exact=True)).to_have_value("3")
     assert _shown(page)[2] == [key, uri]
     page.keyboard.press("Enter")
     expect(_rows(page).nth(3)).to_have_attribute("data-occurrence", key)
+    _settle(page)
     expect(row.get_by_role("button", name="Move down", exact=True)).to_be_focused()
     expect(row.get_by_label("Move to position", exact=True)).to_have_value("4")
     row.get_by_label("Move to position", exact=True).fill("1")
     row.get_by_role("button", name="Move", exact=True).press("Enter")
-    expect(row.get_by_role("button", name="Move", exact=True)).to_be_focused()
     expect(_rows(page).nth(0)).to_have_attribute("data-occurrence", key)
+    _settle(page)
+    expect(row.get_by_role("button", name="Move", exact=True)).to_be_focused()
     assert _shown(page)[0] == [key, uri]
     row.get_by_role("button", name="Remove from draft", exact=True).click()
     expect(_rows(page)).to_have_count(9)

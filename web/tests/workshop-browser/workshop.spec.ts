@@ -380,6 +380,13 @@ test("a move keeps focus on the control used and falls back when it is disabled"
 }) => {
   await start(page);
   const rows = page.locator("[data-occurrence]");
+  const settle = () =>
+    page.evaluate(
+      () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        ),
+    );
   const control = (name: string) =>
     rows.nth(1).getByRole("button", { name, exact: true });
   await rows
@@ -391,23 +398,27 @@ test("a move keeps focus on the control used and falls back when it is disabled"
     .getByRole("button", { name: "Move down", exact: true })
     .press("Enter");
   await expect(rows.nth(1)).toHaveAttribute("data-occurrence", moving);
+  await settle();
   await expect(control("Move down")).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(rows.nth(2)).toHaveAttribute("data-occurrence", moving);
   await expect(
     rows.nth(2).getByRole("button", { name: "Move down", exact: true }),
   ).toBeDisabled();
+  await settle();
   await expect(
     rows.nth(2).getByRole("button", { name: "Move up", exact: true }),
   ).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(rows.nth(1)).toHaveAttribute("data-occurrence", moving);
+  await settle();
   await expect(control("Move up")).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(rows.first()).toHaveAttribute("data-occurrence", moving);
   await expect(
     rows.first().getByRole("button", { name: "Move up", exact: true }),
   ).toBeDisabled();
+  await settle();
   await expect(
     rows.first().getByRole("button", { name: "Move down", exact: true }),
   ).toBeFocused();
@@ -416,6 +427,7 @@ test("a move keeps focus on the control used and falls back when it is disabled"
   await form.fill("2");
   await rows.first().getByRole("button", { name: "Move", exact: true }).click();
   await expect(rows.nth(1)).toHaveAttribute("data-occurrence", moving);
+  await settle();
   await expect(
     rows.nth(1).getByRole("button", { name: "Move", exact: true }),
   ).toBeFocused();
