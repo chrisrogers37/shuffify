@@ -39,10 +39,6 @@ class NewestFirstShuffle(ShuffleAlgorithm):
             }
         }
 
-    @property
-    def requires_features(self) -> bool:
-        return False
-
     def _parse_added_at(self, value: Optional[str]) -> datetime:
         """Parse ISO 8601 added_at timestamp.
 
@@ -59,7 +55,6 @@ class NewestFirstShuffle(ShuffleAlgorithm):
     def shuffle(
         self,
         tracks: List[Dict[str, Any]],
-        features: Optional[Dict[str, Dict[str, Any]]] = None,
         **kwargs,
     ) -> List[str]:
         """
@@ -70,7 +65,6 @@ class NewestFirstShuffle(ShuffleAlgorithm):
 
         Args:
             tracks: List of track dictionaries from Spotify API.
-            features: Unused.
             **kwargs: Additional parameters.
                 - jitter: Window size for local shuffling (default 5).
 

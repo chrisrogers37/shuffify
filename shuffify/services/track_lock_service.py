@@ -126,44 +126,6 @@ class TrackLockService:
         return lock.to_dict()
 
     @staticmethod
-    def set_lock(
-        user_id: int,
-        playlist_id: str,
-        track_uri: str,
-        position: int,
-        tier: str,
-    ) -> Dict:
-        """Set a specific lock tier (create or update)."""
-        existing = TrackLock.query.filter_by(
-            user_id=user_id,
-            spotify_playlist_id=playlist_id,
-            track_uri=track_uri,
-        ).first()
-
-        now = datetime.now(timezone.utc)
-        expires_at = None
-        if tier == LockTier.STANDARD:
-            expires_at = now + timedelta(
-                days=STANDARD_EXPIRY_DAYS
-            )
-
-        if existing:
-            existing.lock_tier = tier
-            existing.position = position
-            existing.expires_at = expires_at
-            safe_commit(
-                f"update lock to {tier} for "
-                f"{track_uri} in {playlist_id}",
-                TrackLockError,
-            )
-            return existing.to_dict()
-
-        return TrackLockService._create_lock(
-            user_id, playlist_id, track_uri,
-            position, tier,
-        )
-
-    @staticmethod
     def unlock(
         user_id: int,
         playlist_id: str,
@@ -262,42 +224,6 @@ class TrackLockService:
             user_id, playlist_id,
         )
         return {lock.track_uri for lock in locks}
-
-    @staticmethod
-    def is_locked(
-        user_id: int,
-        playlist_id: str,
-        track_uri: str,
-    ) -> bool:
-        """Check if a specific track is actively locked."""
-        lock = TrackLock.query.filter(
-            TrackLock.user_id == user_id,
-            TrackLock.spotify_playlist_id == playlist_id,
-            TrackLock.track_uri == track_uri,
-            TrackLockService._active_filter(),
-        ).first()
-        return lock is not None
-
-    @staticmethod
-    def cleanup_expired() -> int:
-        """
-        Delete all expired standard locks.
-
-        Intended to be called by a scheduled cleanup job.
-
-        Returns:
-            Number of expired locks deleted.
-        """
-        now = datetime.now(timezone.utc)
-        count = TrackLock.query.filter(
-            TrackLock.expires_at.isnot(None),
-            TrackLock.expires_at <= now,
-        ).delete(synchronize_session="fetch")
-        safe_commit(
-            f"cleanup {count} expired track locks",
-            TrackLockError,
-        )
-        return count
 
     @staticmethod
     def update_positions_after_reorder(

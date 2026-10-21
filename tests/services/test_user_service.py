@@ -357,7 +357,7 @@ class TestUserServicePreserveOnAbsent:
 
 
 class TestUserServiceLookup:
-    """Tests for get_by_spotify_id and get_by_id."""
+    """Tests for get_by_spotify_id."""
 
     def test_get_by_spotify_id_found(self, app_ctx):
         """Should return user when found."""
@@ -384,23 +384,6 @@ class TestUserServiceLookup:
     def test_get_by_spotify_id_none(self, app_ctx):
         """Should return None for None."""
         user = UserService.get_by_spotify_id(None)
-        assert user is None
-
-    def test_get_by_id_found(self, app_ctx):
-        """Should return user by internal ID."""
-        result = UserService.upsert_from_spotify({
-            "id": "user_y",
-            "display_name": "User Y",
-            "images": [],
-        })
-
-        user = UserService.get_by_id(result.user.id)
-        assert user is not None
-        assert user.spotify_id == "user_y"
-
-    def test_get_by_id_not_found(self, app_ctx):
-        """Should return None for non-existent ID."""
-        user = UserService.get_by_id(99999)
         assert user is None
 
 

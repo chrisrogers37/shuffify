@@ -25,7 +25,7 @@ from werkzeug.serving import make_server
 
 from harness.fake_spotify import create_app, spotify_id, tokens
 from shuffify.routes.playlist_pairs import PLAYLIST_ITEM_FIELDS
-from shuffify.services.base import create_private_playlist
+from shuffify.services.base import ensure_private
 from shuffify.services.playlist_service import PlaylistAccessError, PlaylistService, scrape_playlist_metadata
 from shuffify.services.source_resolver import public_scraper_pathway
 from shuffify.services.source_resolver.public_scraper_pathway import PublicScraperPathway
@@ -228,7 +228,7 @@ def test_someone_elses_playlist_is_a_summary_without_tracks(api):
     """The Workshop's restricted mode: the tracks are withheld, the summary is not."""
     service = PlaylistService(api)
     with pytest.raises(PlaylistAccessError):
-        service.get_playlist(pid("bob-finds"), include_features=False)
+        service.get_playlist(pid("bob-finds"))
     summary = service.get_playlist_summary(pid("bob-finds"))
     assert summary.name == "Bob's Finds"
     assert summary.owner_id == "bob"
@@ -245,11 +245,6 @@ def test_get_tracks_one_by_one_skipping_ids_spotify_cannot_find(api, store):
     uris = [t.uri for t in store.catalog[:3]]
     found = api.get_tracks([uris[0], "spotify:track:0000000000000000000000", *uris[1:]])
     assert [t["uri"] for t in found] == uris
-
-
-def test_audio_features_are_refused_to_a_development_mode_app(api, store):
-    with pytest.raises(SpotifyAPIError, match="403"):
-        api.get_audio_features([store.catalog[0].id])
 
 
 def test_search(api, store):
@@ -294,17 +289,19 @@ def test_change_details_is_a_success_with_no_body(api, store):
 
 
 def test_create_a_private_playlist_without_stalling(api, store):
-    """The create-then-force-private sequence shuffify uses for archives.
+    """The create-then-force-private sequence shuffify uses for new playlists.
 
-    Its follow-up "force private" PUT is the call above. create_private_playlist
+    Its follow-up "force private" PUT is the call above. ensure_private
     catches every exception, so only the fixture's backoff check would notice
     it retrying.
     """
     started = time.monotonic()
-    playlist_id, name = create_private_playlist(api, "Morning Mix", "Archive", "Archived tracks")
+    created = api.create_user_playlist("Morning Mix [Archive]", public=False, description="Archived tracks")
+    playlist_id = created["id"]
+    assert ensure_private(api, playlist_id) is True
     assert time.monotonic() - started < 5
     playlist = store.playlists[playlist_id]
-    assert (playlist.name, playlist.owner, playlist.public) == (name, "alice", False)
+    assert (playlist.name, playlist.owner, playlist.public) == ("Morning Mix [Archive]", "alice", False)
 
 
 # ---------------------------------------------------------------------------

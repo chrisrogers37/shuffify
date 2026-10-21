@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Dict, List, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -22,15 +22,9 @@ class ShuffleAlgorithm(Protocol):
         """Parameters that can be configured for this algorithm."""
         ...
 
-    @property
-    def requires_features(self) -> bool:
-        """Whether this algorithm requires audio features to work."""
-        ...
-
     def shuffle(
         self,
         tracks: List[Dict[str, Any]],
-        features: Optional[Dict[str, Dict[str, Any]]] = None,
         **kwargs
     ) -> List[str]:
         """
@@ -38,7 +32,6 @@ class ShuffleAlgorithm(Protocol):
 
         Args:
             tracks: List of track dictionaries from Spotify API
-            features: Optional dictionary of track URIs to audio features
             **kwargs: Additional parameters specific to the algorithm
 
         Returns:

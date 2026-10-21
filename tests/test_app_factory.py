@@ -208,33 +208,6 @@ class TestCreateApp:
         assert "Exception ignored in atexit" not in result.stderr, result.stderr
 
 
-class TestGetRedisClient:
-    """Tests for get_redis_client function."""
-
-    def test_get_redis_client_returns_none_when_not_configured(self):
-        """Should return None when Redis not configured."""
-        import shuffify
-
-        # Reset the global
-        shuffify._redis_client = None
-
-        result = shuffify.get_redis_client()
-        assert result is None
-
-    def test_get_redis_client_returns_client_when_configured(self):
-        """Should return Redis client when configured."""
-        import shuffify
-
-        mock_redis = Mock(spec=redis.Redis)
-        shuffify._redis_client = mock_redis
-
-        result = shuffify.get_redis_client()
-        assert result is mock_redis
-
-        # Clean up
-        shuffify._redis_client = None
-
-
 class TestGetSpotifyCache:
     """Tests for get_spotify_cache function."""
 
@@ -279,7 +252,6 @@ class TestGetSpotifyCache:
         app.config["CACHE_DEFAULT_TTL"] = 300
         app.config["CACHE_PLAYLIST_TTL"] = 120  # Custom TTL
         app.config["CACHE_USER_TTL"] = 600
-        app.config["CACHE_AUDIO_FEATURES_TTL"] = 86400
 
         with app.app_context():
             result = shuffify.get_spotify_cache()
@@ -323,7 +295,6 @@ class TestConfigIntegration:
         assert hasattr(Config, "CACHE_KEY_PREFIX")
         assert hasattr(Config, "CACHE_PLAYLIST_TTL")
         assert hasattr(Config, "CACHE_USER_TTL")
-        assert hasattr(Config, "CACHE_AUDIO_FEATURES_TTL")
 
     def test_production_config_requires_redis_url(self):
         """Production config should have REDIS_URL from environment."""

@@ -1,40 +1,13 @@
 """
 Tests for pending raid request schemas.
 
-Tests cover Pydantic validation for promote and dismiss requests.
+Tests cover Pydantic validation for dismiss requests.
 """
 
 import pytest
 from pydantic import ValidationError
 
-from shuffify.schemas.pending_raid_requests import (
-    DismissTracksRequest,
-    PromoteTracksRequest,
-)
-
-
-class TestPromoteTracksRequest:
-    """Tests for PromoteTracksRequest validation."""
-
-    def test_valid_request(self):
-        req = PromoteTracksRequest(track_ids=[1, 2, 3])
-        assert req.track_ids == [1, 2, 3]
-
-    def test_empty_list_rejected(self):
-        with pytest.raises(ValidationError):
-            PromoteTracksRequest(track_ids=[])
-
-    def test_missing_field_rejected(self):
-        with pytest.raises(ValidationError):
-            PromoteTracksRequest()
-
-    def test_non_list_rejected(self):
-        with pytest.raises(ValidationError):
-            PromoteTracksRequest(track_ids="not_a_list")
-
-    def test_single_id(self):
-        req = PromoteTracksRequest(track_ids=[42])
-        assert req.track_ids == [42]
+from shuffify.schemas.pending_raid_requests import DismissTracksRequest
 
 
 class TestDismissTracksRequest:

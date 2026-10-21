@@ -128,13 +128,6 @@ class TestRateLimitDoesNotAffectOtherRoutes:
 class TestLimiterInitialization:
     """Tests for limiter initialization behavior."""
 
-    def test_limiter_is_available(self, rate_limited_app):
-        """The limiter should be initialized in the app."""
-        from shuffify import get_limiter
-
-        limiter = get_limiter()
-        assert limiter is not None
-
     def test_rate_limit_header_present(self, rate_client):
         """Rate-limited responses should include Retry-After."""
         for _ in range(11):

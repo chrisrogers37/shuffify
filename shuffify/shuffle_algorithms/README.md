@@ -9,7 +9,6 @@ This directory contains various algorithms for shuffling Spotify playlists, each
 ### Basic
 - **Class**: `BasicShuffle`
 - **File**: `basic.py`
-- **Requires Audio Features**: No
 - **Description**: Standard random shuffle with the option to keep tracks fixed at the start.
 - **Parameters**:
   - `keep_first` (integer): Number of tracks to keep in their original position at the start
@@ -28,7 +27,6 @@ This directory contains various algorithms for shuffling Spotify playlists, each
 ### Percentage
 - **Class**: `PercentageShuffle`
 - **File**: `percentage.py`
-- **Requires Audio Features**: No
 - **Description**: Shuffle a portion of your playlist while keeping the rest in order.
 - **Parameters**:
   - `shuffle_percentage` (float): Percentage to shuffle (0-100%)
@@ -50,7 +48,6 @@ This directory contains various algorithms for shuffling Spotify playlists, each
 ### Balanced
 - **Class**: `BalancedShuffle`
 - **File**: `balanced.py`
-- **Requires Audio Features**: No
 - **Description**: Ensures fair representation from all parts of the playlist by dividing it into sections and using a round-robin selection process.
 - **Parameters**:
   - `keep_first` (integer): Number of tracks to keep in their original position
@@ -97,7 +94,6 @@ This directory contains various algorithms for shuffling Spotify playlists, each
 ### Stratified
 - **Class**: `StratifiedShuffle`
 - **File**: `stratified.py`
-- **Requires Audio Features**: No
 - **Description**: Divide the playlist into sections, shuffle each section independently, and reassemble the sections in the original order.
 - **Parameters**:
   - `keep_first` (integer): Number of tracks to keep in their original position
@@ -125,7 +121,6 @@ This directory contains various algorithms for shuffling Spotify playlists, each
 ### Artist Spacing
 - **Class**: `ArtistSpacingShuffle`
 - **File**: `artist_spacing.py`
-- **Requires Audio Features**: No
 - **Description**: Shuffles tracks while ensuring the same artist never appears back-to-back for a more varied listening experience.
 - **Parameters**:
   - `min_spacing` (integer): Minimum number of tracks between the same artist
@@ -149,7 +144,6 @@ This directory contains various algorithms for shuffling Spotify playlists, each
 ### Album Sequence
 - **Class**: `AlbumSequenceShuffle`
 - **File**: `album_sequence.py`
-- **Requires Audio Features**: No
 - **Description**: Keeps tracks from the same album together in their original order, but shuffles which album plays first.
 - **Parameters**:
   - `shuffle_within_albums` (string): Also shuffle track order within each album
@@ -175,7 +169,6 @@ This directory contains various algorithms for shuffling Spotify playlists, each
 ### Newest First
 - **Class**: `NewestFirstShuffle`
 - **File**: `newest_first.py`
-- **Requires Audio Features**: No
 - **Description**: Reorders tracks so the most recently added appear at the top, with adjustable jitter to keep things feeling natural.
 - **Parameters**:
   - `jitter` (integer): Window size for local shuffling (1 = exact date sort, higher = more variation)
@@ -208,15 +201,15 @@ This directory contains various algorithms for shuffling Spotify playlists, each
 
 ## Algorithm Comparison
 
-| Algorithm | Randomness Level | Structure Preservation | Requires Features | Best For |
-|-----------|------------------|----------------------|-------------------|----------|
-| **Basic** | High | Low | No | Simple random shuffling with optional fixed start |
-| **Percentage** | Medium | High | No | Partial shuffling while keeping most order intact |
-| **Balanced** | Medium | Medium | No | Ensuring fair representation from all playlist regions |
-| **Stratified** | Low | High | No | Controlled randomness within defined sections |
-| **Artist Spacing** | Medium | N/A (constraint-based) | No | Preventing same-artist back-to-back |
-| **Album Sequence** | Medium (album level) | High (within albums) | No | Keeping album tracks together, shuffling album order |
-| **Newest First** | Low-Medium (jitter-controlled) | High (date-based) | No | Surfacing recently added tracks to the top |
+| Algorithm | Randomness Level | Structure Preservation | Best For |
+|-----------|------------------|----------------------|----------|
+| **Basic** | High | Low | Simple random shuffling with optional fixed start |
+| **Percentage** | Medium | High | Partial shuffling while keeping most order intact |
+| **Balanced** | Medium | Medium | Ensuring fair representation from all playlist regions |
+| **Stratified** | Low | High | Controlled randomness within defined sections |
+| **Artist Spacing** | Medium | N/A (constraint-based) | Preventing same-artist back-to-back |
+| **Album Sequence** | Medium (album level) | High (within albums) | Keeping album tracks together, shuffling album order |
+| **Newest First** | Low-Medium (jitter-controlled) | High (date-based) | Surfacing recently added tracks to the top |
 
 ## Architecture
 
@@ -232,10 +225,7 @@ class ShuffleAlgorithm(Protocol):
     def description(self) -> str: ...
     @property
     def parameters(self) -> dict: ...
-    @property
-    def requires_features(self) -> bool: ...
     def shuffle(self, tracks: List[Dict[str, Any]],
-                features: Optional[Dict[str, Dict[str, Any]]] = None,
                 **kwargs) -> List[str]: ...
 ```
 
@@ -277,7 +267,7 @@ To create a new shuffle algorithm:
 1. Create a new Python file in this directory (e.g., `my_algorithm.py`)
 2. Implement the `ShuffleAlgorithm` protocol:
    ```python
-   from typing import List, Dict, Any, Optional
+   from typing import List, Dict, Any
    from . import ShuffleAlgorithm
 
    class MyAlgorithm(ShuffleAlgorithm):
@@ -301,12 +291,7 @@ To create a new shuffle algorithm:
                }
            }
 
-       @property
-       def requires_features(self) -> bool:
-           return False
-
        def shuffle(self, tracks: List[Dict[str, Any]],
-                   features: Optional[Dict[str, Dict[str, Any]]] = None,
                    **kwargs) -> List[str]:
            """Returns list of track URIs in new order."""
            # Your logic here

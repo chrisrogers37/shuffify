@@ -34,11 +34,6 @@ class TestArtistSpacingShuffleProperties:
         assert params["min_spacing"]["default"] == 1
         assert params["min_spacing"]["min"] == 1
 
-    def test_requires_features_is_false(self):
-        """Should not require audio features."""
-        algo = ArtistSpacingShuffle()
-        assert algo.requires_features is False
-
 
 class TestArtistSpacingShuffleShuffle:
     """Tests for ArtistSpacingShuffle.shuffle method."""
@@ -244,16 +239,6 @@ class TestArtistSpacingShuffleEdgeCases:
         ]
         result = algorithm.shuffle(tracks)
         assert len(result) == 2
-
-    def test_features_parameter_is_ignored(self, algorithm):
-        """Should ignore features parameter."""
-        tracks = [
-            {"uri": f"spotify:track:{i}", "artists": [{"name": f"Artist {i}"}]}
-            for i in range(5)
-        ]
-        features = {"track0": {"tempo": 120}}
-        result = algorithm.shuffle(tracks, features=features)
-        assert len(result) == 5
 
     def test_shuffle_is_random(self, algorithm):
         """Should produce different results on different runs."""

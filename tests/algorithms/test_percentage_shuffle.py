@@ -46,11 +46,6 @@ class TestPercentageShuffleProperties:
         assert 'front' in params['shuffle_location']['options']
         assert 'back' in params['shuffle_location']['options']
 
-    def test_requires_features_is_false(self):
-        """Should not require audio features."""
-        algo = PercentageShuffle()
-        assert algo.requires_features is False
-
 
 class TestPercentageShuffleShuffle:
     """Tests for PercentageShuffle.shuffle method."""

@@ -309,9 +309,9 @@ class WorkshopFinalizeService:
         if inspect_only:
             return self._unknown(source_id, name, count_key)
         try:
-            # Strict path: remove from the captured source and verify, unlike the
-            # best-effort RaidLinkService.remove_tracks_from_raid_playlist, which
-            # follows the current link and swallows failures.
+            # Strict path: remove from the captured source, not whatever the link
+            # names now, and verify the removal below; a failure is reported
+            # rather than swallowed.
             self.api.playlist_remove_items(source_id, list(dict.fromkeys(uris)))
         except Exception as error:
             return self._write_failure(source_id, name, count_key, error)

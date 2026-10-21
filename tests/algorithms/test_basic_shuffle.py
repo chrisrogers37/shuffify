@@ -35,11 +35,6 @@ class TestBasicShuffleProperties:
         assert params['keep_first']['default'] == 0
         assert params['keep_first']['min'] == 0
 
-    def test_requires_features_is_false(self):
-        """Should not require audio features."""
-        algo = BasicShuffle()
-        assert algo.requires_features is False
-
 
 class TestBasicShuffleShuffle:
     """Tests for BasicShuffle.shuffle method."""
@@ -209,12 +204,3 @@ class TestBasicShuffleEdgeCases:
         # Should have at least some unique orderings
         unique_results = set(results)
         assert len(unique_results) > 1
-
-    def test_features_parameter_is_ignored(self, algorithm):
-        """Should ignore features parameter (not used by basic shuffle)."""
-        tracks = [{'uri': f'spotify:track:{i}'} for i in range(5)]
-        features = {'track0': {'tempo': 120}}
-
-        result = algorithm.shuffle(tracks, features=features)
-
-        assert len(result) == 5

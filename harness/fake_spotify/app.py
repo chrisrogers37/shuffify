@@ -489,12 +489,6 @@ def _register_api(app: Flask) -> None:
             raise APIError(404, "Resource not found")
         return jsonify(_renderer().track(found))
 
-    @app.get("/v1/audio-features")
-    def audio_features():
-        # Spotify restricts this endpoint for apps in Development Mode and
-        # answers them 403, as the fake does here.
-        raise APIError(403, "Forbidden")
-
     @app.get("/v1/search")
     def search():
         # One type per request, track or playlist: all shuffify sends.

@@ -1,6 +1,6 @@
 import random
 from collections import defaultdict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from . import ShuffleAlgorithm
 
@@ -30,10 +30,6 @@ class AlbumSequenceShuffle(ShuffleAlgorithm):
             }
         }
 
-    @property
-    def requires_features(self) -> bool:
-        return False
-
     def _get_album_name(self, track: Dict[str, Any]) -> str:
         """Extract album name from a track."""
         album = track.get("album")
@@ -47,7 +43,6 @@ class AlbumSequenceShuffle(ShuffleAlgorithm):
     def shuffle(
         self,
         tracks: List[Dict[str, Any]],
-        features: Optional[Dict[str, Dict[str, Any]]] = None,
         **kwargs,
     ) -> List[str]:
         """
@@ -55,7 +50,6 @@ class AlbumSequenceShuffle(ShuffleAlgorithm):
 
         Args:
             tracks: List of track dictionaries from Spotify API.
-            features: Unused.
             **kwargs: Additional parameters.
                 - shuffle_within_albums: "yes" or "no" (default "no").
 

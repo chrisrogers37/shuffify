@@ -44,11 +44,6 @@ class TestStratifiedShuffleProperties:
         assert params['section_count']['min'] == 1
         assert params['section_count']['max'] == 20
 
-    def test_requires_features_is_false(self):
-        """Should not require audio features."""
-        algo = StratifiedShuffle()
-        assert algo.requires_features is False
-
 
 class TestStratifiedShuffleShuffle:
     """Tests for StratifiedShuffle.shuffle method."""

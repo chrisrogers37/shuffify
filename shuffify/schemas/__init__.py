@@ -6,10 +6,7 @@ This module provides type-safe validation for all API endpoints.
 
 from pydantic import ValidationError
 
-from .pending_raid_requests import (
-    DismissTracksRequest,
-    PromoteTracksRequest,
-)
+from .pending_raid_requests import DismissTracksRequest
 from .playlist_pair_requests import (
     ArchiveTracksRequest,
     CreatePairRequest,
@@ -35,7 +32,6 @@ from .requests import (
     BasicShuffleParams,
     ExternalPlaylistRequest,
     PercentageShuffleParams,
-    PlaylistQueryParams,
     ShuffleRequest,
     ShuffleRequestBase,
     StratifiedShuffleParams,
@@ -61,7 +57,6 @@ __all__ = [
     "BalancedShuffleParams",
     "StratifiedShuffleParams",
     "PercentageShuffleParams",
-    "PlaylistQueryParams",
     "WorkshopCommitRequest",
     "WorkshopSearchRequest",
     "ExternalPlaylistRequest",
@@ -93,6 +88,5 @@ __all__ = [
     "SetupSaveRequest",
     "CreateSetupPlaylistRequest",
     # Pending Raid schemas
-    "PromoteTracksRequest",
     "DismissTracksRequest",
 ]

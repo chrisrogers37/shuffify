@@ -1,9 +1,11 @@
 """
 Tests for PendingRaidService.
 
-Tests cover listing, promoting, dismissing, and
-cleanup of pending raid tracks.
+Tests cover listing pending raid tracks and promoting them
+when a finalize is verified.
 """
+
+from datetime import datetime, timezone
 
 import pytest
 
@@ -84,9 +86,7 @@ class TestList:
         stage(user, "pl1", sample_tracks)
         # Promote one
         track = PendingRaidTrack.query.first()
-        PendingRaidService.promote_tracks(
-            user.id, "pl1", [track.id]
-        )
+        PendingRaidService.complete_finalize([track])
         pending = PendingRaidService.list_pending(
             user.id, "pl1"
         )
@@ -94,136 +94,38 @@ class TestList:
 
 
 # =============================================================
-# Promote Tracks
+# Complete Finalize
 # =============================================================
 
 
-class TestPromote:
-    """Tests for promote_tracks and promote_all."""
+class TestCompleteFinalize:
+    """Tests for PendingRaidService.complete_finalize."""
 
-    def test_promote_tracks(self, user, sample_tracks):
-        stage(user, "pl1", sample_tracks)
-        all_tracks = PendingRaidTrack.query.all()
-        promoted = PendingRaidService.promote_tracks(
-            user.id, "pl1", [all_tracks[0].id]
-        )
-        assert len(promoted) == 1
-        assert (
-            promoted[0].status
-            == PendingRaidStatus.PROMOTED
-        )
-        assert promoted[0].resolved_at is not None
-
-    def test_promote_all(self, user, sample_tracks):
-        stage(user, "pl1", sample_tracks)
-        promoted = PendingRaidService.promote_all(
-            user.id, "pl1"
-        )
-        assert len(promoted) == 3
-        for t in promoted:
-            assert (
-                t.status == PendingRaidStatus.PROMOTED
-            )
-
-
-# =============================================================
-# Unpromote Tracks
-# =============================================================
-
-
-class TestUnpromote:
-    """Tests for PendingRaidService.unpromote_tracks."""
-
-    def test_unpromote_reverts_to_pending(
+    def test_complete_finalize_promotes_pending_tracks(
         self, user, sample_tracks
     ):
         stage(user, "pl1", sample_tracks)
-        PendingRaidService.promote_all(user.id, "pl1")
-        uris = [t["uri"] for t in sample_tracks]
-
-        count = PendingRaidService.unpromote_tracks(
-            user.id, "pl1", uris
+        PendingRaidService.complete_finalize(
+            PendingRaidTrack.query.all()
         )
-        assert count == 3
+        tracks = PendingRaidTrack.query.all()
+        assert len(tracks) == 3
+        for t in tracks:
+            assert t.status == PendingRaidStatus.PROMOTED
+            assert t.resolved_at is not None
 
-        pending = PendingRaidService.list_pending(
-            user.id, "pl1"
-        )
-        assert len(pending) == 3
-        for t in pending:
-            assert (
-                t.status == PendingRaidStatus.PENDING
-            )
-            assert t.resolved_at is None
-
-    def test_unpromote_ignores_non_promoted(
+    def test_a_retried_finalize_leaves_already_promoted_tracks_untouched(
         self, user, sample_tracks
     ):
         stage(user, "pl1", sample_tracks)
-        # Don't promote — they're still PENDING
-        uris = [t["uri"] for t in sample_tracks]
+        first, *rest = PendingRaidTrack.query.order_by(PendingRaidTrack.id).all()
+        PendingRaidService.complete_finalize([first])
+        earlier = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        first.resolved_at = earlier
+        db.session.commit()
 
-        count = PendingRaidService.unpromote_tracks(
-            user.id, "pl1", uris
-        )
-        assert count == 0
+        PendingRaidService.complete_finalize(PendingRaidTrack.query.all())
 
-    def test_unpromote_no_match_returns_zero(
-        self, user
-    ):
-        count = PendingRaidService.unpromote_tracks(
-            user.id,
-            "pl1",
-            ["spotify:track:nonexistent"],
-        )
-        assert count == 0
-
-
-# =============================================================
-# Dismiss Tracks
-# =============================================================
-
-
-class TestDismiss:
-    """Tests for dismiss_tracks and dismiss_all."""
-
-    def test_dismiss_tracks(self, user, sample_tracks):
-        stage(user, "pl1", sample_tracks)
-        track = PendingRaidTrack.query.first()
-        count = PendingRaidService.dismiss_tracks(
-            user.id, "pl1", [track.id]
-        )
-        assert count == 1
-
-    def test_dismiss_all(self, user, sample_tracks):
-        stage(user, "pl1", sample_tracks)
-        count = PendingRaidService.dismiss_all(
-            user.id, "pl1"
-        )
-        assert count == 3
-
-
-# =============================================================
-# Counts & Cleanup
-# =============================================================
-
-
-class TestCountsAndCleanup:
-    """Tests for get_pending_count and cleanup_resolved."""
-
-    def test_pending_count(self, user, sample_tracks):
-        stage(user, "pl1", sample_tracks)
-        assert PendingRaidService.get_pending_count(
-            user.id, "pl1"
-        ) == 3
-
-    def test_cleanup_resolved(
-        self, user, sample_tracks
-    ):
-        stage(user, "pl1", sample_tracks)
-        PendingRaidService.promote_all(user.id, "pl1")
-        removed = PendingRaidService.cleanup_resolved(
-            user.id, "pl1"
-        )
-        assert removed == 3
-        assert PendingRaidTrack.query.count() == 0
+        assert db.session.get(PendingRaidTrack, first.id).resolved_at == earlier
+        for t in rest:
+            assert db.session.get(PendingRaidTrack, t.id).status == PendingRaidStatus.PROMOTED

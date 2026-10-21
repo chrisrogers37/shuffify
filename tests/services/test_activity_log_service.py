@@ -1,11 +1,11 @@
 """
 Tests for ActivityLogService.
 
-Tests cover log creation, query methods, error handling,
-and the non-blocking guarantee.
+Tests cover log creation, the recent-activity query, error
+handling, and the non-blocking guarantee.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
@@ -281,118 +281,6 @@ class TestActivityLogServiceGetRecent:
         """Should return empty for unknown user."""
         results = ActivityLogService.get_recent(99999)
         assert results == []
-
-
-class TestActivityLogServiceGetActivitySince:
-    """Tests for the get_activity_since() method."""
-
-    def test_get_activity_since_filters_by_date(
-        self, app_ctx
-    ):
-        """Should return activities after given date."""
-        user = app_ctx
-        ActivityLogService.log(
-            user_id=user.id,
-            activity_type=ActivityType.SHUFFLE,
-            description="Recent shuffle",
-        )
-
-        since = datetime.now(
-            timezone.utc
-        ) - timedelta(hours=1)
-        results = ActivityLogService.get_activity_since(
-            user.id, since
-        )
-        assert len(results) >= 1
-
-    def test_get_activity_since_future_returns_empty(
-        self, app_ctx
-    ):
-        """Should return empty when since is future."""
-        user = app_ctx
-        ActivityLogService.log(
-            user_id=user.id,
-            activity_type=ActivityType.SHUFFLE,
-            description="Past shuffle",
-        )
-
-        future = datetime.now(
-            timezone.utc
-        ) + timedelta(hours=1)
-        results = ActivityLogService.get_activity_since(
-            user.id, future
-        )
-        assert len(results) == 0
-
-
-class TestActivityLogServiceGetActivitySummary:
-    """Tests for the get_activity_summary() method."""
-
-    def test_get_summary_counts_by_type(self, app_ctx):
-        """Should return counts grouped by type."""
-        user = app_ctx
-        for _ in range(3):
-            ActivityLogService.log(
-                user_id=user.id,
-                activity_type=ActivityType.SHUFFLE,
-                description="Shuffle",
-            )
-        ActivityLogService.log(
-            user_id=user.id,
-            activity_type=ActivityType.LOGIN,
-            description="Login",
-        )
-
-        summary = (
-            ActivityLogService.get_activity_summary(
-                user.id
-            )
-        )
-        assert summary.get("shuffle") == 3
-        assert summary.get("login") == 1
-
-    def test_get_summary_empty_user(self, app_ctx):
-        """Should return empty dict for no activity."""
-        summary = (
-            ActivityLogService.get_activity_summary(
-                99999
-            )
-        )
-        assert summary == {}
-
-    def test_get_summary_respects_days_param(
-        self, app_ctx
-    ):
-        """Should count activities within day range."""
-        user = app_ctx
-        ActivityLogService.log(
-            user_id=user.id,
-            activity_type=ActivityType.SHUFFLE,
-            description="Recent",
-        )
-
-        summary = (
-            ActivityLogService.get_activity_summary(
-                user.id, days=30
-            )
-        )
-        assert summary.get("shuffle", 0) >= 1
-
-    def test_get_summary_returns_empty_on_error(
-        self, app_ctx
-    ):
-        """Should return empty dict on database error."""
-        with patch.object(
-            db.session,
-            "query",
-            side_effect=Exception("DB fail"),
-        ):
-            summary = (
-                ActivityLogService.get_activity_summary(
-                    app_ctx.id
-                )
-            )
-            assert summary == {}
 
 
 class TestActivityLogModel:

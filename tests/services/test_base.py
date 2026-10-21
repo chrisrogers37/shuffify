@@ -2,7 +2,7 @@
 Tests for shared service base utilities.
 
 Tests cover safe_commit, commit_or_stage, get_user_or_raise,
-get_owned_entity, ensure_private and create_private_playlist.
+get_owned_entity and ensure_private.
 """
 
 from unittest.mock import Mock, patch
@@ -17,14 +17,12 @@ from shuffify.models.db import (
 )
 from shuffify.services.base import (
     commit_or_stage,
-    create_private_playlist,
     ensure_private,
     get_owned_entity,
     get_user_or_raise,
     safe_commit,
 )
 from shuffify.spotify.api import SpotifyAPI
-from shuffify.spotify.exceptions import SpotifyWriteUnverifiedError
 
 
 class FakeError(Exception):
@@ -297,28 +295,3 @@ class TestEnsurePrivate:
         api.update_playlist_details.side_effect = RuntimeError("timed out")
         assert ensure_private(api, "pl1") is False
         assert "Could not make playlist pl1 private" in caplog.text
-
-    def test_create_private_playlist_keeps_its_playlist_when_privacy_fails(self):
-        api = Mock(spec=SpotifyAPI)
-        api.create_user_playlist.return_value = {"id": "pl1"}
-        api.update_playlist_details.side_effect = RuntimeError("timed out")
-        assert create_private_playlist(api, "Mix", "Archive", "Archived") == ("pl1", "Mix [Archive]")
-        api.create_user_playlist.assert_called_once_with("Mix [Archive]", public=False, description="Archived")
-        api.update_playlist_details.assert_called_once_with("pl1", public=False)
-
-
-class TestCreatePrivatePlaylist:
-    """An answer without a usable ID may hide a playlist that exists."""
-
-    @pytest.mark.parametrize(
-        "answer",
-        [None, {}, {"id": ""}],
-        ids=["empty-2xx", "no-id", "blank-id"],
-    )
-    def test_an_answer_without_a_usable_id_is_an_unknown_creation(self, answer):
-        api = Mock(spec=SpotifyAPI)
-        api.create_user_playlist.return_value = answer
-        with pytest.raises(SpotifyWriteUnverifiedError, match="without an ID"):
-            create_private_playlist(api, "Mix", "Archive", "Archived")
-        api.create_user_playlist.assert_called_once_with("Mix [Archive]", public=False, description="Archived")
-        api.update_playlist_details.assert_not_called()

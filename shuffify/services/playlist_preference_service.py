@@ -7,7 +7,7 @@ bulk order updates for the dashboard playlist grid.
 
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from shuffify.models.db import PlaylistPreference, db
 from shuffify.services.base import safe_commit
@@ -49,17 +49,6 @@ class PlaylistPreferenceService:
         return {
             p.spotify_playlist_id: p for p in prefs
         }
-
-    @staticmethod
-    def get_preference(
-        user_id: int,
-        spotify_playlist_id: str,
-    ) -> Optional[PlaylistPreference]:
-        """Get a single preference record, or None."""
-        return PlaylistPreference.query.filter_by(
-            user_id=user_id,
-            spotify_playlist_id=spotify_playlist_id,
-        ).first()
 
     @staticmethod
     def save_order(

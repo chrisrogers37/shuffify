@@ -1,11 +1,11 @@
 """
 Tests for RaidLinkService.
 
-Tests cover CRUD operations for raid playlist links,
-raid playlist creation, and to_dict serialization.
+Tests cover CRUD operations for raid playlist links
+and to_dict serialization.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -16,7 +16,6 @@ from shuffify.services.raid_link_service import (
     RaidLinkService,
 )
 from shuffify.services.user_service import UserService
-from shuffify.spotify.api import SpotifyAPI
 
 
 @pytest.fixture
@@ -41,18 +40,6 @@ def user2(db_app):
             "images": [],
         })
         yield result.user
-
-
-@pytest.fixture
-def mock_api():
-    """Mock SpotifyAPI client."""
-    api = MagicMock(spec=SpotifyAPI)
-    api.create_user_playlist.return_value = {
-        "id": "new_raid_playlist_id",
-        "name": "My Playlist [Raids]",
-    }
-    api.update_playlist_details.return_value = None
-    return api
 
 
 # =========================================================
@@ -143,22 +130,6 @@ class TestGetLink:
         )
         assert link is None
 
-    def test_get_links_for_user(self, user):
-        RaidLinkService.create_link(
-            user_id=user.id,
-            target_playlist_id="list1",
-            raid_playlist_id="raid_l1",
-        )
-        RaidLinkService.create_link(
-            user_id=user.id,
-            target_playlist_id="list2",
-            raid_playlist_id="raid_l2",
-        )
-        links = RaidLinkService.get_links_for_user(
-            user.id
-        )
-        assert len(links) == 2
-
 
 # =========================================================
 # Update Link
@@ -223,34 +194,6 @@ class TestDeleteLink:
             RaidLinkService.delete_link(
                 user.id, "nonexistent"
             )
-
-
-# =========================================================
-# Create Raid Playlist
-# =========================================================
-
-
-class TestCreateRaidPlaylist:
-    """Tests for RaidLinkService.create_raid_playlist."""
-
-    def test_creates_playlist_with_raids_suffix(
-        self, mock_api
-    ):
-        pid, name = RaidLinkService.create_raid_playlist(
-            mock_api, "My Playlist"
-        )
-        assert pid == "new_raid_playlist_id"
-        assert name == "My Playlist [Raids]"
-        mock_api.create_user_playlist.assert_called_once_with(
-            "My Playlist [Raids]",
-            public=False,
-            description=(
-                "Raid staging playlist for incoming tracks"
-            ),
-        )
-        mock_api.update_playlist_details.assert_called_once_with(
-            "new_raid_playlist_id", public=False
-        )
 
 
 # =========================================================

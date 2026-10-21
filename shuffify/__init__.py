@@ -40,26 +40,6 @@ def _create_redis_client(redis_url: str) -> redis.Redis:
     return redis.from_url(redis_url, decode_responses=False)
 
 
-def get_redis_client() -> Optional[redis.Redis]:
-    """
-    Get the global Redis client for caching.
-
-    Returns:
-        Redis client if configured, None otherwise.
-    """
-    return _redis_client
-
-
-def get_limiter() -> Optional[Limiter]:
-    """
-    Get the global Flask-Limiter instance.
-
-    Returns:
-        Limiter instance if initialized, None otherwise.
-    """
-    return _limiter
-
-
 def get_spotify_cache():
     """
     Get a SpotifyCache instance for Spotify API caching.
@@ -90,7 +70,6 @@ def get_spotify_cache():
             default_ttl=config.get("CACHE_DEFAULT_TTL", 300),
             playlist_ttl=config.get("CACHE_PLAYLIST_TTL", 60),
             user_ttl=config.get("CACHE_USER_TTL", 600),
-            audio_features_ttl=config.get("CACHE_AUDIO_FEATURES_TTL", 86400),
         )
     except RuntimeError:
         # Not in Flask context - use defaults

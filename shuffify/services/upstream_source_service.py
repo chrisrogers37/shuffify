@@ -76,19 +76,6 @@ class UpstreamSourceService:
     MAX_SOURCES_PER_TARGET = MAX_SOURCES_PER_TARGET
 
     @staticmethod
-    def count_sources(
-        spotify_id: str, target_playlist_id: str
-    ) -> int:
-        """Count upstream sources for a user's target playlist."""
-        user = get_user_or_raise(spotify_id)
-        if not user:
-            return 0
-        return UpstreamSource.query.filter_by(
-            user_id=user.id,
-            target_playlist_id=target_playlist_id,
-        ).count()
-
-    @staticmethod
     @locked_commit_target("target_playlist_id")
     def add_source(
         spotify_id: str,

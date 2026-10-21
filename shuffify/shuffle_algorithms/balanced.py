@@ -1,6 +1,6 @@
 import logging
 import random
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from . import ShuffleAlgorithm
 from .utils import extract_uris, split_into_sections, split_keep_first
@@ -44,14 +44,9 @@ class BalancedShuffle(ShuffleAlgorithm):
             },
         }
 
-    @property
-    def requires_features(self) -> bool:
-        return False
-
     def shuffle(
         self,
         tracks: List[Dict[str, Any]],
-        features: Optional[Dict[str, Dict[str, Any]]] = None,
         **kwargs
     ) -> List[str]:
         """
@@ -59,7 +54,6 @@ class BalancedShuffle(ShuffleAlgorithm):
 
         Args:
             tracks: List of track dictionaries from Spotify API
-            features: Optional dictionary of track URIs to audio features (unused in balanced shuffle)
             **kwargs: Additional parameters
                 - keep_first: Number of tracks to keep at start
                 - section_count: Number of sections to divide playlist into

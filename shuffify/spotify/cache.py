@@ -41,7 +41,6 @@ class SpotifyCache:
         default_ttl: int = 300,
         playlist_ttl: int = 60,
         user_ttl: int = 600,
-        audio_features_ttl: int = 86400,
     ):
         """
         Initialize the cache.
@@ -52,14 +51,12 @@ class SpotifyCache:
             default_ttl: Default TTL in seconds.
             playlist_ttl: TTL for playlist data.
             user_ttl: TTL for user profile data.
-            audio_features_ttl: TTL for audio features data.
         """
         self._redis = redis_client
         self._prefix = key_prefix
         self._default_ttl = default_ttl
         self._playlist_ttl = playlist_ttl
         self._user_ttl = user_ttl
-        self._audio_features_ttl = audio_features_ttl
 
     def _make_key(self, namespace: str, *parts: str) -> str:
         """
@@ -312,71 +309,6 @@ class SpotifyCache:
             return False
 
     # =========================================================================
-    # Audio Features
-    # =========================================================================
-
-    def get_audio_features(self, track_ids: List[str]) -> Dict[str, Dict[str, Any]]:
-        """
-        Get cached audio features for multiple tracks.
-
-        Args:
-            track_ids: List of track IDs.
-
-        Returns:
-            Dictionary mapping track ID to audio features (only cached ones).
-        """
-        if not track_ids:
-            return {}
-
-        try:
-            keys = [self._make_key("audio", tid) for tid in track_ids]
-            values = self._redis.mget(keys)
-
-            result = {}
-            for track_id, value in zip(track_ids, values):
-                if value:
-                    result[track_id] = self._deserialize(value)
-
-            logger.debug(f"Audio features cache: {len(result)}/{len(track_ids)} hits")
-            return result
-        except redis.RedisError as e:
-            logger.warning(f"Redis error getting audio features cache: {e}")
-            return {}
-
-    def set_audio_features(
-        self, features: Dict[str, Dict[str, Any]], ttl: Optional[int] = None
-    ) -> bool:
-        """
-        Cache audio features for multiple tracks.
-
-        Args:
-            features: Dictionary mapping track ID to audio features.
-            ttl: Time-to-live in seconds (default: audio_features_ttl).
-
-        Returns:
-            True if cached successfully.
-        """
-        if not features:
-            return True
-
-        try:
-            ttl = ttl or self._audio_features_ttl
-            pipe = self._redis.pipeline()
-
-            for track_id, feature_data in features.items():
-                key = self._make_key("audio", track_id)
-                pipe.setex(key, ttl, self._serialize(feature_data))
-
-            pipe.execute()
-            logger.debug(
-                f"Cached audio features for {len(features)} tracks (TTL: {ttl}s)"
-            )
-            return True
-        except redis.RedisError as e:
-            logger.warning(f"Redis error setting audio features cache: {e}")
-            return False
-
-    # =========================================================================
     # Search Results — Tracks
     # =========================================================================
 
@@ -578,43 +510,4 @@ class SpotifyCache:
             return True
         except redis.RedisError as e:
             logger.warning(f"Redis error invalidating user playlists cache: {e}")
-            return False
-
-    def clear_all(self) -> bool:
-        """
-        Clear all cached data (use with caution).
-
-        Returns:
-            True if cleared successfully.
-        """
-        try:
-            pattern = f"{self._prefix}*"
-            cursor = 0
-            deleted = 0
-
-            while True:
-                cursor, keys = self._redis.scan(cursor, match=pattern, count=100)
-                if keys:
-                    self._redis.delete(*keys)
-                    deleted += len(keys)
-                if cursor == 0:
-                    break
-
-            logger.info(f"Cleared {deleted} cache entries")
-            return True
-        except redis.RedisError as e:
-            logger.warning(f"Redis error clearing cache: {e}")
-            return False
-
-    def is_connected(self) -> bool:
-        """
-        Check if Redis connection is alive.
-
-        Returns:
-            True if connected.
-        """
-        try:
-            self._redis.ping()
-            return True
-        except redis.RedisError:
             return False

@@ -6,8 +6,8 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.exc import OperationalError
 
-from shuffify.enums import JobType, RotationMode
-from shuffify.models.db import PlaylistPair, RaidPlaylistLink, Schedule, UpstreamSource, db
+from shuffify.enums import JobType, LockTier, RotationMode
+from shuffify.models.db import PlaylistPair, RaidPlaylistLink, Schedule, TrackLock, UpstreamSource, db
 from shuffify.services.live_review_scope import (
     DIRECT_DRIP_PARAMS,
     JOB_STEPS,
@@ -196,15 +196,15 @@ def test_rotation_settings_normalize_as_the_executor_does():
 
 
 def test_routine_parts_bind_algorithm_params_and_locks(owner, saved):
-    from shuffify.services.track_lock_service import TrackLockService
-
     routine = Schedule(user_id=owner.id, job_type=JobType.RAID_AND_SHUFFLE, target_playlist_id="target",
                        source_playlist_ids=["source1", "extra"], algorithm_name="BasicShuffle",
                        algorithm_params={"keep_first": 1})
     parts = routine_parts(routine, JOB_STEPS[routine.job_type])
     assert parts["raid"]["extras"] == ["extra", "source1"]
     assert parts["shuffle"] == {"algorithm": "BasicShuffle", "params": {"keep_first": 1}, "locks": []}
-    TrackLockService.set_lock(owner.id, "target", "spotify:track:" + "1" * 22, 3, "super")
+    db.session.add(TrackLock(user_id=owner.id, spotify_playlist_id="target", track_uri="spotify:track:" + "1" * 22,
+                             position=3, lock_tier=LockTier.SUPER))
+    db.session.commit()
     assert routine_parts(routine, ("shuffle",))["shuffle"]["locks"] == [[3, "spotify:track:" + "1" * 22]]
     rotate = routine_parts(
         Schedule(user_id=owner.id, job_type=JobType.ROTATE, target_playlist_id="target",

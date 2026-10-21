@@ -199,7 +199,6 @@ class Config:
     CACHE_DEFAULT_TTL = 300  # 5 minutes default TTL
     CACHE_PLAYLIST_TTL = 60  # 1 minute for playlist data (changes frequently)
     CACHE_USER_TTL = 600  # 10 minutes for user profile data
-    CACHE_AUDIO_FEATURES_TTL = 86400  # 24 hours for audio features (rarely change)
 
     # Source resolver — HTTP timeout (seconds) for public Spotify scrapes.
     # Tunable per-environment so production can dial down latency budget

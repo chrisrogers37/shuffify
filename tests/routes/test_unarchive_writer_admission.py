@@ -27,7 +27,8 @@ def no_spotify(monkeypatch):
         "shuffify.services.AuthService.get_authenticated_api",
         "shuffify.spotify.api.SpotifyAPI.__init__",
         "requests.sessions.Session.request",
-        "shuffify.services.playlist_pair_service.PlaylistPairService.unarchive_tracks",
+        "shuffify.services.operations.commands.archive_move.prepare_unarchive",
+        "shuffify.services.operations.commands.archive_move.execute_unarchive",
     ]:
         monkeypatch.setattr(path, forbidden)
 

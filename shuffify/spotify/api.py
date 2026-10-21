@@ -100,7 +100,6 @@ class SpotifyAPI:
 
     # Batch size for API operations
     BATCH_SIZE = 100
-    AUDIO_FEATURES_BATCH_SIZE = 50
 
     def __init__(
         self,
@@ -761,74 +760,8 @@ class SpotifyAPI:
         )
 
     # =========================================================================
-    # Audio Features Operations
+    # Journaled Batches and Lifecycle
     # =========================================================================
-
-    @api_error_handler
-    def get_audio_features(
-        self, track_ids: List[str], skip_cache: bool = False
-    ) -> Dict[str, Dict[str, Any]]:
-        """
-        Get audio features for multiple tracks.
-
-        Args:
-            track_ids: List of track IDs or URIs.
-            skip_cache: If True, bypass cache and fetch fresh data.
-
-        Returns:
-            Dictionary mapping track ID to audio features.
-
-        Raises:
-            SpotifyAPIError: If the request fails.
-        """
-        self._ensure_valid_token()
-        features = {}
-
-        # Extract IDs from URIs if needed
-        valid_ids = []
-        for tid in track_ids:
-            if tid:
-                clean_id = tid.split(":")[-1] if ":" in tid else tid
-                valid_ids.append(clean_id)
-
-        if not valid_ids:
-            return features
-
-        # Check cache first
-        ids_to_fetch = valid_ids
-        if self._cache and not skip_cache:
-            cached_features = self._cache.get_audio_features(valid_ids)
-            features.update(cached_features)
-            ids_to_fetch = [tid for tid in valid_ids if tid not in cached_features]
-            if not ids_to_fetch:
-                logger.debug(f"All {len(valid_ids)} audio features from cache")
-                return features
-
-        # Fetch uncached in batches
-        new_features = {}
-        for i in range(0, len(ids_to_fetch), self.AUDIO_FEATURES_BATCH_SIZE):
-            batch = ids_to_fetch[i : i + self.AUDIO_FEATURES_BATCH_SIZE]
-            result = self._http.get(
-                "/audio-features",
-                params={"ids": ",".join(batch)},
-            )
-
-            results = result.get("audio_features", []) if result else []
-            if results:
-                for track_id, feature in zip(batch, results):
-                    if feature:
-                        features[track_id] = feature
-                        new_features[track_id] = feature
-
-        logger.debug(
-            f"Retrieved audio features for {len(new_features)} tracks (from API)"
-        )
-
-        # Cache the new results
-        if self._cache and new_features:
-            self._cache.set_audio_features(new_features)
-
-        return features
 
     def dispatch_journaled_batch(self, method: str, path: str, body: Any) -> Any:
         """Dispatch one frozen batch through the active mutation observer."""

@@ -269,15 +269,12 @@ class PlaylistService:
             logger.error(f"Failed to get user playlists: {e}", exc_info=True)
             raise PlaylistError(f"Failed to fetch playlists: {e}")
 
-    def get_playlist(
-        self, playlist_id: str, include_features: bool = False
-    ) -> Playlist:
+    def get_playlist(self, playlist_id: str) -> Playlist:
         """
         Fetch a single playlist with its tracks.
 
         Args:
             playlist_id: The Spotify playlist ID.
-            include_features: Whether to include audio features for tracks.
 
         Returns:
             A Playlist model instance.
@@ -295,9 +292,7 @@ class PlaylistService:
             raise PlaylistNotFoundError("Playlist ID is required")
 
         try:
-            playlist = Playlist.from_spotify(
-                self._api, playlist_id, include_features=include_features
-            )
+            playlist = Playlist.from_spotify(self._api, playlist_id)
             logger.debug(
                 f"Retrieved playlist '{playlist.name}' with {len(playlist)} tracks"
             )
@@ -392,25 +387,6 @@ class PlaylistService:
                 f"Failed to fetch playlist metadata: {e}"
             )
 
-    def get_playlist_stats(self, playlist_id: str) -> Dict[str, Any]:
-        """
-        Get audio feature statistics for a playlist.
-
-        Args:
-            playlist_id: The Spotify playlist ID.
-
-        Returns:
-            Dictionary of feature statistics (tempo, energy, valence, danceability).
-
-        Raises:
-            PlaylistNotFoundError: If the playlist doesn't exist.
-            PlaylistError: If fetching fails.
-        """
-        playlist = self.get_playlist(playlist_id, include_features=True)
-        stats = playlist.get_feature_stats()
-        logger.debug(f"Computed stats for playlist {playlist_id}")
-        return stats
-
     def update_playlist_tracks(self, playlist_id: str, track_uris: List[str]) -> bool:
         """
         Update a playlist with a new track order.
@@ -463,18 +439,5 @@ class PlaylistService:
             PlaylistNotFoundError: If the playlist doesn't exist.
             PlaylistError: If fetching fails.
         """
-        playlist = self.get_playlist(playlist_id, include_features=False)
+        playlist = self.get_playlist(playlist_id)
         return playlist.get_track_uris()
-
-    def validate_playlist_has_tracks(self, playlist: Playlist) -> None:
-        """
-        Validate that a playlist has tracks.
-
-        Args:
-            playlist: The Playlist to validate.
-
-        Raises:
-            PlaylistError: If playlist has no tracks.
-        """
-        if not playlist.tracks:
-            raise PlaylistError(f"Playlist '{playlist.name}' has no tracks")

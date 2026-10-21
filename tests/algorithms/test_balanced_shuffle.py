@@ -44,11 +44,6 @@ class TestBalancedShuffleProperties:
         assert params['section_count']['min'] == 2
         assert params['section_count']['max'] == 10
 
-    def test_requires_features_is_false(self):
-        """Should not require audio features."""
-        algo = BalancedShuffle()
-        assert algo.requires_features is False
-
 
 class TestBalancedShuffleShuffle:
     """Tests for BalancedShuffle.shuffle method."""

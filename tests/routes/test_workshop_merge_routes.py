@@ -275,9 +275,7 @@ class TestSourcePlaylistLoading:
         mock_auth.assert_called_once_with()
         mock_get_db_user.assert_called_once_with()
         mock_playlist_svc.assert_called_once_with(mock_auth.return_value)
-        mock_ps_instance.get_playlist.assert_called_once_with(
-            source_id, include_features=False
-        )
+        mock_ps_instance.get_playlist.assert_called_once_with(source_id)
 
         data = response.get_json()
         assert data["success"] is True

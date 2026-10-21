@@ -189,19 +189,6 @@ class UserService:
         ).first()
 
     @staticmethod
-    def get_by_id(user_id: int) -> Optional[User]:
-        """
-        Look up a user by their internal database ID.
-
-        Args:
-            user_id: The internal auto-increment ID.
-
-        Returns:
-            User instance if found, None otherwise.
-        """
-        return db.session.get(User, user_id)
-
-    @staticmethod
     def store_refresh_token(
         user: "User", refresh_token: str
     ) -> None:

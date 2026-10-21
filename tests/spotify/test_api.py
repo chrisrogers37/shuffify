@@ -1,7 +1,7 @@
 """
 Tests for SpotifyAPI.
 
-Tests cover all data operations: user, playlists, tracks, and audio features.
+Tests cover all data operations: user, playlists, and tracks.
 Also includes tests for caching integration and error handler decorator.
 """
 
@@ -723,115 +723,6 @@ class TestPlaylistRemoveItems:
 
 
 # =============================================================================
-# SpotifyAPI Audio Features Tests
-# =============================================================================
-
-class TestSpotifyAPIAudioFeatures:
-    """Tests for audio features operations."""
-
-    def test_get_audio_features_success(
-        self, valid_token_info, auth_manager
-    ):
-        """Should return audio features for tracks."""
-        features = [
-            {'id': 'track1', 'tempo': 120},
-            {'id': 'track2', 'tempo': 130},
-        ]
-
-        with patch(
-            'shuffify.spotify.api.SpotifyHTTPClient'
-        ) as MockHTTP:
-            mock_http = MockHTTP.return_value
-            mock_http.get.return_value = {
-                'audio_features': features
-            }
-
-            api = SpotifyAPI(valid_token_info, auth_manager)
-            result = api.get_audio_features(
-                ['track1', 'track2']
-            )
-
-            assert len(result) == 2
-            assert 'track1' in result
-            assert 'track2' in result
-
-    def test_get_audio_features_handles_uris(
-        self, valid_token_info, auth_manager
-    ):
-        """Should extract IDs from URIs."""
-        features = [{'id': 'track1', 'tempo': 120}]
-
-        with patch(
-            'shuffify.spotify.api.SpotifyHTTPClient'
-        ) as MockHTTP:
-            mock_http = MockHTTP.return_value
-            mock_http.get.return_value = {
-                'audio_features': features
-            }
-
-            api = SpotifyAPI(valid_token_info, auth_manager)
-            result = api.get_audio_features(
-                ['spotify:track:track1']
-            )
-
-            assert 'track1' in result
-
-    def test_get_audio_features_filters_none_results(
-        self, valid_token_info, auth_manager
-    ):
-        """Should filter out None feature results."""
-        features = [
-            {'id': 'track1', 'tempo': 120},
-            None,
-        ]
-
-        with patch(
-            'shuffify.spotify.api.SpotifyHTTPClient'
-        ) as MockHTTP:
-            mock_http = MockHTTP.return_value
-            mock_http.get.return_value = {
-                'audio_features': features
-            }
-
-            api = SpotifyAPI(valid_token_info, auth_manager)
-            result = api.get_audio_features(
-                ['track1', 'track2']
-            )
-
-            assert len(result) == 1
-            assert 'track1' in result
-
-    def test_get_audio_features_batches_large_lists(
-        self, valid_token_info, auth_manager
-    ):
-        """Should batch requests for >50 tracks."""
-        track_ids = [f'track{i}' for i in range(60)]
-        features_batch1 = [
-            {'id': f'track{i}', 'tempo': 120}
-            for i in range(50)
-        ]
-        features_batch2 = [
-            {'id': f'track{i}', 'tempo': 120}
-            for i in range(50, 60)
-        ]
-
-        with patch(
-            'shuffify.spotify.api.SpotifyHTTPClient'
-        ) as MockHTTP:
-            mock_http = MockHTTP.return_value
-            mock_http.get.side_effect = [
-                {'audio_features': features_batch1},
-                {'audio_features': features_batch2},
-            ]
-
-            api = SpotifyAPI(valid_token_info, auth_manager)
-            result = api.get_audio_features(track_ids)
-
-            assert mock_http.get.call_count == 2
-            assert len(result) == 60
-
-
-# =============================================================================
 # Caching Integration Tests
 # =============================================================================
 
@@ -843,12 +734,10 @@ def mock_cache():
     cache.get_playlists.return_value = None
     cache.get_playlist.return_value = None
     cache.get_playlist_tracks.return_value = None
-    cache.get_audio_features.return_value = {}
     cache.set_user.return_value = True
     cache.set_playlists.return_value = True
     cache.set_playlist.return_value = True
     cache.set_playlist_tracks.return_value = True
-    cache.set_audio_features.return_value = True
     cache.invalidate_playlist.return_value = True
     cache.invalidate_user_playlists.return_value = True
     return cache
@@ -1067,99 +956,6 @@ class TestSpotifyAPICaching:
                 .assert_called_once_with('pl1')
             mock_cache.invalidate_user_playlists \
                 .assert_called_once_with('user123')
-
-    def test_get_audio_features_uses_cache(
-        self, valid_token_info, auth_manager, mock_cache
-    ):
-        """Should use cached audio features when available."""
-        cached_features = {
-            'track1': {'id': 'track1', 'tempo': 120},
-            'track2': {'id': 'track2', 'tempo': 130},
-        }
-        mock_cache.get_audio_features.return_value = (
-            cached_features
-        )
-
-        with patch(
-            'shuffify.spotify.api.SpotifyHTTPClient'
-        ) as MockHTTP:
-            mock_http = MockHTTP.return_value
-
-            api = SpotifyAPI(
-                valid_token_info, auth_manager,
-                cache=mock_cache,
-            )
-            result = api.get_audio_features(
-                ['track1', 'track2']
-            )
-
-            assert result == cached_features
-            mock_http.get.assert_not_called()
-
-    def test_get_audio_features_partial_cache(
-        self, valid_token_info, auth_manager, mock_cache
-    ):
-        """Should fetch only uncached audio features."""
-        cached_features = {
-            'track1': {'id': 'track1', 'tempo': 120},
-        }
-        mock_cache.get_audio_features.return_value = (
-            cached_features
-        )
-
-        with patch(
-            'shuffify.spotify.api.SpotifyHTTPClient'
-        ) as MockHTTP:
-            mock_http = MockHTTP.return_value
-            mock_http.get.return_value = {
-                'audio_features': [
-                    {'id': 'track2', 'tempo': 130}
-                ]
-            }
-
-            api = SpotifyAPI(
-                valid_token_info, auth_manager,
-                cache=mock_cache,
-            )
-            result = api.get_audio_features(
-                ['track1', 'track2']
-            )
-
-            mock_http.get.assert_called_once()
-            assert 'track1' in result
-            assert 'track2' in result
-
-    def test_get_audio_features_caches_fetched(
-        self, valid_token_info, auth_manager, mock_cache
-    ):
-        """Should cache newly fetched audio features."""
-        mock_cache.get_audio_features.return_value = {}
-
-        with patch(
-            'shuffify.spotify.api.SpotifyHTTPClient'
-        ) as MockHTTP:
-            mock_http = MockHTTP.return_value
-            mock_http.get.return_value = {
-                'audio_features': [
-                    {'id': 'track1', 'tempo': 120},
-                    {'id': 'track2', 'tempo': 130},
-                ]
-            }
-
-            api = SpotifyAPI(
-                valid_token_info, auth_manager,
-                cache=mock_cache,
-            )
-            api.get_audio_features(['track1', 'track2'])
-
-            mock_cache.set_audio_features \
-                .assert_called_once()
-            cached_data = (
-                mock_cache.set_audio_features
-                .call_args[0][0]
-            )
-            assert 'track1' in cached_data
-            assert 'track2' in cached_data
 
 
 # =============================================================================

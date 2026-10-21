@@ -136,7 +136,7 @@ def workshop_context(playlist_id, api=None, user=None):
     playlists = PlaylistService(api)
     try:
         playlists.validate_user_can_edit(playlist_id, user.spotify_id, lean=True)
-        playlist = playlists.get_playlist(playlist_id, include_features=False)
+        playlist = playlists.get_playlist(playlist_id)
     except (PlaylistNotFoundError, PlaylistAccessError):
         return json_error("That playlist doesn't exist or is not accessible.", 404)
     try:

@@ -36,11 +36,6 @@ class TestAlbumSequenceShuffleProperties:
         assert "yes" in params["shuffle_within_albums"]["options"]
         assert "no" in params["shuffle_within_albums"]["options"]
 
-    def test_requires_features_is_false(self):
-        """Should not require audio features."""
-        algo = AlbumSequenceShuffle()
-        assert algo.requires_features is False
-
 
 class TestAlbumSequenceShuffleShuffle:
     """Tests for AlbumSequenceShuffle.shuffle method."""
@@ -280,13 +275,3 @@ class TestAlbumSequenceShuffleEdgeCases:
         ]
         result = algorithm.shuffle(tracks)
         assert len(result) == 2
-
-    def test_features_parameter_is_ignored(self, algorithm):
-        """Should ignore features parameter."""
-        tracks = [
-            {"uri": f"spotify:track:{i}", "album": {"name": f"Album {i}"}}
-            for i in range(5)
-        ]
-        features = {"track0": {"tempo": 120}}
-        result = algorithm.shuffle(tracks, features=features)
-        assert len(result) == 5

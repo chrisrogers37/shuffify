@@ -126,11 +126,10 @@ def test_shapes_cover_the_operations_the_extractor_lists():
     assert {f"{m} {p}" for m, p in extract.OPERATIONS} == set(SHAPES["operations"])
 
 
-def test_only_audio_features_is_deprecated():
+def test_no_operation_shuffify_calls_is_deprecated():
     """Spotify's schema marks the calls it withholds from Development Mode
-    apps as deprecated. The one such call shuffify makes, /audio-features,
-    is answered with the 403 those apps get."""
-    assert [op for op, spec in SHAPES["operations"].items() if spec["deprecated"]] == ["GET /audio-features"]
+    apps as deprecated. shuffify makes none of them."""
+    assert [op for op, spec in SHAPES["operations"].items() if spec["deprecated"]] == []
 
 
 def test_fake_credentials_are_the_harness_ones():
@@ -609,10 +608,6 @@ class TestTrack:
 
     def test_a_malformed_id_is_a_400(self, client, alice):
         assert client.get("/v1/tracks/not-an-id", headers=alice).status_code == 400
-
-
-def test_audio_features_are_forbidden_to_a_development_mode_app(client, store, alice):
-    assert client.get(f"/v1/audio-features?ids={store.catalog[0].id}", headers=alice).status_code == 403
 
 
 class TestSearch:

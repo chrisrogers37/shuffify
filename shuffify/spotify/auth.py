@@ -396,22 +396,3 @@ class SpotifyAuthManager:
         except Exception as e:
             logger.debug("Token revocation failed: %s", e)
             return False
-
-    def validate_token(self, token_data: Optional[Dict[str, Any]]) -> bool:
-        """
-        Check if token data is structurally valid (not expired check).
-
-        Args:
-            token_data: Token dictionary to validate.
-
-        Returns:
-            True if token has valid structure, False otherwise.
-        """
-        if not token_data or not isinstance(token_data, dict):
-            return False
-
-        try:
-            TokenInfo.from_dict(token_data)
-            return True
-        except SpotifyTokenError:
-            return False

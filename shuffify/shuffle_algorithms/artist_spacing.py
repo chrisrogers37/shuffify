@@ -1,7 +1,7 @@
 import heapq
 import random
 from collections import defaultdict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from . import ShuffleAlgorithm
 from .utils import extract_uris
@@ -33,10 +33,6 @@ class ArtistSpacingShuffle(ShuffleAlgorithm):
             }
         }
 
-    @property
-    def requires_features(self) -> bool:
-        return False
-
     def _get_artist_name(self, track: Dict[str, Any]) -> str:
         """Extract the primary artist name from a track."""
         artists = track.get("artists", [])
@@ -50,7 +46,6 @@ class ArtistSpacingShuffle(ShuffleAlgorithm):
     def shuffle(
         self,
         tracks: List[Dict[str, Any]],
-        features: Optional[Dict[str, Dict[str, Any]]] = None,
         **kwargs,
     ) -> List[str]:
         """
@@ -63,7 +58,6 @@ class ArtistSpacingShuffle(ShuffleAlgorithm):
 
         Args:
             tracks: List of track dictionaries from Spotify API.
-            features: Unused.
             **kwargs: Additional parameters.
                 - min_spacing: Minimum tracks between same artist.
 
