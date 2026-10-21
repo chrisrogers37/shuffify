@@ -11,7 +11,7 @@ import type { ApiClient } from "../api/client";
 import type { AuthNotice } from "../api/contracts";
 import type { SessionStore } from "./session-store";
 import { State } from "../components/ui/States";
-import { Button } from "../components/ui/controls";
+import { Button, ConsentCheckbox } from "../components/ui/controls";
 import { Toast } from "../components/ui/Toast";
 export type Services = { api: ApiClient; session: SessionStore };
 const Context = createContext<Services | null>(null);
@@ -96,16 +96,13 @@ export function AuthGuard({ children }: { children: ReactNode }) {
           ) : (
             <State heading="h1" kind="empty" title="Connect to Spotify">
               <p>Your session has ended. Connect to continue.</p>
-              <form action="/login" method="get" data-navigation>
-                <label className="sh-toggle">
-                  <input
-                    name="legal_consent"
-                    value="1"
-                    type="checkbox"
-                    required
-                  />
-                  <span>I agree to the Terms and Privacy Policy</span>
-                </label>
+              <form
+                className="sh-reconnect-form"
+                action="/login"
+                method="get"
+                data-navigation
+              >
+                <ConsentCheckbox id="reconnect-consent" />
                 <Button type="submit">Connect with Spotify</Button>
               </form>
             </State>

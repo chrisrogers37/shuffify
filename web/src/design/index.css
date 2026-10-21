@@ -191,11 +191,6 @@
 
 @layer components {
   /* The literal fragments use their existing recipes; these changes enforce shared accessibility contracts. */
-  .sh-landing .sh-landing-consent a {
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--sh-space-control);
-  }
   .sh-landing .sh-landing-demo-controls[hidden] {
     display: none;
   }
