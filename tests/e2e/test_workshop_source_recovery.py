@@ -357,6 +357,7 @@ def test_stale_target_recovery_controls_remain_usable_in_phone_browser(alice, fa
         page.screenshot(path=tmp_path / "stale-target-phone.png", full_page=True)
         _ui()._panel(page).get_by_role("button", name="Use current Spotify as baseline", exact=True).click()
         page.get_by_role("dialog").get_by_role("button", name="Use current order", exact=True).click()
+        expect(_ui()._rows(page)).to_have_count(len(current))
         assert _ui()._uris(page) == current and fake.uris(TARGET) == current
         _ui()._close_tool(page)
         assert _ui()._no_sideways_scroll(page) and visit.problems == []
