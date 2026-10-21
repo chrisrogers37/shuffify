@@ -212,10 +212,15 @@ def test_on_repeat_moves_and_removes_one_occurrence_by_keyboard(fake, open_sessi
     page.keyboard.press("Tab")
     expect(row.get_by_role("button", name="Move down", exact=True)).to_be_focused()
     page.keyboard.press("Enter")
-    assert _shown(page)[2] == [key, uri]
     row = page.locator(f'[data-occurrence="{key}"]')
+    expect(_rows(page).nth(2)).to_have_attribute("data-occurrence", key)
+    # A move hands focus back to the row's first enabled action on the next frame. Using the position form before
+    # then lets that handoff take focus mid-action: Enter lands on Move up and undoes the move.
+    expect(row.get_by_role("button", name="Move up", exact=True)).to_be_focused()
+    assert _shown(page)[2] == [key, uri]
     row.get_by_label("Move to position", exact=True).fill("1")
     row.get_by_role("button", name="Move", exact=True).press("Enter")
+    expect(_rows(page).nth(0)).to_have_attribute("data-occurrence", key)
     assert _shown(page)[0] == [key, uri]
     row.get_by_role("button", name="Remove from draft", exact=True).click()
     expect(_rows(page)).to_have_count(9)
