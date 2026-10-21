@@ -11,7 +11,6 @@ from shuffify.models.db import Schedule
 from shuffify.services.operations.wake import PostgresWakeListener
 from shuffify.services.worker_scheduler import WorkerScheduler
 from tests.services.operations.test_repository import postgres_repository as postgres_repository
-from tests.services.operations.test_repository import postgres_url as postgres_url
 from tests.services.operations.test_scheduled_admission import NOW
 from tests.services.operations.test_worker_scheduler_postgres import make_schedule
 

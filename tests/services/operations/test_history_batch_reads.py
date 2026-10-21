@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 from shuffify.models.db import JobExecution, User, db
 from shuffify.services.operations.history import HistoryStore, get_history_scope
 from tests.services.operations.test_repository import postgres_repository as postgres_repository
-from tests.services.operations.test_repository import postgres_url as postgres_url
 
 
 def test_library_history_batches_targets_and_selects_no_full_payload_or_journal(db_app):

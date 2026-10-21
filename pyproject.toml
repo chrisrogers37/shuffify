@@ -29,8 +29,6 @@ exclude = [
 preview = true
 # E/W: pycodestyle, F: pyflakes, I: import sorting.
 select = ["E", "W", "F", "I"]
-# E203 (whitespace before ':') conflicts with black's slice formatting.
-ignore = ["E203"]
 
 [tool.ruff.lint.per-file-ignores]
 # The blueprint's route modules are imported at the bottom of the package to

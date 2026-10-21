@@ -13,7 +13,6 @@ from alembic.script import ScriptDirectory
 from sqlalchemy.orm import Session
 
 from shuffify.models.db import Schedule, UTCDateTime, db
-from tests.services.operations.test_repository import postgres_url as postgres_url
 from tests.services.operations.test_scheduled_admission import NOW
 from tests.services.operations.test_scheduled_admission import schedule as schedule
 

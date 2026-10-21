@@ -47,7 +47,9 @@ code that is running now.
 5. Unless `--quick`: runs `ruff check .` and `scripts/check-migration-chain.py`,
    and runs `pytest tests/ -m "not integration"` under `env -i` with
    the values of CI's backend jobs and `FLASK_SKIP_DOTENV=1`, so other shell exports
-   and Flask dotenv auto-loading cannot add settings to the suite.
+   and Flask dotenv auto-loading cannot add settings to the suite. A test whose
+   precondition is missing here (`node` on `PATH`, say) skips and the run still
+   passes; CI fails on such a skip (see [Skips fail CI](#skips-fail-ci)).
 6. Starts the fake Spotify on `http://127.0.0.1:8900`, a fresh Gunicorn
    gthread API on `http://127.0.0.1:8000`, and a separate operation worker,
    stopping this checkout's earlier processes. Worker health/control binds only
@@ -433,6 +435,28 @@ app's own origin.
 `main`. Besides the `Frontend and Railway config` job, it has the backend jobs
 and the harness job below.
 
+### Skips fail CI
+
+CI chooses what to run explicitly, with markers and paths in `ci.yml`, and
+everything it chooses must run. A test that skips at run time therefore means a
+missing precondition (the PostgreSQL binaries, `node`), never a test that does
+not apply, so every CI pytest run that executes tests passes `--fail-on-skip`
+(`tests/fail_on_skip.py`): the run exits 1 when any test, or any module skipped
+at collection, was skipped, and its summary lists each skip with the reason. A
+run that already failed keeps its exit status.
+
+Tests that never ran are not skips: the ones `-m`, `-k` or `--ignore` leave out,
+and the ones another shard holds. The step that fingerprints the collected
+suite runs no tests and takes no flag.
+
+Locally the flag is optional, so a test whose precondition is missing on your
+machine skips and the run passes. Add `--fail-on-skip` to see what CI would
+reject:
+
+```bash
+pytest tests/ -m "not integration" --fail-on-skip
+```
+
 ### Backend jobs
 
 The backend suite is divided across parallel jobs, so no single job runs all of
@@ -440,7 +464,7 @@ its tests one after another:
 
 | Job | What it does |
 |---|---|
-| `Backend lint and PostgreSQL integration tests` | Once: `ruff check .`, `scripts/check-migration-chain.py`, `black --check` (reports only) and the PostgreSQL integration tests (`-m integration`) |
+| `Backend lint and PostgreSQL integration tests` | Once: `ruff check .`, `scripts/check-migration-chain.py` and the PostgreSQL integration tests (`-m integration`) |
 | `Backend tests shard 1` ... `Backend tests shard 5` | In parallel, a share of `pytest tests/ -m "not integration"` each |
 | `Backend lint & tests` | The final job: needs both of the above, and keeps the name the single backend job had, because docs and tooling refer to it |
 
@@ -523,8 +547,9 @@ every pull request. It proves:
   live;
 - a login through the fake Spotify reaches the dashboard, and every call the
   app made on the way matched Spotify's documentation;
-- every behaviour test passes (`scripts/harness.sh e2e`), the browser pass
-  included, whose screenshots it keeps as the `page-screenshots` artifact.
+- every behaviour test runs and passes (`scripts/harness.sh e2e --fail-on-skip`,
+  so a skip fails the job), the browser pass included, whose screenshots it
+  keeps as the `page-screenshots` artifact.
 
 The backend jobs already cover lint and tests, including both fake Spotify
 suites, so this job skips them.
