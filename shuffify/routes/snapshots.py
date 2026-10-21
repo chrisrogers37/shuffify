@@ -44,6 +44,12 @@ from shuffify.services.operations.commands.schemas import SnapshotRestoreCommand
 logger = logging.getLogger(__name__)
 
 
+def _snapshot_failure(error, message):
+    """A failed snapshot write: the detail is logged, the client gets ``message``."""
+    logger.error("Snapshot write failed: %s", error)
+    return json_error(message, 500)
+
+
 @api_bp.route(
     "/playlist/<playlist_id>/snapshots", methods=["GET"]
 )
@@ -96,7 +102,7 @@ def create_manual_snapshot(
             snapshot=snapshot.to_dict(),
         )
     except PlaylistSnapshotError as e:
-        return json_error(str(e), 500)
+        return _snapshot_failure(e, "Failed to create snapshot.")
 
 
 @api_bp.route(
@@ -202,4 +208,4 @@ def delete_snapshot(
     except PlaylistSnapshotNotFoundError:
         return json_error("Snapshot not found.", 404)
     except PlaylistSnapshotError as e:
-        return json_error(str(e), 500)
+        return _snapshot_failure(e, "Failed to delete snapshot.")

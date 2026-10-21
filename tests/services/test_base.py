@@ -295,3 +295,53 @@ class TestEnsurePrivate:
         api.update_playlist_details.side_effect = RuntimeError("timed out")
         assert ensure_private(api, "pl1") is False
         assert "Could not make playlist pl1 private" in caplog.text
+
+
+class TestCommitFailureText:
+    """The raised text names the operation only; the driver's message stays in the log and cause."""
+
+    def _fail(self):
+        failure = IntegrityError("INSERT INTO t (c) VALUES (?)", ("SENTINEL-VALUE",), Exception("db.sentinel.invalid"))
+        return failure, patch.object(db.session, "commit", side_effect=failure)
+
+    def test_message_has_no_driver_text_and_chains_the_cause(self, app_ctx):
+        from shuffify.services.base import is_commit_failure
+
+        failure, armed = self._fail()
+        with armed, pytest.raises(FakeError) as raised:
+            safe_commit("create a thing", FakeError)
+        assert str(raised.value) == "Failed to create a thing"
+        assert raised.value.__cause__ is failure
+        assert is_commit_failure(raised.value)
+
+    def test_failure_is_logged_with_its_traceback(self, app_ctx, caplog):
+        failure, armed = self._fail()
+        with armed, caplog.at_level("ERROR"), pytest.raises(FakeError):
+            safe_commit("create a thing", FakeError)
+        record = next(r for r in caplog.records if r.name == "shuffify.services.base")
+        assert record.exc_info[1] is failure
+        assert "SENTINEL-VALUE" in record.getMessage() or "db.sentinel.invalid" in record.getMessage()
+
+    def test_deliberate_errors_are_not_commit_failures(self):
+        from shuffify.services.base import is_commit_failure
+
+        assert not is_commit_failure(FakeError("Invalid theme"))
+
+    def test_delete_schedule_message_and_cause(self, app_ctx):
+        from shuffify.models.db import Schedule
+        from shuffify.services import ScheduleError, SchedulerService
+
+        user = User(spotify_id="sched_owner", display_name="Owner")
+        db.session.add(user)
+        db.session.commit()
+        schedule = Schedule(
+            user_id=user.id, job_type="shuffle", target_playlist_id="t", target_playlist_name="T",
+            algorithm_name="BasicShuffle", algorithm_params={},
+        )
+        db.session.add(schedule)
+        db.session.commit()
+        failure, armed = self._fail()
+        with armed, pytest.raises(ScheduleError) as raised:
+            SchedulerService.delete_schedule(schedule.id, user.id)
+        assert str(raised.value) == f"Failed to delete schedule {schedule.id}"
+        assert raised.value.__cause__ is failure

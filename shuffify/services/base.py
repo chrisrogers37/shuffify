@@ -13,6 +13,26 @@ from shuffify.models.db import User, db
 logger = logging.getLogger(__name__)
 
 
+def commit_failure(exception_class: Type[Exception], operation_name: str) -> Exception:
+    """
+    Build the exception for a failed commit, marked as one.
+
+    The text names only the operation. The driver's message (SQL, bound
+    values, host and port) stays in the log and the ``__cause__`` chain, so
+    nothing that echoes ``str(error)`` can pass it to a client. Routes tell
+    a failed commit from the same class's deliberate messages with
+    ``is_commit_failure``.
+    """
+    error = exception_class(f"Failed to {operation_name}")
+    error.commit_failed = True
+    return error
+
+
+def is_commit_failure(error: BaseException) -> bool:
+    """Whether ``error`` was built by ``commit_failure``."""
+    return getattr(error, "commit_failed", False) is True
+
+
 def safe_commit(
     operation_name: str,
     exception_class: Type[Exception] = Exception,
@@ -26,7 +46,8 @@ def safe_commit(
 
     Args:
         operation_name: Human-readable description of the operation
-            (used in log messages and exception text).
+            (used in log messages and exception text; the driver's
+            message goes to the log only).
         exception_class: The exception class to raise on failure.
             Defaults to Exception.
 
@@ -45,9 +66,7 @@ def safe_commit(
             e,
             exc_info=True,
         )
-        raise exception_class(
-            f"Failed to {operation_name}: {e}"
-        )
+        raise commit_failure(exception_class, operation_name) from e
 
 
 def commit_or_stage(

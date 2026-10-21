@@ -36,6 +36,7 @@ from shuffify.services import (
     WorkshopSessionNotFoundError,
     WorkshopSessionService,
 )
+from shuffify.services.base import is_commit_failure
 from shuffify.services.operations.commands.schemas import WorkshopCommitCommand
 from shuffify.services.workshop_commit_service import (
     WorkshopCommitService,
@@ -390,6 +391,14 @@ def workshop_load_external_playlist(
 # =============================================================================
 
 
+def _session_failure(error, failed_message):
+    """A session error as a 500: a failed commit gets ``failed_message``, never the driver's text."""
+    if is_commit_failure(error):
+        logger.error("Workshop session write failed: %s", error)
+        return json_error(failed_message, 500)
+    return json_error(str(error), 500)
+
+
 @api_bp.route(
     "/workshop/<playlist_id>/sessions", methods=["GET"]
 )
@@ -466,7 +475,7 @@ def save_workshop_session(
     except WorkshopSessionLimitError as e:
         return json_error(str(e), 400)
     except WorkshopSessionError as e:
-        return json_error(str(e), 500)
+        return _session_failure(e, "Failed to save session.")
 
 
 @api_bp.route(
@@ -530,7 +539,7 @@ def update_workshop_session(
     except WorkshopSessionNotFoundError:
         return json_error("Saved session not found.", 404)
     except WorkshopSessionError as e:
-        return json_error(str(e), 500)
+        return _session_failure(e, "Failed to update session.")
 
 
 @api_bp.route(
@@ -564,4 +573,4 @@ def delete_workshop_session(
     except WorkshopSessionNotFoundError:
         return json_error("Saved session not found.", 404)
     except WorkshopSessionError as e:
-        return json_error(str(e), 500)
+        return _session_failure(e, "Failed to delete session.")
