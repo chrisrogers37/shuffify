@@ -502,13 +502,15 @@ refresh the file from the `test-durations` artifact of a run whose
 `Backend lint & tests` passed (the latest on `main`, say):
 
 ```bash
+rm .test_durations                            # gh run download won't overwrite it
 gh run download <run-id> -n test-durations   # writes .test_durations
 ```
 
 Commit it at the repository root. To rebuild it from scratch instead, run the
-suite once with `pytest tests/ -m "not integration" --store-durations`; the CI
-artifact is preferable, since it holds times measured on the runners that use
-them.
+suite once with
+`pytest tests/ -m "not integration" --store-durations --clean-durations`
+(`--store-durations` alone merges into the existing file). The CI artifact is
+preferable, since it holds times measured on the runners that use them.
 
 ### Harness job
 

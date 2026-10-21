@@ -174,9 +174,11 @@ jobs:
       # selection of the next step (tests/ and the marker) without its split
       # arguments. pytest's own count is checked against the ids read, so a line
       # the pattern misses cannot shrink the fingerprinted list unnoticed.
+      # --verbosity=-1 lists one test id per line whatever pytest.ini's addopts
+      # set (-qq does so only while addopts carry -v).
       - name: Fingerprint the collected suite
         run: |
-          pytest --collect-only -qq tests/ -m "not integration" > "$RUNNER_TEMP/collection.txt"
+          pytest --collect-only --verbosity=-1 tests/ -m "not integration" > "$RUNNER_TEMP/collection.txt"
           grep -E '^\S+\.py::' "$RUNNER_TEMP/collection.txt" > "$RUNNER_TEMP/ids.txt"
           collected=$(sed -n -E 's/^([0-9]+)(\/[0-9]+)? tests? collected.*/\1/p' "$RUNNER_TEMP/collection.txt" | tail -n 1)
           read_ids=$(wc -l < "$RUNNER_TEMP/ids.txt")
