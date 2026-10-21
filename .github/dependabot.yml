@@ -48,6 +48,11 @@ updates:
       include: "scope"
     labels:
       - "dependencies"
+    # @types/node follows the Node major in engines, so move them together by hand
+    ignore:
+      - dependency-name: "@types/node"
+        update-types:
+          - "version-update:semver-major"
   - package-ecosystem: "npm"
     directory: "/.railway"
     schedule:
