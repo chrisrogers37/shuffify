@@ -18,9 +18,6 @@ class Playlist:
     total_tracks: Optional[int] = None
     public: Optional[bool] = None
     tracks: List[Dict[str, Any]] = field(default_factory=list)
-    # Always empty: shuffify reads no audio features. to_dict keeps the key
-    # because the Workshop context contract requires it.
-    audio_features: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -88,7 +85,6 @@ class Playlist:
             "total_tracks": self.total_tracks,
             "public": self.public,
             "tracks": self.tracks,
-            "audio_features": self.audio_features,
         }
 
     def __len__(self) -> int:

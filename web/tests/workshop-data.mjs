@@ -21,7 +21,6 @@ export const context = () => ({
     description: "An example playlist",
     total_tracks: 3,
     public: false,
-    audio_features: {},
   },
   tracks: [track(1, "first"), track(2), track(1, "second")],
   algorithms: [],

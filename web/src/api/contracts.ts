@@ -346,8 +346,6 @@ export interface WorkshopPlaylist {
   description: string | null;
   total_tracks: Count | null;
   public: boolean | null;
-  /** Always empty and never read by the client; the API may omit it. */
-  audio_features?: { [track_id: string]: JsonRecord };
 }
 export interface WorkshopTrack {
   id: string;

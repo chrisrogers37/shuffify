@@ -7,8 +7,7 @@
     "owner_id": "alice",
     "description": "A fixture playlist",
     "total_tracks": 1,
-    "public": false,
-    "audio_features": {}
+    "public": false
   },
   "tracks": [
     {
