@@ -5,6 +5,8 @@ Tests cover listing pending raid tracks and promoting them
 when a finalize is verified.
 """
 
+from datetime import datetime, timezone
+
 import pytest
 
 from shuffify.enums import PendingRaidStatus
@@ -111,3 +113,19 @@ class TestCompleteFinalize:
         for t in tracks:
             assert t.status == PendingRaidStatus.PROMOTED
             assert t.resolved_at is not None
+
+    def test_a_retried_finalize_leaves_already_promoted_tracks_untouched(
+        self, user, sample_tracks
+    ):
+        stage(user, "pl1", sample_tracks)
+        first, *rest = PendingRaidTrack.query.order_by(PendingRaidTrack.id).all()
+        PendingRaidService.complete_finalize([first])
+        earlier = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        first.resolved_at = earlier
+        db.session.commit()
+
+        PendingRaidService.complete_finalize(PendingRaidTrack.query.all())
+
+        assert db.session.get(PendingRaidTrack, first.id).resolved_at == earlier
+        for t in rest:
+            assert db.session.get(PendingRaidTrack, t.id).status == PendingRaidStatus.PROMOTED
