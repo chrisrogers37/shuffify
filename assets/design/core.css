@@ -834,7 +834,6 @@
   }
   .sh-consent a {
     display: inline;
-    padding-block: calc(var(--sh-space-control) / 2);
     color: var(--sh-ink);
     text-decoration: underline;
     text-underline-offset: 3px;

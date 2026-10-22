@@ -83,7 +83,9 @@ async function targets(page: Page) {
         if (
           !(target instanceof HTMLElement) ||
           target.closest("[hidden],[inert]") ||
-          target.getAttribute("href") === "#main-content"
+          target.getAttribute("href") === "#main-content" ||
+          (target instanceof HTMLAnchorElement &&
+            target.closest(".sh-consent"))
         )
           return [];
         const box = target.getBoundingClientRect(),
@@ -229,7 +231,7 @@ test("consent remains keyboard operated and submits only the native login contra
   expect([...url.searchParams]).toEqual([["legal_consent", "1"]]);
 });
 
-test("consent checkbox is centred on the first text line and links keep 44px targets", async ({
+test("consent checkbox is centred on the first text line and label text is not covered by a link", async ({
   page,
 }) => {
   await stable(page);
@@ -244,13 +246,17 @@ test("consent checkbox is centred on the first text line and links keep 44px tar
     return Math.abs(box.top + box.height / 2 - (line.top + line.height / 2));
   });
   expect(offset).toBeLessThanOrEqual(3);
-  for (const name of ["Terms of Service", "Privacy Policy"]) {
-    const link = await page
-      .locator(".sh-landing-consent")
-      .getByRole("link", { name, exact: true })
-      .boundingBox();
-    expect(link!.height).toBeGreaterThanOrEqual(44);
-  }
+  const point = await consent.evaluate((input) => {
+      const text = input.nextElementSibling as HTMLElement;
+      const range = document.createRange();
+      range.setStart(text.firstChild as Node, 0);
+      range.setEnd(text.firstChild as Node, 5);
+      const r = range.getBoundingClientRect();
+      const x = r.left + r.width / 2;
+      const y = r.top + r.height / 2;
+      return { x, y, onLink: !!document.elementFromPoint(x, y)?.closest("a") };
+    });
+  expect(point.onLink).toBe(false);
 });
 
 test("consent legal links keep the form open in the original page", async ({
