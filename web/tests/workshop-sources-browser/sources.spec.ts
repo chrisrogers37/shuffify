@@ -534,6 +534,29 @@ test("routine panel uses exact IDs and revisions for state, retained history and
       .getByRole("link", { name: "Edit this routine", exact: true }),
   ).toBeFocused();
 });
+test("routine panel names the zone once, explains legacy timing plainly and labels the next run's zone", async ({
+  page,
+}) => {
+  await start(page, "workshop-sources", "/workshop/target", (body) => {
+    const rows = body.routines ?? body.data?.routines ?? body;
+    rows[0].timing.text = "Every day at 09:30 UTC";
+    rows[0].timing.legacy = true;
+    rows[0].registration.status = "registered";
+    rows[0].registration.next_run_at = "2026-01-01T12:00:00+00:00";
+  });
+  await open(page, "Routines");
+  const first = panel(page).locator('[data-routine-id="1"]');
+  await expect(first).toContainText("Planned: Every day at 09:30 UTC");
+  await expect(first).not.toContainText("UTC · UTC");
+  await expect(first).toContainText(
+    "This routine runs on the scheduler's clock (UTC). Change its timing to pick a timezone.",
+  );
+  await expect(first).not.toContainText("Legacy timing");
+  await expect(first).not.toContainText("Registered next run");
+  await expect(first.getByText(/^Next run:/)).toHaveText(
+    /^Next run: .*\b(?:[A-Z]{2,5}|GMT[+-]\d+)$/,
+  );
+});
 test("a proved unstarted source refusal retains its facts and needs fresh exact review before a new key", async ({
   page,
 }) => {
