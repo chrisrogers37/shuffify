@@ -671,22 +671,33 @@ export function RoutinesPage() {
                       </p>
                       <p className="sh-text-muted">
                         {row.timing.text}
-                        {row.timing.effective_timezone
+                        {row.timing.effective_timezone &&
+                        !row.timing.text.includes(row.timing.effective_timezone)
                           ? ` · ${row.timing.effective_timezone}`
                           : ""}
                       </p>
                       {row.timing.legacy && (
                         <p>
-                          Legacy timing uses the scheduler timezone. Editing
-                          options preserves it until you change timing.
+                          This routine runs on the scheduler's clock
+                          {row.timing.effective_timezone
+                            ? ` (${row.timing.effective_timezone})`
+                            : ""}
+                          . Change its timing to pick a timezone.
                         </p>
                       )}
                       <p className="sh-caption">
-                        Registered next run:{" "}
+                        Next run:{" "}
                         {row.registration.next_run_at
                           ? new Date(
                               row.registration.next_run_at,
-                            ).toLocaleString()
+                            ).toLocaleString(undefined, {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                              timeZoneName: "short",
+                            })
                           : "Unavailable"}
                       </p>
                       {latestRecord === null ? (
