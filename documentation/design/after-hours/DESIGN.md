@@ -152,7 +152,7 @@ uses the shared `sh-*` components.
 | `sh-form-field`, `sh-field-label`, `sh-field-help` | Labelled fields |
 | `sh-toggle` | Settings switch row: label left, control right, full-row target |
 | `sh-check` | Left-aligned native checkbox with its label and a full-row target |
-| `sh-consent`, `sh-reconnect-form` | Legal-consent checkbox with linked Terms and Privacy Policy; the reconnect form centers the row and button |
+| `sh-consent`, `sh-reconnect-form` | Legal-consent checkbox centred on the first text line, with linked Terms and Privacy Policy as inline links whose block padding gives 44px targets without stretching the line; the reconnect form centers the row and button |
 | `sh-field-error`, `sh-form-error` | Persistent field and form validation feedback |
 | `sh-workspace`, `sh-task-panel`, `sh-panel-*` | Contextual task layout, header/body/footer, and blocking modal |
 | `sh-state` | Empty and unavailable-content panels |

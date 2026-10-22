@@ -229,6 +229,30 @@ test("consent remains keyboard operated and submits only the native login contra
   expect([...url.searchParams]).toEqual([["legal_consent", "1"]]);
 });
 
+test("consent checkbox is centred on the first text line and links keep 44px targets", async ({
+  page,
+}) => {
+  await stable(page);
+  const consent = page.getByRole("checkbox");
+  const offset = await consent.evaluate((input) => {
+    const box = input.getBoundingClientRect();
+    const text = input.nextElementSibling as HTMLElement;
+    const range = document.createRange();
+    range.setStart(text.firstChild as Node, 0);
+    range.setEnd(text.firstChild as Node, 1);
+    const line = range.getClientRects()[0]!;
+    return Math.abs(box.top + box.height / 2 - (line.top + line.height / 2));
+  });
+  expect(offset).toBeLessThanOrEqual(3);
+  for (const name of ["Terms of Service", "Privacy Policy"]) {
+    const link = await page
+      .locator(".sh-landing-consent")
+      .getByRole("link", { name, exact: true })
+      .boundingBox();
+    expect(link!.height).toBeGreaterThanOrEqual(44);
+  }
+});
+
 test("consent legal links keep the form open in the original page", async ({
   page,
   context,

@@ -576,6 +576,26 @@ test("signed-out reconnect consent is adjacent, linked, required and submits leg
   });
   expect(gap).toBeGreaterThanOrEqual(0);
   expect(gap).toBeLessThan(24);
+  const checkAlignment = async () =>
+    consent.evaluate((input) => {
+      const box = input.getBoundingClientRect();
+      const text = input.nextElementSibling as HTMLElement;
+      const range = document.createRange();
+      range.setStart(text.firstChild as Node, 0);
+      range.setEnd(text.firstChild as Node, 1);
+      const line = range.getClientRects()[0]!;
+      return Math.abs(
+        box.top + box.height / 2 - (line.top + line.height / 2),
+      );
+    });
+  expect(await checkAlignment()).toBeLessThanOrEqual(3);
+  for (const name of ["Terms of Service", "Privacy Policy"]) {
+    const link = await form.getByRole("link", { name }).boundingBox();
+    expect(link!.height).toBeGreaterThanOrEqual(44);
+  }
+  await page.setViewportSize({ width: 360, height: 800 });
+  expect(await checkAlignment()).toBeLessThanOrEqual(3);
+  await page.setViewportSize({ width: 1280, height: 800 });
   const label = await form.locator("label").boundingBox();
   const button = await form
     .getByRole("button", { name: "Connect with Spotify" })
