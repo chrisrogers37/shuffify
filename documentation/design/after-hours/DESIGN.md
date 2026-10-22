@@ -215,11 +215,13 @@ a client-only key while the saved order stays a list of URIs: position, intact 4
 px artwork, title and artist, the lock state in words, the duration (hidden on
 phone), and one **Row actions** control. Row actions move the occurrence up,
 down or to a position, cycle its lock (saved immediately, separately from the
-draft) and remove exactly that occurrence; moves keep focus on the same
-occurrence and announce its new position, and dragging takes the same path. The
-draft status and **Review & save** sit under the header at desktop widths and
-become a sticky footer below them, with its measured height as scroll padding
-so focused rows are never covered.
+draft) and remove exactly that occurrence; a move keeps focus on the control
+used (falling back to the row's first enabled action when that control is
+disabled) and announces the occurrence's new position, while dragging announces
+the same way and focuses the row's first enabled action. The draft status and
+**Review & save** sit under the header at desktop widths and become a sticky
+footer below them, with its measured height as scroll padding so focused rows
+are never covered.
 
 History keeps three named concepts apart: **Playlist snapshots** (saved
 playlist orders, with a read-only **View tracks**, reviewed restore and

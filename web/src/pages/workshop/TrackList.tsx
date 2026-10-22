@@ -31,7 +31,7 @@ export function TrackList({
         row?.querySelector<HTMLElement>("[data-row-actions]") ?? heading.current
       )?.focus({ preventScroll: true });
     });
-  function move(key: string, n: number) {
+  function move(key: string, n: number, trigger?: HTMLElement | null) {
     const row = c.getSnapshot().working.find((r) => r.key === key);
     if (c.moveOccurrence(key, n)) {
       announce(
@@ -39,6 +39,10 @@ export function TrackList({
         `workshop-move-${++events.current}`,
       );
       requestAnimationFrame(() => {
+        if (trigger?.isConnected && !(trigger as HTMLButtonElement).disabled) {
+          trigger.focus({ preventScroll: true });
+          return;
+        }
         const panel = list.current?.querySelector<HTMLElement>(
           `[data-occurrence="${CSS.escape(key)}"] [data-action-first]`,
         );
@@ -146,7 +150,7 @@ export function TrackList({
               focus(row.key);
             }}
             onDismiss={() => setActive(null)}
-            onMove={(n) => move(row.key, n)}
+            onMove={(n, trigger) => move(row.key, n, trigger)}
             onRemove={() => remove(row.key)}
           />
         ))}
@@ -178,7 +182,7 @@ function TrackRow({
   onOpen: () => void;
   onClose: () => void;
   onDismiss: () => void;
-  onMove: (n: number) => void;
+  onMove: (n: number, trigger?: HTMLElement | null) => void;
   onRemove: () => void;
 }) {
   const [value, setValue] = useState(String(position)),
@@ -279,14 +283,14 @@ function TrackRow({
               data-action-first
               variant="secondary"
               disabled={!permitted || held || position === 1}
-              onClick={() => onMove(position - 1)}
+              onClick={(e) => onMove(position - 1, e.currentTarget)}
             >
               Move up
             </Button>
             <Button
               variant="secondary"
               disabled={!permitted || held || position === total}
-              onClick={() => onMove(position + 1)}
+              onClick={(e) => onMove(position + 1, e.currentTarget)}
             >
               Move down
             </Button>
@@ -309,7 +313,10 @@ function TrackRow({
                 return;
               }
               setError("");
-              onMove(Math.max(1, Math.min(total, Math.trunc(n))));
+              onMove(
+                Math.max(1, Math.min(total, Math.trunc(n))),
+                (e.nativeEvent as SubmitEvent).submitter,
+              );
             }}
           >
             <Field
