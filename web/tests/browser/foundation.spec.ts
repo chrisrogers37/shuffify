@@ -594,6 +594,9 @@ test("signed-out reconnect consent is adjacent, linked, required and submits leg
   });
   await form.getByRole("button", { name: "Connect with Spotify" }).click();
   expect(navigated).toBe(false);
+  expect(await form.evaluate((f: HTMLFormElement) => f.checkValidity())).toBe(
+    false,
+  );
   expect(page.url()).toContain("/__foundation/app");
   await consent.press("Space");
   await expect(consent).toBeChecked();

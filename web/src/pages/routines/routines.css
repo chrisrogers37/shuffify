@@ -44,9 +44,9 @@
   .sh-setup-page a {
     min-height: var(--sh-space-control);
   }
-  .sh-routines-page label,
-  .sh-setup-page label,
-  .sh-routine-task label {
+  .sh-routines-page label:not(.sh-check),
+  .sh-setup-page label:not(.sh-check),
+  .sh-routine-task label:not(.sh-check) {
     display: grid;
     gap: var(--sh-space-2);
     min-width: 0;

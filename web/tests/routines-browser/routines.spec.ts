@@ -200,6 +200,26 @@ test("lost activation response has no automatic replay and explicit Check reuses
   expect(calls).toHaveLength(2);
   expect(calls[0]?.body).toEqual(calls[1]?.body);
 });
+test("setup toggles keep the checkbox and its text side by side", async ({
+  page,
+}) => {
+  await setup(page, "/playlist/target1/setup?return_target=routines");
+  const input = await page
+    .getByLabel("Enable adding collected tracks", { exact: true })
+    .boundingBox();
+  const text = await page
+    .locator("label.sh-check", { hasText: "Enable adding collected tracks" })
+    .locator("span")
+    .boundingBox();
+  const centers = Math.abs(
+    input!.y + input!.height / 2 - (text!.y + text!.height / 2),
+  );
+  expect(centers).toBeLessThan(12);
+  const gap = text!.x - (input!.x + input!.width);
+  expect(gap).toBeGreaterThanOrEqual(0);
+  expect(gap).toBeLessThan(24);
+});
+
 test("setup stages changes, reviews shared impact, requires acknowledgment and saves exact reviewed changes", async ({
   page,
 }) => {

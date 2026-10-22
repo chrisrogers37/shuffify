@@ -78,7 +78,6 @@ export function ConsentCheckbox({
   checked?: boolean;
   onChange?: (checked: boolean) => void;
 }) {
-  const controlled = checked !== undefined;
   return (
     <label htmlFor={id} className={`sh-consent ${className ?? ""}`.trim()}>
       <input
@@ -88,12 +87,10 @@ export function ConsentCheckbox({
         name="legal_consent"
         value="1"
         required
-        {...(controlled
-          ? {
-              checked,
-              onChange: (event) => onChange?.(event.currentTarget.checked),
-            }
-          : {})}
+        checked={checked}
+        onChange={
+          onChange && ((event) => onChange(event.currentTarget.checked))
+        }
       />
       <span>
         I agree to the{" "}
