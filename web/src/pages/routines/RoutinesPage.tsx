@@ -16,6 +16,7 @@ import type {
   RoutineRow,
   RoutinesContext,
 } from "../../api/contracts";
+import { formatNextRun, legacyTimingNote, timingLine } from "./timingDisplay";
 import { useServices, useSession } from "../../auth/SessionProvider";
 import { useAnnouncer } from "../../a11y/Announcer";
 import { Button, Select } from "../../components/ui/controls";
@@ -669,24 +670,14 @@ export function RoutinesPage() {
                         {operationLabel(row.definition.job_type)} · Routine #
                         {row.schedule_id}
                       </p>
-                      <p className="sh-text-muted">
-                        {row.timing.text}
-                        {row.timing.effective_timezone
-                          ? ` · ${row.timing.effective_timezone}`
-                          : ""}
-                      </p>
+                      <p className="sh-text-muted">{timingLine(row.timing)}</p>
                       {row.timing.legacy && (
-                        <p>
-                          Legacy timing uses the scheduler timezone. Editing
-                          options preserves it until you change timing.
-                        </p>
+                        <p>{legacyTimingNote(row.timing)}</p>
                       )}
                       <p className="sh-caption">
-                        Registered next run:{" "}
+                        Next run:{" "}
                         {row.registration.next_run_at
-                          ? new Date(
-                              row.registration.next_run_at,
-                            ).toLocaleString()
+                          ? formatNextRun(row.registration.next_run_at)
                           : "Unavailable"}
                       </p>
                       {latestRecord === null ? (

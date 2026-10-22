@@ -6,6 +6,11 @@ import { ExecutionDetails } from "../../../components/results/ExecutionDetails";
 import type { JobExecution } from "../../../api/contracts";
 import type { WorkshopToolContext } from "../workspace";
 import { labels, safeAvailableDetail } from "../../routines/model";
+import {
+  formatNextRun,
+  legacyTimingNote,
+  timingLine,
+} from "../../routines/timingDisplay";
 import { SourceFeedback, readMessage, useRowReturn, useSources } from "./hooks";
 import { useOpenRun } from "./RunReview";
 function Execution({ execution }: { execution: JobExecution }) {
@@ -108,19 +113,14 @@ export function RoutinesPanel(context: WorkshopToolContext) {
               {row.schedule.target_playlist_name ?? "Playlist"} ·{" "}
               {row.state_label}
             </p>
-            <p>
-              Planned: {row.timing.text} ·{" "}
-              {row.timing.effective_timezone ?? "Timezone unavailable"}
-            </p>
-            {row.timing.legacy && (
-              <p>Legacy timing uses the scheduler timezone.</p>
-            )}
+            <p>Planned: {timingLine(row.timing, "Timezone unavailable")}</p>
+            {row.timing.legacy && <p>{legacyTimingNote(row.timing)}</p>}
             {row.timing.explanation && <p>{row.timing.explanation}</p>}
             <p>
-              Registered next run:{" "}
+              Next run:{" "}
               {row.registration.status === "registered" &&
               row.registration.next_run_at
-                ? new Date(row.registration.next_run_at).toLocaleString()
+                ? formatNextRun(row.registration.next_run_at)
                 : "Unavailable"}
             </p>
             {latest ? (

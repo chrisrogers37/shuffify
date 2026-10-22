@@ -9,6 +9,7 @@ export async function start(
   page: Page,
   scenario = "workshop-sources",
   path = "/workshop/target",
+  mutateRoutines?: (body: any) => void,
 ) {
   const base = createWorkshopFixtures("workshop-happy"),
     tools = createWorkshopToolsFixtures("workshop-tools", base),
@@ -61,9 +62,18 @@ export async function start(
         },
       );
     call.status = response.status;
+    let text = await response.text();
+    if (
+      mutateRoutines &&
+      url.pathname === "/api/playlist/target/routines/context"
+    ) {
+      const parsed = JSON.parse(text);
+      mutateRoutines(parsed);
+      text = JSON.stringify(parsed);
+    }
     await route.fulfill({
       status: response.status,
-      body: await response.text(),
+      body: text,
       headers: (() => {
         const headers: Record<string, string> = {};
         response.headers.forEach((value, key) => {

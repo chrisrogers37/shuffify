@@ -8,6 +8,7 @@ async function setup(
   path = "/routines",
   scenario = "routines-happy",
   lostRun = false,
+  mutateList?: (body: any) => void,
 ) {
   const backend = createRoutinesFixtures(scenario),
     calls: {
@@ -45,13 +46,19 @@ async function setup(
         lost = false;
         return route.abort();
       }
+      let text = await response.text();
+      if (mutateList && path === "/api/routines") {
+        const parsed = JSON.parse(text);
+        mutateList(parsed);
+        text = JSON.stringify(parsed);
+      }
       return route.fulfill({
         status: response.status,
         headers: {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
         },
-        body: await response.text(),
+        body: text,
       });
     } catch {
       return route.abort();
@@ -90,6 +97,37 @@ test("exact cards, local filters, deep links and desired state retain identity",
   expect(
     state.calls.filter((value) => value.path === "/api/routines"),
   ).toHaveLength(1);
+});
+test("card timing names the zone once, explains legacy timing plainly and labels the next run's zone", async ({
+  page,
+}) => {
+  await setup(page, "/routines", "routines-happy", false, (body) => {
+    const rows = body.routines ?? body.data?.routines ?? body;
+    rows[1].timing.text = "Every day at 09:30 UTC";
+    rows[2].timing.legacy = true;
+    rows[0].registration.next_run_at = "2026-01-01T12:00:00+00:00";
+  });
+  const timing = card(page, 2).locator("p.sh-text-muted");
+  await expect(timing).toHaveText("Every day at 09:30 UTC");
+  await expect(card(page, 2)).not.toContainText("UTC · UTC");
+  await expect(card(page, 1).locator("p.sh-text-muted")).toHaveText(
+    "Every day · UTC",
+  );
+  await expect(card(page, 3)).toContainText(
+    "This routine runs on the scheduler's clock (UTC). Change its timing to pick a timezone.",
+  );
+  await expect(card(page, 3)).not.toContainText("Legacy timing");
+  const next = card(page, 1).getByText(/^Next run:/);
+  await expect(next).toBeVisible();
+  const zone = await page.evaluate(
+    (iso) =>
+      new Intl.DateTimeFormat(undefined, { timeZoneName: "short" })
+        .formatToParts(new Date(iso))
+        .find((part) => part.type === "timeZoneName")!.value,
+    "2026-01-01T12:00:00+00:00",
+  );
+  expect((await next.textContent())!.endsWith(` ${zone}`)).toBe(true);
+  await expect(card(page, 1)).not.toContainText("Registered next run");
 });
 test("run reviews first, submits once, keeps observing after close and leaves Pause available", async ({
   page,
