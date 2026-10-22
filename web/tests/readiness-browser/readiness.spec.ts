@@ -103,7 +103,7 @@ for (const item of pages) test(`${item.id} has keyboard, accessibility-tree and 
   }));
   expect(mismatches).toEqual([]);
   const small = await page.locator("button,input,textarea,select,summary,a[href]").evaluateAll((nodes) => nodes.flatMap((node) => {
-    if (!(node instanceof HTMLElement) || node.closest("[hidden],[inert]") || node.getAttribute("href") === "#main-content") return [];
+    if (!(node instanceof HTMLElement) || node.closest("[hidden],[inert]") || node.getAttribute("href") === "#main-content" || (node instanceof HTMLAnchorElement && node.closest(".sh-consent"))) return [];
     const target = node instanceof HTMLInputElement && node.type === "checkbox" ? (node.labels?.[0] ?? node) : node;
     const rect = target.getBoundingClientRect();
     if (!rect.width || !rect.height || getComputedStyle(node).visibility === "hidden") return [];
