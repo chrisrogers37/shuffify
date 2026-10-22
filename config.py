@@ -209,6 +209,10 @@ class Config:
     # Database configuration
     SQLALCHEMY_DATABASE_URI = _resolve_database_url("sqlite:///shuffify.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # Keep bound values out of the exception text SQLAlchemy builds, and so out
+    # of logs and error reports. A subclass's dict replaces this one, so
+    # ProdConfig spreads it into its own.
+    SQLALCHEMY_ENGINE_OPTIONS = {"hide_parameters": True}
 
     # Schema management: whether the app applies Alembic migrations itself
     # during startup. False means something outside the app is expected to
@@ -270,6 +274,7 @@ class ProdConfig(Config):
 
     # PostgreSQL engine options: connection pooling and SSL for managed providers
     SQLALCHEMY_ENGINE_OPTIONS = {
+        **Config.SQLALCHEMY_ENGINE_OPTIONS,
         "pool_size": 5,
         "pool_recycle": 300,
         "pool_pre_ping": True,

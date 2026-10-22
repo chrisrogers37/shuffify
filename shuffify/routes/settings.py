@@ -24,6 +24,7 @@ from shuffify.services import (
     UserSettingsError,
     UserSettingsService,
 )
+from shuffify.services.base import is_commit_failure
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,11 @@ def _settings_context(user, settings=None):
 @require_auth_and_db
 def update_settings(api=None, user=None):
     """Update user settings and return the saved values."""
-    updated, error = _save_settings(user)
+    try:
+        updated, error = _save_settings(user)
+    except UserSettingsError as e:
+        logger.error("Settings write failed: %s", e)
+        return json_error("Failed to save settings.", 500)
     if error:
         return json_error(error, 400)
     return json_success("Settings saved successfully.", **_settings_context(user, updated))
@@ -131,6 +136,9 @@ def _save_settings(user):
             user.id, **update_kwargs
         )
     except UserSettingsError as e:
+        # A failed commit is the caller's 500; the rest are validation text.
+        if is_commit_failure(e):
+            raise
         return None, str(e)
 
     return updated.to_dict(), None

@@ -39,6 +39,7 @@ from shuffify.schemas.raid_requests import (
 )
 from shuffify.schemas.workshop_finalize_requests import FinalizeRaidRequest
 from shuffify.services.api_response import busy_error
+from shuffify.services.base import is_commit_failure
 from shuffify.services.live_operation_service import (
     LIVE_ENDPOINT_KINDS,
     error_status,
@@ -176,7 +177,14 @@ def raid_link_update(
     except PlaylistBusyError:
         return json_reply(busy_error())
     except RaidLinkError as e:
-        return json_error(str(e), 400)
+        if not is_commit_failure(e):
+            return json_error(str(e), 400)
+        logger.error(
+            "Failed to update raid link: %s", e
+        )
+        return json_error(
+            "Failed to update raid link", 500
+        )
     except Exception as e:
         logger.error(
             "Failed to update raid link: %s", e
@@ -215,7 +223,14 @@ def raid_link_delete(
     except PlaylistBusyError:
         return json_reply(busy_error())
     except RaidLinkError as e:
-        return json_error(str(e), 400)
+        if not is_commit_failure(e):
+            return json_error(str(e), 400)
+        logger.error(
+            "Failed to delete raid link: %s", e
+        )
+        return json_error(
+            "Failed to delete raid link", 500
+        )
     except Exception as e:
         logger.error(
             "Failed to delete raid link: %s", e

@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import func
 
 from shuffify.models.db import JobExecution, PlaylistSnapshot, Schedule, db
-from shuffify.services.base import get_owned_entity, safe_commit
+from shuffify.services.base import commit_failure, get_owned_entity, safe_commit
 from shuffify.services.playlist_lock import playlist_configuration_lock, playlist_lock
 
 logger = logging.getLogger(__name__)
@@ -231,8 +231,8 @@ class SchedulerService:
                     "Failed to delete schedule %s: %s",
                     schedule_id, error, exc_info=True,
                 )
-                raise ScheduleError(
-                    f"Failed to delete schedule {schedule_id}: {error}"
+                raise commit_failure(
+                    ScheduleError, f"delete schedule {schedule_id}"
                 ) from error
 
             logger.info("Success: delete schedule %s", schedule_id)

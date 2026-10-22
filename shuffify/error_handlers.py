@@ -37,6 +37,7 @@ from shuffify.services import (
     WorkshopSessionNotFoundError,
 )
 from shuffify.services.api_response import ERROR_CODES, error_payload
+from shuffify.services.base import is_commit_failure
 from shuffify.services.live_action_context_service import inspection_rejected
 from shuffify.services.live_operation_service import (
     DIRECT_ENDPOINT_KINDS,
@@ -308,6 +309,8 @@ def handle_schedule_not_found(
 def handle_schedule_error(error: ScheduleError):
     """Handle general schedule errors."""
     logger.error(f"Schedule error: {error}")
+    if is_commit_failure(error):
+        return json_error_response("Schedule operation failed.", 500)
     return json_error_response(str(error), 500)
 
 
