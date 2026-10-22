@@ -576,6 +576,34 @@ test("signed-out reconnect consent is adjacent, linked, required and submits leg
   });
   expect(gap).toBeGreaterThanOrEqual(0);
   expect(gap).toBeLessThan(24);
+  const checkAlignment = async () =>
+    consent.evaluate((input) => {
+      const box = input.getBoundingClientRect();
+      const text = input.nextElementSibling as HTMLElement;
+      const range = document.createRange();
+      range.setStart(text.firstChild as Node, 0);
+      range.setEnd(text.firstChild as Node, 1);
+      const line = range.getClientRects()[0]!;
+      return Math.abs(
+        box.top + box.height / 2 - (line.top + line.height / 2),
+      );
+    });
+  expect(await checkAlignment()).toBeLessThanOrEqual(3);
+  const point = await consent.evaluate((input) => {
+      const text = input.nextElementSibling as HTMLElement;
+      const range = document.createRange();
+      range.setStart(text.firstChild as Node, 0);
+      range.setEnd(text.firstChild as Node, 5);
+      const r = range.getBoundingClientRect();
+      const x = r.left + r.width / 2;
+      const y = r.top + r.height / 2;
+      return { x, y, onLink: !!document.elementFromPoint(x, y)?.closest("a") };
+    });
+  expect(point.onLink).toBe(false);
+  await page.mouse.click(point.x, point.y);
+  await expect(consent).toBeChecked();
+  await page.mouse.click(point.x, point.y);
+  await expect(consent).not.toBeChecked();
   const label = await form.locator("label").boundingBox();
   const button = await form
     .getByRole("button", { name: "Connect with Spotify" })

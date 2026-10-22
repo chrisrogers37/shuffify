@@ -828,14 +828,12 @@
     width: var(--sh-space-5);
     height: var(--sh-space-5);
     flex: none;
-    margin: 1px 0 0;
+    margin: calc((var(--sh-type-caption) * var(--sh-leading-reading) - var(--sh-space-5)) / 2) 0 0;
     accent-color: var(--sh-accent);
     cursor: pointer;
   }
   .sh-consent a {
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--sh-space-control);
+    display: inline;
     color: var(--sh-ink);
     text-decoration: underline;
     text-underline-offset: 3px;

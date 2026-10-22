@@ -43,7 +43,8 @@ test.afterEach(async ({ page }) => {
         if (
           !(node instanceof HTMLElement) ||
           node.closest("[hidden],[inert]") ||
-          node.getAttribute("href") === "#main-content"
+          node.getAttribute("href") === "#main-content" ||
+          (node instanceof HTMLAnchorElement && node.closest(".sh-consent"))
         )
           return [];
         const target =
