@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { useSession } from "../../auth/SessionProvider";
-import { Button } from "../../components/ui/controls";
+import { Button, ConsentCheckbox } from "../../components/ui/controls";
 import { ShuffleDemo } from "./ShuffleDemo";
 import { Example, Flow, MiniPlaylist, PlaylistRow, Showcase } from "./showcase";
 function ConnectForm() {
@@ -22,29 +22,13 @@ function ConnectForm() {
       className="sh-landing-connect"
       data-navigation
     >
-      <label htmlFor="legal-consent" className="sh-landing-consent">
-        <input
-          ref={checkbox}
-          type="checkbox"
-          id="legal-consent"
-          name="legal_consent"
-          value="1"
-          required
-          checked={consent}
-          onChange={(event) => setConsent(event.currentTarget.checked)}
-        />
-        <span>
-          I agree to the{" "}
-          <a href="/terms" target="_blank" rel="noopener noreferrer">
-            Terms of Service
-          </a>{" "}
-          and{" "}
-          <a href="/privacy" target="_blank" rel="noopener noreferrer">
-            Privacy Policy
-          </a>
-          .
-        </span>
-      </label>
+      <ConsentCheckbox
+        id="legal-consent"
+        className="sh-landing-consent"
+        inputRef={checkbox}
+        checked={consent}
+        onChange={setConsent}
+      />
       <Button
         type="submit"
         id="login-button"

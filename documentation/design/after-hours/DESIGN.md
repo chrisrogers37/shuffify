@@ -149,7 +149,10 @@ uses the shared `sh-*` components.
 | `sh-button`, `sh-button-secondary` | Primary and secondary actions with disabled states |
 | `sh-input` | Inputs with visible boundaries and invalid state |
 | `sh-app-nav`, `sh-app-menu`, `sh-app-links` | Named authenticated destinations and native mobile disclosure |
-| `sh-form-field`, `sh-field-label`, `sh-field-help`, `sh-toggle` | Labelled fields and native checkboxes with full-row targets |
+| `sh-form-field`, `sh-field-label`, `sh-field-help` | Labelled fields |
+| `sh-toggle` | Settings switch row: label left, control right, full-row target |
+| `sh-check` | Left-aligned native checkbox with its label and a full-row target |
+| `sh-consent`, `sh-reconnect-form` | Legal-consent checkbox with linked Terms and Privacy Policy; the reconnect form centers the row and button |
 | `sh-field-error`, `sh-form-error` | Persistent field and form validation feedback |
 | `sh-workspace`, `sh-task-panel`, `sh-panel-*` | Contextual task layout, header/body/footer, and blocking modal |
 | `sh-state` | Empty and unavailable-content panels |

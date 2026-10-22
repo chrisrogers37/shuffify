@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps, ReactNode, Ref } from "react";
 type ButtonProps = Omit<ComponentProps<"button">, "style"> & {
   variant?: "primary" | "secondary" | "danger";
   busy?: boolean;
@@ -55,13 +55,54 @@ export function Toggle({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="sh-toggle">
+    <label className="sh-check">
       <input
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.currentTarget.checked)}
       />
       <span>{label}</span>
+    </label>
+  );
+}
+export function ConsentCheckbox({
+  id,
+  className,
+  inputRef,
+  checked,
+  onChange,
+}: {
+  id: string;
+  className?: string;
+  inputRef?: Ref<HTMLInputElement>;
+  checked?: boolean;
+  onChange?: (checked: boolean) => void;
+}) {
+  return (
+    <label htmlFor={id} className={`sh-consent ${className ?? ""}`.trim()}>
+      <input
+        ref={inputRef}
+        type="checkbox"
+        id={id}
+        name="legal_consent"
+        value="1"
+        required
+        checked={checked}
+        onChange={
+          onChange && ((event) => onChange(event.currentTarget.checked))
+        }
+      />
+      <span>
+        I agree to the{" "}
+        <a href="/terms" target="_blank" rel="noopener noreferrer">
+          Terms of Service
+        </a>{" "}
+        and{" "}
+        <a href="/privacy" target="_blank" rel="noopener noreferrer">
+          Privacy Policy
+        </a>
+        .
+      </span>
     </label>
   );
 }

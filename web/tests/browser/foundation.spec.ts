@@ -554,6 +554,58 @@ test("signed-out fixture renders native consent before starting login", async ({
   await expect(consent).not.toBeChecked();
 });
 
+test("signed-out reconnect consent is adjacent, linked, required and submits legal_consent", async ({
+  page,
+}) => {
+  await page.goto("/__foundation/app?scenario=signed-out");
+  const form = page.locator('form[action="/login"]');
+  const consent = form.getByRole("checkbox");
+  await expect(
+    form.getByRole("link", { name: "Terms of Service" }),
+  ).toHaveAttribute("href", "/terms");
+  await expect(
+    form.getByRole("link", { name: "Privacy Policy" }),
+  ).toHaveAttribute("href", "/privacy");
+  const gap = await consent.evaluate((input) => {
+    const box = input.getBoundingClientRect();
+    const text = input.nextElementSibling as HTMLElement;
+    const range = document.createRange();
+    range.setStart(text.firstChild as Node, 0);
+    range.setEnd(text.firstChild as Node, 1);
+    return range.getClientRects()[0]!.left - box.right;
+  });
+  expect(gap).toBeGreaterThanOrEqual(0);
+  expect(gap).toBeLessThan(24);
+  const label = await form.locator("label").boundingBox();
+  const button = await form
+    .getByRole("button", { name: "Connect with Spotify" })
+    .boundingBox();
+  const panel = await page.locator(".sh-state").boundingBox();
+  const mid = (b: { x: number; width: number } | null) => b!.x + b!.width / 2;
+  expect(Math.abs(mid(label) - mid(panel))).toBeLessThan(4);
+  expect(Math.abs(mid(button) - mid(panel))).toBeLessThan(4);
+  expect(label!.height).toBeGreaterThanOrEqual(44);
+  await consent.focus();
+  await expect(consent).toBeFocused();
+  let navigated = false;
+  await page.route("**/login**", async (route) => {
+    navigated = true;
+    await route.fulfill({ status: 200, contentType: "text/html", body: "ok" });
+  });
+  await form.getByRole("button", { name: "Connect with Spotify" }).click();
+  expect(navigated).toBe(false);
+  expect(await form.evaluate((f: HTMLFormElement) => f.checkValidity())).toBe(
+    false,
+  );
+  expect(page.url()).toContain("/__foundation/app");
+  await consent.press("Space");
+  await expect(consent).toBeChecked();
+  await Promise.all([
+    page.waitForURL(/\/login\?legal_consent=1$/),
+    consent.press("Enter"),
+  ]);
+});
+
 test("session-error fixture offers explicit retry and keeps protected controls unavailable", async ({
   page,
 }) => {
@@ -685,8 +737,9 @@ test("repeated Escape cannot reenter an asynchronous close decision", async ({
   await expect(opener).toBeFocused();
 });
 
-
-test("a native modal owns Escape without dismissing its underlying task", async ({ page }) => {
+test("a native modal owns Escape without dismissing its underlying task", async ({
+  page,
+}) => {
   await app(page);
   const opener = page.getByRole("button", { name: "Open task", exact: true });
   await opener.click();
@@ -703,20 +756,29 @@ test("a native modal owns Escape without dismissing its underlying task", async 
     document.body.append(dialog);
     dialog.showModal();
   });
-  const dialog = page.getByRole("dialog", { name: "Native task decision", exact: true });
+  const dialog = page.getByRole("dialog", {
+    name: "Native task decision",
+    exact: true,
+  });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Native decision action", exact: true })).toBeFocused();
+  await expect(
+    dialog.getByRole("button", { name: "Native decision action", exact: true }),
+  ).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect(task).toBeVisible();
-  await expect(note).toHaveValue("Retained while the native modal owns Escape.");
+  await expect(note).toHaveValue(
+    "Retained while the native modal owns Escape.",
+  );
   await expect(note).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(task).toBeHidden();
   await expect(opener).toBeFocused();
 });
 
-test("a handled Escape preserves its task until a later unhandled Escape", async ({ page }) => {
+test("a handled Escape preserves its task until a later unhandled Escape", async ({
+  page,
+}) => {
   await app(page);
   const opener = page.getByRole("button", { name: "Open task", exact: true });
   await opener.click();
@@ -724,9 +786,14 @@ test("a handled Escape preserves its task until a later unhandled Escape", async
   const note = task.getByLabel("Task note", { exact: true });
   await note.focus();
   await note.evaluate((input) => {
-    input.addEventListener("keydown", (event) => {
-      if (event instanceof KeyboardEvent && event.key === "Escape") event.preventDefault();
-    }, { once: true });
+    input.addEventListener(
+      "keydown",
+      (event) => {
+        if (event instanceof KeyboardEvent && event.key === "Escape")
+          event.preventDefault();
+      },
+      { once: true },
+    );
   });
   await page.keyboard.press("Escape");
   await expect(task).toBeVisible();
