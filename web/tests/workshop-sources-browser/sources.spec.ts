@@ -543,6 +543,8 @@ test("routine panel names the zone once, explains legacy timing plainly and labe
     rows[0].timing.legacy = true;
     rows[0].registration.status = "registered";
     rows[0].registration.next_run_at = "2026-01-01T12:00:00+00:00";
+    rows[1].timing.text = "Every day at 09:30 timezone unavailable";
+    rows[1].timing.effective_timezone = null;
   });
   await open(page, "Routines");
   const first = panel(page).locator('[data-routine-id="1"]');
@@ -553,9 +555,20 @@ test("routine panel names the zone once, explains legacy timing plainly and labe
   );
   await expect(first).not.toContainText("Legacy timing");
   await expect(first).not.toContainText("Registered next run");
-  await expect(first.getByText(/^Next run:/)).toHaveText(
-    /^Next run: .*\b(?:[A-Z]{2,5}|GMT[+-]\d+)$/,
+  const zone = await page.evaluate(
+    (iso) =>
+      new Intl.DateTimeFormat(undefined, { timeZoneName: "short" })
+        .formatToParts(new Date(iso))
+        .find((part) => part.type === "timeZoneName")!.value,
+    "2026-01-01T12:00:00+00:00",
   );
+  await expect(first.getByText(/^Next run:/)).toBeVisible();
+  expect(
+    (await first.getByText(/^Next run:/).textContent())!.endsWith(` ${zone}`),
+  ).toBe(true);
+  await expect(
+    panel(page).locator('[data-routine-id="2"]'),
+  ).toContainText(/Planned: Every day at 09:30 timezone unavailable(?! ·)/);
 });
 test("a proved unstarted source refusal retains its facts and needs fresh exact review before a new key", async ({
   page,

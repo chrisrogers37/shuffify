@@ -119,7 +119,14 @@ test("card timing names the zone once, explains legacy timing plainly and labels
   await expect(card(page, 3)).not.toContainText("Legacy timing");
   const next = card(page, 1).getByText(/^Next run:/);
   await expect(next).toBeVisible();
-  await expect(next).toHaveText(/^Next run: .*\b(?:[A-Z]{2,5}|GMT[+-]\d+)$/);
+  const zone = await page.evaluate(
+    (iso) =>
+      new Intl.DateTimeFormat(undefined, { timeZoneName: "short" })
+        .formatToParts(new Date(iso))
+        .find((part) => part.type === "timeZoneName")!.value,
+    "2026-01-01T12:00:00+00:00",
+  );
+  expect((await next.textContent())!.endsWith(` ${zone}`)).toBe(true);
   await expect(card(page, 1)).not.toContainText("Registered next run");
 });
 test("run reviews first, submits once, keeps observing after close and leaves Pause available", async ({

@@ -5,7 +5,7 @@ type Timing = RoutineRow["timing"];
 /** The timing text with its zone, naming the zone only once. */
 export function timingLine(timing: Timing, missingZone?: string): string {
   const zone = timing.effective_timezone ?? missingZone;
-  return zone && !timing.text.includes(zone)
+  return zone && !timing.text.toLowerCase().includes(zone.toLowerCase())
     ? `${timing.text} · ${zone}`
     : timing.text;
 }
