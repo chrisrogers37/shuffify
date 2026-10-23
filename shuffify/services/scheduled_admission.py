@@ -14,7 +14,7 @@ from shuffify.models.db import JobExecution, RoutineActivationReceipt, Schedule
 from shuffify.scheduler import _parse_schedule
 from shuffify.services.live_review_bindings import fingerprint
 from shuffify.services.operations.commands.routine_capture import CaptureNotFound, CaptureRejected, capture_schedule
-from shuffify.services.operations.repository import BusyOperation, RequestKeyConflict
+from shuffify.services.operations.repository import BusyOperation, PlaylistNeedsReview, RequestKeyConflict
 
 
 def utc(value):
@@ -201,6 +201,9 @@ def admit_scheduled(
         return AdmissionResult("admitted", due, operation_id=row.id)
     except _Skipped as skipped:
         return AdmissionResult("skipped", due, code=skipped.code)
+    except PlaylistNeedsReview as blocked:
+        # Routine skipped: an earlier run on this playlist needs review. Restore or resolve it first.
+        return AdmissionResult("skipped", due, code="needs_attention", blocking_operation_id=blocked.operation_id)
     except BusyOperation as busy:
         return AdmissionResult("skipped", due, code="busy", blocking_operation_id=busy.operation_id)
     except RequestKeyConflict:

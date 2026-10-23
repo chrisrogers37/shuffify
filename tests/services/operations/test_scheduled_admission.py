@@ -101,6 +101,27 @@ def test_busy_fire_is_authored_skip_without_new_row_or_new_now_identity(schedule
     assert JobExecution.query.count() == 1
 
 
+def test_fire_is_skipped_with_the_blocking_id_on_a_playlist_with_an_unresolved_needs_attention_run(schedule):
+    repository = OperationRepository()
+    first = submit(repository, schedule)
+    repository.finish(repository.claim(operation_id=first.operation_id), "needs_attention")
+    second = submit(repository, schedule, NOW + timedelta(days=1))
+    assert second.state == "skipped" and second.code == "needs_attention"
+    assert second.blocking_operation_id == first.operation_id
+    assert second.to_dict()["code"] == "needs_attention"
+    assert JobExecution.query.count() == 1
+
+
+def test_fire_is_admitted_again_once_the_needs_attention_run_is_resolved(schedule):
+    repository = OperationRepository()
+    first = submit(repository, schedule)
+    repository.finish(repository.claim(operation_id=first.operation_id), "needs_attention")
+    row = db.session.get(JobExecution, first.operation_id)
+    row.state = "failed"
+    db.session.commit()
+    assert submit(repository, schedule, NOW + timedelta(days=1)).state == "admitted"
+
+
 def test_nonleader_never_reads_captures_or_admits(schedule, monkeypatch):
     repository = OperationRepository()
     expected = module().build_cadence(schedule).fingerprint

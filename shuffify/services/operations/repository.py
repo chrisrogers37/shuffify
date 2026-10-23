@@ -47,6 +47,14 @@ class BusyOperation(RuntimeError):
         super().__init__("A playlist operation is already active.")
 
 
+class PlaylistNeedsReview(BusyOperation):
+    """A needs_attention operation on a requested target has not been restored or resolved."""
+
+    def __init__(self, operation_id):
+        super().__init__(operation_id)
+        self.args = ("An earlier operation on this playlist needs review.",)
+
+
 class RequestKeyConflict(RuntimeError):
     """An idempotency or scheduled-fire key belongs to a different command."""
 
@@ -269,6 +277,9 @@ class OperationRepository:
                 for row in active:
                     if set(targets).intersection(row.targets or []):
                         raise BusyOperation(row.id)
+                blocker = self._unresolved_attention(session, kind, targets, payload)
+                if blocker is not None:
+                    raise PlaylistNeedsReview(blocker)
             now = self._now(session)
             row = JobExecution(kind=kind, user_id=user_id, targets=list(targets), payload=payload,
                                request_key=request_key, schedule_id=schedule_id, scheduled_for=scheduled_for,
@@ -278,6 +289,34 @@ class OperationRepository:
             if self._postgres:
                 session.execute(text("SELECT pg_notify('shuffify_operations', :id)"), {"id": str(row.id)})
             return self._detach(session, row)
+
+    @staticmethod
+    def _unresolved_attention(session, kind, targets, payload):
+        """Return the oldest needs_attention operation sharing a target that has not been restored.
+
+        Runs inside the admission transaction, after the target locks and the active-state check. An operation
+        is resolved once its restoration committed (the parent journal records ``runtime.restoration``) or an
+        operator moved it out of ``needs_attention``. A restore that is still running is already refused as busy;
+        one that ended ``needs_attention`` is itself an unresolved row. The only exemption is the restore of that
+        very parent, which is the resolution path and writes nothing the review has not seen.
+        """
+        exempt = None
+        if kind == "operation_restore" and isinstance(payload, dict):
+            try:
+                exempt = payload["command"]["capture"]["operation_id"]
+            except (KeyError, TypeError):
+                exempt = None
+        for row in session.scalars(select(JobExecution).where(
+            JobExecution.kind.is_not(None), JobExecution.state == "needs_attention"
+        ).order_by(JobExecution.id)):
+            if row.id == exempt or not set(targets).intersection(row.targets or []):
+                continue
+            runtime = row.journal.get("runtime") if isinstance(row.journal, dict) else None
+            restoration = runtime.get("restoration") if isinstance(runtime, dict) else None
+            if isinstance(restoration, dict) and restoration.get("operation_id") is not None:
+                continue
+            return row.id
+        return None
 
     def get(self, operation_id):
         """Return a private detached storage row to a worker."""
