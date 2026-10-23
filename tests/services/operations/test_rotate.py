@@ -79,8 +79,8 @@ def test_fifo_swap_preserves_orders_and_supplies_original_and_verified_resources
     assert world.playlists["target"]["track_uris"] == [uri(1), uri(4), uri(5)]
     assert world.playlists["archive"]["track_uris"] == [uri(6), uri(2), uri(3)]
     assert [(method, path) for method, path, _ in world.writes] == [
-        ("DELETE", "/playlists/target/items"), ("POST", "/playlists/archive/items"),
-        ("DELETE", "/playlists/archive/items"), ("POST", "/playlists/target/items"),
+        ("POST", "/playlists/archive/items"), ("POST", "/playlists/target/items"),
+        ("DELETE", "/playlists/target/items"), ("DELETE", "/playlists/archive/items"),
     ]
 
 
@@ -133,7 +133,7 @@ def test_overflow_duplicate_uri_removes_every_occurrence_and_preserves_selected_
     # Purge the old occurrence first, then append both selected occurrences.
     assert world.playlists["archive"]["track_uris"] == [uri(4), uri(1), uri(1)]
     assert [path for _, path, _ in world.writes] == [
-        "/playlists/archive/items", "/playlists/target/items", "/playlists/archive/items",
+        "/playlists/archive/items", "/playlists/archive/items", "/playlists/target/items",
     ]
 
 
@@ -338,9 +338,9 @@ def test_intermediate_snapshot_only_external_edit_is_not_adopted_as_our_baseline
     world.dispatch = dispatch
     with pytest.raises(NeedsAttention):
         run(world, config(rotation_count=1))
-    assert len(world.writes) == 2
+    assert len(world.writes) == 1
     assert world.playlists["archive"]["track_uris"] == [uri(2), uri(1)]
-    assert world.playlists["target"]["track_uris"] == []
+    assert world.playlists["target"]["track_uris"] == [uri(1)]
 
 
 def test_without_outer_journal_observer_no_write_can_bypass_the_durable_transport():
@@ -441,3 +441,135 @@ def test_recovery_never_compensates_or_overwrites_an_external_edit(monkeypatch):
     assert len(world.writes) == 1
     assert world.saved["phase"] == "forward"
     assert world.saved["status"] == "needs_attention"
+
+
+def _union(world):
+    return set(world.playlists["target"]["track_uris"]) | set(world.playlists["archive"]["track_uris"])
+
+
+def _interrupt_after_each_write(world_factory, command, writes, monkeypatch):
+    """Cut after every acknowledged wire write; no cut may leave a track in neither playlist."""
+    monkeypatch.setattr("random.sample", lambda values, count: values[:count])
+    for cut_after in range(1, writes + 1):
+        world = world_factory()
+        everything = _union(world)
+        original_checkpoint = world.checkpoint
+
+        def cut(document, original_checkpoint=original_checkpoint, cut_after=cut_after):
+            saved = original_checkpoint(document)
+            acknowledged = [item for step in document.get("plans", []) for item in step["batches"]
+                            if item["state"] == "acknowledged"]
+            if len(acknowledged) == cut_after:
+                raise Crash("after acknowledged write")
+            return saved
+
+        world.checkpoint = cut
+        with pytest.raises(Crash):
+            run(world, command)
+        assert len(world.writes) == cut_after
+        assert everything <= _union(world), f"track lost after write {cut_after}"
+        world.checkpoint = original_checkpoint
+        run(world, command)
+        assert len(world.writes) == writes
+
+
+def test_overflow_never_loses_a_track_at_any_interruption_point(monkeypatch):
+    _interrupt_after_each_write(
+        lambda: world_with([uri(index) for index in range(1, 7)], [uri(20)]),
+        config(target_size=4), 2, monkeypatch)
+
+
+def test_swap_never_loses_a_track_at_any_interruption_point(monkeypatch):
+    _interrupt_after_each_write(
+        lambda: world_with([uri(1), uri(2), uri(3)], [uri(4), uri(5), uri(6)]),
+        config(rotation_count=2), 4, monkeypatch)
+
+
+def test_overflow_archives_selected_tracks_before_removing_them(monkeypatch):
+    world = world_with([uri(1), uri(2), uri(3)], [uri(9)])
+    monkeypatch.setattr("random.sample", lambda values, count: values[:count])
+    run(world, config(target_size=2))
+    assert [(method, path) for method, path, _ in world.writes] == [
+        ("POST", "/playlists/archive/items"), ("DELETE", "/playlists/target/items")]
+
+
+def test_swap_adds_before_it_removes(monkeypatch):
+    world = world_with([uri(1), uri(2), uri(3)], [uri(4), uri(5), uri(6)])
+    monkeypatch.setattr("random.sample", lambda values, count: values[-count:])
+    run(world, config(rotation_count=2))
+    assert [(method, path) for method, path, _ in world.writes] == [
+        ("POST", "/playlists/archive/items"), ("POST", "/playlists/target/items"),
+        ("DELETE", "/playlists/target/items"), ("DELETE", "/playlists/archive/items"),
+    ]
+
+
+def _old_order_actions(prepared):
+    """Rebuild the previous remove-before-add action order from a prepared rotation."""
+    before, choices = prepared["before"], prepared["choices"]
+    current = deepcopy(before)
+    actions = []
+
+    def action(kind, resource, values, phase):
+        if not values:
+            return
+        baseline = deepcopy(current[resource])
+        if kind == "remove":
+            gone = set(values)
+            current[resource]["track_uris"] = [u for u in baseline["track_uris"] if u not in gone]
+        else:
+            current[resource]["track_uris"].extend(values)
+        actions.append({"kind": kind, "resource": resource, "track_uris": list(values),
+                        "before": baseline, "phase": phase})
+
+    action("remove", "archive", choices["purged_uris"], "archive_purge")
+    archive_set = set(current["archive"]["track_uris"])
+    if choices["phase"] == "overflow":
+        selected = choices["overflow_uris"]
+        action("remove", "target", selected, "rotate")
+        action("add", "archive", [u for u in selected if u not in archive_set], "rotate")
+    else:
+        incoming, outgoing = choices["swap_in_uris"], choices["swap_out_uris"]
+        action("remove", "target", outgoing, "rotate")
+        action("add", "archive", [u for u in outgoing if u not in archive_set], "rotate")
+        action("remove", "archive", incoming, "rotate")
+        action("add", "target", incoming, "rotate")
+    return actions, current
+
+
+@pytest.mark.parametrize("target, archive, change", [
+    ([uri(1), uri(2), uri(3)], [uri(4), uri(5), uri(6)], {"rotation_count": 2}),
+    ([uri(1), uri(2), uri(3)], [uri(1), uri(4), uri(5)], {"rotation_count": 2, "protect_count": 1}),
+    ([uri(1), uri(2), uri(3), uri(4)], [uri(9)], {"target_size": 2}),
+])
+def test_new_order_reaches_the_same_final_states_as_the_old_order(monkeypatch, target, archive, change):
+    from shuffify.services.operations.executors.rotate import prepare_rotate
+
+    monkeypatch.setattr("random.sample", lambda values, count: values[-count:])
+    world = world_with(target, archive)
+    prepared = prepare_rotate(RotateRuntime(world), config(**change), prepare_key="rotate")
+    _, old_desired = _old_order_actions(prepared)
+    assert prepared["desired"] == old_desired
+    run(world, config(**change), prepare_key="rotate")
+    for name in ("target", "archive"):
+        assert world.playlists[name]["track_uris"] == old_desired[name]["track_uris"]
+
+
+@pytest.mark.parametrize("target, archive, change", [
+    ([uri(1), uri(2), uri(3)], [uri(1), uri(4), uri(5)], {"rotation_count": 2}),
+    ([uri(1), uri(2), uri(3), uri(4)], [uri(9)], {"target_size": 2}),
+])
+def test_journal_frozen_before_the_reorder_still_replays_to_the_same_final_state(
+        monkeypatch, target, archive, change):
+    from shuffify.services.operations.executors.rotate import prepare_rotate
+
+    monkeypatch.setattr("random.sample", lambda values, count: values[-count:])
+    world = world_with(target, archive)
+    command = config(**change)
+    prepared = prepare_rotate(RotateRuntime(world), command, prepare_key="rotate")
+    old_actions, old_desired = _old_order_actions(prepared)
+    world.saved["runtime"]["prepared"]["rotate"]["actions"] = old_actions
+
+    run(world, command, prepare_key="rotate")
+
+    for name in ("target", "archive"):
+        assert world.playlists[name]["track_uris"] == old_desired[name]["track_uris"]
