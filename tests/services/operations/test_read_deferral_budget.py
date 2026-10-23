@@ -7,8 +7,8 @@ import pytest
 from sqlalchemy import update
 
 from shuffify.models.db import JobExecution
-from shuffify.services.operations.runtime import OperationRuntime
 from shuffify.services.operations.repository import PlaylistNeedsReview
+from shuffify.services.operations.runtime import OperationRuntime
 from shuffify.spotify.deadline import SpotifyDeadlineError
 from shuffify.spotify.exceptions import SpotifyRateLimitError, SpotifyReadTransientError
 from tests.services.operations.test_composite_runtime import composite as composite

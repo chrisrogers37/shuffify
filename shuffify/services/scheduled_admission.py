@@ -207,7 +207,8 @@ def admit_scheduled(
     except PlaylistNeedsReview as blocked:
         # Routine skipped: an earlier run on this playlist needs review. Restore or resolve it first.
         logger.warning(
-            "Scheduled fire skipped: an earlier run needs review (schedule_id=%s scheduled_for=%s blocking_operation_id=%s)",
+            "Scheduled fire skipped: an earlier run needs review "
+            "(schedule_id=%s scheduled_for=%s blocking_operation_id=%s)",
             schedule_id, due.isoformat(), blocked.operation_id,
         )
         return AdmissionResult("skipped", due, code="needs_attention", blocking_operation_id=blocked.operation_id)

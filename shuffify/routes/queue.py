@@ -7,7 +7,10 @@ from shuffify.services.live_operation_service import direct_rejected_result, dir
 from shuffify.services.live_playlist_service import LivePlaylistService
 from shuffify.services.operations.history import HistoryStore, get_history_scope
 from shuffify.services.operations.repository import (
-    BusyOperation, OperationRepository, PlaylistNeedsReview, RequestKeyConflict,
+    BusyOperation,
+    OperationRepository,
+    PlaylistNeedsReview,
+    RequestKeyConflict,
 )
 from shuffify.services.state_service import PLAYLIST_STATES_KEY, StateError
 

@@ -1,8 +1,10 @@
 """Review and restore known effects through the isolated HTTP API and worker."""
 
 import pytest
+import requests
 
-from tests.e2e.conftest import App, pid
+from harness.fake_spotify import tokens
+from tests.e2e.conftest import FAKE, App, pid
 from tests.paths import api_path
 
 pytestmark = pytest.mark.integration
@@ -25,6 +27,18 @@ def interrupted_save(alice, fake):
     assert fake.uris(TARGET) == desired[:100]
     assert parent["recovery"]["available"] is True, parent["recovery"]
     return parent, baseline
+
+
+def edit_outside_shuffify(user, playlist_id, uris):
+    """Reorder a playlist as its owner would in Spotify itself, without an operation in Shuffify."""
+    token = tokens.mint("access", 3600, user=user, scope="playlist-modify-public playlist-modify-private")
+    response = requests.put(
+        f"{FAKE}/v1/playlists/{playlist_id}/items",
+        json={"uris": uris},
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=10,
+    )
+    assert response.status_code == 200, response.text
 
 
 def test_reviewed_restoration_resolves_the_original_and_replays_one_child(alice, fake):
@@ -57,14 +71,8 @@ def test_review_change_refuses_restore_before_writing_and_allows_fresh_review(al
     context = alice.ok("get", f"/operations/{parent['id']}/restore-context")["context"]
     current = fake.uris(TARGET)
     changed = current[1:] + current[:1]
-    saved = alice.queued(
-        f"/workshop/{TARGET}/commit",
-        json={
-            "baseline_track_uris": current,
-            "track_uris": changed,
-        },
-    )
-    assert saved["state"] == "succeeded", saved
+    edit_outside_shuffify("alice", TARGET, changed)
+    assert fake.uris(TARGET) == changed
     before = fake.playlist(TARGET)
     refused = alice.queued(f"/operations/{parent['id']}/restore", json={"reviewed": context["reviewed"]})
     assert refused["state"] == "failed", refused

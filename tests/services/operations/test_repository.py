@@ -13,7 +13,11 @@ from sqlalchemy.schema import CreateSchema, DropSchema
 
 from shuffify.models.db import JobExecution, Schedule, User, db
 from shuffify.services.operations.repository import (
-    BusyOperation, LeaseLost, OperationRepository, PlaylistNeedsReview, RequestKeyConflict,
+    BusyOperation,
+    LeaseLost,
+    OperationRepository,
+    PlaylistNeedsReview,
+    RequestKeyConflict,
 )
 from shuffify.services.playlist_lock import playlist_lock
 
