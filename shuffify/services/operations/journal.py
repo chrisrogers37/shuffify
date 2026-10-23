@@ -12,6 +12,7 @@ from shuffify.spotify.exceptions import (
     SpotifyForbiddenError,
     SpotifyNotFoundError,
     SpotifyRateLimitError,
+    SpotifyReadTransientError,
     SpotifyWriteRejectedError,
     SpotifyWriteUnverifiedError,
 )
@@ -19,7 +20,7 @@ from shuffify.spotify.http_client import _quota_exceeded, _retry_after
 from shuffify.spotify.observation import observe_mutations
 
 from .planner import batch, content, plan, state_hash
-from .recovery import reconcile_resource
+from .recovery import CHANGED, CURRENT, STALE, STALE_READ, observation_verdict, reconcile_resource, walk
 
 READ_DEFERRAL_LIMIT = 8
 READ_DEFERRAL_WINDOW_SECONDS = 15 * 60
@@ -438,6 +439,21 @@ class DurableJournal:
         self._release_read_budget(self._read_key("resource", resource))
         return result
 
+    def _settle_lag(self, resource, reason):
+        """Defer, within the read budget, a read that lags an acknowledged write."""
+        key = self._read_key("stale", resource)
+        if reason == STALE_READ:
+            self.defer_read(SpotifyReadTransientError("The playlist read lags the last acknowledged write"), key)
+        self._release_read_budget(key)
+
+    def _verdict(self, resource, observed, expected):
+        """Judge an observation against `expected` using the resource's own known snapshot chain."""
+        base, batches = self._resource_ledger(resource)
+        _, snapshot, earlier, _ = walk(base, batches)
+        verdict = observation_verdict(observed, expected, snapshot, earlier)
+        self._settle_lag(resource, STALE_READ if verdict == STALE else None)
+        return verdict
+
     def _read(self, resource, *, scope=None):
         scope = scope or self.doc["resources"].get(resource, {}).get("scope", "tracks")
         if scope == "metadata":
@@ -526,6 +542,7 @@ class DurableJournal:
         observed = self._read(resource)
         baseline, batches = self._resource_ledger(resource)
         _, reason = reconcile_resource(baseline, batches, observed)
+        self._settle_lag(resource, reason)
         if reason not in {None, 'replay_settled'}:
             self._attention(reason, {resource: observed})
             raise NeedsAttention(reason)
@@ -665,6 +682,7 @@ class DurableJournal:
                 observed = self._read(resource)
             observations[resource] = observed
             acknowledgements, reason = reconcile_resource(base, batches, observed)
+            self._settle_lag(resource, reason)
             if reason and reason != "replay_settled":
                 return self._attention(reason, observations)
             updates.append((resource, acknowledgements, reason))
@@ -738,9 +756,7 @@ class DurableJournal:
                 resource = step["resource"]
                 if resource is not None:
                     observed = self._before_batch(step, item)
-                    matches = content(observed) == item["before"]
-                    expected_snapshot = self._expected_snapshot(resource)
-                    if not matches or expected_snapshot and observed.get("snapshot_id") != expected_snapshot:
+                    if self._verdict(resource, observed, item["before"]) != CURRENT:
                         return self._attention("external_edit", {resource: observed})
                     item["snapshot_before"] = observed.get("snapshot_id")
                 try:
@@ -829,6 +845,7 @@ class DurableJournal:
             # The second observation protects compensation from an edit after reconciliation.
             base, batches = self._resource_ledger(resource)
             _, reason = reconcile_resource(base, batches, observed)
+            self._settle_lag(resource, reason)
             if reason:
                 return self._attention(reason, {resource: observed})
             baseline = content(observed)
@@ -928,9 +945,7 @@ class DurableJournal:
             raise JournalError("The HTTP mutation differs from its frozen batch")
         if item["attempts"] and step["resource"] is not None:
             observed = self._before_batch(step, item)
-            metadata_only = self.doc["resources"][step["resource"]].get("scope") == "metadata"
-            if content(observed) != item["before"] or (
-                    not metadata_only and observed.get("snapshot_id") != item["snapshot_before"]):
+            if self._verdict(step["resource"], observed, item["before"]) == CHANGED:
                 self._attention("external_edit", {step["resource"]: observed})
                 raise NeedsAttention("external_edit")
         item["state"] = "dispatched"
