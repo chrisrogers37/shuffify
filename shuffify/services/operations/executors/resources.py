@@ -3,7 +3,6 @@
 from copy import deepcopy
 
 from shuffify.services.operations.journal import NeedsAttention
-from shuffify.services.operations.planner import content
 
 
 def observe_resources(runtime, before):

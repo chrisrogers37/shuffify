@@ -8,8 +8,8 @@ import pytest
 from shuffify.services.operations.journal import OperationDeferred, ReadRetryExhausted
 from shuffify.spotify.exceptions import SpotifyWriteRejectedError
 from tests.services.operations.test_crash_recovery import Crash, World, uri
-from tests.services.operations.test_restore_command import restoration  # noqa: F401
-from tests.services.operations.test_routine_commands import routine  # noqa: F401
+from tests.services.operations.test_restore_command import restoration as restoration
+from tests.services.operations.test_routine_commands import routine as routine
 
 BASELINE = [uri(index) for index in range(300)]
 DESIRED = [uri(1000 + index) for index in range(300)]
@@ -466,7 +466,10 @@ def test_a_baseline_read_under_an_unknown_snapshot_is_still_a_changed_baseline()
 def test_a_page_total_that_moves_between_pages_is_a_changed_read_not_a_malformed_one(monkeypatch):
     from shuffify.services import workshop_commit_service as module
     from shuffify.services.workshop_commit_service import (
-        IncompletePlaylistRead, PlaylistChangedDuringRead, WorkshopCommitService)
+        IncompletePlaylistRead,
+        PlaylistChangedDuringRead,
+        WorkshopCommitService,
+    )
 
     monkeypatch.setattr(module, "_READ_PAGE_SIZE", 1)
 

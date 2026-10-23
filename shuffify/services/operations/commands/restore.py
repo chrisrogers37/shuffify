@@ -12,7 +12,6 @@ from shuffify.models.db import JobExecution
 from shuffify.services.operations.bookkeeping import OperationBookkeeping
 from shuffify.services.operations.control import propagate_control
 from shuffify.services.operations.executors.resources import expected_baseline
-from shuffify.services.operations.planner import content
 from shuffify.services.operations.restoration import RestoreCapture, RestoreUnavailable, capture_restore
 from shuffify.services.operations.restore_attempts import require_no_attempt
 from shuffify.services.operations.restore_review import RestoreReview, assert_reviewed, read_all

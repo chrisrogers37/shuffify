@@ -453,10 +453,10 @@ class DurableJournal:
         snapshot for callers that carry their own frozen expectation.
         """
         base, batches = self._resource_ledger(resource)
-        _, chain, earlier, _ = walk(base, batches)
+        chain_expected, chain, earlier, _ = walk(base, batches)
         if not chain_snapshot and chain:
             # The caller's snapshot may predate an acknowledged write; the latest one is as good.
-            earlier = earlier + [(expected, chain)]
+            earlier = earlier + [(chain_expected, chain)]
         verdict = observation_verdict(observed, expected, chain if chain_snapshot else snapshot, earlier)
         self._settle_lag(resource, STALE_READ if verdict == STALE else None)
         return verdict
