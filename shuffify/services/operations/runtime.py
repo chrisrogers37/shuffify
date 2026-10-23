@@ -363,17 +363,26 @@ class OperationRuntime:
                 "metadata": {name: metadata.get(name) for name in ("name", "public", "description")}}
 
     def read_resource(self, playlist_id):
-        """Authorize two complete uncached reads with a stable snapshot and order."""
-        from shuffify.services.workshop_commit_service import IncompletePlaylistRead, WorkshopCommitService
+        """Authorize two complete uncached reads with a stable snapshot and order.
+
+        Right after a write Spotify's reads can briefly disagree with each other. That
+        disagreement between the paired reads is a transient read failure, retried
+        within the journal's read budget, not a hard incomplete read.
+        """
+        from shuffify.services.workshop_commit_service import PlaylistChangedDuringRead, WorkshopCommitService
+        from shuffify.spotify.exceptions import SpotifyReadTransientError
 
         reader = WorkshopCommitService(self.api)
-        first = reader.read_complete(playlist_id, self.user.spotify_id)
-        second = reader.read_complete(playlist_id, self.user.spotify_id)
+        try:
+            first = reader.read_complete(playlist_id, self.user.spotify_id)
+            second = reader.read_complete(playlist_id, self.user.spotify_id)
+        except PlaylistChangedDuringRead as error:
+            raise SpotifyReadTransientError("The playlist changed while it was being read") from error
         if first.track_uris != second.track_uris or first.snapshot_id != second.snapshot_id:
-            raise IncompletePlaylistRead("Playlist changed during reconciliation")
+            raise SpotifyReadTransientError("The playlist changed while it was being read")
         metadata = self.api.get_playlist(playlist_id, skip_cache=True)
         if metadata.get("snapshot_id") != second.snapshot_id:
-            raise IncompletePlaylistRead("Playlist changed during reconciliation")
+            raise SpotifyReadTransientError("The playlist changed while it was being read")
         return {
             "track_uris": list(second.track_uris), "snapshot_id": second.snapshot_id,
             "metadata": {name: metadata.get(name) for name in ("name", "public", "description")},

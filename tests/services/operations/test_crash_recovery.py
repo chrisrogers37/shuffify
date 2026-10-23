@@ -41,12 +41,14 @@ class World:
         self.writes = []
         self.revision = 0
         # Opt-in read lag: after each effective write, the next `lag_reads`
-        # reads return the pre-write snapshot_id ("snapshot") or the whole
-        # pre-write playlist ("full") while the write itself is applied.
+        # reads of the written playlist return the pre-write snapshot_id
+        # ("snapshot") or the whole pre-write playlist ("full") while the
+        # write itself is applied. `lag_resources` limits it to some playlists.
         self.lag_reads = 0
         self.lag_mode = "snapshot"
-        self.lag_left = 0
-        self.lag_view = None
+        self.lag_resources = None
+        self.lag_left = {}
+        self.lag_view = {}
 
     def point(self, label):
         self.trace.append(label)
@@ -62,10 +64,10 @@ class World:
     def read(self, resource):
         self.point("read.before")
         state = deepcopy(self.playlists[resource])
-        if self.lag_left and resource == "target":
-            self.lag_left -= 1
-            state = deepcopy(self.lag_view) if self.lag_mode == "full" else {
-                **state, "snapshot_id": self.lag_view["snapshot_id"]}
+        if self.lag_left.get(resource):
+            self.lag_left[resource] -= 1
+            view = self.lag_view[resource]
+            state = deepcopy(view) if self.lag_mode == "full" else {**state, "snapshot_id": view["snapshot_id"]}
         self.point("read.after")
         return state
 
@@ -95,8 +97,8 @@ class World:
         if state != before:
             self.revision += 1
             state["snapshot_id"] = f"snapshot-{self.revision}"
-            if self.lag_reads:
-                self.lag_left, self.lag_view = self.lag_reads, before
+            if self.lag_reads and (self.lag_resources is None or resource in self.lag_resources):
+                self.lag_left[resource], self.lag_view[resource] = self.lag_reads, before
         self.point("spotify.applied")
         result = {"snapshot_id": state["snapshot_id"]} if path.endswith("/items") else None
         self.point("spotify.response")

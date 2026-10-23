@@ -446,13 +446,24 @@ class DurableJournal:
             self.defer_read(SpotifyReadTransientError("The playlist read lags the last acknowledged write"), key)
         self._release_read_budget(key)
 
-    def _verdict(self, resource, observed, expected):
-        """Judge an observation against `expected` using the resource's own known snapshot chain."""
+    def _verdict(self, resource, observed, expected, snapshot=None, *, chain_snapshot=True):
+        """Judge an observation against `expected` using the resource's own known snapshot chain.
+
+        A stale read defers within the read budget. `snapshot` overrides the chain's expected
+        snapshot for callers that carry their own frozen expectation.
+        """
         base, batches = self._resource_ledger(resource)
-        _, snapshot, earlier, _ = walk(base, batches)
-        verdict = observation_verdict(observed, expected, snapshot, earlier)
+        _, chain, earlier, _ = walk(base, batches)
+        verdict = observation_verdict(observed, expected, chain if chain_snapshot else snapshot, earlier)
         self._settle_lag(resource, STALE_READ if verdict == STALE else None)
         return verdict
+
+    def observation_is_current(self, resource, observed, expected, snapshot):
+        """True when `observed` is the expected state of a resource this run wrote; defers a stale read."""
+        if resource not in self.doc["resources"]:
+            return content(observed) == content(expected) and (
+                not snapshot or observed.get("snapshot_id") == snapshot)
+        return self._verdict(resource, observed, content(expected), snapshot, chain_snapshot=False) == CURRENT
 
     def _read(self, resource, *, scope=None):
         scope = scope or self.doc["resources"].get(resource, {}).get("scope", "tracks")
@@ -508,12 +519,15 @@ class DurableJournal:
                 raise NeedsAttention("prepared_baseline_changed")
             if not unfinished:
                 observed = observed or self._read(resource, scope=scope)
-                if (content(observed) != baseline or scope != "metadata"
-                        and expected_baseline.get("snapshot_id") != observed.get("snapshot_id")):
+                if not self.observation_is_current(resource, observed, baseline, expected_baseline.get("snapshot_id")):
                     self._attention("prepared_baseline_changed", {resource: observed})
                     raise NeedsAttention("prepared_baseline_changed")
         if boundaries is not None and resource not in boundaries["current"]["baselines"]:
             snapshot = observed.get("snapshot_id") if observed is not None else self._expected_snapshot(resource)
+            if observed is not None and expected_baseline is not None and scope != "metadata":
+                # The observation was proved current against the expectation; a lagging
+                # read must not replace the acknowledged snapshot as the boundary's anchor.
+                snapshot = expected_baseline.get("snapshot_id") or snapshot
             boundaries["current"]["baselines"][resource] = {
                 "baseline": deepcopy(baseline), "snapshot_id": snapshot, "scope": scope,
             }
@@ -849,11 +863,17 @@ class DurableJournal:
             if reason:
                 return self._attention(reason, {resource: observed})
             baseline = content(observed)
+            forward, forward_snapshot, earlier, _ = walk(base, batches)
+            # The forward chain's own snapshot is the truth; a lagging read must not replace it.
+            snapshot = forward_snapshot if baseline == forward and forward_snapshot else observed.get("snapshot_id")
+            chain = [[state, known] for state, known in earlier]
+            if forward_snapshot:
+                chain.append([forward, forward_snapshot])
             for name, value in baseline["metadata"].items():
                 prior = original["baseline"]["metadata"].get(name)
                 if value != prior and prior is None:
                     return self._attention("baseline_metadata_unavailable", {resource: observed})
-            resources[resource] = {"baseline": baseline, "snapshot_id": observed.get("snapshot_id")}
+            resources[resource] = {"baseline": baseline, "snapshot_id": snapshot, "earlier": chain}
             if original.get("scope") == "metadata":
                 desired, replacement = baseline, []
             else:

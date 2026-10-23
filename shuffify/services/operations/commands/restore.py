@@ -155,10 +155,9 @@ def _apply(runtime, command):
     after = read_all(command.capture, runtime.read_resource, runtime.read_metadata_resource)
     for item in command.capture.observations:
         expected = expected_baseline(runtime, item.playlist_id, prepared["desired"][item.playlist_id])
-        if (
-            content(after[item.playlist_id]) != content(expected)
-            or item.scope == "tracks"
-            and after[item.playlist_id].get("snapshot_id") != expected.get("snapshot_id")
+        if not runtime.journal.observation_is_current(
+            item.playlist_id, after[item.playlist_id], expected,
+            expected.get("snapshot_id") if item.scope == "tracks" else None,
         ):
             from shuffify.services.operations.journal import NeedsAttention
 

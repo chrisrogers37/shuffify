@@ -41,6 +41,10 @@ class IncompletePlaylistRead(Exception):
     """The response cannot establish one complete, consistent track order."""
 
 
+class PlaylistChangedDuringRead(IncompletePlaylistRead):
+    """The revision or item count moved while one read was in flight (a write, or a lagging read)."""
+
+
 class UnsupportedPlaylistItems(Exception):
     """The playlist contains items Workshop cannot safely represent."""
 
@@ -310,16 +314,14 @@ class WorkshopCommitService:
         # A stable count alone misses order-only changes between pages. Fail
         # closed when Spotify omits the revision needed to bracket this read.
         snapshot_id = before.get("snapshot_id")
-        if (
-            not isinstance(snapshot_id, str)
-            or not snapshot_id
-            or snapshot_id != after.get("snapshot_id")
-        ):
+        if not isinstance(snapshot_id, str) or not snapshot_id:
             raise IncompletePlaylistRead()
+        if snapshot_id != after.get("snapshot_id"):
+            raise PlaylistChangedDuringRead()
         for metadata in (before, after):
             count = playlist_item_count(metadata, default=None)
             if count is not None and count != total:
-                raise IncompletePlaylistRead()
+                raise PlaylistChangedDuringRead()
         return ObservedPlaylist(
             name=before.get("name", "Playlist"),
             track_uris=tuple(track["uri"] for track in tracks),

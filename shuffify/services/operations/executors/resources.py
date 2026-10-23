@@ -33,7 +33,7 @@ def verify_resources(runtime, desired, label):
         runtime.check_pending_control()
         expected = expected_baseline(runtime, resource, frozen)
         observed = runtime.read_resource(resource)
-        if content(observed) != content(frozen) or observed.get('snapshot_id') != expected.get('snapshot_id'):
+        if not runtime.journal.observation_is_current(resource, observed, frozen, expected.get('snapshot_id')):
             raise NeedsAttention(label + '_verification_failed')
         after[resource] = observed
     protect_verified_resources(runtime)

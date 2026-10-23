@@ -22,7 +22,8 @@ def _remember(points, state, snapshot):
 def walk(resource, batches):
     """Return the expected state and snapshot, the earlier known points, and the first unacknowledged batch."""
     expected, snapshot = resource["baseline"], resource.get("snapshot_id")
-    earlier, pending = [], None
+    # A compensating resource carries the forward chain it replaces.
+    earlier, pending = [(state, known) for state, known in resource.get("earlier", [])], None
     for item in batches:
         if item["state"] == "acknowledged":
             _remember(earlier, expected, snapshot)
@@ -50,8 +51,11 @@ def observation_verdict(observed, expected, snapshot, earlier):
     """
     current = content(observed)
     observed_snapshot = observed.get("snapshot_id")
+    if current.get("scope") == "metadata":
+        # A snapshot is no evidence for metadata-only content.
+        return CURRENT if current == expected else CHANGED
     if current == expected:
-        if (current.get("scope") == "metadata" or not snapshot or observed_snapshot == snapshot
+        if (not snapshot or observed_snapshot == snapshot
                 or any(observed_snapshot == known for _, known in earlier)):
             return CURRENT
         return CHANGED
@@ -73,20 +77,22 @@ def reconcile_resource(resource, batches, observed):
         return [], "invalid_journal"
     # A dispatched batch may or may not have landed, so here the snapshot is
     # evidence: a landed write always moves it to a revision we have not seen.
+    compatible = metadata_only or not snapshot or observed.get("snapshot_id") == snapshot
     # A snapshot this run already passed is the same signature as the pre-dispatch one: a lagging read.
-    compatible = (metadata_only or not snapshot or observed.get("snapshot_id") == snapshot
-                  or any(observed.get("snapshot_id") == known for _, known in earlier))
+    lagged = compatible or any(observed.get("snapshot_id") == known for _, known in earlier)
     if current == pending["after"]:
         # A no-effect batch is safe to acknowledge without guessing a duplicate-sensitive cursor.
-        if current != expected or compatible:
-            if current != expected and pending["path"].endswith("/items") and compatible:
+        if current != expected or lagged:
+            if current != expected and pending["path"].endswith("/items") and lagged:
                 # The new content under the pre-dispatch snapshot is the signature of a
                 # lagging read, but it cannot be told from a foreign identical edit, so
                 # a dispatched batch is neither acknowledged nor replayed.
                 return [], "snapshot_ambiguous"
             return [pending], None
-    if current == expected and compatible:
-        if observed.get("settled") is True:
+    if current == expected and lagged:
+        # Only the exact pre-dispatch snapshot proves a replay is safe; an earlier snapshot is
+        # the lag signature of a write that may have landed, so it is never replayed.
+        if compatible and observed.get("settled") is True:
             return [], "replay_settled"
         return [], "unsettled_dispatch"
     return [], mismatch
