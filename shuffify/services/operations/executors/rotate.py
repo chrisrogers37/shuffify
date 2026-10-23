@@ -117,8 +117,9 @@ def _prepare(runtime, config):
         choices["phase"] = "overflow"
         selected = _sample_at_most(eligible, len(production) - config.target_size)
         choices["overflow_uris"] = selected
-        action("remove", target, selected, "rotate")
+        # Archive first: an interruption leaves a duplicate, never a lost track.
         action("add", archive, [uri for uri in selected if uri not in archive_set], "rotate")
+        action("remove", target, selected, "rotate")
     else:
         choices["phase"] = "swap"
         incoming = list(archived[:config.rotation_count])
@@ -126,12 +127,14 @@ def _prepare(runtime, config):
         choices["swap_in_uris"], choices["swap_out_uris"] = incoming, outgoing
         if incoming and outgoing:
             result["tracks_added"] = min(len(incoming), len(outgoing))
-            action("remove", target, outgoing, "rotate")
+            # Both adds precede both removes so every interruption leaves a
+            # track in at least one playlist (at worst in both).
             action("add", archive, [uri for uri in outgoing if uri not in archive_set], "rotate")
-            action("remove", archive, incoming, "rotate")
             # Keep the full FIFO incoming list even if fewer outgoing
             # tracks were eligible; tracks_added still reports the minimum.
             action("add", target, incoming, "rotate")
+            action("remove", target, outgoing, "rotate")
+            action("remove", archive, incoming, "rotate")
     result["tracks_total"] = len(current[target]["track_uris"])
     return prepared()
 
