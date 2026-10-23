@@ -286,13 +286,16 @@ class WorkshopCommitService:
                 or page_total < 0
                 or type(page.get("offset")) is not int
                 or page["offset"] != offset
-                or (total is not None and page_total != total)
                 or len(items) > _READ_PAGE_SIZE
             ):
                 raise IncompletePlaylistRead()
+            if total is not None and page_total != total:
+                raise PlaylistChangedDuringRead()
             total = page_total
             end = offset + len(items)
-            if end > total or (end < total and not items):
+            if end > total:
+                raise PlaylistChangedDuringRead()
+            if end < total and not items:
                 raise IncompletePlaylistRead()
             for entry in items:
                 tracks.append(self._represent_track(entry))

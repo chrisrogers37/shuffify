@@ -411,3 +411,87 @@ def test_reviewed_restore_completes_under_lag(restoration, reads):
         make_row_due(restoration, row.id)
     assert completed.state == "succeeded", completed.journal.get("recovery")
     assert restoration.world.playlists["target"]["track_uris"] == [uri(1), uri(2), uri(3)]
+
+
+@pytest.mark.parametrize("reads", [1, 2, 4])
+def test_lagging_track_list_under_the_fresh_snapshot_defers_instead_of_an_external_edit(reads):
+    world = lagging(BASELINE, mode="items", reads=reads)
+    journal = world.journal()
+    journal.freeze_replace("target", DESIRED)
+    outcomes = []
+    try:
+        outcomes.append(journal.resume())
+    except OperationDeferred:
+        pass
+    for _ in range(40):
+        if outcomes:
+            break
+        make_due(world)
+        try:
+            outcomes.append(world.journal().resume())
+        except OperationDeferred:
+            pass
+    assert outcomes[-1]["state"] == "succeeded", outcomes
+    assert tracks(world) == DESIRED
+
+
+def test_a_baseline_frozen_during_lag_still_matches_the_acknowledged_snapshot():
+    world = lagging(BASELINE, reads=0)
+    journal = world.journal()
+    first = DESIRED[:100]
+    journal.freeze_replace("target", first)
+    journal.resume()
+    stale_snapshot = "snapshot-0"  # what a read taken during the lag would have frozen
+    frozen = {"track_uris": first, "metadata": world.playlists["target"]["metadata"], "snapshot_id": stale_snapshot}
+    journal = world.journal()
+    journal.freeze_replace("target", DESIRED[:50], expected_baseline=frozen)
+    assert journal.resume()["state"] == "succeeded"
+    assert tracks(world) == DESIRED[:50]
+
+
+def test_a_baseline_read_under_an_unknown_snapshot_is_still_a_changed_baseline():
+    from shuffify.services.operations.journal import NeedsAttention
+
+    world = lagging(BASELINE, reads=0)
+    journal = world.journal()
+    journal.freeze_replace("target", DESIRED[:100])
+    journal.resume()
+    frozen = {"track_uris": DESIRED[:100], "metadata": world.playlists["target"]["metadata"],
+              "snapshot_id": "snapshot-0"}
+    world.playlists["target"]["snapshot_id"] = "someone-else"
+    with pytest.raises(NeedsAttention):
+        world.journal().freeze_replace("target", DESIRED[:50], expected_baseline=frozen)
+
+
+def test_a_page_total_that_moves_between_pages_is_a_changed_read_not_a_malformed_one(monkeypatch):
+    from shuffify.services import workshop_commit_service as module
+    from shuffify.services.workshop_commit_service import (
+        IncompletePlaylistRead, PlaylistChangedDuringRead, WorkshopCommitService)
+
+    monkeypatch.setattr(module, "_READ_PAGE_SIZE", 1)
+
+    def read(pages):
+        pages = iter(pages)
+
+        class Api:
+            def get_playlist(self, playlist_id, **kwargs):
+                return {"id": playlist_id, "owner": {"id": "owner"}, "snapshot_id": "s", "name": "n",
+                        "items": {"total": 2}}
+
+            def get_playlist_items_raw(self, playlist_id, limit=50, offset=0):
+                return next(pages)
+
+        return WorkshopCommitService(Api())._read_current("target", "owner")
+
+    def item(number):
+        return {"track": {"uri": uri(number), "name": "n", "artists": [], "type": "track"}}
+
+    next_url = "https://x.invalid/items?offset=1"
+    with pytest.raises(PlaylistChangedDuringRead):
+        read([{"offset": 0, "total": 2, "items": [item(1)], "next": next_url},
+              {"offset": 1, "total": 3, "items": [item(2)], "next": None}])
+    with pytest.raises(PlaylistChangedDuringRead):
+        read([{"offset": 0, "total": 0, "items": [item(1)], "next": None}])
+    with pytest.raises(IncompletePlaylistRead) as malformed:
+        read([{"offset": 0, "total": 2, "items": "bad", "next": None}])
+    assert type(malformed.value) is IncompletePlaylistRead

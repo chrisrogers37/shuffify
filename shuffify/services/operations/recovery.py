@@ -61,6 +61,10 @@ def observation_verdict(observed, expected, snapshot, earlier):
         return CHANGED
     if any(current == state and observed_snapshot == known for state, known in earlier):
         return STALE
+    # The track list can lag while the snapshot is already fresh: an earlier state under the
+    # latest acknowledged snapshot. A real edit always moves the snapshot, so this is a lag too.
+    if snapshot and observed_snapshot == snapshot and any(current == state for state, _ in earlier):
+        return STALE
     return CHANGED
 
 

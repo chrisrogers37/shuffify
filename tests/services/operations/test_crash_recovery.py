@@ -67,7 +67,13 @@ class World:
         if self.lag_left.get(resource):
             self.lag_left[resource] -= 1
             view = self.lag_view[resource]
-            state = deepcopy(view) if self.lag_mode == "full" else {**state, "snapshot_id": view["snapshot_id"]}
+            if self.lag_mode == "full":
+                state = deepcopy(view)
+            elif self.lag_mode == "items":
+                # The track list lags while the snapshot is already the fresh one.
+                state = {**deepcopy(view), "snapshot_id": state["snapshot_id"]}
+            else:
+                state = {**state, "snapshot_id": view["snapshot_id"]}
         self.point("read.after")
         return state
 
