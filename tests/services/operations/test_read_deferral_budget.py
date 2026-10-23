@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import update
 
 from shuffify.models.db import JobExecution
+from shuffify.services.operations.repository import PlaylistNeedsReview
 from shuffify.services.operations.runtime import OperationRuntime
 from shuffify.spotify.deadline import SpotifyDeadlineError
 from shuffify.spotify.exceptions import SpotifyRateLimitError, SpotifyReadTransientError
@@ -303,7 +304,9 @@ def test_permanent_compensation_read_outage_releases_without_unproved_rollback(t
     assert completed.state == 'needs_attention'
     assert terminal.world.uris == AFTER and terminal.world.calls == 1
     assert completed.journal['result']['success'] is False
-    assert terminal.accept().id != row.id
+    with pytest.raises(PlaylistNeedsReview) as refused:
+        terminal.accept()
+    assert refused.value.operation_id == row.id
 
 
 def test_terminal_read_deferrals_are_bounded_without_replaying_verified_writes(terminal, monkeypatch):
@@ -323,7 +326,9 @@ def test_terminal_read_deferrals_are_bounded_without_replaying_verified_writes(t
     completed = terminal.repository.get(row.id)
     assert finished is True and completed.state == 'needs_attention'
     assert handler.executions == 1 and terminal.world.calls == 1
-    assert terminal.accept().id != row.id
+    with pytest.raises(PlaylistNeedsReview) as refused:
+        terminal.accept()
+    assert refused.value.operation_id == row.id
 
 
 def test_exhaustion_preserves_fresh_verified_publication_protection(terminal, monkeypatch):
@@ -345,7 +350,9 @@ def test_exhaustion_preserves_fresh_verified_publication_protection(terminal, mo
     assert finished is True and completed.state == 'needs_attention'
     assert terminal.world.uris == AFTER and terminal.world.calls == 1
     assert not completed.journal.get('compensation')
-    assert terminal.accept().id != row.id
+    with pytest.raises(PlaylistNeedsReview) as refused:
+        terminal.accept()
+    assert refused.value.operation_id == row.id
 
 
 @pytest.mark.parametrize('reason', ['read_retry_exhausted', 'domain_failed'])
@@ -387,7 +394,10 @@ def test_crash_after_abort_preserves_verified_read_exhaustion_but_keeps_domain_r
         assert completed.state == 'needs_attention'
         assert terminal.world.uris == AFTER and terminal.world.calls == 1
         assert not completed.journal.get('compensation')
+        with pytest.raises(PlaylistNeedsReview) as refused:
+            terminal.accept()
+        assert refused.value.operation_id == row.id
     else:
         assert completed.state == 'rolled_back'
         assert terminal.world.uris == BEFORE and terminal.world.calls == 2
-    assert terminal.accept().id != row.id
+        assert terminal.accept().id != row.id

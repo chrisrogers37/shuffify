@@ -4,6 +4,7 @@
 import pytest
 
 from shuffify.services.executors.base_executor import PlaylistVerificationError
+from shuffify.services.operations.repository import PlaylistNeedsReview
 from shuffify.services.operations.runtime import OperationRuntime
 from shuffify.services.playlist_service import PlaylistAccessError
 from shuffify.services.workshop_commit_service import UnsupportedPlaylistItems
@@ -38,7 +39,7 @@ def pending_terminal(case, monkeypatch):
 @pytest.mark.parametrize("error", [
     PlaylistAccessError, SpotifyNotFoundError, SpotifyForbiddenError, SpotifyAuthError, UnsupportedPlaylistItems,
 ])
-def test_permanent_terminal_read_loss_releases_targets_without_replay(terminal, monkeypatch, error):
+def test_permanent_terminal_read_loss_blocks_the_playlist_without_replay(terminal, monkeypatch, error):
     operation, handler = pending_terminal(terminal, monkeypatch)
     writes = terminal.world.calls
 
@@ -53,7 +54,9 @@ def test_permanent_terminal_read_loss_releases_targets_without_replay(terminal, 
     assert row.journal["result"]["operation"]["resources"][0]["status"] == "unknown"
     assert "Private provider detail" not in str(row.journal["result"])
     assert handler.executions == 1 and terminal.world.calls == writes
-    assert terminal.accept().id != operation.id
+    with pytest.raises(PlaylistNeedsReview) as refused:
+        terminal.accept()
+    assert refused.value.operation_id == operation.id
 
 
 def test_unknown_terminal_read_failure_has_a_durable_attempt_limit(terminal, monkeypatch):
@@ -71,7 +74,9 @@ def test_unknown_terminal_read_failure_has_a_durable_attempt_limit(terminal, mon
         assert completed is (attempt == 3)
     assert row.state == "needs_attention"
     assert handler.executions == 1 and terminal.world.calls == 1
-    assert terminal.accept().id != operation.id
+    with pytest.raises(PlaylistNeedsReview) as refused:
+        terminal.accept()
+    assert refused.value.operation_id == operation.id
 
 
 def test_empty_next_boundary_cannot_inherit_previous_steps_verified_protection(composite):

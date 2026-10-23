@@ -398,6 +398,31 @@ def test_wake_callback_failure_does_not_invalidate_committed_admission(schedule,
         assert runtime.metrics["wake_failures"] == 1
 
 
+def test_a_fire_refused_for_an_unresolved_needs_attention_run_is_reported_like_a_busy_fire(schedule, db_app):
+    from shuffify.services.scheduled_admission import AdmissionResult
+
+    events = []
+    with controller(
+        db_app,
+        event_callback=lambda name, value: events.append((name, value)),
+        admission_callback=lambda *args, **kwargs: AdmissionResult(
+            "skipped", NOW, code="needs_attention", blocking_operation_id=41
+        ),
+    ) as runtime:
+        assert runtime.ready.wait(2)
+        snap = runtime.registration_snapshot([schedule.id])
+        result = runtime._fire(
+            schedule.id,
+            snap["registrations"][str(schedule.id)]["cadence_fingerprint"],
+            snap["generation"],
+            scheduled_for=NOW,
+        )
+    assert result.code == "needs_attention"
+    assert runtime.metrics["skipped_needs_attention"] == 1
+    assert ("skipped_needs_attention", result.to_dict()) in events
+    assert result.to_dict()["blocking_operation_id"] == 41
+
+
 def test_boot_is_future_only_and_never_instantiates_a_persistent_jobstore(schedule, db_app, monkeypatch):
     def forbidden(*args, **kwargs):
         raise AssertionError("Persistent/pickled jobstore is forbidden")

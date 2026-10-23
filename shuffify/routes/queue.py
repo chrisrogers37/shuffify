@@ -6,7 +6,12 @@ from shuffify.services.api_response import busy_error, error_payload
 from shuffify.services.live_operation_service import direct_rejected_result, direct_response_payload
 from shuffify.services.live_playlist_service import LivePlaylistService
 from shuffify.services.operations.history import HistoryStore, get_history_scope
-from shuffify.services.operations.repository import BusyOperation, OperationRepository, RequestKeyConflict
+from shuffify.services.operations.repository import (
+    BusyOperation,
+    OperationRepository,
+    PlaylistNeedsReview,
+    RequestKeyConflict,
+)
 from shuffify.services.state_service import PLAYLIST_STATES_KEY, StateError
 
 
@@ -63,6 +68,11 @@ def enqueue_command(user, kind, intent, build, *, schedule_id=None):
                                       request_key=key, schedule_id=schedule_id)
     except AdmissionRejected as error:
         return error.response
+    except PlaylistNeedsReview as error:
+        return jsonify(error_payload(
+            "An earlier operation on this playlist needs review. Restore or resolve it first.", 409,
+            error_code="playlist_needs_review", retryable=False, operation_id=error.operation_id,
+            reason="needs_attention")), 409
     except BusyOperation as error:
         payload, status = busy_error("An operation is using this playlist. Try again.", operation_id=error.operation_id)
         return jsonify(payload), status

@@ -12,7 +12,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 from shuffify.models.db import JobExecution, Schedule, User, db
-from shuffify.services.operations.repository import BusyOperation, LeaseLost, OperationRepository, RequestKeyConflict
+from shuffify.services.operations.repository import (
+    BusyOperation,
+    LeaseLost,
+    OperationRepository,
+    PlaylistNeedsReview,
+    RequestKeyConflict,
+)
 from shuffify.services.playlist_lock import playlist_lock
 
 
@@ -69,6 +75,98 @@ def test_busy_reservations_include_queued_and_shared_targets(repository):
         enqueue(repository, target="target", key="fourth")
     repository.finish(lease, "rolled_back")
     assert enqueue(repository, target="target", key="fifth").id != first.id
+
+
+def needs_attention(repository, *, target="target", key="attention"):
+    operation = enqueue(repository, target=target, key=key)
+    lease = repository.claim(operation_id=operation.id)
+    repository.finish(lease, "needs_attention")
+    return operation
+
+
+def restore_payload(parent_id):
+    return {"version": 1, "command": {"capture": {"operation_id": parent_id}}}
+
+
+def test_a_manual_operation_is_refused_on_a_playlist_with_an_unresolved_needs_attention_run(repository):
+    parent = needs_attention(repository)
+    with pytest.raises(PlaylistNeedsReview) as error:
+        enqueue(repository, target="target", key="next")
+    assert isinstance(error.value, BusyOperation)
+    assert error.value.operation_id == parent.id
+    with Session(repository.engine) as session:
+        assert len(session.scalars(select(JobExecution)).all()) == 1
+
+
+def test_a_shared_target_is_enough_to_be_refused(repository):
+    parent = repository.enqueue(kind="example", user_id=1, targets=["a", "b"], payload={}, request_key="first")
+    repository.finish(repository.claim(operation_id=parent.id), "needs_attention")
+    with pytest.raises(PlaylistNeedsReview) as error:
+        repository.enqueue(kind="example", user_id=2, targets=["b", "c"], payload={}, request_key="second")
+    assert error.value.operation_id == parent.id
+
+
+def test_a_different_playlist_is_admitted_beside_a_needs_attention_run(repository):
+    needs_attention(repository, target="target")
+    assert enqueue(repository, target="elsewhere", key="other").state == "queued"
+
+
+def test_the_restore_of_the_needs_attention_parent_is_admitted(repository):
+    parent = needs_attention(repository)
+    restore = repository.enqueue(kind="operation_restore", user_id=1, targets=["target"],
+                                 payload=restore_payload(parent.id), request_key="restore")
+    assert restore.state == "queued"
+
+
+def test_a_restore_of_another_run_does_not_bypass_the_block(repository):
+    parent = needs_attention(repository)
+    with pytest.raises(PlaylistNeedsReview) as error:
+        repository.enqueue(kind="operation_restore", user_id=1, targets=["target"],
+                           payload=restore_payload(parent.id + 100), request_key="restore")
+    assert error.value.operation_id == parent.id
+
+
+def test_a_second_needs_attention_run_still_blocks_the_restore_of_the_first(repository):
+    first = needs_attention(repository, key="first")
+    with Session(repository.engine) as session, session.begin():
+        session.add(JobExecution(kind="example", user_id=1, targets=["target"], payload={}, state="needs_attention",
+                                 status="failed", journal={}))
+    with pytest.raises(PlaylistNeedsReview):
+        repository.enqueue(kind="operation_restore", user_id=1, targets=["target"],
+                           payload=restore_payload(first.id), request_key="restore")
+
+
+def test_an_active_restore_blocks_as_busy_and_a_restored_parent_releases_the_playlist(repository):
+    parent = needs_attention(repository)
+    restore = repository.enqueue(kind="operation_restore", user_id=1, targets=["target"],
+                                 payload=restore_payload(parent.id), request_key="restore")
+    with pytest.raises(BusyOperation) as error:
+        enqueue(repository, target="target", key="during")
+    assert not isinstance(error.value, PlaylistNeedsReview) and error.value.operation_id == restore.id
+    lease = repository.claim(operation_id=restore.id)
+    repository.finish(lease, "succeeded")
+    with pytest.raises(PlaylistNeedsReview):
+        enqueue(repository, target="target", key="before-marker")
+    with Session(repository.engine) as session, session.begin():
+        row = session.get(JobExecution, parent.id)
+        row.journal = {"runtime": {"restoration": {"operation_id": restore.id}}}
+    assert enqueue(repository, target="target", key="after").state == "queued"
+
+
+def test_a_parent_the_operator_marks_failed_releases_the_playlist(repository):
+    parent = needs_attention(repository)
+    with Session(repository.engine) as session, session.begin():
+        session.get(JobExecution, parent.id).state = "failed"
+    assert enqueue(repository, target="target", key="after").state == "queued"
+
+
+def test_a_failed_restore_child_that_needs_attention_keeps_the_playlist_blocked(repository):
+    parent = needs_attention(repository)
+    child = repository.enqueue(kind="operation_restore", user_id=1, targets=["target"],
+                               payload=restore_payload(parent.id), request_key="restore")
+    repository.finish(repository.claim(operation_id=child.id), "needs_attention")
+    with pytest.raises(PlaylistNeedsReview):
+        enqueue(repository, target="target", key="next")
 
 
 def test_targets_are_sorted_and_copied_and_json_is_detached(repository):
