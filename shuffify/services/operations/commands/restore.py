@@ -12,7 +12,6 @@ from shuffify.models.db import JobExecution
 from shuffify.services.operations.bookkeeping import OperationBookkeeping
 from shuffify.services.operations.control import propagate_control
 from shuffify.services.operations.executors.resources import expected_baseline
-from shuffify.services.operations.planner import content
 from shuffify.services.operations.restoration import RestoreCapture, RestoreUnavailable, capture_restore
 from shuffify.services.operations.restore_attempts import require_no_attempt
 from shuffify.services.operations.restore_review import RestoreReview, assert_reviewed, read_all
@@ -155,10 +154,9 @@ def _apply(runtime, command):
     after = read_all(command.capture, runtime.read_resource, runtime.read_metadata_resource)
     for item in command.capture.observations:
         expected = expected_baseline(runtime, item.playlist_id, prepared["desired"][item.playlist_id])
-        if (
-            content(after[item.playlist_id]) != content(expected)
-            or item.scope == "tracks"
-            and after[item.playlist_id].get("snapshot_id") != expected.get("snapshot_id")
+        if not runtime.journal.observation_is_current(
+            item.playlist_id, after[item.playlist_id], expected,
+            expected.get("snapshot_id") if item.scope == "tracks" else None,
         ):
             from shuffify.services.operations.journal import NeedsAttention
 

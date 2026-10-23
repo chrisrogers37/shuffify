@@ -41,6 +41,10 @@ class IncompletePlaylistRead(Exception):
     """The response cannot establish one complete, consistent track order."""
 
 
+class PlaylistChangedDuringRead(IncompletePlaylistRead):
+    """The revision or item count moved while one read was in flight (a write, or a lagging read)."""
+
+
 class UnsupportedPlaylistItems(Exception):
     """The playlist contains items Workshop cannot safely represent."""
 
@@ -282,13 +286,16 @@ class WorkshopCommitService:
                 or page_total < 0
                 or type(page.get("offset")) is not int
                 or page["offset"] != offset
-                or (total is not None and page_total != total)
                 or len(items) > _READ_PAGE_SIZE
             ):
                 raise IncompletePlaylistRead()
+            if total is not None and page_total != total:
+                raise PlaylistChangedDuringRead()
             total = page_total
             end = offset + len(items)
-            if end > total or (end < total and not items):
+            if end > total:
+                raise PlaylistChangedDuringRead()
+            if end < total and not items:
                 raise IncompletePlaylistRead()
             for entry in items:
                 tracks.append(self._represent_track(entry))
@@ -310,16 +317,14 @@ class WorkshopCommitService:
         # A stable count alone misses order-only changes between pages. Fail
         # closed when Spotify omits the revision needed to bracket this read.
         snapshot_id = before.get("snapshot_id")
-        if (
-            not isinstance(snapshot_id, str)
-            or not snapshot_id
-            or snapshot_id != after.get("snapshot_id")
-        ):
+        if not isinstance(snapshot_id, str) or not snapshot_id:
             raise IncompletePlaylistRead()
+        if snapshot_id != after.get("snapshot_id"):
+            raise PlaylistChangedDuringRead()
         for metadata in (before, after):
             count = playlist_item_count(metadata, default=None)
             if count is not None and count != total:
-                raise IncompletePlaylistRead()
+                raise PlaylistChangedDuringRead()
         return ObservedPlaylist(
             name=before.get("name", "Playlist"),
             track_uris=tuple(track["uri"] for track in tracks),
