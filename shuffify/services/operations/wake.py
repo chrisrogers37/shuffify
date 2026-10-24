@@ -18,13 +18,13 @@ def direct_url(url):
     """Drop Neon's `-pooler` host suffix; PgBouncer transaction mode silently loses LISTEN/NOTIFY."""
     url = make_url(url)
     label, dot, rest = (url.host or '').partition('.')
-    if rest.endswith('neon.tech') and label.endswith('-pooler'):
+    if (rest == 'neon.tech' or rest.endswith('.neon.tech')) and label.endswith('-pooler'):
         return url.set(host=label[:-len('-pooler')] + dot + rest)
     return url
 
 
 class PostgresWakeListener:
-    """Wake after LISTEN commits and notifications; never scan the queue while idle.
+    """Wake after LISTEN commits and notifications; the worker's idle poll covers anything missed.
 
     Registration is asynchronous. The registration wake covers commits before
     LISTEN became effective, including the gap during a reconnect. The worker

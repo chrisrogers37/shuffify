@@ -6,6 +6,7 @@ import time
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy.engine import make_url
 
 from shuffify.services.operations.wake import PostgresWakeListener, direct_url
 
@@ -143,12 +144,15 @@ def test_schedule_channel_boot_delivery_and_reconnect_are_refresh_hints():
 
 
 @pytest.mark.parametrize('url, host', [
-    ('postgresql://u:p@ep-foo-123-pooler.us-east-2.aws.neon.tech/db', 'ep-foo-123.us-east-2.aws.neon.tech'),
+    ('postgresql://u:p@ep-foo-123-pooler.us-east-2.aws.neon.tech/db?sslmode=require&channel_binding=require',
+     'ep-foo-123.us-east-2.aws.neon.tech'),
     ('postgresql://u:p@ep-foo-123.us-east-2.aws.neon.tech/db', 'ep-foo-123.us-east-2.aws.neon.tech'),
     ('postgresql://u:p@db-pooler.example.com/db', 'db-pooler.example.com'),
+    ('postgresql://u:p@ep-foo-pooler.xneon.tech/db', 'ep-foo-pooler.xneon.tech'),
     ('postgresql://u:p@localhost:5432/db', 'localhost'),
 ])
 def test_direct_url_only_strips_the_neon_pooler_suffix(url, host):
     derived = direct_url(url)
     assert derived.host == host
     assert (derived.username, derived.password, derived.database) == ('u', 'p', 'db')
+    assert dict(derived.query) == dict(make_url(url).query)
