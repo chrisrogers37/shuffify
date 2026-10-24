@@ -6,11 +6,21 @@ import socket
 import threading
 
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
 
 logger = logging.getLogger(__name__)
 _CHANNEL = 'shuffify_operations'
 _SCHEDULE_CHANNEL = 'shuffify_schedules'
+
+
+def direct_url(url):
+    """Drop Neon's `-pooler` host suffix; PgBouncer transaction mode silently loses LISTEN/NOTIFY."""
+    url = make_url(url)
+    label, dot, rest = (url.host or '').partition('.')
+    if rest.endswith('neon.tech') and label.endswith('-pooler'):
+        return url.set(host=label[:-len('-pooler')] + dot + rest)
+    return url
 
 
 class PostgresWakeListener:
@@ -41,7 +51,7 @@ class PostgresWakeListener:
             self._stop_read, self._stop_write = socket.socketpair()
             if connection_factory is None:
                 # A dedicated NullPool keeps LISTEN and autocommit out of the application's pool.
-                self._engine = create_engine(repository.engine.url, poolclass=NullPool, connect_args={
+                self._engine = create_engine(direct_url(repository.engine.url), poolclass=NullPool, connect_args={
                     'connect_timeout': connect_timeout, 'keepalives': 1, 'keepalives_idle': 10,
                     'keepalives_interval': 5, 'keepalives_count': 3,
                 })

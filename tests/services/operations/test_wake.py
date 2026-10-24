@@ -5,7 +5,9 @@ import threading
 import time
 from types import SimpleNamespace
 
-from shuffify.services.operations.wake import PostgresWakeListener
+import pytest
+
+from shuffify.services.operations.wake import PostgresWakeListener, direct_url
 
 
 class Connection:
@@ -138,3 +140,15 @@ def test_schedule_channel_boot_delivery_and_reconnect_are_refresh_hints():
         assert refreshed.wait(1)
         assert queue == [True, True]
         assert listener.running
+
+
+@pytest.mark.parametrize('url, host', [
+    ('postgresql://u:p@ep-foo-123-pooler.us-east-2.aws.neon.tech/db', 'ep-foo-123.us-east-2.aws.neon.tech'),
+    ('postgresql://u:p@ep-foo-123.us-east-2.aws.neon.tech/db', 'ep-foo-123.us-east-2.aws.neon.tech'),
+    ('postgresql://u:p@db-pooler.example.com/db', 'db-pooler.example.com'),
+    ('postgresql://u:p@localhost:5432/db', 'localhost'),
+])
+def test_direct_url_only_strips_the_neon_pooler_suffix(url, host):
+    derived = direct_url(url)
+    assert derived.host == host
+    assert (derived.username, derived.password, derived.database) == ('u', 'p', 'db')
