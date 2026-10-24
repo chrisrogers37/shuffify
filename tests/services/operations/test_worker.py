@@ -179,3 +179,25 @@ def test_lease_loss_while_reporting_failure_never_completes_the_fenced_row(db_ap
     row = repository.get(accepted.id)
     assert row.state == "queued"
     assert row.completed_at is None
+
+
+def test_idle_worker_claims_queued_work_on_timeout_without_a_notification(db_app, queue):
+    from shuffify.worker import IDLE_POLL_SECONDS
+
+    repository, user_id = queue
+    runner = worker(db_app, repository, {"example": lambda runtime: {"success": True, "message": "Done."}})
+    timeouts, accepted = [], []
+
+    def idle_wait(timeout=None):
+        timeouts.append(timeout)
+        if len(timeouts) == 2:
+            # The worker went idle; enqueue without a wake and let the wait expire.
+            accepted.append(repository.enqueue(kind="example", user_id=user_id, targets=["a"], payload={"version": 1}))
+        elif len(timeouts) == 3:
+            runner.request_stop()
+        return False
+
+    runner._wake.wait = idle_wait
+    runner._serve_waiting()
+    assert timeouts[1:] == [IDLE_POLL_SECONDS] * 2
+    assert repository.get(accepted[0].id).state == "succeeded"

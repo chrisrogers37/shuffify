@@ -19,6 +19,7 @@ from shuffify.spotify.observation import observe_mutations
 
 logger = logging.getLogger(__name__)
 TERMINAL_RECOVERY_LIMIT = 3
+IDLE_POLL_SECONDS = 5  # Upper bound on how long a lost wake notification can delay queued work.
 
 
 class TerminalPending(RuntimeError):
@@ -604,16 +605,18 @@ class OperationWorker:
                 "scheduler_enabled": bool(self.app.config.get("SCHEDULER_ENABLED", True))}
 
     def _serve_waiting(self):
-        """Wake hints trigger durable reads; lease deadlines arrange their own wake."""
+        """Wake hints trigger durable reads; lease deadlines and a bounded poll cover lost hints."""
         self._wake.set()
-        timeout = None
+        timeout = IDLE_POLL_SECONDS
         while not self._stopping.is_set():
             self._wake.wait(timeout=timeout)
             self._wake.clear()
             if not self._stopping.is_set():
                 self.drain()
                 ready_at = self.repository.next_ready_at()
-                timeout = max(0, (ready_at - datetime.now(timezone.utc)).total_seconds()) if ready_at else None
+                timeout = IDLE_POLL_SECONDS
+                if ready_at:
+                    timeout = min(timeout, max(0, (ready_at - datetime.now(timezone.utc)).total_seconds()))
 
 
 def main(argv=None):

@@ -22,6 +22,7 @@ from sqlalchemy.pool import NullPool
 
 from shuffify.models.db import Schedule
 from shuffify.services.operations.repository import OperationRepository
+from shuffify.services.operations.wake import direct_url
 from shuffify.services.schedule_utils import schedule_revision
 from shuffify.services.scheduled_admission import (
     AdmissionResult,
@@ -136,7 +137,7 @@ class WorkerScheduler:
         self._connect, self._engine = connection_factory, None
         if self._requires_lock and connection_factory is None:
             self._engine = create_engine(
-                self.repository.engine.url,
+                direct_url(self.repository.engine.url),
                 poolclass=NullPool,
                 connect_args={
                     "connect_timeout": connect_timeout,
