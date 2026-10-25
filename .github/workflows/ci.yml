@@ -198,9 +198,14 @@ jobs:
       # --fail-on-skip: the path and the marker choose what runs, so a skip at
       # run time is a missing precondition and fails the leg. The tests of the
       # other legs are deselected, which is not a skip.
+      #
+      # COVERAGE_CORE=sysmon: line coverage through Python 3.12's
+      # sys.monitoring instead of a trace function. Same lines measured, far
+      # less overhead on the long compound crash test.
       - name: Run this shard of the tests with coverage
         env:
           COVERAGE_FILE: .coverage.shard-${{ matrix.group }}
+          COVERAGE_CORE: sysmon
         run: |
           cp .test_durations "durations-shard-$TEST_GROUP.json"
           pytest tests/ -m "not integration" \
