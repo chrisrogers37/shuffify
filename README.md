@@ -1,43 +1,42 @@
-# Shuffify - Playlist Perfection
+# Shuffify
 
-Shuffify is a web application designed to give Spotify users advanced control over their playlists. It provides a suite of unique shuffling algorithms that go beyond Spotify's default shuffle, allowing users to reorder their tracks in more creative and useful ways.
+Keep your Spotify playlists fresh. Shuffify automatically reorders tracks and
+collects songs from playlists you trust, on a schedule you choose.
 
-**Live Application:** [**shuffify.app**](https://shuffify.app)
+**Try Shuffify:** [**shuffify.app**](https://shuffify.app)
 
 ## Project Overview
 
-This project was built to solve a common frustration for avid Spotify users: the generally highly manual nature of managing playlist song orders. Shuffify addresses this by providing a simple, intuitive interface where users can connect their Spotify account, select a playlist, and apply a variety of sorting algorithms to reorder the track list!
+Build a playlist around your own taste, then give it a routine. Reorder it each
+morning, collect songs from a few favorite curators each week, or schedule small
+batches of collected tracks to join the mix.
 
-The application is built with a security-first mindset, using environment variables to manage sensitive API keys and a robust session management system. It features a multi-level undo system, allowing users to step back through previous shuffles with ease.
+You choose the source playlists. Collecting keeps new finds separate from your
+target playlist so you can review them in the Playlist Workshop. To add songs
+automatically, link a collection playlist and set up an **Add collected tracks**
+or **Collect and add** routine. You choose how many tracks to add per run.
 
 ## Key Features
 
-- **Secure Spotify Authentication:** Connects to your Spotify account using the official OAuth 2.0 flow with enhanced security messaging.
-- **7 Shuffle Algorithms:**
+- **Scheduled reordering:** Run a shuffle on a recurring schedule to change the saved track order in Spotify.
+- **Songs from playlists you trust:** Save source playlists and schedule collection runs. Shuffify filters out tracks already in your target playlist, pending collection, linked collection playlist or linked archive.
+- **Automatic additions:** Use a linked collection playlist to add collected tracks in batches, with a track count and schedule you control.
+- **Playlist Workshop:** Edit a local draft, preview shuffles, hold tracks in place, manage snapshots and review collected or archived tracks before saving.
+- **Seven shuffle algorithms:**
     - **Basic Shuffle:** A standard, random reordering.
     - **Balanced Shuffle:** Distribute tracks from all parts of the playlist evenly using round-robin selection.
     - **Percentage Shuffle:** Keep a certain percentage of tracks at the top of the playlist.
     - **Stratified Shuffle:** Divide the playlist into sections, shuffle each section independently.
-    - **Artist Spacing Shuffle:** Ensure the same artist doesn't appear back-to-back.
+    - **Artist Spacing Shuffle:** Space tracks by the same artist apart.
     - **Album Sequence Shuffle:** Keep album tracks together but shuffle albums.
     - **Newest First Shuffle:** Reorder by date added, newest first, with adjustable jitter.
-- **Playlist Workshop:** Edit a local draft, preview algorithms, hold tracks, manage snapshots and review collected or archived tracks before saving.
-- **Scheduled Operations:** Automated shuffle and raid jobs on recurring schedules via APScheduler.
-- **Multi-Level Undo:** Step back through every shuffle you've made to a playlist within your session.
-- **Enhanced User Experience:**
-    - Responsive After Hours design with accessible task panels
-    - A React interface with reviewed actions and durable operation receipts
-    - Accessibility-first approach with ARIA labels and keyboard navigation
-    - Smooth scroll animations and visual feedback
-- **Session Management:** Logout functionality for secure user switching
-- **Legal Compliance:** Includes Terms of Service and Privacy Policy pages, as required by Spotify's developer policies.
+- **Spotify sign-in:** Connect through Spotify's OAuth flow.
 
-## Perfect For
+## Getting Started
 
-- **Curated Collections:** Keep your carefully curated playlists fresh, especially after adding new songs
-- **Tastemaker Playlists:** Perfect for tastemakers who want to mix it up and get those new adds to the top for their followers
-- **New Perspectives:** Make your playlists feel new with a quick reorder
-- **Playlist Maintenance:** Reorder that massive playlist that you've been meaning to update with one click
+1. [Open Shuffify](https://shuffify.app) and connect your Spotify account.
+2. Choose a playlist you own. Pick a shuffle algorithm, add source playlists, or set up both.
+3. Create a routine, choose its timing and review the settings before enabling it. Use the Playlist Workshop when you want to make changes by hand.
 
 ## Tech Stack
 
