@@ -13,8 +13,9 @@ batches of collected tracks to join the mix.
 
 You choose the source playlists. Collecting keeps new finds separate from your
 target playlist so you can review them in the Playlist Workshop. To add songs
-automatically, link a collection playlist and set up an **Add collected tracks**
-or **Collect and add** routine. You choose how many tracks to add per run.
+automatically, link a collection playlist and turn on **Enable adding collected
+tracks** in Playlist setup. Then create an **Add collected tracks** or **Collect
+and add** routine. You choose how many tracks to add per run.
 
 ## Key Features
 
@@ -25,7 +26,7 @@ or **Collect and add** routine. You choose how many tracks to add per run.
 - **Seven shuffle algorithms:**
     - **Basic Shuffle:** A standard, random reordering.
     - **Balanced Shuffle:** Distribute tracks from all parts of the playlist evenly using round-robin selection.
-    - **Percentage Shuffle:** Keep a certain percentage of tracks at the top of the playlist.
+    - **Percentage Shuffle:** Shuffle a chosen percentage at the front or back, keeping the remaining tracks in order.
     - **Stratified Shuffle:** Divide the playlist into sections, shuffle each section independently.
     - **Artist Spacing Shuffle:** Space tracks by the same artist apart.
     - **Album Sequence Shuffle:** Keep album tracks together but shuffle albums.
