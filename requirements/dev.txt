@@ -15,7 +15,7 @@ playwright==1.64.0
 
 # Code Quality
 # ruff handles lint and import sorting; config in pyproject.toml.
-ruff==0.17.1
+ruff==0.17.2
 
 # scripts/extract-spotify-shapes.py
 PyYAML>=6.0.3
