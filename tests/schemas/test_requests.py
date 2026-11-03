@@ -316,6 +316,18 @@ class TestWorkshopCommitRequest:
         with pytest.raises(ValidationError, match="Invalid track URI"):
             WorkshopCommitRequest(baseline_track_uris=[], track_uris=["not-a-uri"])
 
+    @pytest.mark.parametrize("field", ["baseline_track_uris", "track_uris"])
+    def test_holds_a_full_playlist_but_not_one_track_more(self, field):
+        # Spotify's limit for one playlist is 10,000 tracks.
+        uris = [f"spotify:track:{index:022d}" for index in range(10_001)]
+        data = {"baseline_track_uris": [], "track_uris": []}
+        full = WorkshopCommitRequest(**{**data, field: uris[:10_000]})
+        assert len(getattr(full, field)) == 10_000
+        with pytest.raises(ValidationError) as refused:
+            WorkshopCommitRequest(**{**data, field: uris})
+        errors = [(error["loc"], error["type"]) for error in refused.value.errors()]
+        assert errors == [((field,), "too_long")]
+
 
 class TestExternalPlaylistRequest:
     """Tests for ExternalPlaylistRequest mutual exclusion."""

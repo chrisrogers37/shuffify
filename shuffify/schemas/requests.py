@@ -12,6 +12,8 @@ from pydantic import BaseModel, Field, field_validator
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 
 TRACK_URI_RE = re.compile(r"^spotify:track:[a-zA-Z0-9]{22}$")
+# Spotify's maximum number of tracks in one playlist.
+MAX_PLAYLIST_TRACKS = 10_000
 
 
 class ShuffleRequest(BaseModel):
@@ -146,10 +148,16 @@ class WorkshopCommitRequest(BaseModel):
     """Schema for committing workshop changes to Spotify."""
 
     baseline_track_uris: List[str] = Field(
-        ..., min_length=0, description="Ordered track URIs when the draft was loaded"
+        ...,
+        min_length=0,
+        max_length=MAX_PLAYLIST_TRACKS,
+        description="Ordered track URIs when the draft was loaded",
     )
     track_uris: List[str] = Field(
-        ..., min_length=0, description="Ordered list of track URIs to save"
+        ...,
+        min_length=0,
+        max_length=MAX_PLAYLIST_TRACKS,
+        description="Ordered list of track URIs to save",
     )
 
     @field_validator("baseline_track_uris", "track_uris")

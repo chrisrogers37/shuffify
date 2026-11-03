@@ -21,6 +21,8 @@ from tests.paths import api_path
 # Fixtures
 # =============================================================================
 
+_MORE_THAN_A_PLAYLIST = [f"spotify:track:{index:022d}" for index in range(10_001)]
+
 
 def _make_mock_playlist():
     """A Playlist model instance for workshop tests."""
@@ -255,6 +257,9 @@ class TestWorkshopCommit:
             {"baseline_track_uris": [], "track_uris": ["invalid"]},
             {"baseline_track_uris": ["invalid"], "track_uris": []},
             {"baseline_track_uris": None, "track_uris": []},
+            # One track more than a Spotify playlist can hold.
+            {"baseline_track_uris": [], "track_uris": _MORE_THAN_A_PLAYLIST},
+            {"baseline_track_uris": _MORE_THAN_A_PLAYLIST, "track_uris": []},
         ],
     )
     def test_malformed_body_never_calls_service(
