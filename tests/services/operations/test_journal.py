@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from shuffify.services.operations.journal import JournalError, NeedsAttention
+from shuffify.services.operations.planner import PlanTooLarge
 from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.exceptions import SpotifyWriteRejectedError
 from shuffify.spotify.http_client import SpotifyHTTPClient
@@ -321,6 +322,14 @@ def test_a_new_create_cannot_be_frozen_while_an_earlier_dispatch_is_unresolved()
     with pytest.raises(NeedsAttention):
         journal.freeze_create("Do not create")
     assert len(world.saved["plans"]) == 1
+
+
+def test_a_plan_beyond_a_full_playlist_is_refused_before_it_is_frozen():
+    world = World([uri(1)])
+    with pytest.raises(PlanTooLarge):
+        world.journal().freeze_replace("target", [uri(index) for index in range(10_001)])
+    assert world.saved is None
+    assert world.writes == []
 
 
 @pytest.mark.parametrize("kind", ["replace", "add", "remove"])

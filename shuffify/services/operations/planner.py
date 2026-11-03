@@ -10,8 +10,14 @@ import hashlib
 import json
 from copy import deepcopy
 
+from shuffify.schemas.requests import MAX_PLAYLIST_TRACKS
+
 BATCH_SIZE = 100
 DETAIL_FIELDS = frozenset(("name", "public", "description"))
+
+
+class PlanTooLarge(ValueError):
+    """A plan would list, or leave in its playlist, more tracks than one Spotify playlist can hold."""
 
 
 def content(observed):
@@ -74,10 +80,14 @@ def replay(state, batches):
 
 
 def plan(kind, resource, before, *, uris=(), position=None, details=None):
+    values = list(uris)
+    # An add is measured by the playlist it leaves; every other plan by the list it sends.
+    size = len(values) + (len(before["track_uris"]) if kind == "add" else 0)
+    if size > MAX_PLAYLIST_TRACKS:
+        raise PlanTooLarge(f"A Spotify playlist holds at most {MAX_PLAYLIST_TRACKS:,} tracks")
     current = deepcopy(before)
     batches = []
     path = f"/playlists/{resource}/items"
-    values = list(uris)
     current_hash = state_hash(current)
 
     def append(method, target, body):
