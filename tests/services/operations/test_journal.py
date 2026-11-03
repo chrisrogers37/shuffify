@@ -1,11 +1,12 @@
 """Write-ahead observation records every actual Spotify mutation attempt."""
 
+import json
 from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
 
-from shuffify.services.operations.journal import NeedsAttention
+from shuffify.services.operations.journal import JournalError, NeedsAttention
 from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.exceptions import SpotifyWriteRejectedError
 from shuffify.spotify.http_client import SpotifyHTTPClient
@@ -320,3 +321,119 @@ def test_a_new_create_cannot_be_frozen_while_an_earlier_dispatch_is_unresolved()
     with pytest.raises(NeedsAttention):
         journal.freeze_create("Do not create")
     assert len(world.saved["plans"]) == 1
+
+
+@pytest.mark.parametrize("kind", ["replace", "add", "remove"])
+def test_a_frozen_plan_stays_proportional_to_its_track_list(kind):
+    sizes = []
+    for count in (1_000, 4_000):
+        tracks = [uri(index) for index in range(count)]
+        world = World(tracks if kind == "remove" else [uri(1)])
+        getattr(world.journal(), f"freeze_{kind}")("target", tracks)
+        sizes.append(len(json.dumps(world.saved)))
+    # Four times the tracks take about four times the bytes.
+    assert sizes[1] < 5 * sizes[0]
+
+
+def test_a_batch_that_no_longer_matches_its_frozen_plan_is_never_sent():
+    world = World([uri(1)])
+    world.journal().freeze_replace("target", [uri(100 + index) for index in range(150)])
+    world.saved["plans"][0]["batches"][1]["body"]["uris"][0] = uri(999)
+    with pytest.raises(JournalError):
+        world.journal().resume()
+    assert [method for method, _, _ in world.writes] == ["PUT"]
+
+
+def with_full_batch_states(document):
+    """Add the complete before and after states that each batch of a whole-list replacement once stored."""
+    for step in document["plans"] + document.get("compensation", []):
+        baseline, desired = step["baseline"], step["desired"]["track_uris"]
+        ends = range(100, len(desired) + 100, 100)
+        states = [baseline, *({**baseline, "track_uris": desired[:end]} for end in ends)]
+        assert len(states) == len(step["batches"]) + 1, "only whole-list replacements are rebuilt here"
+        for item, before, after in zip(step["batches"], states, states[1:]):
+            item["before"], item["after"] = deepcopy(before), deepcopy(after)
+    return document
+
+
+def test_a_journal_with_full_batch_states_resumes_after_a_lost_response():
+    from tests.services.operations.test_crash_recovery import Crash
+
+    world = World([uri(1), uri(2)])
+    desired = [uri(100 + index) for index in range(250)]
+    journal = world.journal()
+    journal.freeze_replace("target", desired)
+    dispatch = world.dispatch
+
+    def second_response_lost(*args):
+        response = dispatch(*args)
+        if len(world.writes) == 2:
+            raise Crash()
+        return response
+
+    journal.dispatch = second_response_lost
+    with pytest.raises(Crash):
+        journal.resume()
+    world.saved = with_full_batch_states(world.saved)
+    assert world.journal().resume()["state"] == "succeeded"
+    assert world.playlists["target"]["track_uris"] == desired
+    assert [method for method, _, _ in world.writes] == ["PUT", "POST", "POST"]
+
+
+def test_a_journal_with_full_batch_states_compensates_to_its_original_tracks():
+    world = World([uri(1), uri(2)])
+    journal = world.journal()
+    journal.freeze_replace("target", [uri(100 + index) for index in range(250)])
+    dispatch = world.dispatch
+
+    def second_batch_rejected(method, path, body):
+        if world.writes:
+            raise SpotifyWriteRejectedError("batch rejected")
+        return dispatch(method, path, body)
+
+    journal.dispatch = second_batch_rejected
+    with pytest.raises(SpotifyWriteRejectedError):
+        journal.resume()
+    world.saved = with_full_batch_states(world.saved)
+    assert world.journal().compensate()["state"] == "rolled_back"
+    assert world.playlists["target"]["track_uris"] == [uri(1), uri(2)]
+
+
+def test_a_compensation_with_full_batch_states_resumes_after_a_lost_response():
+    from tests.services.operations.test_crash_recovery import Crash
+
+    original = [uri(100 + index) for index in range(250)]
+    world = World(original)
+    journal = world.journal()
+    journal.freeze_replace("target", [uri(1)])
+    assert journal.resume()["state"] == "succeeded"
+    dispatch = world.dispatch
+
+    def second_rollback_response_lost(*args):
+        response = dispatch(*args)
+        if len(world.writes) == 3:
+            raise Crash()
+        return response
+
+    journal = world.journal()
+    journal.dispatch = second_rollback_response_lost
+    with pytest.raises(Crash):
+        journal.compensate()
+    world.saved = with_full_batch_states(world.saved)
+    assert world.journal().resume()["state"] == "rolled_back"
+    assert world.playlists["target"]["track_uris"] == original
+    assert [method for method, _, _ in world.writes] == ["PUT", "PUT", "POST", "POST"]
+
+
+def test_a_new_plan_continues_from_a_journal_with_full_batch_states():
+    world = World([uri(1)])
+    journal = world.journal()
+    journal.freeze_replace("target", [uri(100 + index) for index in range(150)])
+    assert journal.resume()["state"] == "succeeded"
+    world.saved = with_full_batch_states(world.saved)
+    second = [uri(300 + index) for index in range(150)]
+    journal = world.journal()
+    journal.freeze_replace("target", second)
+    assert journal.resume()["state"] == "succeeded"
+    assert world.playlists["target"]["track_uris"] == second
+    assert [method for method, _, _ in world.writes] == ["PUT", "POST", "PUT", "POST"]

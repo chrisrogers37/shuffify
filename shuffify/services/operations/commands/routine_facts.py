@@ -5,6 +5,7 @@ from copy import deepcopy
 
 from shuffify.services.execution_result_service import build_live_execution_detail, serialize_execution_detail
 from shuffify.services.live_operation_service import LiveOperation, operation_result
+from shuffify.services.operations.planner import replay
 from shuffify.services.workshop_commit_service import ObservedPlaylist
 
 BINDING_KEY = "routine.binding.v1"
@@ -135,10 +136,13 @@ def build_result(runtime, command, state, *, error_code=None, message=None, http
             resource = action["resource"]
             phase = "archive_purge" if action.get("phase") == "archive_purge" else name
             key = phase, resource
-            group = groups.setdefault(key, {"baseline": action["before"]["track_uris"], "desired": [], "batches": []})
+            group = groups.setdefault(
+                key, {"baseline": action["before"]["track_uris"], "desired": [], "batches": [], "states": []}
+            )
             group["desired"] = _after(action)
             if offset < len(scope):
                 group["batches"].extend(scope[offset]["batches"])
+                group["states"].extend(replay(scope[offset]["baseline"], scope[offset]["batches"]))
         for (phase, resource), group in groups.items():
             batches = group["batches"]
             attempted = any(
@@ -146,7 +150,8 @@ def build_result(runtime, command, state, *, error_code=None, message=None, http
             )
             ack = [item for item in batches if item["state"] == "acknowledged"]
             unknown = uncertainty or any(item["state"] == "dispatched" for item in batches)
-            actual = ack[-1]["after"]["track_uris"] if ack else group["baseline"]
+            reached = [state for item, state in zip(batches, group["states"]) if item["state"] == "acknowledged"]
+            actual = reached[-1]["track_uris"] if reached else group["baseline"]
             status = (
                 "unknown"
                 if unknown and attempted

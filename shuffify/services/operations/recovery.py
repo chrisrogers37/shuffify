@@ -8,7 +8,7 @@ complete ordered content, using snapshots only to recognise a stale read of a
 point this run already passed through.
 """
 
-from .planner import content
+from .planner import advance, content
 
 STALE_READ = "stale_read"
 CURRENT, STALE, CHANGED = "current", "stale", "changed"
@@ -28,7 +28,7 @@ def walk(resource, batches):
         if item["state"] == "acknowledged":
             _remember(earlier, expected, snapshot)
             _remember(earlier, expected, item.get("snapshot_before"))
-            expected, snapshot = item["after"], item.get("snapshot_id")
+            expected, snapshot = advance(expected, item), item.get("snapshot_id")
         else:
             pending = item
             break
@@ -84,7 +84,7 @@ def reconcile_resource(resource, batches, observed):
     compatible = metadata_only or not snapshot or observed.get("snapshot_id") == snapshot
     # A snapshot this run already passed is the same signature as the pre-dispatch one: a lagging read.
     lagged = compatible or any(observed.get("snapshot_id") == known for _, known in earlier)
-    if current == pending["after"]:
+    if current == advance(expected, pending):
         # A no-effect batch is safe to acknowledge without guessing a duplicate-sensitive cursor.
         if current != expected or lagged:
             if current != expected and pending["path"].endswith("/items") and lagged:

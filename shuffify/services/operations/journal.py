@@ -19,7 +19,7 @@ from shuffify.spotify.exceptions import (
 from shuffify.spotify.http_client import _quota_exceeded, _retry_after
 from shuffify.spotify.observation import observe_mutations
 
-from .planner import batch, content, plan, state_hash
+from .planner import advance, batch, content, plan, state_hash
 from .recovery import CHANGED, CURRENT, STALE, STALE_READ, observation_verdict, reconcile_resource, walk
 
 READ_DEFERRAL_LIMIT = 8
@@ -476,7 +476,17 @@ class DurableJournal:
             return self._observed({**self._read_call(self.read_metadata, resource), "scope": "metadata"})
         return self._observed(self._read_call(self.read_resource, resource))
 
-    def _before_batch(self, step, item):
+    def _prior_state(self, step, item):
+        """Return the state the next batch starts from, proved against the hashes frozen with it."""
+        if "before" in item:
+            return item["before"]
+        before, _, _, pending = walk(*self._resource_ledger(step["resource"]))
+        if (pending is not item or state_hash(before) != item["before_hash"]
+                or state_hash(advance(before, item)) != item["after_hash"]):
+            raise JournalError("A batch no longer matches its frozen plan")
+        return before
+
+    def _before_batch(self, step, item, before):
         resource = step["resource"]
         snapshot = self._expected_snapshot(resource)
         if (self.read_snapshot is not None and self.doc["resources"][resource].get("scope", "tracks") == "tracks"
@@ -486,9 +496,9 @@ class DurableJournal:
             # Production readers return both fields from one authorized GET.
             # A narrow injected snapshot reader can provide only the revision.
             observed_snapshot = observed.get("snapshot_id") if isinstance(observed, dict) else observed
-            metadata_matches = not isinstance(observed, dict) or observed.get("metadata") == item["before"]["metadata"]
+            metadata_matches = not isinstance(observed, dict) or observed.get("metadata") == before["metadata"]
             if observed_snapshot == snapshot and metadata_matches:
-                return {**deepcopy(item["before"]), "snapshot_id": observed_snapshot}
+                return {**deepcopy(before), "snapshot_id": observed_snapshot}
         return self._read(resource)
 
     def _base(self, resource, *, scope="tracks", expected_baseline=None):
@@ -643,7 +653,8 @@ class DurableJournal:
         desired = {"track_uris": [], "metadata": {"name": name, "public": public, "description": description}}
         self.doc["plans"].append({
             "id": plan_id, "kind": "create", "resource": None, "baseline": None, "desired": desired,
-            "batches": [batch("POST", "/me/playlists", desired["metadata"], {}, desired)], "batches_done": 0,
+            "batches": [batch("POST", "/me/playlists", desired["metadata"], state_hash({}), state_hash(desired))],
+            "batches_done": 0,
             "intent": self._intent("create", {"name": name, "public": public, "description": description}),
         })
         self.doc["status"] = "ready"
@@ -673,15 +684,10 @@ class DurableJournal:
         if resource in self.doc["compensation_resources"]:
             return self.doc["compensation_resources"][resource], self._resource_batches(resource)
         # Accepted resources still guard recovery, even though no compensation may touch them.
-        stored = self.doc["resources"][resource]
-        expected, snapshot = stored["baseline"], stored.get("snapshot_id")
-        for step in self.doc["plans"]:
-            if step["resource"] != resource:
-                continue
-            for item in step["batches"]:
-                if item["state"] != "acknowledged":
-                    raise JournalError("An unfinished resource was omitted from compensation")
-                expected, snapshot = item["after"], item.get("snapshot_id")
+        batches = [item for step in self.doc["plans"] if step["resource"] == resource for item in step["batches"]]
+        if any(item["state"] != "acknowledged" for item in batches):
+            raise JournalError("An unfinished resource was omitted from compensation")
+        expected, snapshot, _, _ = walk(self.doc["resources"][resource], batches)
         return {"baseline": expected, "snapshot_id": snapshot}, []
 
     def _reconcile(self, *, on_verified=None):
@@ -772,8 +778,9 @@ class DurableJournal:
                 batch_key = self._read_key("batch", step["id"], position)
                 resource = step["resource"]
                 if resource is not None:
-                    observed = self._before_batch(step, item)
-                    if self._verdict(resource, observed, item["before"]) != CURRENT:
+                    before = self._prior_state(step, item)
+                    observed = self._before_batch(step, item, before)
+                    if self._verdict(resource, observed, before) != CURRENT:
                         return self._attention("external_edit", {resource: observed})
                     item["snapshot_before"] = observed.get("snapshot_id")
                 try:
@@ -967,8 +974,9 @@ class DurableJournal:
         if (method, path, body) != (item["method"], item["path"], item["body"]):
             raise JournalError("The HTTP mutation differs from its frozen batch")
         if item["attempts"] and step["resource"] is not None:
-            observed = self._before_batch(step, item)
-            if self._verdict(step["resource"], observed, item["before"]) == CHANGED:
+            before = self._prior_state(step, item)
+            observed = self._before_batch(step, item, before)
+            if self._verdict(step["resource"], observed, before) == CHANGED:
                 self._attention("external_edit", {step["resource"]: observed})
                 raise NeedsAttention("external_edit")
         item["state"] = "dispatched"
