@@ -7,12 +7,11 @@ from types import SimpleNamespace
 import pytest
 
 from shuffify.services.operations.journal import JournalError, NeedsAttention
-from shuffify.services.operations.planner import PlanTooLarge
 from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.exceptions import SpotifyWriteRejectedError
 from shuffify.spotify.http_client import SpotifyHTTPClient
 from shuffify.spotify.observation import observe_mutations
-from tests.services.operations.test_crash_recovery import World, uri
+from tests.services.operations.test_crash_recovery import Crash, World, uri
 
 
 def test_http_observer_checkpoints_before_dispatch_and_after_response():
@@ -325,6 +324,8 @@ def test_a_new_create_cannot_be_frozen_while_an_earlier_dispatch_is_unresolved()
 
 
 def test_a_plan_beyond_a_full_playlist_is_refused_before_it_is_frozen():
+    from shuffify.services.operations.planner import PlanTooLarge
+
     world = World([uri(1)])
     with pytest.raises(PlanTooLarge):
         world.journal().freeze_replace("target", [uri(index) for index in range(10_001)])
@@ -366,8 +367,6 @@ def with_full_batch_states(document):
 
 
 def test_a_journal_with_full_batch_states_resumes_after_a_lost_response():
-    from tests.services.operations.test_crash_recovery import Crash
-
     world = World([uri(1), uri(2)])
     desired = [uri(100 + index) for index in range(250)]
     journal = world.journal()
@@ -409,8 +408,6 @@ def test_a_journal_with_full_batch_states_compensates_to_its_original_tracks():
 
 
 def test_a_compensation_with_full_batch_states_resumes_after_a_lost_response():
-    from tests.services.operations.test_crash_recovery import Crash
-
     original = [uri(100 + index) for index in range(250)]
     world = World(original)
     journal = world.journal()

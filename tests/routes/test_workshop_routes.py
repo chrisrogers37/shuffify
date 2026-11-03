@@ -21,7 +21,7 @@ from tests.paths import api_path
 # Fixtures
 # =============================================================================
 
-_MORE_THAN_A_PLAYLIST = [f"spotify:track:{index:022d}" for index in range(10_001)]
+_MORE_THAN_A_PLAYLIST = ["spotify:track:" + "a" * 22] * 10_001
 
 
 def _make_mock_playlist():

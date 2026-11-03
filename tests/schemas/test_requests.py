@@ -319,7 +319,7 @@ class TestWorkshopCommitRequest:
     @pytest.mark.parametrize("field", ["baseline_track_uris", "track_uris"])
     def test_holds_a_full_playlist_but_not_one_track_more(self, field):
         # Spotify's limit for one playlist is 10,000 tracks.
-        uris = [f"spotify:track:{index:022d}" for index in range(10_001)]
+        uris = ["spotify:track:" + "a" * 22] * 10_001
         data = {"baseline_track_uris": [], "track_uris": []}
         full = WorkshopCommitRequest(**{**data, field: uris[:10_000]})
         assert len(getattr(full, field)) == 10_000

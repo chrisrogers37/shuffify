@@ -486,7 +486,9 @@ class DurableJournal:
             raise JournalError("A batch no longer matches its frozen plan")
         return before
 
-    def _before_batch(self, step, item, before):
+    def _before_batch(self, step, item):
+        """Return the state `item` starts from and a fresh observation of its resource."""
+        before = self._prior_state(step, item)
         resource = step["resource"]
         snapshot = self._expected_snapshot(resource)
         if (self.read_snapshot is not None and self.doc["resources"][resource].get("scope", "tracks") == "tracks"
@@ -498,8 +500,8 @@ class DurableJournal:
             observed_snapshot = observed.get("snapshot_id") if isinstance(observed, dict) else observed
             metadata_matches = not isinstance(observed, dict) or observed.get("metadata") == before["metadata"]
             if observed_snapshot == snapshot and metadata_matches:
-                return {**deepcopy(before), "snapshot_id": observed_snapshot}
-        return self._read(resource)
+                return before, {**deepcopy(before), "snapshot_id": observed_snapshot}
+        return before, self._read(resource)
 
     def _base(self, resource, *, scope="tracks", expected_baseline=None):
         self.check_pending_control()
@@ -653,8 +655,7 @@ class DurableJournal:
         desired = {"track_uris": [], "metadata": {"name": name, "public": public, "description": description}}
         self.doc["plans"].append({
             "id": plan_id, "kind": "create", "resource": None, "baseline": None, "desired": desired,
-            "batches": [batch("POST", "/me/playlists", desired["metadata"], state_hash({}), state_hash(desired))],
-            "batches_done": 0,
+            "batches": [batch("POST", "/me/playlists", desired["metadata"], {}, desired)], "batches_done": 0,
             "intent": self._intent("create", {"name": name, "public": public, "description": description}),
         })
         self.doc["status"] = "ready"
@@ -778,8 +779,7 @@ class DurableJournal:
                 batch_key = self._read_key("batch", step["id"], position)
                 resource = step["resource"]
                 if resource is not None:
-                    before = self._prior_state(step, item)
-                    observed = self._before_batch(step, item, before)
+                    before, observed = self._before_batch(step, item)
                     if self._verdict(resource, observed, before) != CURRENT:
                         return self._attention("external_edit", {resource: observed})
                     item["snapshot_before"] = observed.get("snapshot_id")
@@ -974,8 +974,7 @@ class DurableJournal:
         if (method, path, body) != (item["method"], item["path"], item["body"]):
             raise JournalError("The HTTP mutation differs from its frozen batch")
         if item["attempts"] and step["resource"] is not None:
-            before = self._prior_state(step, item)
-            observed = self._before_batch(step, item, before)
+            before, observed = self._before_batch(step, item)
             if self._verdict(step["resource"], observed, before) == CHANGED:
                 self._attention("external_edit", {step["resource"]: observed})
                 raise NeedsAttention("external_edit")

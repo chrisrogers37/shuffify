@@ -136,13 +136,15 @@ def build_result(runtime, command, state, *, error_code=None, message=None, http
             resource = action["resource"]
             phase = "archive_purge" if action.get("phase") == "archive_purge" else name
             key = phase, resource
-            group = groups.setdefault(
-                key, {"baseline": action["before"]["track_uris"], "desired": [], "batches": [], "states": []}
-            )
+            baseline = action["before"]["track_uris"]
+            group = groups.setdefault(key, {"baseline": baseline, "actual": baseline, "desired": [], "batches": []})
             group["desired"] = _after(action)
             if offset < len(scope):
-                group["batches"].extend(scope[offset]["batches"])
-                group["states"].extend(replay(scope[offset]["baseline"], scope[offset]["batches"]))
+                planned = scope[offset]
+                group["batches"].extend(planned["batches"])
+                for item, reached in zip(planned["batches"], replay(planned["baseline"], planned["batches"])):
+                    if item["state"] == "acknowledged":
+                        group["actual"] = reached["track_uris"]
         for (phase, resource), group in groups.items():
             batches = group["batches"]
             attempted = any(
@@ -150,8 +152,7 @@ def build_result(runtime, command, state, *, error_code=None, message=None, http
             )
             ack = [item for item in batches if item["state"] == "acknowledged"]
             unknown = uncertainty or any(item["state"] == "dispatched" for item in batches)
-            reached = [state for item, state in zip(batches, group["states"]) if item["state"] == "acknowledged"]
-            actual = reached[-1]["track_uris"] if reached else group["baseline"]
+            actual = group["actual"]
             status = (
                 "unknown"
                 if unknown and attempted

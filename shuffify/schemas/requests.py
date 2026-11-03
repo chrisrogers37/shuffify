@@ -10,10 +10,9 @@ from typing import Annotated, Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
+from shuffify.spotify.api import MAX_PLAYLIST_TRACKS
 
 TRACK_URI_RE = re.compile(r"^spotify:track:[a-zA-Z0-9]{22}$")
-# Spotify's maximum number of tracks in one playlist.
-MAX_PLAYLIST_TRACKS = 10_000
 
 
 class ShuffleRequest(BaseModel):

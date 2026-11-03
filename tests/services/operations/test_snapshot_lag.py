@@ -61,10 +61,10 @@ def test_replace_interrupted_after_the_first_batch_resumes_to_the_full_list(inte
     if interruption == "after_ack":
         original = journal._before_batch
 
-        def stop_before_second(step, item, *rest):
+        def stop_before_second(step, item):
             if item["method"] == "POST":
                 raise Crash()
-            return original(step, item, *rest)
+            return original(step, item)
 
         journal._before_batch = stop_before_second
     else:

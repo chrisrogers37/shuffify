@@ -1,8 +1,8 @@
 """Freeze complete ordered states and the actual 100-item Spotify batch boundaries.
 
-A batch keeps its request body and the hashes of the states before and after it, not the states
-themselves. `advance` applies a batch's body to the state before it, so the state after any batch
-follows from its plan's baseline and the batches before it, and a journal grows with its track
+A playlist batch keeps its request body and the hashes of the states before and after it, not the
+states themselves. `advance` applies a batch's body to the state before it, so the state after any
+batch follows from its plan's baseline and the batches before it, and a journal grows with its track
 lists. Batches frozen with their complete states still carry them, and `advance` returns those.
 """
 
@@ -10,7 +10,7 @@ import hashlib
 import json
 from copy import deepcopy
 
-from shuffify.schemas.requests import MAX_PLAYLIST_TRACKS
+from shuffify.spotify.api import MAX_PLAYLIST_TRACKS
 
 BATCH_SIZE = 100
 DETAIL_FIELDS = frozenset(("name", "public", "description"))
@@ -38,20 +38,19 @@ def state_hash(state):
     return hashlib.sha256(json.dumps(state, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def batch(method, path, body, before_hash, after_hash):
+def batch(method, path, body, before, after):
     return {
-        "method": method, "path": path, "body": deepcopy(body), "before_hash": before_hash, "after_hash": after_hash,
+        "method": method, "path": path, "body": deepcopy(body),
+        "before_hash": state_hash(before), "after_hash": state_hash(after),
         "state": "prepared", "attempts": 0, "snapshot_before": None, "snapshot_id": None,
     }
 
 
 def advance(state, item):
-    """Return the state after `item`, given the state before it."""
+    """Return the state after the playlist batch `item`, given the state before it."""
     if "after" in item:
         return item["after"]
     method, path, body = item["method"], item["path"], item["body"]
-    if path == "/me/playlists":
-        return {"track_uris": [], "metadata": deepcopy(body)}
     after = {**state, "metadata": dict(state["metadata"])}
     if "track_uris" in state:
         after["track_uris"] = list(state["track_uris"])
@@ -88,14 +87,12 @@ def plan(kind, resource, before, *, uris=(), position=None, details=None):
     current = deepcopy(before)
     batches = []
     path = f"/playlists/{resource}/items"
-    current_hash = state_hash(current)
 
     def append(method, target, body):
-        nonlocal current, current_hash
+        nonlocal current
         after = advance(current, {"method": method, "path": target, "body": body})
-        after_hash = state_hash(after)
-        batches.append(batch(method, target, body, current_hash, after_hash))
-        current, current_hash = after, after_hash
+        batches.append(batch(method, target, body, current, after))
+        current = after
 
     if kind == "replace":
         if current["track_uris"] == values:

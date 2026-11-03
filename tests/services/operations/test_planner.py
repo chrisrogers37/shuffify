@@ -6,17 +6,14 @@ import json
 import pytest
 
 from shuffify.services.operations.planner import PlanTooLarge, plan, replay
+from tests.services.operations.test_crash_recovery import uri
 
 METADATA = {"name": "Target", "public": False}
 FULL = 10_000  # Spotify's maximum number of tracks in one playlist.
 
 
-def uri(index):
-    return f"spotify:track:{index:022d}"
-
-
-def tracks(count, start=0):
-    return [uri(start + index) for index in range(count)]
+def tracks(count):
+    return [uri(index) for index in range(count)]
 
 
 @pytest.mark.parametrize("kind,baseline,uris,resulting,batches", [
@@ -26,7 +23,7 @@ def tracks(count, start=0):
 ])
 def test_a_plan_may_fill_a_playlist_to_spotifys_maximum(kind, baseline, uris, resulting, batches):
     before = {"track_uris": tracks(baseline), "metadata": METADATA}
-    desired, frozen = plan(kind, "target", before, uris=tracks(uris, start=FULL if kind == "add" else 0))
+    desired, frozen = plan(kind, "target", before, uris=tracks(uris))
     assert (len(desired["track_uris"]), len(frozen)) == (resulting, batches)
 
 
@@ -39,7 +36,7 @@ def test_a_plan_may_fill_a_playlist_to_spotifys_maximum(kind, baseline, uris, re
 def test_a_plan_beyond_spotifys_maximum_is_refused(kind, baseline, uris):
     before = {"track_uris": tracks(baseline), "metadata": METADATA}
     with pytest.raises(PlanTooLarge):
-        plan(kind, "target", before, uris=tracks(uris, start=FULL if kind == "add" else 0))
+        plan(kind, "target", before, uris=tracks(uris))
 
 
 def digest(track_uris, metadata=METADATA):
