@@ -6,8 +6,10 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_
 
 from shuffify.schemas.requests import ShuffleRequest
 from shuffify.services.live_review_bindings import ReviewBindingError, json_binding
+from shuffify.spotify.api import MAX_PLAYLIST_TRACKS
 
 TrackURI = Annotated[str, Field(pattern=r'^spotify:track:[A-Za-z0-9]{22}$')]
+PlaylistTracks = Annotated[list[TrackURI], Field(max_length=MAX_PLAYLIST_TRACKS)]
 
 
 class Command(BaseModel):
@@ -100,5 +102,5 @@ class SnapshotRestoreCommand(ReviewedCommand):
 
 
 class WorkshopCommitCommand(Command):
-    baseline_track_uris: list[TrackURI]
-    track_uris: list[TrackURI]
+    baseline_track_uris: PlaylistTracks
+    track_uris: PlaylistTracks

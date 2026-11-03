@@ -37,6 +37,8 @@ logger = logging.getLogger(__name__)
 _TRACK_URI = re.compile(r"spotify:track:([A-Za-z0-9]{22})")
 # What get_playlist_summary asks Spotify for: enough to name a playlist and decide who may edit it.
 PLAYLIST_SUMMARY_FIELDS = "id,name,owner(id),collaborative"
+# Spotify's maximum number of tracks in one playlist.
+MAX_PLAYLIST_TRACKS = 10_000
 
 
 def _write_may_have_applied(error: Exception) -> bool:
