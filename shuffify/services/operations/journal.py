@@ -682,13 +682,18 @@ class DurableJournal:
     def _resource_ledger(self, resource):
         if self.doc["phase"] == "forward":
             return self.doc["resources"][resource], self._resource_batches(resource)
+        forward = [item for step in self.doc["plans"] if step["resource"] == resource for item in step["batches"]]
         if resource in self.doc["compensation_resources"]:
-            return self.doc["compensation_resources"][resource], self._resource_batches(resource)
+            stored = self.doc["compensation_resources"][resource]
+            if "earlier" not in stored:
+                # A compensating resource carries the forward chain it replaces, derived from the frozen plans.
+                expected, snapshot, earlier, _ = walk(self.doc["resources"][resource], forward)
+                stored = {**stored, "earlier": earlier + [(expected, snapshot)] if snapshot else earlier}
+            return stored, self._resource_batches(resource)
         # Accepted resources still guard recovery, even though no compensation may touch them.
-        batches = [item for step in self.doc["plans"] if step["resource"] == resource for item in step["batches"]]
-        if any(item["state"] != "acknowledged" for item in batches):
+        if any(item["state"] != "acknowledged" for item in forward):
             raise JournalError("An unfinished resource was omitted from compensation")
-        expected, snapshot, _, _ = walk(self.doc["resources"][resource], batches)
+        expected, snapshot, _, _ = walk(self.doc["resources"][resource], forward)
         return {"baseline": expected, "snapshot_id": snapshot}, []
 
     def _reconcile(self, *, on_verified=None):
@@ -873,17 +878,14 @@ class DurableJournal:
             if reason:
                 return self._attention(reason, {resource: observed})
             baseline = content(observed)
-            forward, forward_snapshot, earlier, _ = walk(base, batches)
+            forward, forward_snapshot, _, _ = walk(base, batches)
             # The forward chain's own snapshot is the truth; a lagging read must not replace it.
             snapshot = forward_snapshot if baseline == forward and forward_snapshot else observed.get("snapshot_id")
-            chain = [[state, known] for state, known in earlier]
-            if forward_snapshot:
-                chain.append([forward, forward_snapshot])
             for name, value in baseline["metadata"].items():
                 prior = original["baseline"]["metadata"].get(name)
                 if value != prior and prior is None:
                     return self._attention("baseline_metadata_unavailable", {resource: observed})
-            resources[resource] = {"baseline": baseline, "snapshot_id": snapshot, "earlier": chain}
+            resources[resource] = {"baseline": baseline, "snapshot_id": snapshot}
             if original.get("scope") == "metadata":
                 desired, replacement = baseline, []
             else:

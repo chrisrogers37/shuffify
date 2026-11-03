@@ -345,6 +345,19 @@ def test_a_frozen_plan_stays_proportional_to_its_track_list(kind):
     assert sizes[1] < 5 * sizes[0]
 
 
+def test_a_rolled_back_plan_stays_proportional_to_its_track_list():
+    sizes = []
+    for count in (1_000, 4_000):
+        world = World([uri(index) for index in range(count)])
+        journal = world.journal()
+        journal.freeze_replace("target", [uri(100_000 + index) for index in range(count)])
+        assert journal.resume()["state"] == "succeeded"
+        assert world.journal().compensate()["state"] == "rolled_back"
+        sizes.append(len(json.dumps(world.saved)))
+    # Four times the tracks take about four times the bytes.
+    assert sizes[1] < 5 * sizes[0]
+
+
 def test_a_batch_that_no_longer_matches_its_frozen_plan_is_never_sent():
     world = World([uri(1)])
     world.journal().freeze_replace("target", [uri(100 + index) for index in range(150)])
@@ -355,7 +368,8 @@ def test_a_batch_that_no_longer_matches_its_frozen_plan_is_never_sent():
 
 
 def with_full_batch_states(document):
-    """Add the complete before and after states that each batch of a whole-list replacement once stored."""
+    """Add the complete states journals once stored: each batch's before and after states, for whole-list
+    replacements, and the forward chain each compensating resource was rolled back against."""
     for step in document["plans"] + document.get("compensation", []):
         baseline, desired = step["baseline"], step["desired"]["track_uris"]
         ends = range(100, len(desired) + 100, 100)
@@ -363,6 +377,15 @@ def with_full_batch_states(document):
         assert len(states) == len(step["batches"]) + 1, "only whole-list replacements are rebuilt here"
         for item, before, after in zip(step["batches"], states, states[1:]):
             item["before"], item["after"] = deepcopy(before), deepcopy(after)
+    for resource, stored in document.get("compensation_resources", {}).items():
+        forward = document["resources"][resource]
+        state, snapshot, chain = forward["baseline"], forward["snapshot_id"], []
+        for item in (item for step in document["plans"] if step["resource"] == resource for item in step["batches"]):
+            if item["state"] != "acknowledged":
+                break
+            chain += [[deepcopy(state), known] for known in (snapshot, item.get("snapshot_before")) if known]
+            state, snapshot = item["after"], item.get("snapshot_id")
+        stored["earlier"] = chain + ([[deepcopy(state), snapshot]] if snapshot else [])
     return document
 
 
