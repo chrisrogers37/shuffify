@@ -151,8 +151,8 @@ SIGNED_IN_LIMITS = [
 ]
 
 
-def _signed_in(app, user_id):
-    """A client whose session is signed in as ``user_id``."""
+def _signed_in(app, user_id, display_name=None):
+    """A client signed in as ``user_id``, shown as ``display_name`` (by default the id)."""
     client = app.test_client()
     with client.session_transaction() as sess:
         sess["spotify_token"] = {
@@ -162,18 +162,18 @@ def _signed_in(app, user_id):
             "expires_at": time.time() + 3600,
             "refresh_token": "test_refresh",
         }
-        sess["user_data"] = {"id": user_id, "display_name": user_id}
+        sess["user_data"] = {"id": user_id, "display_name": display_name or user_id}
     return client
 
 
-def _status(client, method, path, address):
-    return client.open(path, method=method, environ_base={"REMOTE_ADDR": address}).status_code
+def _status(client, method, path, address, headers=None):
+    return client.open(path, method=method, headers=headers, environ_base={"REMOTE_ADDR": address}).status_code
 
 
-def _allowed_before_429(client, method, path, address, cap=50):
+def _allowed_before_429(client, method, path, address, headers=None, cap=50):
     """Send requests until the first 429 and return how many got through."""
     for sent in range(cap):
-        if _status(client, method, path, address) == 429:
+        if _status(client, method, path, address, headers) == 429:
             return sent
     raise AssertionError(f"{path} never answered 429 in {cap} requests")
 
@@ -209,3 +209,13 @@ class TestRateLimitKeys:
         allowed = _allowed_before_429(first, "POST", SHUFFLE, SHARED_ADDRESS)
         assert _status(second, "POST", SHUFFLE, SHARED_ADDRESS) == 429
         assert _allowed_before_429(second, "POST", SHUFFLE, OTHER_ADDRESS) == allowed
+
+    def test_a_signed_out_request_never_counts_against_a_signed_in_user(self, app):
+        alice, stranger = _signed_in(app, "alice"), app.test_client()
+        _allowed_before_429(stranger, "POST", SHUFFLE, SHARED_ADDRESS, headers={"X-Forwarded-For": "user:alice"})
+        assert _status(alice, "POST", SHUFFLE, OTHER_ADDRESS) != 429
+
+    def test_users_who_share_a_display_name_do_not_share_a_bucket(self, app):
+        alice, bob = _signed_in(app, "alice", "Sam"), _signed_in(app, "bob", "Sam")
+        _allowed_before_429(alice, "POST", SHUFFLE, SHARED_ADDRESS)
+        assert _status(bob, "POST", SHUFFLE, SHARED_ADDRESS) != 429

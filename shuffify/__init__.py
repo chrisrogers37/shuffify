@@ -139,13 +139,13 @@ def _init_redis(app):
 
 
 def _user_or_address_key():
-    """Rate-limit key: the signed-in user's id, else the client address.
+    """Rate-limit key: "user:" and the signed-in user's id, else "ip:" and the client address.
 
     A signed-in user keeps one bucket whatever address a request comes
     from, and users who share an address keep separate buckets.
     """
     user_id = (session.get("user_data") or {}).get("id")
-    return f"user:{user_id}" if user_id else get_remote_address()
+    return f"user:{user_id}" if user_id else f"ip:{get_remote_address()}"
 
 
 def _init_limiter(app, redis_client):
