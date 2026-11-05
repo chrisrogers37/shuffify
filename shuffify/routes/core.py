@@ -70,7 +70,14 @@ def health():
 
 @auth_bp.route("/login")
 def login():
-    """Initiate Spotify OAuth flow."""
+    """Initiate Spotify OAuth flow.
+
+    Signing in replaces the session, so, as with logout, another site must not
+    start it: a request marked Sec-Fetch-Site: cross-site goes back to the home
+    page and leaves the session unchanged.
+    """
+    if request.headers.get("Sec-Fetch-Site") == "cross-site":
+        return redirect("/")
     try:
         # Check for legal consent
         if not request.args.get("legal_consent"):
@@ -211,8 +218,8 @@ def callback():
             logger.warning(f"Authentication failed: {e}")
         else:
             logger.error(f"Authentication failed: {e}")
-        session.pop("spotify_token", None)
-        session.pop("user_data", None)
+        # The session changes only once the token exchange and the profile
+        # fetch succeed, so a failed sign-in leaves it as it was.
         _auth_notice("authentication_failed")
         return redirect("/")
 
