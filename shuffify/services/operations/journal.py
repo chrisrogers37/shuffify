@@ -682,11 +682,10 @@ class DurableJournal:
             return self.doc["resources"][resource], self._resource_batches(resource)
         forward = [item for step in self.doc["plans"] if step["resource"] == resource for item in step["batches"]]
         if resource in self.doc["compensation_resources"]:
-            stored = self.doc["compensation_resources"][resource]
-            if "earlier" not in stored:
-                # A compensating resource carries the forward chain it replaces, derived from the frozen plans.
-                expected, snapshot, earlier, _ = walk(self.doc["resources"][resource], forward)
-                stored = {**stored, "earlier": earlier + [(expected, snapshot)] if snapshot else earlier}
+            # A compensation starts where its forward chain ended, so it carries the points before that end,
+            # derived from the frozen plans.
+            _, _, earlier, _ = walk(self.doc["resources"][resource], forward)
+            stored = {**self.doc["compensation_resources"][resource], "earlier": earlier}
             return stored, self._resource_batches(resource)
         # Accepted resources still guard recovery, even though no compensation may touch them.
         if any(item["state"] != "acknowledged" for item in forward):
