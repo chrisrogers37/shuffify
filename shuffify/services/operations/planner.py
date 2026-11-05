@@ -3,7 +3,7 @@
 A playlist batch keeps its request body and the hashes of the states before and after it, not the
 states themselves. `advance` applies a batch's body to the state before it, so the state after any
 batch follows from its plan's baseline and the batches before it, and a journal grows with its track
-lists. Batches frozen with their complete states still carry them, and `advance` returns those.
+lists.
 """
 
 import hashlib
@@ -48,8 +48,6 @@ def batch(method, path, body, before, after):
 
 def advance(state, item):
     """Return the state after the playlist batch `item`, given the state before it."""
-    if "after" in item:
-        return item["after"]
     method, path, body = item["method"], item["path"], item["body"]
     after = {**state, "metadata": dict(state["metadata"])}
     if "track_uris" in state:
