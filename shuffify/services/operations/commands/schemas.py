@@ -5,6 +5,7 @@ from typing import Annotated, Any, ClassVar
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
 
 from shuffify.schemas.requests import ShuffleRequest
+from shuffify.schemas.workshop_finalize_requests import PlaylistID
 from shuffify.services.live_review_bindings import ReviewBindingError, json_binding
 from shuffify.spotify.api import MAX_PLAYLIST_TRACKS
 
@@ -14,7 +15,7 @@ PlaylistTracks = Annotated[list[TrackURI], Field(max_length=MAX_PLAYLIST_TRACKS)
 
 class Command(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    playlist_id: Annotated[str, Field(min_length=1)]
+    playlist_id: PlaylistID
 
 
 class ReviewedCommand(Command):
@@ -78,7 +79,7 @@ class SnapshotPayload(BaseModel):
     model_config = ConfigDict(extra='forbid')
     id: Annotated[int, Field(gt=0)]
     user_id: Annotated[int, Field(gt=0)]
-    playlist_id: Annotated[str, Field(min_length=1)]
+    playlist_id: PlaylistID
     playlist_name: str | None = None
     track_uris: Annotated[list[TrackURI], Field(min_length=1)]
     track_count: int | None = None
