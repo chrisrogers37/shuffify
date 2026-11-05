@@ -227,3 +227,19 @@ def test_creation_names_a_purpose_and_a_trimmed_name():
 def test_creation_bodies_are_strict(body):
     with pytest.raises(ValidationError):
         CreateSetupPlaylistRequest.model_validate(body)
+
+
+@pytest.mark.parametrize(("size", "accepted"), [(16_384, True), (16_385, False)])
+def test_an_acknowledgment_is_at_most_16_kib_of_json(size, accepted):
+    # {"k":"..."} serializes compactly to 8 bytes plus the string; its shape is checked later.
+    body = {
+        "configuration_revision": REVISION,
+        "changes": [EXAMPLES[0][0]],
+        "acknowledgment": {"k": "x" * (size - 8)},
+    }
+    if accepted:
+        assert SetupSaveRequest.model_validate(body).acknowledgment == body["acknowledgment"]
+    else:
+        with pytest.raises(ValidationError) as refused:
+            SetupSaveRequest.model_validate(body)
+        assert [error["loc"] for error in refused.value.errors()] == [("acknowledgment",)]

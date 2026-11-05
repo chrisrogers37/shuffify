@@ -4,10 +4,11 @@ Pydantic validation schemas for user settings requests.
 Validates settings update payloads from the settings form.
 """
 
-from typing import Optional
+from typing import Annotated, Optional
 
 from pydantic import BaseModel, Field, JsonValue, field_validator
 
+from shuffify.schemas.requests import JSONSizeLimit
 from shuffify.shuffle_algorithms.registry import (
     ShuffleRegistry,
 )
@@ -17,8 +18,8 @@ class UserSettingsUpdateRequest(BaseModel):
     """Schema for updating user settings via the settings form."""
 
     default_algorithm: Optional[str] = Field(default=None)
-    default_algorithm_params: Optional[dict[str, JsonValue]] = Field(default=None)
-    extra: Optional[dict[str, JsonValue]] = Field(default=None)
+    default_algorithm_params: Optional[Annotated[dict[str, JsonValue], JSONSizeLimit]] = Field(default=None)
+    extra: Optional[Annotated[dict[str, JsonValue], JSONSizeLimit]] = Field(default=None)
     theme: Optional[str] = Field(default=None)
     notifications_enabled: Optional[bool] = Field(
         default=None

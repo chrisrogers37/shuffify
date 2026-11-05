@@ -40,6 +40,7 @@ from shuffify.services.playlist_snapshot_service import PlaylistSnapshotNotFound
 from shuffify.services.state_service import StateService
 from shuffify.services.workshop_commit_service import _TRACK_URI, WorkshopCommitService
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
+from shuffify.spotify.api import MAX_PLAYLIST_TRACKS
 
 logger = logging.getLogger(__name__)
 
@@ -299,7 +300,7 @@ def parse_inspect_request(body):
         if type(desired) is not bool:
             raise InspectRequestError()
         return kind, desired
-    if not isinstance(desired, list) or any(
+    if not isinstance(desired, list) or len(desired) > MAX_PLAYLIST_TRACKS or any(
         not isinstance(uri, str) or not _TRACK_URI.fullmatch(uri) for uri in desired
     ):
         raise InspectRequestError()

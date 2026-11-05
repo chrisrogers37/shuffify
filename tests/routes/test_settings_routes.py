@@ -278,3 +278,21 @@ class TestDedicatedSettings:
         with db_app.app_context():
             saved = UserSettings.query.filter_by(user_id=user_id).one()
             assert saved.default_algorithm == expected
+
+
+class TestSettingsJsonObjectBounds:
+    """Each JSON object setting is capped at 16,384 bytes of compact JSON."""
+
+    @patch("shuffify.routes.require_auth", return_value=MagicMock(spec=SpotifyAPI))
+    @pytest.mark.parametrize("field", ["extra", "default_algorithm_params"])
+    def test_object_over_16384_bytes_is_400(self, mock_auth, auth_client, field):
+        # Bound: 16,384 bytes of compact JSON; this value is 16,385.
+        response = auth_client.post(api_path("/settings"), json={field: {"k": "x" * (16_385 - 8)}})
+        assert response.status_code == 400
+
+    @patch("shuffify.routes.require_auth", return_value=MagicMock(spec=SpotifyAPI))
+    @pytest.mark.parametrize("field", ["extra", "default_algorithm_params"])
+    def test_object_of_exactly_16384_bytes_succeeds(self, mock_auth, auth_client, field):
+        # Bound: 16,384 bytes of compact JSON is the last accepted size.
+        response = auth_client.post(api_path("/settings"), json={field: {"k": "x" * (16_384 - 8)}})
+        assert response.status_code == 200

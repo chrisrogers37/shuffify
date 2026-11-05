@@ -509,3 +509,42 @@ class TestRestoreSnapshot:
         assert not {"execution_id", "started_at", "execution_state"} & data.keys()
         api.get_playlist.assert_not_called()
         api.update_playlist_tracks.assert_not_called()
+
+
+class TestSnapshotTrackListBound:
+    @patch("shuffify.routes.require_auth")
+    def test_over_spotify_playlist_limit_rejected(
+        self, mock_auth, auth_client
+    ):
+        # Spotify's limit for one playlist is 10,000 tracks.
+        mock_auth.return_value = MagicMock()
+        resp = auth_client.post(
+            api_path("/playlist/p1/snapshots"),
+            json={
+                "playlist_name": "Too big",
+                "track_uris": [
+                    f"spotify:track:{i:022d}"
+                    for i in range(10_001)
+                ],
+            },
+        )
+        assert resp.status_code == 400
+
+    @patch("shuffify.routes.require_auth")
+    def test_at_spotify_playlist_limit_accepted(
+        self, mock_auth, auth_client
+    ):
+        # Spotify's limit for one playlist is 10,000 tracks.
+        mock_auth.return_value = MagicMock()
+        resp = auth_client.post(
+            api_path("/playlist/p1/snapshots"),
+            json={
+                "playlist_name": "At limit",
+                "track_uris": [
+                    f"spotify:track:{i:022d}"
+                    for i in range(10_000)
+                ],
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["snapshot"]["track_count"] == 10_000

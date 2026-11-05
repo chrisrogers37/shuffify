@@ -14,6 +14,11 @@ logger = logging.getLogger(__name__)
 
 # Session key for storing playlist states
 PLAYLIST_STATES_KEY = "playlist_states"
+# One playlist's history keeps at most this many states, and at most MAX_HISTORY_URIS track
+# URIs in all; recording past either drops the oldest states. A queued Undo carries the whole
+# history, and each operation that changes the playlist stores copies of it in its receipt.
+MAX_HISTORY_STATES = 100
+MAX_HISTORY_URIS = 25_000
 
 
 @dataclass
@@ -33,6 +38,14 @@ class PlaylistState:
         return cls(
             states=data.get("states", []), current_index=data.get("current_index", 0)
         )
+
+    def push(self, uris: List[str]) -> None:
+        """Make uris the current state; drop redo states, then the oldest past either cap."""
+        states = (self.states[: self.current_index + 1] + [uris])[-MAX_HISTORY_STATES:]
+        size = sum(map(len, states))
+        while size > MAX_HISTORY_URIS and len(states) > 1:
+            size -= len(states.pop(0))
+        self.states, self.current_index = states, len(states) - 1
 
 
 class StateError(Exception):
@@ -193,12 +206,7 @@ class StateService:
         if not state:
             raise StateError(f"No existing state for playlist {playlist_id}")
 
-        # Truncate any future states (from previous undos)
-        state.states = state.states[: state.current_index + 1]
-
-        # Add the new state
-        state.states.append(new_uris)
-        state.current_index += 1
+        state.push(new_uris)
 
         # Save back to session
         session[PLAYLIST_STATES_KEY][playlist_id] = state.to_dict()
@@ -331,8 +339,7 @@ class StateService:
                 raise StateError("The saved playlist history is unavailable.")
         for uris in (list(before_uris), list(after_uris)):
             if state.states[state.current_index] != uris:
-                state.states = state.states[:state.current_index + 1] + [uris]
-                state.current_index += 1
+                state.push(uris)
         StateService._assign_verified_state(session, playlist_id, state)
         return state
 
