@@ -760,8 +760,10 @@ def _init_sentry(config_class):
         integrations=[
             FlaskIntegration(),
             SqlalchemyIntegration(),
+            # Breadcrumbs start at WARNING: _strip_pii removes secrets but
+            # not names or addresses, so lower lines are not sent at all.
             LoggingIntegration(
-                level=logging.INFO,
+                level=logging.WARNING,
                 event_level=logging.WARNING,
             ),
         ],
@@ -862,6 +864,9 @@ def create_app(config_name=None):
     logging.basicConfig(
         level=logging.DEBUG if config_name != "production" else logging.INFO
     )
+    # Flask-Limiter logs each breach at INFO with its key, the client's
+    # address. The app's 429 handler logs the breach without it.
+    logging.getLogger("flask-limiter").setLevel(logging.WARNING)
 
     logger.info("Creating app with config: %s", config_name)
 

@@ -166,9 +166,7 @@ def callback():
                     db_user,
                     token_data["refresh_token"],
                 )
-                logger.debug(
-                    f"Stored encrypted refresh token for user {user_data['id']}"
-                )
+                logger.debug("Stored encrypted refresh token for user %s", db_user.id)
             except Exception as e:
                 logger.warning(
                     f"Failed to store refresh token: {e}. "
@@ -203,9 +201,8 @@ def callback():
             )
 
         logger.info(
-            f"User "
-            f"{user_data.get('display_name', 'Unknown')} "
-            f"authenticated successfully"
+            "User %s authenticated successfully",
+            db_user.id if db_user else "without a stored record",
         )
         return redirect("/")
 

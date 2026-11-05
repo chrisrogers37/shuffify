@@ -61,6 +61,22 @@ class TestUpstreamSourceServiceAdd:
 
         assert source1.id == source2.id
 
+    def test_adding_a_source_logs_the_user_by_internal_id(self, app_ctx, shuffify_logs):
+        UpstreamSourceService.add_source("user123", "target_1", "source_1")
+        UpstreamSourceService.add_source("user123", "target_1", "source_1")
+        user_id = User.query.filter_by(spotify_id="user123").one().id
+        assert f"Success: add upstream source: source_1 -> target_1 for user {user_id}" in shuffify_logs.text
+        assert f"Upstream source already exists: source_1 -> target_1 for user {user_id}" in shuffify_logs.text
+        assert "user123" not in shuffify_logs.text
+
+    def test_adding_a_search_source_logs_the_user_by_internal_id(self, app_ctx, shuffify_logs):
+        UpstreamSourceService.add_search_source("user123", "target_1", "lofi")
+        UpstreamSourceService.add_search_source("user123", "target_1", "lofi")
+        user_id = User.query.filter_by(spotify_id="user123").one().id
+        assert f"Success: add search source: 'lofi' -> target_1 for user {user_id}" in shuffify_logs.text
+        assert f"Search source already exists: 'lofi' -> target_1 for user {user_id}" in shuffify_logs.text
+        assert "user123" not in shuffify_logs.text
+
     def test_add_source_invalid_type_raises(self, app_ctx):
         """Should reject invalid source_type."""
         with pytest.raises(

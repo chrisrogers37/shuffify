@@ -5,6 +5,7 @@ Tests cover user upsert, lookup, and error handling.
 """
 
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
 
@@ -410,6 +411,19 @@ class TestUserServiceSettingsAutoCreate:
         ).first()
         assert settings is not None
         assert settings.theme == "system"
+
+    def test_a_settings_failure_logs_the_user_by_internal_id(self, app_ctx, shuffify_logs):
+        from shuffify.services.user_settings_service import UserSettingsService
+
+        with patch.object(
+            UserSettingsService, "get_or_create", autospec=True, side_effect=RuntimeError("settings store down")
+        ):
+            result = UserService.upsert_from_spotify(
+                {"id": "settings_fail_user", "display_name": "Settings Fail User", "images": []}
+            )
+        assert f"Failed to create default settings for user {result.user.id}" in shuffify_logs.text
+        assert "settings_fail_user" not in shuffify_logs.text
+        assert "Settings Fail User" not in shuffify_logs.text
 
     def test_existing_user_keeps_settings(
         self, app_ctx
