@@ -502,7 +502,7 @@ class TestLoginHistoryModel:
         assert entry.logged_out_at is not None
 
     def test_to_dict(self, db_session, user):
-        """Should serialize all fields."""
+        """Should serialize every field but the stored session digest."""
         entry = LoginHistory(
             user_id=user.id,
             ip_address="10.0.0.1",
@@ -517,7 +517,7 @@ class TestLoginHistoryModel:
         assert d["user_id"] == user.id
         assert d["ip_address"] == "10.0.0.1"
         assert d["user_agent"] == "Chrome/100"
-        assert d["session_id"] == "sess_xyz"
+        assert "session_id" not in d
         assert d["login_type"] == "oauth_initial"
         assert d["logged_in_at"] is not None
         assert d["logged_out_at"] is None

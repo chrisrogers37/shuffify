@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from shuffify.services.token_service import TokenService
 from tests.paths import api_path
 
 
@@ -183,6 +184,40 @@ class TestCallbackRoute:
             resp = client.get("/callback?code=test_auth_code&state=valid_state")
             assert resp.status_code == 302
             assert resp.headers["Location"].endswith("/")
+
+    @patch("shuffify.routes.core.LoginHistoryService", autospec=True)
+    @patch("shuffify.routes.core.UserService", autospec=True)
+    @patch("shuffify.routes.core.AuthService", autospec=True)
+    def test_callback_stores_only_encrypted_refresh_token(
+        self,
+        mock_auth_svc,
+        mock_user_svc,
+        mock_login_hist,
+        db_app,
+    ):
+        mock_auth_svc.exchange_code_for_token.return_value = {
+            "access_token": "new_token",
+            "token_type": "Bearer",
+            "expires_at": time.time() + 3600,
+            "refresh_token": "new_refresh",
+        }
+        mock_auth_svc.authenticate_and_get_user.return_value = (
+            MagicMock(),
+            {"id": "user123", "display_name": "Test User", "images": []},
+        )
+        upserted = MagicMock(is_new=False, previous_login_at=None)
+        mock_user_svc.upsert_from_spotify.return_value = upserted
+
+        with db_app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["oauth_state"] = "valid_state"
+            client.get("/callback?code=test_auth_code&state=valid_state")
+            with client.session_transaction() as sess:
+                stored = sess["spotify_token"]
+
+        assert "refresh_token" not in stored
+        assert TokenService.decrypt_token(stored["encrypted_refresh_token"]) == "new_refresh"
+        mock_user_svc.store_refresh_token.assert_called_once_with(upserted.user, "new_refresh")
 
     @patch("shuffify.routes.core.LoginHistoryService")
     @patch("shuffify.routes.core.UserService")

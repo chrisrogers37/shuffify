@@ -114,7 +114,7 @@ def test_model_unique_indexes_compile_with_distinct_nulls(name, columns):
 
 def test_migration_extends_the_base_without_a_fork():
     script = ScriptDirectory(str(ROOT / "migrations"))
-    assert script.get_heads() == ["d0e1f2a3b4c5"]
+    assert script.get_heads() == ["e1f2a3b4c5d6"]
     assert script.get_revision(REVISION).down_revision == "f7a8b9c0d1e2"
 
 

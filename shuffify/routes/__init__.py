@@ -28,6 +28,7 @@ from shuffify.services import (
     AuthService,
     UserService,
 )
+from shuffify.services.auth_service import decrypt_session_token, encrypt_session_token
 from shuffify.services.live_operation_service import preflight_error_code
 from shuffify.services.live_review_context import context_rejected
 
@@ -43,10 +44,17 @@ site_bp = Blueprint("site", __name__)
 
 
 def is_authenticated() -> bool:
-    """Check if the user has a valid session token."""
-    return AuthService.validate_session_token(
-        session.get("spotify_token")
-    )
+    """Check if the user has a valid session token.
+
+    The session keeps the refresh token encrypted. Every signed-in request
+    passes this check, so a token that still holds a plaintext one is stored
+    again here, encrypted.
+    """
+    token = session.get("spotify_token")
+    if isinstance(token, dict) and "refresh_token" in token:
+        token = encrypt_session_token(token)
+        session["spotify_token"] = token
+    return AuthService.validate_session_token(token)
 
 
 def require_auth():
@@ -60,7 +68,7 @@ def require_auth():
         return None
     try:
         return AuthService.get_authenticated_api(
-            session["spotify_token"]
+            decrypt_session_token(session["spotify_token"])
         )
     except AuthenticationError:
         return None

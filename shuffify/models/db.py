@@ -668,6 +668,8 @@ class LoginHistory(db.Model):
     logged_out_at = db.Column(UTCDateTime, nullable=True)
     ip_address = db.Column(db.String(45), nullable=True)
     user_agent = db.Column(db.String(512), nullable=True)
+    # A keyed digest of the session id (LoginHistoryService), never the id
+    # itself: the id is the session cookie's value.
     session_id = db.Column(db.String(255), nullable=True)
     login_type = db.Column(db.String(20), nullable=False)
 
@@ -697,7 +699,6 @@ class LoginHistory(db.Model):
             ),
             "ip_address": self.ip_address,
             "user_agent": self.user_agent,
-            "session_id": self.session_id,
             "login_type": self.login_type,
         }
 
