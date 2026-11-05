@@ -210,7 +210,8 @@ def _emit_error(message, *args, **kwargs):
     event_level=WARNING means this becomes a Sentry event, taking the same
     LoggingIntegration path production log calls take.
     """
-    logging.getLogger("shuffify.tests.free_text_egress").error(message, *args, **kwargs)
+    logger = logging.getLogger("shuffify.tests.free_text_egress")
+    logger.error(message, *args, **kwargs)
 
 
 class TestFreeTextEgress:
