@@ -9,6 +9,7 @@ from typing import Annotated, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, StrictBool, StrictInt, model_validator
 
+from shuffify.schemas.workshop_finalize_requests import PlaylistID
 from shuffify.services.live_review_scope import JOB_STEPS
 
 from .schemas import ReviewedCommand
@@ -25,7 +26,7 @@ class CapturedModel(BaseModel):
 class RoutineDefinition(CapturedModel):
     schedule_id: RowID | None
     job_type: JobKind
-    target_playlist_id: Identifier
+    target_playlist_id: PlaylistID
     target_playlist_name: str | None
     algorithm_name: str | None
     algorithm_params: JsonValue
@@ -34,7 +35,7 @@ class RoutineDefinition(CapturedModel):
 
 class CapturedLink(CapturedModel):
     id: RowID
-    raid_playlist_id: Identifier
+    raid_playlist_id: PlaylistID
     raid_playlist_name: str | None
     drip_count: StrictInt
     drip_enabled: StrictBool
@@ -42,7 +43,7 @@ class CapturedLink(CapturedModel):
 
 class CapturedPair(CapturedModel):
     id: RowID
-    archive_playlist_id: Identifier
+    archive_playlist_id: PlaylistID
     archive_playlist_name: str | None
 
 

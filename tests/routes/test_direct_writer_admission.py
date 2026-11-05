@@ -9,6 +9,7 @@ from jsonschema import Draft7Validator
 from shuffify.models.db import ActivityLog, JobExecution, PlaylistSnapshot, User, db
 from shuffify.services.operations.repository import OperationRepository
 from shuffify.services.state_service import StateService
+from shuffify.services.user_service import UserService
 
 
 def uri(index):
@@ -39,16 +40,16 @@ def forbid_spotify(monkeypatch):
         monkeypatch.setattr(name, forbidden)
 
 
-def writer_case(kind, snapshot_id):
+def writer_case(kind, snapshot_id, playlist_id="target"):
     if kind == "shuffle":
-        return "/api/shuffle/target", {"data": {"algorithm": "BasicShuffle"}}
+        return f"/api/shuffle/{playlist_id}", {"data": {"algorithm": "BasicShuffle"}}
     if kind == "undo":
-        return "/api/undo/target", {}
+        return f"/api/undo/{playlist_id}", {}
     if kind == "visibility":
-        return "/api/playlist/target/toggle-visibility", {"json": {"public": False}}
+        return f"/api/playlist/{playlist_id}/toggle-visibility", {"json": {"public": False}}
     if kind == "snapshot_restore":
         return f"/api/snapshots/{snapshot_id}/restore", {"json": {"track_uris": [uri(99)]}}
-    return "/api/workshop/target/commit", {"json": {"baseline_track_uris": [uri(2)], "track_uris": []}}
+    return f"/api/workshop/{playlist_id}/commit", {"json": {"baseline_track_uris": [uri(2)], "track_uris": []}}
 
 
 @pytest.mark.parametrize("kind", ["shuffle", "undo", "visibility", "snapshot_restore", "workshop_commit"])
@@ -77,6 +78,32 @@ def test_writers_accept_one_row_with_zero_spotify_calls(auth_client, local_sourc
     busy = auth_client.post(path, headers={"Idempotency-Key": "different-request"}, **options)
     assert busy.status_code == 409
     assert busy.json["operation_id"] == row.id
+
+
+@pytest.mark.parametrize("kind", ["shuffle", "visibility", "workshop_commit"])
+def test_a_playlist_id_outside_the_strict_pattern_is_refused_before_queue(auth_client, local_sources,
+                                                                          forbid_spotify, kind):
+    path, options = writer_case(kind, None, playlist_id="not-a-playlist")
+    response = auth_client.post(path, **options)
+    assert response.status_code == 400
+    assert response.json["message"].startswith("playlist_id:")
+    assert JobExecution.query.count() == 0
+
+
+@pytest.mark.parametrize(("state", "error_code"), [("queued", "playlist_busy"),
+                                                   ("needs_attention", "playlist_needs_review")])
+def test_a_refusal_never_names_another_users_operation(auth_client, local_sources, forbid_spotify, state,
+                                                       error_code):
+    other = UserService.upsert_from_spotify({"id": "other", "display_name": "Other", "images": []}).user
+    repository = OperationRepository()
+    blocking = repository.enqueue(kind="shuffle", user_id=other.id, targets=["target"], payload={})
+    if state == "needs_attention":
+        repository.finish(repository.claim(operation_id=blocking.id), "needs_attention")
+    path, options = writer_case("shuffle", None)
+    response = auth_client.post(path, **options)
+    assert (response.status_code, response.json["error_code"]) == (409, error_code)
+    assert "operation_id" not in response.json
+    assert JobExecution.query.count() == 1
 
 
 def test_snapshot_replay_uses_accepted_order_after_source_is_deleted(auth_client, local_sources, forbid_spotify):
