@@ -129,6 +129,16 @@ def test_routines_include_machine_state_and_playlist_refs(auth_client, context_a
     assert response.json["playlists"] == [{"id": "target", "name": "target"}]
 
 
+def test_routines_answer_a_failed_playlist_fetch_with_a_fixed_message(auth_client, context_api):
+    context_api.get_user_playlists.side_effect = ConnectionError("upstream-7f3c.internal:5432")
+
+    response = auth_client.get("/api/routines")
+
+    assert response.status_code == 400
+    assert response.json["message"] == "Playlist operation failed."
+    assert "upstream-7f3c" not in response.get_data(as_text=True)
+
+
 @pytest.mark.parametrize("failure", [PlaylistNotFoundError("Missing"), PlaylistAccessError("Inaccessible")])
 def test_unavailable_workshop_returns_404_without_clearing_session(auth_client, context_api, failure):
     with patch("shuffify.routes.contexts.PlaylistService", autospec=PlaylistService) as playlists:

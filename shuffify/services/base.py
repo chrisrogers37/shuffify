@@ -33,6 +33,24 @@ def is_commit_failure(error: BaseException) -> bool:
     return getattr(error, "commit_failed", False) is True
 
 
+def public_error(exception_class: Type[Exception], message: str) -> Exception:
+    """
+    Build an exception whose message is written for the user.
+
+    Error handlers answer with a fixed message for each class, because an
+    exception's text can carry an upstream cause. An exception built here
+    carries its message as ``public_message``, which they answer with instead.
+    """
+    error = exception_class(message)
+    error.public_message = message
+    return error
+
+
+def public_message(error: BaseException, default: str) -> str:
+    """The message a handler answers ``error`` with: its public one, else ``default``."""
+    return getattr(error, "public_message", None) or default
+
+
 def safe_commit(
     operation_name: str,
     exception_class: Type[Exception] = Exception,
