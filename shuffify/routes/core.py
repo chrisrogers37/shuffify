@@ -29,6 +29,7 @@ from shuffify.services import (
     UserService,
 )
 from shuffify.services.auth_notice import auth_notice
+from shuffify.services.auth_service import encrypt_session_token
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +138,7 @@ def callback():
         # We then clear stale pre-auth data before writing auth state.
         current_app.session_interface.regenerate(session)
         session.clear()
-        session["spotify_token"] = token_data
+        session["spotify_token"] = encrypt_session_token(token_data)
         session["user_data"] = user_data
 
         # Upsert user record in database (non-blocking)
