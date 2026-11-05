@@ -218,3 +218,20 @@ class TestRotatedRefreshTokenIsStored:
             assert TokenService.decrypt_token(self._stored(user)) == "refresh_v1"
             on_401()  # the next refresh stores it
         assert TokenService.decrypt_token(self._stored(user)) == "refresh_v2"
+
+    def test_a_stored_token_logs_the_user_by_internal_id(self, user, shuffify_logs):
+        self._job_api(user, self._token("refresh_v2"), on_refresh="refresh_v2")
+        assert f"store the rotated refresh token for user {user.id}" in shuffify_logs.text
+        assert user.spotify_id not in shuffify_logs.text
+
+
+class TestMissingRefreshToken:
+    """The error a job fails with reaches the worker's log, so it names the
+    user by internal id."""
+
+    def test_names_the_user_by_internal_id(self, mock_user):
+        mock_user.encrypted_refresh_token = None
+        with pytest.raises(JobExecutionError) as error:
+            JobExecutorService._get_spotify_api(mock_user)
+        assert str(error.value).startswith(f"User {mock_user.id} has no stored refresh token")
+        assert mock_user.spotify_id not in str(error.value)

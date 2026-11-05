@@ -79,7 +79,7 @@ class JobExecutorService:
         """
         if not user.encrypted_refresh_token:
             raise JobExecutionError(
-                f"User {user.spotify_id} has no stored "
+                f"User {user.id} has no stored "
                 f"refresh token. User must log in to enable "
                 f"scheduled operations."
             )
@@ -121,7 +121,7 @@ class JobExecutorService:
                 # On failure safe_commit rolls back, logs and raises. SpotifyAPI
                 # swallows that, so the job runs on, and the next refresh,
                 # still differing from the stored token, retries the store.
-                safe_commit(f"store the rotated refresh token for user {user.spotify_id}")
+                safe_commit(f"store the rotated refresh token for user {user.id}")
                 refresh_token = new_token.refresh_token
 
             return SpotifyAPI(
