@@ -367,6 +367,31 @@ def test_a_batch_that_no_longer_matches_its_frozen_plan_is_never_sent():
     assert [method for method, _, _ in world.writes] == ["PUT"]
 
 
+def test_a_batch_whose_start_no_longer_matches_its_frozen_plan_is_never_sent():
+    world = World([uri(1)])
+    world.journal().freeze_replace("target", [uri(100 + index) for index in range(150)])
+    # The journal and the playlist agree on a start the plan was not frozen from. The first batch
+    # replaces the whole list, so it still ends where the plan froze it.
+    world.saved["resources"]["target"]["baseline"]["track_uris"] = [uri(2)]
+    world.playlists["target"]["track_uris"] = [uri(2)]
+    with pytest.raises(JournalError):
+        world.journal().resume()
+    assert world.writes == []
+
+
+def test_a_batch_that_is_not_its_playlists_next_is_refused_even_when_its_hashes_match():
+    world = World([uri(1), uri(2)])
+    journal = world.journal()
+    # Removing tracks the playlist does not hold changes nothing, so both batches start from the same state.
+    journal.freeze_remove("target", [uri(100 + index) for index in range(100)] + [uri(1)])
+    step = journal.doc["plans"][0]
+    first, second = step["batches"]
+    assert first["before_hash"] == second["before_hash"]
+    assert journal._prior_state(step, first)["track_uris"] == [uri(1), uri(2)]
+    with pytest.raises(JournalError):
+        journal._prior_state(step, second)
+
+
 def with_full_batch_states(document):
     """Add the complete states journals once stored: each batch's before and after states, for whole-list
     replacements, and the forward chain each compensating resource was rolled back against. The journal
