@@ -76,10 +76,6 @@ def login():
             _auth_notice("consent_required")
             return redirect("/")
 
-        # Clear any existing session data
-        session.pop("spotify_token", None)
-        session.pop("user_data", None)
-
         state = secrets.token_urlsafe(32)
         session["oauth_state"] = state
         session.modified = True
@@ -121,7 +117,9 @@ def callback():
     # Validate CSRF state parameter
     callback_state = request.args.get("state")
     stored_state = session.pop("oauth_state", None)
-    if not stored_state or not hmac.compare_digest(stored_state, callback_state or ""):
+    if not stored_state or not hmac.compare_digest(
+        stored_state.encode(), (callback_state or "").encode()
+    ):
         logger.error("OAuth state mismatch: possible CSRF attack")
         _auth_notice("invalid_state")
         return redirect("/")

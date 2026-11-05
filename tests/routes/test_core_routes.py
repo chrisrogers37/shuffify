@@ -44,6 +44,21 @@ class TestLoginRoute:
             with client.session_transaction() as sess:
                 assert sess.get("oauth_state") == state_value
 
+    @patch("shuffify.routes.core.AuthService", autospec=True)
+    def test_login_changes_only_the_oauth_state_of_a_signed_in_session(self, mock_auth_svc, auth_client):
+        mock_auth_svc.get_auth_url.return_value = "https://accounts.spotify.com/authorize?test=1"
+        with auth_client.session_transaction() as sess:
+            before = dict(sess)
+        assert {"spotify_token", "user_data"} <= before.keys()
+
+        resp = auth_client.get("/login?legal_consent=1")
+
+        assert resp.status_code == 302
+        with auth_client.session_transaction() as sess:
+            after = dict(sess)
+        assert after.pop("oauth_state")
+        assert after == before
+
     @patch("shuffify.routes.core.AuthService")
     def test_auth_error_during_login_redirects(self, mock_auth_svc, db_app):
         from shuffify.services import AuthenticationError
@@ -121,6 +136,15 @@ class TestCallbackRoute:
                 sess["oauth_state"] = "stored_state"
             resp = client.get("/callback?code=test_auth_code")
             assert resp.status_code == 302
+
+    def test_non_ascii_state_gets_the_invalid_state_notice(self, db_app):
+        with db_app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["oauth_state"] = "stored_state"
+            resp = client.get("/callback", query_string={"code": "test_auth_code", "state": "stored_st\u00e4te"})
+            notice = client.get(api_path("/session")).get_json()["notice"]
+        assert resp.status_code == 302
+        assert notice["code"] == "invalid_state"
 
     @patch("shuffify.routes.core.LoginHistoryService")
     @patch("shuffify.routes.core.UserService")
