@@ -1,10 +1,12 @@
 """OAuth consent, callback/session renewal, safe notices, and native logout."""
 
+import json
 import logging
 import time
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from shuffify.services.auth_service import decrypt_session_token
 from shuffify.services.token_service import TokenService
@@ -357,6 +359,46 @@ class TestCallbackRoute:
         assert resp.status_code == 302
         assert resp.headers["Location"] == "/"
         with auth_client.session_transaction() as sess:
+            after = dict(sess)
+        assert after.pop("auth_notice") == "authentication_failed"
+        assert after == before
+
+    @pytest.mark.parametrize("signed_in", [True, False], ids=["signed-in", "no-sign-in"])
+    def test_a_sign_in_that_fails_after_a_token_refresh_keeps_the_session(
+        self, request, db_app, monkeypatch, signed_in
+    ):
+        """The profile request answers 401, the refresh is accepted, and it answers 401 again."""
+        client = request.getfixturevalue("auth_client") if signed_in else db_app.test_client()
+        grants, profile_reads = [], []
+
+        def spotify(url, **kwargs):
+            grant = (kwargs.get("data") or {}).get("grant_type")
+            if grant is None:
+                profile_reads.append(url)
+                status, body = 401, {"error": {"status": 401, "message": "The access token expired"}}
+            else:
+                grants.append(grant)
+                status, body = 200, {"access_token": f"{grant}-access", "token_type": "Bearer", "expires_in": 3600}
+                if grant == "authorization_code":
+                    body["refresh_token"] = "new-refresh"
+            reply = requests.Response()
+            reply.status_code, reply._content = status, json.dumps(body).encode()
+            return reply
+
+        monkeypatch.setattr("shuffify.spotify.auth.requests.post", spotify)
+        monkeypatch.setattr(
+            "requests.sessions.Session.request", lambda self, method, url, **kwargs: spotify(url, **kwargs)
+        )
+        with client.session_transaction() as sess:
+            before = dict(sess)
+            sess["oauth_state"] = "valid_state"
+
+        resp = client.get("/callback?code=new_code&state=valid_state")
+
+        assert resp.headers["Location"] == "/"
+        assert grants == ["authorization_code", "refresh_token"]
+        assert profile_reads == ["https://api.spotify.com/v1/me"] * 2
+        with client.session_transaction() as sess:
             after = dict(sess)
         assert after.pop("auth_notice") == "authentication_failed"
         assert after == before

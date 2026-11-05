@@ -132,6 +132,9 @@ def callback():
         _auth_notice("invalid_state")
         return redirect("/")
 
+    # A token refresh during the profile fetch below writes the session's
+    # token; a failed sign-in puts this one back.
+    previous_token = session.get("spotify_token")
     try:
         # Exchange code for token
         token_data = AuthService.exchange_code_for_token(code)
@@ -218,8 +221,11 @@ def callback():
             logger.warning(f"Authentication failed: {e}")
         else:
             logger.error(f"Authentication failed: {e}")
-        # The session changes only once the token exchange and the profile
-        # fetch succeed, so a failed sign-in leaves it as it was.
+        # The rest of the session changes only once the sign-in succeeds.
+        if previous_token is None:
+            session.pop("spotify_token", None)
+        else:
+            session["spotify_token"] = previous_token
         _auth_notice("authentication_failed")
         return redirect("/")
 
