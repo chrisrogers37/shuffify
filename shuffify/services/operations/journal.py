@@ -478,8 +478,6 @@ class DurableJournal:
 
     def _prior_state(self, step, item):
         """Return the state the next batch starts from, proved against the hashes frozen with it."""
-        if "before" in item:
-            return item["before"]
         before, _, _, pending = walk(*self._resource_ledger(step["resource"]))
         if (pending is not item or state_hash(before) != item["before_hash"]
                 or state_hash(advance(before, item)) != item["after_hash"]):

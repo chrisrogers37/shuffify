@@ -369,7 +369,8 @@ def test_a_batch_that_no_longer_matches_its_frozen_plan_is_never_sent():
 
 def with_full_batch_states(document):
     """Add the complete states journals once stored: each batch's before and after states, for whole-list
-    replacements, and the forward chain each compensating resource was rolled back against."""
+    replacements, and the forward chain each compensating resource was rolled back against. The journal
+    reads none of them, so a journal that carries them finishes from its bodies and hashes."""
     for step in document["plans"] + document.get("compensation", []):
         baseline, desired = step["baseline"], step["desired"]["track_uris"]
         ends = range(100, len(desired) + 100, 100)
