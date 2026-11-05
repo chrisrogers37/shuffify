@@ -44,7 +44,7 @@ class TestLoginRoute:
             with client.session_transaction() as sess:
                 assert sess.get("oauth_state") == state_value
 
-    @patch("shuffify.routes.core.AuthService")
+    @patch("shuffify.routes.core.AuthService", autospec=True)
     def test_login_changes_only_the_oauth_state_of_a_signed_in_session(self, mock_auth_svc, auth_client):
         mock_auth_svc.get_auth_url.return_value = "https://accounts.spotify.com/authorize?test=1"
         with auth_client.session_transaction() as sess:
