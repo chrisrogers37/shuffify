@@ -99,7 +99,7 @@ class WorkshopSessionService:
         db.session.add(ws)
         safe_commit(
             f"save workshop session '{session_name}' for "
-            f"user {spotify_id}, playlist {playlist_id} "
+            f"user {user.id}, playlist {playlist_id} "
             f"({len(track_uris)} tracks)",
             WorkshopSessionError,
         )

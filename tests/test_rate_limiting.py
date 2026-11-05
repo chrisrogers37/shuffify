@@ -80,6 +80,19 @@ class TestLoginRateLimit:
             assert "Too many requests" in data["message"]
 
 
+class TestRateLimitLog:
+    """A rate-limited request is logged without the client's address."""
+
+    def test_a_429_logs_no_client_address(self, rate_client, shuffify_logs):
+        statuses = [
+            rate_client.get("/callback", environ_base={"REMOTE_ADDR": "203.0.113.77"}).status_code
+            for _ in range(21)
+        ]
+        assert 429 in statuses
+        assert "Rate limit exceeded" in shuffify_logs.text
+        assert "203.0.113.77" not in shuffify_logs.text
+
+
 class TestCallbackRateLimit:
     """Tests for rate limiting on the /callback endpoint."""
 

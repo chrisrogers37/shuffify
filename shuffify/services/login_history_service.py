@@ -74,7 +74,7 @@ class LoginHistoryService:
         )
         db.session.add(entry)
         safe_commit(
-            f"record login for user_id={user_id}, type={login_type}, ip={ip_address}",
+            f"record login for user_id={user_id}, type={login_type}",
             LoginHistoryError,
         )
         return entry
