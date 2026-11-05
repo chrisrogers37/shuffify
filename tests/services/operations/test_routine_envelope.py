@@ -60,3 +60,18 @@ def test_scheduler_identity_uses_the_server_owned_fire_key():
         validate_command(runtime, ScheduleRunCommand)
     runtime.operation.scheduled_for = datetime.now(timezone.utc)
     assert validate_command(runtime, ScheduleRunCommand).reserved_targets == ["archive", "target"]
+
+
+@pytest.mark.parametrize(("asset", "field", "captured"), [
+    ("pair", "archive_playlist_id",
+     {"id": 2, "archive_playlist_id": "not-a-playlist", "archive_playlist_name": None}),
+    ("link", "raid_playlist_id",
+     {"id": 3, "raid_playlist_id": "not-a-playlist", "raid_playlist_name": None, "drip_count": 3,
+      "drip_enabled": False}),
+])
+def test_captured_asset_playlist_ids_use_the_strict_pattern(asset, field, captured):
+    command = runtime_for().operation.payload["command"]
+    command["config"][asset] = captured
+    with pytest.raises(ValidationError) as error:
+        ScheduleRunCommand.model_validate(command)
+    assert [(item["loc"][-1], item["type"]) for item in error.value.errors()] == [(field, "string_pattern_mismatch")]
