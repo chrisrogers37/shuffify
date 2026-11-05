@@ -465,8 +465,8 @@ class TestHistoryDepth:
         assert StateService.confirm_undo(session, "target", selection).current_index == 98
 
 
-class TestSessionHistoryBudget:
-    """All of a session's histories together hold at most a fixed number of track URIs."""
+class TestHistoryUriBudget:
+    """One playlist's history holds at most a fixed number of track URIs."""
 
     BUDGET = 25_000
 
@@ -483,22 +483,7 @@ class TestSessionHistoryBudget:
 
         return SecureCookieSession({PLAYLIST_STATES_KEY: entries})
 
-    def test_over_the_budget_the_playlist_changed_longest_ago_goes_first(self):
-        fifth = self.BUDGET // 5
-        session = self._session(
-            oldest=self._entry(fifth), older=self._entry(fifth), current=self._entry(2 * fifth),
-        )
-        StateService.record_new_state(session, "current", self._state(9, 2 * fifth))
-        assert list(session[PLAYLIST_STATES_KEY]) == ["older", "current"]
-        assert session[PLAYLIST_STATES_KEY]["current"]["current_index"] == 1
-
-    def test_a_session_at_the_budget_keeps_every_history(self):
-        fifth = self.BUDGET // 5
-        session = self._session(oldest=self._entry(fifth), current=self._entry(2 * fifth))
-        StateService.record_new_state(session, "current", self._state(9, 2 * fifth))
-        assert list(session[PLAYLIST_STATES_KEY]) == ["oldest", "current"]
-
-    def test_a_playlist_over_the_budget_alone_loses_its_oldest_states(self):
+    def test_a_new_state_past_the_budget_drops_the_oldest(self):
         fifth = self.BUDGET // 5
         session = self._session(current=self._entry(fifth, fifth, fifth, fifth, fifth))
         state = StateService.record_new_state(session, "current", self._state(9, fifth))
@@ -506,9 +491,34 @@ class TestSessionHistoryBudget:
         assert state.current_index == 4
         assert session[PLAYLIST_STATES_KEY]["current"] == state.to_dict()
 
-    def test_recording_a_change_makes_its_playlist_the_most_recent(self):
-        session = self._session(first=self._entry(10), second=self._entry(10))
-        StateService.record_verified_change(
-            session, "first", before_uris=self._state(0, 10), after_uris=self._state(1, 10),
+    def test_a_new_state_at_the_budget_keeps_every_state(self):
+        fifth = self.BUDGET // 5
+        session = self._session(current=self._entry(fifth, fifth, fifth, fifth))
+        state = StateService.record_new_state(session, "current", self._state(9, fifth))
+        assert len(state.states) == 5
+        assert state.current_index == 4
+
+    def test_a_verified_change_past_the_budget_drops_the_oldest(self):
+        fifth = self.BUDGET // 5
+        session = self._session(current=self._entry(fifth, fifth, fifth, fifth))
+        state = StateService.record_verified_change(
+            session, "current", before_uris=self._state(8, fifth), after_uris=self._state(9, fifth),
         )
-        assert list(session[PLAYLIST_STATES_KEY]) == ["second", "first"]
+        assert [uris[0] for uris in state.states] == [self._state(n, 1)[0] for n in (1, 2, 3, 8, 9)]
+        assert state.current_index == 4
+
+    def test_a_change_never_drops_another_playlists_history(self):
+        # Two playlists changed by one operation: each within the budget, together past it.
+        half = self.BUDGET // 2
+        session = self._session(archive=self._entry(half, half))
+        StateService.record_verified_change(
+            session, "target", before_uris=self._state(7, half // 2), after_uris=self._state(8, half // 2),
+        )
+        assert session[PLAYLIST_STATES_KEY]["archive"] == self._entry(half, half)
+        assert len(session[PLAYLIST_STATES_KEY]["target"]["states"]) == 2
+
+    def test_the_current_state_stays_even_past_the_budget(self):
+        session = self._session(current=self._entry(10))
+        state = StateService.record_new_state(session, "current", self._state(9, self.BUDGET + 1))
+        assert [len(uris) for uris in state.states] == [self.BUDGET + 1]
+        assert state.current_index == 0

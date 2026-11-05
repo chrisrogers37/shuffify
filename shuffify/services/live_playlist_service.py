@@ -26,7 +26,6 @@ from shuffify.services.shuffle_service import InvalidAlgorithmError, ShuffleServ
 from shuffify.services.state_service import (
     AlreadyAtOriginalError,
     NoHistoryError,
-    PlaylistState,
     StaleHistoryError,
     StateError,
     StateService,
@@ -217,7 +216,9 @@ class LivePlaylistService:
             if history["playlist_state"] is not None and any(
                     item["kind"] == "session_history" and item["status"] == "complete"
                     for item in operation.bookkeeping):
-                StateService.save_history(session, playlist_id, PlaylistState.from_dict(history["playlist_state"]))
+                histories = dict(session.get("playlist_states", {}))
+                histories[playlist_id] = deepcopy(history["playlist_state"])
+                session["playlist_states"], session.modified = histories, True
             if changed and kind != "undo":
                 def activity(db_session):
                     from shuffify.services.operations.bookkeeping import OperationBookkeeping

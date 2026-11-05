@@ -14,11 +14,11 @@ logger = logging.getLogger(__name__)
 
 # Session key for storing playlist states
 PLAYLIST_STATES_KEY = "playlist_states"
-# One playlist's history keeps at most this many states; recording past it drops the oldest.
+# One playlist's history keeps at most this many states, and at most MAX_HISTORY_URIS track
+# URIs in all; recording past either drops the oldest states. A queued Undo carries the whole
+# history, and each operation that changes the playlist stores copies of it in its receipt.
 MAX_HISTORY_STATES = 100
-# Every request loads the whole session, so all of its histories together hold at most this
-# many track URIs, under 1 MiB (see StateService.save_history).
-MAX_SESSION_HISTORY_URIS = 25_000
+MAX_HISTORY_URIS = 25_000
 
 
 @dataclass
@@ -40,9 +40,12 @@ class PlaylistState:
         )
 
     def push(self, uris: List[str]) -> None:
-        """Make uris the current state, dropping redo states and the oldest past MAX_HISTORY_STATES."""
-        self.states = (self.states[: self.current_index + 1] + [uris])[-MAX_HISTORY_STATES:]
-        self.current_index = len(self.states) - 1
+        """Make uris the current state; drop redo states, then the oldest past either cap."""
+        states = (self.states[: self.current_index + 1] + [uris])[-MAX_HISTORY_STATES:]
+        size = sum(map(len, states))
+        while size > MAX_HISTORY_URIS and len(states) > 1:
+            size -= len(states.pop(0))
+        self.states, self.current_index = states, len(states) - 1
 
 
 class StateError(Exception):
@@ -78,14 +81,6 @@ class UndoSelection:
 
     def state_dict(self):
         return {"states": [list(uris) for uris in self.states], "current_index": self.current_index}
-
-
-def _uri_count(entry) -> int:
-    """The track URIs one stored history holds; an unreadable entry holds none."""
-    states = entry.get("states") if isinstance(entry, dict) else None
-    if not isinstance(states, list):
-        return 0
-    return sum(len(uris) for uris in states if isinstance(uris, list))
 
 
 class StateService:
@@ -176,9 +171,10 @@ class StateService:
         """
         StateService.initialize_session(session)
 
-        state = StateService.save_history(
-            session, playlist_id, PlaylistState(states=[initial_uris], current_index=0)
-        )
+        state = PlaylistState(states=[initial_uris], current_index=0)
+
+        session[PLAYLIST_STATES_KEY][playlist_id] = state.to_dict()
+        session.modified = True
 
         logger.info(
             f"Initialized state for playlist {playlist_id} with {len(initial_uris)} tracks"
@@ -211,7 +207,10 @@ class StateService:
             raise StateError(f"No existing state for playlist {playlist_id}")
 
         state.push(new_uris)
-        state = StateService.save_history(session, playlist_id, state)
+
+        # Save back to session
+        session[PLAYLIST_STATES_KEY][playlist_id] = state.to_dict()
+        session.modified = True
 
         logger.info(
             f"Recorded new state for playlist {playlist_id}, index now at {state.current_index}"
@@ -264,7 +263,10 @@ class StateService:
         # Move to previous state
         state.current_index -= 1
         previous_uris = state.states[state.current_index]
-        StateService.save_history(session, playlist_id, state)
+
+        # Save back to session
+        session[PLAYLIST_STATES_KEY][playlist_id] = state.to_dict()
+        session.modified = True
 
         logger.info(
             f"Undo for playlist {playlist_id}, index now at {state.current_index}"
@@ -322,7 +324,8 @@ class StateService:
     def confirm_undo(session, playlist_id, selection) -> PlaylistState:
         StateService.assert_undo_selection(session, playlist_id, selection)
         state = PlaylistState([list(uris) for uris in selection.states], selection.current_index - 1)
-        return StateService.save_history(session, playlist_id, state)
+        StateService._assign_verified_state(session, playlist_id, state)
+        return state
 
     @staticmethod
     def record_verified_change(session, playlist_id, *, before_uris, after_uris) -> PlaylistState:
@@ -337,33 +340,12 @@ class StateService:
         for uris in (list(before_uris), list(after_uris)):
             if state.states[state.current_index] != uris:
                 state.push(uris)
-        return StateService.save_history(session, playlist_id, state)
+        StateService._assign_verified_state(session, playlist_id, state)
+        return state
 
     @staticmethod
-    def save_history(session, playlist_id, state) -> PlaylistState:
-        """Store one playlist's history as the session's most recently changed one.
-
-        Histories keep the order their playlists last changed in, oldest first, and
-        hold at most MAX_SESSION_HISTORY_URIS track URIs in all. Past that, the
-        histories of the playlists changed longest ago are dropped whole, then this
-        playlist's own oldest states. Returns the history as stored.
-        """
-        states, index = list(state.states), state.current_index
-        size = sum(map(len, states))
-        while size > MAX_SESSION_HISTORY_URIS and index > 0:
-            size -= len(states.pop(0))
-            index -= 1
+    def _assign_verified_state(session, playlist_id, state):
         histories = dict(session.get(PLAYLIST_STATES_KEY, {}))
-        histories.pop(playlist_id, None)
-        counts = {key: _uri_count(entry) for key, entry in histories.items()}
-        total = size + sum(counts.values())
-        for key, count in counts.items():
-            if total <= MAX_SESSION_HISTORY_URIS:
-                break
-            del histories[key]
-            total -= count
-        stored = PlaylistState(states, index)
-        histories[playlist_id] = deepcopy(stored.to_dict())
+        histories[playlist_id] = deepcopy(state.to_dict())
         session[PLAYLIST_STATES_KEY] = histories
         session.modified = True
-        return stored
