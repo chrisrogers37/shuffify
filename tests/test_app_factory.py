@@ -10,19 +10,6 @@ import pytest
 import redis
 
 
-@pytest.fixture
-def no_schema_check(monkeypatch):
-    """Neutralize the production schema guard for this test.
-
-    create_app("production") verifies the database is at Alembic head and
-    refuses to build otherwise. Tests that construct a
-    production-configured app only to inspect session backends or response
-    headers are not exercising a production boot, and must not depend on
-    whatever migration state the local SQLite file happens to be in.
-    """
-    monkeypatch.setattr("shuffify._verify_schema_at_head", lambda _dir: None)
-
-
 class TestCreateApp:
     """Tests for create_app function."""
 
@@ -392,56 +379,48 @@ class TestSecretKeyValidation:
 
 
 class TestRedisProductionRequirement:
-    """Tests for Redis behavior in production.
+    """Production requires Redis; every other config falls back without it.
 
-    Production deployments without a provisioned Redis must fall back to
-    filesystem sessions rather than crash on boot.
+    Production keeps sessions and rate-limit counters in Redis, so a
+    production boot without it fails, rather than keep sessions on the
+    container's disk and count limits in each process's memory.
     """
 
-    def test_production_falls_back_when_redis_url_unset(self, no_schema_check):
-        """Production should warn + fall back to filesystem when REDIS_URL is unset."""
-        with patch.dict(
-            "os.environ",
-            {
-                "SPOTIFY_CLIENT_ID": "test_id",
-                "SPOTIFY_CLIENT_SECRET": "test_secret",
-                "SECRET_KEY": "test-secret",
-                "REDIS_URL": "",
-            },
-        ):
-            from shuffify import create_app
-
-            app = create_app("production")
-            assert app.config["SESSION_TYPE"] == "filesystem"
-
-    def test_production_falls_back_on_redis_connection_failure(
-        self, monkeypatch, no_schema_check
+    @pytest.mark.parametrize("redis_url", [None, ""])
+    def test_production_refuses_to_boot_without_redis_url(
+        self, monkeypatch, production_boot_env, no_schema_check, redis_url
     ):
-        """Production should warn + fall back to filesystem when Redis is unreachable."""
         from config import ProdConfig
+        from shuffify import create_app
 
-        monkeypatch.setattr(ProdConfig, "REDIS_URL", "redis://localhost:6379/0")
+        monkeypatch.setattr(ProdConfig, "REDIS_URL", redis_url)
+        with pytest.raises(RuntimeError, match="REDIS_URL"):
+            create_app("production")
 
-        with patch.dict(
-            "os.environ",
-            {
-                "SPOTIFY_CLIENT_ID": "test_id",
-                "SPOTIFY_CLIENT_SECRET": "test_secret",
-                "SECRET_KEY": "test-secret",
-                "REDIS_URL": "redis://localhost:6379/0",
-            },
-        ):
-            with patch("shuffify.redis.from_url") as mock_from_url:
-                mock_redis_client = Mock()
-                mock_redis_client.ping.side_effect = redis.ConnectionError(
-                    "Connection refused"
-                )
-                mock_from_url.return_value = mock_redis_client
+    def test_production_refuses_to_boot_when_redis_is_unreachable(
+        self, production_boot_env, no_schema_check, production_redis
+    ):
+        from shuffify import create_app
 
-                from shuffify import create_app
+        production_redis.ping.side_effect = redis.ConnectionError("Connection refused")
+        with pytest.raises(RuntimeError, match="unreachable") as excinfo:
+            create_app("production")
+        assert isinstance(excinfo.value.__cause__, redis.ConnectionError)
 
-                app = create_app("production")
-                assert app.config["SESSION_TYPE"] == "filesystem"
+    @pytest.mark.parametrize("redis_url", ["", "redis://localhost:6379/0"])
+    def test_harness_falls_back_when_redis_is_unset_or_unreachable(self, monkeypatch, redis_url):
+        from flask import Flask
+
+        import shuffify
+
+        client = MagicMock(spec=redis.Redis)
+        client.ping.side_effect = redis.ConnectionError("Connection refused")
+        monkeypatch.setattr(shuffify, "_create_redis_client", lambda _url: client)
+        app = Flask(__name__)
+        app.config.update(CONFIG_NAME="harness", REDIS_URL=redis_url)
+
+        assert shuffify._init_redis(app) is None
+        assert app.config["SESSION_TYPE"] == "filesystem"
 
     def test_development_falls_back_to_filesystem(self):
         """Development should fall back to filesystem when Redis fails."""
@@ -464,6 +443,28 @@ class TestRedisProductionRequirement:
 
                 app = create_app("development")
                 assert app.config["SESSION_TYPE"] == "filesystem"
+
+
+class TestLimiterProductionRequirement:
+    """Production refuses to boot when the rate limiter cannot start."""
+
+    def test_production_refuses_to_boot_when_the_limiter_fails(
+        self, production_boot_env, no_schema_check, production_redis
+    ):
+        from shuffify import create_app
+
+        with patch("shuffify.Limiter", autospec=True, side_effect=RuntimeError("storage unavailable")):
+            with pytest.raises(RuntimeError, match="storage unavailable"):
+                create_app("production")
+
+    def test_development_boots_without_a_limiter_when_it_fails(self):
+        env = {"SPOTIFY_CLIENT_ID": "test_id", "SPOTIFY_CLIENT_SECRET": "test_secret", "REDIS_URL": ""}
+        with patch.dict("os.environ", env):
+            with patch("shuffify.Limiter", autospec=True, side_effect=RuntimeError("storage unavailable")):
+                from shuffify import create_app
+
+                app = create_app("development")
+        assert "limiter" not in app.extensions
 
 
 class TestSecurityHeaders:

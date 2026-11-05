@@ -80,11 +80,11 @@ def routing_calls(monkeypatch):
 
 
 @pytest.fixture
-def production_env(monkeypatch, tmp_path):
+def production_env(monkeypatch, tmp_path, production_redis):
     """Environment for booting a real create_app("production").
 
     ProdConfig reads DATABASE_URL when config is imported, so the database is
-    also set on the class.
+    also set on the class. Redis is conftest's stand-in.
     """
     from config import ProdConfig
 
