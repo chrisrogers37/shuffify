@@ -87,7 +87,7 @@ class JobExecutorService:
         try:
             refresh_token = TokenService.decrypt_token(user.encrypted_refresh_token)
         except TokenEncryptionError as e:
-            raise JobExecutionError(f"Failed to decrypt refresh token for user {user.spotify_id}: {e}")
+            raise JobExecutionError("Failed to decrypt the stored refresh token.") from e
 
         try:
             from flask import current_app
@@ -133,4 +133,4 @@ class JobExecutorService:
             )
 
         except SpotifyTokenError as e:
-            raise JobExecutionError(f"Failed to refresh Spotify token for user {user.spotify_id}: {e}")
+            raise JobExecutionError("Failed to refresh the Spotify token.") from e

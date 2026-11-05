@@ -15,8 +15,9 @@ from shuffify.services.executors import (
     JobExecutionError,
     JobExecutorService,
 )
-from shuffify.services.token_service import TokenService
+from shuffify.services.token_service import TokenEncryptionError, TokenService
 from shuffify.spotify.auth import TokenInfo
+from shuffify.spotify.exceptions import SpotifyTokenError
 
 # TestRotatedRefreshTokenIsStored stores tokens through db.session, so every
 # test in this module needs the shared app_ctx fixture (tests/conftest.py).
@@ -122,6 +123,36 @@ class TestGetSpotifyApi:
             match="no stored refresh token",
         ):
             JobExecutorService._get_spotify_api(mock_user)
+
+    def test_decrypt_failure_is_chained_without_its_text_or_the_user(self, mock_user):
+        cause = TokenEncryptionError("Decryption failed: upstream-7f3c")
+
+        with (
+            patch.object(TokenService, "decrypt_token", autospec=True, side_effect=cause),
+            pytest.raises(JobExecutionError) as exc_info,
+        ):
+            JobExecutorService._get_spotify_api(mock_user)
+
+        assert "upstream-7f3c" not in str(exc_info.value)
+        assert mock_user.spotify_id not in str(exc_info.value)
+        assert exc_info.value.__cause__ is cause
+
+    def test_refresh_failure_is_chained_without_its_text_or_the_user(self, mock_user, app_context):
+        cause = SpotifyTokenError("Token refresh failed: upstream-7f3c")
+        executor = "shuffify.services.executors.base_executor"
+
+        with (
+            patch.object(TokenService, "decrypt_token", autospec=True, return_value="refresh"),
+            patch(f"{executor}.SpotifyCredentials", autospec=True),
+            patch(f"{executor}.SpotifyAuthManager", autospec=True),
+            patch(f"{executor}.SpotifyAPI", autospec=True, side_effect=cause),
+            pytest.raises(JobExecutionError) as exc_info,
+        ):
+            JobExecutorService._get_spotify_api(mock_user)
+
+        assert "upstream-7f3c" not in str(exc_info.value)
+        assert mock_user.spotify_id not in str(exc_info.value)
+        assert exc_info.value.__cause__ is cause
 
 
 class TestRotatedRefreshTokenIsStored:
