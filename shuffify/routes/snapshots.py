@@ -94,7 +94,7 @@ def create_manual_snapshot(
             ),
         )
         logger.info(
-            f"User {user.spotify_id} created manual "
+            f"User {user.id} created manual "
             f"snapshot for playlist {playlist_id}"
         )
         return json_success(

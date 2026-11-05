@@ -566,11 +566,7 @@ def handle_internal_error(error):
 
 def handle_rate_limit_exceeded(error):
     """Handle 429 Too Many Requests from Flask-Limiter."""
-    logger.warning(
-        "Rate limit exceeded: %s on %s",
-        request.remote_addr,
-        request.path,
-    )
+    logger.warning("Rate limit exceeded on %s", request.path)
     response, status = json_error_response(
         "Too many requests. Please wait a moment and try again.",
         429,
