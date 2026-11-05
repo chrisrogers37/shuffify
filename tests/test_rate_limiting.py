@@ -223,9 +223,10 @@ class TestRateLimitKeys:
         assert _status(second, "POST", SHUFFLE, SHARED_ADDRESS) == 429
         assert _allowed_before_429(second, "POST", SHUFFLE, OTHER_ADDRESS) == allowed
 
-    def test_a_signed_out_request_never_counts_against_a_signed_in_user(self, app):
+    @pytest.mark.parametrize("forwarded", ["user:alice", "alice"])
+    def test_a_signed_out_request_never_counts_against_a_signed_in_user(self, app, forwarded):
         alice, stranger = _signed_in(app, "alice"), app.test_client()
-        _allowed_before_429(stranger, "POST", SHUFFLE, SHARED_ADDRESS, headers={"X-Forwarded-For": "user:alice"})
+        _allowed_before_429(stranger, "POST", SHUFFLE, SHARED_ADDRESS, headers={"X-Forwarded-For": forwarded})
         assert _status(alice, "POST", SHUFFLE, OTHER_ADDRESS) != 429
 
     def test_users_who_share_a_display_name_do_not_share_a_bucket(self, app):
