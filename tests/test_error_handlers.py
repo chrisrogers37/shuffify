@@ -5,6 +5,8 @@ Verifies that each service-layer exception is caught and converted
 to the correct JSON error response with appropriate HTTP status code.
 """
 
+import logging
+
 import pytest
 from flask import Flask
 
@@ -13,17 +15,26 @@ from shuffify.services import (
     AlreadyAtOriginalError,
     AuthenticationError,
     InvalidAlgorithmError,
+    JobExecutionError,
     NoHistoryError,
     ParameterValidationError,
     PlaylistError,
     PlaylistNotFoundError,
     PlaylistUpdateError,
+    ScheduleError,
     ShuffleError,
     ShuffleExecutionError,
     StateError,
     TokenValidationError,
 )
 from shuffify.spotify.exceptions import SpotifyQuotaExceededError, SpotifyRateLimitError
+
+MARKER = "upstream-7f3c.internal:5432"
+# Errors whose handlers answer with a fixed message or the error's public_message.
+WRAPPING_ERRORS = {
+    cls.__name__: cls
+    for cls in (JobExecutionError, PlaylistError, ScheduleError, ShuffleError)
+}
 
 
 @pytest.fixture
@@ -81,6 +92,20 @@ def app():
     @app.route("/raise/state-error")
     def raise_state_error():
         raise StateError("Test state error")
+
+    @app.route("/raise/wrapped/<name>")
+    def raise_wrapped(name):
+        try:
+            raise ConnectionError(MARKER)
+        except ConnectionError as e:
+            raise WRAPPING_ERRORS[name](f"Request failed: {e}") from e
+
+    @app.route("/raise/public/<name>")
+    def raise_public(name):
+        # Two different texts, so a reply built from str(error) cannot pass.
+        error = WRAPPING_ERRORS[name]("Internal detail.")
+        error.public_message = "Shown to the user."
+        raise error
 
     return app
 
@@ -154,6 +179,24 @@ class TestErrorHandlerResponseFormat:
     def test_state_error_returns_500(self, client):
         response = client.get("/raise/state-error")
         self._assert_json_error(response, 500)
+
+
+class TestHandlersAnswerWithFixedMessages:
+    """A reply never carries an error's own text, which can hold an upstream cause."""
+
+    @pytest.mark.parametrize("name", sorted(WRAPPING_ERRORS))
+    def test_the_cause_is_logged_and_kept_out_of_the_reply(self, client, caplog, name):
+        with caplog.at_level(logging.ERROR, logger="shuffify.error_handlers"):
+            response = client.get(f"/raise/wrapped/{name}")
+
+        assert MARKER not in response.get_data(as_text=True)
+        assert f"ConnectionError: {MARKER}" in caplog.text
+
+    @pytest.mark.parametrize("name", sorted(WRAPPING_ERRORS))
+    def test_a_public_message_is_the_reply(self, client, name):
+        response = client.get(f"/raise/public/{name}")
+
+        assert response.get_json()["message"] == "Shown to the user."
 
 
 class TestHTTPErrorHandlers:
