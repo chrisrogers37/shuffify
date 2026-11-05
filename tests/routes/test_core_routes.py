@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from shuffify.services.auth_service import decrypt_session_token
 from shuffify.services.token_service import TokenService
 from tests.paths import api_path
 
@@ -195,10 +196,11 @@ class TestCallbackRoute:
         mock_login_hist,
         db_app,
     ):
+        expires_at = time.time() + 3600
         mock_auth_svc.exchange_code_for_token.return_value = {
             "access_token": "new_token",
             "token_type": "Bearer",
-            "expires_at": time.time() + 3600,
+            "expires_at": expires_at,
             "refresh_token": "new_refresh",
         }
         mock_auth_svc.authenticate_and_get_user.return_value = (
@@ -217,6 +219,7 @@ class TestCallbackRoute:
 
         assert "refresh_token" not in stored
         assert TokenService.decrypt_token(stored["encrypted_refresh_token"]) == "new_refresh"
+        assert decrypt_session_token(stored).get("expires_at") == expires_at
         mock_user_svc.store_refresh_token.assert_called_once_with(upserted.user, "new_refresh")
 
     @patch("shuffify.routes.core.LoginHistoryService")
