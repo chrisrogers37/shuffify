@@ -48,8 +48,6 @@ def api_error_handler(func: Callable) -> Callable:
                 "Unexpected error in %s: %s",
                 func.__name__, e, exc_info=True,
             )
-            raise SpotifyAPIError(
-                f"Unexpected error: {e}"
-            )
+            raise SpotifyAPIError("The Spotify request failed.") from e
 
     return wrapper
