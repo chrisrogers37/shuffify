@@ -331,3 +331,30 @@ class TestArchiveFinalizers:
         assert response.json["status"] == "failed"
         assert response.json["retryable"] is False
         service.assert_not_called()
+
+
+class TestArchiveFinalizerListBounds:
+    @pytest.mark.parametrize("endpoint,field", [
+        ("archive", "track_uris"),
+        ("archive", "target_track_uris"),
+        ("archive", "baseline_track_uris"),
+        ("finalize-restore", "track_uris"),
+        ("finalize-restore", "target_track_uris"),
+    ])
+    @patch("shuffify.routes.playlist_pairs.WorkshopFinalizeService")
+    @patch("shuffify.routes.require_auth")
+    def test_over_spotify_playlist_limit_rejected(self, auth, service, auth_client, endpoint, field):
+        # Spotify's limit for one playlist is 10,000 tracks.
+        payload = {
+            "source_playlist_id": "archive123",
+            "target_track_uris": ["spotify:track:" + "a" * 22],
+            "track_uris": ["spotify:track:" + "a" * 22] * 2,
+        }
+        if endpoint == "archive":
+            payload["baseline_track_uris"] = ["spotify:track:" + "b" * 22] * 2
+        payload[field] = [f"spotify:track:{i:022d}" for i in range(10_001)]
+        response = auth_client.post(api_path(f"/playlist/p1/pair/{endpoint}"), json=payload)
+        assert response.status_code == 400
+        assert response.json["status"] == "failed"
+        assert response.json["retryable"] is False
+        service.assert_not_called()

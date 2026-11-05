@@ -10,7 +10,7 @@ import hashlib
 import json
 from copy import deepcopy
 
-from shuffify.spotify.api import MAX_PLAYLIST_TRACKS
+from shuffify.spotify.api import MAX_PLAYLIST_TRACKS, TOO_MANY_TRACKS
 
 BATCH_SIZE = 100
 DETAIL_FIELDS = frozenset(("name", "public", "description"))
@@ -81,7 +81,7 @@ def plan(kind, resource, before, *, uris=(), position=None, details=None):
     # An add is measured by the playlist it leaves; every other plan by the list it sends.
     size = len(values) + (len(before["track_uris"]) if kind == "add" else 0)
     if size > MAX_PLAYLIST_TRACKS:
-        raise PlanTooLarge(f"A Spotify playlist holds at most {MAX_PLAYLIST_TRACKS:,} tracks")
+        raise PlanTooLarge(TOO_MANY_TRACKS)
     current = deepcopy(before)
     batches = []
     path = f"/playlists/{resource}/items"

@@ -208,3 +208,16 @@ class TestManualSnapshotRequestInvalid:
                     trigger_description="x" * 501
                 )
             )
+
+
+class TestManualSnapshotRequestBound:
+    """A manual snapshot holds at most one playlist's tracks."""
+
+    def test_holds_a_full_playlist_but_not_one_track_more(self):
+        # Spotify's limit for one playlist is 10,000 tracks.
+        uris = ["spotify:track:" + "a" * 22] * 10_001
+        full = ManualSnapshotRequest(playlist_name="Mix", track_uris=uris[:10_000])
+        assert len(full.track_uris) == 10_000
+        with pytest.raises(ValidationError) as refused:
+            ManualSnapshotRequest(playlist_name="Mix", track_uris=uris)
+        assert [(error["loc"], error["type"]) for error in refused.value.errors()] == [(("track_uris",), "too_long")]

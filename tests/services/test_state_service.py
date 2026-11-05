@@ -15,6 +15,7 @@ from shuffify.services import (
     StateError,
     StateService,
 )
+from tests.mutable_spotify import uri
 
 
 class TestPlaylistStateDataclass:
@@ -407,3 +408,107 @@ class TestVerifiedHistory:
         StateService.record_verified_change(session, "target", before_uris=["a"], after_uris=["b"])
         state = StateService.record_verified_change(session, "target", before_uris=["b"], after_uris=["b"])
         assert state.to_dict() == {"states": [["a"], ["b"]], "current_index": 1}
+
+
+class TestHistoryDepth:
+    """A playlist's history keeps its 100 most recent states."""
+
+    @staticmethod
+    def _state(number):
+        return [uri(number)]
+
+    def _history(self, count):
+        from flask.sessions import SecureCookieSession
+
+        return SecureCookieSession({PLAYLIST_STATES_KEY: {"target": {
+            "states": [self._state(number) for number in range(count)], "current_index": count - 1,
+        }}})
+
+    def test_a_new_state_at_the_limit_drops_the_oldest(self):
+        session = self._history(100)
+        state = StateService.record_new_state(session, "target", self._state(100))
+        assert state.states == [self._state(number) for number in range(1, 101)]
+        assert state.current_index == 99
+        assert session[PLAYLIST_STATES_KEY]["target"] == state.to_dict()
+
+    def test_a_new_state_below_the_limit_keeps_every_state(self):
+        session = self._history(99)
+        state = StateService.record_new_state(session, "target", self._state(99))
+        assert state.states == [self._state(number) for number in range(100)]
+        assert state.current_index == 99
+
+    def test_a_verified_change_at_the_limit_drops_the_oldest(self):
+        session = self._history(99)
+        state = StateService.record_verified_change(
+            session, "target", before_uris=self._state(500), after_uris=self._state(501),
+        )
+        assert state.states == [self._state(number) for number in range(1, 99)] + [
+            self._state(500), self._state(501),
+        ]
+        assert state.current_index == 99
+        assert session[PLAYLIST_STATES_KEY]["target"] == state.to_dict()
+
+    def test_a_verified_change_below_the_limit_keeps_every_state(self):
+        session = self._history(98)
+        state = StateService.record_verified_change(
+            session, "target", before_uris=self._state(500), after_uris=self._state(501),
+        )
+        assert len(state.states) == 100
+        assert state.states[0] == self._state(0)
+        assert state.current_index == 99
+
+    def test_undo_still_walks_back_over_a_full_history(self):
+        session = self._history(100)
+        StateService.record_new_state(session, "target", self._state(100))
+        selection = StateService.peek_undo(session, "target")
+        assert list(selection.desired_uris) == self._state(99)
+        assert StateService.confirm_undo(session, "target", selection).current_index == 98
+
+
+class TestSessionHistoryBudget:
+    """All of a session's histories together hold at most a fixed number of track URIs."""
+
+    BUDGET = 25_000
+
+    @staticmethod
+    def _state(number, size):
+        return [uri(number)] * size
+
+    def _entry(self, *sizes):
+        return {"states": [self._state(n, size) for n, size in enumerate(sizes)], "current_index": len(sizes) - 1}
+
+    @staticmethod
+    def _session(**entries):
+        from flask.sessions import SecureCookieSession
+
+        return SecureCookieSession({PLAYLIST_STATES_KEY: entries})
+
+    def test_over_the_budget_the_playlist_changed_longest_ago_goes_first(self):
+        fifth = self.BUDGET // 5
+        session = self._session(
+            oldest=self._entry(fifth), older=self._entry(fifth), current=self._entry(2 * fifth),
+        )
+        StateService.record_new_state(session, "current", self._state(9, 2 * fifth))
+        assert list(session[PLAYLIST_STATES_KEY]) == ["older", "current"]
+        assert session[PLAYLIST_STATES_KEY]["current"]["current_index"] == 1
+
+    def test_a_session_at_the_budget_keeps_every_history(self):
+        fifth = self.BUDGET // 5
+        session = self._session(oldest=self._entry(fifth), current=self._entry(2 * fifth))
+        StateService.record_new_state(session, "current", self._state(9, 2 * fifth))
+        assert list(session[PLAYLIST_STATES_KEY]) == ["oldest", "current"]
+
+    def test_a_playlist_over_the_budget_alone_loses_its_oldest_states(self):
+        fifth = self.BUDGET // 5
+        session = self._session(current=self._entry(fifth, fifth, fifth, fifth, fifth))
+        state = StateService.record_new_state(session, "current", self._state(9, fifth))
+        assert [uris[0] for uris in state.states] == [self._state(n, 1)[0] for n in (1, 2, 3, 4, 9)]
+        assert state.current_index == 4
+        assert session[PLAYLIST_STATES_KEY]["current"] == state.to_dict()
+
+    def test_recording_a_change_makes_its_playlist_the_most_recent(self):
+        session = self._session(first=self._entry(10), second=self._entry(10))
+        StateService.record_verified_change(
+            session, "first", before_uris=self._state(0, 10), after_uris=self._state(1, 10),
+        )
+        assert list(session[PLAYLIST_STATES_KEY]) == ["second", "first"]

@@ -5,7 +5,9 @@ Pydantic schemas for playlist pair (archive) API endpoints.
 import re
 from typing import List, Optional
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from shuffify.spotify.api import MAX_PLAYLIST_TRACKS
 
 TRACK_URI_PATTERN = re.compile(r"^spotify:track:[a-zA-Z0-9]{22}$")
 
@@ -88,7 +90,7 @@ class UpdatePairRequest(BaseModel):
 class _TrackUriListRequest(BaseModel):
     """Base for requests carrying a list of track URIs."""
 
-    track_uris: List[str]
+    track_uris: List[str] = Field(max_length=MAX_PLAYLIST_TRACKS)
 
     @field_validator("track_uris")
     @classmethod

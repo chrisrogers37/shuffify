@@ -152,3 +152,15 @@ class TestUpdatePairRequestInvalid:
             UpdatePairRequest(
                 auto_archive_on_remove=None,
             )
+
+
+class TestUnarchiveTracksRequestBound:
+    """An unarchive selection holds at most one playlist's tracks."""
+
+    def test_holds_a_full_playlist_but_not_one_track_more(self):
+        # Spotify's limit for one playlist is 10,000 tracks.
+        uris = ["spotify:track:" + "a" * 22] * 10_001
+        assert len(UnarchiveTracksRequest(track_uris=uris[:10_000]).track_uris) == 10_000
+        with pytest.raises(ValidationError) as refused:
+            UnarchiveTracksRequest(track_uris=uris)
+        assert [(error["loc"], error["type"]) for error in refused.value.errors()] == [(("track_uris",), "too_long")]

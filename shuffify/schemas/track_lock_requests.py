@@ -6,6 +6,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from shuffify.spotify.api import MAX_PLAYLIST_TRACKS
+
 
 class TrackLockToggleRequest(BaseModel):
     """Schema for toggling a track lock."""
@@ -33,6 +35,7 @@ class TrackLockBulkUnlockRequest(BaseModel):
 
     track_uris: Optional[List[str]] = Field(
         default=None,
+        max_length=MAX_PLAYLIST_TRACKS,
         description=(
             "Specific track URIs to unlock, "
             "or null to unlock all"
