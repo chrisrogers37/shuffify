@@ -266,6 +266,47 @@ def authenticated_client(app):
         yield test_client
 
 
+@pytest.fixture
+def no_schema_check(monkeypatch):
+    """Neutralize the production schema guard for this test.
+
+    create_app("production") verifies the database is at Alembic head and
+    refuses to build otherwise. Tests that construct a
+    production-configured app only to inspect session backends or response
+    headers are not exercising a production boot, and must not depend on
+    whatever migration state the local SQLite file happens to be in.
+    """
+    monkeypatch.setattr("shuffify._verify_schema_at_head", lambda _dir: None)
+
+
+@pytest.fixture
+def production_redis(monkeypatch):
+    """A Redis URL on ProdConfig and a stand-in client for it.
+
+    A production app refuses to build without Redis, and no test reaches a
+    real one: the stand-in answers the boot's ping. The rate limiter opens its
+    own connection to the URL only when a request is counted.
+    """
+    from unittest.mock import MagicMock
+
+    import redis
+
+    from config import ProdConfig
+
+    client = MagicMock(spec=redis.Redis)
+    monkeypatch.setattr(ProdConfig, "REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setattr("shuffify._create_redis_client", lambda _url: client)
+    return client
+
+
+@pytest.fixture
+def production_boot_env(monkeypatch):
+    """The environment variables a production app checks for at boot."""
+    monkeypatch.setenv("SPOTIFY_CLIENT_ID", "test_client_id")
+    monkeypatch.setenv("SPOTIFY_CLIENT_SECRET", "test_client_secret")
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key-for-testing")
+
+
 # =============================================================================
 # Algorithm Fixtures
 # =============================================================================

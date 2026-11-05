@@ -2,14 +2,21 @@
 Tests for rate limiting.
 
 Verifies that /login and /callback are rate-limited per address to
-prevent abuse of the OAuth flow, and that the other limits key by the
-signed-in user, or by the address when no one is signed in.
+prevent abuse of the OAuth flow, that the other limits key by the
+signed-in user, or by the address when no one is signed in, that every
+limit is in place once the app is built, and that a 429 says when its
+limit resets.
 """
 
 import time
 from unittest.mock import patch
 
 import pytest
+from flask import abort
+from flask_limiter.util import get_qualified_name, get_remote_address
+
+import shuffify
+from shuffify import _user_or_address_key
 
 
 @pytest.fixture
@@ -140,16 +147,32 @@ class TestRateLimitDoesNotAffectOtherRoutes:
             assert response.status_code != 429
 
 
-class TestLimiterInitialization:
-    """Tests for limiter initialization behavior."""
+class TestRetryAfter:
+    """A limit's 429 says when the limit resets; any other 429 says nothing."""
 
-    def test_rate_limit_header_present(self, rate_client):
-        """Rate-limited responses should include Retry-After."""
-        for _ in range(11):
-            response = rate_client.get("/login")
+    def test_a_429_carries_the_seconds_until_its_limit_resets(self, rate_client):
+        statuses = [rate_client.get("/login").status_code for _ in range(10)]
         response = rate_client.get("/login")
-        if response.status_code == 429:
-            assert "Retry-After" in response.headers
+        assert 429 not in statuses
+        assert response.status_code == 429
+        # /login allows 10 a minute, so its window resets within 60 seconds.
+        assert response.headers["Retry-After"].isdigit()
+        assert 1 <= int(response.headers["Retry-After"]) <= 60
+
+    @pytest.mark.parametrize("limit", [None, "100/minute"])
+    def test_a_429_that_no_limit_raised_has_no_retry_after(self, rate_limited_app, limit):
+        """A 429 from the view itself, on a route with no limit or one it has not reached."""
+
+        def busy():
+            abort(429)
+
+        if limit:
+            (limiter,) = rate_limited_app.extensions["limiter"]
+            busy = limiter.limit(limit)(busy)
+        rate_limited_app.add_url_rule("/busy", "busy", busy)
+        response = rate_limited_app.test_client().get("/busy")
+        assert response.status_code == 429
+        assert "Retry-After" not in response.headers
 
 
 # Documentation addresses (RFC 5737), never a real client's.
@@ -233,3 +256,50 @@ class TestRateLimitKeys:
         alice, bob = _signed_in(app, "alice", "Sam"), _signed_in(app, "bob", "Sam")
         _allowed_before_429(alice, "POST", SHUFFLE, SHARED_ADDRESS)
         assert _status(bob, "POST", SHUFFLE, SHARED_ADDRESS) != 429
+
+
+# Each limited endpoint, with its limit and the function that keys its bucket,
+# written out here rather than read from shuffify.RATE_LIMITS.
+LIMITED_ENDPOINTS = {
+    "auth.login": ("10 per 1 minute", get_remote_address),
+    "auth.callback": ("10 per 1 minute", get_remote_address),
+    "api.shuffle": ("5 per 1 minute", _user_or_address_key),
+    "api.workshop_commit": ("10 per 1 minute", _user_or_address_key),
+    "api.run_schedule_now": ("5 per 1 minute", _user_or_address_key),
+    "api.playlist_setup_create_playlist": ("10 per 1 minute", _user_or_address_key),
+}
+
+
+@pytest.fixture
+def production_app(production_boot_env, production_redis, no_schema_check):
+    """The production app, built on conftest's stand-in Redis."""
+    from shuffify import create_app
+
+    return create_app("production")
+
+
+class TestLimitsAtBoot:
+    """Every limit is in place once the app is built, or the boot fails."""
+
+    def test_production_wraps_each_limited_endpoint_in_its_limit(self, production_app):
+        # The two things Flask-Limiter reads when a wrapped view runs: the
+        # limiter that made the wrapper, and the limits that limiter holds
+        # under the view's qualified name.
+        (limiter,) = production_app.extensions["limiter"]
+        applied = {}
+        for endpoint in LIMITED_ENDPOINTS:
+            view = production_app.view_functions[endpoint]
+            assert getattr(view, "__wrapper-limiter-instance", None) == limiter, endpoint
+            applied[endpoint] = [
+                (str(limit.limit), limit.key_func)
+                for limit in limiter.limit_manager.decorated_limits(get_qualified_name(view))
+            ]
+        assert applied == {endpoint: [expected] for endpoint, expected in LIMITED_ENDPOINTS.items()}
+
+    def test_a_limited_endpoint_that_is_not_registered_fails_the_boot(self, monkeypatch):
+        monkeypatch.setitem(shuffify.RATE_LIMITS, "api.renamed_endpoint", ("5/minute", None))
+
+        from shuffify import create_app
+
+        with pytest.raises(RuntimeError, match="api.renamed_endpoint"):
+            create_app("testing")
