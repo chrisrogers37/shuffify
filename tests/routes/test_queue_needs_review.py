@@ -18,7 +18,7 @@ def reply(app, monkeypatch, error):
 
 
 def test_refusal_names_the_blocking_run_and_is_not_retryable(app, monkeypatch):
-    body, status = reply(app, monkeypatch, PlaylistNeedsReview(41))
+    body, status = reply(app, monkeypatch, PlaylistNeedsReview(41, owner_id=1))
     assert status == 409
     assert body["error_code"] == "playlist_needs_review"
     assert body["operation_id"] == 41 and body["reason"] == "needs_attention"
@@ -27,5 +27,5 @@ def test_refusal_names_the_blocking_run_and_is_not_retryable(app, monkeypatch):
 
 
 def test_a_busy_refusal_is_unchanged(app, monkeypatch):
-    body, status = reply(app, monkeypatch, BusyOperation(7))
+    body, status = reply(app, monkeypatch, BusyOperation(7, owner_id=1))
     assert (status, body["error_code"], body["retryable"], body["operation_id"]) == (409, "playlist_busy", True, 7)

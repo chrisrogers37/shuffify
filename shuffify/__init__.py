@@ -5,8 +5,9 @@ from typing import Optional
 from urllib.parse import unquote, urlsplit
 
 import redis
-from flask import Flask, Request, current_app, request
+from flask import Flask, Request, current_app, request, session
 from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from flask_migrate import Migrate
 from flask_session import Session
 from flask_wtf.csrf import CSRFProtect
@@ -137,14 +138,22 @@ def _init_redis(app):
     return None
 
 
+def _user_or_address_key():
+    """Rate-limit key: "user:" and the signed-in user's id, else "ip:" and the client address.
+
+    A signed-in user keeps one bucket whatever address a request comes
+    from, and users who share an address keep separate buckets.
+    """
+    user_id = (session.get("user_data") or {}).get("id")
+    return f"user:{user_id}" if user_id else f"ip:{get_remote_address()}"
+
+
 def _init_limiter(app, redis_client):
     """Initialize Flask-Limiter for rate limiting.
 
     Returns Limiter instance if successful, None otherwise.
     """
     try:
-        from flask_limiter.util import get_remote_address
-
         if redis_client is not None:
             storage_uri = app.config.get("REDIS_URL")
             logger.info("Rate limiter using Redis storage")
@@ -157,7 +166,7 @@ def _init_limiter(app, redis_client):
 
         limiter = Limiter(
             app=app,
-            key_func=get_remote_address,
+            key_func=_user_or_address_key,
             storage_uri=storage_uri,
             default_limits=[],
             strategy="fixed-window",
@@ -760,8 +769,10 @@ def _init_sentry(config_class):
         integrations=[
             FlaskIntegration(),
             SqlalchemyIntegration(),
+            # Breadcrumbs start at WARNING: _strip_pii removes secrets but
+            # not names or addresses, so lower lines are not sent at all.
             LoggingIntegration(
-                level=logging.INFO,
+                level=logging.WARNING,
                 event_level=logging.WARNING,
             ),
         ],
@@ -862,6 +873,9 @@ def create_app(config_name=None):
     logging.basicConfig(
         level=logging.DEBUG if config_name != "production" else logging.INFO
     )
+    # Flask-Limiter logs each breach at INFO with its key, the client's
+    # address. The app's 429 handler logs the breach without it.
+    logging.getLogger("flask-limiter").setLevel(logging.WARNING)
 
     logger.info("Creating app with config: %s", config_name)
 
@@ -921,13 +935,14 @@ def create_app(config_name=None):
     # Traditional account lockout does not apply: this is an
     # OAuth-only app — users never enter credentials here.
     # Per-IP rate limiting on /login and /callback is the
-    # appropriate brute-force protection for OAuth flows.
+    # appropriate brute-force protection for OAuth flows, so they
+    # keep the address key rather than the limiter's per-user default.
     if _limiter is not None:
         try:
-            app.view_functions["auth.login"] = _limiter.limit("10/minute")(
+            app.view_functions["auth.login"] = _limiter.limit("10/minute", key_func=get_remote_address)(
                 app.view_functions["auth.login"]
             )
-            app.view_functions["auth.callback"] = _limiter.limit("10/minute")(
+            app.view_functions["auth.callback"] = _limiter.limit("10/minute", key_func=get_remote_address)(
                 app.view_functions["auth.callback"]
             )
             # Resource-intensive endpoints

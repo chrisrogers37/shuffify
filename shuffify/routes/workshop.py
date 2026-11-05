@@ -450,7 +450,7 @@ def save_workshop_session(
             track_uris=track_uris,
         )
         logger.info(
-            f"User {user.spotify_id} saved workshop "
+            f"User {user.id} saved workshop "
             f"session '{session_name}' for playlist "
             f"{playlist_id}"
         )

@@ -112,10 +112,8 @@ class UserService:
             user.updated_at = now
             is_new = False
             logger.info(
-                "Updated existing user: %s (%s)"
-                " — login #%d",
-                spotify_id,
-                user_data.get("display_name", "Unknown"),
+                "Updated existing user %s — login #%d",
+                user.id,
                 user.login_count,
             )
         else:
@@ -134,19 +132,13 @@ class UserService:
             )
             db.session.add(user)
             is_new = True
-            logger.info(
-                "Created new user: %s (%s)",
-                spotify_id,
-                user_data.get("display_name", "Unknown"),
-            )
 
-        safe_commit(
-            f"upsert user {spotify_id}",
-            UserServiceError,
-        )
+        safe_commit("upsert user", UserServiceError)
 
-        # Auto-create default settings for new users
         if is_new:
+            # A new user's id is assigned by the commit.
+            logger.info("Created new user %s", user.id)
+            # Auto-create default settings for new users
             try:
                 from shuffify.services.user_settings_service import (
                     UserSettingsService,
@@ -161,7 +153,7 @@ class UserService:
                 logger.warning(
                     "Failed to create default settings "
                     "for user %s: %s",
-                    spotify_id,
+                    user.id,
                     settings_err,
                 )
 
@@ -210,7 +202,6 @@ class UserService:
             TokenService.encrypt_token(refresh_token)
         )
         safe_commit(
-            f"store refresh token for user "
-            f"{user.spotify_id}",
+            f"store refresh token for user {user.id}",
             UserServiceError,
         )

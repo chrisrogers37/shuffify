@@ -252,7 +252,7 @@ class SpotifyAPI:
                 return cached
 
         user = self._http.get("/me")
-        logger.debug(f"Retrieved user: {user.get('display_name', 'Unknown')}")
+        logger.debug("Retrieved user profile")
 
         # Cache the result
         if self._cache and user:
