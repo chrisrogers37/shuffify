@@ -158,13 +158,17 @@ class TestApiErrorHandler:
             api_error_func()
 
     def test_wraps_unexpected_exceptions(self):
-        """Should wrap unexpected exceptions in SpotifyAPIError."""
+        """Should wrap unexpected exceptions in SpotifyAPIError, chained, without their text."""
+        cause = ValueError("upstream-7f3c.internal:5432")
+
         @api_error_handler
         def unexpected_func():
-            raise ValueError('Unexpected error')
+            raise cause
 
-        with pytest.raises(SpotifyAPIError, match="Unexpected error"):
+        with pytest.raises(SpotifyAPIError) as exc_info:
             unexpected_func()
+        assert "upstream-7f3c" not in str(exc_info.value)
+        assert exc_info.value.__cause__ is cause
 
 
 # =============================================================================

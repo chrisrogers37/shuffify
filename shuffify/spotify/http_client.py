@@ -424,8 +424,8 @@ class SpotifyHTTPClient:
                     ) from e
                 if attempt >= MAX_RETRIES:
                     raise SpotifyReadTransientError(
-                        f"Network error after {MAX_RETRIES + 1} attempts: {e}"
-                    )
+                        f"Network error after {MAX_RETRIES + 1} attempts."
+                    ) from e
                 delay = _calculate_backoff_delay(attempt)
                 logger.warning(
                     "Network error, retry %d/%d in %ss: %s",
