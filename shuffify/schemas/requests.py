@@ -4,15 +4,30 @@ Request validation schemas using Pydantic.
 Provides type-safe validation for all API request parameters.
 """
 
+import json
 import re
 from typing import Annotated, Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AfterValidator, BaseModel, Field, field_validator
 
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 from shuffify.spotify.api import MAX_PLAYLIST_TRACKS
 
 TRACK_URI_RE = re.compile(r"^spotify:track:[a-zA-Z0-9]{22}$")
+
+# The most bytes one JSON object in a request may take as compact JSON
+# (ASCII-escaped, so its length in characters is its size in bytes).
+MAX_JSON_BYTES = 16 * 1024
+
+
+def _within_json_limit(value):
+    if len(json.dumps(value, separators=(",", ":"))) > MAX_JSON_BYTES:
+        raise ValueError(f"must be at most {MAX_JSON_BYTES:,} bytes as JSON")
+    return value
+
+
+# Annotated metadata that refuses a JSON value larger than MAX_JSON_BYTES.
+JSONSizeLimit = AfterValidator(_within_json_limit)
 
 
 class ShuffleRequest(BaseModel):
@@ -46,6 +61,7 @@ class ShuffleRequest(BaseModel):
     # Track locks: {position: track_uri} for locked tracks
     locked_positions: Optional[Dict[str, str]] = Field(
         default=None,
+        max_length=MAX_PLAYLIST_TRACKS,
         description=(
             "Map of position (as string key) to track URI "
             "for tracks that should stay in place"

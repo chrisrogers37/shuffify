@@ -471,6 +471,114 @@ class TestWorkshopCommit:
         service.assert_not_called()
 
 
+# =============================================================================
+# Preview Shuffle Input Bounds
+# =============================================================================
+
+
+class TestWorkshopPreviewShuffleBounds:
+    """Preview shuffle refuses oversized track and lock lists."""
+
+    @pytest.fixture
+    def preview(self, authenticated_client):
+        with (
+            patch("shuffify.is_db_available", return_value=True),
+            patch(
+                "shuffify.routes.get_db_user",
+                return_value=Mock(id=1, spotify_id="user123"),
+            ),
+            patch("shuffify.routes.require_auth", return_value=Mock()),
+            patch("shuffify.routes.workshop.ShuffleService") as svc,
+        ):
+            svc.execute.return_value = []
+            algorithm = Mock()
+            algorithm.name = "Basic"
+            svc.get_algorithm.return_value = algorithm
+
+            def post(payload):
+                return authenticated_client.post(
+                    api_path("/workshop/playlist123/preview-shuffle"),
+                    data=json.dumps({"algorithm": "BasicShuffle", **payload}),
+                    content_type="application/json",
+                )
+
+            yield post
+
+    @staticmethod
+    def _tracks(count):
+        return [{"uri": f"spotify:track:{i:022d}"} for i in range(count)]
+
+    def test_preview_tracks_over_10000_is_400(self, preview):
+        # Bound: at most 10,000 tracks (Spotify's playlist maximum).
+        assert preview({"tracks": self._tracks(10_001)}).status_code == 400
+
+    def test_preview_tracks_of_exactly_10000_is_accepted(self, preview):
+        # Bound: 10,000 tracks is the last accepted size.
+        assert preview({"tracks": self._tracks(10_000)}).status_code == 200
+
+    def test_preview_locked_positions_over_10000_is_400(self, preview):
+        # Bound: at most 10,000 locked positions.
+        locked = {str(i): f"spotify:track:{i:022d}" for i in range(10_001)}
+        response = preview({"tracks": self._tracks(5), "locked_positions": locked})
+        assert response.status_code == 400
+
+
+@patch("shuffify.routes.require_auth")
+class TestSavedSessionTrackBounds:
+    """Saved-session writes refuse more than 10,000 track URIs."""
+
+    @staticmethod
+    def _uris(count):
+        return [f"spotify:track:{i:022d}" for i in range(count)]
+
+    def test_save_over_10000_track_uris_is_400(self, mock_auth, auth_client):
+        # Bound: at most 10,000 track_uris (Spotify's playlist maximum).
+        mock_auth.return_value = MagicMock()
+        with patch("shuffify.routes.workshop.WorkshopSessionService.save_session") as save:
+            resp = auth_client.post(
+                api_path("/workshop/p1/sessions"),
+                json={"session_name": "Big", "track_uris": self._uris(10_001)},
+            )
+        assert resp.status_code == 400
+        save.assert_not_called()
+
+    def test_save_of_exactly_10000_track_uris_is_accepted(self, mock_auth, auth_client):
+        # Bound: 10,000 track_uris is the last accepted size.
+        mock_auth.return_value = MagicMock()
+        with patch("shuffify.routes.workshop.WorkshopSessionService.save_session") as save:
+            save.return_value.to_dict.return_value = {}
+            resp = auth_client.post(
+                api_path("/workshop/p1/sessions"),
+                json={"session_name": "Big", "track_uris": self._uris(10_000)},
+            )
+        assert resp.status_code == 200
+        save.assert_called_once()
+
+    def test_update_over_10000_track_uris_is_400(self, mock_auth, auth_client):
+        # Bound: at most 10,000 track_uris (Spotify's playlist maximum).
+        mock_auth.return_value = MagicMock()
+        with patch("shuffify.routes.workshop.WorkshopSessionService.update_session") as update:
+            resp = auth_client.put(
+                api_path("/workshop/sessions/1"),
+                json={"track_uris": self._uris(10_001)},
+            )
+        assert resp.status_code == 400
+        update.assert_not_called()
+
+    def test_update_of_exactly_10000_track_uris_is_accepted(self, mock_auth, auth_client):
+        # Bound: 10,000 track_uris is the last accepted size.
+        mock_auth.return_value = MagicMock()
+        with patch("shuffify.routes.workshop.WorkshopSessionService.update_session") as update:
+            update.return_value.to_dict.return_value = {}
+            update.return_value.session_name = "Big"
+            resp = auth_client.put(
+                api_path("/workshop/sessions/1"),
+                json={"track_uris": self._uris(10_000)},
+            )
+        assert resp.status_code == 200
+        update.assert_called_once()
+
+
 class TestSaveWorkshopSession:
     """POST /workshop/<playlist_id>/sessions"""
 

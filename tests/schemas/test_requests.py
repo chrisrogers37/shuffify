@@ -365,3 +365,19 @@ class TestExternalPlaylistRequest:
         )
         assert req.url is not None
         assert req.query is None
+
+
+class TestShuffleRequestLockedPositionsBound:
+    """Locks name at most one playlist's positions."""
+
+    def test_locks_a_full_playlist_but_not_one_position_more(self):
+        # Spotify's limit for one playlist is 10,000 tracks.
+        uri = "spotify:track:" + "a" * 22
+        locks = {str(position): uri for position in range(10_001)}
+        full = ShuffleRequest(locked_positions={str(position): uri for position in range(10_000)})
+        assert len(full.locked_positions) == 10_000
+        with pytest.raises(ValidationError) as refused:
+            ShuffleRequest(locked_positions=locks)
+        assert [(error["loc"], error["type"]) for error in refused.value.errors()] == [
+            (("locked_positions",), "too_long")
+        ]
