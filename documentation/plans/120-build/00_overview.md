@@ -223,10 +223,10 @@ here.
   - **(a) One mechanical rename of `user_id` to `workspace_id`** across the
     affected tables and code, in one PR.
   - **(b) Table by table,** over several PRs.
-- **Lean:** (a). Everything lands on the integration branch and there's no
-  data to migrate, so a single consistent rename is safer than a long
+- **Decision:** (a). Everything lands on the integration branch and there's
+  no data to migrate, so a single consistent rename is safer than a long
   half-renamed state.
-- **Ratifier:** owner · **Status:** open
+- **Ratifier:** owner · **Status:** locked (owner, 2026-11-10)
 
 ## Companion Plans
 
@@ -290,7 +290,9 @@ here.
   the harness.
 - Don't migrate today's data; the design calls for a wipe.
 - Don't rename internal identifiers (the `shuffify` package, cookie, cache
-  prefixes).
+  prefixes) in these phases. The owner wants the code renamed from
+  `shuffify` to `raccoon` later, in one separate mechanical sweep (see
+  #122).
 - Don't build workspace switching, SoundCloud, or moving music between
   accounts.
 - Don't fix #128–#131 or #141 inside these phases.
