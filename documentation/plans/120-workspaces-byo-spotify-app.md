@@ -1,6 +1,6 @@
 # Workspaces and bring-your-own Spotify app
 
-Issue: #120 · Epic: #119 · Status: design approved, ready for an implementation plan
+Issue: #120 · Epic: #119 · Status: design approved · Build plan: [`120-build/`](120-build/00_overview.md)
 
 The product is being renamed Raccoon, at raccoon.fm (#122). This doc uses the
 new name. The rename of what users see ships before this project launches,
@@ -65,6 +65,11 @@ screenshots are drafts.
 - The MCP server (#121), the product's name (#122), and launch safeguards such
   as abuse limits, account deletion and legal pages (#123).
 - Migrating today's accounts (see Launch).
+- Creating and switching between several workspaces in the product (the data
+  model supports it; see Decisions).
+- Moving music between Spotify accounts. That would mean raiding or rotating
+  between playlists in two workspaces owned by the same person. It's a later
+  feature that this model makes possible, not part of this project.
 
 ## Anti-goals
 
@@ -85,10 +90,19 @@ These would make the project a failure even if it technically works:
 ### The owner's decisions
 
 - **Google sign-in only, at first.**
-- **One chain, one-to-one at every link:** a Google login has one workspace;
-  the workspace has one Spotify app; the app connects one Spotify account. The
-  database enforces each link with uniqueness constraints, not just
-  application code.
+- **The model: person → workspaces → service connections.**
+  - A person, identified by their Google login, is the top-level entity and
+    can own several workspaces.
+  - The workspace is the source of truth that all product data belongs to:
+    routines, schedules, pairings, snapshots and history.
+  - A workspace connects to services. Spotify is the only service today, and
+    the model is shaped so others such as SoundCloud fit later.
+  - A workspace has at most one connection per service. For Spotify that is
+    one app and the one Spotify account connected through it.
+  - The database enforces each of these rules with constraints, not just
+    application code.
+  - At launch the product shows one workspace per person. Creating and
+    switching between several comes later; the data model is ready for it.
 - **App secrets are stored encrypted.** Security is a first-class concern for
   this project.
 - **Guided setup** explains every step on Spotify's side: creating the app,
@@ -117,7 +131,8 @@ These would make the project a failure even if it technically works:
 - **One redirect URL for every workspace.** Each person adds the same
   Raccoon callback URL to their own app. The OAuth `state`, already random
   and checked in `shuffify/routes/core.py`, binds each round trip to the
-  signed-in Google login, and therefore to its workspace and app. Per-workspace
+  signed-in person and the workspace they are connecting, and therefore to
+  that workspace's app. Per-workspace
   callback URLs were considered and not chosen: they add routing and make the
   setup copy longer, for no security gain over a bound state.
 - **"Checking the keys"** means requesting a client-credentials token from
@@ -155,10 +170,12 @@ These would make the project a failure even if it technically works:
   secret settings are retired. The redirect URL stays a site setting, because
   it's the same for every workspace.
 - **Identity today.** `users` is keyed by `spotify_id`, and signing in with
-  Spotify creates the user. Fourteen tables hang off `users.id`. In the new
-  model the Google login and its workspace are the identity, and connecting
-  Spotify attaches to them. Because the database is wiped, the schema can be
-  reshaped freely. There is no backfill to write.
+  Spotify creates the user. Thirteen tables have a foreign key to `users.id`,
+  and `job_executions.user_id` has none. In the new model the person (Google
+  login) is the user, product data belongs to the workspace, and today's
+  Spotify-account row becomes the workspace's Spotify connection. Because the
+  database is wiped, the schema can be reshaped freely. There is no backfill
+  to write.
 - **A refresh token only works with the app that issued it.** After an app is
   swapped, the old token is useless and must be discarded on reconnect.
 - **Recent sign-in hardening** (#135, #139, #143, #150) covers:
@@ -198,8 +215,8 @@ Other people who had accounts sign up fresh like anyone else.
 
 ## Left to the builder
 
-- **Schema details:** table names, and whether `users` becomes the workspace
-  or sits beside it, as long as the one-to-one chain and its constraints hold.
+- **Schema details:** table and column names, as long as the model and its
+  constraints in Decisions hold. The build plan proposes them.
 - **Google sign-in:** the library, and how the session works across the
   Vercel web app and the Railway API.
 - **Key management:** how the secret-encryption key is stored and rotated.
