@@ -126,8 +126,8 @@ ALREADY = {
     "archive": ("already_paired", "This playlist already has an archive. Replace it in its settings instead."),
 }
 DESCRIPTIONS = {
-    "collection": "Collected discoveries, created in Shuffify setup",
-    "archive": "Archived tracks, created in Shuffify setup",
+    "collection": "Collected discoveries, created in Raccoon setup",
+    "archive": "Archived tracks, created in Raccoon setup",
 }
 # The row each setup section is, as live_review_scope.STEP_ROWS names what a step reads.
 ROWS = {"sources": "sources", "collection": "link", "archive": "pair"}

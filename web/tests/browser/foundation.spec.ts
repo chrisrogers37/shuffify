@@ -700,7 +700,7 @@ test("session bootstrap sets the final route title and focuses its heading", asy
   page,
 }) => {
   await app(page);
-  await expect(page).toHaveTitle("Foundation review · Shuffify");
+  await expect(page).toHaveTitle("Foundation review · Raccoon");
   await expect(
     page.getByRole("heading", { name: "Foundation review", exact: true }),
   ).toBeFocused();

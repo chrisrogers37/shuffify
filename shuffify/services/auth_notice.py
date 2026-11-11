@@ -6,7 +6,7 @@ AUTH_NOTICE_MESSAGES = {
     "missing_code": "No authorization code received from Spotify. Please try again.",
     "invalid_state": "Authentication failed due to a security check. Please try again.",
     "authentication_failed": "Error connecting to Spotify. Please try again.",
-    "consent_required": "You must agree to the Terms of Service and Privacy Policy to use Shuffify.",
+    "consent_required": "You must agree to the Terms of Service and Privacy Policy to use Raccoon.",
     "login_failed": "An error occurred during login. Please try again.",
 }
 

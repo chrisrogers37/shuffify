@@ -2,7 +2,7 @@
 
 Design direction: **After Hours**.
 
-Shuffify uses graphite surfaces, warm white text, and a citron accent. Manrope
+Raccoon uses graphite surfaces, warm white text, and a citron accent. Manrope
 gives headings their character; DM Sans keeps controls and track information
 easy to scan. The landing page introduces an asymmetric hero with a playlist
 preview. Every authenticated page must use this exact theme and its shared components.
@@ -311,10 +311,10 @@ JavaScript reads these core values; it does not introduce another motion recipe.
 ## Spotify content and branding
 
 Follow [Spotify's Design & Branding Guidelines](https://developer.spotify.com/documentation/design).
-The independent Shuffify mark stays separate from Spotify branding and does not
+The independent Raccoon mark stays separate from Spotify branding and does not
 imply endorsement. Use the unmodified official white full logo on graphite
 surfaces, at least 70 px wide, with clear space of half the icon height. Do not
-recolor, stretch, animate, or combine it with the Shuffify wordmark.
+recolor, stretch, animate, or combine it with the Raccoon wordmark.
 
 Spotify artwork remains intact: no cropping, overlays, blurring, or distortion.
 Use 4 px corners on small and medium devices and 8 px on large devices. Keep

@@ -155,8 +155,8 @@ export function RoutineSetupPage() {
   }, [client, playlistId, query, actor, navigation]);
   useEffect(() => {
     document.title = selected
-      ? `Edit routine #${selected} · Shuffify`
-      : "Create routine · Shuffify";
+      ? `Edit routine #${selected} · Raccoon`
+      : "Create routine · Raccoon";
     heading.current?.focus();
   }, [selected]);
   useEffect(() => {

@@ -1,18 +1,18 @@
 export const publicPages = {
   "/": {
-    title: "Shuffify: Evolve your collection.",
+    title: "Raccoon: Evolve your collection.",
     description:
       "Find new songs, keep favorites in rotation, and choose how your playlists refresh on your schedule.",
   },
   "/terms": {
-    title: "Terms of Service - Shuffify",
+    title: "Terms of Service - Raccoon",
     description:
-      "Terms of Service for Shuffify, the independent Spotify playlist management app.",
+      "Terms of Service for Raccoon, the independent Spotify playlist management app.",
   },
   "/privacy": {
-    title: "Privacy Policy - Shuffify",
+    title: "Privacy Policy - Raccoon",
     description:
-      "How Shuffify collects, uses, stores and protects your information.",
+      "How Raccoon collects, uses, stores and protects your information.",
   },
 } as const;
 export type PublicPath = keyof typeof publicPages;
