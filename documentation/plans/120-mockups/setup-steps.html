@@ -107,7 +107,7 @@ ol li { margin-bottom:6px; }
         <div class="panel">
           <h2>Add the redirect URL</h2>
           <p>In your app, choose <b>Settings</b>, then <b>Edit</b>, and paste this under <b>Redirect URIs</b>, then save.</p>
-          <div class="row"><div class="input mono">https://raccoon.fm/callback</div><span class="btn secondary">Copy</span></div>
+          <div class="row"><div class="input mono">https://raccoon.fm/spotify/callback</div><span class="btn secondary">Copy</span></div>
           <p style="margin-top:10px">If it's missing or not exactly this, Spotify stops on its own error page and never sends you back to Raccoon. If that happens, return here and check it was saved exactly.</p>
         </div>
         <div class="panel">
@@ -139,6 +139,8 @@ ol li { margin-bottom:6px; }
             <div class="status bad"><div><b>That doesn't look like a client ID.</b> It's 32 letters and numbers, with no spaces. Check you didn't copy the client secret or a link.</div></div>
             <div class="statelabel">If it's saved</div>
             <div class="status ok"><div><b>Client ID saved.</b> One step left: connecting is what checks it.</div></div>
+            <div class="statelabel">If another workspace already uses this app</div>
+            <div class="status bad"><div><b>This app is already used by another workspace.</b> Each Spotify app can belong to only one workspace. Create a new app (step 1) and paste its client ID.</div></div>
             <div class="statelabel">If the ID is wrong but looks right</div>
             <div class="status bad"><div><b>Spotify shows a page that says "INVALID_CLIENT".</b> You won't be sent back to Raccoon from it. Come back here, fix the client ID and try again.</div></div>
           </div>
@@ -162,7 +164,7 @@ ol li { margin-bottom:6px; }
           <div class="statelabel">If you come back with an error</div>
           <div class="status bad"><div><b>This Spotify account isn't allowed on your app.</b> Add it under User Management (step 2), then try again.</div></div>
           <div class="status bad"><div><b>This Spotify account is already connected to another workspace.</b> Use a different account, or sign in to Spotify as the one you set up.</div></div>
-          <div class="status bad"><div><b>This isn't the Spotify account this workspace started with.</b> Connect the original account to keep your routines and history.</div></div>
+          <div class="status bad"><div><b>This isn't the Spotify account this workspace started with.</b> Connect the original account to keep your routines and history. Switching to a different account isn't available yet.</div></div>
           <div class="lock">Change the client ID (step 3)</div>
         </div>
       </div>

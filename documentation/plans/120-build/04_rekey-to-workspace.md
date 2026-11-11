@@ -4,6 +4,7 @@ type: plan
 status: draft
 owner: chrisrogers37
 created: 2026-11-10
+updated: 2026-11-10
 tags: [enhancement, workspaces]
 repos: chrisrogers37/shuffify
 ---
@@ -51,11 +52,13 @@ That is why it is XL, and why it stays one PR (F7).
   `services/base.py:get_user_or_raise`. It's also the ownership argument to
   `validate_user_can_edit` / `read_complete` (e.g.
   `services/operations/runtime.py:344-378`).
-- The worker takes a `credential:{user_id}` lock (`shuffify/worker.py:94-95`),
-  and since phase 02 the web refresh takes the same lock.
+- The worker takes a `credential:{user_id}` lock (`shuffify/worker.py:94-95`)
+  to keep one user's runs from overlapping. Since phase 02 the refresh token
+  itself is protected by a row lock inside a short refresh transaction, not
+  by that lock.
 - Admission checks for busy and needs-review spanned all users (#129). The
-  fix lands on main before the branch is cut; re-key whatever it leaves and
-  keep its semantics.
+  fix may land on main before or after this phase; when it lands, merge main
+  in, re-key whatever it leaves and keep its semantics.
 
 ## Implementation Plan
 
@@ -85,10 +88,16 @@ That is why it is XL, and why it stays one PR (F7).
    - Replace `get_user_or_raise(spotify_id)` with a workspace lookup.
 4. **Update the worker and the scheduler.**
    - Operation rows carry `workspace_id`.
-   - The credential lock becomes `credential:{spotify_connection_id}`, for
-     the worker and for the web refresh from phase 02 alike.
-   - `JobExecutorService._get_spotify_api` takes the workspace and reads the
-     refresh token from its connection, at refresh time, under that lock.
+   - The worker's run-serialisation lock becomes
+     `credential:{spotify_connection_id}`. It is not what protects the refresh
+     token.
+   - Re-point phase 02's refresher at the connection row: its
+     `SELECT ... FOR UPDATE` now locks the `spotify_connections` row that
+     holds the encrypted refresh token and reads `credential_generation`
+     with it, so a failure can say which generation it came from (phase 08).
+     The web and the worker both use it, and
+     `JobExecutorService._get_spotify_api` takes the workspace and reads the
+     token at refresh time inside the refresher.
 5. **Keep the request helpers working for now.** `require_auth_and_db` and
    `get_db_user` (`shuffify/routes/__init__.py:128-260`) resolve the
    workspace from the current session, which is still today's Spotify
@@ -109,16 +118,16 @@ That is why it is XL, and why it stays one PR (F7).
 - The full backend suite and the harness e2e run pass on the branch.
 
 ## Verification Checklist
-- [ ] A schema test (`tests/isolation/test_scoping_columns.py`) finds a
-      `user_id` column on exactly two tables, `workspaces` and
-      `login_history`, and a `workspace_id` column on the 12 re-keyed tables
-      and `job_executions`.
-- [ ] `git grep -nw "user_id" -- shuffify ':!shuffify/spotify/cache.py' ':!shuffify/spotify/api.py'`
-      lists hits only in the person code: the `User`, `Workspace` and
+- [ ] `pytest tests/isolation` passes. It includes the schema test
+      `tests/isolation/test_scoping_columns.py`, which finds a `user_id`
+      column on exactly two tables, `workspaces` and `login_history`, and a
+      `workspace_id` column on the 12 re-keyed tables and `job_executions`.
+      That test is the proof; as a reviewer's aid,
+      `git grep -nw "user_id" -- shuffify ':!shuffify/spotify/cache.py' ':!shuffify/spotify/api.py'`
+      should list hits only in the person code (the `User`, `Workspace` and
       `LoginHistory` models, sign-in and session handling, and the login
-      history and user services. The Spotify-account `user_id` in `cache.py`
+      history and user services); the Spotify-account `user_id` in `cache.py`
       and `api.py` is excluded because it's never renamed.
-- [ ] `pytest tests/isolation` passes.
 - [ ] CI is green on `feat/workspaces`.
 
 ## What NOT To Do

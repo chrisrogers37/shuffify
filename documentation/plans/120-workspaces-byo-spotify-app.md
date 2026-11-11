@@ -1,12 +1,13 @@
 # Workspaces and bring-your-own Spotify app
 
-Issue: #120 · Epic: #119 · Status: design approved, amended 2026-11-10 (PKCE, staging, early domain move, no naming step) · Build plan: [`120-build/`](120-build/00_overview.md)
+Issue: #120 · Epic: #119 · Status: design approved, amended 2026-11-10 (PKCE, staging, early domain move, no naming step, a dedicated Spotify callback path, a published Google consent screen) · Build plan: [`120-build/`](120-build/00_overview.md)
 
 The product is being renamed Raccoon, at raccoon.fm (#122). This doc uses the
 new name. The rename of what users see ships before this project's code does,
 and the domain moves to raccoon.fm on main before the project's code does,
 because the redirect URL every person pastes into their Spotify app is
-`https://raccoon.fm/callback`. The code's internal name stays `shuffify`.
+`https://raccoon.fm/spotify/callback`. The code's internal name stays
+`shuffify`.
 
 ## Why
 
@@ -70,11 +71,14 @@ screenshots are drafts.
 - Removing a Spotify app from a workspace, or deleting a workspace. Both
   belong to account deletion in #123. Until then a person swaps to another
   app (see Decisions) and the owner fixes anything else by hand.
-- Opening the product to strangers. Sign-up has no gate in #120 only because
-  the owner and invited testers are the only users. #120 must not be opened
-  to the public before #123's sign-up safeguards ship. The production Google
-  client stays in Testing mode, with the owner and testers listed, until
-  then.
+- Launch safeguards for strangers: abuse limits, account deletion and legal
+  pages (#123). Sign-up has no gate in #120 and the production Google consent
+  screen is published at cutover, so anyone with a Google account can sign
+  up. The owner is the only user at first. Until #123 ships, the only
+  sign-up safeguard is #139's per-address limit of 10 requests a minute on
+  the sign-in views. Google may require brand verification for the consent
+  screen; the basic `openid`, `email` and `profile` scopes need no
+  sensitive-scope review.
 - Migrating today's accounts (see Cutover).
 - Creating and switching between several workspaces in the product (the data
   model supports it; see Decisions). Naming a workspace comes back with
@@ -128,8 +132,8 @@ These would make the project a failure even if it technically works:
   allow-list and reconnect.
 - **Paused schedules resume on their own once the app works again.** They run
   at their next scheduled time. Runs missed while paused are not made up.
-- **No sign-up gate.** Sign-up is open when this ships, but only the owner
-  and invited testers use it. The launch safeguards, and the public opening,
+- **No sign-up gate.** Sign-up is open when this ships and the Google consent
+  screen is published, but the owner is the only user. The launch safeguards
   wait for #123.
 
 ### Owner's decisions, ratified 2026-11-10
@@ -159,9 +163,11 @@ These amend the decisions above.
    phase 06 onward**, so the first real-service run isn't the wipe. See the
    build plan's Staging section.
 4. **The domain moves early, on main.** raccoon.fm serves the current site,
-   `PUBLIC_ORIGIN` and `SPOTIFY_REDIRECT_URI` switch to it, and shuffify.app
-   redirects there permanently, in a small phase right after the rename.
-   Cutover day is then only the wipe and the merge.
+   `PUBLIC_ORIGIN` and `SPOTIFY_REDIRECT_URI` switch to it, the new
+   `https://raccoon.fm/spotify/callback` redirect URL is added to the current
+   Spotify app, and shuffify.app redirects to raccoon.fm permanently, in a
+   small phase right after the rename. Cutover day is then only the wipe and
+   the merge.
 5. **No "Name your workspace" step.** The workspace is created named "My
    workspace". Naming returns when a person can have several workspaces.
 
@@ -170,7 +176,8 @@ These amend the decisions above.
 - **A Spotify app belongs to at most one workspace.** The client ID is unique
   across workspaces.
 - **One redirect URL for every workspace.** Each person adds the same
-  Raccoon callback URL to their own app: `https://raccoon.fm/callback`. The
+  Raccoon callback URL to their own app: `https://raccoon.fm/spotify/callback`,
+  a dedicated path that only the connect step uses. The
   OAuth `state` and PKCE verifier, both random and kept in the session, bind
   each round trip to the signed-in person and the workspace they are
   connecting, and therefore to that workspace's app. Per-workspace callback
@@ -218,7 +225,9 @@ These amend the decisions above.
   Every one of these must resolve the workspace's app instead. The ID and
   secret settings are retired, and so is Basic authorization on the token
   and revoke calls (`shuffify/spotify/auth.py:236, 297, 382`). The redirect
-  URL stays a site setting, because it's the same for every workspace.
+  URL stays site-wide, because it's the same for every workspace: it is
+  `PUBLIC_ORIGIN` plus `/spotify/callback`, so the `SPOTIFY_REDIRECT_URI`
+  setting is retired with the ID and secret.
 - **Identity today.** `users` is keyed by `spotify_id`, and signing in with
   Spotify creates the user. Thirteen tables have a foreign key to `users.id`,
   and `job_executions.user_id` has none. In the new model the person (Google
@@ -230,9 +239,11 @@ These amend the decisions above.
   swapped, the old token is useless and must be discarded on reconnect.
 - **PKCE refresh tokens rotate and may be single-use.** The database holds
   the only copy of a connection's refresh token. Whoever refreshes (a web
-  request or the worker) takes the per-connection credential lock, reads the
-  token from the database, refreshes, and stores the new one before
-  releasing it. The session keeps no copy of the refresh token.
+  request or the worker) does it in a short transaction that locks the
+  connection's row (`SELECT ... FOR UPDATE`), reads the token from the
+  database, refreshes, and stores the new one before committing. The lock is
+  around the refresh, never around a whole run. The session keeps no copy of
+  the refresh token.
 - **Recent sign-in hardening** (#135, #139, #143, #150) covers:
   - session handling when sign-in starts or fails;
   - the encrypted session refresh token;
@@ -243,9 +254,11 @@ These amend the decisions above.
   The new Google sign-in and the Connect Spotify flow keep all of these
   properties, except that the session no longer carries a refresh token.
 - **Open security issues touch the same model.** #126 and #128 to #131
-  (draft PRs #144 and #145) land on main before `feat/workspaces` is cut,
-  because they touch code the re-key rewrites. #141 stays open. Build so they
-  stay solvable per workspace; don't fix any of them here unless the new
+  (draft PRs #144 and #145) touch code the re-key rewrites. They don't gate
+  the branch: it is cut when phase 02 lands, and main is merged into it as
+  each fix lands. #141 stays a separate issue and isn't built now: an expired refresh
+  token surfaces as the access-removed case with a reconnect fix. Build so
+  they stay solvable per workspace; don't fix any of them here unless the new
   model makes one trivial.
 - **The test harness** requires fake Spotify credentials (`config.py`, the
   `HARNESS_FAKE_CLIENT_ID` check). It needs to seed a workspace whose app
@@ -256,23 +269,26 @@ These amend the decisions above.
 
 ## Cutover
 
-The domain has already moved (phase 01b), and the project has run on staging
-against real Spotify and Google. Cutover day is the wipe and the merge.
+The domain has already moved (phase 01b), the pre-deploy script already knows
+how to build a new database (phase 06), and the project has run on staging
+against real Spotify and Google. The owner is the only user, so cutover is one
+sitting: wipe, merge, then set up from scratch.
 
 1. Before the switch, the owner clears their raid inbox and notes their
    schedule settings. Playlists and archive playlists live on Spotify and are
    untouched.
-2. Deploy, wipe the production database, and remove the retired Spotify
-   settings from Railway.
+2. Hold the worker, snapshot the database, wipe it and merge straight away.
+   The new build creates the schema, and the worker is released.
 3. The owner deletes their old Spotify app in Spotify's dashboard and signs up
    as the first new user. They create a new app by following the in-product
-   guide alone, which is the real test of the ten-minute goal, and the setup
-   copy gets checked against Spotify's live dashboard. A friend may run the
-   same guide on staging first.
-4. The owner rebuilds their schedules and routines through the product. This
-   is the acceptance test.
-5. Saved snapshots (restore points) are lost in the wipe. Switch on a quiet
-   day and watch the first scheduled run of each routine.
+   guide alone, timed, which is the real test of the ten-minute goal (the
+   target is under 15 minutes from step 1 to their own playlists), and the
+   setup copy gets checked against Spotify's live dashboard.
+4. The owner rebuilds their schedules and routines through the product, then
+   watches the first scheduled run of each routine and restores one from its
+   snapshot. This is the acceptance test.
+5. The retired Spotify settings are removed from Railway and the staging
+   environment is deleted.
 
 Other people who had accounts sign up fresh like anyone else.
 

@@ -4,21 +4,29 @@ type: plan
 status: draft
 owner: chrisrogers37
 created: 2026-11-10
+updated: 2026-11-10
 tags: [enhancement, auth]
 repos: chrisrogers37/shuffify
 ---
 
 ## Summary
 
-Part of [the #120 build plan](00_overview.md) (main). Size: L. There's no
-visible change. This phase does three things:
+Part of [the #120 build plan](00_overview.md) (main). Size: L, shipped as two
+PRs. There's no visible change. This phase does three things:
 - routes every place that gets Spotify app credentials through one function;
 - makes Spotify's failures keep their cause (revoked access, rejected app,
   account not allowed) all the way to the code that will act on it, without
   changing which handlers catch them today;
 - makes the database the only home of the refresh token: the web and the
-  worker both refresh under the per-user credential lock, and the session
+  worker both refresh inside a short row-locked transaction, and the session
   stops keeping its own copy.
+
+It ships as two PRs so the riskier half can be reverted alone:
+- **02a, the credential seam and typed failures** (steps 1 to 5 and 7): low
+  risk, nothing users see changes.
+- **02b, the refresh-token move** (step 6): changes how the live site's web
+  requests stay signed in, on main, where every merge deploys production.
+  It is revertible without touching 02a.
 
 Phases 06 and 08 build on all three, and they're safe on main today.
 
@@ -58,8 +66,11 @@ Catchers that must keep matching:
 
 **Two copies of the refresh token.**
 - The worker takes `credential:{user_id}` for the whole run
-  (`shuffify/worker.py:94-95`) and stores a rotated token in the database
-  (`base_executor.py:112-125`).
+  (`shuffify/worker.py:94-95`, with a deadline of up to 240s at `worker.py:33`)
+  and stores a rotated token in the database (`base_executor.py:112-125`). That
+  closure also keeps a rotated token in memory when the save fails, so the
+  next refresh in the same run doesn't use a token Spotify has already
+  invalidated.
 - A web refresh reads the refresh token from the session, and
   `_persist_token_to_session` (`auth_service.py:230-255`) writes only the
   session. The database copy goes stale, and so does the session's after a
@@ -68,15 +79,44 @@ Catchers that must keep matching:
 - Sign-in already stores the database copy (`routes/core.py:175`,
   `UserService.store_refresh_token(user, refresh_token)`).
 
+**Why the existing lock can't protect the token.**
+- `OperationRepository.target_locks` takes session-level advisory locks on the
+  repository's engine (`shuffify/services/operations/repository.py:509-543`).
+  Production's api and worker both connect through Neon's pooled host
+  (checked read-only 2026-11-10, although the guides describe the direct
+  host). A session advisory lock is not reliable through a transaction-mode
+  pooler, so it can't be what stops two refreshes racing. A transaction-scoped
+  row lock is correct through any pooler.
+- `target_locks` waits 2 seconds by default, and the worker holds
+  `credential:{user_id}` for a whole run. A web refresh waiting on that lock
+  would time out during any long run.
+- `get_authenticated_api` turns every non-deadline error into
+  `AuthenticationError` (`auth_service.py:225-227`), and `require_auth`
+  (`routes/__init__.py:60-73`) turns that into "signed out". A lock or database
+  timeout would therefore sign the person out.
+
+**What #143 left in the session** (7b56eaa). Live sessions carry
+`encrypted_refresh_token`, not `refresh_token`:
+- `encrypt_session_token` and `decrypt_session_token`
+  (`auth_service.py:32-58`);
+- the upgrade path in `is_authenticated` that re-encrypts a plaintext token
+  (`routes/__init__.py:46-56`) and `require_auth`'s decrypt call;
+- sign-in's write (`routes/core.py:151`) and `_persist_token_to_session`
+  (`auth_service.py:251`);
+- `tests/routes/test_session_refresh_token.py`, which asserts the behaviour
+  this phase removes.
+
 ## Implementation Plan
 
 ### Dependencies
-None.
+None. 02b follows 02a.
 
 ### Blocks
 03, 06, 08.
 
 ### Steps
+
+**02a: the credential seam and typed failures**
 
 1. **Add `shuffify/spotify/credentials.py: credentials_for(owner) -> SpotifyCredentials`.**
    - In this phase it returns `SpotifyCredentials.from_flask_config(current_app.config)`
@@ -123,35 +163,81 @@ None.
    `spotify_user_not_allowed`. In `operations/commands/routines.py:359-415`,
    use these in place of the generic `write_rejected` when
    `spotify_failure_of` finds one.
-6. **Make the database the only home of the refresh token.**
-   - Add a refresher around `SpotifyAuthManager` that `get_authenticated_api`
-     and the worker's `_get_spotify_api` hand to `SpotifyAPI` in place of the
-     bare auth manager (`SpotifyAPI` only calls `refresh_token` and
-     `ensure_valid_token`, `api.py:141, 187`). Each refresh:
-     1. takes the per-user credential lock, `credential:{user.id}`, the same
-        name the worker takes (`worker.py:95`), through the operation
-        repository's `target_locks`;
-     2. reads and decrypts the stored refresh token;
-     3. refreshes with it;
-     4. stores the rotated token, encrypted, before releasing the lock.
-   - The worker already holds that lock for the whole run, and a nested
-     acquisition shares ownership, so only its token read moves to refresh
-     time (the closure at `base_executor.py:112-125` goes).
-   - If the lock isn't acquired in time, the refresh fails as a transient
-     read failure, never as a typed app failure.
-   - The web path needs the signed-in user's database id; the session
-     already carries it as `_db_user_id`. With no stored token, the request
-     is treated as signed out.
-   - Sign-in stops putting the refresh token in the session
-     (`routes/core.py:151`), and `is_authenticated`
-     (`routes/__init__.py`) drops any refresh token an existing
-     session still carries. `_persist_token_to_session` writes the access
-     token and its expiry only.
 7. **Teach the fake Spotify to fail on demand.** In
    `harness/fake_spotify/app.py`, add `/_fake/faults` modes that return
-   these three failures, so the harness can produce each one.
+   these three failures, so the harness can produce each one. Add a mode that
+   makes the refresh endpoint rotate the refresh token and invalidate the
+   previous one, as PKCE refreshes do, so 02b's tests can see a stale token
+   fail.
+
+**02b: the refresh-token move** (its own PR, revertible on its own)
+
+6. **Make the database the only home of the refresh token.** Spotify
+   rotates a PKCE refresh token and may invalidate the old one, so a refresh
+   must read the current stored token, refresh, and store the new one as one
+   serialised step. That step is a short database transaction, never a lock
+   around a whole run.
+   - **A refresher around `SpotifyAuthManager`** that `get_authenticated_api`
+     and the worker's `_get_spotify_api` hand to `SpotifyAPI` in place of the
+     bare auth manager (`SpotifyAPI` only calls `refresh_token` and
+     `ensure_valid_token`, `api.py:141, 187`). Each refresh, in its own
+     session that commits before the refresh returns:
+     1. begins a transaction and sets a bounded `lock_timeout` (10 seconds);
+     2. runs `SELECT ... FOR UPDATE` on the row that holds the encrypted
+        refresh token: the `users` row today, and the connection row once the
+        columns move (created in phase 03, re-pointed in phase 04 step 4);
+     3. reads and decrypts the stored token, and refreshes with it;
+     4. stores the rotated token, encrypted, and commits, which releases the
+        row lock.
+   - **The row lock is the only protection for the token.** It is correct
+     through Neon's pooled host, because the lock lives inside one
+     transaction. The worker's `credential:{user_id}` advisory lock stays for
+     what it was for, keeping one user's runs from overlapping, but the
+     refresher doesn't take it and nothing relies on it to protect the token.
+     A web refresh therefore never waits on a worker run.
+   - **A failed save keeps the rotated token.** If Spotify has rotated the
+     token and the commit fails, retry the commit once. If it still fails,
+     keep the rotated token in memory in the refresher (per process, keyed by
+     the row) and use it for the next refresh while the stored token is still
+     the one it replaced, retrying the store each time. This replaces the
+     closure at `base_executor.py:112-125` with the same guarantee for web
+     and worker alike. The save failure itself is transient and is logged.
+   - **A lock or database timeout is transient, never "signed out".**
+     Add `SpotifyRefreshUnavailable` under `SpotifyError`, outside both
+     `SpotifyAuthError` and `SpotifyTokenExpiredError`. `get_authenticated_api`
+     re-raises it untouched, as it does `SpotifyDeadlineError`, instead of
+     letting `except Exception` (`auth_service.py:225-227`) wrap it in
+     `AuthenticationError`. `require_auth` lets it through. A Flask handler
+     returns 503 with `Retry-After`, never 401, and leaves the session as it
+     is. The worker treats it as transient too: it is neither a typed app
+     failure nor a failed run.
+   - **The access token is minted on demand.** The session's access token is
+     a cache. When the session has no access token, or it has expired, build
+     the client from the stored refresh token with an already-expired access
+     token so it refreshes on first use, as `_get_spotify_api` does for the
+     worker. A person with a healthy stored token is never treated as "not
+     connected" because the session lacks an access token; without a stored
+     token, the request is signed out. This is what lets a fresh Google
+     sign-in (phase 05) work without reconnecting Spotify.
+   - **The web path needs the signed-in user's database id;** the session
+     already carries it as `_db_user_id`.
+   - **Remove #143's session refresh-token handling**, which the session no
+     longer needs:
+     - delete `encrypt_session_token` and `decrypt_session_token`
+       (`auth_service.py:32-58`);
+     - delete the upgrade path in `is_authenticated`
+       (`routes/__init__.py:46-56`) and make it drop both `refresh_token` and
+       `encrypted_refresh_token` from a live session that still carries one;
+     - stop writing a refresh token at sign-in (`routes/core.py:151`) and in
+       `_persist_token_to_session`, which writes the access token and its
+       expiry only;
+     - delete `tests/routes/test_session_refresh_token.py` and cover the
+       replacement behaviour in the tests below.
+
 
 ## Test Plan
+
+**02a**
 - Unit tests:
   - each OAuth error body maps to its typed exception;
   - a typed refresh failure is still caught by `except SpotifyTokenError`
@@ -163,24 +249,52 @@ None.
   - `spotify_failure_of` finds the cause through `JobExecutionError` and
     `AuthenticationError`, and returns `None` for an unrelated error;
   - `credentials_for` raises `SpotifyAppUnavailable` with empty config.
-- Refresh tests (real Postgres, as the operation lock tests use):
-  - a web refresh after a worker rotation uses the rotated token;
-  - a web refresh stores its rotated token, and the worker then uses it;
-  - two refreshes at once run one after the other, never in parallel;
-  - the session never holds a refresh token after sign-in or any request;
-  - a missing lock is a transient failure, not an app failure.
 - A worker test: a run whose refresh fails with `invalid_client` ends
   `failed` with `spotify_app_rejected`.
+
+**02b** (real Postgres, as the operation lock tests use)
+- A web refresh after a worker rotation uses the rotated token, and a web
+  refresh stores its rotated token for the worker to use.
+- Two refreshes at once against the fake Spotify, which invalidates the
+  previous refresh token on rotation: both succeed, one after the other, and
+  neither gets `invalid_grant`.
+- **A refresh during a long worker run:** with the worker holding
+  `credential:{user_id}` for several seconds, a web refresh still succeeds
+  and the person is not signed out.
+- **A lock timeout is transient:** with another transaction holding the row
+  lock past `lock_timeout`, the refresh raises `SpotifyRefreshUnavailable`,
+  the request returns 503 with `Retry-After` and not 401, and the session is
+  unchanged.
+- **A failed save keeps the token:** make the store fail once after Spotify
+  rotates the token. The next refresh uses the in-memory token and gets no
+  `invalid_grant`, and the stored token catches up.
+- **Sign-out and back in:** a session with a user id and no access token, and
+  a healthy stored refresh token, loads data without reconnecting; the same
+  session with no stored token is signed out.
+- The session never holds a refresh token, plaintext or encrypted, after
+  sign-in or any request, and a live session that still carries one has it
+  dropped on its next request.
+- The design depends only on transaction-scoped row locks, so these tests on
+  plain Postgres cover Neon's pooled host too.
 - The existing suites stay green.
 
 ## Verification Checklist
-- [ ] `git grep -n "from_env\|from_flask_config\|SpotifyCredentials(" -- shuffify ':!shuffify/spotify/credentials.py'`
+- [ ] **02a:** `git grep -n "from_env\|SpotifyCredentials(" -- shuffify ':!shuffify/spotify/credentials.py'`
       returns nothing: only `credentials_for` builds credentials.
-- [ ] `git grep -n "refresh_token" -- shuffify/routes shuffify/services/auth_service.py`
-      shows no write of a refresh token into the session.
-- [ ] Each of the three faults in the fake Spotify produces its error code in
-      the harness.
-- [ ] CI is green.
+      `from_flask_config` is deliberately kept here (it's the body of
+      `credentials_for`); phase 06 deletes it.
+- [ ] **02a:** each of the three faults in the fake Spotify produces its error
+      code in the harness.
+- [ ] **02b:** `pytest tests/services/test_credential_refresher.py tests/routes/test_session_holds_no_refresh_token.py`
+      passes (both files exist and run their tests).
+- [ ] **02b:** `git grep -n "encrypt_session_token\|decrypt_session_token\|encrypted_refresh_token" -- shuffify/routes shuffify/services/auth_service.py`
+      returns nothing, and `tests/routes/test_session_refresh_token.py` no
+      longer exists.
+- [ ] **02b:** `git revert` of the 02b merge alone leaves 02a's seam and typed
+      failures working (a revert dry run on the branch before merging).
+- [ ] After 02b deploys, the production logs show no `invalid_grant` and no
+      503 from a refresh over the next day of scheduled runs.
+- [ ] CI is green on each PR.
 
 ## What NOT To Do
 - Don't add any workspace concept yet.
@@ -190,6 +304,11 @@ None.
 - Don't treat every 403 as an app failure; playlist 403s are ordinary.
 - Don't read a refresh token from the session or hold one in a closure
   across a refresh.
+- Don't rely on an advisory lock to protect the refresh token, and don't hold
+  a lock around a whole run for it. The refresh is its own short transaction.
+- Don't let a lock or database timeout reach `AuthenticationError`: it is not
+  "signed out".
+- Don't mix 02a and 02b in one PR.
 
 ## Context
 - Source skill: forge · Area: shuffify/spotify, services/auth_service.py, executors · Effort: L · Risk: Medium · Priority: High

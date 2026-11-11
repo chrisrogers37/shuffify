@@ -4,6 +4,7 @@ type: plan
 status: draft
 owner: chrisrogers37
 created: 2026-11-10
+updated: 2026-11-10
 tags: [enhancement, workspaces]
 repos: chrisrogers37/shuffify
 ---
@@ -11,8 +12,7 @@ repos: chrisrogers37/shuffify
 ## Summary
 
 Part of [the #120 build plan](00_overview.md) (integration branch
-`feat/workspaces`, cut from main after 02 and after the security fixes
-#126 and #128 to #131 have merged). Size: M.
+`feat/workspaces`, cut from main when 02 merges). Size: M.
 
 This phase adds the new identity tables. It doesn't yet move any product
 data (04), add sign-in (05) or change any route. There is no app-secret
@@ -28,14 +28,15 @@ only (F8).
 - Migrations use an Alembic chain under `migrations/`, with chain tests in
   `tests/test_migration_chain_integrity.py` and
   `scripts/check-migration-chain.py`.
-- #126 and #128 to #131 (draft PRs #144 and #145) rewrite code this phase's
-  successors rewrite, so they merge to main first (overview, Dependencies).
+- #126 and #128 to #131 (draft PRs #144 and #145) touch code this phase's
+  successors rewrite. They don't gate the branch: main is merged into it as
+  each lands (overview, Dependencies).
 
 ## Implementation Plan
 
 ### Dependencies
-02. Security fixes #126 and #128 to #131 merged to main and merged into the
-branch at the cut.
+02. Main is merged into the branch each time one of the security fixes
+(#126, #128 to #131) lands.
 
 ### Blocks
 04, 05, 06.
@@ -70,6 +71,11 @@ branch at the cut.
      - `status` (`unchecked` | `ok` | `broken`, not null, default
        `unchecked`);
      - `broken_reason` (nullable) and `status_changed_at`;
+     - `credential_generation` (integer, not null, default 0): bumped
+       whenever the connection's credentials are replaced (a successful
+       connect, or saving a different client ID, phase 06). A failure only
+       marks the connection broken if it was produced under the current
+       generation (phase 08), so a stale failure can't undo a reconnect;
      - timestamps.
    - A check constraint ties `broken_reason` to `status = 'broken'`.
 2. **One migration** creates `workspaces` and `spotify_connections` and
@@ -82,6 +88,9 @@ branch at the cut.
    phase 05, the Spotify `/callback` finds or creates a person
    (`google_sub` null), that person's workspace, and its connection.
    - The connection takes the site app's `client_id` and `status = ok`.
+     (These rows exist only on the branch's development and staging
+     databases; phase 06's migration deletes them before adding the unique
+     constraint.)
    - It records the connection's `spotify_id`, profile and refresh token.
    - Every phase PR keeps the harness e2e suite green.
    - Phase 06 deletes this stopgap and, in the same migration, adds the
@@ -95,6 +104,7 @@ branch at the cut.
   - the cascade from person to workspace to connection;
   - the status and reason check;
   - the default workspace name.
+- **Defaults:** a new connection has `credential_generation = 0`.
 - **A repr test:** `repr(SpotifyConnection)` contains no refresh token.
 - **Migration tests:** the chain integrity and drift tests pass, and
   `create-schema` on an empty database matches the models.

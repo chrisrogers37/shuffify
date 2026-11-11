@@ -4,6 +4,7 @@ type: plan
 status: draft
 owner: chrisrogers37
 created: 2026-11-10
+updated: 2026-11-10
 tags: [enhancement, web]
 repos: chrisrogers37/shuffify
 ---
@@ -35,12 +36,13 @@ their account to it, pastes the client ID and connects.
   the routers are in `web/src/app/*-routes.tsx`.
 - **What this phase needs from earlier phases:**
   - from 05: `/api/session` with `setup.spotify_app`, `setup.spotify_connected`
-    and `setup.redirect_url` (the site's `SPOTIFY_REDIRECT_URI`, so the page
-    shows it without hard-coding a domain);
+    and `setup.redirect_url` (`PUBLIC_ORIGIN` plus `/spotify/callback`, so the
+    page shows it without hard-coding a domain);
   - from 06: `PUT /api/workspace/spotify-app` `{client_id}`, the
     `GET /spotify/connect` start and the notice codes
     (`spotify_user_not_allowed`, `wrong_spotify_account`,
-    `spotify_account_in_use_elsewhere`) that come back after `/callback`;
+    `spotify_account_in_use_elsewhere`) that come back after `/spotify/callback`,
+    and `app_in_use_elsewhere`, which the save returns;
   - from 08: the `/setup/problem` page.
 
   There is no workspace-rename endpoint to depend on.
@@ -48,8 +50,11 @@ their account to it, pastes the client ID and connects.
 ## Implementation Plan
 
 ### Dependencies
-05 (session shape and `redirect_url`). It can build against fixtures in
-parallel with 06, which supplies the endpoints above before this merges.
+05 (session shape and `redirect_url`), 06 (endpoints) and 08 (the
+`/setup/problem` page that a `broken` workspace is sent to; nothing sets
+`broken` before 08 lands, so the redirect is harmless until then). It can
+build against fixtures in parallel with 06 and 08, which supply the
+endpoints and the problem page before this merges.
 
 ### Blocks
 09.
@@ -67,11 +72,19 @@ parallel with 06, which supplies the endpoints above before this merges.
       per developer (an old one has to be deleted in the dashboard before a
       new one can be made). Numbered instructions, plus a button that opens
       `https://developer.spotify.com/dashboard` in a new tab.
-   2. **Redirect URL and allow-list.** A read-only field with the site's
-      redirect URL from `/api/session` (not hard-coded), a copy button and
-      a confirm checkbox. It says that if the URL is wrong or unsaved,
-      Spotify stops on its own error page and never returns to Raccoon, and
-      to come back here and check it was saved exactly.
+   2. **Redirect URL and allow-list,** two panels from the mockup and one
+      confirm checkbox for both.
+      - *Add the redirect URL.* A read-only field with the site's redirect
+        URL from `/api/session` (not hard-coded) and a copy button. It says
+        that if the URL is wrong or unsaved, Spotify stops on its own error
+        page and never returns to Raccoon, and to come back here and check it
+        was saved exactly.
+      - *Allow your Spotify account.* "Under **User Management**, add the
+        name and email of the Spotify account you'll connect." It says an app
+        allows five accounts and that the account added must be the one
+        connected in step 4, because the workspace is bound to the first
+        account it connects.
+      - "I've done both" enables Continue.
    3. **Paste the client ID.** `Field` and `Input` for the ID, checked for
       32 hexadecimal characters as the person types and by
       `PUT /api/workspace/spotify-app` on save. It says plainly: only the
@@ -80,7 +93,19 @@ parallel with 06, which supplies the endpoints above before this merges.
       to Raccoon from it, and that you should return here and fix the ID.
    4. **Connect Spotify.** A form `GET` to `/spotify/connect`, with a link
       back to step 3 to change the ID. Coming back with a notice shows that
-      notice's fix, linking to the step it names.
+      notice's fix, linking to the step it names. The notices:
+      - `spotify_user_not_allowed`: "This Spotify account isn't allowed on
+        your app." Links to step 2's allow-list panel.
+      - `spotify_account_in_use_elsewhere`: "This Spotify account is already
+        connected to another workspace." Use a different account.
+      - `wrong_spotify_account`: "This isn't the Spotify account this
+        workspace started with." Connect the original account. It also says
+        that switching to a different account isn't available yet.
+      - `app_in_use_elsewhere`, which comes back from saving the client ID
+        in step 3 rather than from connecting: "This app is already used by
+        another workspace. Each Spotify app can belong to only one
+        workspace, so create a new app (step 1) and paste its client ID."
+        Links to step 1.
 3. **Resume where they left off.** The current step comes from the session's
    setup state: no app saved goes to step 1; an app saved (`unchecked`) goes
    to step 4; connected goes to the app. Steps 1 and 2 are instructions, so
@@ -97,7 +122,9 @@ parallel with 06, which supplies the endpoints above before this merges.
   - the guard sends each setup state to the right step;
   - saving a client ID: the format error, the saved state, and the
     INVALID_CLIENT guidance;
-  - each connect notice's fix;
+  - each connect notice's fix, and `app_in_use_elsewhere` on save;
+  - the "Allow your Spotify account" panel's copy and the confirm checkbox
+    that gates Continue;
   - the copy button;
   - accessibility (headings, focus moves to the h1, alerts announced).
 - **`npm test`** contract tests for the new endpoints.
@@ -107,7 +134,9 @@ parallel with 06, which supplies the endpoints above before this merges.
 ## Verification Checklist
 - [ ] `npx playwright test -c playwright.setup.config.ts` passes.
 - [ ] The harness e2e first-run test passes through the setup pages.
-- [ ] No setup page asks for, or mentions pasting, a client secret.
+- [ ] No setup page has an input for a client secret, and the only mention of
+      the secret on any setup page is step 3's warning not to paste it
+      (a Playwright assertion over the setup pages).
 - [ ] Step 1 states the Premium requirement.
 - [ ] On staging, the owner walks the setup pages against real Spotify and
       Google and notes where the copy differs from Spotify's live dashboard.

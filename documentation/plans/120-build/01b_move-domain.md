@@ -4,6 +4,7 @@ type: plan
 status: draft
 owner: chrisrogers37
 created: 2026-11-10
+updated: 2026-11-10
 tags: [enhancement, ops, rename]
 repos: chrisrogers37/shuffify
 ---
@@ -15,8 +16,9 @@ when the owner buys raccoon.fm.
 
 The current site moves to raccoon.fm on main, long before the workspaces
 code ships. The redirect URL every person will paste into their Spotify app
-is `https://raccoon.fm/callback`, and it is already on the current site's
-Spotify app by the time the new flow arrives. Cutover day (phase 09) then
+is `https://raccoon.fm/spotify/callback`, and it is already on the current
+site's Spotify app by the time the new flow arrives (staging uses that app).
+The current site keeps using `https://raccoon.fm/callback` until the cutover. Cutover day (phase 09) then
 needs no domain work: it is the wipe and the merge.
 
 This is its own phase, not a second PR of phase 01. The rename has no
@@ -48,15 +50,18 @@ rather than application code. Each gets its own rollback.
 01 (the rename). The owner buys raccoon.fm.
 
 ### Blocks
-06 (the setup copy and staging use the raccoon.fm redirect URL), 09.
+09. Phase 06's code doesn't need it; only 06's staging step needs the domain
+bought, because staging is `staging.raccoon.fm`.
 
 ### Steps
 
 **The owner, in order**
 1. Buy raccoon.fm and point its DNS at Vercel. Add `raccoon.fm` to the
    Vercel project as a second domain. Both domains now serve the site.
-2. Add `https://raccoon.fm/callback` to the current Spotify app's redirect
-   URIs, next to the shuffify.app one. Don't remove the old one yet.
+2. Add two redirect URIs to the current Spotify app, next to the shuffify.app
+   one: `https://raccoon.fm/callback` (the current site) and
+   `https://raccoon.fm/spotify/callback` (the new flow's callback, F13). Don't
+   remove the old one yet.
 3. In one sitting, on a quiet moment, change the shared Railway variables
    `PUBLIC_ORIGIN` to `https://raccoon.fm` and `SPOTIFY_REDIRECT_URI` to
    `https://raccoon.fm/callback`, then set shuffify.app to permanently
@@ -85,6 +90,8 @@ rather than application code. Each gets its own rollback.
 - [ ] `curl -s https://raccoon.fm/health` returns 200.
 - [ ] Signing in on raccoon.fm returns to raccoon.fm, and a write succeeds.
 - [ ] Railway api and worker deployments are SUCCESS.
+- [ ] The current Spotify app lists the raccoon.fm `/callback` and
+      `/spotify/callback` redirect URIs.
 
 ## What NOT To Do
 - Don't remove `https://shuffify.app/callback` from the Spotify app until
