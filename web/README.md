@@ -1,4 +1,4 @@
-# Shuffify web frontend
+# Raccoon web frontend
 
 The React/Vite application uses the existing After Hours design. It provides public landing and legal pages, shared app controls, session and API clients, an authenticated Settings form, Activity run and event views, the playlist Library, and Routines with guided and playlist setup.
 
@@ -31,7 +31,7 @@ The fixture transport fails closed for unknown endpoints and scenarios; it never
 
 ## Design source
 
-`assets/design/tokens.json` in the repository root is authoritative. `npm run theme:generate` creates `src/design/generated/theme.css`, the Tailwind 4 theme, and a compatibility composition of the existing shared design recipes. It also copies local fonts, licenses, the Shuffify mark and the official Spotify logo from `shuffify/static/` into `public/`. `theme:check` rejects stale, missing and obsolete CSS output and stale copied assets. Do not edit generated CSS or copied assets by hand.
+`assets/design/tokens.json` in the repository root is authoritative. `npm run theme:generate` creates `src/design/generated/theme.css`, the Tailwind 4 theme, and a compatibility composition of the existing shared design recipes. It also copies local fonts, licenses, the Raccoon mark and the official Spotify logo from `shuffify/static/` into `public/`. `theme:check` rejects stale, missing and obsolete CSS output and stale copied assets. Do not edit generated CSS or copied assets by hand.
 
 The foundation adds `radii.artwork-wide` and explicit existing legacy breakpoints to the shared token source. Artwork uses the two artwork tokens: 4px below the workspace breakpoint and 8px from that breakpoint. The component displays intact artwork with the official Spotify logo and a direct Spotify link. Layout, palette, type, spacing, radii, shadows and motion remain token driven.
 

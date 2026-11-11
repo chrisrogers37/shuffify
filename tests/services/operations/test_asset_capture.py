@@ -24,8 +24,8 @@ def assets(db_app):
     [
         ("pair_create", "archive", "Example [Archive]", "Archive playlist for removed tracks"),
         ("raid_link_create", "collection", "Example [Raids]", "Raid staging playlist for incoming tracks"),
-        ("setup_playlist_create", "archive", "New asset", "Archived tracks, created in Shuffify setup"),
-        ("setup_playlist_create", "collection", "New asset", "Collected discoveries, created in Shuffify setup"),
+        ("setup_playlist_create", "archive", "New asset", "Archived tracks, created in Raccoon setup"),
+        ("setup_playlist_create", "collection", "New asset", "Collected discoveries, created in Raccoon setup"),
     ],
 )
 def test_new_asset_captures_exact_authored_strings(assets, kind, purpose, name, description):

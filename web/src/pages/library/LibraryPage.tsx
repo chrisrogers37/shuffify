@@ -233,7 +233,7 @@ export function LibraryPage({
           {organizing && (
             <section className="sh-library-organize-note">
               <p>
-                Changes save immediately in Shuffify. Organizing never changes
+                Changes save immediately in Raccoon. Organizing never changes
                 your Spotify playlists. Drag within a section or use the
                 keyboard controls.
               </p>

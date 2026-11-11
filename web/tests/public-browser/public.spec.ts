@@ -131,7 +131,7 @@ test("landing is prerendered, hydrates without replacing content and keeps the p
   expect(response?.headers()["content-security-policy"]).not.toContain(
     "unsafe-inline",
   );
-  await expect(page).toHaveTitle("Shuffify: Evolve your collection.");
+  await expect(page).toHaveTitle("Raccoon: Evolve your collection.");
   await expect(page.locator("#hero-title")).toBeFocused();
   expect(
     await page
@@ -167,7 +167,7 @@ for (const item of [
   }, info) => {
     const response = await stable(page, item.path);
     expect(await response?.text()).toContain("Last updated: October 14, 2026");
-    await expect(page).toHaveTitle(`${item.title} - Shuffify`);
+    await expect(page).toHaveTitle(`${item.title} - Raccoon`);
     await expect(page.locator("main h1")).toHaveText(item.title);
     await expect(page.locator("main h1")).toBeFocused();
     expect(await page.locator(".legal-copy section").count()).toBe(
@@ -189,7 +189,7 @@ for (const item of [
       animations: "disabled",
     });
     await page
-      .getByRole("link", { name: "← Back to Shuffify", exact: true })
+      .getByRole("link", { name: "← Back to Raccoon", exact: true })
       .click();
     await expect(page).toHaveURL("/");
     await expect(page.locator("#hero-title")).toBeFocused();
@@ -431,7 +431,7 @@ test("all public pages retain useful content, native links and consent with Java
       page.getByText("Last updated: October 14, 2026", { exact: true }),
     ).toBeVisible();
     await page
-      .getByRole("link", { name: "Shuffify home", exact: true })
+      .getByRole("link", { name: "Raccoon home", exact: true })
       .click();
     let loginUrl = "";
     await page.route("**/login?*", (route) => {
@@ -523,8 +523,8 @@ test("control accessible names retain their visible labels and public aliases se
     const response = await page.goto(path);
     expect(await response?.text()).toContain(
       path === "/terms/"
-        ? "Terms of Service - Shuffify"
-        : "Privacy Policy - Shuffify",
+        ? "Terms of Service - Raccoon"
+        : "Privacy Policy - Raccoon",
     );
     await expect(page.locator("main h1")).toHaveText(
       path === "/terms/" ? "Terms of Service" : "Privacy Policy",
@@ -560,7 +560,7 @@ test("returning to the landing announces a new identical demo outcome once", asy
     .getByRole("link", { name: "Terms", exact: true })
     .click();
   await page
-    .getByRole("link", { name: "← Back to Shuffify", exact: true })
+    .getByRole("link", { name: "← Back to Raccoon", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Preview Shuffle", exact: true })

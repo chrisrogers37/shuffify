@@ -44,7 +44,7 @@ export function SnapshotsTool(context: WorkshopToolContext) {
     t.confirmingSnapshot(id);
     const accepted = await confirm.confirm({
       title: "Delete this snapshot?",
-      message: `Delete snapshot #${id} from Shuffify. Spotify does not change.`,
+      message: `Delete snapshot #${id} from Raccoon. Spotify does not change.`,
       confirmLabel: "Delete snapshot",
       danger: true,
     });
@@ -80,7 +80,7 @@ export function SnapshotsTool(context: WorkshopToolContext) {
         Snapshot timeline
       </h3>
       <p>
-        Snapshots preserve an exact track order in Shuffify. Viewing, taking and
+        Snapshots preserve an exact track order in Raccoon. Viewing, taking and
         deleting a snapshot leave Spotify unchanged. Restore reviews Spotify’s
         current state before queuing a change.
       </p>

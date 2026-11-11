@@ -75,7 +75,7 @@ test("complete settings groups use typed saved values, current identity, local f
   await expect(
     page.getByRole("heading", { name: "Settings", exact: true }),
   ).toBeFocused();
-  await expect(page).toHaveTitle("Settings · Shuffify");
+  await expect(page).toHaveTitle("Settings · Raccoon");
   for (const name of [
     "Shuffle defaults",
     "Snapshots & History",

@@ -43,7 +43,7 @@ test("stat tiles, bounded lists, title, labels and responsive targets match auth
   await expect(
     page.getByRole("heading", { name: "Activity", exact: true }),
   ).toBeFocused();
-  await expect(page).toHaveTitle("Activity · Shuffify");
+  await expect(page).toHaveTitle("Activity · Raccoon");
   await expect(
     page.getByRole("group", { name: "Activity totals" }),
   ).toContainText("4Shuffles");

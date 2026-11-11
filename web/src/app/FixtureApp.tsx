@@ -335,7 +335,7 @@ function FoundationReview() {
               <p className="sh-eyebrow">Artwork component</p>
               <h2>Intact artwork, clear attribution</h2>
               <p>
-                This local Shuffify illustration is a fixture. The shared
+                This local Raccoon illustration is a fixture. The shared
                 component reserves space for Spotify attribution and the
                 original link.
               </p>
