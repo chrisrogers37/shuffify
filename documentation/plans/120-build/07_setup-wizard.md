@@ -41,7 +41,9 @@ their account to it, pastes the client ID and connects.
   - from 06: `PUT /api/workspace/spotify-app` `{client_id}`, the
     `GET /spotify/connect` start and the notice codes
     (`spotify_user_not_allowed`, `wrong_spotify_account`,
-    `spotify_account_in_use_elsewhere`) that come back after `/spotify/callback`,
+    `spotify_account_in_use_elsewhere`, and `oauth_failed` for an
+    `invalid_grant` at the code exchange) that come back after
+    `/spotify/callback`,
     and `app_in_use_elsewhere`, which the save returns;
   - from 08: the `/setup/problem` page.
 
@@ -96,6 +98,12 @@ endpoints and the problem page before this merges.
       notice's fix, linking to the step it names. The notices:
       - `spotify_user_not_allowed`: "This Spotify account isn't allowed on
         your app." Links to step 2's allow-list panel.
+      - `spotify_app_rejected`: "Spotify didn't recognise this app." The
+        client ID is wrong or the app was deleted. Links to step 3 to check
+        the ID, and to step 1 if the app no longer exists.
+      - `oauth_failed`: "Spotify didn't finish connecting. The sign-in
+        expired or was already used." Connect Spotify again; nothing else
+        changes and the app isn't marked broken.
       - `spotify_account_in_use_elsewhere`: "This Spotify account is already
         connected to another workspace." Use a different account.
       - `wrong_spotify_account`: "This isn't the Spotify account this
@@ -139,8 +147,9 @@ endpoints and the problem page before this merges.
       (a Playwright assertion over the setup pages).
 - [ ] Step 1 states the Premium requirement.
 - [ ] On staging, the owner walks the setup pages against real Spotify and
-      Google and notes where the copy differs from Spotify's live dashboard.
-      The from-scratch test of the guide happens at cutover (phase 09).
+      Google, and the copy follow-up PR's description lists every place the
+      copy differs from Spotify's live dashboard, or says none was found. The
+      from-scratch test of the guide happens at cutover (phase 09).
 
 ## What NOT To Do
 - Don't hard-code `raccoon.fm` in the web app; the redirect URL comes from

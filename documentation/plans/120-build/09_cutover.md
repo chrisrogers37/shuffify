@@ -55,10 +55,15 @@ new database in phase 06, so neither is done on this day.
   settings). The merge starts the build at once, and the api's pre-deploy runs
   after the build finishes.
 - The worker has no pre-deploy step and refuses to start on a schema that
-  isn't at head (`documentation/guides/production.md`, Recent data changes),
-  and its restart policy is `ON_FAILURE` with 10 retries. A worker that starts
-  against the emptied database before the api has built it can use up its
-  retries.
+  isn't at head: `create_app()` raises `SchemaOutOfDateError`
+  (`shuffify/__init__.py:223-300`, called from `shuffify/worker.py:628`;
+  `documentation/guides/production.md`, Recent data changes). Its restart
+  policy is `ON_FAILURE` with 10 retries (`.railway/railway.ts`). A worker that
+  starts against the emptied database before the api has built it therefore
+  builds the app, refuses and exits without touching any data, and uses up its
+  retries, leaving the deployment FAILED. That does no harm, and step 11
+  redeploys the worker by hand in every case, so nothing needs to hold the new
+  worker back.
 
 **Rolling back the database** is documented in
 `documentation/guides/production.md`: "Recent data changes" and "Back to the
@@ -89,11 +94,8 @@ depends on 01b.
 1. Phases 06 to 08 have passed their staging checks against real Spotify and
    Google, and staging has rehearsed the mechanics of the day, so none is first
    tried on production:
-   - the pre-deploy build of an emptied database (phase 06 step 7);
-   - which mechanism keeps the worker down through a push (step 7), by pushing
-     to `feat/workspaces` while it is held;
-   - the order of steps 9 to 11, timed, so the owner knows how many minutes the
-     site is down;
+   - the pre-deploy build of an emptied database (phase 06 step 7), through the
+     pooled host production uses;
    - walking the setup pages against real Spotify with the existing app, so
      the copy is checked once before the timed run. Optionally a friend with a
      Premium Spotify account runs the guide from scratch on staging (that uses
@@ -114,8 +116,8 @@ depends on 01b.
 3. **Set the new Railway shared variables:** `GOOGLE_CLIENT_ID`,
    `GOOGLE_CLIENT_SECRET` and `GOOGLE_REDIRECT_URI`. Setting a shared variable
    redeploys the services, so do it now, not on the day. Keep the shared
-   `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` until step 14: rolling back
-   to the old code needs them.
+   `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` and `SPOTIFY_REDIRECT_URI`
+   until step 14: rolling back to the old code needs them.
 4. **The owner** clears their raid inbox and writes down their schedule
    settings.
 5. **Merge main into `feat/workspaces` one last time,** confirm which of #126
@@ -123,23 +125,30 @@ depends on 01b.
    `python scripts/check-migration-chain.py`, and wait for CI to be fully
    green.
 6. **Stage the commands** in a scratch file: the Neon identity check, the
-   schema reset, the Redis flush, the worker hold and release, and the rollback.
-   Verify the Neon branch's identity from Neon's metadata
-   (`.railway/README.md`), not from a remembered id.
+   schema reset, the Redis flush, the old worker's removal and the new worker's
+   redeploy, and the rollback. Verify the Neon branch's identity from Neon's
+   metadata (`.railway/README.md`), not from a remembered id.
+   - **Read back the variables the new api needs before it will start,** next
+     to the Neon identity check. The new api refuses to start without
+     `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GOOGLE_REDIRECT_URI`
+     (phase 05 step 2), and after the wipe the database is already empty, so a
+     missing or mistyped value fails the deploy at the worst moment. Staging
+     only rehearses staging's own variables. Read these four back from
+     production's shared variables: `GOOGLE_CLIENT_ID` is production's Google
+     client from step 2, `GOOGLE_REDIRECT_URI` is exactly
+     `https://raccoon.fm/auth/google/callback`, `PUBLIC_ORIGIN` is exactly
+     `https://raccoon.fm`, and `GOOGLE_CLIENT_SECRET` is set (compare it with
+     the secret Google issued, without printing it into a shared log).
 
 **Cutover, in one sitting.** The old site keeps serving until the wipe, and the
 wipe is followed immediately by the merge, so the downtime is one build.
-7. **Hold the worker** so the merge's redeploy doesn't start it:
-   1. In Railway, open the worker's active deployment and choose Remove
-      (`production.md`), then confirm no operation is running.
-   2. The merge builds a new worker from `main` anyway. Keep it from starting
-      with whichever of these the staging rehearsal showed holds through a
-      push: set the worker service's replica count to 0 in the dashboard, or
-      turn off its automatic deploys. Don't run `railway config apply` that
-      day: the configuration says `replicas: 1`. Check this on staging rather
-      than assume it; if neither holds, let the worker start, rely on its
-      schema refusal, and redeploy it by hand in step 11.
-8. **Take the snapshot.** With the worker held, create a Neon backup branch of
+7. **Stop the old worker** so the old code doesn't run against the wiped
+   database: in Railway, open the worker's active deployment and choose Remove
+   (`production.md`), then confirm no operation is running. The merge builds a
+   new worker from `main` anyway; if it starts before the api has built the
+   schema it refuses on its schema check and exits (Evidence), and step 11
+   redeploys it by hand either way.
+8. **Take the snapshot.** With the old worker stopped, create a Neon backup branch of
    `production` (the 2026-10-17 precedent; `npx neonctl branches create --name
    backup-before-workspaces-<date> --parent production --project-id
    proud-dew-57305636`, flags confirmed with `neonctl branches create --help`
@@ -158,13 +167,14 @@ wipe is followed immediately by the merge, so the downtime is one build.
     pre-deploy log shows the stamped revision and the Neon branch it ran on,
     `https://raccoon.fm/health` returns 200, and a Google sign-in as the owner
     reaches the setup page.
-11. **Release the worker:** undo the hold, redeploy the worker on the merge SHA
-    by hand now that the api is at head, and confirm its deployment is SUCCESS
-    and its health check passes.
+11. **Redeploy the worker** on the merge SHA by hand now that the api is at
+    head (the merge's own worker build may have run out its restart retries
+    against the unbuilt database), and confirm its deployment is SUCCESS and
+    its health check passes.
 
 **Acceptance, by the owner, straight after**
-12. **The point of no return, and the ten-minute test.** With a timer, on
-    raccoon.fm:
+12. **The point of no return, and the timed setup (the threshold is 15
+    minutes).** With a timer, on raccoon.fm:
     1. Delete the old Spotify app in Spotify's dashboard. From here the old
        site can't be rolled back to, because its tokens belong to a deleted
        app. (Spotify allows one development-mode app per person, so this is
@@ -190,15 +200,21 @@ wipe is followed immediately by the merge, so the downtime is one build.
 **Clean-up**
 14. Delete the `staging` Railway environment, the staging Neon branch, the
     Vercel branch variable, the `staging.raccoon.fm` domain with its DNS record
-    and the staging Google client. Remove the shared `SPOTIFY_CLIENT_ID` and
-    `SPOTIFY_CLIENT_SECRET` from Railway. Update
+    and the staging Google client. Remove the shared `SPOTIFY_CLIENT_ID`,
+    `SPOTIFY_CLIENT_SECRET` and `SPOTIFY_REDIRECT_URI` from Railway (the
+    redirect URL is now `PUBLIC_ORIGIN` plus `/spotify/callback`, F13). Update
     `documentation/guides/production.md`, the README and `.railway/README.md`
-    with the new variables, the pre-deploy behaviour and this runbook's
-    outcome; their "no staging environment" lines are correct again.
+    with the new variables and this runbook's outcome (phase 06 step 7 already
+    rewrote their pre-deploy wording); their "no staging environment" lines are
+    correct again. **Update the README's sign-in wording** too: the
+    "Spotify sign-in" feature bullet (README.md:34) and Getting Started step 1
+    (README.md:38) still describe signing in with Spotify, and sign-up is open
+    from the cutover. They become: sign in with Google, create your own Spotify
+    app, connect it.
 
 **Rollback**
 - **Before step 12.1** (the old app still exists): stop the worker as in step
-  7.1, restore `production` from the backup branch from step 8, following
+  7, restore `production` from the backup branch from step 8, following
   `documentation/guides/production.md` ("Back to the pre-cutover snapshot",
   steps 1, 2, 4 and 5; its token-clearing step doesn't apply, because
   `TOKEN_ENCRYPTION_KEY` hasn't changed):
@@ -217,8 +233,11 @@ The acceptance steps 12 and 13 are the test. Before the merge, CI on
 `feat/workspaces` must be fully green and the staging gate passed.
 
 ## Verification Checklist
-- [ ] Staging passed phases 06 to 08 and rehearsed the pre-deploy build, the
-      worker hold and the timed order of steps 9 to 11.
+- [ ] Staging passed phases 06 to 08 and rehearsed the pre-deploy build of an
+      emptied database.
+- [ ] Production's `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+      `GOOGLE_REDIRECT_URI` and `PUBLIC_ORIGIN` were read back before the wipe
+      (step 6).
 - [ ] The Google consent screen is published and sign-in works for an account
       that isn't a test user.
 - [ ] `curl -s https://raccoon.fm/health` returns 200.
@@ -232,8 +251,9 @@ The acceptance steps 12 and 13 are the test. Before the merge, CI on
       the workspace's app and matched its state before the run.
 - [ ] The broken-app drill paused and then resumed schedules.
 - [ ] The staging environment, Neon branch, Vercel variable and domain, and
-      Google client are gone, and the retired Spotify variables are gone from
-      Railway.
+      Google client are gone, and `SPOTIFY_CLIENT_ID`,
+      `SPOTIFY_CLIENT_SECRET` and `SPOTIFY_REDIRECT_URI` are gone from Railway.
+- [ ] The README describes Google sign-in and creating your own Spotify app.
 
 ## What NOT To Do
 - Don't run `create-schema` through `railway run` from a laptop against
@@ -241,11 +261,14 @@ The acceptance steps 12 and 13 are the test. Before the merge, CI on
 - Don't run `flask db upgrade` on the emptied database before `create-schema`.
 - Don't merge before the wipe: the pre-deploy would upgrade the old database
   through the new migrations.
-- Don't leave the worker to start by itself on the merge.
+- Don't skip step 11: the merge's own worker build may have refused and run
+  out its retries, so redeploy it by hand once the api is at head.
+- Don't leave the old worker running through the wipe (step 7).
 - Don't switch domain variables on this day; they moved in 01b.
 - Don't delete the old Spotify app before the deploy is verified (step 10).
-- Don't remove the old Spotify variables before step 14: rollback needs them
-  until the old app is deleted.
+- Don't remove the old Spotify variables (`SPOTIFY_CLIENT_ID`,
+  `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI`) before step 14: rollback
+  needs them until the old app is deleted.
 
 ## Context
 - Source skill: forge · Area: ops, hosting, docs · Effort: S · Risk: High · Priority: High

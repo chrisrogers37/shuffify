@@ -240,10 +240,11 @@ These amend the decisions above.
 - **PKCE refresh tokens rotate and may be single-use.** The database holds
   the only copy of a connection's refresh token. Whoever refreshes (a web
   request or the worker) does it in a short transaction that locks the
-  connection's row (`SELECT ... FOR UPDATE`), reads the token from the
-  database, refreshes, and stores the new one before committing. The lock is
-  around the refresh, never around a whole run. The session keeps no copy of
-  the refresh token.
+  connection's row (`SELECT ... FOR NO KEY UPDATE`, with a lock timeout that
+  lasts only for that transaction), reads the token from the database,
+  refreshes, and stores the new one before committing. The lock is around the
+  refresh, never around a whole run. A lock timeout is a transient failure, not
+  a sign-out. The session keeps no copy of the refresh token.
 - **Recent sign-in hardening** (#135, #139, #143, #150) covers:
   - session handling when sign-in starts or fails;
   - the encrypted session refresh token;
@@ -277,8 +278,9 @@ sitting: wipe, merge, then set up from scratch.
 1. Before the switch, the owner clears their raid inbox and notes their
    schedule settings. Playlists and archive playlists live on Spotify and are
    untouched.
-2. Hold the worker, snapshot the database, wipe it and merge straight away.
-   The new build creates the schema, and the worker is released.
+2. Stop the old worker, snapshot the database, wipe it and merge straight
+   away. The new build creates the schema, and the worker is redeployed once
+   it has.
 3. The owner deletes their old Spotify app in Spotify's dashboard and signs up
    as the first new user. They create a new app by following the in-product
    guide alone, timed, which is the real test of the ten-minute goal (the
@@ -301,7 +303,9 @@ Other people who had accounts sign up fresh like anyone else.
 - **Detecting failures:** how to tell Spotify's failure cases apart (token
   refresh errors, 401/403 responses). The build plan maps `invalid_client`,
   `invalid_grant` and a 403 "user not registered" to three broken-app
-  reasons, each with its own fix.
+  reasons, each with its own fix, and detects them where the Spotify client
+  raises them, because services catch these errors before a route could see
+  them.
 - **In-flight work when an app breaks:** what happens to queued and running
   operations. The existing journal and needs-attention handling should carry
   most of it.

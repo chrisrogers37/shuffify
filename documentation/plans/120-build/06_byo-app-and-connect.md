@@ -20,25 +20,27 @@ app, and the site-wide Spotify app settings are removed. The phase also
 makes the pre-deploy script able to build a new database and stands up
 staging, so the first real Spotify and real Google runs happen here.
 
-It is XL because it holds five separate pieces of work: the PKCE changes, the
-save-app and connect endpoints, the stopgap's removal with its migration, a
+It is XL because it holds six separate pieces of work: the PKCE changes, the
+save-app and connect endpoints, the stopgaps' removal with its migration, a
 rewrite of the fake Spotify (`harness/fake_spotify/app.py`, 652 lines) into a
-per-app registry that enforces PKCE and rotates tokens, and retiring the site
+per-app registry that enforces PKCE and rotates tokens, retiring the site
 credentials (`SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` and `client_secret`
-appear in 44 tracked files, 24 of them under `tests/`), plus the owner's
-staging setup. It is one phase and still lands as several PRs where the
-builder finds a clean seam (for example the fake Spotify first).
+appear in 44 tracked files, 24 of them under `tests/`), and the pre-deploy
+script's database build (step 7), plus the owner's staging setup. It is one
+phase and still lands as several PRs where the builder finds a clean seam (for
+example the fake Spotify first).
 
 ## Evidence
 
 - After 02, `credentials_for` (`shuffify/spotify/credentials.py`) is the
   only source of credentials, `AuthService` takes them as an argument, and
-  the database is the only home of the refresh token, refreshed under the
-  credential lock.
-- After 03 and 05, `SpotifyConnection` exists, and a stopgap
+  the database is the only home of the refresh token, refreshed under a row
+  lock on the connection (re-pointed there by phase 04).
+- After 04 and 05, the Spotify account lives on `SpotifyConnection` (the
+  `users` columns are gone), phase 04's sign-in stopgap (the old `/callback`)
+  is unreachable from any start (`/login` is Google), and phase 05's stopgap
   `/spotify/connect` and `/spotify/callback` attach the site app's connection
-  to the signed-in person's workspace. The old `/callback` is unreachable from
-  any start (`/login` is Google).
+  to the signed-in person's workspace.
 - Today the token calls use Basic authorization with the secret
   (`shuffify/spotify/auth.py:236` exchange, `:297` refresh, `:382` revoke).
   The authorize URL (`auth.py:179-204`) has no PKCE and no `show_dialog`.
@@ -58,10 +60,11 @@ builder finds a clean seam (for example the fake Spotify first).
 ### Dependencies
 02, 05. It does not depend on 01b: the redirect URL comes from
 `/api/session`, the harness uses loopback, and nothing in the code needs the
-domain move. Only step 7 (staging) needs raccoon.fm to be bought, because
+domain move. Only step 8 (staging) needs raccoon.fm to be bought, because
 staging lives at `staging.raccoon.fm`; if the owner hasn't bought it yet, the
-code lands without step 7 and the staging checks wait, and phase 09's gate
-requires them. Phase 09 is the only phase that depends on 01b.
+code, including step 7's pre-deploy change, lands without step 8 and the
+staging checks wait, and phase 09's gate requires them. Phase 09 is the only
+phase that depends on 01b.
 
 The owner, for staging: access to Railway, Neon, Vercel, Google Cloud, the
 Spotify dashboard and raccoon.fm's DNS.
@@ -84,8 +87,10 @@ Spotify dashboard and raccoon.fm's DNS.
      a broken app and must work while one is broken.
    - Code that calls Spotify on a person's behalf refuses a connection that
      isn't `ok`: `require_auth` returns `spotify_not_connected` for
-     `unchecked`, and phase 08 adds the broken case and the worker's
-     claim-time refusal.
+     `unchecked`, and phase 08 adds the `broken` case (its step 4) and the
+     worker's claim-time refusal. The connect, save-app and `/api/session`
+     routes check only the signed-in person and their workspace, not
+     `require_auth`, so they keep working in every status.
    - Delete `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` from the places
      in Evidence, from `_SENTRY_SECRET_CONFIG_ATTRS`, and from every test
      that sets them; the harness identifies fake apps by the client ID it
@@ -145,8 +150,10 @@ Spotify dashboard and raccoon.fm's DNS.
      `https://raccoon.fm/spotify/callback`. It runs only for a
      signed-in person, **never calls `session.clear()`**, and removes only
      `spotify_connect` from the session.
-     - The state must match with `hmac.compare_digest`, and the workspace in
-       it must be the session's current workspace.
+     - The stored and returned state must match, compared as UTF-8 bytes with
+       `hmac.compare_digest` (#135, `routes/core.py:128-130`), so a non-ASCII
+       `state` is an `invalid_state` notice and never a 500 (#124); and the
+       workspace in it must be the session's current workspace.
      - The code exchange uses `credentials_for(connection)` and the stored
        verifier.
      - The profile's `spotify_id` must equal the connection's bound
@@ -155,29 +162,43 @@ Spotify dashboard and raccoon.fm's DNS.
        (`spotify_account_in_use_elsewhere`; the unique constraint is the
        backstop).
      - On success, in one transaction that first takes the connection row's
-       `SELECT ... FOR UPDATE` lock (the lock a refresh takes, phase 02), it
+       `FOR NO KEY UPDATE` lock (the lock a refresh takes, phase 02), it
        stores the encrypted refresh token, sets `spotify_id` and the profile,
        bumps `credential_generation`, and calls
        `SpotifyConnectionHealth.mark_ok(connection)`; then it sets the
        session's Spotify access token. The status becomes `ok` here and
        nowhere earlier. Phase 08 extends `mark_ok` to resume schedules.
-     - Spotify's "not registered" error becomes `spotify_user_not_allowed`,
-       and `invalid_client` at the exchange becomes `spotify_app_rejected`.
-       In this phase both are notices only. Phase 08 decides when they also
-       mark the connection broken: only for a connection that has connected
-       before (it has a bound `spotify_id`), never for a first connect.
+     - **The callback catches every typed failure itself,** so none of them
+       reaches a global handler, and it builds its own clients without a
+       failure hook: the exchange uses the bare auth manager and the profile
+       fetch a client with no hook, so nothing marks the connection from
+       inside them (phase 08 gives the hook to the clients the web and worker
+       builders make for ordinary calls). It sorts failures by what they say:
+       - **`invalid_grant` at the code exchange** (`SpotifyGrantRevoked`: a
+         reused or expired code, or a verifier lost with the session) is a
+         notice, `oauth_failed`, in every status. It never marks anything
+         broken, and the status, the refresh token and the
+         `credential_generation` stay as they were. Only a failed refresh
+         means "access removed" (phase 08).
+       - Spotify's "not registered" error at the profile fetch becomes
+         `spotify_user_not_allowed`, and `invalid_client` at the exchange
+         becomes `spotify_app_rejected`. In this phase both are notices only.
+         Phase 08 decides when they also mark the connection broken: only for
+         a connection that has connected before (it has a bound
+         `spotify_id`), never for a first connect.
    - A redirect URL mismatch or a wrong client ID never reaches `/spotify/callback`:
      Spotify stops on its own page. There is no notice for it; step 2 and 3
      of the setup copy (phase 07) explain what that page looks like and to
      come back and fix it.
    - Add the notice codes to `shuffify/services/auth_notice.py`.
-5. **Delete the old Spotify sign-in and the phase 03 and 05 stopgap.**
+5. **Delete the old Spotify sign-in and the phase 04 and 05 stopgaps.**
    Remove the old `/callback` route and `auth.callback` (with its #139 limit
    registration), the Spotify sign-in code behind `/login`, and `/callback`
    from the Vercel forwarding rule (`web/scripts/build-vercel-output.mjs`)
-   and the harness preview proxy (`tests/frontend_preview.py`). The stopgap
-   is the site app's client ID copied into a connection. Its migration is the one that deletes the stopgap
-   rows and then adds the unique constraint in step 3.
+   and the harness preview proxy (`tests/frontend_preview.py`). The stopgaps
+   are the site app's client ID copied into a connection. Their migration is
+   the one that deletes the stopgap rows and then adds the unique constraint
+   in step 3.
 6. **Make the fake Spotify enforce PKCE.** In `harness/fake_spotify/`:
    - a per-app registry (`/_fake/apps`): client ID, redirect URIs (the
      harness's `/spotify/callback`) and an allow-list, with no secret;
@@ -209,14 +230,50 @@ Spotify dashboard and raccoon.fm's DNS.
      built on quietly. Tighten it: no revision and any table at all is
      refused loudly, naming the tables. A database that has a revision is
      left to the upgrade, as today. It logs which revision it stamped.
-   - Update `tests/test_runtime_launch.py`, `tests/test_db_schema_guard.py`
-     and the README's migration note (README.md:119). Test the four cases:
-     empty builds and stamps; a revision is left alone; no revision with the
-     models' tables is refused; no revision with unrelated tables is
-     refused.
+   - Test the four cases: empty builds and stamps; a revision is left alone;
+     no revision with the models' tables is refused; no revision with
+     unrelated tables is refused.
+   - **This reverses a rule the repo pinned on purpose.** Since the split
+     runtime (05d4262, 2026-10-15), pre-deploy has run only `flask db
+     upgrade`, `create-schema` has been an explicit one-time bootstrap, and a
+     database with no revision has failed the deploy
+     (`migrations/env.py:54-66`). The cutover can't work that way: production
+     is wiped and rebuilt by its deploy. **Decision: pre-deploy keeps
+     `create-schema` after the cutover.** The tightened command does nothing
+     on a database that has a revision, so on production afterwards it is
+     inert, and putting the old rule back would take another main PR and
+     deploy for a guard whose remaining value is small. What is lost: an
+     empty database behind a wrong `DATABASE_URL` is now built and booted
+     instead of failing the deploy, and production's `DATABASE_URL` host has
+     already differed from what the guides described. What remains is the
+     refusal of any database that has tables and no revision, and the
+     Neon-identity check before a first deploy (overview Staging, cutover
+     step 6).
+   - **Rewrite the tests that assert the old rule:**
+     - `tests/test_db_schema_guard.py::TestPredeploy::test_runs_only_the_explicit_upgrade`
+       (L337) expects the stub `flask` to see only `db upgrade`. It now
+       expects `create-schema`, then `db upgrade`, in that order;
+     - `::test_missing_schema_is_never_silently_bootstrapped` (L354) uses a
+       stub that exits 91 if `create-schema` is called. It becomes: a
+       `create-schema` that fails blocks the deploy, `db upgrade` doesn't run
+       and the exit code passes through;
+     - `tests/test_runtime_launch.py::test_predeploy_disables_scheduler_and_sets_only_the_migration_process_marker`
+       (L40) expects exactly `false|1|db upgrade`. It now expects
+       `false|1|create-schema` and then `false|1|db upgrade`.
+   - **Rewrite the docs that state the old rule,** in this step and not at
+     cutover, because they contradict the script from the day it merges to the
+     branch: README.md's "Split runtime" paragraph (L119: an empty database
+     "requires an explicit one-time `flask create-schema` bootstrap") and the
+     last paragraph of `.railway/README.md` (L21: "upgrading never silently
+     stamps an existing database"). Both now say that pre-deploy builds a
+     database that has no revision and no tables, leaves one that has a
+     revision to the upgrade, and refuses one that has tables and no
+     revision. (The "no staging environment" sentences are the ones left for
+     phase 09.)
 8. **Stand up staging** (the owner, with the overview's Staging section):
-   the Railway environment, the emptied Neon branch on its direct host, the
-   Vercel branch variable and `staging.raccoon.fm`, the Spotify redirect URI
+   the Railway environment, the emptied Neon branch on its pooled host (as
+   production's api and worker use), the Vercel branch variable and
+   `staging.raccoon.fm`, the Spotify redirect URI
    on the owner's existing app (the `/spotify/callback` URL), and a Google
    client for staging (Testing mode is fine there). Deploy
    `feat/workspaces` to it, so the first deploy onto the emptied branch runs
@@ -243,6 +300,13 @@ Spotify dashboard and raccoon.fm's DNS.
     allow-list;
   - the callback leaves the Google session in place and removes only
     `spotify_connect`;
+  - **a non-ASCII `state`** gets the invalid-state notice and not a 500
+    (modelled on `test_non_ascii_state_gets_the_invalid_state_notice` in
+    `tests/routes/test_core_routes.py`);
+  - **`invalid_grant` at the code exchange** (a reused code, and a wrong
+    verifier) shows the `oauth_failed` notice and leaves the status, the
+    refresh token and the generation as they were, for an `unchecked`, an `ok`
+    and a `broken` connection;
   - replacing the app keeps the workspace's data and requires reconnecting;
   - status is `unchecked` after saving and `ok` only after a successful
     connect, which also bumps the generation;
@@ -251,7 +315,8 @@ Spotify dashboard and raccoon.fm's DNS.
 - **Migration test:** a database with two stopgap connections sharing one
   client ID upgrades through the unique-constraint migration, which leaves
   no connections.
-- **Pre-deploy tests:** the four create-schema cases in step 7.
+- **Pre-deploy tests:** the four create-schema cases in step 7, and the three
+  rewritten pre-deploy tests it names.
 - **Fake Spotify tests:** a missing, wrong or reused verifier is refused; a
   Basic header is refused; a deleted app answers `invalid_client`; a rotated
   refresh token invalidates the old one.
@@ -268,8 +333,10 @@ Spotify dashboard and raccoon.fm's DNS.
   - sign in with Google;
   - save the existing app's client ID, connect and confirm the playlists
     load, with Spotify's account dialog shown;
-  - let a token refresh and confirm the stored token rotated (this is where
-    real Spotify's PKCE refresh behaviour is first seen);
+  - let a token refresh and confirm the stored token rotated, through the
+    pooled host (phase 02's script already showed how real Spotify rotates;
+    this confirms the row-locked refresher against it, on the topology
+    production has);
   - run a routine once.
 
 ## Verification Checklist
@@ -282,7 +349,10 @@ Spotify dashboard and raccoon.fm's DNS.
 - [ ] `git grep -n "from_env\|from_flask_config" -- shuffify` returns nothing
       (step 1 deletes `from_flask_config` from `shuffify/spotify/credentials.py`).
 - [ ] `pytest tests/test_runtime_launch.py tests/test_db_schema_guard.py`
-      passes with the four create-schema cases.
+      passes with the four create-schema cases and the three rewritten
+      pre-deploy tests, and
+      `git grep -nE "never silently|explicit,? one-time" -- README.md .railway/README.md`
+      returns nothing.
 - [ ] The harness e2e first-run test passes.
 - [ ] The staging checks above pass.
 - [ ] CI is green on `feat/workspaces`.

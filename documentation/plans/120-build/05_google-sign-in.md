@@ -81,10 +81,16 @@ Spotify stops being a way to sign in; from here on it's only a connection
      to the acknowledged non-secret set in
      `tests/test_sentry_init.py` (`NOT_SECRETS`), each as a decision.
 3. **Make the routes.** These keep every property of today's `/login` and
-   `/callback`: refuse cross-site starts, require consent, compare state
-   with `hmac.compare_digest`, regenerate the session id on success, leave
-   the session untouched on failure, and limit each address to 10 requests a
-   minute (#139).
+   `/callback`: refuse cross-site starts, require consent, compare state,
+   regenerate the session id on success, leave the session untouched on
+   failure, and limit each address to 10 requests a minute (#139).
+   - **The state compare** is `hmac.compare_digest` on the stored and the
+     returned state **as UTF-8 bytes**, as `routes/core.py:128-130` does since
+     #135. `compare_digest` raises on a non-ASCII `str`, which was #124's 500;
+     a non-ASCII `state` must reach the invalid-state notice instead. Both new
+     callbacks (Google here, and the stopgap Spotify one) need it, and the
+     Google port can't copy a comparison to preserve: storydump keeps its state
+     in a database table.
    - **The per-address limit.** #139 applies
      `_limiter.limit("10/minute", key_func=get_remote_address)` to the views
      `auth.login` and `auth.callback` by name (`shuffify/__init__.py:937-947`).
@@ -92,7 +98,9 @@ Spotify stops being a way to sign in; from here on it's only a connection
      view functions and would otherwise fall back to the limiter's default, so
      register the same limit for all three next to those two. `auth.callback`
      (the old Spotify sign-in return) keeps its limit until phase 06 deletes
-     it.
+     it. If #145 has landed and replaced these per-endpoint limits with a
+     `RATE_LIMITS` table, the three new views need rows there instead, and
+     phase 06 removes `auth.callback`'s row; merging main in shows it.
    - `GET /login` is now Google sign-in. Its state is kept under the session
      key `google_state`, and the nonce is derived from it. Spotify's flow
      uses a different key, `spotify_connect` (phase 06), so neither flow can
@@ -118,13 +126,23 @@ Spotify stops being a way to sign in; from here on it's only a connection
      own). `/spotify/connect` requires a signed-in person, refuses a
      cross-site start like `/login`, stores `{state, workspace_id}` under
      `spotify_connect`, and redirects to Spotify with the site app.
-     `/spotify/callback` requires a signed-in person, compares that state, and attaches the
-     Spotify connection to that person's workspace. **It never calls
+     `/spotify/callback` requires a signed-in person, compares that state (as
+     bytes, above), and attaches the Spotify connection to that person's
+     workspace. **It never calls
      `session.clear()`:** a signed-in person stays signed in, and only
      `spotify_connect` and the Spotify token entries change. Phase 06
      replaces the stopgap's body with the per-workspace PKCE flow and keeps
      the paths. The old `/callback` is no longer reachable from any start,
      because `/login` is Google; phase 06 deletes it.
+   - **The redirect URI the stopgap sends.** Until phase 06, `credentials_for`
+     still builds from config (phase 02), so the stopgap's authorize URL sends
+     the `SPOTIFY_REDIRECT_URI` setting. The harness sets it to its own
+     `/spotify/callback`, the URI the fake Spotify registers. The harness is
+     the only place the stopgap runs: staging doesn't stand up until phase 06,
+     which deletes the setting. `/api/session`'s `setup.redirect_url` is
+     `PUBLIC_ORIGIN` plus `/spotify/callback` and is the same value in the
+     harness (tested). From phase 06 both come from `PUBLIC_ORIGIN` plus the
+     path.
 4. **Change session helpers.**
    - `require_session_and_db` and its relatives resolve the person and the
      workspace from the session.
@@ -153,10 +171,11 @@ Spotify stops being a way to sign in; from here on it's only a connection
    - The legal copy describes Google sign-in and bring-your-own Spotify
      app; update the hash pins.
 6. **Logout** clears the whole session, as it does today.
-7. **A follow-up migration makes `users.google_sub` NOT NULL.** The
-   phase 03 stopgap stops creating people; from here it only attaches a
-   Spotify connection to the signed-in person's workspace, as step 3
-   describes. Phase 06 replaces it.
+7. **A follow-up migration makes `users.google_sub` NOT NULL.** Phase 04's
+   sign-in stopgap (the old Spotify `/callback`, which creates a person with
+   no `google_sub`) is no longer reachable, because `/login` is Google. The
+   only stopgap left attaches a Spotify connection to the signed-in person's
+   workspace, as step 3 describes. Phase 06 replaces it.
 8. **Build a fake Google in the harness:** `harness/fake_google/`, on its
    own loopback port.
    - It has `/o/oauth2/v2/auth` with a `fake_user=` shortcut, `/token`
@@ -178,6 +197,10 @@ Spotify stops being a way to sign in; from here on it's only a connection
   - a cross-site start is refused;
   - missing consent is refused;
   - a state mismatch is refused;
+  - **a non-ASCII `state`** gets the invalid-state notice and not a 500, on
+    `/auth/google/callback` and on the stopgap `/spotify/callback` (modelled
+    on `test_non_ascii_state_gets_the_invalid_state_notice` in
+    `tests/routes/test_core_routes.py`);
   - the first sign-in creates a person and a workspace;
   - a second sign-in reuses them;
   - a failed callback leaves the session as it was.
@@ -196,8 +219,9 @@ Spotify stops being a way to sign in; from here on it's only a connection
 - **Session keys:** a Google callback with a `spotify_connect` entry in the
   session leaves it alone, and a Spotify callback with a `google_state` entry
   leaves that alone; a stopgap `/spotify/callback` never signs the person out.
-- **`/api/session`** contract tests, including `setup.redirect_url`; the web contract tests and Playwright
-  session mocks updated to the new shape.
+- **`/api/session`** contract tests, including `setup.redirect_url` and that
+  it equals the redirect URI the stopgap sends in the harness; the web
+  contract tests and Playwright session mocks updated to the new shape.
 - **Harness e2e:** sign in through fake Google and land on the app with
   `setup.spotify_app = none`.
 
@@ -205,7 +229,8 @@ Spotify stops being a way to sign in; from here on it's only a connection
 - [ ] The harness `check_login` passes through fake Google.
 - [ ] `git grep -n "oauth_state" -- shuffify` returns nothing.
 - [ ] `git grep -n "10/minute" -- shuffify/__init__.py` shows the per-address
-      limit applied to `auth.login`, `auth.callback` and the three new views.
+      limit applied to `auth.login`, `auth.callback` and the three new views
+      (or, if #145 has landed, the same rows in its `RATE_LIMITS` table).
 - [ ] `git grep -n "GOOGLE_CLIENT_SECRET" -- shuffify/__init__.py` shows it in
       `_SENTRY_SECRET_CONFIG_ATTRS`.
 - [ ] `git grep -n "accounts.spotify.com" -- web/security-headers.ts` still
@@ -217,7 +242,7 @@ Spotify stops being a way to sign in; from here on it's only a connection
 - Don't key identity on email.
 - Don't verify ID tokens with a JWKS fetch (F3).
 - Don't drop any of the existing sign-in protections, including #139's
-  per-address limit.
+  per-address limit and the bytes comparison of the state (#135).
 - Don't call `session.clear()` in any Spotify route.
 - Don't put an email or display name in a log line or activity text.
 - Don't build workspace switching. The session always holds the person's
