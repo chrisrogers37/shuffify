@@ -10,13 +10,16 @@ repos: chrisrogers37/shuffify
 
 ## Summary
 
-Part of [the #120 build plan](00_overview.md) (integration). Size: L.
+Part of [the #120 build plan](00_overview.md) (integration). Size: XL.
 
 Every table that belongs to a person's product data is re-keyed from
 `user_id` to `workspace_id`, so the workspace becomes the source of truth.
 Every service and route changes to scope by workspace. Code that needs the
 Spotify account, for ownership checks and playlist reads, takes it from the
 workspace's Spotify connection.
+
+The sweep is large: about 1,300 lines across about 200 files, tests included.
+That is why it is XL, and why it stays one PR (F7).
 
 ## Evidence
 
@@ -39,14 +42,20 @@ workspace's Spotify connection.
 
 **Code that scopes by user or Spotify id**
 - `user_id` appears in 66 files under `shuffify/`.
+- **`user_id` in `shuffify/spotify/cache.py` and `shuffify/spotify/api.py`
+  means the Spotify account's id** (for example `api.py:153, 221-258`), not a
+  database row. Those uses are never renamed, and the sweep must not touch
+  them.
 - `spotify_id` is the scoping key in `UpstreamSourceService`,
   `WorkshopSessionService`, `RaidSyncService` and
   `services/base.py:get_user_or_raise`. It's also the ownership argument to
   `validate_user_can_edit` / `read_complete` (e.g.
   `services/operations/runtime.py:344-378`).
-- The worker takes a `credential:{user_id}` lock (`shuffify/worker.py:94-95`).
-- Admission checks for busy and needs-review span all users (#129). Keep
-  their semantics; don't fix #129 here.
+- The worker takes a `credential:{user_id}` lock (`shuffify/worker.py:94-95`),
+  and since phase 02 the web refresh takes the same lock.
+- Admission checks for busy and needs-review spanned all users (#129). The
+  fix lands on main before the branch is cut; re-key whatever it leaves and
+  keep its semantics.
 
 ## Implementation Plan
 
@@ -76,13 +85,14 @@ workspace's Spotify connection.
    - Replace `get_user_or_raise(spotify_id)` with a workspace lookup.
 4. **Update the worker and the scheduler.**
    - Operation rows carry `workspace_id`.
-   - The credential lock becomes `credential:{spotify_connection_id}`.
+   - The credential lock becomes `credential:{spotify_connection_id}`, for
+     the worker and for the web refresh from phase 02 alike.
    - `JobExecutorService._get_spotify_api` takes the workspace and reads the
-     refresh token from its connection.
+     refresh token from its connection, at refresh time, under that lock.
 5. **Keep the request helpers working for now.** `require_auth_and_db` and
    `get_db_user` (`shuffify/routes/__init__.py:128-260`) resolve the
    workspace from the current session, which is still today's Spotify
-   sign-in through the stopgap in phase 03 step 5. The app keeps running on
+   sign-in through the stopgap in phase 03 step 4. The app keeps running on
    the branch until phase 05 replaces sign-in.
 6. **Update the test factories and fixtures** to create a person, a
    workspace and a connection, and re-key every test that builds rows by
@@ -99,15 +109,24 @@ workspace's Spotify connection.
 - The full backend suite and the harness e2e run pass on the branch.
 
 ## Verification Checklist
-- [ ] `git grep -n "user_id" -- shuffify` matches only the person tables
-      (`users`, `workspaces.user_id`, `login_history`) and session code.
+- [ ] A schema test (`tests/isolation/test_scoping_columns.py`) finds a
+      `user_id` column on exactly two tables, `workspaces` and
+      `login_history`, and a `workspace_id` column on the 12 re-keyed tables
+      and `job_executions`.
+- [ ] `git grep -nw "user_id" -- shuffify ':!shuffify/spotify/cache.py' ':!shuffify/spotify/api.py'`
+      lists hits only in the person code: the `User`, `Workspace` and
+      `LoginHistory` models, sign-in and session handling, and the login
+      history and user services. The Spotify-account `user_id` in `cache.py`
+      and `api.py` is excluded because it's never renamed.
 - [ ] `pytest tests/isolation` passes.
 - [ ] CI is green on `feat/workspaces`.
 
 ## What NOT To Do
 - Don't split this across PRs that leave the code half-renamed (F7).
-- Don't change admission semantics or fix #129 here.
+- Don't change admission semantics.
+- Don't rename the Spotify-account `user_id` in `shuffify/spotify/cache.py`
+  and `api.py`.
 - Don't add workspace switching.
 
 ## Context
-- Source skill: forge · Area: models, services, routes, worker · Effort: L · Risk: High · Priority: High
+- Source skill: forge · Area: models, services, routes, worker · Effort: XL · Risk: High · Priority: High

@@ -12,9 +12,11 @@ repos: chrisrogers37/shuffify
 
 Part of [the #120 build plan](00_overview.md) (integration). Size: M.
 
-This builds the five setup steps from the design's mockups in the production
+This builds the four setup steps from the design's mockups in the production
 design system. A signed-in person whose workspace isn't fully set up lands
-on the setup steps, not the app.
+on the setup steps, not the app. There is no workspace-naming step and no
+secret to paste: the person creates a Spotify app, adds the redirect URL and
+their account to it, pastes the client ID and connects.
 
 ## Evidence
 
@@ -31,12 +33,23 @@ on the setup steps, not the app.
   - `sh-surface`, `sh-spinner`, `sh-setup-nav`.
 - **Route guards:** `AuthGuard` (`web/src/auth/SessionProvider.tsx:67-119`);
   the routers are in `web/src/app/*-routes.tsx`.
-- The session shape comes from phase 05, and the endpoints from phase 06.
+- **What this phase needs from earlier phases:**
+  - from 05: `/api/session` with `setup.spotify_app`, `setup.spotify_connected`
+    and `setup.redirect_url` (the site's `SPOTIFY_REDIRECT_URI`, so the page
+    shows it without hard-coding a domain);
+  - from 06: `PUT /api/workspace/spotify-app` `{client_id}`, the
+    `GET /spotify/connect` start and the notice codes
+    (`spotify_user_not_allowed`, `wrong_spotify_account`,
+    `spotify_account_in_use_elsewhere`) that come back after `/callback`;
+  - from 08: the `/setup/problem` page.
+
+  There is no workspace-rename endpoint to depend on.
 
 ## Implementation Plan
 
 ### Dependencies
-05. It can build against fixtures in parallel with 06.
+05 (session shape and `redirect_url`). It can build against fixtures in
+parallel with 06, which supplies the endpoints above before this merges.
 
 ### Blocks
 09.
@@ -48,22 +61,30 @@ on the setup steps, not the app.
      (and an app that isn't `broken`) to `/setup`.
    - It sends a person whose app is `broken` to `/setup/problem` (phase 08).
 2. **The step pages** (`web/src/pages/setup/`). The step bar is
-   `sh-routine-progress` with `aria-current="step"`.
-   1. **Name the workspace.** This calls a new `PATCH /api/workspace`
-      `{name}` in the backend.
-   2. **Create a Spotify app.** Numbered instructions, plus a button that
-      opens `https://developer.spotify.com/dashboard` in a new tab.
-   3. **Redirect URL and allow-list.** A read-only field with the site's
+   `sh-routine-progress` with `aria-current="step"`, four steps.
+   1. **Create a Spotify app.** Says first that Spotify requires a Premium
+      account to own an app, and that Spotify allows one development app
+      per developer (an old one has to be deleted in the dashboard before a
+      new one can be made). Numbered instructions, plus a button that opens
+      `https://developer.spotify.com/dashboard` in a new tab.
+   2. **Redirect URL and allow-list.** A read-only field with the site's
       redirect URL from `/api/session` (not hard-coded), a copy button and
-      a confirm checkbox.
-   4. **Paste the keys.** `Field` and `Input` for the ID and a password-type
-      input for the secret. "Check with Spotify" saves, then checks, and
-      shows the checking, rejected and accepted states as callouts.
-   5. **Connect Spotify.** A form `GET` to `/spotify/connect`. Coming back
-      with a notice shows that notice's fix, linking to the step it names.
+      a confirm checkbox. It says that if the URL is wrong or unsaved,
+      Spotify stops on its own error page and never returns to Raccoon, and
+      to come back here and check it was saved exactly.
+   3. **Paste the client ID.** `Field` and `Input` for the ID, checked for
+      32 hexadecimal characters as the person types and by
+      `PUT /api/workspace/spotify-app` on save. It says plainly: only the
+      client ID, never the secret. It also says that a wrong ID takes you to
+      a Spotify page reading "INVALID_CLIENT", that you'll never come back
+      to Raccoon from it, and that you should return here and fix the ID.
+   4. **Connect Spotify.** A form `GET` to `/spotify/connect`, with a link
+      back to step 3 to change the ID. Coming back with a notice shows that
+      notice's fix, linking to the step it names.
 3. **Resume where they left off.** The current step comes from the session's
-   setup state (no app, unchecked, ok but not connected). Steps 1–3 are
-   instructions, so going back and forth between them is free.
+   setup state: no app saved goes to step 1; an app saved (`unchecked`) goes
+   to step 4; connected goes to the app. Steps 1 and 2 are instructions, so
+   going back and forth between them is free.
 4. **Copy follows the mockups.** Screenshots of Spotify's dashboard are
    placeholders until they've been checked against the live dashboard
    (design: left to the builder).
@@ -74,7 +95,8 @@ on the setup steps, not the app.
 - **Playwright** at 360px and desktop:
   - each step renders;
   - the guard sends each setup state to the right step;
-  - the key check's three states;
+  - saving a client ID: the format error, the saved state, and the
+    INVALID_CLIENT guidance;
   - each connect notice's fix;
   - the copy button;
   - accessibility (headings, focus moves to the h1, alerts announced).
@@ -85,13 +107,19 @@ on the setup steps, not the app.
 ## Verification Checklist
 - [ ] `npx playwright test -c playwright.setup.config.ts` passes.
 - [ ] The harness e2e first-run test passes through the setup pages.
-- [ ] No setup page shows the secret after it's saved.
+- [ ] No setup page asks for, or mentions pasting, a client secret.
+- [ ] Step 1 states the Premium requirement.
+- [ ] On staging, the owner walks the setup pages against real Spotify and
+      Google and notes where the copy differs from Spotify's live dashboard.
+      The from-scratch test of the guide happens at cutover (phase 09).
 
 ## What NOT To Do
 - Don't hard-code `raccoon.fm` in the web app; the redirect URL comes from
   the API.
 - Don't invent new design tokens; reuse the existing recipes.
 - Don't add a "skip setup" path into the app.
+- Don't add a "name your workspace" step or call a rename endpoint.
+- Don't add a field for the client secret.
 
 ## Context
 - Source skill: forge · Area: web/src/pages/setup, auth guard · Effort: M · Risk: Low · Priority: High

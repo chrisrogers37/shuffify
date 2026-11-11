@@ -62,16 +62,16 @@ ol li b { color:var(--ink); font-weight:600; }
 </style>
 </head>
 <body>
-<p class="caption">Mockups in the production design system (same colours, fonts, buttons, panels). Left: one step of first-time setup. Right: the "uh oh" page, showing case A; the chips above the fix show the other cases it can switch to.</p>
+<p class="caption">Mockups in the production design system (same colours, fonts, buttons, panels). Left: one step of first-time setup. Right: the "uh oh" page, showing case A; the chips above the fix show the other cases it can switch to. None of them asks for a secret.</p>
 <div class="screens">
 
   <div>
-    <p class="label">Guided setup — step 3 of 5</p>
+    <p class="label">Guided setup — step 2 of 4</p>
     <div class="screen">
       <div class="topbar"><div class="brand">Raccoon<span>.</span></div><div class="who">My workspace <div class="avatar"></div></div></div>
       <div class="page">
-        <div class="steps"><div class="done"></div><div class="done"></div><div class="now"></div><div></div><div></div></div>
-        <p class="eyebrow">Step 3 · Your Spotify app</p>
+        <div class="steps"><div class="done"></div><div class="now"></div><div></div><div></div></div>
+        <p class="eyebrow">Step 2 · Your Spotify app</p>
         <h1>Tell Spotify where to send you back</h1>
         <p class="lead">Spotify only signs people in to addresses you've approved. Add ours to your app.</p>
 
@@ -104,22 +104,23 @@ ol li b { color:var(--ink); font-weight:600; }
 
         <div class="alert"><div class="dot"></div><div><b>5 scheduled runs are paused</b><p>They can't run until your app works again.</p></div></div>
 
-        <div class="variants"><span class="on">A · Secret rejected</span><span>B · App not found</span><span>C · Account not allowed</span></div>
+        <div class="variants"><span class="on">A · App not found</span><span>B · Access removed</span><span>C · Account not allowed</span></div>
 
         <div class="panel">
-          <span class="badge">Spotify rejected your app's secret</span>
-          <h2>Paste your new client secret</h2>
-          <p>This usually means the secret was reset in the Spotify dashboard.</p>
+          <span class="badge">Spotify no longer recognises your app</span>
+          <h2>Create a new Spotify app</h2>
+          <p>This usually means the app was deleted in the Spotify dashboard. Make a new one and connect through it. Your routines and history stay.</p>
           <ol>
-            <li>Open your app in the dashboard and choose <b>Settings</b>.</li>
-            <li>Choose <b>View client secret</b> and copy it.</li>
+            <li>Create an app in the dashboard (Spotify Premium is required).</li>
+            <li>Add the redirect URL and your account, then paste the new client ID.</li>
+            <li>Connect Spotify with the same account as before.</li>
           </ol>
-          <div class="row"><input class="input" placeholder="Client secret"><span class="btn">Save and test</span></div>
+          <span class="btn">Start setup again</span>
         </div>
 
         <div class="panel">
           <h2>Not the problem?</h2>
-          <p>Swap in a different Spotify app instead. You'll go back through setup and reconnect; your routines and history stay.</p>
+          <p>Swap in a different Spotify app instead. Delete the old one in the dashboard first, because Spotify allows one per person. You'll go back through setup and reconnect; your routines and history stay.</p>
           <span class="btn secondary">Use a different app</span>
         </div>
       </div>

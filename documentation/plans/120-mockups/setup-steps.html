@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>#120 setup — all five steps</title>
+<title>#120 setup — all four steps</title>
 <style>
 @font-face { font-family: "DM Sans"; src: url("../../../web/public/fonts/dm-sans-latin-variable.woff2") format("woff2"); font-weight: 100 1000; }
 @font-face { font-family: "Manrope"; src: url("../../../web/public/fonts/manrope-latin-variable.woff2") format("woff2"); font-weight: 200 800; }
@@ -66,41 +66,23 @@ ol li { margin-bottom:6px; }
 </style>
 </head>
 <body>
-<p class="caption">All five setup steps in the production design system. Step 3 is the one you saw. Steps 4 and 5 show the in-between and failure states underneath. The last panel is where setup lands: your own playlists.</p>
+<p class="caption">All four setup steps in the production design system. Step 2 is the one in the other mockup. Steps 3 and 4 show the in-between and failure states underneath. The last panel is where setup lands: your own playlists. There is no workspace-naming step and no secret to paste.</p>
 <div class="grid">
 
   <!-- STEP 1 -->
   <div>
-    <p class="label">Step 1 — name the workspace</p>
+    <p class="label">Step 1 — create a Spotify app</p>
     <div class="screen">
-      <div class="topbar"><div class="brand">Raccoon<span>.</span></div><div class="who">Signed in with Google</div></div>
+      <div class="topbar"><div class="brand">Raccoon<span>.</span></div><div class="who">My workspace</div></div>
       <div class="page">
-        <div class="steps"><div class="now"></div><div></div><div></div><div></div><div></div></div>
-        <p class="eyebrow">Step 1 · Your workspace</p>
-        <h1>Welcome. Let's set you up.</h1>
-        <p class="lead">Raccoon runs through your own Spotify developer app. Setup takes about ten minutes, and we'll walk you through every click.</p>
-        <div class="panel">
-          <div class="field"><label>Workspace name</label><div class="input dim">My music</div></div>
-          <p style="margin:0">You can change this later.</p>
-        </div>
-        <div class="footer"><span></span><span class="btn">Continue</span></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- STEP 2 -->
-  <div>
-    <p class="label">Step 2 — create a Spotify app</p>
-    <div class="screen">
-      <div class="topbar"><div class="brand">Raccoon<span>.</span></div><div class="who">My music</div></div>
-      <div class="page">
-        <div class="steps"><div class="done"></div><div class="now"></div><div></div><div></div><div></div></div>
-        <p class="eyebrow">Step 2 · Your Spotify app</p>
+        <div class="steps"><div class="now"></div><div></div><div></div><div></div></div>
+        <p class="eyebrow">Step 1 · Your Spotify app</p>
         <h1>Create a Spotify app</h1>
-        <p class="lead">It's free and stays private to you. Open Spotify's developer dashboard in a new tab.</p>
+        <p class="lead">Raccoon runs through your own Spotify developer app. It's free and stays private to you. Setup takes about ten minutes, and we'll walk you through every click.</p>
         <div class="panel">
+          <div class="status wait" style="margin:0 0 12px"><div><b>You need Spotify Premium.</b> Spotify only lets Premium accounts own a developer app, and allows one per person. If you already have one you no longer use, delete it in the dashboard first.</div></div>
           <ol>
-            <li>Sign in with your Spotify account and choose <b>Create app</b>.</li>
+            <li>Open the dashboard below, sign in with your Spotify account and choose <b>Create app</b>.</li>
             <li>Give it any name and description.</li>
             <li>Under <b>Which API/SDKs</b>, tick <b>Web API</b>.</li>
             <li>Agree to Spotify's terms and <b>Save</b>.</li>
@@ -108,28 +90,29 @@ ol li { margin-bottom:6px; }
           <div class="shot">Annotated screenshot of the Create app form</div>
           <div style="margin-top:12px"><span class="btn secondary wide">Open Spotify dashboard ↗</span></div>
         </div>
-        <div class="footer"><span class="btn secondary">Back</span><span class="btn">I've created it</span></div>
+        <div class="footer"><span></span><span class="btn">I've created it</span></div>
       </div>
     </div>
   </div>
 
-  <!-- STEP 3 -->
+  <!-- STEP 2 -->
   <div>
-    <p class="label">Step 3 — redirect URL and allow-list</p>
+    <p class="label">Step 2 — redirect URL and allow-list</p>
     <div class="screen">
-      <div class="topbar"><div class="brand">Raccoon<span>.</span></div><div class="who">My music</div></div>
+      <div class="topbar"><div class="brand">Raccoon<span>.</span></div><div class="who">My workspace</div></div>
       <div class="page">
-        <div class="steps"><div class="done"></div><div class="done"></div><div class="now"></div><div></div><div></div></div>
-        <p class="eyebrow">Step 3 · Your Spotify app</p>
+        <div class="steps"><div class="done"></div><div class="now"></div><div></div><div></div></div>
+        <p class="eyebrow">Step 2 · Your Spotify app</p>
         <h1>Tell Spotify where to send you back</h1>
         <div class="panel">
           <h2>Add the redirect URL</h2>
-          <p>In your app, choose <b>Settings</b>, then <b>Edit</b>, and paste this under <b>Redirect URIs</b>.</p>
+          <p>In your app, choose <b>Settings</b>, then <b>Edit</b>, and paste this under <b>Redirect URIs</b>, then save.</p>
           <div class="row"><div class="input mono">https://raccoon.fm/callback</div><span class="btn secondary">Copy</span></div>
+          <p style="margin-top:10px">If it's missing or not exactly this, Spotify stops on its own error page and never sends you back to Raccoon. If that happens, return here and check it was saved exactly.</p>
         </div>
         <div class="panel">
           <h2>Allow your Spotify account</h2>
-          <p>Under <b>User Management</b>, add the email of the Spotify account you'll connect.</p>
+          <p>Under <b>User Management</b>, add the name and email of the Spotify account you'll connect.</p>
           <div class="check"><div class="box"></div>I've done both</div>
         </div>
         <div class="footer"><span class="btn secondary">Back</span><span class="btn">Continue</span></div>
@@ -137,49 +120,50 @@ ol li { margin-bottom:6px; }
     </div>
   </div>
 
-  <!-- STEP 4 -->
+  <!-- STEP 3 -->
   <div>
-    <p class="label">Step 4 — paste the keys</p>
+    <p class="label">Step 3 — paste the client ID</p>
     <div class="screen">
-      <div class="topbar"><div class="brand">Raccoon<span>.</span></div><div class="who">My music</div></div>
+      <div class="topbar"><div class="brand">Raccoon<span>.</span></div><div class="who">My workspace</div></div>
       <div class="page">
-        <div class="steps"><div class="done"></div><div class="done"></div><div class="done"></div><div class="now"></div><div></div></div>
-        <p class="eyebrow">Step 4 · Your Spotify app</p>
-        <h1>Paste your app's keys</h1>
-        <p class="lead">Both are on your app's <b style="color:var(--ink)">Settings</b> page.</p>
+        <div class="steps"><div class="done"></div><div class="done"></div><div class="now"></div><div></div></div>
+        <p class="eyebrow">Step 3 · Your Spotify app</p>
+        <h1>Paste your app's client ID</h1>
+        <p class="lead">It's on your app's <b style="color:var(--ink)">Settings</b> page. Only the client ID: never your client secret.</p>
         <div class="panel">
-          <div class="field"><label>Client ID</label><div class="input mono dim">32 characters</div></div>
-          <div class="field"><label>Client secret</label><div class="input mono dim">••••••••••••••••••••••••••••••••</div>
-            <div class="lock">🔒 Stored encrypted. Never shown again once saved.</div></div>
-          <span class="btn wide">Check with Spotify</span>
+          <div class="field"><label>Client ID</label><div class="input mono dim">32 characters, letters and numbers</div>
+            <div class="hint">Raccoon never asks for your client secret.</div></div>
+          <span class="btn wide">Save client ID</span>
           <div class="states">
-            <div class="statelabel">While checking</div>
-            <div class="status wait"><div class="spinner"></div>Checking with Spotify…</div>
-            <div class="statelabel">If Spotify rejects them</div>
-            <div class="status bad"><div><b>Spotify didn't accept these keys.</b> Check you copied the whole secret, with no spaces.</div></div>
-            <div class="statelabel">If they work</div>
-            <div class="status ok"><div><b>Spotify accepted your app.</b> One step left.</div></div>
+            <div class="statelabel">If it isn't a client ID</div>
+            <div class="status bad"><div><b>That doesn't look like a client ID.</b> It's 32 letters and numbers, with no spaces. Check you didn't copy the client secret or a link.</div></div>
+            <div class="statelabel">If it's saved</div>
+            <div class="status ok"><div><b>Client ID saved.</b> One step left: connecting is what checks it.</div></div>
+            <div class="statelabel">If the ID is wrong but looks right</div>
+            <div class="status bad"><div><b>Spotify shows a page that says "INVALID_CLIENT".</b> You won't be sent back to Raccoon from it. Come back here, fix the client ID and try again.</div></div>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- STEP 5 -->
+  <!-- STEP 4 -->
   <div>
-    <p class="label">Step 5 — connect Spotify</p>
+    <p class="label">Step 4 — connect Spotify</p>
     <div class="screen">
-      <div class="topbar"><div class="brand">Raccoon<span>.</span></div><div class="who">My music</div></div>
+      <div class="topbar"><div class="brand">Raccoon<span>.</span></div><div class="who">My workspace</div></div>
       <div class="page">
-        <div class="steps"><div class="done"></div><div class="done"></div><div class="done"></div><div class="done"></div><div class="now"></div></div>
-        <p class="eyebrow">Step 5 · Connect</p>
+        <div class="steps"><div class="done"></div><div class="done"></div><div class="done"></div><div class="now"></div></div>
+        <p class="eyebrow">Step 4 · Connect</p>
         <h1>Connect your Spotify account</h1>
         <p class="lead">You'll sign in on Spotify's site through the app you just made, then come straight back.</p>
         <div class="panel">
           <span class="btn wide">Connect Spotify</span>
           <div class="statelabel">If you come back with an error</div>
-          <div class="status bad"><div><b>Spotify says the redirect URL doesn't match.</b> Go back to step 3 and check it was saved exactly.</div></div>
-          <div class="status bad"><div><b>This Spotify account isn't allowed on your app.</b> Add it under User Management (step 3), then try again.</div></div>
+          <div class="status bad"><div><b>This Spotify account isn't allowed on your app.</b> Add it under User Management (step 2), then try again.</div></div>
+          <div class="status bad"><div><b>This Spotify account is already connected to another workspace.</b> Use a different account, or sign in to Spotify as the one you set up.</div></div>
+          <div class="status bad"><div><b>This isn't the Spotify account this workspace started with.</b> Connect the original account to keep your routines and history.</div></div>
+          <div class="lock">Change the client ID (step 3)</div>
         </div>
       </div>
     </div>
@@ -189,9 +173,9 @@ ol li { margin-bottom:6px; }
   <div>
     <p class="label">Done — your playlists</p>
     <div class="screen">
-      <div class="topbar"><div class="brand">Raccoon<span>.</span></div><div class="who">My music</div></div>
+      <div class="topbar"><div class="brand">Raccoon<span>.</span></div><div class="who">My workspace</div></div>
       <div class="page">
-        <div class="steps"><div class="done"></div><div class="done"></div><div class="done"></div><div class="done"></div><div class="done"></div></div>
+        <div class="steps"><div class="done"></div><div class="done"></div><div class="done"></div><div class="done"></div></div>
         <p class="eyebrow" style="color:var(--success)">You're connected</p>
         <h1>Your playlists</h1>
         <p class="lead">From here everything works as usual, through your own app.</p>

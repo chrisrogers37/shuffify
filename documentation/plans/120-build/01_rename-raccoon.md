@@ -14,8 +14,8 @@ Part of [the #120 build plan](00_overview.md) (main). Size: S. Closes the
 rename part of #122.
 
 Every name a person sees becomes Raccoon. This PR doesn't touch the domain:
-moving to raccoon.fm is configuration work at launch (phase 09). The internal
-code name stays `shuffify`.
+moving to raccoon.fm is configuration work in phase 01b. The internal code
+name stays `shuffify`.
 
 ## Evidence
 
@@ -69,7 +69,7 @@ code name stays `shuffify`.
 None.
 
 ### Blocks
-09 (launch).
+01b (move the domain), 09 (cutover).
 
 ### Steps
 1. In each web file listed above, replace the visible "Shuffify" and
@@ -84,7 +84,7 @@ None.
    Raccoon setup", and the test assertion changes to match.
 4. Update the tests that assert the name.
 5. In the README, web README and DESIGN.md, change the product's name.
-   Domain links stay as they are until phase 09.
+   Domain links stay as they are until phase 01b.
 6. Keep the favicon and the shuffle-mark artwork; a Raccoon mark is a
    separate design task.
 
