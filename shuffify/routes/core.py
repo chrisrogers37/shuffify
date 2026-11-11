@@ -30,6 +30,8 @@ from shuffify.services import (
 )
 from shuffify.services.auth_notice import auth_notice
 from shuffify.services.auth_service import encrypt_session_token
+from shuffify.spotify.credentials import credentials_for
+from shuffify.spotify.exceptions import SpotifyAppUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -88,11 +90,11 @@ def login():
         session["oauth_state"] = state
         session.modified = True
 
-        auth_url = AuthService.get_auth_url(state=state)
+        auth_url = AuthService.get_auth_url(credentials_for(None), state=state)
         logger.debug(f"Redirecting to Spotify auth: {auth_url}")
         return redirect(auth_url)
 
-    except AuthenticationError as e:
+    except (AuthenticationError, SpotifyAppUnavailable) as e:
         logger.error(f"Login error: {e}")
         _auth_notice("login_failed")
         return redirect("/")
@@ -136,11 +138,14 @@ def callback():
     # token; a failed sign-in puts this one back.
     previous_token = session.get("spotify_token")
     try:
+        # Nobody has signed in yet, so there is no user to name the app for.
+        credentials = credentials_for(None)
+
         # Exchange code for token
-        token_data = AuthService.exchange_code_for_token(code)
+        token_data = AuthService.exchange_code_for_token(credentials, code)
 
         # Validate by fetching user data
-        _, user_data = AuthService.authenticate_and_get_user(token_data)
+        _, user_data = AuthService.authenticate_and_get_user(credentials, token_data)
 
         # Regenerate session ID to prevent session fixation attacks.
         # Flask-Session's regenerate() deletes the old server-side
@@ -216,7 +221,7 @@ def callback():
         )
         return redirect("/")
 
-    except AuthenticationError as e:
+    except (AuthenticationError, SpotifyAppUnavailable) as e:
         if "not registered" in str(e):
             logger.warning(f"Authentication failed: {e}")
         else:
@@ -244,7 +249,7 @@ def logout():
         if token_data:
             access_token = token_data.get("access_token")
             if access_token:
-                AuthService.revoke_access_token(access_token)
+                AuthService.revoke_access_token(credentials_for(None), access_token)
     except Exception as e:
         logger.warning("Token revocation failed during logout: %s", e)
 

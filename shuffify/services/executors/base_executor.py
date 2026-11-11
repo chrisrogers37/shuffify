@@ -16,7 +16,7 @@ from shuffify.services.token_service import (
 )
 from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.auth import SpotifyAuthManager, TokenInfo
-from shuffify.spotify.credentials import SpotifyCredentials
+from shuffify.spotify.credentials import credentials_for
 from shuffify.spotify.exceptions import SpotifyTokenError
 
 # Sentinel token used when constructing a SpotifyAPI with only a
@@ -26,7 +26,16 @@ _EXPIRED_ACCESS_TOKEN = "expired_placeholder"
 
 
 class JobExecutionError(Exception):
-    """Raised when a scheduled job fails to execute."""
+    """Raised when a scheduled job fails to execute.
+
+    ``cause`` is the Spotify failure that triggered it, when there is one (a
+    refresh that failed), so the worker can read it, as ``spotify_failure_of``
+    does. The message is unchanged.
+    """
+
+    def __init__(self, *args, cause=None):
+        super().__init__(*args)
+        self.cause = cause
 
 
 class PlaylistVerificationError(JobExecutionError):
@@ -90,10 +99,7 @@ class JobExecutorService:
             raise JobExecutionError("Failed to decrypt the stored refresh token.") from e
 
         try:
-            from flask import current_app
-
-            credentials = SpotifyCredentials.from_flask_config(current_app.config)
-            auth_manager = SpotifyAuthManager(credentials)
+            auth_manager = SpotifyAuthManager(credentials_for(user))
 
             # Create a token_info with an expired access token
             # and valid refresh token. SpotifyAPI will
@@ -133,4 +139,4 @@ class JobExecutorService:
             )
 
         except SpotifyTokenError as e:
-            raise JobExecutionError("Failed to refresh the Spotify token.") from e
+            raise JobExecutionError("Failed to refresh the Spotify token.", cause=e) from e

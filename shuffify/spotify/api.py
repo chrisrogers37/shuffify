@@ -83,7 +83,7 @@ class SpotifyAPI:
     Supports optional Redis caching for improved performance.
 
     Example:
-        credentials = SpotifyCredentials.from_flask_config(app.config)
+        credentials = credentials_for(user)
         auth_manager = SpotifyAuthManager(credentials)
         token_info = TokenInfo.from_dict(session['spotify_token'])
 
@@ -110,6 +110,7 @@ class SpotifyAPI:
         auto_refresh: bool = True,
         cache: Optional["SpotifyCache"] = None,
         on_token_refresh: Optional[Callable[[TokenInfo], None]] = None,
+        on_typed_failure: Optional[Callable[[Exception], None]] = None,
     ):
         """
         Initialize the API client.
@@ -125,6 +126,9 @@ class SpotifyAPI:
                 expiry before a call, or on a 401 retry. Web requests use it
                 to write the token back to the session; background jobs to
                 store a rotated refresh token.
+            on_typed_failure: Optional callback handed to the HTTP client,
+                called with the failure where a ``SpotifyUserNotAllowed`` is
+                raised (see ``SpotifyHTTPClient``). Nothing supplies one yet.
 
         Raises:
             SpotifyTokenExpiredError: If token is expired and cannot be refreshed.
@@ -149,6 +153,7 @@ class SpotifyAPI:
             on_token_refresh=(
                 self._handle_token_refresh if self._auto_refresh else None
             ),
+            on_typed_failure=on_typed_failure,
         )
         self._user_id: Optional[str] = None
         logger.debug(

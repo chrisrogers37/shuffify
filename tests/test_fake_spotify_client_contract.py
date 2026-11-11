@@ -35,11 +35,16 @@ from shuffify.spotify.auth import DEFAULT_SCOPES, SpotifyAuthManager, TokenInfo
 from shuffify.spotify.credentials import SpotifyCredentials
 from shuffify.spotify.exceptions import (
     SpotifyAPIError,
+    SpotifyAppRejected,
     SpotifyForbiddenError,
+    SpotifyGrantRevoked,
     SpotifyNotFoundError,
     SpotifyPartialBatchError,
     SpotifyQuotaExceededError,
     SpotifyRateLimitError,
+    SpotifyTokenError,
+    SpotifyTokenExpiredError,
+    SpotifyUserNotAllowed,
     SpotifyWriteUnverifiedError,
 )
 from tests import spotify_urls
@@ -441,3 +446,86 @@ def test_a_batch_refused_for_quota_is_a_partial_write(server, api, store, backof
     assert isinstance(raised.value.cause, SpotifyQuotaExceededError)
     assert playlist.uris == reversed_uris[:100]
     assert backoffs == []
+
+
+# ---------------------------------------------------------------------------
+# The failures that name the app, the grant or the account: the client's typed
+# failures, against what the fake answers for each (faults.py).
+# ---------------------------------------------------------------------------
+
+
+def test_a_rejected_app_is_a_typed_failure_at_the_refresh(server, auth, backoffs):
+    token = log_in(auth)
+    arm(server, kind="app_rejected")
+    with pytest.raises(SpotifyAppRejected) as raised:
+        auth.refresh_token(token)
+    assert (raised.value.error, raised.value.error_description) == ("invalid_client", "Invalid client")
+    assert isinstance(raised.value, SpotifyTokenExpiredError) and fired(server) == [1]
+
+
+def test_a_rejected_app_is_a_typed_failure_at_the_code_exchange(server, auth):
+    consent = requests.get(auth.get_auth_url(state="st") + "&fake_user=alice", allow_redirects=False)
+    code = parse_qs(urlsplit(consent.headers["Location"]).query)["code"][0]
+    arm(server, kind="app_rejected")
+    with pytest.raises(SpotifyAppRejected):
+        auth.exchange_code(code)
+
+
+def test_a_revoked_grant_is_a_typed_failure_at_the_refresh(server, auth):
+    token = log_in(auth)
+    arm(server, kind="grant_revoked")
+    with pytest.raises(SpotifyGrantRevoked) as raised:
+        auth.refresh_token(token)
+    assert (raised.value.error, raised.value.error_description) == ("invalid_grant", "Refresh token revoked")
+    assert isinstance(raised.value, SpotifyTokenError) and fired(server) == [1]
+
+
+def test_a_401_then_a_failed_refresh_reaches_the_caller_as_the_typed_cause(server, auth):
+    """Spotify rejects the access token, and then the refresh fails: the caller sees why."""
+    good = log_in(auth)
+    stale = TokenInfo(
+        access_token=tokens.mint("access", -1, user="alice", scope=""),
+        token_type="Bearer", expires_at=time.time() + 3600, refresh_token=good.refresh_token,
+    )
+    api = SpotifyAPI(stale, auth)
+    arm(server, kind="grant_revoked")
+    with pytest.raises(SpotifyGrantRevoked):
+        api.get_current_user()
+    assert fired(server) == [1]
+
+
+def test_a_user_not_allowed_is_typed_and_reaches_the_hook_once(server, auth):
+    seen = []
+    api = SpotifyAPI(log_in(auth), auth, on_typed_failure=seen.append)
+    arm(server, operation="GET /me", kind="user_not_allowed")
+    with pytest.raises(SpotifyUserNotAllowed, match="403") as raised:
+        api.get_current_user()
+    assert isinstance(raised.value, SpotifyForbiddenError)
+    assert seen == [raised.value] and fired(server) == [1]
+
+
+def test_a_service_that_catches_a_user_not_allowed_still_fires_the_hook(server, auth):
+    seen = []
+    api = SpotifyAPI(log_in(auth), auth, on_typed_failure=seen.append)
+    arm(server, operation="GET /playlists/{playlist_id}", kind="user_not_allowed")
+    with pytest.raises(PlaylistAccessError):
+        PlaylistService(api).get_playlist(pid("alice-morning-mix"))
+    assert len(seen) == 1 and isinstance(seen[0], SpotifyUserNotAllowed)
+
+
+def test_a_playlist_403_is_not_a_user_not_allowed_and_leaves_the_hook_alone(server, auth):
+    seen = []
+    api = SpotifyAPI(log_in(auth), auth, on_typed_failure=seen.append)
+    with pytest.raises(SpotifyForbiddenError) as raised:
+        api.get_playlist_tracks(pid("bob-finds"))
+    assert type(raised.value) is SpotifyForbiddenError and seen == []
+
+
+def test_a_rotating_refresh_hands_back_the_new_token_and_the_old_one_stops_working(server, auth):
+    first = log_in(auth)
+    arm(server, kind="rotate_refresh", times=5)
+    second = auth.refresh_token(first)
+    assert second.refresh_token and second.refresh_token != first.refresh_token
+    with pytest.raises(SpotifyGrantRevoked):
+        auth.refresh_token(first)
+    assert auth.refresh_token(second).refresh_token not in (first.refresh_token, second.refresh_token)

@@ -276,11 +276,18 @@ because a fake built that way agrees with the app's mistakes.
   | `quota` | 429 with `{"error": {"status": 429, "message": "Too many requests", "reason": "QUOTA_EXCEEDED"}}`, Spotify's spent-quota answer |
   | `server_error` | 500, 502 or 503 (`status`, default 503), before the operation runs, so nothing is applied |
   | `slow` | served normally, `delay` seconds late (at most 60), or as soon as it is released. A write is still applied after a client that gave up on it |
+  | `user_not_allowed` | 403 whose message says the user may not be registered, which Spotify gives any call of an account the app's user list leaves out (any `/v1` operation) |
+  | `app_rejected` | the token endpoint answers 400 `{"error": "invalid_client", "error_description": "Invalid client"}`, as for a client ID Spotify does not know (a deleted app); an exchange or a refresh |
+  | `grant_revoked` | the token endpoint answers 400 `{"error": "invalid_grant", "error_description": "Refresh token revoked"}`, as for a refresh token that no longer works |
+  | `rotate_refresh` | a refresh succeeds with a new `refresh_token` and ends the one it was given, so a later refresh with the old one gets `invalid_grant`, as a PKCE refresh may. It counts refresh grants only (a code exchange does not use it up), and the old token stays ended after the fault is spent |
 
   `operation` is one of the operations in `shapes.json`, and `playlist_id`
-  narrows a playlist operation to one playlist. The fault lets `skip`
-  matching calls through, answers the next `times` of them, then the fake
-  serves normally again. The fault comes after the request checks, so a
+  narrows a playlist operation to one playlist. The three token kinds
+  (`app_rejected`, `grant_revoked`, `rotate_refresh`) are armed for
+  `POST /api/token`, which `operation` may leave out; they come after the
+  client check, and `skip` and `times` count the token endpoint's calls. The
+  fault lets `skip` matching calls through, answers the next `times` of them,
+  then the fake serves normally again. The fault comes after the request checks, so a
   request Spotify would refuse still gets its 400. `GET /_fake/faults` lists
   each fault with how many calls it saw and answered; `DELETE /_fake/faults`
   and `/_fake/reset` clear them. `POST /_fake/faults/release` ends the wait
@@ -299,7 +306,7 @@ because a fake built that way agrees with the app's mistakes.
   always sends the full order); `collaborative` on a write; searching for
   types other than tracks and playlists, or several at once; `fields`
   filters with dots or `!` exclusions. Also not modelled yet: faults on the
-  OAuth and public-page hosts (faults cover `/v1` operations), the
+  public-page hosts (faults cover `/v1` operations and the token endpoint), the
   form-encoded client credentials Spotify also accepts (shuffify sends HTTP
   Basic), and how Spotify's real login page looks.
 

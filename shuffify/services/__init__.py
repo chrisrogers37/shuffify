@@ -12,10 +12,12 @@ Usage:
 
 Example:
     from shuffify.services import AuthService, PlaylistService
+    from shuffify.spotify import credentials_for
 
     # Authenticate
-    token = AuthService.exchange_code_for_token(code)
-    client, user = AuthService.authenticate_and_get_user(token)
+    credentials = credentials_for(None)
+    token = AuthService.exchange_code_for_token(credentials, code)
+    client, user = AuthService.authenticate_and_get_user(credentials, token)
 
     # Get playlists
     playlist_service = PlaylistService(client)

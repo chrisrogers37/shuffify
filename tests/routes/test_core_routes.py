@@ -10,6 +10,7 @@ import requests
 
 from shuffify.services.auth_service import decrypt_session_token
 from shuffify.services.token_service import TokenService
+from shuffify.spotify.credentials import SpotifyCredentials
 from tests.paths import api_path
 
 
@@ -93,6 +94,31 @@ class TestLoginRoute:
             assert resp.headers["Location"] == "https://accounts.spotify.com/authorize?test=1"
             with client.session_transaction() as sess:
                 assert sess["oauth_state"] == mock_auth_svc.get_auth_url.call_args.kwargs["state"]
+
+    @patch("shuffify.routes.core.AuthService", autospec=True)
+    def test_login_hands_the_seams_credentials_to_the_auth_service(self, mock_auth_svc, db_app):
+        mock_auth_svc.get_auth_url.return_value = "https://accounts.spotify.com/authorize?test=1"
+        with db_app.test_client() as client:
+            client.get("/login?legal_consent=true")
+
+        (credentials,), kwargs = mock_auth_svc.get_auth_url.call_args
+        assert credentials == SpotifyCredentials(
+            db_app.config["SPOTIFY_CLIENT_ID"],
+            db_app.config["SPOTIFY_CLIENT_SECRET"],
+            db_app.config["SPOTIFY_REDIRECT_URI"],
+        )
+        assert kwargs["state"]
+
+    @patch("shuffify.routes.core.AuthService", autospec=True)
+    def test_login_with_no_app_credentials_ends_as_a_failed_sign_in(self, mock_auth_svc, db_app):
+        db_app.config.update(SPOTIFY_CLIENT_ID="", SPOTIFY_CLIENT_SECRET="")
+        with db_app.test_client() as client:
+            resp = client.get("/login?legal_consent=true")
+            notice = client.get(api_path("/session")).get_json()["notice"]
+
+        assert resp.status_code == 302 and resp.headers["Location"] == "/"
+        assert notice["code"] == "login_failed"
+        mock_auth_svc.get_auth_url.assert_not_called()
 
     @patch("shuffify.routes.core.AuthService")
     def test_auth_error_during_login_redirects(self, mock_auth_svc, db_app):
@@ -180,6 +206,33 @@ class TestCallbackRoute:
             notice = client.get(api_path("/session")).get_json()["notice"]
         assert resp.status_code == 302
         assert notice["code"] == "invalid_state"
+
+    @patch("shuffify.routes.core.AuthService", autospec=True)
+    def test_callback_hands_the_seams_credentials_to_the_auth_service(self, mock_auth_svc, db_app):
+        from shuffify.services import AuthenticationError
+
+        mock_auth_svc.exchange_code_for_token.side_effect = AuthenticationError("stop here")
+        with db_app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["oauth_state"] = "valid_state"
+            client.get("/callback?code=test_auth_code&state=valid_state")
+
+        (credentials, code), _ = mock_auth_svc.exchange_code_for_token.call_args
+        assert isinstance(credentials, SpotifyCredentials) and code == "test_auth_code"
+        assert credentials.client_id == db_app.config["SPOTIFY_CLIENT_ID"]
+
+    @patch("shuffify.routes.core.AuthService", autospec=True)
+    def test_callback_with_no_app_credentials_ends_as_a_failed_sign_in(self, mock_auth_svc, db_app):
+        db_app.config.update(SPOTIFY_CLIENT_ID="", SPOTIFY_CLIENT_SECRET="")
+        with db_app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["oauth_state"] = "valid_state"
+            resp = client.get("/callback?code=test_auth_code&state=valid_state")
+            notice = client.get(api_path("/session")).get_json()["notice"]
+
+        assert resp.status_code == 302 and resp.headers["Location"] == "/"
+        assert notice["code"] == "authentication_failed"
+        mock_auth_svc.exchange_code_for_token.assert_not_called()
 
     @patch("shuffify.routes.core.LoginHistoryService")
     @patch("shuffify.routes.core.UserService")
@@ -422,7 +475,9 @@ class TestLogoutRoute:
         resp = auth_client.post("/logout")
         assert resp.status_code == 302
         assert resp.headers["Location"].endswith("/")
-        mock_auth_svc.revoke_access_token.assert_called_once_with("test_token")
+        (credentials, access_token), _ = mock_auth_svc.revoke_access_token.call_args
+        assert isinstance(credentials, SpotifyCredentials)
+        assert access_token == "test_token"
         with auth_client.session_transaction() as sess:
             assert "spotify_token" not in sess
 

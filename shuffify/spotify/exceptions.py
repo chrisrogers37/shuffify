@@ -29,6 +29,47 @@ class SpotifyTokenExpiredError(SpotifyTokenError):
     pass
 
 
+class SpotifyAppUnavailable(SpotifyError):
+    """There are no Spotify app credentials to build a client with."""
+
+    pass
+
+
+class _OAuthDetail:
+    """Keeps the OAuth ``error`` and ``error_description`` a typed failure
+    was raised from, so the code that acts on it never parses a message."""
+
+    error = None
+    error_description = None
+
+    def __init__(self, message="", *, error=None, error_description=None):
+        super().__init__(message)
+        self.error = error
+        self.error_description = error_description
+
+
+class SpotifyAppRejected(_OAuthDetail, SpotifyTokenExpiredError):
+    """Spotify's token endpoint answered ``invalid_client``: it does not
+    recognise the app.
+
+    A token that cannot be refreshed, so ``except SpotifyTokenExpiredError``
+    and ``except SpotifyTokenError`` still match it."""
+
+    def __init__(self, message="", *, error="invalid_client", error_description=None):
+        super().__init__(message, error=error, error_description=error_description)
+
+
+class SpotifyGrantRevoked(_OAuthDetail, SpotifyTokenExpiredError):
+    """Spotify's token endpoint answered ``invalid_grant``: the grant behind
+    the refresh token (or the authorization code) no longer works.
+
+    A token that cannot be refreshed, so ``except SpotifyTokenExpiredError``
+    and ``except SpotifyTokenError`` still match it."""
+
+    def __init__(self, message="", *, error="invalid_grant", error_description=None):
+        super().__init__(message, error=error, error_description=error_description)
+
+
 class SpotifyAPIError(SpotifyError):
     """Raised when a Spotify API call fails."""
 
@@ -85,6 +126,14 @@ class SpotifyForbiddenError(SpotifyAPIError):
     pass
 
 
+class SpotifyUserNotAllowed(_OAuthDetail, SpotifyForbiddenError):
+    """Spotify answered 403 and said the user is not registered for the app.
+
+    Still a 403, so existing ``except SpotifyForbiddenError`` handling matches
+    it; code that tells the two apart tests for this subclass first. A
+    playlist-level 403 stays a plain ``SpotifyForbiddenError``."""
+
+
 class SpotifyPartialBatchError(SpotifyAPIError):
     """Raised when a multi-batch playlist write fails mid-flight.
 
@@ -131,3 +180,42 @@ class SpotifyPartialBatchError(SpotifyAPIError):
             f"{len(self.remaining_uris)} remaining. "
             f"Cause: {cause}"
         )
+
+
+# The failures that say the app, the grant or the account is the problem, not
+# the request. Phase 08 acts on them; nothing else parses a message for them.
+TYPED_FAILURES = (SpotifyAppRejected, SpotifyGrantRevoked, SpotifyUserNotAllowed)
+
+# The error code a failed worker run records for each.
+SPOTIFY_FAILURE_CODES = (
+    (SpotifyAppRejected, "spotify_app_rejected"),
+    (SpotifyGrantRevoked, "spotify_grant_revoked"),
+    (SpotifyUserNotAllowed, "spotify_user_not_allowed"),
+)
+
+
+def spotify_failure_of(error):
+    """The first typed failure on ``error`` or its ``cause``/``__cause__``
+    chain, or None.
+
+    The wrappers a failure passes through on its way up (the worker's
+    ``JobExecutionError``, the web's ``AuthenticationError``, a partial-batch
+    error) keep it on one of those two links."""
+    seen, pending = set(), [error]
+    while pending:
+        current = pending.pop(0)
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, TYPED_FAILURES):
+            return current
+        pending.extend((getattr(current, "cause", None), getattr(current, "__cause__", None)))
+    return None
+
+
+def spotify_failure_code(failure):
+    """The worker's error code for a typed failure."""
+    for kind, code in SPOTIFY_FAILURE_CODES:
+        if isinstance(failure, kind):
+            return code
+    raise TypeError(f"{type(failure).__name__} is not a typed Spotify failure")

@@ -7,6 +7,7 @@ rate limit handling, and pagination support.
 
 import logging
 import os
+import re
 import threading
 import time
 from typing import Any, Callable, Dict, List, Optional
@@ -20,12 +21,15 @@ from .deadline import SpotifyDeadlineError, bounded_sleep, check_deadline, remai
 from .endpoints import API_BASE_URL
 from .exceptions import (
     SpotifyAPIError,
+    SpotifyAppRejected,
     SpotifyForbiddenError,
+    SpotifyGrantRevoked,
     SpotifyNotFoundError,
     SpotifyQuotaExceededError,
     SpotifyRateLimitError,
     SpotifyReadTransientError,
     SpotifyTokenExpiredError,
+    SpotifyUserNotAllowed,
     SpotifyWriteRejectedError,
     SpotifyWriteUnverifiedError,
 )
@@ -80,6 +84,18 @@ def _quota_exceeded(response) -> bool:
     return isinstance(error, dict) and error.get("reason") == "QUOTA_EXCEEDED"
 
 
+# Spotify says it two ways: "User not registered in the Developer Dashboard"
+# and "Check settings on developer.spotify.com/dashboard, the user may not be
+# registered."
+_NOT_REGISTERED = re.compile(r"\bnot\s+(?:be\s+)?registered\b", re.IGNORECASE)
+
+
+def _user_not_registered(message) -> bool:
+    """Whether a 403's message is Spotify saying the user is not registered
+    for the app, which no playlist's 403 says."""
+    return isinstance(message, str) and _NOT_REGISTERED.search(message) is not None
+
+
 def get_shared_adapter() -> HTTPAdapter:
     """Return this process's shared connection-pool adapter.
 
@@ -121,6 +137,7 @@ class SpotifyHTTPClient:
         self,
         access_token: str,
         on_token_refresh: Optional[Callable[[], str]] = None,
+        on_typed_failure: Optional[Callable[[Exception], None]] = None,
     ):
         """
         Initialize the HTTP client.
@@ -129,9 +146,18 @@ class SpotifyHTTPClient:
             access_token: Bearer token for API requests.
             on_token_refresh: Optional callback that returns a fresh
                 access token. Called on 401 responses.
+            on_typed_failure: Optional callback called with the failure,
+                once, immediately before the client raises
+                ``SpotifyUserNotAllowed`` (a 403 saying the user is not
+                registered for the app), and never for a playlist 403. It
+                runs where the failure is raised, so a service that catches
+                the failure afterwards cannot hide it. A callback that raises
+                is logged and ignored: it cannot change the failure the caller
+                sees.
         """
         self._access_token = access_token
         self._on_token_refresh = on_token_refresh
+        self._on_typed_failure = on_typed_failure
         self._session = requests.Session()
         self._session.headers.update(
             {
@@ -147,6 +173,23 @@ class SpotifyHTTPClient:
         """Update the bearer token for future requests."""
         self._access_token = access_token
         self._session.headers["Authorization"] = f"Bearer {access_token}"
+
+    def _report_typed_failure(self, failure: Exception) -> None:
+        """Hand a typed failure to the hook, if there is one.
+
+        The hook cannot change what the caller sees: one that raises is
+        logged and swallowed.
+        """
+        if self._on_typed_failure is None:
+            return
+        try:
+            self._on_typed_failure(failure)
+        except Exception as error:
+            logger.warning(
+                "on_typed_failure hook failed: %s: %s",
+                type(error).__name__,
+                error,
+            )
 
     def close(self) -> None:
         """Release this client's session, leaving the shared pool intact.
@@ -329,7 +372,13 @@ class SpotifyHTTPClient:
                             token_refreshed = True
                             attempt = 0  # refresh restarts attempts, never the shared deadline
                             continue
-                        except (SpotifyDeadlineError, SpotifyRateLimitError, SpotifyReadTransientError):
+                        except (
+                            SpotifyDeadlineError,
+                            SpotifyRateLimitError,
+                            SpotifyReadTransientError,
+                            SpotifyAppRejected,
+                            SpotifyGrantRevoked,
+                        ):
                             raise
                         except Exception as e:
                             check_deadline()
@@ -408,6 +457,13 @@ class SpotifyHTTPClient:
                 except Exception:
                     msg = response.text
                 if response.status_code == 403:
+                    if _user_not_registered(msg):
+                        failure = SpotifyUserNotAllowed(
+                            f"API error {response.status_code}: {msg}",
+                            error_description=msg,
+                        )
+                        self._report_typed_failure(failure)
+                        raise failure
                     error = SpotifyForbiddenError
                 elif method != "GET" and 400 <= response.status_code < 500:
                     error = SpotifyWriteRejectedError

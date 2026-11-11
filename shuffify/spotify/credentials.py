@@ -1,11 +1,14 @@
 """
 Spotify credentials management.
 
-Provides a dataclass for Spotify OAuth credentials that does not
-depend on Flask.
+Provides a dataclass for Spotify OAuth credentials that does not depend on
+Flask, and ``credentials_for``, the one place any code gets the credentials of
+the Spotify app it calls Spotify with.
 """
 
 from dataclasses import dataclass, field
+
+from .exceptions import SpotifyAppUnavailable
 
 
 @dataclass(frozen=True)
@@ -22,15 +25,8 @@ class SpotifyCredentials:
         redirect_uri: The OAuth callback URL.
 
     Example:
-        # Create from Flask config
-        credentials = SpotifyCredentials.from_flask_config(current_app.config)
-
-        # Or create directly
-        credentials = SpotifyCredentials(
-            client_id='your_client_id',
-            client_secret='your_client_secret',
-            redirect_uri='http://127.0.0.1:8000/callback'
-        )
+        # The credentials of the app a request or a job calls Spotify with
+        credentials = credentials_for(user)
     """
 
     client_id: str
@@ -69,21 +65,26 @@ class SpotifyCredentials:
             redirect_uri=config.get("SPOTIFY_REDIRECT_URI", ""),
         )
 
-    @classmethod
-    def from_env(cls) -> "SpotifyCredentials":
-        """
-        Create credentials from environment variables.
 
-        Returns:
-            SpotifyCredentials instance.
+def credentials_for(owner) -> SpotifyCredentials:
+    """The credentials of the Spotify app ``owner`` calls Spotify with.
 
-        Raises:
-            ValueError: If required environment variables are missing.
-        """
-        import os
+    Every place that needs them (the sign-in routes, the web's client builder,
+    the worker's) gets them here. For now that is the site's one app, from
+    the Flask config, whoever ``owner`` is: the ``User`` a request or a job
+    acts for, or None before anyone has signed in. Later the owner's own
+    Spotify connection supplies them.
 
-        return cls(
-            client_id=os.getenv("SPOTIFY_CLIENT_ID", ""),
-            client_secret=os.getenv("SPOTIFY_CLIENT_SECRET", ""),
-            redirect_uri=os.getenv("SPOTIFY_REDIRECT_URI", ""),
-        )
+    Raises:
+        SpotifyAppUnavailable: If the app's ID or secret (or the callback URL)
+            is not set. There is no other source to fall back to.
+    """
+    from flask import current_app
+
+    config = current_app.config
+    if not config.get("SPOTIFY_CLIENT_ID") or not config.get("SPOTIFY_CLIENT_SECRET"):
+        raise SpotifyAppUnavailable("The Spotify app's client ID and secret are not set.")
+    try:
+        return SpotifyCredentials.from_flask_config(config)
+    except ValueError as error:
+        raise SpotifyAppUnavailable("The Spotify app's credentials are incomplete.") from error

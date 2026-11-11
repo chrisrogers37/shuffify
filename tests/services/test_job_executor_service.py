@@ -17,7 +17,14 @@ from shuffify.services.executors import (
 )
 from shuffify.services.token_service import TokenEncryptionError, TokenService
 from shuffify.spotify.auth import TokenInfo
-from shuffify.spotify.exceptions import SpotifyTokenError
+from shuffify.spotify.credentials import SpotifyCredentials
+from shuffify.spotify.exceptions import (
+    SpotifyAppRejected,
+    SpotifyAppUnavailable,
+    SpotifyGrantRevoked,
+    SpotifyTokenError,
+    spotify_failure_of,
+)
 
 # TestRotatedRefreshTokenIsStored stores tokens through db.session, so every
 # test in this module needs the shared app_ctx fixture (tests/conftest.py).
@@ -51,7 +58,7 @@ class TestGetSpotifyApi:
     )
     @patch(
         "shuffify.services.executors.base_executor"
-        ".SpotifyCredentials"
+        ".credentials_for"
     )
     def test_creates_api_with_decrypted_token(
         self,
@@ -90,7 +97,7 @@ class TestGetSpotifyApi:
     )
     @patch(
         "shuffify.services.executors.base_executor"
-        ".SpotifyCredentials"
+        ".credentials_for"
     )
     def test_injects_spotify_cache(
         self,
@@ -143,7 +150,7 @@ class TestGetSpotifyApi:
 
         with (
             patch.object(TokenService, "decrypt_token", autospec=True, return_value="refresh"),
-            patch(f"{executor}.SpotifyCredentials", autospec=True),
+            patch(f"{executor}.credentials_for", autospec=True),
             patch(f"{executor}.SpotifyAuthManager", autospec=True),
             patch(f"{executor}.SpotifyAPI", autospec=True, side_effect=cause),
             pytest.raises(JobExecutionError) as exc_info,
@@ -153,6 +160,87 @@ class TestGetSpotifyApi:
         assert "upstream-7f3c" not in str(exc_info.value)
         assert mock_user.spotify_id not in str(exc_info.value)
         assert exc_info.value.__cause__ is cause
+
+
+class TestTheWorkersCredentialsComeFromTheSeam:
+    """The worker asks credentials_for for the user's app, and never reads the
+    Flask config or the environment itself."""
+
+    def test_the_client_is_built_on_credentials_for_the_user(self, mock_user, app_context):
+        credentials = SpotifyCredentials("seam_id", "seam_secret", "http://seam/callback")
+        executor = "shuffify.services.executors.base_executor"
+
+        with (
+            patch.object(TokenService, "decrypt_token", autospec=True, return_value="refresh"),
+            patch(f"{executor}.credentials_for", autospec=True, return_value=credentials) as seam,
+            patch(f"{executor}.SpotifyAuthManager", autospec=True) as manager,
+            patch(f"{executor}.SpotifyAPI", autospec=True),
+        ):
+            JobExecutorService._get_spotify_api(mock_user)
+
+        seam.assert_called_once_with(mock_user)
+        manager.assert_called_once_with(credentials)
+
+    def test_an_app_that_is_unavailable_is_not_hidden_as_a_token_failure(self, mock_user, app_context):
+        executor = "shuffify.services.executors.base_executor"
+
+        with (
+            patch.object(TokenService, "decrypt_token", autospec=True, return_value="refresh"),
+            patch(f"{executor}.credentials_for", autospec=True, side_effect=SpotifyAppUnavailable("no app")),
+            pytest.raises(SpotifyAppUnavailable),
+        ):
+            JobExecutorService._get_spotify_api(mock_user)
+
+    def test_empty_config_leaves_no_fallback(self, mock_user, app):
+        app.config.update(SPOTIFY_CLIENT_ID="", SPOTIFY_CLIENT_SECRET="")
+
+        with (
+            app.app_context(),
+            patch.object(TokenService, "decrypt_token", autospec=True, return_value="refresh"),
+            pytest.raises(SpotifyAppUnavailable),
+        ):
+            JobExecutorService._get_spotify_api(mock_user)
+
+
+class TestRefreshFailureKeepsItsCause:
+    """The worker wraps a failed refresh in JobExecutionError. The wrapper
+    keeps its message and class, and carries the Spotify failure as ``cause``."""
+
+    @pytest.mark.parametrize("kind", [SpotifyAppRejected, SpotifyGrantRevoked])
+    def test_the_typed_failure_is_the_cause(self, mock_user, app_context, kind):
+        cause = kind("Token refresh failed: nope")
+        executor = "shuffify.services.executors.base_executor"
+
+        with (
+            patch.object(TokenService, "decrypt_token", autospec=True, return_value="refresh"),
+            patch(f"{executor}.credentials_for", autospec=True),
+            patch(f"{executor}.SpotifyAuthManager", autospec=True),
+            patch(f"{executor}.SpotifyAPI", autospec=True, side_effect=cause),
+            pytest.raises(JobExecutionError) as exc_info,
+        ):
+            JobExecutorService._get_spotify_api(mock_user)
+
+        assert str(exc_info.value) == "Failed to refresh the Spotify token."
+        assert exc_info.value.cause is cause
+        assert exc_info.value.__cause__ is cause
+        assert spotify_failure_of(exc_info.value) is cause
+
+    def test_other_job_execution_errors_have_no_cause(self, mock_user):
+        mock_user.encrypted_refresh_token = None
+
+        with pytest.raises(JobExecutionError) as exc_info:
+            JobExecutorService._get_spotify_api(mock_user)
+
+        assert exc_info.value.cause is None
+
+    def test_a_decrypt_failure_is_not_a_spotify_cause(self, mock_user):
+        with (
+            patch.object(TokenService, "decrypt_token", autospec=True, side_effect=TokenEncryptionError("x")),
+            pytest.raises(JobExecutionError) as exc_info,
+        ):
+            JobExecutorService._get_spotify_api(mock_user)
+
+        assert exc_info.value.cause is None and spotify_failure_of(exc_info.value) is None
 
 
 class TestRotatedRefreshTokenIsStored:
@@ -189,7 +277,7 @@ class TestRotatedRefreshTokenIsStored:
         is what a 401's outright refresh returns.
         """
         with patch(
-            "shuffify.services.executors.base_executor.SpotifyCredentials",
+            "shuffify.services.executors.base_executor.credentials_for",
             autospec=True,
         ), patch(
             "shuffify.services.executors.base_executor.SpotifyAuthManager",

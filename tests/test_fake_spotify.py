@@ -843,3 +843,189 @@ class TestFaults:
         arm(client, operation="GET /me", kind="quota", times=5)
         client.delete("/_fake/faults")
         assert client.get("/v1/me", headers=alice).status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Faults for the failures that name the app, the grant or the account
+# ---------------------------------------------------------------------------
+
+
+def refresh(client, refresh_token, auth=BASIC):
+    return client.post("/api/token", headers={"Authorization": auth},
+                       data={"grant_type": "refresh_token", "refresh_token": refresh_token})
+
+
+class TestSpotifyFailureFaults:
+    """The three failures shuffify types (app rejected, grant revoked, account not allowed), on demand."""
+
+    def test_app_rejected_is_an_invalid_client_answer_from_the_token_endpoint_then_service_resumes(self, client):
+        refresh_token = tokens_for(client)["refresh_token"]
+        arm(client, kind="app_rejected")
+        rejected = refresh(client, refresh_token)
+        assert rejected.status_code == 400
+        assert rejected.get_json() == {"error": "invalid_client", "error_description": "Invalid client"}
+        assert refresh(client, refresh_token).status_code == 200
+
+    def test_app_rejected_also_refuses_a_code_exchange(self, client):
+        code = code_for(client)
+        arm(client, kind="app_rejected")
+        assert exchange(client, code).get_json()["error"] == "invalid_client"
+        # The code was not spent: the app was refused before it was read.
+        assert exchange(client, code).status_code == 200
+
+    def test_grant_revoked_is_an_invalid_grant_answer_from_the_token_endpoint_then_service_resumes(self, client):
+        refresh_token = tokens_for(client)["refresh_token"]
+        arm(client, kind="grant_revoked")
+        revoked = refresh(client, refresh_token)
+        assert revoked.status_code == 400
+        assert revoked.get_json() == {"error": "invalid_grant", "error_description": "Refresh token revoked"}
+        assert refresh(client, refresh_token).status_code == 200
+
+    def test_skip_lets_the_sign_in_through_before_the_refresh_fails(self, client):
+        arm(client, kind="grant_revoked", skip=1)
+        refresh_token = tokens_for(client)["refresh_token"]
+        assert refresh(client, refresh_token).get_json()["error"] == "invalid_grant"
+
+    def test_times_keeps_the_failure_up(self, client):
+        refresh_token = tokens_for(client)["refresh_token"]
+        arm(client, kind="app_rejected", times=3)
+        assert [refresh(client, refresh_token).status_code for _ in range(4)] == [400, 400, 400, 200]
+        assert fired(client) == [3]
+
+    def test_the_fault_comes_after_the_client_check(self, client):
+        """A refresh with wrong credentials is refused as it always was, and does not use the fault up."""
+        refresh_token = tokens_for(client)["refresh_token"]
+        arm(client, kind="grant_revoked")
+        wrong = "Basic " + base64.b64encode(b"harness-fake-client-id:wrong").decode()
+        assert refresh(client, refresh_token, auth=wrong).get_json()["error"] == "invalid_client"
+        assert fired(client) == [0]
+
+    def test_a_token_fault_names_its_operation_but_need_not_say_it(self, client):
+        assert arm(client, kind="app_rejected")["operation"] == "POST /api/token"
+        assert arm(client, kind="grant_revoked", operation="POST /api/token")["operation"] == "POST /api/token"
+
+    def test_user_not_allowed_is_a_403_saying_the_user_is_not_registered_then_service_resumes(self, client, alice):
+        arm(client, operation="GET /me", kind="user_not_allowed")
+        refused = client.get("/v1/me", headers=alice)
+        assert refused.status_code == 403
+        error = refused.get_json()["error"]
+        assert error["status"] == 403 and "not be registered" in error["message"]
+        assert client.get("/v1/me", headers=alice).status_code == 200
+
+    @pytest.mark.parametrize("operation, path", [
+        ("GET /me/playlists", "/v1/me/playlists"),
+        ("GET /playlists/{playlist_id}", f"/v1/playlists/{pid('alice-morning-mix')}"),
+    ])
+    def test_user_not_allowed_can_answer_any_api_operation(self, client, alice, operation, path):
+        arm(client, operation=operation, kind="user_not_allowed")
+        assert client.get(path, headers=alice).status_code == 403
+
+    def test_user_not_allowed_for_one_playlist_leaves_the_others_alone(self, client, alice):
+        arm(client, operation="GET /playlists/{playlist_id}", kind="user_not_allowed",
+            playlist_id=pid("alice-long-haul"))
+        assert client.get(f"/v1/playlists/{pid('alice-morning-mix')}", headers=alice).status_code == 200
+        assert client.get(f"/v1/playlists/{pid('alice-long-haul')}", headers=alice).status_code == 403
+
+    def test_a_request_spotify_would_refuse_gets_its_400_not_the_user_not_allowed_fault(self, client, alice):
+        arm(client, operation="GET /me/playlists", kind="user_not_allowed")
+        assert client.get("/v1/me/playlists?limit=0", headers=alice).status_code == 400
+
+    @pytest.mark.parametrize("spec, problem", [
+        ({"operation": "GET /me", "kind": "app_rejected"}, "applies only to POST /api/token"),
+        ({"operation": "GET /me", "kind": "rotate_refresh"}, "applies only to POST /api/token"),
+        ({"operation": "POST /api/token", "kind": "user_not_allowed"}, "not one the fake serves"),
+        ({"operation": "POST /api/token", "kind": "quota"}, "not one the fake serves"),
+        ({"kind": "user_not_allowed"}, "not one the fake serves"),
+        ({"kind": "app_rejected", "playlist_id": "x"}, "playlist_id applies only"),
+        ({"kind": "rotate_refresh", "retry_after": 3}, "retry_after applies only to a rate_limit"),
+        ({"kind": "grant_revoked", "status": 503}, "status applies only to a server_error"),
+    ])
+    def test_a_mistaken_token_or_account_fault_is_refused_with_why(self, client, spec, problem):
+        resp = client.post("/_fake/faults", json=spec)
+        assert resp.status_code == 400 and problem in resp.get_json()["error"]
+        assert client.get("/_fake/faults").get_json() == []
+
+
+class TestRotatingRefreshTokens:
+    """A refresh that rotates the refresh token and invalidates the one it was given, as PKCE refreshes do."""
+
+    def test_a_rotating_refresh_returns_a_new_refresh_token_and_ends_the_old_one(self, client):
+        first = tokens_for(client)["refresh_token"]
+        arm(client, kind="rotate_refresh", times=10)
+        rotated = refresh(client, first)
+        assert rotated.status_code == 200
+        second = rotated.get_json()["refresh_token"]
+        assert second and second != first
+        stale = refresh(client, first)
+        assert stale.status_code == 400 and stale.get_json()["error"] == "invalid_grant"
+        # The new one works, and rotates in turn.
+        third = refresh(client, second).get_json()["refresh_token"]
+        assert third not in (first, second)
+        assert refresh(client, second).get_json()["error"] == "invalid_grant"
+
+    def test_the_new_refresh_token_belongs_to_the_same_user_and_scope(self, client):
+        first = tokens_for(client, "alice")
+        arm(client, kind="rotate_refresh")
+        body = refresh(client, first["refresh_token"]).get_json()
+        assert body["scope"] == first["scope"]
+        claims = tokens.read(body["refresh_token"], "refresh")
+        assert claims["user"] == "alice" and claims["scope"] == first["scope"]
+        assert client.get("/v1/me", headers=bearer(body["access_token"])).get_json()["id"] == "alice"
+
+    def test_the_old_token_stays_ended_after_the_fault_is_spent(self, client):
+        first = tokens_for(client)["refresh_token"]
+        arm(client, kind="rotate_refresh", times=1)
+        second = refresh(client, first).get_json()["refresh_token"]
+        assert fired(client) == [1]
+        assert refresh(client, first).get_json()["error"] == "invalid_grant"
+        # Spent: the next refresh keeps the token, as the fake always has.
+        plain = refresh(client, second)
+        assert plain.status_code == 200 and "refresh_token" not in plain.get_json()
+        assert refresh(client, second).status_code == 200
+
+    def test_without_the_fault_a_refresh_does_not_rotate(self, client):
+        refresh_token = tokens_for(client)["refresh_token"]
+        for _ in range(2):
+            resp = refresh(client, refresh_token)
+            assert resp.status_code == 200 and "refresh_token" not in resp.get_json()
+
+    def test_a_code_exchange_does_not_use_the_fault_up(self, client):
+        arm(client, kind="rotate_refresh", times=1)
+        first = tokens_for(client)["refresh_token"]
+        assert fired(client) == [0]
+        assert "refresh_token" in refresh(client, first).get_json()
+        assert fired(client) == [1]
+
+    def test_skip_lets_refreshes_through_before_rotating(self, client):
+        refresh_token = tokens_for(client)["refresh_token"]
+        arm(client, kind="rotate_refresh", skip=1)
+        assert "refresh_token" not in refresh(client, refresh_token).get_json()
+        assert "refresh_token" in refresh(client, refresh_token).get_json()
+
+    def test_two_refreshes_of_one_token_at_once_rotate_it_once(self, client):
+        refresh_token = tokens_for(client)["refresh_token"]
+        arm(client, kind="rotate_refresh", times=10)
+        statuses, barrier = [], threading.Barrier(2)
+
+        def attempt():
+            barrier.wait()
+            statuses.append(refresh(client.application.test_client(), refresh_token).status_code)
+
+        threads = [threading.Thread(target=attempt) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(10)
+        assert sorted(statuses) == [200, 400]
+
+    def test_a_forged_refresh_token_is_still_refused(self, client):
+        arm(client, kind="rotate_refresh")
+        assert refresh(client, "not-a-token").get_json()["error"] == "invalid_grant"
+
+    def test_reset_forgets_what_was_ended(self, client):
+        first = tokens_for(client)["refresh_token"]
+        arm(client, kind="rotate_refresh")
+        refresh(client, first)
+        assert refresh(client, first).status_code == 400
+        client.post("/_fake/reset")
+        assert refresh(client, first).status_code == 200

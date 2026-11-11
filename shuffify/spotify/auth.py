@@ -18,7 +18,9 @@ from .credentials import SpotifyCredentials
 from .deadline import SpotifyDeadlineError, check_deadline, remaining_timeout
 from .endpoints import ACCOUNTS_BASE_URL
 from .exceptions import (
+    SpotifyAppRejected,
     SpotifyAuthError,
+    SpotifyGrantRevoked,
     SpotifyRateLimitError,
     SpotifyReadTransientError,
     SpotifyTokenError,
@@ -39,6 +41,34 @@ DEFAULT_SCOPES = [
     "playlist-modify-public",
     "user-read-private",
 ]
+
+
+_OAUTH_FAILURES = {
+    "invalid_client": SpotifyAppRejected,
+    "invalid_grant": SpotifyGrantRevoked,
+}
+
+
+def _token_failure(action: str, response) -> SpotifyTokenError:
+    """The failure for a token endpoint answer that is not a success.
+
+    Spotify's OAuth ``error`` says whose fault it is: ``invalid_client`` is an
+    app it does not recognise, ``invalid_grant`` a grant (a refresh token or
+    an authorization code) that no longer works. Each becomes its own type,
+    still a token failure, and keeps the ``error`` and ``error_description``
+    it was raised from. Anything else stays a plain ``SpotifyTokenError``.
+    """
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    body = body if isinstance(body, dict) else {}
+    error, description = body.get("error"), body.get("error_description")
+    message = f"{action}: {description if description is not None else response.text}"
+    kind = _OAUTH_FAILURES.get(error)
+    if kind is None:
+        return SpotifyTokenError(message)
+    return kind(message, error=error, error_description=description)
 
 
 @dataclass
@@ -146,7 +176,7 @@ class SpotifyAuthManager:
     tokens - it operates on tokens passed to it.
 
     Example:
-        credentials = SpotifyCredentials.from_flask_config(app.config)
+        credentials = credentials_for(user)
         auth_manager = SpotifyAuthManager(credentials)
 
         # Get auth URL for user to visit
@@ -245,8 +275,7 @@ class SpotifyAuthManager:
                     retry_after = None
                 raise SpotifyRateLimitError("Spotify token endpoint is rate limited.", retry_after=retry_after)
             if response.status_code != 200:
-                error_msg = response.json().get("error_description", response.text)
-                raise SpotifyTokenError(f"Token exchange failed: {error_msg}")
+                raise _token_failure("Token exchange failed", response)
 
             token_data = response.json()
             if not token_data:
@@ -308,8 +337,7 @@ class SpotifyAuthManager:
             if 500 <= response.status_code < 600:
                 raise SpotifyReadTransientError("Spotify token refresh is temporarily unavailable.")
             if response.status_code != 200:
-                error_msg = response.json().get("error_description", response.text)
-                raise SpotifyTokenError(f"Token refresh failed: {error_msg}")
+                raise _token_failure("Token refresh failed", response)
 
             new_token_data = response.json()
             if not new_token_data:

@@ -19,6 +19,35 @@ produce one when a test needs it:
   still applied, after the client may have given up on it, as a real server
   can.
 
+Three more name the app, the grant or the account that Spotify refuses. They
+are answers a person's own setup produces (deleting the app, removing the
+app from their account, an account the app does not list), which no test can
+make a real account do on demand:
+
+- ``user_not_allowed``: 403 whose message says the user is not registered
+  for the app, which Spotify gives any ``/v1`` call of an account the app's
+  user list leaves out. Armed for a ``/v1`` operation, like the kinds above.
+- ``app_rejected``: the token endpoint answers 400 ``invalid_client``, as it
+  does for a client ID it does not know (a deleted app).
+- ``grant_revoked``: the token endpoint answers 400 ``invalid_grant``, as it
+  does for a refresh token that no longer works (access removed in the
+  person's Spotify account).
+
+And one changes a success rather than failing it:
+
+- ``rotate_refresh``: a refresh answers with a new refresh token and ends the
+  one it was given, so a later refresh with the old one gets ``invalid_grant``
+  (the rotation Spotify documents for PKCE refreshes). It applies to refresh
+  grants only, so a code exchange does not use it up. The old token stays
+  ended for good, even after the fault has been spent.
+
+The token kinds are armed for ``POST /api/token`` (the ``operation`` may be
+left out). They come after the client check, as the others come after the
+request checks, and ``skip`` and ``times`` count calls of the token endpoint
+(of refresh grants, for ``rotate_refresh``). What Spotify's own answers are,
+beyond what its documentation says, is the owner's check against the real
+thing (docs-only in behaviours.json until then).
+
 ``POST /_fake/faults`` arms one for an operation (``"GET /me"``, as in
 shapes.json), optionally only for one playlist. It lets ``skip`` matching
 calls through, answers the next ``times`` of them, then the fake serves
@@ -38,8 +67,19 @@ from typing import List, Optional
 
 from . import shapes
 
-KINDS = ("rate_limit", "quota", "server_error", "slow")
+TOKEN_OPERATION = "POST /api/token"  # not a /v1 operation, so not in shapes.json
+TOKEN_KINDS = ("app_rejected", "grant_revoked", "rotate_refresh")
+KINDS = ("rate_limit", "quota", "server_error", "slow", "user_not_allowed") + TOKEN_KINDS
+# The grant a kind applies to; a kind not listed applies to every call.
+_KIND_GRANTS = {"rotate_refresh": "refresh_token"}
 SERVER_ERRORS = {500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable"}
+# What the token endpoint answers for each failing token kind: (error, error_description).
+TOKEN_ERRORS = {
+    "app_rejected": ("invalid_client", "Invalid client"),
+    "grant_revoked": ("invalid_grant", "Refresh token revoked"),
+}
+# Spotify's message for a /v1 call of a user the app's user list leaves out.
+USER_NOT_ALLOWED_MESSAGE = "Check settings on developer.spotify.com/dashboard, the user may not be registered."
 MAX_DELAY = 60  # seconds: a slow answer, not a hung test
 # The fields only one kind takes.
 _KIND_FIELDS = {"retry_after": "rate_limit", "status": "server_error", "delay": "slow"}
@@ -81,10 +121,14 @@ def parse(spec) -> Fault:
     if unknown:
         raise ValueError(f"unknown fault fields: {', '.join(sorted(unknown))}")
     operation, kind = spec.get("operation"), spec.get("kind")
-    if operation not in shapes.SHAPES["operations"]:
-        raise ValueError(f"operation {operation!r} is not one the fake serves")
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {', '.join(KINDS)}")
+    if kind in TOKEN_KINDS:
+        operation = TOKEN_OPERATION if operation is None else operation
+        if operation != TOKEN_OPERATION:
+            raise ValueError(f"the {kind} fault applies only to {TOKEN_OPERATION}")
+    elif operation not in shapes.SHAPES["operations"]:
+        raise ValueError(f"operation {operation!r} is not one the fake serves")
     for name, owner in _KIND_FIELDS.items():
         if name in spec and kind != owner:
             raise ValueError(f"{name} applies only to a {owner} fault")
@@ -131,11 +175,16 @@ class Faults:
             for fault in self._armed:
                 fault.released.set()
 
-    def take(self, operation: str, playlist_id: Optional[str]) -> Optional[Fault]:
-        """The fault this call is answered with, if any, counted as fired."""
+    def take(self, operation: str, playlist_id: Optional[str], grant: Optional[str] = None) -> Optional[Fault]:
+        """The fault this call is answered with, if any, counted as fired.
+
+        ``grant`` is the token endpoint's ``grant_type``: a fault that applies
+        to one grant (rotate_refresh) ignores calls for any other."""
         with self._lock:
             for fault in self._armed:
                 if fault.operation != operation or fault.fired >= fault.times:
+                    continue
+                if _KIND_GRANTS.get(fault.kind, grant) != grant:
                     continue
                 if fault.playlist_id is not None and fault.playlist_id != playlist_id:
                     continue

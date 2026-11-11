@@ -159,6 +159,38 @@
       "label": "docs-only",
       "scenario": null,
       "why": "Spotify cannot be made to answer this way on demand; the fake answers it as an armed fault (faults.py)."
+    },
+    {
+      "id": "faults.user-not-allowed",
+      "summary": "A Web API call from a user the app's user list leaves out is a 403 whose message says the user may not be registered.",
+      "source": "https://developer.spotify.com/documentation/web-api/concepts/quota-modes",
+      "label": "docs-only",
+      "scenario": null,
+      "why": "Spotify cannot be made to answer this way on demand without an account the app does not list; the fake answers it as an armed fault (faults.py). The message's wording is from reports of the real answer, not from a reference page."
+    },
+    {
+      "id": "faults.app-rejected",
+      "summary": "The token endpoint answers 400 with the OAuth error invalid_client for a client ID it does not recognise, such as a deleted app's.",
+      "source": "https://datatracker.ietf.org/doc/html/rfc6749#section-5.2",
+      "label": "docs-only",
+      "scenario": null,
+      "why": "Not a Web API call, and the real answer needs an app that does not exist; the fake answers it as an armed fault (faults.py)."
+    },
+    {
+      "id": "faults.grant-revoked",
+      "summary": "The token endpoint answers 400 with the OAuth error invalid_grant for a refresh token that no longer works, such as one whose access the person removed.",
+      "source": "https://datatracker.ietf.org/doc/html/rfc6749#section-5.2",
+      "label": "docs-only",
+      "scenario": null,
+      "why": "Not a Web API call, and the real answer needs a grant the person has removed; the fake answers it as an armed fault (faults.py)."
+    },
+    {
+      "id": "faults.refresh-rotation",
+      "summary": "A refresh may return a new refresh token, after which the one it was given may stop working.",
+      "source": "https://developer.spotify.com/documentation/web-api/tutorials/refreshing-tokens",
+      "label": "docs-only",
+      "scenario": null,
+      "why": "Not a Web API call, and whether Spotify rotates the token is not something a scenario can ask for; the fake rotates it as an armed fault (faults.py). A throwaway check against real Spotify is what settles the answer."
     }
   ]
 }

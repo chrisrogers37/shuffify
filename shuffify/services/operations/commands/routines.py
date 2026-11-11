@@ -34,6 +34,8 @@ from shuffify.spotify.exceptions import (
     SpotifyRateLimitError,
     SpotifyWriteRejectedError,
     SpotifyWriteUnverifiedError,
+    spotify_failure_code,
+    spotify_failure_of,
 )
 from shuffify.spotify.observation import observe_mutations
 
@@ -368,9 +370,15 @@ class RoutineHandler:
                     SpotifyWriteRejectedError,
                 ),
             )
+            # A revoked grant, a rejected app or an account the app does not
+            # list is named as such, in place of the generic rejection, even
+            # when the failure reached here wrapped in the worker's error.
+            typed = spotify_failure_of(error)
             code = (
                 "review_changed"
                 if isinstance(error, ReviewChanged)
+                else spotify_failure_code(typed)
+                if typed is not None
                 else "write_rejected"
                 if rejected
                 else "write_unverified"

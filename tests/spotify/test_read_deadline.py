@@ -268,7 +268,7 @@ def test_auth_service_does_not_turn_budget_exhaustion_into_invalid_login(clock, 
               side_effect=SpotifyDeadlineError("fixture deadline")),
     ):
         with pytest.raises(SpotifyDeadlineError):
-            AuthService.get_authenticated_api(token().to_dict())
+            AuthService.get_authenticated_api(manager._credentials, token().to_dict())
 
 
 def test_oauth_exchange_and_revocation_cap_http_timeout(clock, manager):
@@ -541,7 +541,7 @@ def test_unscoped_oauth_rate_limit_keeps_authentication_error_contract(manager):
     with patch.object(AuthService, '_auth_manager', return_value=manager):
         with patch.object(manager, 'exchange_code', side_effect=SpotifyRateLimitError('fixture limit', retry_after=25)):
             with pytest.raises(AuthenticationError):
-                AuthService.exchange_code_for_token('fixture-code')
+                AuthService.exchange_code_for_token(manager._credentials, 'fixture-code')
 
 
 def test_oauth_callback_rate_limit_redirects_and_keeps_one_time_notice(db_app, manager):
