@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>#120 setup and uh-oh</title>
+<style>
+@font-face { font-family: "DM Sans"; src: url("../../../web/public/fonts/dm-sans-latin-variable.woff2") format("woff2"); font-weight: 100 1000; }
+@font-face { font-family: "Manrope"; src: url("../../../web/public/fonts/manrope-latin-variable.woff2") format("woff2"); font-weight: 200 800; }
+:root {
+  --ink:#f4f6ef; --muted:#aeb5b9; --base:#111417; --surface:#1a1e22; --raised:#22272c;
+  --border:#3b4247; --control:#74818b; --accent:#c9ed75; --accent-ink:#171e0b;
+  --success:#9cdfca; --success-surface:#182a25; --error:#ffb4ab; --error-surface:#321f20;
+  --warning:#f3cd81; --warning-surface:#302719;
+  --ui:"DM Sans",Arial,sans-serif; --display:"Manrope",Arial,sans-serif;
+}
+* { box-sizing:border-box; }
+body { margin:0; background:#0b0d0f; color:var(--ink); font:14px/22px var(--ui); padding:32px; }
+.caption { color:var(--muted); font-size:13px; margin:0 0 20px; max-width:900px; }
+.screens { display:grid; grid-template-columns:1fr 1fr; gap:28px; align-items:start; }
+.label { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin:0 0 8px; }
+.screen { background:var(--base); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.topbar { display:flex; align-items:center; justify-content:space-between; padding:14px 24px; border-bottom:1px solid var(--border); }
+.brand { font:800 22px/1.2 var(--display); letter-spacing:-.01em; }
+.brand span { color:var(--accent); }
+.who { color:var(--muted); font-size:13px; display:flex; gap:10px; align-items:center; }
+.avatar { width:26px; height:26px; border-radius:50%; background:var(--raised); border:1px solid var(--border); }
+.page { padding:36px 40px 40px; }
+.eyebrow { font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); margin:0 0 8px; }
+h1 { font:700 32px/38px var(--display); margin:0 0 8px; letter-spacing:-.015em; }
+.lead { color:var(--muted); font-size:16px; line-height:1.6; margin:0 0 28px; }
+.steps { display:flex; gap:6px; margin:0 0 28px; }
+.steps div { flex:1; height:4px; border-radius:4px; background:var(--raised); }
+.steps .done { background:var(--accent); }
+.steps .now { background:linear-gradient(90deg,var(--accent) 50%,var(--raised) 50%); }
+.panel { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; margin-bottom:16px; }
+.panel h2 { font:700 19px/1.4 var(--display); margin:0 0 6px; }
+.panel p { margin:0 0 14px; color:var(--muted); }
+.panel p b { color:var(--ink); font-weight:600; }
+.row { display:flex; gap:8px; }
+.input { flex:1; min-height:44px; border:1px solid var(--control); border-radius:8px; padding:11px 12px; background:var(--base); color:var(--ink); font:15px var(--ui); }
+.mono { font-family: ui-monospace, Menlo, monospace; font-size:13px; }
+.btn { min-height:44px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px; padding:11px 18px; font:600 15px var(--ui); border:1px solid var(--accent); background:var(--accent); color:var(--accent-ink); }
+.btn.secondary { background:var(--surface); color:var(--ink); border-color:var(--control); }
+.shot { margin-top:14px; height:130px; border-radius:8px; border:1px dashed var(--border); background:var(--raised); display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:13px; }
+.check { display:flex; gap:10px; align-items:flex-start; padding:12px 14px; border-radius:8px; background:var(--raised); margin-top:12px; color:var(--ink); }
+.box { width:18px; height:18px; border:1px solid var(--control); border-radius:4px; flex:none; margin-top:2px; }
+.footer { display:flex; justify-content:space-between; margin-top:24px; }
+.alert { display:flex; gap:12px; padding:14px 16px; border-radius:12px; background:var(--warning-surface); border:1px solid #5a4a2a; color:var(--warning); margin-bottom:24px; }
+.alert b { color:var(--ink); }
+.alert p { margin:2px 0 0; color:var(--muted); }
+.dot { width:10px; height:10px; border-radius:50%; background:var(--warning); margin-top:6px; flex:none; }
+.badge { display:inline-block; font-size:12px; padding:2px 8px; border-radius:6px; background:var(--error-surface); color:var(--error); margin-bottom:10px; }
+.variants { display:flex; gap:6px; margin:-4px 0 14px; }
+.variants span { font-size:12px; padding:4px 10px; border-radius:6px; border:1px solid var(--border); color:var(--muted); }
+.variants span.on { border-color:var(--accent); color:var(--accent); }
+ol { margin:0 0 16px; padding-left:20px; color:var(--muted); }
+ol li { margin-bottom:6px; }
+ol li b { color:var(--ink); font-weight:600; }
+.paused { margin-top:16px; }
+.sched { display:flex; justify-content:space-between; padding:10px 0; border-top:1px solid var(--border); color:var(--muted); font-size:13px; }
+.pill { font-size:12px; padding:2px 8px; border-radius:6px; background:var(--warning-surface); color:var(--warning); }
+</style>
+</head>
+<body>
+<p class="caption">Mockups in the production design system (same colours, fonts, buttons, panels). Left: one step of first-time setup. Right: the "uh oh" page, showing case A; the chips above the fix show the other cases it can switch to. None of them asks for a secret.</p>
+<div class="screens">
+
+  <div>
+    <p class="label">Guided setup — step 2 of 4</p>
+    <div class="screen">
+      <div class="topbar"><div class="brand">Raccoon<span>.</span></div><div class="who">My workspace <div class="avatar"></div></div></div>
+      <div class="page">
+        <div class="steps"><div class="done"></div><div class="now"></div><div></div><div></div></div>
+        <p class="eyebrow">Step 2 · Your Spotify app</p>
+        <h1>Tell Spotify where to send you back</h1>
+        <p class="lead">Spotify only signs people in to addresses you've approved. Add ours to your app.</p>
+
+        <div class="panel">
+          <h2>Add the redirect URL</h2>
+          <p>In the Spotify developer dashboard, open your app, choose <b>Settings</b>, then <b>Edit</b>, and paste this under <b>Redirect URIs</b>.</p>
+          <div class="row"><div class="input mono">https://raccoon.fm/spotify/callback</div><span class="btn secondary">Copy</span></div>
+          <div class="shot">Annotated screenshot of Spotify's settings page</div>
+        </div>
+
+        <div class="panel">
+          <h2>Allow your Spotify account</h2>
+          <p>Under <b>User Management</b>, add the email of the Spotify account you'll connect. Apps in development mode only work for the people listed there.</p>
+          <div class="check"><div class="box"></div>I've saved the redirect URL and added my account</div>
+        </div>
+
+        <div class="footer"><span class="btn secondary">Back</span><span class="btn">Continue</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <p class="label">Uh oh — app stopped working</p>
+    <div class="screen">
+      <div class="topbar"><div class="brand">Raccoon<span>.</span></div><div class="who">My workspace <div class="avatar"></div></div></div>
+      <div class="page">
+        <p class="eyebrow" style="color:var(--error)">Spotify connection</p>
+        <h1>Uh oh — Spotify stopped accepting your app</h1>
+        <p class="lead">Nothing has been changed on your playlists. Fix this and you're back where you left off.</p>
+
+        <div class="alert"><div class="dot"></div><div><b>5 scheduled runs are paused</b><p>They can't run until your app works again.</p></div></div>
+
+        <div class="variants"><span class="on">A · App not found</span><span>B · Access removed</span><span>C · Account not allowed</span></div>
+
+        <div class="panel">
+          <span class="badge">Spotify no longer recognises your app</span>
+          <h2>Create a new Spotify app</h2>
+          <p>This usually means the app was deleted in the Spotify dashboard. Make a new one and connect through it. Your routines and history stay.</p>
+          <ol>
+            <li>Create an app in the dashboard (Spotify Premium is required).</li>
+            <li>Add the redirect URL and your account, then paste the new client ID.</li>
+            <li>Connect Spotify with the same account as before.</li>
+          </ol>
+          <span class="btn">Start setup again</span>
+        </div>
+
+        <div class="panel">
+          <h2>Not the problem?</h2>
+          <p>Swap in a different Spotify app instead. Delete the old one in the dashboard first, because Spotify allows one per person. You'll go back through setup and reconnect; your routines and history stay.</p>
+          <span class="btn secondary">Use a different app</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
