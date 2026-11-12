@@ -1,7 +1,7 @@
 -r base.txt
 
 # Testing
-pytest==9.1.1
+pytest==9.2.0
 pytest-cov==7.1.0
 pytest-mock==3.17.0
 # Divides the suite across CI's parallel backend test jobs by the recorded test
@@ -15,7 +15,7 @@ playwright==1.64.0
 
 # Code Quality
 # ruff handles lint and import sorting; config in pyproject.toml.
-ruff==0.17.1
+ruff==0.17.4
 
 # scripts/extract-spotify-shapes.py
 PyYAML>=6.0.3
