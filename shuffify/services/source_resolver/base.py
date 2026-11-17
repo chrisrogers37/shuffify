@@ -17,9 +17,11 @@ class ResolveResult:
     """Result of resolving a single source.
 
     Attributes:
-        track_uris: URIs the pathway resolved (empty on failure).
+        track_uris: URIs the pathway resolved (empty on failure, or when
+            the source has no tracks).
         pathway_name: Identifier of the pathway that produced this result.
-        success: True iff the pathway completed and returned tracks.
+        success: True iff the pathway completed and read the source. A
+            source with no tracks is a success with no track URIs.
         partial: True if results are a subset (e.g. search returns top-N).
         applicable: False means "this pathway did not apply to the input"
             — the resolver should skip silently to the next pathway
