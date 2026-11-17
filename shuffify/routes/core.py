@@ -47,7 +47,10 @@ def _auth_notice(code):
 
 @site_bp.route("/health")
 def health():
-    """Health check endpoint for Docker and monitoring."""
+    """Health check for Docker, Railway's deploy check and monitoring.
+
+    Answers 200 when the database answers a query and 503 when it does not.
+    """
     from shuffify import is_db_available
 
     db_healthy = is_db_available()
@@ -59,7 +62,7 @@ def health():
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         ),
-        200,
+        200 if db_healthy else 503,
     )
 
 
