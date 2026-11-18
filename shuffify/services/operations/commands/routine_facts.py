@@ -5,6 +5,7 @@ from copy import deepcopy
 
 from shuffify.services.execution_result_service import build_live_execution_detail, serialize_execution_detail
 from shuffify.services.live_operation_service import LiveOperation, operation_result
+from shuffify.services.operations.planner import replay
 from shuffify.services.workshop_commit_service import ObservedPlaylist
 
 BINDING_KEY = "routine.binding.v1"
@@ -135,10 +136,15 @@ def build_result(runtime, command, state, *, error_code=None, message=None, http
             resource = action["resource"]
             phase = "archive_purge" if action.get("phase") == "archive_purge" else name
             key = phase, resource
-            group = groups.setdefault(key, {"baseline": action["before"]["track_uris"], "desired": [], "batches": []})
+            baseline = action["before"]["track_uris"]
+            group = groups.setdefault(key, {"baseline": baseline, "actual": baseline, "desired": [], "batches": []})
             group["desired"] = _after(action)
             if offset < len(scope):
-                group["batches"].extend(scope[offset]["batches"])
+                planned = scope[offset]
+                group["batches"].extend(planned["batches"])
+                for item, reached in zip(planned["batches"], replay(planned["baseline"], planned["batches"])):
+                    if item["state"] == "acknowledged":
+                        group["actual"] = reached["track_uris"]
         for (phase, resource), group in groups.items():
             batches = group["batches"]
             attempted = any(
@@ -146,7 +152,7 @@ def build_result(runtime, command, state, *, error_code=None, message=None, http
             )
             ack = [item for item in batches if item["state"] == "acknowledged"]
             unknown = uncertainty or any(item["state"] == "dispatched" for item in batches)
-            actual = ack[-1]["after"]["track_uris"] if ack else group["baseline"]
+            actual = group["actual"]
             status = (
                 "unknown"
                 if unknown and attempted

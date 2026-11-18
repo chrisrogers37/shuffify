@@ -378,6 +378,37 @@ class TestAuthServiceTokenRefreshPersistence:
             assert session["spotify_token"]["access_token"] == "refreshed_access"
             assert session.modified is True
 
+    def test_refreshed_token_is_persisted_encrypted(self, app):
+        """A refresh token Spotify issues mid-request reaches the session
+        encrypted, never in plaintext."""
+        from flask import session
+
+        from shuffify.services.token_service import TokenService
+        from shuffify.spotify.auth import SpotifyAuthManager
+
+        refreshed = self._refreshed_token_info()
+
+        with app.test_request_context():
+            session["spotify_token"] = self._expired_token()
+
+            with patch("shuffify.spotify.api.SpotifyHTTPClient", autospec=True), patch(
+                "shuffify.services.auth_service.SpotifyCredentials"
+                ".from_flask_config",
+                autospec=True,
+                return_value=self._test_credentials(),
+            ), patch.object(
+                SpotifyAuthManager,
+                "ensure_valid_token",
+                autospec=True,
+                return_value=refreshed,
+            ):
+                AuthService.get_authenticated_api(session["spotify_token"])
+
+            stored = session["spotify_token"]
+
+        assert "refresh_token" not in stored
+        assert TokenService.decrypt_token(stored["encrypted_refresh_token"]) == refreshed.refresh_token
+
     def test_refresh_callback_is_noop_without_request_context(self, app):
         """Background executors have no request context; a refresh during
         client creation must not raise."""

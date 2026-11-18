@@ -129,7 +129,7 @@ class UpstreamSourceService:
             logger.info(
                 f"Upstream source already exists: "
                 f"{source_playlist_id} -> "
-                f"{target_playlist_id} for user {spotify_id}"
+                f"{target_playlist_id} for user {user.id}"
             )
             return existing
 
@@ -148,7 +148,7 @@ class UpstreamSourceService:
             commit,
             f"add upstream source: "
             f"{source_playlist_id} -> "
-            f"{target_playlist_id} for user {spotify_id} "
+            f"{target_playlist_id} for user {user.id} "
             f"(type={source_type})",
             UpstreamSourceError,
         )
@@ -197,7 +197,7 @@ class UpstreamSourceService:
                 "'%s' -> %s for user %s",
                 search_query,
                 target_playlist_id,
-                spotify_id,
+                user.id,
             )
             return existing
 
@@ -215,7 +215,7 @@ class UpstreamSourceService:
         commit_or_stage(
             commit,
             f"add search source: '{search_query}' -> "
-            f"{target_playlist_id} for user {spotify_id}",
+            f"{target_playlist_id} for user {user.id}",
             UpstreamSourceError,
         )
         return source

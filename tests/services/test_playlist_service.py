@@ -140,13 +140,16 @@ class TestPlaylistServiceGetUserPlaylists:
         assert result == []
 
     def test_get_user_playlists_failure(self, mock_spotify_api):
-        """Should raise PlaylistError on API failure."""
-        mock_spotify_api.get_user_playlists.side_effect = Exception("API error")
+        """Should raise PlaylistError on API failure, chained, without the cause's text."""
+        cause = Exception("API error at upstream-7f3c.internal:5432")
+        mock_spotify_api.get_user_playlists.side_effect = cause
         service = PlaylistService(mock_spotify_api)
 
         with pytest.raises(PlaylistError) as exc_info:
             service.get_user_playlists()
         assert "Failed to fetch playlists" in str(exc_info.value)
+        assert "upstream-7f3c" not in str(exc_info.value)
+        assert exc_info.value.__cause__ is cause
 
 
 class TestPlaylistServiceGetPlaylist:
@@ -180,13 +183,16 @@ class TestPlaylistServiceGetPlaylist:
         assert "Playlist ID is required" in str(exc_info.value)
 
     def test_get_playlist_api_failure(self, mock_spotify_api):
-        """Should raise PlaylistError on API failure."""
-        mock_spotify_api.get_playlist.side_effect = Exception("API error")
+        """Should raise PlaylistError on API failure, chained, without the cause's text."""
+        cause = Exception("API error at upstream-7f3c.internal:5432")
+        mock_spotify_api.get_playlist.side_effect = cause
         service = PlaylistService(mock_spotify_api)
 
         with pytest.raises(PlaylistError) as exc_info:
             service.get_playlist('playlist123')
         assert "Failed to fetch playlist" in str(exc_info.value)
+        assert "upstream-7f3c" not in str(exc_info.value)
+        assert exc_info.value.__cause__ is cause
 
     def test_get_playlist_withheld_tracks_raise_access_error(self, mock_spotify_api):
         """Spotify answers another user's playlist items with 403."""
@@ -259,13 +265,14 @@ class TestPlaylistServiceGetPlaylistMetadata:
         scraper.assert_called_once_with("pl1")
 
     def test_get_metadata_api_failure(self, mock_spotify_api):
-        """Should raise PlaylistError on generic failure."""
-        mock_spotify_api.get_playlist.side_effect = (
-            Exception("API error")
-        )
+        """Should raise PlaylistError on generic failure, chained, without the cause's text."""
+        cause = Exception("API error at upstream-7f3c.internal:5432")
+        mock_spotify_api.get_playlist.side_effect = cause
         service = PlaylistService(mock_spotify_api)
-        with pytest.raises(PlaylistError):
+        with pytest.raises(PlaylistError) as exc_info:
             service.get_playlist_metadata("pl1")
+        assert "upstream-7f3c" not in str(exc_info.value)
+        assert exc_info.value.__cause__ is cause
 
 
 class TestPlaylistServiceGetPlaylistSummary:

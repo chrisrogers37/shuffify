@@ -235,6 +235,26 @@ def test_partial_collect_is_accepted_and_stops_the_dependent_drip(routine, monke
     assert routine.world.playlists["collection"]["track_uris"] == [uri(4), uri(4), uri(5)]
 
 
+def test_empty_source_collects_nothing_and_the_dependent_drip_runs(routine, monkeypatch):
+    # The owner's source playlist has no tracks and, like a private playlist, no public page.
+    monkeypatch.setattr(
+        "shuffify.services.source_resolver.public_scraper_pathway.request_with_deadline",
+        lambda *args, **kwargs: SimpleNamespace(status_code=404, text="", headers={}),
+    )
+    routine.world.playlists["source"]["track_uris"] = []
+    row, _ = routine.enqueue("raid_and_drip")
+    completed = routine.run(row)
+    steps = completed.journal["result"]["operation"]["steps"]
+    assert completed.state == "succeeded"
+    assert [(step["step"], step["status"]) for step in steps] == [("raid", "complete"), ("drip", "complete")]
+    assert routine.world.playlists["target"]["track_uris"] == [uri(4), uri(4), uri(1), uri(2), uri(3)]
+    assert [entry.activity_type for entry in ActivityLog.query.all()] == ["schedule_run"]
+    source = UpstreamSource.query.one()
+    db.session.refresh(source)
+    assert (source.last_resolve_pathway, source.last_resolve_status) == ("direct_api", "success")
+    assert source.last_track_count == 0
+
+
 @pytest.mark.parametrize("origin,enabled,expected", [("manual", False, "succeeded"), ("scheduler", False, "failed")])
 def test_only_scheduled_origin_requires_an_enabled_schedule(routine, origin, enabled, expected):
     row, _ = routine.enqueue("raid", origin=origin, enabled=enabled)

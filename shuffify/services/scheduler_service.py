@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import func
 
 from shuffify.models.db import JobExecution, PlaylistSnapshot, Schedule, db
-from shuffify.services.base import commit_failure, get_owned_entity, safe_commit
+from shuffify.services.base import commit_failure, get_owned_entity, public_error, safe_commit
 from shuffify.services.playlist_lock import playlist_configuration_lock, playlist_lock
 
 logger = logging.getLogger(__name__)
@@ -55,15 +55,15 @@ def _locked_exact_schedule(schedule_id, user_id, *, destination=None, execution=
             for target in targets:
                 acquired = stack.enter_context(playlist_lock(target, timeout_s=LOCK_WAIT_S))
                 if not acquired:
-                    raise ScheduleBusyError("A routine is using this playlist. Try again.")
+                    raise public_error(ScheduleBusyError, "A routine is using this playlist. Try again.")
         for target in targets:
             acquired = stack.enter_context(playlist_configuration_lock(target, timeout_s=LOCK_WAIT_S))
             if not acquired:
-                raise ScheduleBusyError("A routine is using this playlist. Try again.")
+                raise public_error(ScheduleBusyError, "A routine is using this playlist. Try again.")
         db.session.expire_all()
         schedule = SchedulerService.get_schedule(schedule_id, user_id)
         if schedule.target_playlist_id != original_target:
-            raise ScheduleError("Schedule changed while it was being updated. Try again.")
+            raise public_error(ScheduleError, "Schedule changed while it was being updated. Try again.")
         yield schedule
 
 
@@ -123,7 +123,7 @@ class SchedulerService:
         """
         with playlist_configuration_lock(target_playlist_id, timeout_s=LOCK_WAIT_S) as acquired:
             if not acquired:
-                raise ScheduleBusyError("A routine is using this playlist. Try again.")
+                raise public_error(ScheduleBusyError, "A routine is using this playlist. Try again.")
             schedule = Schedule(
                 user_id=user_id,
                 job_type=job_type,

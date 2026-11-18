@@ -512,13 +512,16 @@ class TestRetryLogic:
 
         session = mock_session_cls.return_value
         session.headers = {}
-        session.request.side_effect = ConnectionError("refused")
+        refused = ConnectionError("refused by upstream-7f3c.internal:443")
+        session.request.side_effect = refused
 
         client = SpotifyHTTPClient("token")
         client._session = session
 
-        with pytest.raises(SpotifyAPIError, match="Network error"):
+        with pytest.raises(SpotifyAPIError, match="Network error") as exc_info:
             client.get("/me")
+        assert "upstream-7f3c" not in str(exc_info.value)
+        assert exc_info.value.__cause__ is refused
 
 
 class TestWriteOutcomeCertainty:
