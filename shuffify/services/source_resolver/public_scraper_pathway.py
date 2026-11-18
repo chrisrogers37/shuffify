@@ -170,16 +170,11 @@ class PublicScraperPathway:
                 playlist_id,
                 len(cached),
             )
-            if cached:
-                return ResolveResult(
-                    track_uris=cached,
-                    pathway_name=self.name,
-                    success=True,
-                )
+            # An empty entry is a confirmed page that listed no tracks.
             return ResolveResult(
-                track_uris=[],
+                track_uris=cached,
                 pathway_name=self.name,
-                success=False,
+                success=True,
             )
 
         # Strategy 1: Embed endpoint (lighter, more structured)
@@ -218,8 +213,7 @@ class PublicScraperPathway:
             return ResolveResult(
                 track_uris=[],
                 pathway_name=self.name,
-                success=False,
-                error_message="Scraping returned no tracks",
+                success=True,
             )
 
         # Both unconfirmed — surface the failure without caching.
