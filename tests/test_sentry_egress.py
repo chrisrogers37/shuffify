@@ -37,6 +37,10 @@ ALL_SECRETS = (AUTH_CODE, ACCESS_TOKEN, REFRESH_TOKEN, CLIENT_SECRET)
 # and length that the shape locator keys on.
 SHAPED_ACCESS_TOKEN = "BQ" + "SECRETMARKERaccesstoken" + "A" * 35
 
+# Each test logs through shuffify's loggers, which a migration run earlier in
+# the session may have disabled.
+pytestmark = pytest.mark.usefixtures("shuffify_logs")
+
 
 class _SinkHandler(BaseHTTPRequestHandler):
     """Collects envelope bodies, transparently decompressing them."""
@@ -105,21 +109,6 @@ def _sink_config(server):
     return SinkConfig
 
 
-def _reenable_shuffify_loggers():
-    """Undo logger disabling so the ERROR actually reaches the integration.
-
-    Alembic's migrations/env.py runs logging.config.fileConfig, whose default
-    disable_existing_loggers=True switches off every shuffify.* logger created
-    at import time. Any test that has built the app through a migration run
-    leaves them disabled, and logger.error becomes a silent no-op — which
-    would make these tests pass while proving nothing. Restore the state the
-    production code assumes so the assertions stay meaningful.
-    """
-    for name in list(logging.root.manager.loggerDict):
-        if name == "shuffify" or name.startswith("shuffify."):
-            logging.getLogger(name).disabled = False
-
-
 def _trigger_token_exchange_error():
     """Drive the real exchange_code failure path.
 
@@ -127,7 +116,6 @@ def _trigger_token_exchange_error():
     the generic handler that logs at ERROR with exc_info=True. At that
     moment code, token_data, and the credentials object are live locals.
     """
-    _reenable_shuffify_loggers()
     credentials = SpotifyCredentials(
         client_id="test-client-id",
         client_secret=CLIENT_SECRET,
@@ -222,9 +210,7 @@ def _emit_error(message, *args, **kwargs):
     event_level=WARNING means this becomes a Sentry event, taking the same
     LoggingIntegration path production log calls take.
     """
-    _reenable_shuffify_loggers()
     logger = logging.getLogger("shuffify.tests.free_text_egress")
-    logger.disabled = False
     logger.error(message, *args, **kwargs)
 
 
@@ -300,6 +286,33 @@ class TestFreeTextEgress:
         assert '"breadcrumbs"' in payload
         assert "exchanging" in payload
         assert AUTH_CODE not in payload
+
+
+class TestPersonalDataEgress:
+    """Only warnings and errors ride along with an event as breadcrumbs.
+
+    Redaction removes secrets by key and by shape, and a name is neither, so a
+    line below WARNING that names a person is kept off the wire by not being
+    sent at all.
+    """
+
+    DISPLAY_NAME = "Marker Display Name 5d41"
+
+    def test_an_info_line_naming_a_person_does_not_egress(
+        self, sentry_sink, sentry_client_teardown, shuffify_logs
+    ):
+        assert _init_sentry(_sink_config(sentry_sink)) is True
+
+        logging.getLogger("shuffify.routes.core").info(
+            "User %s authenticated successfully", self.DISPLAY_NAME
+        )
+        _emit_error("sign-in follow-up failed")
+        payload = _flush_and_read(sentry_sink)
+
+        # The line was logged, so the integration saw it, and the event arrived.
+        assert self.DISPLAY_NAME in shuffify_logs.text
+        assert "sign-in follow-up failed" in payload
+        assert self.DISPLAY_NAME not in payload
 
 
 class TestStripPiiExceptionFrames:

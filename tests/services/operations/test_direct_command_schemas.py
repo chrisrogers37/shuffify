@@ -62,3 +62,15 @@ def test_workshop_accepts_empty_arrays_but_rejects_invalid_uris_and_unknown_fiel
         WorkshopCommitCommand(playlist_id='target', baseline_track_uris=[], track_uris=['local:bad'])
     with pytest.raises(ValidationError):
         WorkshopCommitCommand(playlist_id='target', baseline_track_uris=[], track_uris=[], user_id=42)
+
+
+@pytest.mark.parametrize('field', ['baseline_track_uris', 'track_uris'])
+def test_workshop_commit_holds_a_full_playlist_but_not_one_track_more(field):
+    # Spotify's limit for one playlist is 10,000 tracks.
+    uris = [URI] * 10_001
+    lists = {'baseline_track_uris': [], 'track_uris': []}
+    command = WorkshopCommitCommand(playlist_id='target', **{**lists, field: uris[:10_000]})
+    assert len(getattr(command, field)) == 10_000
+    with pytest.raises(ValidationError) as refused:
+        WorkshopCommitCommand(playlist_id='target', **{**lists, field: uris})
+    assert [(error['loc'], error['type']) for error in refused.value.errors()] == [((field,), 'too_long')]

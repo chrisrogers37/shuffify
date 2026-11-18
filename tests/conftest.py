@@ -5,6 +5,7 @@ This module provides common fixtures used across all test modules,
 including mock Spotify clients, sample data, and Flask app contexts.
 """
 
+import logging
 import time
 from unittest.mock import Mock
 
@@ -348,6 +349,22 @@ def auth_client(db_app):
                 "display_name": "Test User",
             }
         yield client
+
+
+@pytest.fixture
+def shuffify_logs(caplog):
+    """Capture every log record at DEBUG, with shuffify's loggers enabled.
+
+    A migration run applies alembic.ini's logging config, which disables the
+    loggers that exist by then, shuffify's among them. A disabled logger drops
+    its records silently, so a test that asserts something is absent from the
+    logs would pass while proving nothing. This turns them back on first.
+    """
+    for name in list(logging.root.manager.loggerDict):
+        if name == "shuffify" or name.startswith("shuffify."):
+            logging.getLogger(name).disabled = False
+    caplog.set_level(logging.DEBUG)
+    return caplog
 
 
 # =============================================================================

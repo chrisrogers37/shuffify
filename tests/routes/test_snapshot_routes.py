@@ -182,6 +182,20 @@ class TestCreateManualSnapshot:
         )
 
     @patch("shuffify.routes.require_auth")
+    def test_create_logs_the_user_by_internal_id(
+        self, mock_auth, auth_client, shuffify_logs
+    ):
+        mock_auth.return_value = MagicMock()
+        resp = auth_client.post(
+            api_path("/playlist/p1/snapshots"),
+            json={"playlist_name": "My Playlist", "track_uris": ["spotify:track:a"]},
+        )
+        assert resp.status_code == 200
+        user_id = UserService.get_by_spotify_id("user123").id
+        assert f"User {user_id} created manual snapshot for playlist p1" in shuffify_logs.text
+        assert "user123" not in shuffify_logs.text
+
+    @patch("shuffify.routes.require_auth")
     def test_create_empty_track_list(
         self, mock_auth, auth_client
     ):

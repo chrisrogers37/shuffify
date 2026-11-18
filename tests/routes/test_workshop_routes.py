@@ -13,6 +13,7 @@ from werkzeug.exceptions import ServiceUnavailable
 
 from shuffify.models.playlist import Playlist
 from shuffify.services import PlaylistAccessError
+from shuffify.services.user_service import UserService
 from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.exceptions import SpotifyTokenExpiredError
 from tests.paths import api_path
@@ -20,6 +21,8 @@ from tests.paths import api_path
 # =============================================================================
 # Fixtures
 # =============================================================================
+
+_MORE_THAN_A_PLAYLIST = ["spotify:track:" + "a" * 22] * 10_001
 
 
 def _make_mock_playlist():
@@ -255,6 +258,9 @@ class TestWorkshopCommit:
             {"baseline_track_uris": [], "track_uris": ["invalid"]},
             {"baseline_track_uris": ["invalid"], "track_uris": []},
             {"baseline_track_uris": None, "track_uris": []},
+            # One track more than a Spotify playlist can hold.
+            {"baseline_track_uris": [], "track_uris": _MORE_THAN_A_PLAYLIST},
+            {"baseline_track_uris": _MORE_THAN_A_PLAYLIST, "track_uris": []},
         ],
     )
     def test_malformed_body_never_calls_service(
@@ -463,3 +469,20 @@ class TestWorkshopCommit:
             assert body["requires_refresh"] is False
             assert body["retryable"] is True
         service.assert_not_called()
+
+
+class TestSaveWorkshopSession:
+    """POST /workshop/<playlist_id>/sessions"""
+
+    @patch("shuffify.routes.require_auth")
+    def test_save_logs_the_user_by_internal_id(self, mock_auth, auth_client, shuffify_logs):
+        mock_auth.return_value = MagicMock()
+        resp = auth_client.post(
+            api_path("/workshop/p1/sessions"),
+            json={"session_name": "Evening", "track_uris": ["spotify:track:a"]},
+        )
+        assert resp.status_code == 200
+        user_id = UserService.get_by_spotify_id("user123").id
+        assert f"User {user_id} saved workshop session 'Evening' for playlist p1" in shuffify_logs.text
+        assert f"save workshop session 'Evening' for user {user_id}, playlist p1" in shuffify_logs.text
+        assert "user123" not in shuffify_logs.text

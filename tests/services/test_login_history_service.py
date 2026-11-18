@@ -5,15 +5,27 @@ Tests cover login recording, logout recording, recent logins
 retrieval, and login statistics computation.
 """
 
+import hashlib
+import hmac
+import re
 from unittest.mock import Mock
 
 import pytest
+from flask import current_app
 
 from shuffify.models.db import LoginHistory, db
+from shuffify.services import signed_digest
 from shuffify.services.login_history_service import (
     LoginHistoryService,
 )
 from shuffify.services.user_service import UserService
+
+
+def keyed_digest(session_id):
+    """A session id as login history stores it: an HMAC-SHA256 under the
+    login-session key derived from the app's SECRET_KEY."""
+    key = signed_digest.key("shuffify.login.session.v1")
+    return hmac.new(key, session_id.encode(), hashlib.sha256).hexdigest()
 
 
 @pytest.fixture
@@ -74,10 +86,28 @@ class TestRecordLogin:
         assert entry.user_id == app_ctx.id
         assert entry.ip_address == "192.168.1.100"
         assert entry.user_agent == "Mozilla/5.0 TestBrowser"
-        assert entry.session_id == "sess_abc"
+        assert entry.session_id == keyed_digest("sess_abc")
         assert entry.login_type == "oauth_initial"
         assert entry.logged_in_at is not None
         assert entry.logged_out_at is None
+
+    def test_record_login_stores_keyed_digest(self, app_ctx, mock_request):
+        """The session id is the session cookie's value, so login history
+        stores a digest keyed by the deployment's secret, never the id."""
+        entry = LoginHistoryService.record_login(
+            user_id=app_ctx.id,
+            request=mock_request,
+            session_id="sess_abc",
+        )
+        assert re.fullmatch("[0-9a-f]{64}", entry.session_id)
+
+        current_app.config["SECRET_KEY"] = "another-deployment-secret"
+        other = LoginHistoryService.record_login(
+            user_id=app_ctx.id,
+            request=mock_request,
+            session_id="sess_abc",
+        )
+        assert other.session_id != entry.session_id
 
     def test_record_login_uses_remote_addr(self, app_ctx, mock_request_with_proxy):
         """Should use remote_addr (ProxyFix corrects it at WSGI layer)."""
@@ -235,3 +265,22 @@ class TestRecordLogout:
         # sess_2 should still be open
         updated2 = db.session.get(LoginHistory, entry2.id)
         assert updated2.logged_out_at is None
+
+    def test_record_logout_matches_row_stored_as_digest(self, app_ctx):
+        """A sign-out finds its sign-in by the stored digest of its id."""
+        signed_in = LoginHistory(
+            user_id=app_ctx.id,
+            session_id=keyed_digest("sess_1"),
+            login_type="oauth_initial",
+        )
+        elsewhere = LoginHistory(
+            user_id=app_ctx.id,
+            session_id=keyed_digest("sess_2"),
+            login_type="oauth_initial",
+        )
+        db.session.add_all([signed_in, elsewhere])
+        db.session.commit()
+
+        assert LoginHistoryService.record_logout(user_id=app_ctx.id, session_id="sess_1") is True
+        assert db.session.get(LoginHistory, signed_in.id).logged_out_at is not None
+        assert db.session.get(LoginHistory, elsewhere.id).logged_out_at is None

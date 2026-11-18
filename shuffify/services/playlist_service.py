@@ -267,7 +267,7 @@ class PlaylistService:
             return playlists
         except Exception as e:
             logger.error(f"Failed to get user playlists: {e}", exc_info=True)
-            raise PlaylistError(f"Failed to fetch playlists: {e}")
+            raise PlaylistError("Failed to fetch playlists.") from e
 
     def get_playlist(self, playlist_id: str) -> Playlist:
         """
@@ -306,7 +306,7 @@ class PlaylistService:
             raise
         except Exception as e:
             logger.error(f"Failed to get playlist {playlist_id}: {e}", exc_info=True)
-            raise PlaylistError(f"Failed to fetch playlist: {e}")
+            raise PlaylistError("Failed to fetch playlist.") from e
 
     def get_playlist_summary(self, playlist_id: str) -> Playlist:
         """The playlist without its tracks, for when get_playlist is refused.
@@ -383,9 +383,7 @@ class PlaylistService:
                 f"{playlist_id}: {e}",
                 exc_info=True,
             )
-            raise PlaylistError(
-                f"Failed to fetch playlist metadata: {e}"
-            )
+            raise PlaylistError("Failed to fetch playlist metadata.") from e
 
     def update_playlist_tracks(self, playlist_id: str, track_uris: List[str]) -> bool:
         """

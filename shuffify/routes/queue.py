@@ -45,6 +45,11 @@ def capture_direct_history(user, playlist_id, kind, *, storage=None):
         raise AdmissionRejected((jsonify(payload), status)) from error
 
 
+def _blocking_operation(user, error):
+    """Name the blocking operation only to the user who owns it."""
+    return {"operation_id": error.operation_id} if error.owner_id == user.id else {}
+
+
 def enqueue_command(user, kind, intent, build, *, schedule_id=None):
     """Reply with one owned operation, replaying the same key before local capture.
 
@@ -71,10 +76,11 @@ def enqueue_command(user, kind, intent, build, *, schedule_id=None):
     except PlaylistNeedsReview as error:
         return jsonify(error_payload(
             "An earlier operation on this playlist needs review. Restore or resolve it first.", 409,
-            error_code="playlist_needs_review", retryable=False, operation_id=error.operation_id,
-            reason="needs_attention")), 409
+            error_code="playlist_needs_review", retryable=False, reason="needs_attention",
+            **_blocking_operation(user, error))), 409
     except BusyOperation as error:
-        payload, status = busy_error("An operation is using this playlist. Try again.", operation_id=error.operation_id)
+        payload, status = busy_error("An operation is using this playlist. Try again.",
+                                     **_blocking_operation(user, error))
         return jsonify(payload), status
     except RequestKeyConflict:
         return jsonify(error_payload("This idempotency key belongs to different changes.", 409,

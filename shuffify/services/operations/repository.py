@@ -42,16 +42,17 @@ _PRIVATE_FIELDS = frozenset({
 class BusyOperation(RuntimeError):
     """An accepted operation already reserves at least one requested target."""
 
-    def __init__(self, operation_id):
+    def __init__(self, operation_id, owner_id):
         self.operation_id = operation_id
+        self.owner_id = owner_id
         super().__init__("A playlist operation is already active.")
 
 
 class PlaylistNeedsReview(BusyOperation):
     """A needs_attention operation on a requested target has not been restored or resolved."""
 
-    def __init__(self, operation_id):
-        super().__init__(operation_id)
+    def __init__(self, operation_id, owner_id):
+        super().__init__(operation_id, owner_id)
         self.args = ("An earlier operation on this playlist needs review.",)
 
 
@@ -276,10 +277,10 @@ class OperationRepository:
                 ).order_by(JobExecution.id)).all()
                 for row in active:
                     if set(targets).intersection(row.targets or []):
-                        raise BusyOperation(row.id)
+                        raise BusyOperation(row.id, row.user_id)
                 blocker = self._unresolved_attention(session, kind, targets, payload)
                 if blocker is not None:
-                    raise PlaylistNeedsReview(blocker)
+                    raise PlaylistNeedsReview(blocker.id, blocker.user_id)
             now = self._now(session)
             row = JobExecution(kind=kind, user_id=user_id, targets=list(targets), payload=payload,
                                request_key=request_key, schedule_id=schedule_id, scheduled_for=scheduled_for,
@@ -315,7 +316,7 @@ class OperationRepository:
             restoration = runtime.get("restoration") if isinstance(runtime, dict) else None
             if isinstance(restoration, dict) and restoration.get("operation_id") is not None:
                 continue
-            return row.id
+            return row
         return None
 
     def get(self, operation_id):

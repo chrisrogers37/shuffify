@@ -26,7 +26,7 @@ def migration():
 def test_new_revision_extends_the_deployed_head_without_a_fork():
     assert MIGRATION.is_file()
     script = ScriptDirectory(str(ROOT / "migrations"))
-    assert script.get_heads() == [REVISION]
+    assert script.get_heads() == ["e1f2a3b4c5d6"]
     assert script.get_revision(REVISION).down_revision == "c9d0e1f2a3b4"
 
 

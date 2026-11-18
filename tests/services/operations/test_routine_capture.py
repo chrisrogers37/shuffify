@@ -254,7 +254,7 @@ def test_dependent_step_revalidation_ignores_already_completed_inputs_but_reject
     saved.schedule.job_type = "raid_and_shuffle"
     saved.storage.commit()
     before = capture(saved)
-    saved.pair.archive_playlist_id = "different-archive"
+    saved.pair.archive_playlist_id = "differentArchive"
     saved.storage.commit()
     after = capture(saved)
     assert_revalidated(before, after, steps=("shuffle",))

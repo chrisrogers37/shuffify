@@ -309,13 +309,12 @@ def test_a_dispatched_batch_under_an_earlier_snapshot_is_never_replayed_as_settl
     from shuffify.services.operations.recovery import reconcile_resource
 
     first, second = {"uris": [uri(1)]}, {"uris": [uri(2)]}
-    states = [{"track_uris": [], "metadata": {}}, {"track_uris": [uri(1)], "metadata": {}},
-              {"track_uris": [uri(1), uri(2)], "metadata": {}}]
+    states = [{"track_uris": [], "metadata": {}}, {"track_uris": [uri(1)], "metadata": {}}]
     batches = [
-        {"state": "acknowledged", "before": states[0], "after": states[1], "snapshot_before": "s0",
-         "snapshot_id": "s1", "path": "/playlists/t/items", "body": first},
-        {"state": "dispatched", "before": states[1], "after": states[2], "snapshot_before": "s1",
-         "snapshot_id": None, "path": "/playlists/t/items", "body": second},
+        {"state": "acknowledged", "snapshot_before": "s0", "snapshot_id": "s1",
+         "method": "POST", "path": "/playlists/t/items", "body": first},
+        {"state": "dispatched", "snapshot_before": "s1", "snapshot_id": None,
+         "method": "POST", "path": "/playlists/t/items", "body": second},
     ]
     resource = {"baseline": states[0], "snapshot_id": "s0"}
     for snapshot, settled, reason in [("s1", True, "replay_settled"), ("s0", True, "unsettled_dispatch"),

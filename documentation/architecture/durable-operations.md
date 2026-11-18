@@ -18,8 +18,9 @@ Clients send `Idempotency-Key` with each distinct submitted intent. Keys contain
 reading current history or a selected snapshot again. Changing that intent
 with the same key returns `409 request_key_conflict`. An active operation
 reserves all its targets, so another command for a reserved target returns
-`409 playlist_busy` with its operation ID. Commands without a key still reserve
-their targets but cannot identify a retry after completion.
+`409 playlist_busy`, which names the blocking operation's ID only to its owner.
+Commands without a key still reserve their targets but cannot identify a retry
+after completion.
 
 The command records the validated input, selected snapshot contents and relevant
 browser history binding. Snapshot retries therefore preserve the accepted order

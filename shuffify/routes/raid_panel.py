@@ -304,11 +304,18 @@ def raid_add_url(playlist_id, api=None, user=None):
             "Cannot raid from the same playlist", 400
         )
 
-    # 3. Get playlist metadata for ownership check.
+    # 3. Guard: the caller can edit the target. A refusal
+    # raises PlaylistAccessError (403) before any source or
+    # schedule is written.
+    playlist_svc = PlaylistService(api)
+    playlist_svc.validate_user_can_edit(
+        playlist_id, user.spotify_id, lean=True
+    )
+
+    # 4. Get playlist metadata for ownership check.
     # The service tries the API first and falls back to
     # the public embed page when the API answers 404.
     try:
-        playlist_svc = PlaylistService(api)
         playlist_meta = playlist_svc.get_playlist_metadata(
             source_playlist_id
         )
@@ -328,7 +335,7 @@ def raid_add_url(playlist_id, api=None, user=None):
             "Could not access playlist", 400
         )
 
-    # 4. Guard: owner is not current user (external-only).
+    # 5. Guard: owner is not current user (external-only).
     # Skip check if owner_id is unknown (embed-page fallback).
     owner_id = playlist_meta.get("owner_id", "unknown")
     if (
@@ -341,10 +348,10 @@ def raid_add_url(playlist_id, api=None, user=None):
             400,
         )
 
-    # 5. Best-effort track count
+    # 6. Best-effort track count
     track_count = playlist_meta.get("total_tracks")
 
-    # 6. Register source
+    # 7. Register source
     data = request.get_json(silent=True)
     try:
         with ExitStack() as locks:

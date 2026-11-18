@@ -15,8 +15,9 @@ from shuffify.services.executors import (
     JobExecutionError,
     JobExecutorService,
 )
-from shuffify.services.token_service import TokenService
+from shuffify.services.token_service import TokenEncryptionError, TokenService
 from shuffify.spotify.auth import TokenInfo
+from shuffify.spotify.exceptions import SpotifyTokenError
 
 # TestRotatedRefreshTokenIsStored stores tokens through db.session, so every
 # test in this module needs the shared app_ctx fixture (tests/conftest.py).
@@ -123,6 +124,36 @@ class TestGetSpotifyApi:
         ):
             JobExecutorService._get_spotify_api(mock_user)
 
+    def test_decrypt_failure_is_chained_without_its_text_or_the_user(self, mock_user):
+        cause = TokenEncryptionError("Decryption failed: upstream-7f3c")
+
+        with (
+            patch.object(TokenService, "decrypt_token", autospec=True, side_effect=cause),
+            pytest.raises(JobExecutionError) as exc_info,
+        ):
+            JobExecutorService._get_spotify_api(mock_user)
+
+        assert "upstream-7f3c" not in str(exc_info.value)
+        assert mock_user.spotify_id not in str(exc_info.value)
+        assert exc_info.value.__cause__ is cause
+
+    def test_refresh_failure_is_chained_without_its_text_or_the_user(self, mock_user, app_context):
+        cause = SpotifyTokenError("Token refresh failed: upstream-7f3c")
+        executor = "shuffify.services.executors.base_executor"
+
+        with (
+            patch.object(TokenService, "decrypt_token", autospec=True, return_value="refresh"),
+            patch(f"{executor}.SpotifyCredentials", autospec=True),
+            patch(f"{executor}.SpotifyAuthManager", autospec=True),
+            patch(f"{executor}.SpotifyAPI", autospec=True, side_effect=cause),
+            pytest.raises(JobExecutionError) as exc_info,
+        ):
+            JobExecutorService._get_spotify_api(mock_user)
+
+        assert "upstream-7f3c" not in str(exc_info.value)
+        assert mock_user.spotify_id not in str(exc_info.value)
+        assert exc_info.value.__cause__ is cause
+
 
 class TestRotatedRefreshTokenIsStored:
     """Spotify may issue a new refresh token on any refresh, and the old one
@@ -218,3 +249,20 @@ class TestRotatedRefreshTokenIsStored:
             assert TokenService.decrypt_token(self._stored(user)) == "refresh_v1"
             on_401()  # the next refresh stores it
         assert TokenService.decrypt_token(self._stored(user)) == "refresh_v2"
+
+    def test_a_stored_token_logs_the_user_by_internal_id(self, user, shuffify_logs):
+        self._job_api(user, self._token("refresh_v2"), on_refresh="refresh_v2")
+        assert f"store the rotated refresh token for user {user.id}" in shuffify_logs.text
+        assert user.spotify_id not in shuffify_logs.text
+
+
+class TestMissingRefreshToken:
+    """The error a job fails with reaches the worker's log, so it names the
+    user by internal id."""
+
+    def test_names_the_user_by_internal_id(self, mock_user):
+        mock_user.encrypted_refresh_token = None
+        with pytest.raises(JobExecutionError) as error:
+            JobExecutorService._get_spotify_api(mock_user)
+        assert str(error.value).startswith(f"User {mock_user.id} has no stored refresh token")
+        assert mock_user.spotify_id not in str(error.value)

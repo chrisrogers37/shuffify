@@ -175,9 +175,10 @@ class TestDeliberateMessagesAreKept:
     def test_schedule_error_message(self, mock_auth, auth_client):
         mock_auth.return_value = MagicMock()
         from shuffify.services import ScheduleError
+        from shuffify.services.base import public_error
 
         with patch("shuffify.routes.schedules.SchedulerService.delete_schedule") as delete:
-            delete.side_effect = ScheduleError("Schedule changed while it was being updated. Try again.")
+            delete.side_effect = public_error(ScheduleError, "Schedule changed while it was being updated. Try again.")
             resp = auth_client.delete(api_path("/schedules/1"))
         assert (resp.status_code, resp.get_json()["message"]) == (
             500, "Schedule changed while it was being updated. Try again."
