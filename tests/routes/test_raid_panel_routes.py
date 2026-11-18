@@ -288,6 +288,57 @@ class TestRaidAddUrlValidation:
         )
         assert resp.status_code == 404
 
+    @patch("shuffify.routes.require_auth")
+    @patch(
+        "shuffify.routes.raid_panel"
+        ".parse_spotify_playlist_url"
+    )
+    @patch(
+        "shuffify.routes.raid_panel.PlaylistService"
+    )
+    def test_target_the_caller_cannot_edit_returns_403(
+        self,
+        mock_svc_cls,
+        mock_parse,
+        mock_auth,
+        auth_client,
+    ):
+        from shuffify.models.db import Schedule, UpstreamSource
+        from shuffify.services.playlist_service import (
+            PlaylistAccessError,
+        )
+
+        mock_auth.return_value = MagicMock()
+        mock_parse.return_value = "ext1"
+        playlists = mock_svc_cls.return_value
+        playlists.get_playlist_metadata.return_value = {
+            "id": "ext1",
+            "name": "Their List",
+            "owner_id": "someone_else",
+            "description": None,
+            "total_tracks": 10,
+        }
+        playlists.validate_user_can_edit.side_effect = (
+            PlaylistAccessError("Not editable")
+        )
+
+        resp = auth_client.post(
+            api_path("/playlist/p1/raid-add-url"),
+            json={
+                "url": (
+                    "https://open.spotify.com/playlist/"
+                    "37i9dQZF1DXcBWIGoYBM5M"
+                ),
+                "auto_schedule": True,
+            },
+        )
+        assert resp.status_code == 403
+        assert playlists.validate_user_can_edit.call_args.args == (
+            "p1", "user123"
+        )
+        assert UpstreamSource.query.count() == 0
+        assert Schedule.query.count() == 0
+
 
 # =============================================================================
 # PUT /playlist/<id>/raid-schedule

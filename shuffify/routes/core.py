@@ -29,6 +29,7 @@ from shuffify.services import (
     UserService,
 )
 from shuffify.services.auth_notice import auth_notice
+from shuffify.services.auth_service import encrypt_session_token
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,10 @@ def _auth_notice(code):
 
 @site_bp.route("/health")
 def health():
-    """Health check endpoint for Docker and monitoring."""
+    """Health check for Docker, Railway's deploy check and monitoring.
+
+    Answers 200 when the database answers a query and 503 when it does not.
+    """
     from shuffify import is_db_available
 
     db_healthy = is_db_available()
@@ -58,7 +62,7 @@ def health():
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         ),
-        200,
+        200 if db_healthy else 503,
     )
 
 
@@ -69,16 +73,19 @@ def health():
 
 @auth_bp.route("/login")
 def login():
-    """Initiate Spotify OAuth flow."""
+    """Initiate Spotify OAuth flow.
+
+    Signing in replaces the session, so, as with logout, another site must not
+    start it: a request marked Sec-Fetch-Site: cross-site goes back to the home
+    page and leaves the session unchanged.
+    """
+    if request.headers.get("Sec-Fetch-Site") == "cross-site":
+        return redirect("/")
     try:
         # Check for legal consent
         if not request.args.get("legal_consent"):
             _auth_notice("consent_required")
             return redirect("/")
-
-        # Clear any existing session data
-        session.pop("spotify_token", None)
-        session.pop("user_data", None)
 
         state = secrets.token_urlsafe(32)
         session["oauth_state"] = state
@@ -121,11 +128,16 @@ def callback():
     # Validate CSRF state parameter
     callback_state = request.args.get("state")
     stored_state = session.pop("oauth_state", None)
-    if not stored_state or not hmac.compare_digest(stored_state, callback_state or ""):
+    if not stored_state or not hmac.compare_digest(
+        stored_state.encode(), (callback_state or "").encode()
+    ):
         logger.error("OAuth state mismatch: possible CSRF attack")
         _auth_notice("invalid_state")
         return redirect("/")
 
+    # A token refresh during the profile fetch below writes the session's
+    # token; a failed sign-in puts this one back.
+    previous_token = session.get("spotify_token")
     try:
         # Exchange code for token
         token_data = AuthService.exchange_code_for_token(code)
@@ -139,7 +151,7 @@ def callback():
         # We then clear stale pre-auth data before writing auth state.
         current_app.session_interface.regenerate(session)
         session.clear()
-        session["spotify_token"] = token_data
+        session["spotify_token"] = encrypt_session_token(token_data)
         session["user_data"] = user_data
 
         # Upsert user record in database (non-blocking)
@@ -167,9 +179,7 @@ def callback():
                     db_user,
                     token_data["refresh_token"],
                 )
-                logger.debug(
-                    f"Stored encrypted refresh token for user {user_data['id']}"
-                )
+                logger.debug("Stored encrypted refresh token for user %s", db_user.id)
             except Exception as e:
                 logger.warning(
                     f"Failed to store refresh token: {e}. "
@@ -204,9 +214,8 @@ def callback():
             )
 
         logger.info(
-            f"User "
-            f"{user_data.get('display_name', 'Unknown')} "
-            f"authenticated successfully"
+            "User %s authenticated successfully",
+            db_user.id if db_user else "without a stored record",
         )
         return redirect("/")
 
@@ -215,8 +224,11 @@ def callback():
             logger.warning(f"Authentication failed: {e}")
         else:
             logger.error(f"Authentication failed: {e}")
-        session.pop("spotify_token", None)
-        session.pop("user_data", None)
+        # The rest of the session changes only once the sign-in succeeds.
+        if previous_token is None:
+            session.pop("spotify_token", None)
+        else:
+            session["spotify_token"] = previous_token
         _auth_notice("authentication_failed")
         return redirect("/")
 

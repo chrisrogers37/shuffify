@@ -1,13 +1,14 @@
 """Legacy routine state changes remain available during an execution."""
 
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
 from shuffify.models.db import Schedule, User, db
 from shuffify.services.playlist_lock import playlist_lock
-from shuffify.services.scheduler_service import ScheduleBusyError, SchedulerService
+from shuffify.services.scheduler_service import ScheduleBusyError, ScheduleError, SchedulerService
 
 
 @pytest.fixture
@@ -49,9 +50,22 @@ def test_state_only_update_proceeds_during_execution_but_definition_edit_waits(t
     ):
         assert acquired
         assert pool.submit(mutate, is_enabled=False).result(timeout=5) is False
-        with pytest.raises(ScheduleBusyError):
+        with pytest.raises(ScheduleBusyError) as busy:
             pool.submit(mutate, is_enabled=True, schedule_value="weekly").result(timeout=5)
 
     db.session.expire_all()
     assert schedule.is_enabled is False
     assert schedule.schedule_value == "daily"
+    assert busy.value.public_message == "A routine is using this playlist. Try again."
+
+
+def test_a_routine_moved_while_its_lock_was_taken_keeps_its_message(threaded_app):
+    rows = [SimpleNamespace(target_playlist_id="before"), SimpleNamespace(target_playlist_id="after")]
+
+    with (
+        patch.object(SchedulerService, "get_schedule", autospec=True, side_effect=rows),
+        pytest.raises(ScheduleError) as moved,
+    ):
+        SchedulerService.delete_schedule(1, 1)
+
+    assert moved.value.public_message == "Schedule changed while it was being updated. Try again."
