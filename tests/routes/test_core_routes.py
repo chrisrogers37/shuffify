@@ -1,10 +1,12 @@
 """OAuth consent, callback/session renewal, safe notices, and native logout."""
 
+import json
 import logging
 import time
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from shuffify.services.auth_service import decrypt_session_token
 from shuffify.services.token_service import TokenService
@@ -60,6 +62,37 @@ class TestLoginRoute:
             after = dict(sess)
         assert after.pop("oauth_state")
         assert after == before
+
+    @pytest.mark.parametrize("query", ["?legal_consent=1", ""])
+    @patch("shuffify.routes.core.AuthService", autospec=True)
+    def test_a_sign_in_started_from_another_site_changes_nothing(self, mock_auth_svc, auth_client, query):
+        with auth_client.session_transaction() as sess:
+            before = dict(sess)
+
+        resp = auth_client.get(f"/login{query}", headers={"Sec-Fetch-Site": "cross-site"})
+
+        assert resp.status_code == 302
+        assert resp.headers["Location"] == "/"
+        mock_auth_svc.get_auth_url.assert_not_called()
+        with auth_client.session_transaction() as sess:
+            assert dict(sess) == before
+
+    @pytest.mark.parametrize(
+        "headers",
+        [{"Sec-Fetch-Site": "same-origin"}, {"Sec-Fetch-Site": "same-site"}, {"Sec-Fetch-Site": "none"}, {}],
+        ids=["same-origin", "same-site", "none", "no-header"],
+    )
+    @patch("shuffify.routes.core.AuthService", autospec=True)
+    def test_a_sign_in_started_on_the_site_or_from_the_address_bar_goes_to_spotify(
+        self, mock_auth_svc, db_app, headers
+    ):
+        mock_auth_svc.get_auth_url.return_value = "https://accounts.spotify.com/authorize?test=1"
+        with db_app.test_client() as client:
+            resp = client.get("/login?legal_consent=1", headers=headers)
+
+            assert resp.headers["Location"] == "https://accounts.spotify.com/authorize?test=1"
+            with client.session_transaction() as sess:
+                assert sess["oauth_state"] == mock_auth_svc.get_auth_url.call_args.kwargs["state"]
 
     @patch("shuffify.routes.core.AuthService")
     def test_auth_error_during_login_redirects(self, mock_auth_svc, db_app):
@@ -310,19 +343,65 @@ class TestCallbackRoute:
                 if pre_auth_sid is not None:
                     assert post_auth_sid != pre_auth_sid
 
-    @patch("shuffify.routes.core.AuthService")
-    def test_auth_failure_during_callback(self, mock_auth_svc, db_app):
+    @pytest.mark.parametrize("failing_step", ["exchange_code_for_token", "authenticate_and_get_user"])
+    @patch("shuffify.routes.core.AuthService", autospec=True)
+    def test_a_failed_sign_in_keeps_the_signed_in_session(self, mock_auth_svc, auth_client, failing_step):
         from shuffify.services import AuthenticationError
 
-        mock_auth_svc.exchange_code_for_token.side_effect = AuthenticationError(
-            "invalid code"
-        )
+        getattr(mock_auth_svc, failing_step).side_effect = AuthenticationError("invalid code")
+        with auth_client.session_transaction() as sess:
+            before = dict(sess)
+            sess["oauth_state"] = "valid_state"
+        assert {"spotify_token", "user_data"} <= before.keys()
 
-        with db_app.test_client() as client:
-            with client.session_transaction() as sess:
-                sess["oauth_state"] = "valid_state"
-            resp = client.get("/callback?code=bad_code&state=valid_state")
-            assert resp.status_code == 302
+        resp = auth_client.get("/callback?code=bad_code&state=valid_state")
+
+        assert resp.status_code == 302
+        assert resp.headers["Location"] == "/"
+        with auth_client.session_transaction() as sess:
+            after = dict(sess)
+        assert after.pop("auth_notice") == "authentication_failed"
+        assert after == before
+
+    @pytest.mark.parametrize("signed_in", [True, False], ids=["signed-in", "no-sign-in"])
+    def test_a_sign_in_that_fails_after_a_token_refresh_keeps_the_session(
+        self, request, db_app, monkeypatch, signed_in
+    ):
+        """The profile request answers 401, the refresh is accepted, and it answers 401 again."""
+        client = request.getfixturevalue("auth_client") if signed_in else db_app.test_client()
+        grants, profile_reads = [], []
+
+        def spotify(url, **kwargs):
+            grant = (kwargs.get("data") or {}).get("grant_type")
+            if grant is None:
+                profile_reads.append(url)
+                status, body = 401, {"error": {"status": 401, "message": "The access token expired"}}
+            else:
+                grants.append(grant)
+                status, body = 200, {"access_token": f"{grant}-access", "token_type": "Bearer", "expires_in": 3600}
+                if grant == "authorization_code":
+                    body["refresh_token"] = "new-refresh"
+            reply = requests.Response()
+            reply.status_code, reply._content = status, json.dumps(body).encode()
+            return reply
+
+        monkeypatch.setattr("shuffify.spotify.auth.requests.post", spotify)
+        monkeypatch.setattr(
+            "requests.sessions.Session.request", lambda self, method, url, **kwargs: spotify(url, **kwargs)
+        )
+        with client.session_transaction() as sess:
+            before = dict(sess)
+            sess["oauth_state"] = "valid_state"
+
+        resp = client.get("/callback?code=new_code&state=valid_state")
+
+        assert resp.headers["Location"] == "/"
+        assert grants == ["authorization_code", "refresh_token"]
+        assert profile_reads == ["https://api.spotify.com/v1/me"] * 2
+        with client.session_transaction() as sess:
+            after = dict(sess)
+        assert after.pop("auth_notice") == "authentication_failed"
+        assert after == before
 
     def test_callback_does_not_log_auth_code(self, db_app, caplog):
         """Authorization code must not appear in log output."""

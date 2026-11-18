@@ -38,7 +38,7 @@ def _is_specd(call):
 
 # file -> number of unspec'd stand-ins still to convert. May only decrease.
 # Regenerate with: python -m pytest tests/test_mock_spec_contract.py -q
-BASELINE = {'routes/test_core_routes.py': 11,
+BASELINE = {'routes/test_core_routes.py': 10,
  'routes/test_settings_routes.py': 2,
  'routes/test_workshop_external_routes.py': 1,
  'routes/test_workshop_search_routes.py': 1,
