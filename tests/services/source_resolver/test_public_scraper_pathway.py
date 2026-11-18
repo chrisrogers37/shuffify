@@ -692,12 +692,12 @@ class TestResolve:
         assert mock_get.call_count == 2
 
     @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
-    def test_both_strategies_fail(self, mock_get, pathway, mock_source):
+    def test_both_strategies_find_no_tracks(self, mock_get, pathway, mock_source):
         mock_get.return_value = Mock(status_code=200, text="<html></html>")
 
         result = pathway.resolve(mock_source)
-        assert result.success is False
-        assert "no tracks" in result.error_message.lower()
+        assert result.success is True
+        assert result.track_uris == []
 
     @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
     def test_http_error(self, mock_get, pathway, mock_source):
@@ -766,8 +766,8 @@ class TestCaching:
             assert result.success is True
             assert len(result.track_uris) == 2
 
-    def test_cache_hit_empty_returns_failure(self, mock_source, db_app):
-        """Cached empty result returns failure."""
+    def test_cache_hit_empty_returns_empty_result(self, mock_source, db_app):
+        """Cached empty result returns an empty result, not a failure."""
         from datetime import datetime, timedelta, timezone
 
         from shuffify.models.db import (
@@ -789,7 +789,8 @@ class TestCaching:
 
             pathway = PublicScraperPathway()
             result = pathway.resolve(mock_source)
-            assert result.success is False
+            assert result.success is True
+            assert result.track_uris == []
 
     @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
     def test_cache_miss_fetches_and_stores(self, mock_get, mock_source, db_app):
@@ -857,7 +858,7 @@ class TestCaching:
             assert "spotify:track:oldoldoldoldoldoldoldold" not in result.track_uris
 
     @patch("shuffify.services.source_resolver.public_scraper_pathway.requests.get")
-    def test_failed_scrape_caches_empty(self, mock_get, mock_source, db_app):
+    def test_empty_scrape_caches_empty(self, mock_get, mock_source, db_app):
         """A confirmed page with no tracks caches an empty result."""
         from shuffify.models.db import (
             ScrapedPlaylistCache,
@@ -868,7 +869,7 @@ class TestCaching:
 
             pathway = PublicScraperPathway()
             result = pathway.resolve(mock_source)
-            assert result.success is False
+            assert result.success is True
 
             # Verify empty was cached
             row = ScrapedPlaylistCache.query.filter_by(playlist_id="pl_test123").first()
@@ -990,7 +991,7 @@ class TestCachePoisoningRegression:
             pathway = PublicScraperPathway()
             result = pathway.resolve(mock_source)
 
-            assert result.success is False
+            assert result.success is True
             row = ScrapedPlaylistCache.query.filter_by(playlist_id="pl_test123").first()
             assert row is not None
             assert len(row.track_uris) == 0
