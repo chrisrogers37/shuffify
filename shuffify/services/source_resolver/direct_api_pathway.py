@@ -102,8 +102,9 @@ class DirectAPIPathway:
             t["uri"] for t in tracks if t.get("uri")
         ]
 
-        if not uris:
-            # Empty result — likely Spotify withholding the items
+        if not uris and source.source_type != "own":
+            # Spotify withholds the items of external playlists, so an empty
+            # answer means no tracks only for the user's own playlist.
             logger.info(
                 "DirectAPI returned empty tracks for %s "
                 "(likely API restriction)",
