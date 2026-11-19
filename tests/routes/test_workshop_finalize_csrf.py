@@ -134,7 +134,7 @@ def test_other_json_routes_keep_generic_csrf_response(
     assert response.get_json() == {
         "success": False,
         "category": "error",
-        "error_code": "invalid_request",
+        "error_code": "session_verification_expired",
         "message": "Your request could not be verified. Please refresh the page and try again.",
     }
 
@@ -147,6 +147,6 @@ def test_logout_csrf_rejection_returns_json_error(csrf_client):
     assert response.get_json() == {
         "success": False,
         "category": "error",
-        "error_code": "invalid_request",
+        "error_code": "session_verification_expired",
         "message": "Your request could not be verified. Please refresh the page and try again.",
     }

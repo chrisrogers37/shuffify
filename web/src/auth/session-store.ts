@@ -8,6 +8,7 @@ export function createSessionStore(
 ) {
   let state: SessionState = { status: "pending" };
   let pending: Promise<void> | undefined;
+  let revalidating: Promise<SessionContext | null> | undefined;
   const listeners = new Set<() => void>();
   const update = (value: SessionState) => {
     state = value;
@@ -43,6 +44,21 @@ export function createSessionStore(
     refresh: () => {
       update({ status: "pending" });
       return load();
+    },
+    /** Reads the session again while the current snapshot stays in place; null when the read fails. */
+    revalidate: () => {
+      revalidating ??= fetchSession()
+        .then(
+          (session) => {
+            update({ status: "ready", session });
+            return session;
+          },
+          () => null,
+        )
+        .finally(() => {
+          revalidating = undefined;
+        });
+      return revalidating;
     },
     consumeNotice: () => {
       if (state.status === "ready" && state.session.notice)
