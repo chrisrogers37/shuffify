@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import update
+from sqlalchemy.exc import OperationalError
 
 from shuffify.models.db import JobExecution, User, db
 
@@ -19,10 +20,10 @@ def queue(db_app):
     return OperationRepository(), user.id
 
 
-def worker(db_app, repository, handlers):
+def worker(db_app, repository, handlers, heartbeat_interval=0):
     from shuffify.worker import OperationWorker
 
-    return OperationWorker(db_app, repository=repository, handlers=handlers, heartbeat_interval=0)
+    return OperationWorker(db_app, repository=repository, handlers=handlers, heartbeat_interval=heartbeat_interval)
 
 
 def test_worker_finishes_the_accepted_row_and_preserves_the_result(db_app, queue):
@@ -201,3 +202,69 @@ def test_idle_worker_claims_queued_work_on_timeout_without_a_notification(db_app
     runner._serve_waiting()
     assert timeouts[1:] == [IDLE_POLL_SECONDS] * 2
     assert repository.get(accepted[0].id).state == "succeeded"
+
+
+def test_queue_loop_survives_a_database_error_and_serves_the_next_item(db_app, queue, monkeypatch):
+    repository, user_id = queue
+    accepted = repository.enqueue(kind="example", user_id=user_id, targets=["playlist-a"], payload={"version": 1})
+    claim, failures = repository.claim, []
+
+    def claim_after_one_error(**kwargs):
+        if not failures:
+            failures.append(True)
+            raise OperationalError("SELECT next operation", {}, Exception("database unavailable"))
+        return claim(**kwargs)
+
+    def execute(runtime):
+        runner.request_stop()
+        return {"success": True}
+
+    monkeypatch.setattr(repository, "claim", claim_after_one_error)
+    runner = worker(db_app, repository, {"example": execute})
+    wait, reported = runner._wake.wait, []
+
+    def observed_wait(timeout=None):
+        reported.append(runner._control_status().get("queue_errors"))
+        return wait(timeout)
+
+    runner._wake.wait = observed_wait
+    runner._serve_waiting()
+    assert reported == [0, 1]
+    assert runner._control_status()["queue_errors"] == 0
+    assert repository.get(accepted.id).state == "succeeded"
+
+
+def test_database_error_after_the_claim_returns_the_operation_to_the_queue(db_app, queue, monkeypatch):
+    repository, user_id = queue
+    accepted = repository.enqueue(kind="example", user_id=user_id, targets=["playlist-a"], payload={"version": 1})
+    get = repository.get
+
+    def unavailable_once(operation_id):
+        monkeypatch.setattr(repository, "get", get)
+        raise OperationalError("SELECT operation", {}, Exception("database unavailable"))
+
+    monkeypatch.setattr(repository, "get", unavailable_once)
+    with pytest.raises(OperationalError):
+        worker(db_app, repository, {}).run_once()
+    assert repository.get(accepted.id).state == "queued"
+
+
+def test_heartbeat_retries_a_failed_renewal_before_giving_up_the_lease(db_app, queue, monkeypatch):
+    repository, user_id = queue
+    accepted = repository.enqueue(kind="example", user_id=user_id, targets=["playlist-a"], payload={"version": 1})
+    renewals, renewed = [], threading.Event()
+
+    def renew(lease):
+        renewals.append(lease.operation_id)
+        if len(renewals) <= 2:
+            raise OperationalError("UPDATE lease", {}, Exception("database unavailable"))
+        renewed.set()
+
+    def execute(runtime):
+        renewed.wait(timeout=2)
+        return {"success": True}
+
+    monkeypatch.setattr(repository, "renew", renew)
+    assert worker(db_app, repository, {"example": execute}, heartbeat_interval=0.01).run_once() is True
+    assert renewed.is_set()
+    assert repository.get(accepted.id).state == "succeeded"

@@ -64,6 +64,9 @@ def test_private_control_auth_health_and_batched_memory_read(private_server):
         assert controller.ids[-1] == [1, 2]
         private = client.health()
         assert private["worker"]["running"] and private["scheduler"]["leader"]
+        state["queue_errors"] = 1
+        assert http.get(server.url + "/health", timeout=1).status_code == 503
+        state["queue_errors"] = 0
         state["stopping"] = True
         assert http.get(server.url + "/health", timeout=1).status_code == 503
 

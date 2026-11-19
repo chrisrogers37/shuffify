@@ -128,7 +128,8 @@ class WorkerControlServer:
         worker = self.worker_status()
         # A replacement must serve while the incumbent holds scheduler leadership.
         # Private control reports leadership independently; only the leader schedules.
-        return bool(worker.get("running") and not worker.get("stopping"))
+        # A queue loop retrying database errors is not ready.
+        return bool(worker.get("running") and not worker.get("stopping") and not worker.get("queue_errors"))
 
     def start(self):
         if self._closed:
