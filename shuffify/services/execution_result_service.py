@@ -7,11 +7,13 @@ exception text must never reach ``JobExecution.result_json``.
 from collections import Counter
 from copy import deepcopy
 
+from shuffify.enums import JOB_STEPS, JobType
+
 VERSION = 1
 MAX_STEPS = 4
 MAX_FACTS = 12
 MAX_ID = 128
-OPERATIONS = frozenset({"raid", "shuffle", "raid_and_shuffle", "raid_and_drip", "rotate", "drip"})
+OPERATIONS = frozenset(JobType)
 STEPS = frozenset({"raid", "shuffle", "rotate", "drip"})
 STATUSES = frozenset({"complete", "partial", "unknown", "failed", "restored", "not_started", "pending"})
 FACT_STATUSES = frozenset({"complete", "failed", "unknown", "restored", "not_required"})
@@ -22,7 +24,6 @@ COUNTS = frozenset({
 })
 RESOURCE_KINDS = frozenset({"target", "collection", "archive"})
 BOOKKEEPING = frozenset({"pending_stage", "pending_promotion", "pending_restore", "execution_record"})
-COMPOSITE_STEPS = {"raid_and_shuffle": ("raid", "shuffle"), "raid_and_drip": ("raid", "drip")}
 
 
 def _choice(value, choices):
@@ -193,7 +194,7 @@ def build_live_execution_detail(operation, execution_id, target_id, *, execution
     if not steps:
         raise ValueError("No execution steps")
     if run_state == "running":
-        for pending in COMPOSITE_STEPS.get(operation.kind, ())[len(steps):]:
+        for pending in JOB_STEPS.get(operation.kind, ())[len(steps):]:
             steps.append({"step": pending, "status": "pending", "counts": {}, "resources": [], "bookkeeping": []})
     outcome = operation.outcome()["aggregate_status"]
     if run_state == "running" and outcome == "complete":
