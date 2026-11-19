@@ -163,3 +163,16 @@ def test_revision_ignores_run_tracking_but_includes_timezone():
     assert schedule_revision(schedule) == before
     schedule.timezone = "UTC"
     assert schedule_revision(schedule) != before
+
+
+def test_revision_of_null_sources_and_options_is_fixed():
+    """Clients and the worker compare stored revisions, so a legacy row's value must not move."""
+    from types import SimpleNamespace
+
+    schedule = SimpleNamespace(
+        id=1, user_id=2, job_type="shuffle", target_playlist_id="target",
+        target_playlist_name="Target", source_playlist_ids=None, algorithm_name="BasicShuffle",
+        algorithm_params=None, schedule_type="interval", schedule_value="daily", timezone=None,
+        is_enabled=True,
+    )
+    assert schedule_revision(schedule) == "9e79cb78a1aef1b3f5254294c3295be14343310a1b180edcd1a322daf242fa21"

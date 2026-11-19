@@ -7,23 +7,10 @@ from flask import current_app, has_app_context
 from sqlalchemy import event, inspect, text
 from sqlalchemy.orm import Session
 
+from shuffify.services.schedule_utils import DEFINITION_COLUMNS
+
 logger = logging.getLogger(__name__)
-_FIELDS = frozenset(
-    (
-        "user_id",
-        "job_type",
-        "target_playlist_id",
-        "target_playlist_name",
-        "source_playlist_ids",
-        "algorithm_name",
-        "algorithm_params",
-        "schedule_type",
-        "schedule_value",
-        "timezone",
-        "is_enabled",
-        "created_at",
-    )
-)
+_FIELDS = frozenset((*DEFINITION_COLUMNS, "user_id", "is_enabled", "created_at"))
 _KEY = "schedule_definition_notification"
 _installed = False
 
