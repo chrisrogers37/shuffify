@@ -62,7 +62,7 @@
   },
   "overrides": {
     "ts-json-schema-generator": {
-      "glob": "^14.0.4"
+      "glob": "^14.0.6"
     }
   }
 }
