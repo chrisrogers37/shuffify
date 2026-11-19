@@ -493,7 +493,7 @@ def handle_csrf_error(error):
         "Your request could not be verified. "
         "Please refresh the page and try again."
     )
-    return json_error_response(message, 400)
+    return json_error_response(message, 400, error_code="session_verification_expired")
 
 
 def handle_bad_request(error):
