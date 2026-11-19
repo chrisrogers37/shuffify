@@ -4,6 +4,7 @@ from pydantic import ValidationError
 
 from shuffify.routes.queue import AdmissionRejected, enqueue_command
 from shuffify.services.operations.commands.routine_capture import (
+    DIRECT_MODELS,
     CaptureNotFound,
     CaptureRejected,
     capture_direct,
@@ -34,7 +35,7 @@ def admit_schedule(user, schedule_id, *, reviewed, on_rejection):
 
 def admit_direct(user, playlist_id, kind, *, source_playlist_ids=None, reviewed=None, on_rejection):
     """Reserve the captured collection/archive without authenticating Spotify."""
-    operation_kind = {"raid": "raid_now", "drip": "drip_now", "raid_and_drip": "raid_and_drip"}[kind]
+    operation_kind = DIRECT_MODELS[kind].kind
 
     def build(storage):
         return _capture(
