@@ -11,6 +11,7 @@ import {
   draftFromSettings,
   isDirty,
   loadSettings,
+  maxSnapshotLimit,
   saveSettings,
   settingsProblem,
   validateDraft,
@@ -331,7 +332,7 @@ export function SettingsPage() {
                     <Field
                       id="max_snapshots_per_playlist"
                       label={labels.max_snapshots_per_playlist}
-                      help="Keep 1–50 snapshots. The oldest is removed when the limit is reached."
+                      help={`Keep 1–${maxSnapshotLimit} snapshots. The oldest is removed when the limit is reached.`}
                       {...(fields.max_snapshots_per_playlist
                         ? { error: fields.max_snapshots_per_playlist }
                         : {})}
@@ -343,7 +344,7 @@ export function SettingsPage() {
                           type="number"
                           name="max_snapshots_per_playlist"
                           min="1"
-                          max="50"
+                          max={maxSnapshotLimit}
                           step="1"
                           required
                           className="sh-settings-limit"

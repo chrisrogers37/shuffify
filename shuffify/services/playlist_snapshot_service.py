@@ -15,8 +15,9 @@ from shuffify.services.base import get_owned_entity, safe_commit
 
 logger = logging.getLogger(__name__)
 
-# Default max snapshots if UserSettings is unavailable
-DEFAULT_MAX_SNAPSHOTS_PER_PLAYLIST = 50
+# The snapshot limit for a user with no settings row, and for a settings read
+# that fails without a caller's session.
+FALLBACK_SNAPSHOTS_LIMIT = 50
 
 
 class PlaylistSnapshotError(Exception):
@@ -299,7 +300,7 @@ class PlaylistSnapshotService:
         Get the max snapshots setting for a user.
 
         Reads from UserSettings if available,
-        otherwise returns the default.
+        otherwise returns FALLBACK_SNAPSHOTS_LIMIT.
 
         Args:
             user_id: The internal database user ID.
@@ -319,11 +320,18 @@ class PlaylistSnapshotService:
                 and settings.max_snapshots_per_playlist
             ):
                 return settings.max_snapshots_per_playlist
-        except (ImportError, Exception):
+        except (ImportError, Exception) as err:
             if session is not None:
                 raise
+            # Database errors can embed passwords, DSNs and hostnames; log only their type.
+            logger.warning(
+                "Could not read the snapshot limit for user %s; falling back to %s (%s)",
+                user_id,
+                FALLBACK_SNAPSHOTS_LIMIT,
+                type(err).__name__,
+            )
 
-        return DEFAULT_MAX_SNAPSHOTS_PER_PLAYLIST
+        return FALLBACK_SNAPSHOTS_LIMIT
 
     @staticmethod
     def is_auto_snapshot_enabled(user_id: int, *, session=None) -> bool:
