@@ -408,6 +408,7 @@ def test_registration_attention_retries_only_the_exact_saved_routine(
         assert response.status == 200, response.text()
         body = response.json()
         body["state"] = "Saved—registration needs attention"
+        body["state_code"] = "needs_attention"
         body["registration"] = {"status": "needs_attention", "next_run_at": None}
         route.fulfill(response=response, json=body)
 
