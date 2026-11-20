@@ -25,6 +25,12 @@ def test_each_schedule_column_is_classified_exactly_once():
     assert sorted(columns) == sorted((*DEFINITION_COLUMNS, *extras, *bookkeeping))
 
 
+def test_the_definition_fields_are_the_definition_columns_user_id_is_enabled_and_created_at():
+    """A change to any of these fields stamps a definition change and notifies the worker."""
+    module = importlib.import_module("shuffify.services.schedule_notifications")
+    assert module._FIELDS == {*DEFINITION_COLUMNS, "user_id", "is_enabled", "created_at"}
+
+
 def test_orm_insert_update_delete_pokes_only_after_outer_commit(schedule, db_app, monkeypatch):
     module = importlib.import_module("shuffify.services.schedule_notifications")
     sent, poked = [], []
