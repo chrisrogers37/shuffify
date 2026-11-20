@@ -22,6 +22,7 @@ import sqlalchemy as sa
 from shuffify.enums import JobType, PendingRaidStatus, ScheduleType, SnapshotType
 from shuffify.models.db import db
 from shuffify.services.operations.commands.routine_schemas import JobKind
+from shuffify.services.playlist_snapshot_service import FALLBACK_SNAPSHOTS_LIMIT
 from shuffify.services.user_settings_service import MAX_SNAPSHOTS_LIMIT
 
 SCHEMAS = Path(__file__).resolve().parents[2] / "web" / "schemas"
@@ -89,6 +90,9 @@ def test_each_copy_of_the_snapshot_cap_is_the_cap():
     assert maxima, "No schema under web/schemas defines SnapshotLimit"
     for path, maximum in maxima.items():
         assert maximum == MAX_SNAPSHOTS_LIMIT, path
+    assert FALLBACK_SNAPSHOTS_LIMIT >= MAX_SNAPSHOTS_LIMIT, (
+        "Keep the fallback at or above the cap: snapshots are pruned to it when a user's limit can't be read"
+    )
 
 
 def test_each_count_check_is_its_range():
