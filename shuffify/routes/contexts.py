@@ -30,11 +30,10 @@ from shuffify.services.page_context_service import (
     execution_row,
     playlist_row,
     recently_loaded,
-    routine_row,
 )
 from shuffify.services.playlist_preference_service import PlaylistPreferenceService
 from shuffify.services.playlist_service import PlaylistAccessError, PlaylistNotFoundError
-from shuffify.services.routine_activation_service import schedule_payloads
+from shuffify.services.routine_activation_service import ROUTINE_STATES, schedule_payloads
 from shuffify.services.scheduler_service import SchedulerService
 
 logger = logging.getLogger(__name__)
@@ -124,7 +123,8 @@ def routines_context(api=None, user=None):
     """Read full routine rows and the editable playlist names used by their forms."""
     return json_success(
         "Routines loaded.",
-        routines=[routine_row(row) for row in schedule_payloads(SchedulerService.get_user_schedules(user.id))],
+        routines=[{**row, "state_label": ROUTINE_STATES[row["state"]]}
+                  for row in schedule_payloads(SchedulerService.get_user_schedules(user.id))],
         playlists=[{"id": row["id"], "name": row["name"]} for row in PlaylistService(api).get_user_playlists()],
     )
 

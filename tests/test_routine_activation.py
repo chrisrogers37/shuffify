@@ -327,22 +327,22 @@ def test_deleted_replay_keeps_original_identity(world):
     db.session.delete(Schedule.query.get(accepted["schedule_id"]))
     db.session.commit()
     replay, status = _activate(user, api, request, review)
-    assert status == 200 and (replay["state"], replay["state_code"]) == ("Deleted", "deleted")
+    assert status == 200 and replay["state"] == "deleted" and "state_code" not in replay
     assert replay["schedule_id"] == accepted["schedule_id"]
     assert replay["dependency_revision"] == configuration_revision(read_state(user.id, "target"))
     assert Schedule.query.count() == 0
 
 
-@pytest.mark.parametrize(("enabled", "registration", "label", "code"), [
-    (True, "registered", "Active", "active"),
-    (False, "paused", "Paused", "paused"),
-    (True, "needs_attention", "Saved—registration needs attention", "needs_attention"),
+@pytest.mark.parametrize(("enabled", "registration", "code"), [
+    (True, "registered", "active"),
+    (False, "paused", "paused"),
+    (True, "needs_attention", "needs_attention"),
 ])
-def test_each_state_sends_its_code_beside_its_unchanged_label(world, enabled, registration, label, code):
+def test_each_state_sends_its_code_as_state(world, enabled, registration, code):
     user, _, _ = world
     routine = add_routine(user, "shuffle", enabled=enabled)
     payload = _schedule_payload(routine, {"status": registration, "next_run_at": None, "effective_timezone": None})
-    assert (payload["state"], payload["state_code"]) == (label, code)
+    assert payload["state"] == code and "state_code" not in payload
 
 
 def test_stale_edit_and_final_merged_validation(world):
