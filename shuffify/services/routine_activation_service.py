@@ -34,6 +34,13 @@ INTENT_AGE_S = 24 * 60 * 60
 RECEIPT_RETENTION = timedelta(days=7)
 LOCK_WAIT_S = 2.0
 DEFINITION_FIELDS = frozenset(DEFINITION_COLUMNS)
+# Each routine state's code and its label, the text the routine pages show for it.
+ROUTINE_STATES = {
+    "active": "Active",
+    "paused": "Paused",
+    "needs_attention": "Saved—registration needs attention",
+    "deleted": "Deleted",
+}
 
 
 def _error(code, status, message, field=None, **extra):
@@ -267,22 +274,27 @@ def _validate_submitted(definition, target_id):
         raise DefinitionError("definition.source_playlist_ids", "Use the reviewed legacy source IDs.")
 
 
+def _state_fields(code):
+    """Send a routine state's label as its state, with its code beside it as state_code."""
+    return {"state": ROUTINE_STATES[code], "state_code": code}
+
+
 def _schedule_payload(schedule, registration=None):
     from shuffify.scheduler import get_schedule_registration
 
     if registration is None:
         registration = get_schedule_registration(schedule)
     if registration["status"] == "registered" and schedule.is_enabled:
-        state = "Active"
+        code = "active"
     elif registration["status"] == "paused" and not schedule.is_enabled:
-        state = "Paused"
+        code = "paused"
     else:
-        state = "Saved—registration needs attention"
+        code = "needs_attention"
     return {
         "schedule_id": schedule.id, "schedule": schedule.to_dict(),
         "definition": stored_definition(schedule), "schedule_revision": schedule_revision(schedule),
         "timing": serialize_timing(schedule, effective_timezone=registration["effective_timezone"]),
-        "registration": registration, "state": state,
+        "registration": registration, **_state_fields(code),
     }
 
 
@@ -311,7 +323,7 @@ def _accepted_locked(user_id, target_id, receipt, *, replayed):
         return {
             "success": True, "accepted": True, "replayed": replayed,
             "schedule_id": receipt.schedule_id, "accepted_at": receipt.accepted_at.isoformat(),
-            "dependency_revision": revision, "state": "Deleted", "schedule": None,
+            "dependency_revision": revision, **_state_fields("deleted"), "schedule": None,
         }, 200
     return {
         "success": True, "accepted": True, "replayed": replayed,

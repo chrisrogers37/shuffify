@@ -25,6 +25,7 @@ from shuffify.services.operations.repository import OperationRepository
 from shuffify.services.operations.wake import direct_url
 from shuffify.services.schedule_utils import schedule_revision
 from shuffify.services.scheduled_admission import (
+    GRACE_SECONDS,
     AdmissionResult,
     admit_scheduled,
     build_cadence,
@@ -32,10 +33,10 @@ from shuffify.services.scheduled_admission import (
     recovery_evidence,
     utc,
 )
+from shuffify.services.worker_control import valid_ids
 
 logger = logging.getLogger(__name__)
 LOCK_ID = 88442211
-GRACE_SECONDS = 3600
 
 
 def now_utc():
@@ -45,7 +46,7 @@ def now_utc():
 class DurableAdmissionExecutor(BaseExecutor):
     """APScheduler 3.x extension: pass exact run_times to local queue admission."""
 
-    def __init__(self, *, clock=now_utc, max_workers=4):
+    def __init__(self, *, max_workers, clock=now_utc):
         super().__init__()
         self.clock = clock
         self._pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="schedule-admission")
@@ -285,7 +286,7 @@ class WorkerScheduler:
                 jobstores={"default": MemoryJobStore()},
                 executors={
                     "default": DurableAdmissionExecutor(
-                        clock=self.clock, max_workers=self.app.config.get("SCHEDULER_THREAD_POOL_SIZE", 4)
+                        clock=self.clock, max_workers=self.app.config["SCHEDULER_THREAD_POOL_SIZE"]
                     )
                 },
                 job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": GRACE_SECONDS},
@@ -437,7 +438,7 @@ class WorkerScheduler:
 
     def registration_snapshot(self, schedule_ids):
         ids = list(schedule_ids)
-        if len(ids) > 5000 or any(type(value) is not int or value < 1 for value in ids):
+        if not valid_ids(ids):
             raise ValueError("Registration reads require bounded positive schedule IDs")
         with self._state_lock:
             running = (

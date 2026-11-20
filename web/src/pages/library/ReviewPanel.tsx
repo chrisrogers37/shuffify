@@ -1,12 +1,14 @@
 import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { Link } from "react-router";
+import { unsuccessfulOperationStates } from "../../api/contracts";
 import type { Operation } from "../../api/contracts";
+import { record } from "../../api/guards";
 import { useSession } from "../../auth/SessionProvider";
 import { Button } from "../../components/ui/controls";
 import { State } from "../../components/ui/States";
 import { useTasks } from "../../components/tasks/TaskPanel";
 import type { LibraryController } from "./controller";
-import { resultFacts, record } from "./api";
+import { resultFacts } from "./api";
 import { OperationRestoration } from "../../components/results/OperationRestoration";
 import { useLibrary, useClock } from "./hooks";
 function Facts({ operation }: { operation: Operation }) {
@@ -312,10 +314,7 @@ export function ReviewPanel({
             r.status === "unknown" ||
             (id !== null &&
               (entry?.observation === "unavailable" ||
-                (op &&
-                  ["failed", "needs_attention", "rolled_back"].includes(
-                    op.state,
-                  ))))) && (
+                (op && unsuccessfulOperationStates.has(op.state))))) && (
             <section aria-label="Current state inspection">
               <Button
                 variant="secondary"

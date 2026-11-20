@@ -1,16 +1,15 @@
 import type { ApiClient, ApiResult } from "../../api/client.ts";
 import type { JsonRecord, RoutinesContext } from "../../api/contracts.ts";
 import { ProtocolError } from "../../api/errors.ts";
+import { digest, record } from "../../api/guards.ts";
 import {
   activationBody,
-  digest,
   normalizeRow,
   parseGuided,
   parseHistory,
   parseRoutines,
   parseSetup,
   playlistPath,
-  record,
 } from "./model.ts";
 import type {
   ActivationReply,

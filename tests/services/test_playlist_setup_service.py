@@ -287,8 +287,11 @@ def test_each_op_a_request_can_name_has_a_phase_a_review_and_what_it_affects():
     ops = {op for change in get_args(get_args(SetupChange)[0]) for op in get_args(change.model_fields["op"].annotation)}
     assert set(setup.PHASES) == ops
     assert {op for op in ops if not callable(getattr(setup._Review, f"_{op}", None))} <= set(setup.ASSET_OPS)
+    assert set(setup.ASSET_OPS) <= ops
     # _effects lists no routine for an op it has no branch for, so each op names what it affects, or None.
     assert set(setup.AFFECTS) == ops
+    # An asset op affects the routines that use its asset.
+    assert {op: setup.AFFECTS[op] for op in setup.ASSET_OPS} == {op: role for op, (role, _) in setup.ASSET_OPS.items()}
 
 
 def test_the_context_refuses_a_target_the_user_cannot_edit(user, api):

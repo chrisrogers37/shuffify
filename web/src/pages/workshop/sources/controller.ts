@@ -1,12 +1,17 @@
+import { terminalOperationStates } from "../../../api/contracts.ts";
 import type {
   JsonRecord,
   Operation,
   WorkshopTrack,
 } from "../../../api/contracts.ts";
-import { ApiRequestError, ProtocolError } from "../../../api/errors.ts";
+import {
+  ApiRequestError,
+  ProtocolError,
+  retryDeadline,
+} from "../../../api/errors.ts";
+import { inRange, record } from "../../../api/guards.ts";
 import type { AdmissionRequest } from "../../../operations/admissions.ts";
 import { getAdmissionRegistry } from "../../../operations/admissions.ts";
-import { terminalOperationStates } from "../../../operations/store.ts";
 import type { OperationStore } from "../../../operations/store.ts";
 import type { WorkshopController } from "../core/controller.ts";
 import type {
@@ -24,7 +29,6 @@ import {
   freeze,
   pendingTrack,
   prepareTasks,
-  record,
   records,
   removeArchiveCopy,
   sourceResult,
@@ -109,10 +113,7 @@ export function createSourcesController(
   };
   const errorPatch = (e: unknown) => ({
     error: message(e),
-    retryUntil:
-      e instanceof ApiRequestError && e.retryAfterMs !== null
-        ? Date.now() + e.retryAfterMs
-        : state.retryUntil,
+    retryUntil: retryDeadline(e, Date.now()) ?? state.retryUntil,
   });
   const cooling = () => Date.now() < state.retryUntil;
   let bootRelease: (() => void) | null = null,
@@ -155,10 +156,7 @@ export function createSourcesController(
       } as Partial<SourceState>);
     } catch (e) {
       if (reading.get(name) !== ticket) return;
-      const retryUntil =
-        e instanceof ApiRequestError && e.retryAfterMs !== null
-          ? Date.now() + e.retryAfterMs
-          : 0;
+      const retryUntil = retryDeadline(e, Date.now()) ?? 0;
       update({
         [name]: {
           ...state[name],
@@ -567,19 +565,13 @@ export function createSourcesController(
         ...(e instanceof ApiRequestError
           ? { result: JSON.parse(JSON.stringify(e.error)) as JsonRecord }
           : {}),
-        retryUntil:
-          a?.retryUntil ??
-          (e instanceof ApiRequestError && e.retryAfterMs !== null
-            ? Date.now() + e.retryAfterMs
-            : 0),
+        retryUntil: a?.retryUntil ?? retryDeadline(e, Date.now()) ?? 0,
       });
       update({
         retryUntil: Math.max(
           state.retryUntil,
           a?.retryUntil ?? 0,
-          e instanceof ApiRequestError && e.retryAfterMs !== null
-            ? Date.now() + e.retryAfterMs
-            : 0,
+          retryDeadline(e, Date.now()) ?? 0,
         ),
       });
       return false;
@@ -1695,32 +1687,44 @@ export function createSourcesController(
           )
         : Promise.resolve(false),
     saveCount: () => {
-      const n = Number(state.dripInput);
-      if (!Number.isInteger(n) || n < 1 || n > 50) {
-        update({ error: "Tracks per run must be 1–50." });
+      const n = Number(state.dripInput),
+        drip = state.status.value?.drip_count_range;
+      if (!drip) return Promise.resolve(false);
+      if (!inRange(n, drip)) {
+        update({ error: `Tracks per run must be ${drip[0]}–${drip[1]}.` });
         return Promise.resolve(false);
       }
-      return local(() => client.updateLink({ drip_count: n }), loadStatus);
-    },
-    toggleDrip: () =>
-      local(
-        () =>
-          client.updateLink({
-            drip_enabled: !state.status.value?.raid_link?.drip_enabled,
-          }),
+      return local(
+        () => client.updateLink({ drip_count: n }, drip),
         loadStatus,
-      ),
+      );
+    },
+    toggleDrip: () => {
+      const drip = state.status.value?.drip_count_range;
+      return drip
+        ? local(
+            () =>
+              client.updateLink(
+                { drip_enabled: !state.status.value?.raid_link?.drip_enabled },
+                drip,
+              ),
+            loadStatus,
+          )
+        : Promise.resolve(false);
+    },
     async updateSourceCount(id: number, n: number) {
-      const row = state.status.value?.sources.find((x) => x.id === id);
+      const row = state.status.value?.sources.find((x) => x.id === id),
+        range = state.status.value?.raid_count_range;
       if (
         !sourceConfigurationAllowed() ||
         !row ||
+        !range ||
         state.busy ||
         state.configurationUnknown ||
         !active()
       )
         return false;
-      if (!Number.isInteger(n) || n < 1 || n > 100 || n === row.raid_count) {
+      if (!inRange(n, range) || n === row.raid_count) {
         update({
           sourceCountInputs: {
             ...state.sourceCountInputs,

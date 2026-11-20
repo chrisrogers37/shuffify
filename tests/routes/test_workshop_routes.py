@@ -140,6 +140,41 @@ class TestWorkshopPreviewShuffle:
         )
         assert response.status_code == 400
 
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
+    @patch("shuffify.routes.workshop.ShuffleService")
+    def test_preview_refuses_a_section_count_outside_the_algorithm_range(
+        self,
+        mock_shuffle_svc,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
+    ):
+        """A section_count outside the algorithm's declared range is a 400, and nothing is shuffled."""
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
+
+        response = authenticated_client.post(
+            api_path("/workshop/playlist123/preview-shuffle"),
+            data=json.dumps(
+                {
+                    "algorithm": "BalancedShuffle",
+                    "section_count": "11",
+                    "tracks": _make_mock_playlist().tracks,
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert "BalancedShuffle takes 2 to 10 sections" in response.get_json()["message"]
+        mock_shuffle_svc.execute.assert_not_called()
+
 
 # =============================================================================
 # Commit Route Tests

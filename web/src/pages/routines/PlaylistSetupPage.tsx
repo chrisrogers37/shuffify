@@ -11,7 +11,12 @@ import {
   useSyncExternalStore,
 } from "react";
 import { Link, useLocation, useParams } from "react-router";
-import { ApiRequestError } from "../../api/errors";
+import {
+  terminalOperationStates,
+  unsuccessfulOperationStates,
+} from "../../api/contracts";
+import { retryDeadline } from "../../api/errors";
+import { record } from "../../api/guards";
 import { useServices, useSession } from "../../auth/SessionProvider";
 import { useAnnouncer } from "../../a11y/Announcer";
 import {
@@ -25,13 +30,12 @@ import { State } from "../../components/ui/States";
 import { useConfirm } from "../../components/tasks/ConfirmDialog";
 import { useNavigationBlocker } from "../../navigation/NavigationGuard";
 import { getOperationStore } from "../../operations/store";
-import { unconfirmedMutation } from "./model";
+import { countInputs, unconfirmedMutation } from "./model";
 import { createRoutineClient } from "./client";
 import {
   parseSetup,
   playlistPath,
   readContinuation,
-  record,
   stageChange,
 } from "./model";
 import type { SetupChange, SetupContext, SetupReview } from "./model";
@@ -66,6 +70,8 @@ const names: Record<string, string> = {
   unpair_archive: "Unpair archive",
   set_auto_archive: "Change automatic archiving",
 };
+// The ID is letters and digits, as the backend's PlaylistID requires; the
+// backend also caps its length at 255.
 function sourceId(value: string) {
   const text = value.trim(),
     uri = /^spotify:playlist:([A-Za-z0-9]+)$/u.exec(text);
@@ -208,9 +214,7 @@ export function PlaylistSetupPage() {
         }
       } else if (
         entry?.operation &&
-        ["failed", "rolled_back", "needs_attention"].includes(
-          entry.operation.state,
-        ) &&
+        unsuccessfulOperationStates.has(entry.operation.state) &&
         !current.unknown
       ) {
         current.refused =
@@ -430,8 +434,7 @@ export function PlaylistSetupPage() {
       const retained = admissions.getSnapshot().get(value.key);
       value.operationId = retained?.operationId ?? null;
       value.refused = !value.unknown && retained?.relation !== "original";
-      if (problem instanceof ApiRequestError && problem.retryAfterMs !== null)
-        value.retryAt = Date.now() + problem.retryAfterMs;
+      value.retryAt = retryDeadline(problem, Date.now()) ?? value.retryAt;
       setError(
         problem instanceof Error
           ? problem.message
@@ -566,8 +569,7 @@ export function PlaylistSetupPage() {
                         <Input
                           {...props}
                           type="number"
-                          min={1}
-                          max={100}
+                          {...countInputs(context).source}
                           value={String(
                             changes.find(
                               (change) =>
@@ -701,9 +703,7 @@ export function PlaylistSetupPage() {
                   : undefined,
                 active =
                   entry?.operation &&
-                  ["queued", "running", "compensating"].includes(
-                    entry.operation.state,
-                  );
+                  !terminalOperationStates.has(entry.operation.state);
               return (
                 <section
                   className="sh-setup-section sh-surface"
@@ -903,8 +903,7 @@ export function PlaylistSetupPage() {
                           <Input
                             {...props}
                             type="number"
-                            min={1}
-                            max={50}
+                            {...countInputs(context).drip}
                             value={String(
                               changes.find((value) => value.op === "set_drip")
                                 ?.drip_count ??

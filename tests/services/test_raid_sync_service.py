@@ -11,6 +11,7 @@ import pytest
 
 from shuffify.enums import JobType
 from shuffify.models.db import Schedule, UpstreamSource, db
+from shuffify.schemas.playlist_setup_requests import DRIP_COUNT_RANGE, RAID_COUNT_RANGE
 from shuffify.services.raid_sync_service import (
     RaidSyncError,
     RaidSyncService,
@@ -279,6 +280,8 @@ class TestGetRaidStatus:
         assert status["source_count"] == 0
         assert status["has_schedule"] is False
         assert status["sources"] == []
+        assert status["raid_count_range"] == list(RAID_COUNT_RANGE)
+        assert status["drip_count_range"] == list(DRIP_COUNT_RANGE)
 
     def test_status_unknown_user(self, db_app):
         with db_app.app_context():
@@ -287,6 +290,8 @@ class TestGetRaidStatus:
             )
             assert status["source_count"] == 0
             assert status["has_schedule"] is False
+            assert status["raid_count_range"] == list(RAID_COUNT_RANGE)
+            assert status["drip_count_range"] == list(DRIP_COUNT_RANGE)
 
 
 # =============================================================================

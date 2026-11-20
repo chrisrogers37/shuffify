@@ -19,7 +19,7 @@ import logging
 from dataclasses import dataclass
 from functools import partial
 
-from shuffify.enums import ActivityType
+from shuffify.enums import JOB_STEPS, ActivityType
 from shuffify.models.db import PlaylistPair, RaidPlaylistLink, Schedule, db
 from shuffify.schemas.playlist_setup_requests import DRIP_COUNT_RANGE, RAID_COUNT_RANGE, is_playlist_id
 from shuffify.services import signed_digest
@@ -28,7 +28,6 @@ from shuffify.services.api_response import busy_error
 from shuffify.services.base import ensure_private, safe_commit
 from shuffify.services.live_review_bindings import fingerprint
 from shuffify.services.live_review_scope import (
-    JOB_STEPS,
     STEP_ROWS,
     drip_forced,
     drip_override,

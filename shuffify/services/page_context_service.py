@@ -61,13 +61,10 @@ def dashboard_context(dashboard):
 
 
 def routine_row(payload):
-    """Add a machine state code while retaining the human-readable routine label."""
-    label = payload["state"]
-    return {
-        **payload,
-        "state": {"Active": "active", "Paused": "paused"}.get(label, "needs_attention"),
-        "state_label": label,
-    }
+    """Send the payload's state code as the row's state, with its label as state_label."""
+    row = {**payload, "state_label": payload["state"]}
+    row["state"] = row.pop("state_code")
+    return row
 
 
 def recently_loaded(history):

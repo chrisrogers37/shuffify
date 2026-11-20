@@ -8,6 +8,7 @@ import type {
   WorkshopTrack,
 } from "../../../api/contracts.ts";
 import { ProtocolError } from "../../../api/errors.ts";
+import { digest, record, trackURI } from "../../../api/guards.ts";
 import type {
   CommitBody,
   CurrentObservation,
@@ -17,13 +18,9 @@ import type {
   VisibilityReview,
   ReviewedAction,
 } from "./types.ts";
-export const record = (v: unknown): v is Record<string, unknown> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
 export const strings = (v: unknown): v is string[] =>
   Array.isArray(v) && v.every((u) => typeof u === "string");
 const nullable = (v: unknown) => v === null || typeof v === "string";
-export const trackURI = (v: unknown): v is string =>
-  typeof v === "string" && /^spotify:track:[A-Za-z0-9]{22}$/u.test(v);
 export function parseTrack(v: unknown, current = false): WorkshopTrack {
   if (
     !record(v) ||
@@ -149,8 +146,6 @@ function draft(v: unknown, target: string): NamedDraft {
     );
   return v as unknown as NamedDraft;
 }
-const digest = (v: unknown) =>
-  typeof v === "string" && /^[a-f0-9]{64}$/u.test(v);
 export function parseSnapshotReview(
   v: unknown,
   target: string,
@@ -199,6 +194,8 @@ export function parseSnapshotReview(
   return v as unknown as SnapshotRestoreReview;
 }
 export function createWorkshopClient(api: ApiClient, target: string) {
+  // A path check, not the PlaylistID rule: the target goes into the request
+  // path unencoded, so it may contain only letters, digits, "_" and "-".
   if (!/^[A-Za-z0-9_-]+$/u.test(target))
     throw new TypeError("Invalid playlist identifier.");
   const base = `/api/workshop/${target}`;

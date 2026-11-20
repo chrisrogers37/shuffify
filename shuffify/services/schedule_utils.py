@@ -17,8 +17,8 @@ from shuffify.services.live_review_bindings import fingerprint
 # Frequencies that support a time-of-day picker
 TIME_CAPABLE_FREQUENCIES = {"daily", "every_3d", "weekly"}
 
-# HH:MM pattern
-TIME_RE = re.compile(r"^\d{2}:\d{2}$")
+# A clock time: HH:MM from 00:00 to 23:59
+TIME_RE = re.compile(r"^([01][0-9]|2[0-3]):[0-5][0-9]$")
 
 
 def build_cron(schedule_value: str, schedule_time: str) -> str:
@@ -93,8 +93,6 @@ def normalize_timing(timing):
         if not isinstance(clock, str) or not TIME_RE.fullmatch(clock):
             raise ValueError("time must be HH:MM")
         hour, minute = (int(part) for part in clock.split(":"))
-        if hour > 23 or minute > 59:
-            raise ValueError("time must be HH:MM")
         weekday = "*"
         if kind == "weekly":
             weekday = timing.get("weekday")
