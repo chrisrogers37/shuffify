@@ -11,6 +11,8 @@ from jsonschema import Draft7Validator
 from shuffify.models.db import ActivityLog, JobExecution, PlaylistPreference, Schedule, User, db
 from shuffify.models.playlist import Playlist
 from shuffify.services import PlaylistNotFoundError, PlaylistService
+from shuffify.services.auth_notice import AUTH_NOTICE_MESSAGES
+from shuffify.services.operations.repository import ACTIVE_STATES, TERMINAL_STATES
 from tests.paths import api_path
 
 WEB = Path(__file__).resolve().parents[2] / "web"
@@ -103,6 +105,13 @@ def test_signed_out_callback_notice_is_consumed_once(client):
     assert "untrusted-query-text" not in first["notice"]["message"]
     second = check_response(client.get(api_path("/session")), "session-context")
     assert second["notice"] is None
+
+
+def test_schema_enums_match_the_python_notice_codes_and_operation_states():
+    session = json.loads((WEB / "schemas" / "session-context.schema.json").read_text())
+    operation = json.loads((WEB / "schemas" / "operation-context.schema.json").read_text())
+    assert set(session["definitions"]["AuthNoticeCode"]["enum"]) == set(AUTH_NOTICE_MESSAGES)
+    assert set(operation["definitions"]["OperationState"]["enum"]) == ACTIVE_STATES | TERMINAL_STATES
 
 
 @pytest.mark.parametrize("path,schema", [

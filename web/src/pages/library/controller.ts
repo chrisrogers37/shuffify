@@ -5,6 +5,10 @@ import {
   admissionUnknown,
 } from "../../operations/admissions.ts";
 import type { ApiClient } from "../../api/client.ts";
+import {
+  confirmedOperationStates,
+  terminalOperationStates,
+} from "../../api/contracts.ts";
 import type { JsonRecord, LibraryContext } from "../../api/contracts.ts";
 import type { SessionStore } from "../../auth/session-store.ts";
 import {
@@ -230,7 +234,7 @@ export function createLibraryController(
         )
       )
         return true;
-      return !op || !["succeeded", "failed", "rolled_back"].includes(op.state);
+      return !op || !confirmedOperationStates.has(op.state);
     });
   }
   async function begin(
@@ -474,13 +478,7 @@ export function createLibraryController(
     for (const r of state.receipts.values()) {
       if (r.operationId === null || applied.has(r.operationId)) continue;
       const op = operations.getSnapshot().get(r.operationId)?.operation;
-      if (
-        !op ||
-        !["succeeded", "failed", "rolled_back", "needs_attention"].includes(
-          op.state,
-        )
-      )
-        continue;
+      if (!op || !terminalOperationStates.has(op.state)) continue;
       applied.add(op.id);
       // Only verified terminal success may update the Library projection.
       if (op.state === "succeeded" && op.result?.success === true) {

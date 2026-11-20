@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { Link } from "react-router";
+import { unsuccessfulOperationStates } from "../../api/contracts";
 import type { Operation } from "../../api/contracts";
 import { useSession } from "../../auth/SessionProvider";
 import { Button } from "../../components/ui/controls";
@@ -312,10 +313,7 @@ export function ReviewPanel({
             r.status === "unknown" ||
             (id !== null &&
               (entry?.observation === "unavailable" ||
-                (op &&
-                  ["failed", "needs_attention", "rolled_back"].includes(
-                    op.state,
-                  ))))) && (
+                (op && unsuccessfulOperationStates.has(op.state))))) && (
             <section aria-label="Current state inspection">
               <Button
                 variant="secondary"
