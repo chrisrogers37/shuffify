@@ -39,18 +39,16 @@ test("row state normalization reads the state code only and checks exact identit
     registration: {},
     state: "paused",
   };
-  const reply = { ...row, state: "Paused", state_code: "paused" };
-  for (const value of [row, reply]) {
-    assert.equal(normalizeRow(value).state, "paused");
-    assert.equal(normalizeRow(value).state_label, "Paused");
-  }
+  assert.equal(normalizeRow(row).state, "paused");
+  assert.equal(normalizeRow(row).state_label, "Paused");
   assert.throws(() =>
     normalizeRow({ ...row, schedule: { ...row.schedule, id: 8 } }),
   );
   for (const value of [
     { ...row, state: "Paused" },
+    { ...row, state: "Paused", state_code: "paused" },
     { ...row, state: "maybe" },
-    { ...reply, state_code: "deleted" },
+    { ...row, state: "deleted" },
   ])
     assert.throws(() => normalizeRow(value));
 });
@@ -71,7 +69,7 @@ test("an activation reply's state is its code, a deleted replay's included", asy
           }),
       }),
     ).activate("target", { schedule_id: 7 });
-  const deleted = await activate({ state: "Deleted", state_code: "deleted" });
+  const deleted = await activate({ state: "deleted" });
   assert.equal(deleted.state, "deleted");
   await assert.rejects(activate({ state: "Deleted" }), {
     name: "ProtocolError",
