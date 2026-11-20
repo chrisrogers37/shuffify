@@ -1,5 +1,6 @@
 """Queued routine orchestration: frozen child choices and atomic acceptance, one execution identity."""
 
+import logging
 from datetime import datetime, timezone
 
 from pydantic import ValidationError
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from shuffify.enums import ActivityType, SnapshotType
 from shuffify.models.db import ActivityLog, Schedule
+from shuffify.schemas.playlist_setup_requests import DRIP_COUNT_RANGE
 from shuffify.services.live_review_bindings import REVIEW_CHANGED
 from shuffify.services.live_review_scope import ReviewChanged, drip_forced, effective_drip_count, rotation_settings
 from shuffify.services.operations.bookkeeping import OperationBookkeeping
@@ -41,6 +43,8 @@ from .envelope import validate_command
 from .routine_capture import DIRECT_MODELS, CaptureNotFound, CaptureRejected, recapture, require_review
 from .routine_facts import BINDING_KEY, build_result, input_key, plan_key
 from .routine_schemas import DripNowCommand, RaidAndDripCommand, RaidNowCommand, ScheduleRunCommand
+
+logger = logging.getLogger(__name__)
 
 EXECUTORS = {
     "raid": (prepare_raid, execute_raid),
@@ -142,6 +146,12 @@ def _config(runtime, name, values):
             raise CaptureRejected("link_required", "No raid playlist link found. Create a raid link first.")
         forced = drip_forced(params)
         count = effective_drip_count(params, link) if forced or link.drip_enabled else 1
+        low, high = DRIP_COUNT_RANGE
+        if not low <= count <= high:
+            # The routine API refuses only new or changed counts outside the range; a saved one runs as saved.
+            logger.warning(
+                "Drip count outside %s to %s: %s (schedule_id=%s)", low, high, count, definition.schedule_id
+            )
         return DripConfig(
             user_id,
             target,

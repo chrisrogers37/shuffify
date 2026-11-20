@@ -25,6 +25,7 @@ from shuffify.models.db import (
     User,
     db,
 )
+from shuffify.schemas.playlist_setup_requests import DRIP_COUNT_RANGE
 from shuffify.services.operations.commands.routine_capture import capture_direct, capture_schedule
 from shuffify.services.operations.repository import OperationRepository
 from shuffify.services.source_resolver.base import ResolveResult
@@ -1108,6 +1109,26 @@ def test_saved_closed_drip_gate_precedes_invalid_count_conversion(routine):
     assert result["skipped_reason"] == "drip_disabled"
     assert result["result_detail"]["steps"][0]["status"] == "not_started"
     assert routine.world.writes == []
+
+
+def test_a_saved_drip_count_above_its_range_runs_at_that_count_and_warns(routine, shuffify_logs):
+    low, high = DRIP_COUNT_RANGE
+    count = high + 10
+    routine.world.playlists["collection"]["track_uris"] = [uri(index) for index in range(100, 100 + count + 5)]
+    row, command = routine.enqueue("drip", params={"drip_count": count})
+    completed = routine.run(row)
+    assert completed.state == "succeeded"
+    assert completed.journal["result"]["result_detail"]["steps"][0]["counts"] == {
+        "tracks_moved_to_target": count,
+        "tracks_removed_from_collection": count,
+    }
+    assert routine.world.playlists["target"]["track_uris"][count:] == [uri(1), uri(2), uri(3)]
+    assert len(routine.world.playlists["collection"]["track_uris"]) == 5
+    assert [
+        (record.levelname, record.getMessage())
+        for record in shuffify_logs.records
+        if record.name == "shuffify.services.operations.commands.routines"
+    ] == [("WARNING", f"Drip count outside {low} to {high}: {count} (schedule_id={command.definition.schedule_id})")]
 
 
 @pytest.mark.parametrize("kind,expected", [("drip", True), ("raid_and_drip", False)])
