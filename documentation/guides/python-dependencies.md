@@ -43,6 +43,10 @@ does not fail the check: pip installs only files whose hashes the lock lists.
 A committed hash that the new compile does not list fails it; delete both
 locks and run `scripts/lock.sh` to compile them again.
 
+CI's next step runs `scripts/test-lock-check.sh`, which fails unless the check
+fails on two copies of the locks: one with a stale pin, one with a hash that no
+file has. Run it after changing `scripts/lock.sh`.
+
 ## The 7-day cutoff
 
 `[tool.uv.pip]` in `pyproject.toml` sets `exclude-newer = "7 days"`: uv only
@@ -72,7 +76,9 @@ Security updates skip the cooldown but not the cutoff: a fix released less than
 
 If the lock check fails on a Dependabot pull request with the same versions on
 both sides, Dependabot's uv wrote them in another form: move the uv version in
-`ci.yml` to the one Dependabot ran, which its job log shows.
+`ci.yml` to the one Dependabot ran, which its job log shows, and the `checksum`
+beside it to the sha256 in that release's
+`uv-x86_64-unknown-linux-gnu.tar.gz.sha256`.
 
 ## Python version
 
