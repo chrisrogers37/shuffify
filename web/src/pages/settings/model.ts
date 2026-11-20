@@ -9,7 +9,7 @@ import type {
 } from "../../api/contracts.ts";
 import {
   ApiRequestError,
-  NetworkError,
+  isOutcomeUnknown,
   ProtocolError,
   retryDeadline,
 } from "../../api/errors.ts";
@@ -179,19 +179,15 @@ export function settingsProblem(error: unknown): SettingsProblem {
       )
         fields[key as keyof SettingsDraft] = item.message;
     }
-    return {
-      message: error.message,
-      fields,
-      // Counted from 0, the deadline is the wait itself.
-      retryAfterMs: retryDeadline(error, 0),
-    };
   }
   return {
-    message:
-      error instanceof NetworkError || error instanceof ProtocolError
-        ? "Could not confirm your settings were saved. Check your connection and try again."
+    message: isOutcomeUnknown(error)
+      ? "Could not confirm your settings were saved. Check your connection and try again."
+      : error instanceof ApiRequestError
+        ? error.message
         : "Your settings could not be saved. Please try again.",
     fields,
-    retryAfterMs: null,
+    // Counted from 0, the deadline is the wait itself.
+    retryAfterMs: retryDeadline(error, 0),
   };
 }
