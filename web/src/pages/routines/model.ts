@@ -8,7 +8,7 @@ import type {
   RoutineRow,
   RoutinesContext,
 } from "../../api/contracts.ts";
-import { ApiRequestError, ProtocolError } from "../../api/errors.ts";
+import { ProtocolError } from "../../api/errors.ts";
 import { countRange, digest, id, record } from "../../api/guards.ts";
 import type { CountRange } from "../../api/guards.ts";
 export const labels: Record<JobType, string> = {
@@ -390,10 +390,6 @@ export function parseHistory(value: unknown): JobExecution[] {
   });
 }
 
-/** A transport/protocol failure cannot prove a mutation was refused. */
-export function unconfirmedMutation(problem: unknown): boolean {
-  return !(problem instanceof ApiRequestError) || problem.status >= 500;
-}
 export function listDeepLink(search: string, hash: string): number | null {
   const query = new URLSearchParams(search);
   const raw = query.get("routine_id") ?? /^#routine-([0-9]+)$/u.exec(hash)?.[1];

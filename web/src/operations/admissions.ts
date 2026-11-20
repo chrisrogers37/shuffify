@@ -9,6 +9,7 @@ import type { JsonValue, Operation } from "../api/contracts.ts";
 import {
   ApiRequestError,
   ConflictError,
+  isOutcomeUnknown,
   MissingCsrfTokenError,
   ProtocolError,
   RateLimitError,
@@ -430,10 +431,7 @@ export function createAdmissionRegistry(
         Number.isSafeInteger(error.error.operation_id)
           ? error.error.operation_id
           : null;
-      const refused =
-        !wasUnknown &&
-        (error instanceof MissingCsrfTokenError ||
-          (error instanceof ApiRequestError && error.status < 500));
+      const refused = !wasUnknown && !isOutcomeUnknown(error);
       update(r.key, {
         ...a,
         status: wasUnknown
@@ -1106,8 +1104,5 @@ export function admissionUnknown(
 ): boolean {
   const a = registry.getSnapshot().get(key);
   if (a) return a.status === "unknown";
-  return (
-    !(error instanceof MissingCsrfTokenError) &&
-    (!(error instanceof ApiRequestError) || error.status >= 500)
-  );
+  return isOutcomeUnknown(error);
 }

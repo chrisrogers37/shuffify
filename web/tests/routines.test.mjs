@@ -10,7 +10,6 @@ import {
   operationLabel,
   listDeepLink,
   safeAvailableDetail,
-  unconfirmedMutation,
   parseSetup,
   countInputs,
 } from "../src/pages/routines/model.ts";
@@ -204,23 +203,6 @@ test("a repeated accepted run intent returns its original ID", async () => {
     first = await client.run(1, "a".repeat(64), "request");
   const second = await client.run(1, "a".repeat(64), "request");
   assert.equal(first.operation.id, second.operation.id);
-});
-
-test("authored refusal stays distinct from unconfirmed transport or protocol failures", async () => {
-  const { ApiRequestError, NetworkError, ProtocolError } =
-    await import("../src/api/errors.ts");
-  const body = {
-    success: false,
-    error_code: "refused",
-    category: "error",
-    message: "Refused",
-  };
-  assert.equal(unconfirmedMutation(new ApiRequestError(409, body)), false);
-  assert.equal(unconfirmedMutation(new NetworkError("POST", Error())), true);
-  assert.equal(
-    unconfirmedMutation(new ProtocolError("Invalid reply", 202)),
-    true,
-  );
 });
 
 
