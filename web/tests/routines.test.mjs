@@ -30,7 +30,7 @@ test("deep links accept exact positive IDs and finite origin codes only", () => 
     assert.throws(() => parseNavigation("?schedule_id=" + value));
   assert.throws(() => parseNavigation("?origin=https://outside.invalid"));
 });
-test("row state normalization uses documented server state only and checks exact identities", () => {
+test("row state normalization reads the state code only and checks exact identities", () => {
   const row = {
     schedule_id: 7,
     schedule: { id: 7, target_playlist_id: "target" },
@@ -38,14 +38,45 @@ test("row state normalization uses documented server state only and checks exact
     schedule_revision: "a".repeat(64),
     timing: {},
     registration: {},
-    state: "Paused",
+    state: "paused",
   };
-  assert.equal(normalizeRow(row).state, "paused");
-  assert.equal(normalizeRow(row).state_label, "Paused");
+  const reply = { ...row, state: "Paused", state_code: "paused" };
+  for (const value of [row, reply]) {
+    assert.equal(normalizeRow(value).state, "paused");
+    assert.equal(normalizeRow(value).state_label, "Paused");
+  }
   assert.throws(() =>
     normalizeRow({ ...row, schedule: { ...row.schedule, id: 8 } }),
   );
-  assert.throws(() => normalizeRow({ ...row, state: "maybe" }));
+  for (const value of [
+    { ...row, state: "Paused" },
+    { ...row, state: "maybe" },
+    { ...reply, state_code: "deleted" },
+  ])
+    assert.throws(() => normalizeRow(value));
+});
+test("an activation reply's state is its code, a deleted replay's included", async () => {
+  const activate = (fields) =>
+    createRoutineClient(
+      createApiClient({
+        getCsrfToken: () => "fixture",
+        transport: async () =>
+          Response.json({
+            success: true,
+            accepted: true,
+            replayed: true,
+            schedule_id: 7,
+            accepted_at: "2026-11-20T00:00:00Z",
+            schedule: null,
+            ...fields,
+          }),
+      }),
+    ).activate("target", { schedule_id: 7 });
+  const deleted = await activate({ state: "Deleted", state_code: "deleted" });
+  assert.equal(deleted.state, "deleted");
+  await assert.rejects(activate({ state: "Deleted" }), {
+    name: "ProtocolError",
+  });
 });
 test("activation sends the exact normalized definition and signed intent with original request key", () => {
   const request = {

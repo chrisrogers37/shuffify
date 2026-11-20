@@ -24,6 +24,7 @@ import {
   parseNavigation,
   playlistPath,
   readContinuation,
+  stateLabels,
 } from "./model";
 import type {
   ActivationReply,
@@ -377,9 +378,9 @@ export function RoutineSetupPage() {
       {accepted ? (
         <section className="sh-routine-step sh-surface">
           <h2>Routine #{accepted.schedule_id} saved</h2>
-          <p>{accepted.state}</p>
+          <p>{stateLabels[accepted.state]}</p>
           <p>
-            {accepted.state === "Deleted"
+            {accepted.state === "deleted"
               ? "This accepted routine was subsequently deleted. It will not be recreated."
               : accepted.registration?.status === "registered"
                 ? "Scheduling is registered."

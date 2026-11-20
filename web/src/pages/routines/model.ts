@@ -23,6 +23,23 @@ export const operationLabel = (kind: string) =>
   labels[kind as JobType] ?? "Operation unavailable";
 export const playlistPath = (target: string) =>
   `/playlist/${encodeURIComponent(target)}`;
+// Each routine state's code and the text the routine pages show for it.
+export const stateLabels = {
+  active: "Active",
+  paused: "Paused",
+  needs_attention: "Saved—registration needs attention",
+  deleted: "Deleted",
+} as const satisfies Record<RoutineRow["state"], RoutineRow["state_label"]> & {
+  deleted: string;
+};
+type StateCode = keyof typeof stateLabels;
+// Replies send the state code as state_code, or as state if no state_code.
+export function stateCode(value: { state?: unknown; state_code?: unknown }) {
+  const code = value.state_code ?? value.state;
+  return typeof code === "string" && Object.hasOwn(stateLabels, code)
+    ? (code as StateCode)
+    : undefined;
+}
 export function parseNavigation(search: string) {
   const query = new URLSearchParams(search),
     raw = query.get("schedule_id"),
@@ -50,26 +67,14 @@ export function normalizeRow(value: unknown): RoutineRow {
     !record(value.registration)
   )
     throw new ProtocolError("The exact routine response is incomplete.");
-  const states: Record<string, RoutineRow["state"]> = {
-    Active: "active",
-    Paused: "paused",
-    "Saved—registration needs attention": "needs_attention",
-    active: "active",
-    paused: "paused",
-    needs_attention: "needs_attention",
-  };
-  const state =
-    typeof value.state === "string" ? states[value.state] : undefined;
-  if (!state) throw new ProtocolError("The routine state is unavailable.");
+  const state = stateCode(value);
+  // Only an activation reply reports a deleted routine; a row never does.
+  if (!state || state === "deleted")
+    throw new ProtocolError("The routine state is unavailable.");
   return {
     ...value,
     state,
-    state_label:
-      state === "active"
-        ? "Active"
-        : state === "paused"
-          ? "Paused"
-          : "Saved—registration needs attention",
+    state_label: stateLabels[state],
   } as unknown as RoutineRow;
 }
 export function parseRoutines(value: unknown): RoutinesContext {
@@ -166,7 +171,7 @@ export interface ActivationReply {
   schedule_id: number;
   accepted_at: string;
   dependency_revision: string;
-  state: string;
+  state: StateCode;
   schedule: RoutineRow["schedule"] | null;
   schedule_revision?: string;
   registration?: RoutineRow["registration"];
