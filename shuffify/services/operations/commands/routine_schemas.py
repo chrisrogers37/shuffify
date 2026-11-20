@@ -10,6 +10,7 @@ from typing import Annotated, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, StrictBool, StrictInt, model_validator
 
 from shuffify.enums import JOB_STEPS
+from shuffify.schemas.playlist_setup_requests import DripCount
 from shuffify.schemas.workshop_finalize_requests import PlaylistID
 
 from .schemas import ReviewedCommand
@@ -37,7 +38,7 @@ class CapturedLink(CapturedModel):
     id: RowID
     raid_playlist_id: PlaylistID
     raid_playlist_name: str | None
-    drip_count: StrictInt
+    drip_count: DripCount
     drip_enabled: StrictBool
 
 

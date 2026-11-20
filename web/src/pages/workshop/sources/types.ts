@@ -6,6 +6,7 @@ import type {
   JobExecution,
 } from "../../../api/contracts.ts";
 import type { DeepReadonly, SourceStagingSnapshot } from "../core/types.ts";
+import type { CountRange } from "../../../api/guards.ts";
 export interface PendingTrack {
   id: number;
   target_playlist_id: string;
@@ -53,6 +54,8 @@ export interface RaidStatus {
   raid_link: RaidLink | null;
   source_count: number;
   max_sources: number;
+  raid_count_range: CountRange;
+  drip_count_range: CountRange;
 }
 export interface PlaylistChoice {
   id: string;

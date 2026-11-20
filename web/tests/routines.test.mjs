@@ -11,10 +11,13 @@ import {
   listDeepLink,
   safeAvailableDetail,
   unconfirmedMutation,
+  parseSetup,
+  countInputs,
 } from "../src/pages/routines/model.ts";
 import { createRoutinesFixtures } from "../src/fixtures/routines.ts";
 import { createLibraryFixtures } from "../src/fixtures/library.ts";
 import signedIn from "../fixtures/valid/session-signed-in.json" with { type: "json" };
+import routinesSeed from "../fixtures/routines/initial.json" with { type: "json" };
 import { createApiClient } from "../src/api/client.ts";
 import { createRoutineClient } from "../src/pages/routines/client.ts";
 
@@ -225,4 +228,19 @@ test("composed fixture dispatch preserves a foreign FormData admission and exact
   assert.equal(observed.operation.state, "succeeded");
   await assert.rejects(transport("/api/not-a-route", "POST", request), /Unhandled fixture request/);
   await assert.rejects(routines("/api/playlist/target/routines/review", "POST", { body: "{" }), SyntaxError);
+});
+test("the setup pages take each count input's min and max from the context's limits", () => {
+  const limits = { max_sources: 10, raid_count: [1, 7], drip_count: [2, 9] };
+  assert.deepEqual(countInputs(parseSetup({ ...routinesSeed.setup, limits })), {
+    source: { min: 1, max: 7 },
+    drip: { min: 2, max: 9 },
+  });
+  for (const malformed of [
+    undefined,
+    { raid_count: [1, 7] },
+    { raid_count: [7, 1], drip_count: [2, 9] },
+    { raid_count: [1, "7"], drip_count: [2, 9] },
+    { raid_count: [1, 7, 9], drip_count: [2, 9] },
+  ])
+    assert.throws(() => parseSetup({ ...routinesSeed.setup, limits: malformed }), /incomplete/u);
 });

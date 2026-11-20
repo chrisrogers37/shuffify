@@ -50,6 +50,8 @@ async function harness(handle = () => null, providedOperations = null) {
                         raid_link: null,
                         source_count: 0,
                         max_sources: 10,
+                        raid_count_range: [1, 100],
+                        drip_count_range: [1, 50],
                       },
                     }
                   : { success: true },
@@ -441,6 +443,8 @@ test("source count drafts survive reads, revert known refusal, and retain an unk
             raid_link: null,
             source_count: 1,
             max_sources: 10,
+            raid_count_range: [1, 100],
+            drip_count_range: [1, 50],
           },
         })
       : path.endsWith("/raid-source-count")

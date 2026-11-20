@@ -30,7 +30,7 @@ import { State } from "../../components/ui/States";
 import { useConfirm } from "../../components/tasks/ConfirmDialog";
 import { useNavigationBlocker } from "../../navigation/NavigationGuard";
 import { getOperationStore } from "../../operations/store";
-import { unconfirmedMutation } from "./model";
+import { countInputs, unconfirmedMutation } from "./model";
 import { createRoutineClient } from "./client";
 import {
   parseSetup,
@@ -570,8 +570,7 @@ export function PlaylistSetupPage() {
                         <Input
                           {...props}
                           type="number"
-                          min={1}
-                          max={100}
+                          {...countInputs(context).source}
                           value={String(
                             changes.find(
                               (change) =>
@@ -905,8 +904,7 @@ export function PlaylistSetupPage() {
                           <Input
                             {...props}
                             type="number"
-                            min={1}
-                            max={50}
+                            {...countInputs(context).drip}
                             value={String(
                               changes.find((value) => value.op === "set_drip")
                                 ?.drip_count ??
