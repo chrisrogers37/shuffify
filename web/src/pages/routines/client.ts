@@ -1,16 +1,16 @@
 import type { ApiClient, ApiResult } from "../../api/client.ts";
 import type { JsonRecord, RoutinesContext } from "../../api/contracts.ts";
 import { ProtocolError } from "../../api/errors.ts";
+import { digest, record } from "../../api/guards.ts";
 import {
   activationBody,
-  digest,
   normalizeRow,
   parseGuided,
   parseHistory,
   parseRoutines,
   parseSetup,
   playlistPath,
-  record,
+  stateCode,
 } from "./model.ts";
 import type {
   ActivationReply,
@@ -103,18 +103,20 @@ export function createRoutineClient(api: ApiClient) {
         base(target) + "/routines/activate",
         { method: "POST", json: body },
       );
+      const state = stateCode(value);
       if (
         value.accepted !== true ||
         !Number.isSafeInteger(value.schedule_id) ||
         (body.schedule_id && value.schedule_id !== body.schedule_id) ||
         typeof value.replayed !== "boolean" ||
         !value.accepted_at ||
-        (value.schedule !== null && value.schedule.id !== value.schedule_id)
+        (value.schedule !== null && value.schedule.id !== value.schedule_id) ||
+        !state
       )
         throw new ProtocolError(
           "Activation may already be saved. Check the same request.",
         );
-      return value;
+      return { ...value, state };
     },
     setup: async (target: string, returnTarget: string) => {
       const value = await completed<{ success: true; context: unknown }>(

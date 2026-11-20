@@ -178,7 +178,7 @@ export function createLibraryFixtures(scenario: string) {
         return json(fail("Missing CSRF token."), 400);
       preferences++;
       if (scenario === "library-preference-failure" && preferences === 1)
-        return json(fail("Preferences were not saved."), 503);
+        return json(fail("Preferences were not saved."), 400);
       const suffix = path.slice("/api/playlist-preferences/".length),
         match = /^([^/]+)\/toggle-(pinned|hidden)$/u.exec(suffix);
       if (match) {

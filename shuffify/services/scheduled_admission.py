@@ -12,12 +12,14 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from shuffify.models.db import JobExecution, RoutineActivationReceipt, Schedule
-from shuffify.scheduler import _parse_schedule
+from shuffify.scheduler import InvalidSchedule, _parse_schedule
 from shuffify.services.live_review_bindings import fingerprint
 from shuffify.services.operations.commands.routine_capture import CaptureNotFound, CaptureRejected, capture_schedule
 from shuffify.services.operations.repository import BusyOperation, PlaylistNeedsReview, RequestKeyConflict
 
 logger = logging.getLogger(__name__)
+# How late a scheduled fire may still be admitted, in seconds.
+GRACE_SECONDS = 3600
 
 
 def utc(value):
@@ -36,7 +38,12 @@ class Cadence:
 def build_cadence(schedule, default_timezone="UTC"):
     """Execution bookkeeping cannot change a created-at-anchored interval phase."""
     zone = ZoneInfo(schedule.timezone or default_timezone)
-    kind, options = _parse_schedule(schedule.schedule_type, schedule.schedule_value)
+    try:
+        kind, options = _parse_schedule(schedule.schedule_type, schedule.schedule_value)
+    except InvalidSchedule as invalid:
+        # A stored definition the parser refuses runs on its daily fallback; the log names only the row and reason.
+        logger.warning("Schedule runs daily: %s (schedule_id=%s)", invalid.reason, schedule.id)
+        kind, options = invalid.fallback
     anchor = utc(schedule.created_at)
     trigger = (
         IntervalTrigger(start_date=anchor, timezone=zone, **options)
@@ -98,7 +105,7 @@ def eligibility_floor(schedule, activation_at=None):
     return max(floor, utc(activation_at)) if activation_at is not None else floor
 
 
-def recoverable_fire(schedule, cadence, now, *, latest=None, activation_at=None, grace_seconds=3600):
+def recoverable_fire(schedule, cadence, now, *, grace_seconds, latest=None, activation_at=None):
     """Coalesce to the latest eligible slot, never to a new admission-time identity.
 
     A persisted start and current definition/activation floors bound catch-up;

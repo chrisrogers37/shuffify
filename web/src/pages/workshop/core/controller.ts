@@ -10,24 +10,22 @@ import {
 } from "../../../operations/admissions.ts";
 import type { AdmissionRequest } from "../../../operations/admissions.ts";
 import type { ApiClient } from "../../../api/client.ts";
+import { terminalOperationStates } from "../../../api/contracts.ts";
 import type { WorkshopTrack } from "../../../api/contracts.ts";
 import type { SessionStore } from "../../../auth/session-store.ts";
 import {
   ApiRequestError,
   ConflictError,
-  NetworkError,
+  isOutcomeUnknown,
   ProtocolError,
-  RateLimitError,
+  retryDeadline,
 } from "../../../api/errors.ts";
-import {
-  getOperationStore,
-  terminalOperationStates,
-} from "../../../operations/store.ts";
+import { trackURI } from "../../../api/guards.ts";
+import { getOperationStore } from "../../../operations/store.ts";
 import type { OperationStore } from "../../../operations/store.ts";
 import {
   createWorkshopClient,
   targetResult,
-  trackURI,
   verifiedRestore,
 } from "./client.ts";
 import {
@@ -195,9 +193,7 @@ export function createWorkshopController(
     return !p.allowed;
   };
   const retryHint = (e: unknown) =>
-    e instanceof RateLimitError
-      ? Date.now() + (e.retryAfterMs ?? 1000)
-      : state.retryUntil;
+    retryDeadline(e, Date.now()) ?? state.retryUntil;
   const cooling = () => Date.now() < state.retryUntil;
   const hasDraft = () =>
     !sameOrder(uris(state.baseline), uris(state.working)) ||
@@ -676,10 +672,7 @@ export function createWorkshopController(
         unknown =
           admissions.getSnapshot().has(review.key) &&
           admissionUnknown(admissions, review.key, e),
-        until =
-          e instanceof RateLimitError
-            ? Date.now() + (e.retryAfterMs ?? 1000)
-            : 0;
+        until = retryDeadline(e, Date.now()) ?? 0;
       const busy =
         !unknown && e instanceof ConflictError ? e.error.operation_id : null;
       update({
@@ -1031,10 +1024,7 @@ export function createWorkshopController(
       });
       return true;
     } catch (e) {
-      const unknown =
-        e instanceof NetworkError ||
-        e instanceof ProtocolError ||
-        (e instanceof ApiRequestError && e.status >= 500);
+      const unknown = isOutcomeUnknown(e);
       if (unknown)
         pendingDraft = {
           kind: "save",
@@ -1071,10 +1061,7 @@ export function createWorkshopController(
       });
       return true;
     } catch (e) {
-      const unknown =
-        e instanceof NetworkError ||
-        e instanceof ProtocolError ||
-        (e instanceof ApiRequestError && e.status >= 500);
+      const unknown = isOutcomeUnknown(e);
       if (unknown)
         pendingDraft = {
           kind: "delete",

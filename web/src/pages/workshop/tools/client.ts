@@ -1,7 +1,7 @@
 import type { ApiClient, ApiRequestInit } from "../../../api/client.ts";
 import type { WorkshopTrack } from "../../../api/contracts.ts";
 import { ProtocolError } from "../../../api/errors.ts";
-import { trackURI } from "./model.ts";
+import { count, id, record, trackURI } from "../../../api/guards.ts";
 import type {
   ExternalIntent,
   ExternalPlaylist,
@@ -13,14 +13,8 @@ import type {
   Snapshot,
   TrackLock,
 } from "./types.ts";
-const record = (v: unknown): v is Record<string, unknown> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
 const nullable = (v: unknown): v is string | null =>
   v === null || typeof v === "string";
-const id = (v: unknown): v is number =>
-  Number.isSafeInteger(v) && Number(v) > 0;
-const count = (v: unknown): v is number =>
-  Number.isSafeInteger(v) && Number(v) >= 0;
 const fail = (message: string): never => {
   throw new ProtocolError(message);
 };
@@ -132,6 +126,8 @@ function choice(v: unknown): PlaylistChoice {
   return v as unknown as PlaylistChoice;
 }
 export function createToolsClient(api: ApiClient, target: string) {
+  // A path check, not the PlaylistID rule: the target goes into the request
+  // path unencoded, so it may contain only letters, digits, "_" and "-".
   if (!/^[A-Za-z0-9_-]+$/u.test(target))
     throw TypeError("Invalid playlist identifier.");
   const base = `/api/workshop/${target}`;

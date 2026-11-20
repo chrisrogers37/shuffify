@@ -8,7 +8,9 @@ import type {
   RoutineRow,
   RoutinesContext,
 } from "../../api/contracts.ts";
-import { ApiRequestError, ProtocolError } from "../../api/errors.ts";
+import { ProtocolError } from "../../api/errors.ts";
+import { countRange, digest, id, record } from "../../api/guards.ts";
+import type { CountRange } from "../../api/guards.ts";
 export const labels: Record<JobType, string> = {
   raid: "Collect",
   shuffle: "Shuffle",
@@ -19,14 +21,24 @@ export const labels: Record<JobType, string> = {
 };
 export const operationLabel = (kind: string) =>
   labels[kind as JobType] ?? "Operation unavailable";
-export const record = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-export const id = (value: unknown): value is number =>
-  Number.isSafeInteger(value) && Number(value) > 0;
-export const digest = (value: unknown): value is string =>
-  typeof value === "string" && /^[a-f0-9]{64}$/u.test(value);
 export const playlistPath = (target: string) =>
   `/playlist/${encodeURIComponent(target)}`;
+// Each routine state's code and the text the routine pages show for it.
+export const stateLabels = {
+  active: "Active",
+  paused: "Paused",
+  needs_attention: "Saved—registration needs attention",
+  deleted: "Deleted",
+} as const satisfies Record<RoutineRow["state"], RoutineRow["state_label"]> & {
+  deleted: string;
+};
+type StateCode = keyof typeof stateLabels;
+// Replies send the state code as state.
+export function stateCode({ state }: { state?: unknown }) {
+  return typeof state === "string" && Object.hasOwn(stateLabels, state)
+    ? (state as StateCode)
+    : undefined;
+}
 export function parseNavigation(search: string) {
   const query = new URLSearchParams(search),
     raw = query.get("schedule_id"),
@@ -54,26 +66,14 @@ export function normalizeRow(value: unknown): RoutineRow {
     !record(value.registration)
   )
     throw new ProtocolError("The exact routine response is incomplete.");
-  const states: Record<string, RoutineRow["state"]> = {
-    Active: "active",
-    Paused: "paused",
-    "Saved—registration needs attention": "needs_attention",
-    active: "active",
-    paused: "paused",
-    needs_attention: "needs_attention",
-  };
-  const state =
-    typeof value.state === "string" ? states[value.state] : undefined;
-  if (!state) throw new ProtocolError("The routine state is unavailable.");
+  const state = stateCode(value);
+  // Only an activation reply reports a deleted routine; a row never does.
+  if (!state || state === "deleted")
+    throw new ProtocolError("The routine state is unavailable.");
   return {
     ...value,
     state,
-    state_label:
-      state === "active"
-        ? "Active"
-        : state === "paused"
-          ? "Paused"
-          : "Saved—registration needs attention",
+    state_label: stateLabels[state],
   } as unknown as RoutineRow;
 }
 export function parseRoutines(value: unknown): RoutinesContext {
@@ -118,7 +118,7 @@ export interface SetupContext {
     is_enabled: boolean;
     timing_text: string;
   }[];
-  limits: JsonRecord;
+  limits: { raid_count: CountRange; drip_count: CountRange };
   configuration_revision: string;
   section_digests: Record<
     "sources" | "collection" | "archive" | "routines",
@@ -170,7 +170,7 @@ export interface ActivationReply {
   schedule_id: number;
   accepted_at: string;
   dependency_revision: string;
-  state: string;
+  state: StateCode;
   schedule: RoutineRow["schedule"] | null;
   schedule_revision?: string;
   registration?: RoutineRow["registration"];
@@ -210,6 +210,9 @@ export function parseSetup(value: unknown): SetupContext {
     !Array.isArray(value.sources) ||
     !Array.isArray(value.routines) ||
     !Array.isArray(value.routine_only_sources) ||
+    !record(value.limits) ||
+    !countRange(value.limits.raid_count) ||
+    !countRange(value.limits.drip_count) ||
     !digest(value.configuration_revision) ||
     !record(value.section_digests) ||
     !["sources", "collection", "archive", "routines"].every((name) =>
@@ -219,6 +222,11 @@ export function parseSetup(value: unknown): SetupContext {
     throw new ProtocolError("The playlist settings response is incomplete.");
   return structuredClone(value) as unknown as SetupContext;
 }
+// The min and max of the setup pages' count inputs, from the context's limits.
+export const countInputs = ({ limits }: SetupContext) => ({
+  source: { min: limits.raid_count[0], max: limits.raid_count[1] },
+  drip: { min: limits.drip_count[0], max: limits.drip_count[1] },
+});
 export function parseGuided(value: unknown): GuidedContext {
   if (
     !record(value) ||
@@ -381,10 +389,6 @@ export function parseHistory(value: unknown): JobExecution[] {
   });
 }
 
-/** A transport/protocol failure cannot prove a mutation was refused. */
-export function unconfirmedMutation(problem: unknown): boolean {
-  return !(problem instanceof ApiRequestError) || problem.status >= 500;
-}
 export function listDeepLink(search: string, hash: string): number | null {
   const query = new URLSearchParams(search);
   const raw = query.get("routine_id") ?? /^#routine-([0-9]+)$/u.exec(hash)?.[1];

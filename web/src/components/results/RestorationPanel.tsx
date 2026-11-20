@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { OperationRestoreResource } from "../../api/contracts";
+import { count as isCount } from "../../api/guards";
 import { useSession } from "../../auth/SessionProvider";
 import { useAnnouncer } from "../../a11y/Announcer";
 import { useConfirm } from "../tasks/ConfirmDialog";
@@ -11,9 +12,7 @@ import { useClock } from "../../pages/library/hooks";
 import "./restoration.css";
 
 const count = (value: unknown) =>
-  Number.isSafeInteger(value) && Number(value) >= 0
-    ? String(value)
-    : "Unconfirmed";
+  isCount(value) ? String(value) : "Unconfirmed";
 const text = (value: unknown) =>
   value === true
     ? "Public"

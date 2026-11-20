@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import type { JobType, RoutineRow } from "../../api/contracts";
+import type { IntervalTiming, JobType, RoutineRow } from "../../api/contracts";
 import { useServices, useSession } from "../../auth/SessionProvider";
+import { isOutcomeUnknown } from "../../api/errors";
 import { useAnnouncer } from "../../a11y/Announcer";
 import { ROUTINE_CONTINUATION_KEY as CONTINUATION_KEY } from "../../auth/browser-storage";
 import {
@@ -13,7 +14,7 @@ import {
 } from "../../components/ui/controls";
 import { State } from "../../components/ui/States";
 import { useNavigationBlocker } from "../../navigation/NavigationGuard";
-import { unconfirmedMutation } from "./model";
+import { countInputs } from "./model";
 import { createRoutineClient } from "./client";
 import {
   activationBody,
@@ -24,6 +25,7 @@ import {
   parseNavigation,
   playlistPath,
   readContinuation,
+  stateLabels,
 } from "./model";
 import type {
   ActivationReply,
@@ -34,6 +36,14 @@ import type {
 } from "./model";
 import "./routines.css";
 export { CONTINUATION_KEY };
+// Every interval the routine contract allows, in menu order, with its label.
+const intervals: Record<IntervalTiming["interval"], string> = {
+  every_6h: "Every 6 hours",
+  every_12h: "Every 12 hours",
+  daily: "Every day",
+  every_3d: "Every 3 days",
+  weekly: "Every week",
+};
 const defaultDraft: RoutineDraft = {
   job_type: "shuffle",
   algorithm_name: "BasicShuffle",
@@ -264,7 +274,7 @@ export function RoutineSetupPage() {
       setUnknown(false);
       announce(`Routine #${result.schedule_id} saved.`, crypto.randomUUID());
     } catch (problem) {
-      const unresolved = unconfirmedMutation(problem);
+      const unresolved = isOutcomeUnknown(problem);
       setUnknown(unresolved);
       if (!unresolved) {
         setReview(null);
@@ -369,9 +379,9 @@ export function RoutineSetupPage() {
       {accepted ? (
         <section className="sh-routine-step sh-surface">
           <h2>Routine #{accepted.schedule_id} saved</h2>
-          <p>{accepted.state}</p>
+          <p>{stateLabels[accepted.state]}</p>
           <p>
-            {accepted.state === "Deleted"
+            {accepted.state === "deleted"
               ? "This accepted routine was subsequently deleted. It will not be recreated."
               : accepted.registration?.status === "registered"
                 ? "Scheduling is registered."
@@ -622,8 +632,7 @@ export function RoutineSetupPage() {
                         <Input
                           {...props}
                           type="number"
-                          min={1}
-                          max={50}
+                          {...countInputs(context.prerequisites).drip}
                           value={String(
                             draft.algorithm_params.drip_count ?? "",
                           )}
@@ -693,13 +702,7 @@ export function RoutineSetupPage() {
                             timing("interval", event.currentTarget.value)
                           }
                         >
-                          {[
-                            ["every_6h", "Every 6 hours"],
-                            ["every_12h", "Every 12 hours"],
-                            ["daily", "Every day"],
-                            ["every_3d", "Every 3 days"],
-                            ["weekly", "Every week"],
-                          ].map(([value, label]) => (
+                          {Object.entries(intervals).map(([value, label]) => (
                             <option value={value} key={value}>
                               {label}
                             </option>
