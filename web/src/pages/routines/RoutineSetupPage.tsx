@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import type { JobType, RoutineRow } from "../../api/contracts";
+import type { IntervalTiming, JobType, RoutineRow } from "../../api/contracts";
 import { useServices, useSession } from "../../auth/SessionProvider";
 import { useAnnouncer } from "../../a11y/Announcer";
 import { ROUTINE_CONTINUATION_KEY as CONTINUATION_KEY } from "../../auth/browser-storage";
@@ -34,6 +34,14 @@ import type {
 } from "./model";
 import "./routines.css";
 export { CONTINUATION_KEY };
+// Every interval the routine contract allows, in menu order, with its label.
+const intervals: Record<IntervalTiming["interval"], string> = {
+  every_6h: "Every 6 hours",
+  every_12h: "Every 12 hours",
+  daily: "Every day",
+  every_3d: "Every 3 days",
+  weekly: "Every week",
+};
 const defaultDraft: RoutineDraft = {
   job_type: "shuffle",
   algorithm_name: "BasicShuffle",
@@ -692,13 +700,7 @@ export function RoutineSetupPage() {
                             timing("interval", event.currentTarget.value)
                           }
                         >
-                          {[
-                            ["every_6h", "Every 6 hours"],
-                            ["every_12h", "Every 12 hours"],
-                            ["daily", "Every day"],
-                            ["every_3d", "Every 3 days"],
-                            ["weekly", "Every week"],
-                          ].map(([value, label]) => (
+                          {Object.entries(intervals).map(([value, label]) => (
                             <option value={value} key={value}>
                               {label}
                             </option>
