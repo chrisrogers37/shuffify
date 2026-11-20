@@ -1,5 +1,5 @@
 -r base.txt
 
 # Production
-gunicorn==26.2.0
-sentry-sdk>=2.74.0,<3.0
+gunicorn==27.0.1
+sentry-sdk>=2.75.0,<3.0

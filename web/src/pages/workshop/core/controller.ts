@@ -10,6 +10,7 @@ import {
 } from "../../../operations/admissions.ts";
 import type { AdmissionRequest } from "../../../operations/admissions.ts";
 import type { ApiClient } from "../../../api/client.ts";
+import { terminalOperationStates } from "../../../api/contracts.ts";
 import type { WorkshopTrack } from "../../../api/contracts.ts";
 import type { SessionStore } from "../../../auth/session-store.ts";
 import {
@@ -19,10 +20,7 @@ import {
   ProtocolError,
   RateLimitError,
 } from "../../../api/errors.ts";
-import {
-  getOperationStore,
-  terminalOperationStates,
-} from "../../../operations/store.ts";
+import { getOperationStore } from "../../../operations/store.ts";
 import type { OperationStore } from "../../../operations/store.ts";
 import {
   createWorkshopClient,

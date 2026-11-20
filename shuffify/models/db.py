@@ -174,6 +174,10 @@ class User(db.Model):
         return f"<User {self.spotify_id} ({self.display_name})>"
 
 
+# The snapshot limit a new settings row starts with.
+DEFAULT_SNAPSHOTS_LIMIT = 10
+
+
 class UserSettings(db.Model):
     """
     User preferences and configuration.
@@ -203,7 +207,7 @@ class UserSettings(db.Model):
     # Feature toggles
     notifications_enabled = db.Column(db.Boolean, nullable=False, default=False)
     auto_snapshot_enabled = db.Column(db.Boolean, nullable=False, default=True)
-    max_snapshots_per_playlist = db.Column(db.Integer, nullable=False, default=10)
+    max_snapshots_per_playlist = db.Column(db.Integer, nullable=False, default=DEFAULT_SNAPSHOTS_LIMIT)
 
     # Dashboard preferences
     dashboard_show_recent_activity = db.Column(db.Boolean, nullable=False, default=True)

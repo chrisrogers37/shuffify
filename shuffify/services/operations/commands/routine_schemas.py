@@ -9,8 +9,8 @@ from typing import Annotated, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, StrictBool, StrictInt, model_validator
 
+from shuffify.enums import JOB_STEPS
 from shuffify.schemas.workshop_finalize_requests import PlaylistID
-from shuffify.services.live_review_scope import JOB_STEPS
 
 from .schemas import ReviewedCommand
 

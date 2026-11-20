@@ -1,10 +1,11 @@
 import type { ApiClient } from "../../api/client.ts";
+import { terminalOperationStates } from "../../api/contracts.ts";
 import type { JsonValue, Operation } from "../../api/contracts.ts";
 import { ApiRequestError } from "../../api/errors.ts";
 import type { SessionStore } from "../../auth/session-store.ts";
 import { getAdmissionRegistry } from "../admissions.ts";
 import type { AdmissionRegistry, AdmissionRequest } from "../admissions.ts";
-import { getOperationStore, terminalOperationStates } from "../store.ts";
+import { getOperationStore } from "../store.ts";
 import type { OperationStore } from "../store.ts";
 import {
   assertRestoreChild,

@@ -12,6 +12,8 @@ import {
   ProtocolError,
   RateLimitError,
 } from "../../api/errors.ts";
+/** The largest snapshot limit a user can choose. */
+export const maxSnapshotLimit = 50;
 export interface SettingsDraft {
   default_algorithm: string;
   auto_snapshot_enabled: boolean;
@@ -35,9 +37,11 @@ export function draftFromSettings(settings: UserSettings): SettingsDraft {
 export function validateDraft(draft: SettingsDraft): FieldErrors {
   return /^\d+$/u.test(draft.max_snapshots_per_playlist) &&
     Number(draft.max_snapshots_per_playlist) >= 1 &&
-    Number(draft.max_snapshots_per_playlist) <= 50
+    Number(draft.max_snapshots_per_playlist) <= maxSnapshotLimit
     ? {}
-    : { max_snapshots_per_playlist: "Choose a whole number from 1 to 50." };
+    : {
+        max_snapshots_per_playlist: `Choose a whole number from 1 to ${maxSnapshotLimit}.`,
+      };
 }
 export function updateFromDraft(draft: SettingsDraft): SettingsUpdateRequest {
   if (Object.keys(validateDraft(draft)).length)
@@ -124,7 +128,7 @@ function assertContext(value: unknown): asserts value is SettingsContext {
     typeof s.dashboard_show_recent_activity !== "boolean" ||
     !Number.isSafeInteger(s.max_snapshots_per_playlist) ||
     Number(s.max_snapshots_per_playlist) < 1 ||
-    Number(s.max_snapshots_per_playlist) > 50 ||
+    Number(s.max_snapshots_per_playlist) > maxSnapshotLimit ||
     !record(s.extra) ||
     !jsonValue(s.extra) ||
     !nullableString(s.created_at) ||

@@ -29,6 +29,7 @@ import { useNavigationBlocker } from "../navigation/NavigationGuard";
 import { useAnnouncer } from "../a11y/Announcer";
 import { pollOperation } from "../api/operations";
 import { ConflictError, RateLimitError } from "../api/errors";
+import { terminalOperationStates } from "../api/contracts";
 import type { Operation } from "../api/contracts";
 import { TaskScrollHarness } from "../fixtures/TaskScrollHarness";
 import { NavigationHandoff } from "../fixtures/NavigationHandoff";
@@ -162,8 +163,7 @@ function FoundationReview() {
   const queue = async () => {
     if (
       queueing ||
-      (operation &&
-        ["queued", "running", "compensating"].includes(operation.state))
+      (operation && !terminalOperationStates.has(operation.state))
     )
       return;
     setQueueing(true);
@@ -361,10 +361,7 @@ function FoundationReview() {
               <Button
                 busy={
                   queueing ||
-                  (!!operation &&
-                    ["queued", "running", "compensating"].includes(
-                      operation.state,
-                    ))
+                  (!!operation && !terminalOperationStates.has(operation.state))
                 }
                 onClick={() => {
                   void queue();

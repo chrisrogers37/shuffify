@@ -40,8 +40,11 @@ export interface ApiError {
 }
 export type ApiResponse<T extends SuccessEnvelope> = T | ApiError;
 
-export type AuthNoticeCode = 'access_denied' | 'oauth_failed' | 'missing_code' | 'invalid_state'
-  | 'authentication_failed' | 'consent_required' | 'login_failed';
+export const authNoticeCodes = [
+  'access_denied', 'oauth_failed', 'missing_code', 'invalid_state',
+  'authentication_failed', 'consent_required', 'login_failed',
+] as const;
+export type AuthNoticeCode = (typeof authNoticeCodes)[number];
 /** A fixed-map notice is consumed from the session once. No OAuth query text is returned. */
 export interface AuthNotice {
   code: AuthNoticeCode;
@@ -393,8 +396,22 @@ export interface WorkshopContext extends SuccessEnvelope {
   recently_loaded: RecentlyLoadedPlaylist[];
 }
 
-export type OperationState = 'queued' | 'running' | 'compensating' | 'succeeded'
-  | 'failed' | 'rolled_back' | 'needs_attention';
+export const operationStates = [
+  'queued', 'running', 'compensating', 'succeeded',
+  'failed', 'rolled_back', 'needs_attention',
+] as const;
+export type OperationState = (typeof operationStates)[number];
+export const terminalOperationStates: ReadonlySet<OperationState> = new Set([
+  'succeeded', 'failed', 'rolled_back', 'needs_attention',
+]);
+/** The terminal states other than needs_attention. */
+export const confirmedOperationStates: ReadonlySet<OperationState> = new Set([
+  'succeeded', 'failed', 'rolled_back',
+]);
+/** The terminal states other than succeeded. */
+export const unsuccessfulOperationStates: ReadonlySet<OperationState> = new Set([
+  'failed', 'rolled_back', 'needs_attention',
+]);
 export interface OperationProgress {
   batches_done?: Count;
   total_batches?: Count;

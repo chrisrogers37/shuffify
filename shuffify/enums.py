@@ -19,6 +19,17 @@ class JobType(StrEnum):
     DRIP = "drip"
 
 
+# Executor steps per saved job type, in the order the runner dispatches them.
+JOB_STEPS = {
+    JobType.RAID: ("raid",),
+    JobType.SHUFFLE: ("shuffle",),
+    JobType.RAID_AND_SHUFFLE: ("raid", "shuffle"),
+    JobType.RAID_AND_DRIP: ("raid", "drip"),
+    JobType.ROTATE: ("rotate",),
+    JobType.DRIP: ("drip",),
+}
+
+
 class RotationMode(StrEnum):
     """Modes for the scheduled rotation job type."""
 

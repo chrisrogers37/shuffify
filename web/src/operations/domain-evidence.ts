@@ -1,3 +1,4 @@
+import { confirmedOperationStates } from "../api/contracts.ts";
 import type { Operation } from "../api/contracts.ts";
 const count = (v: unknown): v is number =>
   Number.isSafeInteger(v) && Number(v) >= 0;
@@ -51,7 +52,7 @@ export function sourceSettlement(operation: Operation): boolean | null {
   if (operation.kind === "pending_dismiss") {
     if (
       !r ||
-      !["succeeded", "failed", "rolled_back"].includes(operation.state) ||
+      !confirmedOperationStates.has(operation.state) ||
       !count(r.source_removed_count)
     )
       return false;

@@ -52,7 +52,7 @@
     "tailwindcss": "4.3.3",
     "ts-json-schema-generator": "2.9.0",
     "typescript": "7.0.2",
-    "vite": "8.3.7"
+    "vite": "8.3.8"
   },
   "dependencies": {
     "react": "19.3.1",
@@ -62,7 +62,7 @@
   },
   "overrides": {
     "ts-json-schema-generator": {
-      "glob": "^14.0.4"
+      "glob": "^14.0.6"
     }
   }
 }

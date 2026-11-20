@@ -10,7 +10,7 @@ import pytest
 from shuffify.enums import SnapshotType
 from shuffify.models.db import db
 from shuffify.services.playlist_snapshot_service import (
-    DEFAULT_MAX_SNAPSHOTS_PER_PLAYLIST,
+    FALLBACK_SNAPSHOTS_LIMIT,
     PlaylistSnapshotNotFoundError,
     PlaylistSnapshotService,
 )
@@ -702,7 +702,7 @@ class TestPlaylistSnapshotServiceMaxSnapshots:
         if settings:
             expected = settings.max_snapshots_per_playlist
         else:
-            expected = DEFAULT_MAX_SNAPSHOTS_PER_PLAYLIST
+            expected = FALLBACK_SNAPSHOTS_LIMIT
 
         result = (
             PlaylistSnapshotService._get_max_snapshots(
@@ -734,6 +734,30 @@ class TestPlaylistSnapshotServiceMaxSnapshots:
             )
         )
         assert result == 25
+
+    def test_falls_back_without_a_settings_row(self, app_ctx):
+        user = app_ctx
+        from shuffify.models.db import UserSettings
+
+        UserSettings.query.filter_by(user_id=user.id).delete()
+        db.session.commit()
+
+        assert PlaylistSnapshotService._get_max_snapshots(user.id) == FALLBACK_SNAPSHOTS_LIMIT
+
+    def test_a_failed_settings_read_falls_back_and_is_logged(self, app_ctx, monkeypatch, shuffify_logs):
+        user = app_ctx
+
+        def fail(*args, **kwargs):
+            raise RuntimeError("settings unavailable")
+
+        monkeypatch.setattr(db.session, "query", fail)
+
+        assert PlaylistSnapshotService._get_max_snapshots(user.id) == FALLBACK_SNAPSHOTS_LIMIT
+        assert (
+            f"Could not read the snapshot limit for user {user.id}; "
+            f"falling back to {FALLBACK_SNAPSHOTS_LIMIT} (RuntimeError)"
+        ) in shuffify_logs.text
+        assert "settings unavailable" not in shuffify_logs.text
 
 
 class TestPlaylistSnapshotToDict:

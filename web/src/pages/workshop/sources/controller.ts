@@ -1,3 +1,4 @@
+import { terminalOperationStates } from "../../../api/contracts.ts";
 import type {
   JsonRecord,
   Operation,
@@ -6,7 +7,6 @@ import type {
 import { ApiRequestError, ProtocolError } from "../../../api/errors.ts";
 import type { AdmissionRequest } from "../../../operations/admissions.ts";
 import { getAdmissionRegistry } from "../../../operations/admissions.ts";
-import { terminalOperationStates } from "../../../operations/store.ts";
 import type { OperationStore } from "../../../operations/store.ts";
 import type { WorkshopController } from "../core/controller.ts";
 import type {

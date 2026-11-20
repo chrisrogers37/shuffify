@@ -117,20 +117,35 @@ def normalize_timing(timing):
     return {"schedule_type": schedule_type, "schedule_value": value, "timezone": zone}
 
 
+# The Schedule columns that say what a routine does and when. Every field set
+# that covers a routine's definition is built from this tuple.
+DEFINITION_COLUMNS = (
+    "job_type",
+    "target_playlist_id",
+    "target_playlist_name",
+    "source_playlist_ids",
+    "algorithm_name",
+    "algorithm_params",
+    "schedule_type",
+    "schedule_value",
+    "timezone",
+)
+
+
+def stored_definition(schedule):
+    """A saved routine's definition, with NULL sources and options read as empty."""
+    definition = {name: getattr(schedule, name) for name in DEFINITION_COLUMNS}
+    definition["source_playlist_ids"] = definition["source_playlist_ids"] or []
+    definition["algorithm_params"] = definition["algorithm_params"] or {}
+    return definition
+
+
 def schedule_revision(schedule):
     """A definition/state token unaffected by execution bookkeeping."""
     return fingerprint({
+        **stored_definition(schedule),
         "id": schedule.id,
         "user_id": schedule.user_id,
-        "job_type": schedule.job_type,
-        "target_playlist_id": schedule.target_playlist_id,
-        "target_playlist_name": schedule.target_playlist_name,
-        "source_playlist_ids": schedule.source_playlist_ids or [],
-        "algorithm_name": schedule.algorithm_name,
-        "algorithm_params": schedule.algorithm_params or {},
-        "schedule_type": schedule.schedule_type,
-        "schedule_value": schedule.schedule_value,
-        "timezone": getattr(schedule, "timezone", None),
         "is_enabled": schedule.is_enabled,
     })
 

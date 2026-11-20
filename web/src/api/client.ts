@@ -1,3 +1,4 @@
+import { authNoticeCodes, operationStates } from "./contracts.ts";
 import type {
   ApiError,
   Operation,
@@ -20,6 +21,8 @@ export type { Transport } from "./transport.ts";
 export interface ApiClientOptions {
   transport?: Transport;
   getCsrfToken?: () => string | null | undefined;
+  /** A new token once the server has refused the one sent; null or undefined when there is none. */
+  refreshCsrfToken?: () => Promise<string | null | undefined>;
   onUnauthorized?: () => void;
 }
 export interface ApiRequestInit extends Omit<
@@ -34,24 +37,8 @@ export type ApiResult<T> =
   | { status: "completed"; data: T };
 
 type RecordValue = Record<string, unknown>;
-const states = new Set([
-  "queued",
-  "running",
-  "compensating",
-  "succeeded",
-  "failed",
-  "rolled_back",
-  "needs_attention",
-]);
-const noticeCodes = new Set([
-  "access_denied",
-  "oauth_failed",
-  "missing_code",
-  "invalid_state",
-  "authentication_failed",
-  "consent_required",
-  "login_failed",
-]);
+const states = new Set<string>(operationStates);
+const noticeCodes = new Set<string>(authNoticeCodes);
 const isRecord = (value: unknown): value is RecordValue =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const isId = (value: unknown): value is number =>
@@ -133,6 +120,17 @@ function isApiError(value: RecordValue): value is RecordValue & ApiError {
   );
 }
 
+// A write refused for its CSRF token never ran, so it can be sent once more with a new token.
+// The code is at the top level of the body, or on its operation for live actions and reviews.
+const csrfRejected = "session_verification_expired";
+function isCsrfRejection(status: number, body: RecordValue): boolean {
+  return (
+    status === 400 &&
+    (body.error_code === csrfRejected ||
+      (isRecord(body.operation) && body.operation.error_code === csrfRejected))
+  );
+}
+
 function retryHint(response: Response, body: ApiError): number | null {
   const header = response.headers.get("Retry-After");
   let milliseconds: number | null = null;
@@ -192,9 +190,17 @@ function assertSession(value: unknown): asserts value is SessionContext {
 
 export function createApiClient(options: ApiClientOptions = {}) {
   const transport = options.transport ?? fetchTransport;
-  async function request<T>(
+  function request<T>(
     path: string,
     init: ApiRequestInit = {},
+  ): Promise<ApiResult<T>> {
+    return send<T>(path, init);
+  }
+  /** csrfToken is set only on the one resend after a CSRF rejection. */
+  async function send<T>(
+    path: string,
+    init: ApiRequestInit,
+    csrfToken?: string,
   ): Promise<ApiResult<T>> {
     assertApiPath(path);
     const { json, ...fetchInit } = init;
@@ -211,7 +217,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       headers.set("Content-Type", "application/json");
     }
     if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
-      const token = options.getCsrfToken?.();
+      const token = csrfToken ?? options.getCsrfToken?.();
       if (!token) throw new MissingCsrfTokenError();
       headers.set("X-CSRFToken", token);
     }
@@ -269,6 +275,10 @@ export function createApiClient(options: ApiClientOptions = {}) {
       }
       if (response.status === 409) throw new ConflictError(data, hint);
       if (response.status === 429) throw new RateLimitError(data, hint);
+      if (csrfToken === undefined && isCsrfRejection(response.status, data)) {
+        const renewed = await options.refreshCsrfToken?.();
+        if (renewed) return send<T>(path, init, renewed);
+      }
       throw new ApiRequestError(response.status, data, hint);
     }
     if (data.success !== true)
