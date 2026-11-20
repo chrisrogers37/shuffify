@@ -274,6 +274,47 @@ for (const [name, path, rejection] of [
   });
 }
 
+test("two writes refused for a stale CSRF token at the same moment share one session read and are each resent once", async () => {
+  const wire = scriptedTransport([
+    signedInWith("stale-csrf"),
+    response(csrfRejected, 400),
+    response(csrfRejected, 400),
+    signedInWith("fresh-csrf"),
+    response({ success: true, saved: "first" }),
+    response({ success: true, saved: "second" }),
+  ]);
+  const services = createServices(wire.transport);
+  await services.session.load();
+  const states = published(services);
+  const results = await Promise.allSettled(
+    ["first", "second"].map((request_key) =>
+      services.api.request("/api/settings", {
+        method: "POST",
+        json: { request_key },
+      }),
+    ),
+  );
+  assert.deepEqual(sent(wire), [
+    ["GET", "/api/session", null, null],
+    ["POST", "/api/settings", "stale-csrf", '{"request_key":"first"}'],
+    ["POST", "/api/settings", "stale-csrf", '{"request_key":"second"}'],
+    ["GET", "/api/session", null, null],
+    ["POST", "/api/settings", "fresh-csrf", '{"request_key":"first"}'],
+    ["POST", "/api/settings", "fresh-csrf", '{"request_key":"second"}'],
+  ]);
+  assert.deepEqual(results, [
+    {
+      status: "fulfilled",
+      value: { status: "completed", data: { success: true, saved: "first" } },
+    },
+    {
+      status: "fulfilled",
+      value: { status: "completed", data: { success: true, saved: "second" } },
+    },
+  ]);
+  assert.deepEqual(states, ["fresh-csrf"]);
+});
+
 test("a resend rejected for its CSRF token again is reported and not sent a third time", async () => {
   const wire = scriptedTransport([
     signedInWith("stale-csrf"),
@@ -344,6 +385,30 @@ for (const [name, path, rejection] of [
     assert.deepEqual(states, []);
   });
 }
+
+test("a CSRF rejection code on a status other than 400 is reported unchanged, without a session read or a resend", async () => {
+  const wire = scriptedTransport([
+    signedInWith("stale-csrf"),
+    response(csrfRejected, 403),
+  ]);
+  const services = createServices(wire.transport);
+  await services.session.load();
+  const states = published(services);
+  await assert.rejects(
+    services.api.request("/api/settings", { method: "POST", json: {} }),
+    (error) => {
+      assert.ok(error instanceof ApiRequestError);
+      assert.equal(error.status, 403);
+      assert.deepEqual(error.error, csrfRejected);
+      return true;
+    },
+  );
+  assert.deepEqual(sent(wire), [
+    ["GET", "/api/session", null, null],
+    ["POST", "/api/settings", "stale-csrf", "{}"],
+  ]);
+  assert.deepEqual(states, []);
+});
 
 for (const [outcome, sessionRead, states] of [
   ["finds the session ended", response(signedOut), ["signed-out"]],
