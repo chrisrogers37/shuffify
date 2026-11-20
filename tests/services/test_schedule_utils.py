@@ -11,6 +11,7 @@ import pytest
 from apscheduler.triggers.cron import CronTrigger
 
 from shuffify.services.schedule_utils import (
+    DEFINITION_COLUMNS,
     TIME_CAPABLE_FREQUENCIES,
     TIME_RE,
     build_cron,
@@ -176,3 +177,13 @@ def test_revision_of_null_sources_and_options_is_fixed():
         is_enabled=True,
     )
     assert schedule_revision(schedule) == "9e79cb78a1aef1b3f5254294c3295be14343310a1b180edcd1a322daf242fa21"
+
+
+@pytest.mark.parametrize("column", DEFINITION_COLUMNS)
+def test_the_revision_changes_with_each_definition_column(column):
+    from types import SimpleNamespace
+
+    schedule = SimpleNamespace(id=1, user_id=2, is_enabled=True, **dict.fromkeys(DEFINITION_COLUMNS))
+    before = schedule_revision(schedule)
+    setattr(schedule, column, "changed")
+    assert schedule_revision(schedule) != before
