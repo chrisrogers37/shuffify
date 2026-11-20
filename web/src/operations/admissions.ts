@@ -13,6 +13,7 @@ import {
   ProtocolError,
   RateLimitError,
 } from "../api/errors.ts";
+import { digest, record } from "../api/guards.ts";
 import { getOperationStore } from "./store.ts";
 import type { OperationStore } from "./store.ts";
 export interface AdmissionResource {
@@ -108,8 +109,6 @@ export interface Admission {
     readonly dependsOn: readonly string[];
   };
 }
-const record = (v: unknown): v is Record<string, unknown> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
 function frozen<T>(value: T): ReadonlyDeep<T> {
   const copy = structuredClone(value);
   const freeze = (v: unknown) => {
@@ -495,8 +494,6 @@ export function createAdmissionRegistry(
   ) {
     if (confirmedActor !== actor) throw new MissingCsrfTokenError();
     const { parent, context, request } = input;
-    const digest = (v: unknown) =>
-      typeof v === "string" && /^[0-9a-f]{64}$/u.test(v);
     if (
       !Number.isSafeInteger(parent.id) ||
       parent.id < 1 ||

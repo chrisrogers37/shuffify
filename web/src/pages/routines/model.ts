@@ -9,6 +9,7 @@ import type {
   RoutinesContext,
 } from "../../api/contracts.ts";
 import { ApiRequestError, ProtocolError } from "../../api/errors.ts";
+import { digest, id, record } from "../../api/guards.ts";
 export const labels: Record<JobType, string> = {
   raid: "Collect",
   shuffle: "Shuffle",
@@ -19,12 +20,6 @@ export const labels: Record<JobType, string> = {
 };
 export const operationLabel = (kind: string) =>
   labels[kind as JobType] ?? "Operation unavailable";
-export const record = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-export const id = (value: unknown): value is number =>
-  Number.isSafeInteger(value) && Number(value) > 0;
-export const digest = (value: unknown): value is string =>
-  typeof value === "string" && /^[a-f0-9]{64}$/u.test(value);
 export const playlistPath = (target: string) =>
   `/playlist/${encodeURIComponent(target)}`;
 export function parseNavigation(search: string) {

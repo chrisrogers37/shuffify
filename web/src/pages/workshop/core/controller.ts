@@ -20,12 +20,12 @@ import {
   ProtocolError,
   RateLimitError,
 } from "../../../api/errors.ts";
+import { trackURI } from "../../../api/guards.ts";
 import { getOperationStore } from "../../../operations/store.ts";
 import type { OperationStore } from "../../../operations/store.ts";
 import {
   createWorkshopClient,
   targetResult,
-  trackURI,
   verifiedRestore,
 } from "./client.ts";
 import {

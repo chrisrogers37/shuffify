@@ -16,6 +16,7 @@ import {
   unsuccessfulOperationStates,
 } from "../../api/contracts";
 import { ApiRequestError } from "../../api/errors";
+import { record } from "../../api/guards";
 import { useServices, useSession } from "../../auth/SessionProvider";
 import { useAnnouncer } from "../../a11y/Announcer";
 import {
@@ -35,7 +36,6 @@ import {
   parseSetup,
   playlistPath,
   readContinuation,
-  record,
   stageChange,
 } from "./model";
 import type { SetupChange, SetupContext, SetupReview } from "./model";
@@ -70,6 +70,8 @@ const names: Record<string, string> = {
   unpair_archive: "Unpair archive",
   set_auto_archive: "Change automatic archiving",
 };
+// The ID is letters and digits, as the backend's PlaylistID requires; the
+// backend also caps its length at 255.
 function sourceId(value: string) {
   const text = value.trim(),
     uri = /^spotify:playlist:([A-Za-z0-9]+)$/u.exec(text);
