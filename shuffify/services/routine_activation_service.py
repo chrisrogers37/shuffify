@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from shuffify.enums import ActivityType, JobType, RotationMode
 from shuffify.models.db import RoutineActivationReceipt, Schedule, db
-from shuffify.schemas.playlist_setup_requests import is_playlist_id
+from shuffify.schemas.playlist_setup_requests import DRIP_COUNT_RANGE, is_playlist_id
 from shuffify.services import signed_digest
 from shuffify.services.activity_log_service import ActivityLogService
 from shuffify.services.api_response import busy_error
@@ -108,7 +108,8 @@ class DefinitionError(ValueError):
         self.path = path
 
 
-def _validate_options(job_type, algorithm, params):
+def _validate_options(job_type, algorithm, params, *, stored_params=None):
+    """Refuse invalid routine options; ``stored_params`` are the saved options of the exact routine, if any."""
     if not isinstance(params, dict):
         raise DefinitionError("definition.algorithm_params", "Routine options must be an object.")
     if params.get("force"):
@@ -146,7 +147,14 @@ def _validate_options(job_type, algorithm, params):
             if key in params:
                 _positive_int(params[key], f"definition.algorithm_params.{key}", minimum=minimum)
     if job_type in (JobType.DRIP, JobType.RAID_AND_DRIP) and "drip_count" in params:
-        _positive_int(params["drip_count"], "definition.algorithm_params.drip_count", minimum=1)
+        count = params["drip_count"]
+        low, high = DRIP_COUNT_RANGE
+        # A count above the range is refused only when new or changed: a saved routine keeps its own count.
+        unchanged = isinstance(stored_params, dict) and stored_params.get("drip_count") == count
+        if type(count) is not int or count < low or (count > high and not unchanged):
+            raise DefinitionError(
+                "definition.algorithm_params.drip_count", f"Enter a whole number from {low} to {high}."
+            )
     if job_type in (JobType.DRIP, JobType.RAID_AND_DRIP):
         unknown = set(params) - {"drip_count"}
         if unknown:
@@ -222,7 +230,7 @@ def _normalize(api, user, target_id, supplied, existing, state, target_name):
     params = supplied.get("algorithm_params", base.get("algorithm_params", {}))
     if params is None:
         params = {}
-    _validate_options(job_type, algorithm, params)
+    _validate_options(job_type, algorithm, params, stored_params=base.get("algorithm_params"))
     _validate_dependencies(
         api, user, target_id, state, job_type,
         extra_source_ids=base.get("source_playlist_ids", []), editable_cache={},
@@ -454,7 +462,10 @@ class RoutineActivationService:
             return _error("invalid_definition", 400, "Activate a new routine as enabled.", "desired_enabled")
         try:
             definition = request["definition"]
-            _validate_options(definition["job_type"], definition["algorithm_name"], definition["algorithm_params"])
+            _validate_options(
+                definition["job_type"], definition["algorithm_name"], definition["algorithm_params"],
+                stored_params=existing.algorithm_params if existing else None,
+            )
             expected_sources = stored_definition(existing)["source_playlist_ids"] if existing else []
             if definition["source_playlist_ids"] != expected_sources:
                 raise DefinitionError("definition.source_playlist_ids", "Routine sources changed. Review it again.")
@@ -543,7 +554,8 @@ class RoutineActivationService:
                 if error:
                     return error
                 try:
-                    _validate_options(schedule.job_type, schedule.algorithm_name, schedule.algorithm_params or {})
+                    params = schedule.algorithm_params or {}
+                    _validate_options(schedule.job_type, schedule.algorithm_name, params, stored_params=params)
                     _validate_dependencies(
                         api, user, target_id, state, schedule.job_type,
                         extra_source_ids=schedule.source_playlist_ids or [], editable_cache={},

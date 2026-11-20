@@ -10,6 +10,7 @@ import pytest
 from flask import current_app
 
 from shuffify.models.db import RoutineActivationReceipt, Schedule, User, db
+from shuffify.schemas.playlist_setup_requests import DRIP_COUNT_RANGE
 from shuffify.services import signed_digest
 from shuffify.services.playlist_lock import playlist_configuration_lock, playlist_lock
 from shuffify.services.playlist_setup_service import configuration_revision, read_state
@@ -114,6 +115,17 @@ def _activate(user, api, request, review):
         "definition": review["definition"], "intent": review["intent"],
         "dependency_revision": review["dependency_revision"],
     })
+
+
+def _resigned(user, request, review, params):
+    """``review`` with ``params`` as its options, signed for ``request``, so that activate's own check decides."""
+    definition = {**review["definition"], "algorithm_params": params}
+    body = {
+        **{key: value for key, value in request.items() if key != "definition"},
+        "definition": definition, "dependency_revision": review["dependency_revision"],
+    }
+    intent = signed_digest.issue(INTENT_PURPOSE, _intent_payload(user.id, "target", body))
+    return {**review, "definition": definition, "intent": intent}
 
 
 @pytest.mark.parametrize("job_type", ["raid", "shuffle", "raid_and_shuffle", "raid_and_drip", "rotate", "drip"])
@@ -423,6 +435,72 @@ def test_timing_edit_preserves_legacy_routine_only_source(world, job_type):
     assert routine.source_playlist_ids == ["legacy1"]
     assert routine.is_enabled is False
     assert routine.schedule_value == "0 8 * * *"
+
+
+def test_a_new_drip_count_outside_its_range_is_refused_at_review_and_at_activate(world):
+    user, api, _ = world
+    add_link(user, enabled=True)
+    low, high = DRIP_COUNT_RANGE
+    refusal = [{
+        "path": "definition.algorithm_params.drip_count", "message": f"Enter a whole number from {low} to {high}.",
+    }]
+    for count in (low - 1, high + 1):
+        request = _request(f"outside-{count}", "drip")
+        request["definition"]["algorithm_params"] = {"drip_count": count}
+        refused, status = RoutineActivationService.review(api, user, "target", request)
+        assert (status, refused["error_code"], refused["field_errors"]) == (422, "invalid_definition", refusal)
+        # Activate checks the count itself: sign the refused count onto an accepted review.
+        request["definition"]["algorithm_params"] = {"drip_count": low}
+        reviewed = _review(user, api, request)
+        refused, status = _activate(user, api, request, _resigned(user, request, reviewed, {"drip_count": count}))
+        assert (status, refused["error_code"], refused["field_errors"]) == (422, "invalid_definition", refusal)
+    assert Schedule.query.count() == 0
+    for count in (low, high):
+        request = _request(f"inside-{count}", "drip", create_another=True)
+        request["definition"]["algorithm_params"] = {"drip_count": count}
+        accepted, status = _activate(user, api, request, _review(user, api, request))
+        assert status == 200, accepted
+        assert Schedule.query.get(accepted["schedule_id"]).algorithm_params == {"drip_count": count}
+
+
+def test_a_saved_drip_count_above_its_range_is_kept_until_an_edit_changes_it(world):
+    user, api, _ = world
+    add_link(user, enabled=True)
+    saved, inside = DRIP_COUNT_RANGE[1] + 10, DRIP_COUNT_RANGE[1] - 10
+    routine = add_routine(user, "drip", params={"drip_count": saved})
+
+    def edit(key, count):
+        # The routine setup page sends the whole options object with every edit.
+        return {
+            "request_key": key, "schedule_id": routine.id, "expected_revision": schedule_revision(routine),
+            "definition": {"algorithm_params": {"drip_count": count}, "timing": {"kind": "daily", "time": "08:00"}},
+        }
+
+    raised, kept = edit("raised", saved + 1), edit("kept", saved)
+    refused, status = RoutineActivationService.review(api, user, "target", raised)
+    assert status == 422 and refused["field_errors"][0]["path"] == "definition.algorithm_params.drip_count"
+    reviewed = _review(user, api, kept)
+    refused, status = _activate(user, api, raised, _resigned(user, raised, reviewed, {"drip_count": saved + 1}))
+    assert status == 422 and refused["field_errors"][0]["path"] == "definition.algorithm_params.drip_count"
+    accepted, status = _activate(user, api, kept, reviewed)
+    assert status == 200, accepted
+    assert routine.algorithm_params == {"drip_count": saved} and routine.schedule_value == "0 8 * * *"
+    lowered = edit("lowered", inside)
+    accepted, status = _activate(user, api, lowered, _review(user, api, lowered))
+    assert status == 200, accepted
+    assert routine.algorithm_params == {"drip_count": inside}
+
+
+def test_resume_keeps_a_saved_drip_count_above_its_range(world):
+    user, api, _ = world
+    add_link(user, enabled=True)
+    saved = DRIP_COUNT_RANGE[1] + 10
+    routine = add_routine(user, "drip", enabled=False, params={"drip_count": saved})
+    answer, status = RoutineActivationService.set_state(api, user, routine.id, {
+        "desired_enabled": True, "expected_revision": schedule_revision(routine),
+    })
+    assert status == 200, answer
+    assert routine.is_enabled is True and routine.algorithm_params == {"drip_count": saved}
 
 
 def test_review_cannot_change_existing_legacy_sources(world):
