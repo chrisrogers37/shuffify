@@ -6,7 +6,9 @@ constraint. ``JobKind`` stays a ``Literal`` for type checkers, and a web union
 is read through the schemas generated from ``web/src/api/contracts.ts``.
 
 The copies of the snapshot cap, in the settings request, its CHECK constraint
-and the web schemas, are checked against ``MAX_SNAPSHOTS_LIMIT`` the same way.
+and the web schemas, are checked against ``MAX_SNAPSHOTS_LIMIT`` the same way,
+and the raid and drip count CHECK constraints against ``RAID_COUNT_RANGE`` and
+``DRIP_COUNT_RANGE``.
 """
 
 import json
@@ -34,15 +36,18 @@ CHECKS = {
 UNIONS = {"JobType": JobType}
 
 
-@pytest.mark.parametrize(("name", "enum"), CHECKS.items())
-def test_check_constraint_lists_its_enum(name, enum):
-    texts = {
+def check_texts():
+    return {
         constraint.name: str(constraint.sqltext)
         for table in db.metadata.tables.values()
         for constraint in table.constraints
         if isinstance(constraint, sa.CheckConstraint)
     }
-    values = re.findall(r"'([^']*)'", texts[name])
+
+
+@pytest.mark.parametrize(("name", "enum"), CHECKS.items())
+def test_check_constraint_lists_its_enum(name, enum):
+    values = re.findall(r"'([^']*)'", check_texts()[name])
     assert set(values) == set(enum), f"Change {name}'s text and add a migration that replaces the constraint"
 
 
@@ -84,3 +89,17 @@ def test_each_copy_of_the_snapshot_cap_is_the_cap():
     assert maxima, "No schema under web/schemas defines SnapshotLimit"
     for path, maximum in maxima.items():
         assert maximum == MAX_SNAPSHOTS_LIMIT, path
+
+
+def test_each_count_check_is_its_range():
+    # Imported here for the same reason as the settings request.
+    from shuffify.schemas.playlist_setup_requests import DRIP_COUNT_RANGE, RAID_COUNT_RANGE
+
+    texts = check_texts()
+    for name, column, (low, high) in (
+        ("ck_upstream_raid_count_range", "raid_count", RAID_COUNT_RANGE),
+        ("ck_raid_link_drip_count", "drip_count", DRIP_COUNT_RANGE),
+    ):
+        assert texts[name] == f"{column} >= {low} AND {column} <= {high}", (
+            f"Change {name}'s text and add a migration that replaces the constraint"
+        )

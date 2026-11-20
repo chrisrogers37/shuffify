@@ -13,7 +13,7 @@ import {
 } from "../../components/ui/controls";
 import { State } from "../../components/ui/States";
 import { useNavigationBlocker } from "../../navigation/NavigationGuard";
-import { unconfirmedMutation } from "./model";
+import { countInputs, unconfirmedMutation } from "./model";
 import { createRoutineClient } from "./client";
 import {
   activationBody,
@@ -622,8 +622,7 @@ export function RoutineSetupPage() {
                         <Input
                           {...props}
                           type="number"
-                          min={1}
-                          max={50}
+                          {...countInputs(context.prerequisites).drip}
                           value={String(
                             draft.algorithm_params.drip_count ?? "",
                           )}

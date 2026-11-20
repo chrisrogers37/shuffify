@@ -3,6 +3,8 @@ import { Link } from "react-router";
 import { Button, Field, Input, Select } from "../../../components/ui/controls";
 import { useConfirm } from "../../../components/tasks/ConfirmDialog";
 import type { WorkshopToolContext } from "../workspace";
+import { inRange } from "../../../api/guards";
+import type { CountRange } from "../../../api/guards";
 import type { UpstreamSource } from "./types";
 import {
   ActionReceipt,
@@ -13,34 +15,34 @@ import {
 } from "./hooks";
 export function SourceCount({
   source,
+  range,
   onSave,
   value,
   onChange,
 }: {
   source: UpstreamSource;
+  range: CountRange;
   onSave: (n: number) => void;
   value: string;
   onChange: (value: string) => void;
 }) {
   const save = () => {
     const n = Number(value);
-    if (Number.isInteger(n) && n >= 1 && n <= 100 && n !== source.raid_count)
-      onSave(n);
-    else if (!Number.isInteger(n) || n < 1 || n > 100)
-      onChange(String(source.raid_count));
+    if (!inRange(n, range)) onChange(String(source.raid_count));
+    else if (n !== source.raid_count) onSave(n);
   };
   return (
     <Field
       id={`source-count-${source.id}`}
       label={`Tracks per collect for ${source.source_name ?? source.search_query ?? source.source_playlist_id ?? "source"} #${source.id}`}
-      help="1–100; saves when you leave this field."
+      help={`${range[0]}–${range[1]}; saves when you leave this field.`}
     >
       {(props) => (
         <Input
           {...props}
           type="number"
-          min="1"
-          max="100"
+          min={range[0]}
+          max={range[1]}
           value={value}
           onChange={(e) => onChange(e.currentTarget.value)}
           onBlur={save}
@@ -285,6 +287,7 @@ export function SourceSetupPanel(context: WorkshopToolContext) {
             {source.last_track_count === null && <p>Track count unavailable</p>}
             <SourceCount
               source={source}
+              range={status.raid_count_range}
               value={
                 state.sourceCountInputs[source.id] ?? String(source.raid_count)
               }

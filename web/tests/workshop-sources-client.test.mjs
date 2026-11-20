@@ -28,6 +28,49 @@ test("pending parser rejects foreign target and duplicate row identities before 
   tracks = [{ ...pending, target_playlist_id: "foreign" }];
   await assert.rejects(client.pending(), /target|playlist/i);
 });
+test("raid status carries both count ranges and checks each count against them", async () => {
+  const source = {
+    id: 5,
+    target_playlist_id: "target",
+    source_type: "external",
+    source_playlist_id: "upstream",
+    source_name: "Upstream",
+    source_url: null,
+    search_query: null,
+    raid_count: 7,
+    last_track_count: null,
+    last_resolve_status: null,
+  };
+  const link = {
+    id: 3,
+    target_playlist_id: "target",
+    raid_playlist_id: "raid",
+    raid_playlist_name: null,
+    drip_count: 9,
+    drip_enabled: false,
+  };
+  let ranges = { raid_count_range: [1, 7], drip_count_range: [2, 9] };
+  const client = createSourcesClient(
+    createApiClient({
+      transport: async () =>
+        json({
+          success: true,
+          raid_status: { sources: [source], raid_link: link, source_count: 1, max_sources: 10, ...ranges },
+        }),
+    }),
+    "target",
+  );
+  const status = await client.status();
+  assert.deepEqual([status.raid_count_range, status.drip_count_range], [[1, 7], [2, 9]]);
+  ranges = { raid_count_range: [8, 100], drip_count_range: [2, 9] };
+  await assert.rejects(client.status(), /source row/u);
+  ranges = { raid_count_range: [1, 7], drip_count_range: [2, 8] };
+  await assert.rejects(client.status(), /collection binding/u);
+  for (const malformed of [{}, { raid_count_range: [1, 7] }, { raid_count_range: [7, 1], drip_count_range: [2, 9] }]) {
+    ranges = malformed;
+    await assert.rejects(client.status(), /status is incomplete/u);
+  }
+});
 test("archive response retains total and duplicate physical occurrences", async () => {
   const track = {
     id: "1",

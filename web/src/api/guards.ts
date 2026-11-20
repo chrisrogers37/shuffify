@@ -9,3 +9,13 @@ export const digest = (v: unknown): v is string =>
   typeof v === "string" && /^[0-9a-f]{64}$/u.test(v);
 export const trackURI = (v: unknown): v is string =>
   typeof v === "string" && /^spotify:track:[A-Za-z0-9]{22}$/u.test(v);
+// An inclusive [minimum, maximum] count, as the server sends it.
+export type CountRange = [number, number];
+export const countRange = (v: unknown): v is CountRange =>
+  Array.isArray(v) &&
+  v.length === 2 &&
+  count(v[0]) &&
+  count(v[1]) &&
+  v[0] <= v[1];
+export const inRange = (v: unknown, [low, high]: CountRange) =>
+  count(v) && low <= v && v <= high;
