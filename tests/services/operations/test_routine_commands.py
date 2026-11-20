@@ -116,7 +116,10 @@ def routine(db_app, sample_token, monkeypatch):
             return {
                 "offset": offset,
                 "total": len(values),
-                "next": None,
+                "next": (
+                    f"https://api.spotify.com/v1/playlists/{resource}/items?offset={offset + limit}&limit={limit}"
+                    if offset + limit < len(values) else None
+                ),
                 "items": [
                     {"added_at": "2026-01-01T00:00:00Z", "track": value} for value in values[offset : offset + limit]
                 ],
