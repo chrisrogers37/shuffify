@@ -4,7 +4,11 @@ import type {
   Operation,
   WorkshopTrack,
 } from "../../../api/contracts.ts";
-import { ApiRequestError, ProtocolError } from "../../../api/errors.ts";
+import {
+  ApiRequestError,
+  ProtocolError,
+  retryDeadline,
+} from "../../../api/errors.ts";
 import { inRange, record } from "../../../api/guards.ts";
 import type { AdmissionRequest } from "../../../operations/admissions.ts";
 import { getAdmissionRegistry } from "../../../operations/admissions.ts";
@@ -109,10 +113,7 @@ export function createSourcesController(
   };
   const errorPatch = (e: unknown) => ({
     error: message(e),
-    retryUntil:
-      e instanceof ApiRequestError && e.retryAfterMs !== null
-        ? Date.now() + e.retryAfterMs
-        : state.retryUntil,
+    retryUntil: retryDeadline(e, Date.now()) ?? state.retryUntil,
   });
   const cooling = () => Date.now() < state.retryUntil;
   let bootRelease: (() => void) | null = null,
@@ -155,10 +156,7 @@ export function createSourcesController(
       } as Partial<SourceState>);
     } catch (e) {
       if (reading.get(name) !== ticket) return;
-      const retryUntil =
-        e instanceof ApiRequestError && e.retryAfterMs !== null
-          ? Date.now() + e.retryAfterMs
-          : 0;
+      const retryUntil = retryDeadline(e, Date.now()) ?? 0;
       update({
         [name]: {
           ...state[name],
@@ -567,19 +565,13 @@ export function createSourcesController(
         ...(e instanceof ApiRequestError
           ? { result: JSON.parse(JSON.stringify(e.error)) as JsonRecord }
           : {}),
-        retryUntil:
-          a?.retryUntil ??
-          (e instanceof ApiRequestError && e.retryAfterMs !== null
-            ? Date.now() + e.retryAfterMs
-            : 0),
+        retryUntil: a?.retryUntil ?? retryDeadline(e, Date.now()) ?? 0,
       });
       update({
         retryUntil: Math.max(
           state.retryUntil,
           a?.retryUntil ?? 0,
-          e instanceof ApiRequestError && e.retryAfterMs !== null
-            ? Date.now() + e.retryAfterMs
-            : 0,
+          retryDeadline(e, Date.now()) ?? 0,
         ),
       });
       return false;

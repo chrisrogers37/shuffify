@@ -12,6 +12,7 @@ import {
   MissingCsrfTokenError,
   ProtocolError,
   RateLimitError,
+  retryDeadline,
 } from "../api/errors.ts";
 import { digest, record } from "../api/guards.ts";
 import { getOperationStore } from "./store.ts";
@@ -449,10 +450,7 @@ export function createAdmissionRegistry(
         [400, 401, 403].includes(error.status)
           ? { conclusiveRefusal: error.status as 400 | 401 | 403 }
           : {}),
-        retryUntil:
-          error instanceof ApiRequestError && error.retryAfterMs !== null
-            ? Date.now() + error.retryAfterMs
-            : a.retryUntil,
+        retryUntil: retryDeadline(error, Date.now()) ?? a.retryUntil,
       });
       if (refused) refuseUnstartedContinuations(r.key);
       if (busy) operations.observe(busy);

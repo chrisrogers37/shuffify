@@ -100,6 +100,7 @@ function isApiError(value: RecordValue): value is RecordValue & ApiError {
     typeof value.category === "string" &&
     (value.retryable === undefined || typeof value.retryable === "boolean") &&
     (value.retry_after === undefined ||
+      value.retry_after === null ||
       (typeof value.retry_after === "number" &&
         Number.isFinite(value.retry_after) &&
         value.retry_after >= 0)) &&
@@ -139,7 +140,7 @@ function retryHint(response: Response, body: ApiError): number | null {
       (Number.isFinite(date) ? Math.max(0, date - Date.now()) : null);
     if (hint !== null && Number.isFinite(hint)) milliseconds = hint;
   }
-  if (body.retry_after !== undefined)
+  if (typeof body.retry_after === "number")
     milliseconds = Math.max(milliseconds ?? 0, body.retry_after * 1000);
   return milliseconds;
 }

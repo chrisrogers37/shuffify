@@ -15,7 +15,7 @@ import {
   terminalOperationStates,
   unsuccessfulOperationStates,
 } from "../../api/contracts";
-import { ApiRequestError } from "../../api/errors";
+import { retryDeadline } from "../../api/errors";
 import { record } from "../../api/guards";
 import { useServices, useSession } from "../../auth/SessionProvider";
 import { useAnnouncer } from "../../a11y/Announcer";
@@ -434,8 +434,7 @@ export function PlaylistSetupPage() {
       const retained = admissions.getSnapshot().get(value.key);
       value.operationId = retained?.operationId ?? null;
       value.refused = !value.unknown && retained?.relation !== "original";
-      if (problem instanceof ApiRequestError && problem.retryAfterMs !== null)
-        value.retryAt = Date.now() + problem.retryAfterMs;
+      value.retryAt = retryDeadline(problem, Date.now()) ?? value.retryAt;
       setError(
         problem instanceof Error
           ? problem.message

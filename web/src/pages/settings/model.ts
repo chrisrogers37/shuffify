@@ -11,7 +11,7 @@ import {
   ApiRequestError,
   NetworkError,
   ProtocolError,
-  RateLimitError,
+  retryDeadline,
 } from "../../api/errors.ts";
 /** The largest snapshot limit a user can choose. */
 export const maxSnapshotLimit = 50;
@@ -182,8 +182,8 @@ export function settingsProblem(error: unknown): SettingsProblem {
     return {
       message: error.message,
       fields,
-      retryAfterMs:
-        error instanceof RateLimitError ? (error.retryAfterMs ?? 1000) : null,
+      // Counted from 0, the deadline is the wait itself.
+      retryAfterMs: retryDeadline(error, 0),
     };
   }
   return {

@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { SettingsContext } from "../../api/contracts";
-import { ApiRequestError, RateLimitError } from "../../api/errors";
+import { ApiRequestError, retryDeadline } from "../../api/errors";
 import { useServices, useSession } from "../../auth/SessionProvider";
 import { Button, Field, Input, Select } from "../../components/ui/controls";
 import { State } from "../../components/ui/States";
@@ -142,8 +142,8 @@ export function SettingsPage() {
             ? error.message
             : "The settings response could not be loaded. Please try again.",
         );
-        if (error instanceof RateLimitError)
-          setRetryUntil(Date.now() + (error.retryAfterMs ?? 1000));
+        const until = retryDeadline(error, Date.now());
+        if (until !== null) setRetryUntil(until);
         setLoading(false);
       },
     );

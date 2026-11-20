@@ -17,7 +17,7 @@ import {
   MissingCsrfTokenError,
   NetworkError,
   ProtocolError,
-  RateLimitError,
+  retryDeadline,
 } from "../../api/errors.ts";
 import { record } from "../../api/guards.ts";
 import { getOperationStore } from "../../operations/store.ts";
@@ -180,10 +180,7 @@ export function createLibraryController(
       } catch (e) {
         update({
           error: message(e),
-          retryUntil:
-            e instanceof RateLimitError
-              ? Date.now() + (e.retryAfterMs ?? 1000)
-              : 0,
+          retryUntil: retryDeadline(e, Date.now()) ?? 0,
         });
       } finally {
         update({ loading: false });
@@ -311,10 +308,7 @@ export function createLibraryController(
             ? (JSON.parse(JSON.stringify(e.error)) as JsonRecord)
             : null,
         error: message(e),
-        retryUntil:
-          e instanceof RateLimitError
-            ? Date.now() + (e.retryAfterMs ?? 1000)
-            : 0,
+        retryUntil: retryDeadline(e, Date.now()) ?? 0,
       });
     }
   }
@@ -372,10 +366,7 @@ export function createLibraryController(
         error: known
           ? message(e)
           : "The request may have been accepted. Its exact request and key are retained. New Spotify changes are blocked until this is reconciled.",
-        retryUntil:
-          e instanceof RateLimitError
-            ? Date.now() + (e.retryAfterMs ?? 1000)
-            : 0,
+        retryUntil: retryDeadline(e, Date.now()) ?? 0,
         busyId: busy,
       });
       if (busy !== null) operations.observe(busy);
@@ -434,10 +425,7 @@ export function createLibraryController(
     } catch (e) {
       changeReceipt(id, {
         inspectionError: message(e),
-        inspectionRetryUntil:
-          e instanceof RateLimitError
-            ? Date.now() + (e.retryAfterMs ?? 1000)
-            : 0,
+        inspectionRetryUntil: retryDeadline(e, Date.now()) ?? 0,
       });
     } finally {
       changeReceipt(id, { inspecting: false });
@@ -509,8 +497,7 @@ export function createLibraryController(
     update({});
   });
   const preferenceCooling = () => Date.now() < state.preferenceRetryUntil;
-  const preferenceRetry = (e: unknown) =>
-    e instanceof RateLimitError ? Date.now() + (e.retryAfterMs ?? 1000) : 0;
+  const preferenceRetry = (e: unknown) => retryDeadline(e, Date.now()) ?? 0;
   async function toggle(id: string, flag: "pinned" | "hidden") {
     if (
       state.loading ||

@@ -9,6 +9,7 @@ import {
   NetworkError,
   ProtocolError,
   RateLimitError,
+  retryDeadline,
   UnauthorizedError,
 } from "../src/api/errors.ts";
 import { pollOperation } from "../src/api/operations.ts";
@@ -487,6 +488,67 @@ test("429 preserves the full largest retry hint without replaying a write", asyn
   );
   assert.equal(wire.requests.length, 1);
 });
+
+test("a 429 with a null retry_after is a rate limit with its message and no hint", async () => {
+  const message = "Spotify is busy. Nothing was changed; try again shortly.";
+  const client = createApiClient({
+    transport: async () =>
+      response(
+        apiError("rate_limited", {
+          message,
+          retryable: true,
+          retry_after: null,
+        }),
+        429,
+      ),
+  });
+  await assert.rejects(
+    client.request("/api/playlist/p1/setup/context"),
+    (error) => {
+      assert.ok(error instanceof RateLimitError);
+      assert.equal(error.message, message);
+      assert.equal(error.retryAfterMs, null);
+      return true;
+    },
+  );
+});
+
+for (const [name, error, deadline] of [
+  [
+    "a 429 waits its retry hint",
+    new RateLimitError(apiError("rate_limited"), 30_000),
+    1_030_000,
+  ],
+  [
+    "a 429 without a retry hint waits one second",
+    new RateLimitError(apiError("rate_limited")),
+    1_001_000,
+  ],
+  [
+    "a 503 waits its retry hint",
+    new ApiRequestError(503, apiError("unavailable"), 30_000),
+    1_030_000,
+  ],
+  [
+    "a 503 without a retry hint does not wait",
+    new ApiRequestError(503, apiError("unavailable")),
+    null,
+  ],
+  [
+    "a 400 with a retry hint does not wait",
+    new ApiRequestError(400, apiError("invalid_request"), 30_000),
+    null,
+  ],
+  [
+    "a network failure does not wait",
+    new NetworkError("POST", new TypeError("Failed to fetch")),
+    null,
+  ],
+]) {
+  test(`retryDeadline: ${name}`, () => {
+    assert.equal(retryDeadline(error, 1_000_000), deadline);
+  });
+}
 
 test("network failure marks unsafe admission unknown and never retries", async () => {
   const wire = scriptedTransport([
