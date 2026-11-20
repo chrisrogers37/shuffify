@@ -112,8 +112,7 @@ install_deps() {
     return
   fi
   log "installing requirements/dev.txt"
-  "${py}" -m pip install -q --upgrade pip
-  "${py}" -m pip install -q -r requirements/dev.txt
+  "${py}" -m pip install -q --require-hashes -r requirements/dev.txt
   echo "${want}" > "${stamp}"
 }
 
