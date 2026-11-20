@@ -385,7 +385,7 @@ jobs:
     # artifact.
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:16-alpine@sha256:1d5b02d3a9941fbd52437db4107f8c52d6297dac553ca1e5c299ebb3756b4857
         env:
           POSTGRES_DB: shuffify_harness
           POSTGRES_USER: shuffify
@@ -396,7 +396,7 @@ jobs:
           --health-cmd "pg_isready -U shuffify -d shuffify_harness"
           --health-interval 5s --health-timeout 5s --health-retries 12
       redis:
-        image: redis:7-alpine
+        image: redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
         ports: ['6379:6379']
         options: >-
           --health-cmd "redis-cli ping"
