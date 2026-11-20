@@ -1,4 +1,5 @@
 import type { ApiClient } from "../../api/client.ts";
+import { record } from "../../api/guards.ts";
 import type {
   AlgorithmParameter,
   JsonValue,
@@ -60,8 +61,6 @@ export function isDirty(draft: SettingsDraft, settings: UserSettings): boolean {
     (key) => draft[key] !== saved[key],
   );
 }
-const record = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 const nullableString = (value: unknown) =>
   value === null || typeof value === "string";
 const jsonValue = (value: unknown): value is JsonValue =>

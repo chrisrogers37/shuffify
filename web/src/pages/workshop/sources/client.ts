@@ -3,13 +3,12 @@ import type { JsonRecord, WorkshopTrack } from "../../../api/contracts.ts";
 import { ApiRequestError, ProtocolError } from "../../../api/errors.ts";
 import {
   count,
-  playlistId,
-  positive,
+  digest,
+  id as positive,
   record,
-  sourceResult,
-  taskPath,
-  uri,
-} from "./model.ts";
+  trackURI as uri,
+} from "../../../api/guards.ts";
+import { playlistId, sourceResult, taskPath } from "./model.ts";
 import type {
   ArchivePair,
   PendingTrack,
@@ -288,8 +287,7 @@ export function createSourcesClient(api: ApiClient, target: string) {
         !record(v.context.target) ||
         v.context.target.id !== target ||
         !record(v.context.review_binding) ||
-        typeof v.context.review_binding.scope !== "string" ||
-        !/^[a-f0-9]{64}$/.test(v.context.review_binding.scope) ||
+        !digest(v.context.review_binding.scope) ||
         !Array.isArray(v.context.resources)
       )
         return invalid(

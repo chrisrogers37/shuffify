@@ -19,6 +19,7 @@ import {
   ProtocolError,
   RateLimitError,
 } from "../../api/errors.ts";
+import { record } from "../../api/guards.ts";
 import { getOperationStore } from "../../operations/store.ts";
 import type { OperationStore } from "../../operations/store.ts";
 import {
@@ -26,7 +27,6 @@ import {
   loadLibrary,
   loadReview,
   preference,
-  record,
   libraryAdmission,
 } from "./api.ts";
 import type { Intent, Review, Inspection, InspectionIntent } from "./api.ts";

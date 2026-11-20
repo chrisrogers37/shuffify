@@ -6,20 +6,19 @@ import type {
   OperationRestoreRequest,
 } from "../../api/contracts.ts";
 import { ProtocolError } from "../../api/errors.ts";
+import {
+  count,
+  digest,
+  id,
+  record,
+  trackURI as track,
+} from "../../api/guards.ts";
 
 export type RestoreContext = OperationRestoreContext["context"];
-const record = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-const id = (value: unknown): value is number =>
-  Number.isSafeInteger(value) && Number(value) > 0;
-const count = (value: unknown): value is number =>
-  Number.isSafeInteger(value) && Number(value) >= 0;
-const digest = (value: unknown) =>
-  typeof value === "string" && /^[0-9a-f]{64}$/u.test(value);
+// Wider than the backend's PlaylistID (1 to 255 letters and digits): it also
+// accepts "_" and "-".
 const playlist = (value: unknown): value is string =>
   typeof value === "string" && /^[A-Za-z0-9_-]{1,255}$/u.test(value);
-const track = (value: unknown) =>
-  typeof value === "string" && /^spotify:track:[A-Za-z0-9]{22}$/u.test(value);
 const same = (left: readonly string[], right: readonly string[]) => {
   const ordered = [...right].sort();
   return (

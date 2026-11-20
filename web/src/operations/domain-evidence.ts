@@ -1,7 +1,6 @@
 import { confirmedOperationStates } from "../api/contracts.ts";
 import type { Operation } from "../api/contracts.ts";
-const count = (v: unknown): v is number =>
-  Number.isSafeInteger(v) && Number(v) >= 0;
+import { count } from "../api/guards.ts";
 const ids = (v: unknown): v is number[] =>
   Array.isArray(v) &&
   v.every((x) => Number.isSafeInteger(x) && x > 0) &&

@@ -14,6 +14,7 @@ import {
   RateLimitError,
   UnauthorizedError,
 } from "./errors.ts";
+import { count as isCount, id as isId, record as isRecord } from "./guards.ts";
 import { fetchTransport } from "./transport.ts";
 import type { Transport } from "./transport.ts";
 export type { Transport } from "./transport.ts";
@@ -39,12 +40,6 @@ export type ApiResult<T> =
 type RecordValue = Record<string, unknown>;
 const states = new Set<string>(operationStates);
 const noticeCodes = new Set<string>(authNoticeCodes);
-const isRecord = (value: unknown): value is RecordValue =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-const isId = (value: unknown): value is number =>
-  Number.isSafeInteger(value) && (value as number) > 0;
-const isCount = (value: unknown): value is number =>
-  Number.isSafeInteger(value) && (value as number) >= 0;
 const isNullableString = (value: unknown): value is string | null =>
   value === null || typeof value === "string";
 

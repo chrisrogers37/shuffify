@@ -12,7 +12,8 @@ import { getSourcesController } from "./controller";
 import type { QueuedAction } from "./types";
 import { OperationRestoration } from "../../../components/results/OperationRestoration";
 import { OperationView } from "../../routines/OperationView";
-import { record, playlistId } from "./model";
+import { record } from "../../../api/guards";
+import { playlistId } from "./model";
 export function SourceActor({
   controller: c,
   children,

@@ -5,6 +5,7 @@ import type {
   WorkshopTrack,
 } from "../../../api/contracts.ts";
 import { ApiRequestError, ProtocolError } from "../../../api/errors.ts";
+import { record } from "../../../api/guards.ts";
 import type { AdmissionRequest } from "../../../operations/admissions.ts";
 import { getAdmissionRegistry } from "../../../operations/admissions.ts";
 import type { OperationStore } from "../../../operations/store.ts";
@@ -24,7 +25,6 @@ import {
   freeze,
   pendingTrack,
   prepareTasks,
-  record,
   records,
   removeArchiveCopy,
   sourceResult,
