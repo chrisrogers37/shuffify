@@ -19,7 +19,13 @@ from shuffify.services.playlist_setup_service import (
     configuration_revision,
     read_state,
 )
-from shuffify.services.schedule_utils import normalize_timing, schedule_revision, serialize_timing
+from shuffify.services.schedule_utils import (
+    DEFINITION_COLUMNS,
+    normalize_timing,
+    schedule_revision,
+    serialize_timing,
+    stored_definition,
+)
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 from shuffify.spotify.exceptions import SpotifyError
 
@@ -27,10 +33,7 @@ INTENT_PURPOSE = "shuffify.routine.activation.v1"
 INTENT_AGE_S = 24 * 60 * 60
 RECEIPT_RETENTION = timedelta(days=7)
 LOCK_WAIT_S = 2.0
-DEFINITION_FIELDS = frozenset(
-    ("job_type", "target_playlist_id", "target_playlist_name", "source_playlist_ids",
-     "algorithm_name", "algorithm_params", "schedule_type", "schedule_value", "timezone")
-)
+DEFINITION_FIELDS = frozenset(DEFINITION_COLUMNS)
 
 
 def _error(code, status, message, field=None, **extra):
@@ -199,26 +202,12 @@ def _validate_dependencies(api, user, target_id, state, job_type, *, extra_sourc
             raise DefinitionError("definition.job_type", "The paired archive cannot be edited.") from error
 
 
-def _stored(schedule):
-    return {
-        "job_type": schedule.job_type,
-        "target_playlist_id": schedule.target_playlist_id,
-        "target_playlist_name": schedule.target_playlist_name,
-        "source_playlist_ids": schedule.source_playlist_ids or [],
-        "algorithm_name": schedule.algorithm_name,
-        "algorithm_params": schedule.algorithm_params or {},
-        "schedule_type": schedule.schedule_type,
-        "schedule_value": schedule.schedule_value,
-        "timezone": schedule.timezone,
-    }
-
-
 def _normalize(api, user, target_id, supplied, existing, state, target_name):
     if not isinstance(supplied, dict):
         raise DefinitionError("definition", "Routine definition must be an object.")
     if set(supplied) - {"job_type", "algorithm_name", "algorithm_params", "timing"}:
         raise DefinitionError("definition", "The routine definition has unsupported fields.")
-    base = _stored(existing) if existing else {}
+    base = stored_definition(existing) if existing else {}
     job_type = supplied.get("job_type", base.get("job_type"))
     if job_type not in tuple(JobType):
         raise DefinitionError("definition.job_type", "Choose an available routine operation.")
@@ -291,7 +280,7 @@ def _schedule_payload(schedule, registration=None):
         state = "Saved—registration needs attention"
     return {
         "schedule_id": schedule.id, "schedule": schedule.to_dict(),
-        "definition": _stored(schedule), "schedule_revision": schedule_revision(schedule),
+        "definition": stored_definition(schedule), "schedule_revision": schedule_revision(schedule),
         "timing": serialize_timing(schedule, effective_timezone=registration["effective_timezone"]),
         "registration": registration, "state": state,
     }
@@ -459,7 +448,7 @@ class RoutineActivationService:
         try:
             definition = request["definition"]
             _validate_options(definition["job_type"], definition["algorithm_name"], definition["algorithm_params"])
-            expected_sources = _stored(existing)["source_playlist_ids"] if existing else []
+            expected_sources = stored_definition(existing)["source_playlist_ids"] if existing else []
             if definition["source_playlist_ids"] != expected_sources:
                 raise DefinitionError("definition.source_playlist_ids", "Routine sources changed. Review it again.")
             _validate_dependencies(

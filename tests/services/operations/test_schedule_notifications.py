@@ -8,8 +8,21 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from shuffify.models.db import Schedule, db
+from shuffify.services.schedule_utils import DEFINITION_COLUMNS
 from tests.services.operations.test_scheduled_admission import NOW
 from tests.services.operations.test_scheduled_admission import schedule as schedule
+
+
+def test_each_schedule_column_is_classified_exactly_once():
+    """A new Schedule column fails here until it is a definition column, an extra or bookkeeping."""
+    # Outside the definition, though some field sets add them, such as id in the revision.
+    extras = ("id", "user_id", "is_enabled", "created_at")
+    # Bookkeeping never stamps a definition change or notifies the worker.
+    bookkeeping = (
+        "definition_changed_at", "last_run_at", "last_status", "last_error", "recovery_start_at", "updated_at",
+    )
+    columns = [column.name for column in Schedule.__table__.columns]
+    assert sorted(columns) == sorted((*DEFINITION_COLUMNS, *extras, *bookkeeping))
 
 
 def test_orm_insert_update_delete_pokes_only_after_outer_commit(schedule, db_app, monkeypatch):
