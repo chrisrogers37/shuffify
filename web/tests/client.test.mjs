@@ -3,14 +3,17 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createApiClient } from "../src/api/client.ts";
 import {
+  ApiRequestError,
   ConflictError,
   MissingCsrfTokenError,
   NetworkError,
   ProtocolError,
   RateLimitError,
+  retryDeadline,
   UnauthorizedError,
 } from "../src/api/errors.ts";
 import { pollOperation } from "../src/api/operations.ts";
+import { createServices } from "../src/app/services.ts";
 
 const signedIn = JSON.parse(
   await readFile(
@@ -186,6 +189,265 @@ test("401 notifies shared session owner without replaying unsafe request", async
   assert.equal(wire.requests.length, 1);
 });
 
+const signedInWith = (csrf_token) => response({ ...signedIn, csrf_token });
+const sent = (wire) =>
+  wire.requests.map(({ input, init }) => [
+    init.method,
+    input,
+    new Headers(init.headers).get("X-CSRFToken"),
+    init.body ?? null,
+  ]);
+// Each session state the store publishes: the token it holds, "signed-out", or its status.
+const published = (services) => {
+  const states = [];
+  services.session.subscribe(() => {
+    const state = services.session.getSnapshot();
+    states.push(
+      state.status !== "ready"
+        ? state.status
+        : state.session.signed_in
+          ? state.session.csrf_token
+          : "signed-out",
+    );
+  });
+  return states;
+};
+const csrfRejected = {
+  success: false,
+  error_code: "session_verification_expired",
+  message:
+    "Your request could not be verified. Please refresh the page and try again.",
+  category: "error",
+};
+const directRejected = (error_code, message) => ({
+  status: "failed",
+  message,
+  error: message,
+  operation: {
+    kind: "shuffle",
+    aggregate_status: "partial",
+    resources: [],
+    bookkeeping: [],
+    error_code,
+    retryable: false,
+  },
+  success: false,
+  category: "error",
+  error_code: "invalid_request",
+});
+
+for (const [name, path, rejection] of [
+  ["a write", "/api/settings", csrfRejected],
+  [
+    "a direct action",
+    "/api/shuffle/playlist-1",
+    directRejected(
+      "session_verification_expired",
+      "Session verification failed. This attempt did not run. Reloading loses the recovery details kept on this page; earlier Spotify changes remain.",
+    ),
+  ],
+]) {
+  test(`a stale CSRF token on ${name} renews the session in place and resends the write once`, async () => {
+    const wire = scriptedTransport([
+      signedInWith("stale-csrf"),
+      response(rejection, 400),
+      signedInWith("fresh-csrf"),
+      response({ success: true, saved: true }),
+    ]);
+    const services = createServices(wire.transport);
+    await services.session.load();
+    const states = published(services);
+    const result = await services.api.request(path, {
+      method: "POST",
+      json: { request_key: "same-intent" },
+    });
+    assert.deepEqual(result, {
+      status: "completed",
+      data: { success: true, saved: true },
+    });
+    assert.deepEqual(sent(wire), [
+      ["GET", "/api/session", null, null],
+      ["POST", path, "stale-csrf", '{"request_key":"same-intent"}'],
+      ["GET", "/api/session", null, null],
+      ["POST", path, "fresh-csrf", '{"request_key":"same-intent"}'],
+    ]);
+    assert.deepEqual(states, ["fresh-csrf"]);
+  });
+}
+
+test("two writes refused for a stale CSRF token at the same moment share one session read and are each resent once", async () => {
+  const wire = scriptedTransport([
+    signedInWith("stale-csrf"),
+    response(csrfRejected, 400),
+    response(csrfRejected, 400),
+    signedInWith("fresh-csrf"),
+    response({ success: true, saved: "first" }),
+    response({ success: true, saved: "second" }),
+  ]);
+  const services = createServices(wire.transport);
+  await services.session.load();
+  const states = published(services);
+  const results = await Promise.allSettled(
+    ["first", "second"].map((request_key) =>
+      services.api.request("/api/settings", {
+        method: "POST",
+        json: { request_key },
+      }),
+    ),
+  );
+  assert.deepEqual(sent(wire), [
+    ["GET", "/api/session", null, null],
+    ["POST", "/api/settings", "stale-csrf", '{"request_key":"first"}'],
+    ["POST", "/api/settings", "stale-csrf", '{"request_key":"second"}'],
+    ["GET", "/api/session", null, null],
+    ["POST", "/api/settings", "fresh-csrf", '{"request_key":"first"}'],
+    ["POST", "/api/settings", "fresh-csrf", '{"request_key":"second"}'],
+  ]);
+  assert.deepEqual(results, [
+    {
+      status: "fulfilled",
+      value: { status: "completed", data: { success: true, saved: "first" } },
+    },
+    {
+      status: "fulfilled",
+      value: { status: "completed", data: { success: true, saved: "second" } },
+    },
+  ]);
+  assert.deepEqual(states, ["fresh-csrf"]);
+});
+
+test("a resend rejected for its CSRF token again is reported and not sent a third time", async () => {
+  const wire = scriptedTransport([
+    signedInWith("stale-csrf"),
+    response(csrfRejected, 400),
+    signedInWith("fresh-csrf"),
+    response(csrfRejected, 400),
+  ]);
+  const services = createServices(wire.transport);
+  await services.session.load();
+  await assert.rejects(
+    services.api.request("/api/settings", { method: "POST", json: {} }),
+    (error) => {
+      assert.ok(error instanceof ApiRequestError);
+      assert.equal(error.status, 400);
+      assert.equal(error.error.error_code, "session_verification_expired");
+      return true;
+    },
+  );
+  assert.deepEqual(sent(wire), [
+    ["GET", "/api/session", null, null],
+    ["POST", "/api/settings", "stale-csrf", "{}"],
+    ["GET", "/api/session", null, null],
+    ["POST", "/api/settings", "fresh-csrf", "{}"],
+  ]);
+});
+
+for (const [name, path, rejection] of [
+  [
+    "a refused write",
+    "/api/settings",
+    {
+      success: false,
+      error_code: "invalid_request",
+      message: "Request body must be a JSON object.",
+      category: "error",
+    },
+  ],
+  [
+    "a refused direct action",
+    "/api/shuffle/playlist-1",
+    directRejected(
+      "invalid_request",
+      "Check the shuffle method and its options.",
+    ),
+  ],
+]) {
+  test(`${name} is reported without a session read or a resend`, async () => {
+    const wire = scriptedTransport([
+      signedInWith("stale-csrf"),
+      response(rejection, 400),
+    ]);
+    const services = createServices(wire.transport);
+    await services.session.load();
+    const states = published(services);
+    await assert.rejects(
+      services.api.request(path, { method: "POST", json: {} }),
+      (error) => {
+        assert.ok(error instanceof ApiRequestError);
+        assert.equal(error.status, 400);
+        assert.equal(error.error.error_code, "invalid_request");
+        return true;
+      },
+    );
+    assert.deepEqual(sent(wire), [
+      ["GET", "/api/session", null, null],
+      ["POST", path, "stale-csrf", "{}"],
+    ]);
+    assert.deepEqual(states, []);
+  });
+}
+
+test("a CSRF rejection code on a status other than 400 is reported unchanged, without a session read or a resend", async () => {
+  const wire = scriptedTransport([
+    signedInWith("stale-csrf"),
+    response(csrfRejected, 403),
+  ]);
+  const services = createServices(wire.transport);
+  await services.session.load();
+  const states = published(services);
+  await assert.rejects(
+    services.api.request("/api/settings", { method: "POST", json: {} }),
+    (error) => {
+      assert.ok(error instanceof ApiRequestError);
+      assert.equal(error.status, 403);
+      assert.deepEqual(error.error, csrfRejected);
+      return true;
+    },
+  );
+  assert.deepEqual(sent(wire), [
+    ["GET", "/api/session", null, null],
+    ["POST", "/api/settings", "stale-csrf", "{}"],
+  ]);
+  assert.deepEqual(states, []);
+});
+
+for (const [outcome, sessionRead, states] of [
+  ["finds the session ended", response(signedOut), ["signed-out"]],
+  [
+    "fails",
+    () => {
+      throw new TypeError("connection lost");
+    },
+    [],
+  ],
+]) {
+  test(`when the session read after a CSRF rejection ${outcome}, the rejection stands and nothing is resent`, async () => {
+    const wire = scriptedTransport([
+      signedInWith("stale-csrf"),
+      response(csrfRejected, 400),
+      sessionRead,
+    ]);
+    const services = createServices(wire.transport);
+    await services.session.load();
+    const seen = published(services);
+    await assert.rejects(
+      services.api.request("/api/settings", { method: "POST", json: {} }),
+      (error) => {
+        assert.ok(error instanceof ApiRequestError);
+        assert.equal(error.status, 400);
+        assert.equal(error.error.error_code, "session_verification_expired");
+        return true;
+      },
+    );
+    assert.deepEqual(sent(wire), [
+      ["GET", "/api/session", null, null],
+      ["POST", "/api/settings", "stale-csrf", "{}"],
+      ["GET", "/api/session", null, null],
+    ]);
+    assert.deepEqual(seen, states);
+  });
+}
+
 test("409 exposes the busy operation and never replays admission", async () => {
   const wire = scriptedTransport([
     response(apiError("operation_busy", { operation_id: 42 }), 409),
@@ -226,6 +488,67 @@ test("429 preserves the full largest retry hint without replaying a write", asyn
   );
   assert.equal(wire.requests.length, 1);
 });
+
+test("a 429 with a null retry_after is a rate limit with its message and no hint", async () => {
+  const message = "Spotify is busy. Nothing was changed; try again shortly.";
+  const client = createApiClient({
+    transport: async () =>
+      response(
+        apiError("rate_limited", {
+          message,
+          retryable: true,
+          retry_after: null,
+        }),
+        429,
+      ),
+  });
+  await assert.rejects(
+    client.request("/api/playlist/p1/setup/context"),
+    (error) => {
+      assert.ok(error instanceof RateLimitError);
+      assert.equal(error.message, message);
+      assert.equal(error.retryAfterMs, null);
+      return true;
+    },
+  );
+});
+
+for (const [name, error, deadline] of [
+  [
+    "a 429 waits its retry hint",
+    new RateLimitError(apiError("rate_limited"), 30_000),
+    1_030_000,
+  ],
+  [
+    "a 429 without a retry hint waits one second",
+    new RateLimitError(apiError("rate_limited")),
+    1_001_000,
+  ],
+  [
+    "a 503 waits its retry hint",
+    new ApiRequestError(503, apiError("unavailable"), 30_000),
+    1_030_000,
+  ],
+  [
+    "a 503 without a retry hint does not wait",
+    new ApiRequestError(503, apiError("unavailable")),
+    null,
+  ],
+  [
+    "a 400 with a retry hint does not wait",
+    new ApiRequestError(400, apiError("invalid_request"), 30_000),
+    null,
+  ],
+  [
+    "a network failure does not wait",
+    new NetworkError("POST", new TypeError("Failed to fetch")),
+    null,
+  ],
+]) {
+  test(`retryDeadline: ${name}`, () => {
+    assert.equal(retryDeadline(error, 1_000_000), deadline);
+  });
+}
 
 test("network failure marks unsafe admission unknown and never retries", async () => {
   const wire = scriptedTransport([

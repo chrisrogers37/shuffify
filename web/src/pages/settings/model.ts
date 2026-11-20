@@ -1,4 +1,5 @@
 import type { ApiClient } from "../../api/client.ts";
+import { record } from "../../api/guards.ts";
 import type {
   AlgorithmParameter,
   JsonValue,
@@ -10,8 +11,10 @@ import {
   ApiRequestError,
   NetworkError,
   ProtocolError,
-  RateLimitError,
+  retryDeadline,
 } from "../../api/errors.ts";
+/** The largest snapshot limit a user can choose. */
+export const maxSnapshotLimit = 50;
 export interface SettingsDraft {
   default_algorithm: string;
   auto_snapshot_enabled: boolean;
@@ -35,9 +38,11 @@ export function draftFromSettings(settings: UserSettings): SettingsDraft {
 export function validateDraft(draft: SettingsDraft): FieldErrors {
   return /^\d+$/u.test(draft.max_snapshots_per_playlist) &&
     Number(draft.max_snapshots_per_playlist) >= 1 &&
-    Number(draft.max_snapshots_per_playlist) <= 50
+    Number(draft.max_snapshots_per_playlist) <= maxSnapshotLimit
     ? {}
-    : { max_snapshots_per_playlist: "Choose a whole number from 1 to 50." };
+    : {
+        max_snapshots_per_playlist: `Choose a whole number from 1 to ${maxSnapshotLimit}.`,
+      };
 }
 export function updateFromDraft(draft: SettingsDraft): SettingsUpdateRequest {
   if (Object.keys(validateDraft(draft)).length)
@@ -56,8 +61,6 @@ export function isDirty(draft: SettingsDraft, settings: UserSettings): boolean {
     (key) => draft[key] !== saved[key],
   );
 }
-const record = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 const nullableString = (value: unknown) =>
   value === null || typeof value === "string";
 const jsonValue = (value: unknown): value is JsonValue =>
@@ -124,7 +127,7 @@ function assertContext(value: unknown): asserts value is SettingsContext {
     typeof s.dashboard_show_recent_activity !== "boolean" ||
     !Number.isSafeInteger(s.max_snapshots_per_playlist) ||
     Number(s.max_snapshots_per_playlist) < 1 ||
-    Number(s.max_snapshots_per_playlist) > 50 ||
+    Number(s.max_snapshots_per_playlist) > maxSnapshotLimit ||
     !record(s.extra) ||
     !jsonValue(s.extra) ||
     !nullableString(s.created_at) ||
@@ -179,8 +182,8 @@ export function settingsProblem(error: unknown): SettingsProblem {
     return {
       message: error.message,
       fields,
-      retryAfterMs:
-        error instanceof RateLimitError ? (error.retryAfterMs ?? 1000) : null,
+      // Counted from 0, the deadline is the wait itself.
+      retryAfterMs: retryDeadline(error, 0),
     };
   }
   return {

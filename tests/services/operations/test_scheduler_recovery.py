@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from shuffify.models.db import JobExecution, RoutineActivationReceipt, db
 from shuffify.services.operations.repository import OperationRepository
-from shuffify.services.scheduled_admission import admit_scheduled, build_cadence, recoverable_fire
+from shuffify.services.scheduled_admission import GRACE_SECONDS, admit_scheduled, build_cadence, recoverable_fire
 from shuffify.services.worker_scheduler import WorkerScheduler
 from tests.services.operations.test_scheduled_admission import NOW
 from tests.services.operations.test_scheduled_admission import schedule as schedule
@@ -259,7 +259,9 @@ def test_recovery_across_dst_fold_advances_by_utc_instant(schedule):
 
     now = datetime(2026, 11, 1, 6, 45, tzinfo=timezone.utc)
     bounded = replace(cadence, trigger=BoundedTrigger())
-    assert recoverable_fire(schedule, bounded, now) == datetime(2026, 11, 1, 6, 30, tzinfo=timezone.utc)
+    assert recoverable_fire(schedule, bounded, now, grace_seconds=GRACE_SECONDS) == datetime(
+        2026, 11, 1, 6, 30, tzinfo=timezone.utc
+    )
 
 
 def test_new_interval_anchor_is_phase_origin_and_first_period_can_recover(schedule, db_app, scheduler_clock):
@@ -267,7 +269,7 @@ def test_new_interval_anchor_is_phase_origin_and_first_period_can_recover(schedu
     db.session.commit()
     scheduler_clock[0] = NOW + timedelta(minutes=5)
     cadence = build_cadence(schedule)
-    assert recoverable_fire(schedule, cadence, scheduler_clock[0]) is None
+    assert recoverable_fire(schedule, cadence, scheduler_clock[0], grace_seconds=GRACE_SECONDS) is None
     repository = OperationRepository()
     with runtime(db_app, repository, scheduler_clock) as replacement:
         assert replacement.ready.wait(2)

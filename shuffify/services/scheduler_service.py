@@ -14,6 +14,7 @@ from sqlalchemy import func
 from shuffify.models.db import JobExecution, PlaylistSnapshot, Schedule, db
 from shuffify.services.base import commit_failure, get_owned_entity, public_error, safe_commit
 from shuffify.services.playlist_lock import playlist_configuration_lock, playlist_lock
+from shuffify.services.schedule_utils import DEFINITION_COLUMNS
 
 logger = logging.getLogger(__name__)
 LOCK_WAIT_S = 2.0
@@ -163,18 +164,7 @@ class SchedulerService:
             ScheduleNotFoundError: If not found.
             ScheduleError: If update fails.
         """
-        allowed_fields = {
-            "job_type",
-            "target_playlist_id",
-            "target_playlist_name",
-            "source_playlist_ids",
-            "algorithm_name",
-            "algorithm_params",
-            "schedule_type",
-            "schedule_value",
-            "timezone",
-            "is_enabled",
-        }
+        allowed_fields = {*DEFINITION_COLUMNS, "is_enabled"}
         # A state-only Pause/Resume must remain available while a runner owns
         # the execution lock. All definition edits still wait for that runner.
         definition_edit = (set(kwargs) & allowed_fields) != {"is_enabled"}

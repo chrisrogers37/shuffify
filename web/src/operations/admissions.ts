@@ -4,6 +4,7 @@ import type {
   UnidentifiedCreatorKind,
 } from "./domain-evidence.ts";
 import type { ApiClient, ApiResult } from "../api/client.ts";
+import { terminalOperationStates } from "../api/contracts.ts";
 import type { JsonValue, Operation } from "../api/contracts.ts";
 import {
   ApiRequestError,
@@ -11,8 +12,10 @@ import {
   MissingCsrfTokenError,
   ProtocolError,
   RateLimitError,
+  retryDeadline,
 } from "../api/errors.ts";
-import { getOperationStore, terminalOperationStates } from "./store.ts";
+import { digest, record } from "../api/guards.ts";
+import { getOperationStore } from "./store.ts";
 import type { OperationStore } from "./store.ts";
 export interface AdmissionResource {
   readonly resource: string;
@@ -107,8 +110,6 @@ export interface Admission {
     readonly dependsOn: readonly string[];
   };
 }
-const record = (v: unknown): v is Record<string, unknown> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
 function frozen<T>(value: T): ReadonlyDeep<T> {
   const copy = structuredClone(value);
   const freeze = (v: unknown) => {
@@ -449,10 +450,7 @@ export function createAdmissionRegistry(
         [400, 401, 403].includes(error.status)
           ? { conclusiveRefusal: error.status as 400 | 401 | 403 }
           : {}),
-        retryUntil:
-          error instanceof ApiRequestError && error.retryAfterMs !== null
-            ? Date.now() + error.retryAfterMs
-            : a.retryUntil,
+        retryUntil: retryDeadline(error, Date.now()) ?? a.retryUntil,
       });
       if (refused) refuseUnstartedContinuations(r.key);
       if (busy) operations.observe(busy);
@@ -494,8 +492,6 @@ export function createAdmissionRegistry(
   ) {
     if (confirmedActor !== actor) throw new MissingCsrfTokenError();
     const { parent, context, request } = input;
-    const digest = (v: unknown) =>
-      typeof v === "string" && /^[0-9a-f]{64}$/u.test(v);
     if (
       !Number.isSafeInteger(parent.id) ||
       parent.id < 1 ||

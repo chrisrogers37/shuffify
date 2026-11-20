@@ -6,6 +6,17 @@ from typing import Optional
 
 from pydantic import BaseModel, field_validator, model_validator
 
+from shuffify.schemas.playlist_setup_requests import DRIP_COUNT_RANGE, RAID_COUNT_RANGE
+
+
+def _in_range(name, value, bounds):
+    low, high = bounds
+    if value < low:
+        raise ValueError(f"{name} must be at least {low}")
+    if value > high:
+        raise ValueError(f"{name} must be {high} or fewer")
+    return value
+
 
 class CreateRaidLinkRequest(BaseModel):
     """Request to create a raid playlist link."""
@@ -29,15 +40,7 @@ class CreateRaidLinkRequest(BaseModel):
     @field_validator("drip_count")
     @classmethod
     def validate_drip_count(cls, v):
-        if v < 1:
-            raise ValueError(
-                "drip_count must be at least 1"
-            )
-        if v > 50:
-            raise ValueError(
-                "drip_count must be 50 or fewer"
-            )
-        return v
+        return _in_range("drip_count", v, DRIP_COUNT_RANGE)
 
     @model_validator(mode="after")
     def require_id_or_create(self):
@@ -60,16 +63,7 @@ class UpdateRaidLinkRequest(BaseModel):
     @field_validator("drip_count")
     @classmethod
     def validate_drip_count(cls, v):
-        if v is not None:
-            if v < 1:
-                raise ValueError(
-                    "drip_count must be at least 1"
-                )
-            if v > 50:
-                raise ValueError(
-                    "drip_count must be 50 or fewer"
-                )
-        return v
+        return v if v is None else _in_range("drip_count", v, DRIP_COUNT_RANGE)
 
     @model_validator(mode="after")
     def at_least_one_field(self):
@@ -94,12 +88,4 @@ class UpdateSourceRaidCountRequest(BaseModel):
     @field_validator("raid_count")
     @classmethod
     def validate_raid_count(cls, v):
-        if v < 1:
-            raise ValueError(
-                "raid_count must be at least 1"
-            )
-        if v > 100:
-            raise ValueError(
-                "raid_count must be 100 or fewer"
-            )
-        return v
+        return _in_range("raid_count", v, RAID_COUNT_RANGE)

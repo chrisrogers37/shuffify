@@ -1,5 +1,6 @@
 import type { JsonRecord, WorkshopTrack } from "../../../api/contracts.ts";
 import { ProtocolError } from "../../../api/errors.ts";
+import { count, id as positive, record } from "../../../api/guards.ts";
 import type {
   SourceContext,
   SourceResult,
@@ -8,16 +9,9 @@ import type {
   Staging,
   PendingTrack,
 } from "./types.ts";
-export const record = (v: unknown): v is Record<string, unknown> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
 export const records = (v: unknown): Record<string, unknown>[] =>
   Array.isArray(v) ? v.filter(record) : [];
-export const positive = (v: unknown): v is number =>
-  Number.isSafeInteger(v) && (v as number) > 0;
-export const count = (v: unknown): v is number =>
-  Number.isSafeInteger(v) && (v as number) >= 0;
-export const uri = (v: unknown): v is string =>
-  typeof v === "string" && /^spotify:track:[A-Za-z0-9]{22}$/.test(v);
+// The backend's PlaylistID: 1 to 255 letters and digits.
 export const playlistId = (v: unknown): v is string =>
   typeof v === "string" && /^[A-Za-z0-9]+$/.test(v) && v.length <= 255;
 export function freeze<T>(v: T): T {

@@ -22,7 +22,10 @@
           "type": "boolean"
         },
         "retry_after": {
-          "type": "number"
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "field_errors": {
           "type": "array",

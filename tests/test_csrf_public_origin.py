@@ -72,7 +72,7 @@ def test_missing_or_bad_token_never_reaches_review(origin_app, token):
     client, _ = verified_client(app)
     response = post(client, token)
     assert response.status_code == 400
-    assert response.get_json()["error_code"] == "invalid_request"
+    assert response.get_json()["error_code"] == "session_verification_expired"
     assert "no-store" in response.headers["Cache-Control"]
     assert entered == []
 

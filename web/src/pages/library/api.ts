@@ -3,6 +3,7 @@ import type { AdmissionRequest } from "../../operations/admissions.ts";
 import type { ApiClient, ApiResult } from "../../api/client.ts";
 import type { JsonRecord, LibraryContext } from "../../api/contracts.ts";
 import { ApiRequestError, ProtocolError } from "../../api/errors.ts";
+import { count, digest, record } from "../../api/guards.ts";
 import type { ShuffleForm } from "./model.ts";
 export type Intent =
   | { kind: "shuffle"; form: ShuffleForm }
@@ -65,14 +66,8 @@ export type Review = ReviewBase &
         action: { public: boolean };
       }
   );
-export const record = (v: unknown): v is Record<string, unknown> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
 const strings = (v: unknown): v is string[] =>
   Array.isArray(v) && v.every((x) => typeof x === "string");
-const count = (v: unknown): v is number =>
-  Number.isSafeInteger(v) && Number(v) >= 0;
-const digest = (v: unknown) =>
-  typeof v === "string" && /^[a-f0-9]{64}$/u.test(v);
 export async function loadLibrary(
   api: ApiClient,
   refresh = false,

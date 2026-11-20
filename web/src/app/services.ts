@@ -1,6 +1,6 @@
-import { createApiClient } from "../api/client";
+import { createApiClient } from "../api/client.ts";
 import type { Transport } from "../api/transport";
-import { createSessionStore } from "../auth/session-store";
+import { createSessionStore } from "../auth/session-store.ts";
 import type { Services } from "../auth/SessionProvider";
 export function createServices(transport?: Transport): Services {
   let services: Services;
@@ -11,6 +11,10 @@ export function createServices(transport?: Transport): Services {
       return state.status === "ready" && state.session.signed_in
         ? state.session.csrf_token
         : null;
+    },
+    refreshCsrfToken: async () => {
+      const session = await services.session.revalidate();
+      return session && session.signed_in ? session.csrf_token : null;
     },
     onUnauthorized: () => {
       void services.session.refresh();

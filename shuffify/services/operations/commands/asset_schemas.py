@@ -4,6 +4,7 @@ from typing import Annotated, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
+from shuffify.schemas.playlist_setup_requests import DripCount
 from shuffify.schemas.workshop_finalize_requests import PlaylistID
 
 Name = Annotated[str, Field(min_length=1, max_length=255)]
@@ -31,7 +32,7 @@ class AssetCommand(AssetModel):
     asset_playlist_id: PlaylistID | None = None
     asset_playlist_name: Name | None = None
     existing_binding: AssetBinding | None = None
-    drip_count: Annotated[StrictInt, Field(ge=1, le=50)] = 3
+    drip_count: DripCount = 3
     drip_enabled: bool = False
 
     @property

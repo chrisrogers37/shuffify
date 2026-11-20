@@ -471,6 +471,7 @@ def test_security_rejection_keeps_archive_retry_known_unchanged(alice, fake, rec
     original = fake.uris(TARGET)
     visit = CsrfRecoveryVisit(recovery_browser, "desktop")
     archive_url = APP + api_path(f"/playlist/{TARGET}/pair/archive")
+    session_url = APP + api_path("/session")
     requests = []
     visit.page.on("request", lambda req: requests.append(req.url) if req.method == "POST" else None)
     try:
@@ -494,13 +495,16 @@ def test_security_rejection_keeps_archive_retry_known_unchanged(alice, fake, rec
             route.continue_(headers=headers)
 
         page.route(archive_url, omit_security_token)
+        session_reads = []
+        page.on("request", lambda req: session_reads.append(req.url) if req.url == session_url else None)
         card.get_by_role("button", name="Run reviewed cleanup", exact=True).click()
         expect(card).to_contain_text("session_verification_expired")
         expect(card.get_by_role("button", name="Review failed cleanup again", exact=True)).to_be_visible()
         expect(card.get_by_role("button", name="Check the same request", exact=True)).to_have_count(0)
         assert fake.uris(ARCHIVE) == [] and fake.playlist(TARGET) == confirmed_target
         assert requests.count(APP + api_path(f"/workshop/{TARGET}/commit")) == 1
-        assert requests.count(archive_url) == 2
+        assert requests.count(archive_url) == 3
+        assert len(session_reads) == 1
         assert visit.problems == []
     finally:
         visit.close()

@@ -25,6 +25,7 @@ export function InboxPanel(context: WorkshopToolContext) {
     run = useOpenRun(context),
     pending = t.visiblePending(),
     link = state.status.value?.raid_link,
+    drip = state.status.value?.drip_count_range,
     canDraft = c.permission("draft");
   useEffect(() => {
     if (t.getSnapshot().pending.phase === "idle") void t.loadPending();
@@ -241,7 +242,7 @@ export function InboxPanel(context: WorkshopToolContext) {
           Playlist setup
         </Link>
       </section>
-      {link && (
+      {link && drip && (
         <section
           className="sh-sources-stack"
           aria-labelledby="automatic-heading"
@@ -261,14 +262,14 @@ export function InboxPanel(context: WorkshopToolContext) {
           <Field
             id="source-drip-count"
             label="Tracks per run"
-            help="A whole number from 1 to 50. Your unsaved value survives refresh."
+            help={`A whole number from ${drip[0]} to ${drip[1]}. Your unsaved value survives refresh.`}
           >
             {(props) => (
               <Input
                 {...props}
                 type="number"
-                min="1"
-                max="50"
+                min={drip[0]}
+                max={drip[1]}
                 value={state.dripInput}
                 onChange={(e) => t.setDripInput(e.currentTarget.value)}
               />

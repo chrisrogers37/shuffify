@@ -3,13 +3,15 @@ import type { JsonRecord, WorkshopTrack } from "../../../api/contracts.ts";
 import { ApiRequestError, ProtocolError } from "../../../api/errors.ts";
 import {
   count,
-  playlistId,
-  positive,
+  countRange,
+  digest,
+  id as positive,
+  inRange,
   record,
-  sourceResult,
-  taskPath,
-  uri,
-} from "./model.ts";
+  trackURI as uri,
+} from "../../../api/guards.ts";
+import type { CountRange } from "../../../api/guards.ts";
+import { playlistId, sourceResult, taskPath } from "./model.ts";
 import type {
   ArchivePair,
   PendingTrack,
@@ -53,7 +55,7 @@ export function createSourcesClient(api: ApiClient, target: string) {
       );
     return v as unknown as ArchivePair;
   }
-  function link(v: unknown): RaidLink | null {
+  function link(v: unknown, drip: CountRange): RaidLink | null {
     if (v === null) return null;
     if (
       !record(v) ||
@@ -62,8 +64,7 @@ export function createSourcesClient(api: ApiClient, target: string) {
       !playlistId(v.raid_playlist_id) ||
       v.raid_playlist_id === target ||
       !text(v.raid_playlist_name) ||
-      !positive(v.drip_count) ||
-      v.drip_count > 50 ||
+      !inRange(v.drip_count, drip) ||
       typeof v.drip_enabled !== "boolean"
     )
       return invalid(
@@ -115,9 +116,13 @@ export function createSourcesClient(api: ApiClient, target: string) {
         !Array.isArray(v.sources) ||
         !count(v.source_count) ||
         !positive(v.max_sources) ||
+        !countRange(v.raid_count_range) ||
+        !countRange(v.drip_count_range) ||
         v.source_count !== v.sources.length
       )
         return invalid("The source status is incomplete.");
+      const raid = v.raid_count_range,
+        drip = v.drip_count_range;
       const sources = v.sources.map((s) => {
         if (
           !record(s) ||
@@ -132,8 +137,7 @@ export function createSourcesClient(api: ApiClient, target: string) {
             s.last_resolve_status,
           ].every(text) ||
           !(s.last_track_count === null || count(s.last_track_count)) ||
-          !positive(s.raid_count) ||
-          s.raid_count > 100
+          !inRange(s.raid_count, raid)
         )
           return invalid(
             "A source row is incomplete or names a different target.",
@@ -144,9 +148,11 @@ export function createSourcesClient(api: ApiClient, target: string) {
         return invalid("Source identities are duplicated.");
       return {
         sources,
-        raid_link: link(v.raid_link),
+        raid_link: link(v.raid_link, drip),
         source_count: v.source_count,
         max_sources: v.max_sources,
+        raid_count_range: raid,
+        drip_count_range: drip,
       };
     },
     async pending(): Promise<PendingTrack[]> {
@@ -251,9 +257,12 @@ export function createSourcesClient(api: ApiClient, target: string) {
       write("/raid-source-count", "PUT", { source_id, raid_count }),
     unwatch: (source_id: number) =>
       write("/raid-unwatch", "POST", { source_id }),
-    async updateLink(values: { drip_enabled?: boolean; drip_count?: number }) {
+    async updateLink(
+      values: { drip_enabled?: boolean; drip_count?: number },
+      drip: CountRange,
+    ) {
       const v = await write("/raid-link", "PUT", values);
-      return link(v.raid_link);
+      return link(v.raid_link, drip);
     },
     unlinkCollection: () => write("/raid-link", "DELETE"),
     async autoArchive(value: boolean) {
@@ -288,8 +297,7 @@ export function createSourcesClient(api: ApiClient, target: string) {
         !record(v.context.target) ||
         v.context.target.id !== target ||
         !record(v.context.review_binding) ||
-        typeof v.context.review_binding.scope !== "string" ||
-        !/^[a-f0-9]{64}$/.test(v.context.review_binding.scope) ||
+        !digest(v.context.review_binding.scope) ||
         !Array.isArray(v.context.resources)
       )
         return invalid(

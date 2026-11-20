@@ -11,6 +11,7 @@ import {
   settingsProblem,
   loadSettings,
   saveSettings,
+  maxSnapshotLimit,
 } from "../src/pages/settings/model.ts";
 const context = JSON.parse(
   await readFile(
@@ -49,22 +50,38 @@ test("Settings draft preserves types and sends only editable fields, leaving ric
 });
 test("Settings validation rejects missing, fractional and out of range limits without coercion", () => {
   const draft = draftFromSettings(context.settings);
-  for (const invalid of ["", "0", "51", "1.5", "NaN", "2e1"]) {
+  const aboveCap = String(maxSnapshotLimit + 1);
+  for (const invalid of ["", "0", aboveCap, "1.5", "NaN", "2e1"]) {
     assert.equal(
       validateDraft({ ...draft, max_snapshots_per_playlist: invalid })
         .max_snapshots_per_playlist,
-      "Choose a whole number from 1 to 50.",
+      `Choose a whole number from 1 to ${maxSnapshotLimit}.`,
     );
     assert.throws(
       () => updateFromDraft({ ...draft, max_snapshots_per_playlist: invalid }),
       TypeError,
     );
   }
-  for (const valid of ["1", "50"])
+  for (const valid of ["1", String(maxSnapshotLimit)])
     assert.deepEqual(
       validateDraft({ ...draft, max_snapshots_per_playlist: valid }),
       {},
     );
+});
+test("The snapshot limit cap is the SnapshotLimit maximum in the generated schemas", async () => {
+  for (const name of ["settings-context", "settings-update-request"]) {
+    const schema = JSON.parse(
+      await readFile(
+        new URL(`../schemas/${name}.schema.json`, import.meta.url),
+        "utf8",
+      ),
+    );
+    assert.equal(
+      schema.definitions.SnapshotLimit.maximum,
+      maxSnapshotLimit,
+      name,
+    );
+  }
 });
 test("Settings GET and POST consume the same complete context and save is ordinary HTTP200 with CSRF", async () => {
   const calls = [];
@@ -100,6 +117,13 @@ test("Settings rejects a malformed completed context and unexpected queued accep
     {
       ...context,
       settings: { ...context.settings, max_snapshots_per_playlist: "10" },
+    },
+    {
+      ...context,
+      settings: {
+        ...context.settings,
+        max_snapshots_per_playlist: maxSnapshotLimit + 1,
+      },
     },
     { ...context, algorithm_options: [{ value: 1, label: "Bad" }] },
     { success: true },

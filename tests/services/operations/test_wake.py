@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy.engine import make_url
 
-from shuffify.services.operations.wake import PostgresWakeListener, direct_url
+from shuffify.services.operations.wake import OPERATION_CHANNEL, SCHEDULE_CHANNEL, PostgresWakeListener, direct_url
 
 
 class Connection:
@@ -36,7 +36,7 @@ class Connection:
     def poll(self):
         self.polls += 1
         self.read.recv(1024)
-        self.notifies.append(SimpleNamespace(channel='shuffify_operations'))
+        self.notifies.append(SimpleNamespace(channel=OPERATION_CHANNEL))
 
     def close(self):
         self.closed = True
@@ -57,7 +57,7 @@ def test_registration_and_notifications_wake_but_idle_never_polls():
     with PostgresWakeListener(repository(), wake, connection_factory=lambda: connection) as listener:
         assert received.wait(1)
         assert listener.ready.is_set()
-        assert connection.statements == ['LISTEN shuffify_operations']
+        assert connection.statements == [f'LISTEN {OPERATION_CHANNEL}']
         assert calls == [True]
         time.sleep(0.03)
         assert connection.polls == 0
@@ -124,7 +124,7 @@ def test_schedule_channel_boot_delivery_and_reconnect_are_refresh_hints():
             self.polls += 1
             if not self.read.recv(1024):
                 raise OSError('disconnected')
-            self.notifies.append(SimpleNamespace(channel='shuffify_schedules'))
+            self.notifies.append(SimpleNamespace(channel=SCHEDULE_CHANNEL))
 
     first, second = ScheduleConnection(), ScheduleConnection()
     refreshed, queue = threading.Event(), []
@@ -132,7 +132,7 @@ def test_schedule_channel_boot_delivery_and_reconnect_are_refresh_hints():
     with PostgresWakeListener(repository(), lambda: queue.append(True), schedule_callback=refreshed.set,
                               connection_factory=lambda: next(connections), reconnect_delay=.01) as listener:
         assert refreshed.wait(1)
-        assert first.statements == ['LISTEN shuffify_operations', 'LISTEN shuffify_schedules']
+        assert first.statements == [f'LISTEN {OPERATION_CHANNEL}', f'LISTEN {SCHEDULE_CHANNEL}']
         refreshed.clear()
         first.write.send(b'notify')
         assert refreshed.wait(1) and queue == [True]

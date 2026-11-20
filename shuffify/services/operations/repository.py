@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from shuffify.models.db import JobExecution, db
 from shuffify.services.execution_result_service import serialize_execution_detail
+from shuffify.services.operations.wake import OPERATION_CHANNEL
 from shuffify.services.playlist_lock import (
     _held_targets,
     _local_guard,
@@ -288,7 +289,9 @@ class OperationRepository:
             session.add(row)
             session.flush()
             if self._postgres:
-                session.execute(text("SELECT pg_notify('shuffify_operations', :id)"), {"id": str(row.id)})
+                session.execute(
+                    text("SELECT pg_notify(:channel, :id)"), {"channel": OPERATION_CHANNEL, "id": str(row.id)}
+                )
             return self._detach(session, row)
 
     @staticmethod

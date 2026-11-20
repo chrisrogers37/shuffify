@@ -404,6 +404,8 @@ export function createWorkshopSourcesFixtures(scenario: string) {
             raid_link: null,
             source_count: 0,
             max_sources: 10,
+            raid_count_range: [1, 100],
+            drip_count_range: [1, 50],
           },
         });
       if (method === "GET" && path.endsWith("/pending-raids"))
@@ -438,6 +440,8 @@ export function createWorkshopSourcesFixtures(scenario: string) {
           raid_link: link,
           source_count: sources.length,
           max_sources: 10,
+          raid_count_range: [1, 100],
+          drip_count_range: [1, 50],
         },
       });
     if (path === "/api/playlist/target/pending-raids" && method === "GET") {
