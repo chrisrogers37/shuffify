@@ -38,7 +38,7 @@ from shuffify.spotify.exceptions import (
 from shuffify.spotify.observation import observe_mutations
 
 from .envelope import validate_command
-from .routine_capture import CaptureNotFound, CaptureRejected, recapture, require_review
+from .routine_capture import DIRECT_MODELS, CaptureNotFound, CaptureRejected, recapture, require_review
 from .routine_facts import BINDING_KEY, build_result, input_key, plan_key
 from .routine_schemas import DripNowCommand, RaidAndDripCommand, RaidNowCommand, ScheduleRunCommand
 
@@ -121,11 +121,7 @@ def _config(runtime, name, values):
     schema = (
         ScheduleRunCommand
         if raw["definition"]["schedule_id"] is not None
-        else {
-            "raid": RaidNowCommand,
-            "drip": DripNowCommand,
-            "raid_and_drip": RaidAndDripCommand,
-        }[raw["definition"]["job_type"]]
+        else DIRECT_MODELS[raw["definition"]["job_type"]]
     )
     command = schema.model_validate(raw)
     config, definition, user_id, target = command.config, command.definition, runtime.user.id, command.playlist_id
