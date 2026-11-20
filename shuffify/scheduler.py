@@ -11,7 +11,7 @@ from typing import Dict, Tuple
 
 from shuffify.enums import IntervalValue, ScheduleType
 from shuffify.services.schedule_utils import schedule_revision
-from shuffify.services.worker_control import WorkerControlClient
+from shuffify.services.worker_control import MAX_IDS, WorkerControlClient
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def get_schedule_registrations(schedules):
     schedules = list(schedules)
     if not schedules:
         return {}
-    snapshot = WorkerControlClient().registrations([row.id for row in schedules]) if len(schedules) <= 5000 else None
+    snapshot = WorkerControlClient().registrations([row.id for row in schedules]) if len(schedules) <= MAX_IDS else None
     available = bool(snapshot and snapshot.get('leader') is True and snapshot.get('scheduler_running') is True
                      and isinstance(snapshot.get('generation'), str) and snapshot['generation'])
     result = {}

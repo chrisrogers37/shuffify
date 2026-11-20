@@ -88,7 +88,7 @@ class WorkerControlClient:
 
     def registrations(self, ids):
         if not valid_ids(ids):
-            raise ValueError("Use at most 5000 positive schedule IDs")
+            raise ValueError(f"Use at most {MAX_IDS} positive schedule IDs")
         value = self._post("/internal/registrations", {"ids": ids})
         if (
             value is None
@@ -108,7 +108,7 @@ class WorkerControlClient:
 class WorkerControlServer:
     """A dedicated private listener, disabled unless a shared token is configured."""
 
-    def __init__(self, controller, worker_status, *, token, host="127.0.0.1", port=5001, wake_callback=None):
+    def __init__(self, controller, worker_status, *, token, port, host="127.0.0.1", wake_callback=None):
         self.controller, self.worker_status = controller, worker_status
         self._wake = wake_callback
         self.token = token if isinstance(token, str) else None
