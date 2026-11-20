@@ -34,7 +34,7 @@ export interface ApiError {
   message: string;
   category: string;
   retryable?: boolean;
-  retry_after?: number;
+  retry_after?: number | null;
   field_errors?: FieldError[];
   operation_id?: DatabaseId;
 }

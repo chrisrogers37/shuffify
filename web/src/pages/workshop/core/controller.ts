@@ -18,7 +18,7 @@ import {
   ConflictError,
   NetworkError,
   ProtocolError,
-  RateLimitError,
+  retryDeadline,
 } from "../../../api/errors.ts";
 import { trackURI } from "../../../api/guards.ts";
 import { getOperationStore } from "../../../operations/store.ts";
@@ -193,9 +193,7 @@ export function createWorkshopController(
     return !p.allowed;
   };
   const retryHint = (e: unknown) =>
-    e instanceof RateLimitError
-      ? Date.now() + (e.retryAfterMs ?? 1000)
-      : state.retryUntil;
+    retryDeadline(e, Date.now()) ?? state.retryUntil;
   const cooling = () => Date.now() < state.retryUntil;
   const hasDraft = () =>
     !sameOrder(uris(state.baseline), uris(state.working)) ||
@@ -674,10 +672,7 @@ export function createWorkshopController(
         unknown =
           admissions.getSnapshot().has(review.key) &&
           admissionUnknown(admissions, review.key, e),
-        until =
-          e instanceof RateLimitError
-            ? Date.now() + (e.retryAfterMs ?? 1000)
-            : 0;
+        until = retryDeadline(e, Date.now()) ?? 0;
       const busy =
         !unknown && e instanceof ConflictError ? e.error.operation_id : null;
       update({

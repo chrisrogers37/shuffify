@@ -4,6 +4,7 @@ import {
   ConflictError,
   NetworkError,
   ProtocolError,
+  retryDeadline,
 } from "../../../api/errors.ts";
 import type { WorkshopController } from "../core/controller.ts";
 import { freeze } from "../core/occurrences.ts";
@@ -126,10 +127,7 @@ export function createToolsController(
       message: "",
       operationId:
         e instanceof ConflictError ? (e.error.operation_id ?? null) : null,
-      retryUntil:
-        e instanceof ApiRequestError && e.retryAfterMs !== null
-          ? Date.now() + e.retryAfterMs
-          : 0,
+      retryUntil: retryDeadline(e, Date.now()) ?? 0,
     } as Partial<ToolsState[typeof key]>);
   };
   const waiting = (key: keyof ToolsState) => Date.now() < state[key].retryUntil;
