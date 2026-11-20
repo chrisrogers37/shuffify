@@ -179,7 +179,7 @@ export function SettingsPage() {
       limitRef.current?.focus();
       return;
     }
-    // Capture before disabling the controls; the shared client never replays a POST.
+    // Capture before disabling the controls; a resend after a CSRF refusal sends this same body.
     const captured = { ...draft };
     inFlight.current = true;
     setSaving(true);

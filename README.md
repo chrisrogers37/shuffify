@@ -59,7 +59,7 @@ The project follows a standard Flask application structure, with a focus on modu
 ```
 shuffify/
 ├── config.py                 # Application configuration (loads from .env)
-├── requirements/             # Python dependencies (base.txt, dev.txt, prod.txt)
+├── requirements/             # Python dependencies (prod.in, dev.in) and their hashed locks
 ├── run.py                    # Application entry point
 ├── documentation/            # Project documentation
 ├── shuffify/

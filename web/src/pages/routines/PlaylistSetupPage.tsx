@@ -15,7 +15,7 @@ import {
   terminalOperationStates,
   unsuccessfulOperationStates,
 } from "../../api/contracts";
-import { retryDeadline } from "../../api/errors";
+import { isOutcomeUnknown, retryDeadline } from "../../api/errors";
 import { record } from "../../api/guards";
 import { useServices, useSession } from "../../auth/SessionProvider";
 import { useAnnouncer } from "../../a11y/Announcer";
@@ -30,7 +30,7 @@ import { State } from "../../components/ui/States";
 import { useConfirm } from "../../components/tasks/ConfirmDialog";
 import { useNavigationBlocker } from "../../navigation/NavigationGuard";
 import { getOperationStore } from "../../operations/store";
-import { countInputs, unconfirmedMutation } from "./model";
+import { countInputs } from "./model";
 import { createRoutineClient } from "./client";
 import {
   parseSetup,
@@ -354,7 +354,7 @@ export function PlaylistSetupPage() {
       else setMessage("Settings saved. Reload to confirm their current state.");
     } catch (problem) {
       existingDigest.current = review.expected_state_digest;
-      setUnknownSave(unconfirmedMutation(problem));
+      setUnknownSave(isOutcomeUnknown(problem));
       setReview(null);
       setError(
         problem instanceof Error

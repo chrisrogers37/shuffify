@@ -70,7 +70,7 @@ def test_review_is_read_only_and_replay_preserves_pause_edit_and_deleted_identit
     accepted = _activate(alice, body)
     sid = accepted["schedule_id"]
     assert accepted["accepted"] and not accepted["replayed"]
-    assert accepted["state"] == "Active"
+    assert accepted["state"] == "active"
     assert accepted["registration"]["status"] == "registered"
     registration = _registration(sid)
     assert registration is not None
@@ -81,19 +81,19 @@ def test_review_is_read_only_and_replay_preserves_pause_edit_and_deleted_identit
     paused = alice.ok("put", f"/routines/{sid}/state", json={
         "desired_enabled": False, "expected_revision": replay["schedule_revision"],
     })
-    assert paused["state"] == "Paused" and _registration(sid) is None
+    assert paused["state"] == "paused" and _registration(sid) is None
     edit_body = _review(alice, "harness-edit", definition={"algorithm_params": {"keep_first": 2}},
                         schedule_id=sid, expected_revision=paused["schedule_revision"])
     edited = _activate(alice, edit_body)
-    assert edited["state"] == "Paused"
+    assert edited["state"] == "paused"
     assert edited["definition"]["timezone"] == "America/New_York"
     replay = _activate(alice, body)
-    assert replay["state"] == "Paused"
+    assert replay["state"] == "paused"
     assert replay["definition"]["algorithm_params"] == {"keep_first": 2}
     assert _registration(sid) is None
     alice.ok("delete", f"/schedules/{sid}")
     deleted = _activate(alice, body)
-    assert deleted["state"] == "Deleted" and deleted["schedule"] is None
+    assert deleted["state"] == "deleted" and deleted["schedule"] is None
     assert deleted["schedule_id"] == sid and _registration(sid) is None
     assert fake.playlist(TARGET) == spotify_before
 
@@ -251,11 +251,11 @@ def test_state_and_compatible_settings_remain_available_during_execution(alice, 
             paused = alice.ok("put", f"/routines/{sid}/state", json={
                 "desired_enabled": False, "expected_revision": accepted["schedule_revision"],
             })
-            assert paused["state"] == "Paused" and _registration(sid) is None
+            assert paused["state"] == "paused" and _registration(sid) is None
             resumed = alice.ok("put", f"/routines/{sid}/state", json={
                 "desired_enabled": True, "expected_revision": paused["schedule_revision"],
             })
-            assert resumed["state"] == "Active"
+            assert resumed["state"] == "active"
             for enabled in (False, True):
                 retired = alice.request("PUT", api_path(f"/schedules/{sid}"), json={"is_enabled": enabled})
                 assert retired.status_code == 405

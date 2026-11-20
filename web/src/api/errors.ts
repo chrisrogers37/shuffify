@@ -84,3 +84,16 @@ export class MissingCsrfTokenError extends Error {
     this.name = "MissingCsrfTokenError";
   }
 }
+/**
+ * Whether a failed write may have been applied, so that only a fresh read can
+ * show its outcome. Two failures show it was not: a missing CSRF token, which
+ * stops the request before it is sent, and a status under 500, which the
+ * server refused. Any other failure is unknown, a plain Error included: page
+ * code also throws one from a check after the server has answered.
+ */
+export function isOutcomeUnknown(error: unknown): boolean {
+  return (
+    !(error instanceof MissingCsrfTokenError) &&
+    !(error instanceof ApiRequestError && error.status < 500)
+  );
+}

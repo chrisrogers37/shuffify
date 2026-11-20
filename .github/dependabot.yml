@@ -2,13 +2,18 @@
 # Docs: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
 version: 2
 updates:
-  # Python pip dependencies
-  - package-ecosystem: "pip"
+  # Python: requirements/*.in and the hashed locks compiled from them
+  # (scripts/lock.sh). Dependabot reads pyproject.toml, which holds the 7-day
+  # cutoff, only from this directory, so it stays the root.
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
     cooldown:
       default-days: 7
+    # The locks' pins of transitive dependencies are bumped too
+    allow:
+      - dependency-type: "all"
     open-pull-requests-limit: 10
     commit-message:
       prefix: "deps"
@@ -35,6 +40,13 @@ updates:
           - "APScheduler"
           - "psycopg2*"
           - "sentry-sdk"
+        update-types:
+          - "minor"
+          - "patch"
+      # Every other minor and patch update, transitive pins included
+      other-dependencies:
+        patterns:
+          - "*"
         update-types:
           - "minor"
           - "patch"

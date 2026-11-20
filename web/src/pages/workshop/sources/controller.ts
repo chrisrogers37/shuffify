@@ -6,6 +6,7 @@ import type {
 } from "../../../api/contracts.ts";
 import {
   ApiRequestError,
+  isOutcomeUnknown,
   ProtocolError,
   retryDeadline,
 } from "../../../api/errors.ts";
@@ -1162,8 +1163,7 @@ export function createSourcesController(
       });
       return true;
     } catch (e) {
-      const unknown = !(e instanceof ApiRequestError && e.status < 500);
-      update({ ...errorPatch(e), configurationUnknown: unknown });
+      update({ ...errorPatch(e), configurationUnknown: isOutcomeUnknown(e) });
       return false;
     } finally {
       update({ busy: false });
