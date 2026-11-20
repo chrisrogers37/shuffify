@@ -93,6 +93,23 @@ PHASES = {
     "add_playlist_source": 5,
     "add_search_source": 5,
 }
+# What a routine must use for each change to affect it (a key of a routine's "uses" in the context); _effects
+# says how. No routine uses auto-archive: set_auto_archive affects none, and the impact notes AUTO_ARCHIVE_NOTE.
+AFFECTS = {
+    "remove_source": "sources",
+    "remove_routine_source": "sources",
+    "unlink_collection": "collection",
+    "unpair_archive": "archive",
+    "set_source_count": "sources",
+    "link_collection": "collection",
+    "replace_collection": "collection",
+    "pair_archive": "archive",
+    "replace_archive": "archive",
+    "set_drip": "drip",
+    "set_auto_archive": None,
+    "add_playlist_source": "sources",
+    "add_search_source": "sources",
+}
 
 BUSY = "A routine or save is running on this playlist. Try again when it finishes."
 CONFIGURATION_CHANGED = "These settings changed since your review. Review the changes again."
