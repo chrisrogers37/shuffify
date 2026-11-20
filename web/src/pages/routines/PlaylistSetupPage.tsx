@@ -11,6 +11,10 @@ import {
   useSyncExternalStore,
 } from "react";
 import { Link, useLocation, useParams } from "react-router";
+import {
+  terminalOperationStates,
+  unsuccessfulOperationStates,
+} from "../../api/contracts";
 import { ApiRequestError } from "../../api/errors";
 import { useServices, useSession } from "../../auth/SessionProvider";
 import { useAnnouncer } from "../../a11y/Announcer";
@@ -208,9 +212,7 @@ export function PlaylistSetupPage() {
         }
       } else if (
         entry?.operation &&
-        ["failed", "rolled_back", "needs_attention"].includes(
-          entry.operation.state,
-        ) &&
+        unsuccessfulOperationStates.has(entry.operation.state) &&
         !current.unknown
       ) {
         current.refused =
@@ -701,9 +703,7 @@ export function PlaylistSetupPage() {
                   : undefined,
                 active =
                   entry?.operation &&
-                  ["queued", "running", "compensating"].includes(
-                    entry.operation.state,
-                  );
+                  !terminalOperationStates.has(entry.operation.state);
               return (
                 <section
                   className="sh-setup-section sh-surface"

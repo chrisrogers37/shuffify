@@ -1,5 +1,6 @@
 import { isOperation } from "../api/client.ts";
 import type { ApiClient } from "../api/client.ts";
+import { terminalOperationStates } from "../api/contracts.ts";
 import type { Operation } from "../api/contracts.ts";
 import { pollOperation } from "../api/operations.ts";
 import type { PollOptions } from "../api/operations.ts";
@@ -9,12 +10,6 @@ export interface ObservedOperation {
   observation: "watching" | "settled" | "unavailable";
   error: Error | null;
 }
-export const terminalOperationStates = new Set([
-  "succeeded",
-  "failed",
-  "rolled_back",
-  "needs_attention",
-]);
 /** Observation belongs to the document, rather than a task or page subscription.
  * Removing a subscriber never cancels an accepted action or its read loop. */
 export function createOperationStore(

@@ -4,6 +4,7 @@ import type {
   UnidentifiedCreatorKind,
 } from "./domain-evidence.ts";
 import type { ApiClient, ApiResult } from "../api/client.ts";
+import { terminalOperationStates } from "../api/contracts.ts";
 import type { JsonValue, Operation } from "../api/contracts.ts";
 import {
   ApiRequestError,
@@ -12,7 +13,7 @@ import {
   ProtocolError,
   RateLimitError,
 } from "../api/errors.ts";
-import { getOperationStore, terminalOperationStates } from "./store.ts";
+import { getOperationStore } from "./store.ts";
 import type { OperationStore } from "./store.ts";
 export interface AdmissionResource {
   readonly resource: string;

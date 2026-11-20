@@ -1,3 +1,4 @@
+import { authNoticeCodes, operationStates } from "./contracts.ts";
 import type {
   ApiError,
   Operation,
@@ -36,24 +37,8 @@ export type ApiResult<T> =
   | { status: "completed"; data: T };
 
 type RecordValue = Record<string, unknown>;
-const states = new Set([
-  "queued",
-  "running",
-  "compensating",
-  "succeeded",
-  "failed",
-  "rolled_back",
-  "needs_attention",
-]);
-const noticeCodes = new Set([
-  "access_denied",
-  "oauth_failed",
-  "missing_code",
-  "invalid_state",
-  "authentication_failed",
-  "consent_required",
-  "login_failed",
-]);
+const states = new Set<string>(operationStates);
+const noticeCodes = new Set<string>(authNoticeCodes);
 const isRecord = (value: unknown): value is RecordValue =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const isId = (value: unknown): value is number =>
