@@ -33,11 +33,10 @@ export const stateLabels = {
   deleted: string;
 };
 type StateCode = keyof typeof stateLabels;
-// Replies send the state code as state_code, or as state if no state_code.
-export function stateCode(value: { state?: unknown; state_code?: unknown }) {
-  const code = value.state_code ?? value.state;
-  return typeof code === "string" && Object.hasOwn(stateLabels, code)
-    ? (code as StateCode)
+// Replies send the state code as state.
+export function stateCode({ state }: { state?: unknown }) {
+  return typeof state === "string" && Object.hasOwn(stateLabels, state)
+    ? (state as StateCode)
     : undefined;
 }
 export function parseNavigation(search: string) {
