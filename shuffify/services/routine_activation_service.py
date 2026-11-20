@@ -274,11 +274,6 @@ def _validate_submitted(definition, target_id):
         raise DefinitionError("definition.source_playlist_ids", "Use the reviewed legacy source IDs.")
 
 
-def _state_fields(code):
-    """Send a routine state's label as its state, with its code beside it as state_code."""
-    return {"state": ROUTINE_STATES[code], "state_code": code}
-
-
 def _schedule_payload(schedule, registration=None):
     from shuffify.scheduler import get_schedule_registration
 
@@ -294,7 +289,7 @@ def _schedule_payload(schedule, registration=None):
         "schedule_id": schedule.id, "schedule": schedule.to_dict(),
         "definition": stored_definition(schedule), "schedule_revision": schedule_revision(schedule),
         "timing": serialize_timing(schedule, effective_timezone=registration["effective_timezone"]),
-        "registration": registration, **_state_fields(code),
+        "registration": registration, "state": code,
     }
 
 
@@ -323,7 +318,7 @@ def _accepted_locked(user_id, target_id, receipt, *, replayed):
         return {
             "success": True, "accepted": True, "replayed": replayed,
             "schedule_id": receipt.schedule_id, "accepted_at": receipt.accepted_at.isoformat(),
-            "dependency_revision": revision, **_state_fields("deleted"), "schedule": None,
+            "dependency_revision": revision, "state": "deleted", "schedule": None,
         }, 200
     return {
         "success": True, "accepted": True, "replayed": replayed,

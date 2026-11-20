@@ -60,13 +60,6 @@ def dashboard_context(dashboard):
     }
 
 
-def routine_row(payload):
-    """Send the payload's state code as the row's state, with its label as state_label."""
-    row = {**payload, "state_label": payload["state"]}
-    row["state"] = row.pop("state_code")
-    return row
-
-
 def recently_loaded(history):
     """Project the bounded external-playlist history stored by Workshop."""
     if not isinstance(history, list):

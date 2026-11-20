@@ -82,7 +82,7 @@ def test_payload_list_reads_worker_once_and_passes_effective_timezone(schedule, 
 
     monkeypatch.setattr(scheduler_module.WorkerControlClient, 'registrations', registrations)
     rows = schedule_payloads([schedule])
-    assert len(calls) == 1 and rows[0]['state'] == 'Active'
+    assert len(calls) == 1 and rows[0]['state'] == 'active'
     assert rows[0]['timing']['effective_timezone'] == 'Europe/London'
     assert serialize_timing(schedule)['effective_timezone'] is None
 
