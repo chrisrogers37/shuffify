@@ -114,6 +114,34 @@ exclude-newer-package = { <name> = false }  # Remove on <date>: <advisory>
 release's changes before the pull request merges. On the removal date, delete
 the line and run `scripts/lock.sh` again: the pins stay as they are.
 
+## CI's service images
+
+The `harness` job in `ci.yml` runs Docker Hub's official PostgreSQL and Redis
+images, each named by its tag and a digest, as in
+`postgres:16-alpine@sha256:<digest>`. Docker pulls by the digest and ignores
+the tag, so the job keeps the same image when its tag moves to a new build.
+The digest is that of the image index the tag names, which lists an image for
+each platform (the runner's is `linux/amd64`), not that of one platform's
+image.
+
+To move a digest when its tag moves, read what the tag names now from Docker
+Hub's own registry, and replace the digest after the `@`:
+
+```bash
+repo=library/postgres tag=16-alpine
+token="$(curl -fsS "https://auth.docker.io/token?service=registry.docker.io&scope=repository:${repo}:pull" | jq -r .token)"
+curl -fsS -I -H "Authorization: Bearer ${token}" \
+  -H 'Accept: application/vnd.oci.image.index.v1+json' \
+  -H 'Accept: application/vnd.docker.distribution.manifest.list.v2+json' \
+  -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
+  -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+  "https://registry-1.docker.io/v2/${repo}/manifests/${tag}"
+```
+
+The digest is the response's `Docker-Content-Digest` header, and its
+`Content-Type` is `application/vnd.oci.image.index.v1+json`. To move to another
+tag, change the tag and its digest together, reading the digest the same way.
+
 ## Not covered by the locks
 
 - The base image: `python:3.12-slim` is a tag, not a digest.
