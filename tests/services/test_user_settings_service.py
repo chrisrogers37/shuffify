@@ -6,7 +6,7 @@ Tests cover get-or-create, update, validation, and convenience methods.
 
 import pytest
 
-from shuffify.models.db import User, UserSettings, db
+from shuffify.models.db import DEFAULT_SNAPSHOTS_LIMIT, User, UserSettings, db
 from shuffify.services.user_settings_service import (
     UserSettingsError,
     UserSettingsService,
@@ -42,7 +42,7 @@ class TestGetOrCreate:
         assert settings.default_algorithm is None
         assert settings.notifications_enabled is False
         assert settings.auto_snapshot_enabled is True
-        assert settings.max_snapshots_per_playlist == 10
+        assert settings.max_snapshots_per_playlist == DEFAULT_SNAPSHOTS_LIMIT
         assert (
             settings.dashboard_show_recent_activity is True
         )
@@ -269,7 +269,7 @@ class TestUserSettingsModel:
         assert d["default_algorithm_params"] == {}
         assert d["notifications_enabled"] is False
         assert d["auto_snapshot_enabled"] is True
-        assert d["max_snapshots_per_playlist"] == 10
+        assert d["max_snapshots_per_playlist"] == DEFAULT_SNAPSHOTS_LIMIT
         assert d["dashboard_show_recent_activity"] is True
         assert d["extra"] == {}
         assert "created_at" in d
