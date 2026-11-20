@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import pytest
 from apscheduler.triggers.cron import CronTrigger
 
+from shuffify.enums import IntervalValue
 from shuffify.services.schedule_utils import (
     DEFINITION_COLUMNS,
     TIME_CAPABLE_FREQUENCIES,
@@ -67,7 +68,7 @@ class TestTimeRegex:
     def test_valid_times_match(self, val):
         assert TIME_RE.match(val)
 
-    @pytest.mark.parametrize("val", ["0:00", "12:3", "noon", "", "12:00:00"])
+    @pytest.mark.parametrize("val", ["0:00", "12:3", "noon", "", "12:00:00", "24:00", "12:60"])
     def test_invalid_times_no_match(self, val):
         assert not TIME_RE.match(val)
 
@@ -80,12 +81,18 @@ def test_each_job_type_has_an_operation_label(operation, expected):
     assert operation_label(operation) == expected
 
 
+# Each interval's label; a new IntervalValue member needs its row here.
+INTERVAL_LABELS = {
+    "every_6h": "Every 6 hours",
+    "every_12h": "Every 12 hours",
+    "daily": "Every day",
+    "every_3d": "Every 3 days",
+    "weekly": "Every week",
+}
+
+
 @pytest.mark.parametrize("kind, value, expected", [
-    ("interval", "every_6h", "Every 6 hours"),
-    ("interval", "every_12h", "Every 12 hours"),
-    ("interval", "daily", "Every day"),
-    ("interval", "every_3d", "Every 3 days"),
-    ("interval", "weekly", "Every week"),
+    *(("interval", value, INTERVAL_LABELS[value]) for value in IntervalValue),
     ("interval", "hourly", "Custom timing (hourly)"),
     ("cron", "0 9 * * *", "Every day at 09:00 UTC"),
     ("cron", "05 18 */3 * *", "Calendar day */3 at 18:05 UTC"),
