@@ -9,6 +9,7 @@ from collections import Counter
 from contextlib import ExitStack, contextmanager, suppress
 from copy import deepcopy
 from datetime import datetime, timezone
+from time import monotonic
 
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -23,6 +24,10 @@ logger = logging.getLogger(__name__)
 TERMINAL_RECOVERY_LIMIT = 3
 IDLE_POLL_SECONDS = 5  # Upper bound on how long a lost wake notification can delay queued work.
 QUEUE_RETRY_SECONDS = 0.1  # First wait after a database error in the queue loop; it doubles up to IDLE_POLL_SECONDS.
+# Queue loop iterations that fail for this long in a row end the process with a non-zero status, so the deployment's
+# ON_FAILURE policy runs it again and a lasting failure ends in a failed deployment. A process whose first claim query
+# has not returned ends at its first failure, so those runs fail fast.
+QUEUE_FAILURE_SECONDS = 600
 # A lease is given up when this many renewals in a row fail with a database error. That many heartbeat
 # intervals, plus the time the failed calls take, must stay well inside the lease: 30 s of 60 s by default.
 HEARTBEAT_ATTEMPTS = 3
@@ -49,6 +54,7 @@ class OperationWorker:
         self._scheduler_controller = self._control_server = None
         self._serving = False
         self._queue_errors = 0  # Queue loop iterations in a row that ended in a database error.
+        self._queue_checked = False  # Whether a claim query has returned in this process.
 
     def request_stop(self):
         """Prevent new claims; the active command retains its lease until it settles."""
@@ -102,6 +108,7 @@ class OperationWorker:
             return False, False
         with self.app.app_context(), ExitStack() as stack:
             lease = self.repository.claim(operation_id=operation_id)
+            self._queue_checked = True
             if lease is None:
                 return False, False
             try:
@@ -623,12 +630,12 @@ class OperationWorker:
     def _control_status(self):
         return {"running": self._serving, "stopping": self._stopping.is_set(),
                 "scheduler_enabled": bool(self.app.config.get("SCHEDULER_ENABLED", True)),
-                "queue_errors": self._queue_errors}
+                "queue_checked": self._queue_checked, "queue_errors": self._queue_errors}
 
     def _serve_waiting(self):
         """Wake hints trigger durable reads; lease deadlines and a bounded poll cover lost hints."""
         self._wake.set()
-        timeout, retry = IDLE_POLL_SECONDS, QUEUE_RETRY_SECONDS
+        timeout, retry, failing_since = IDLE_POLL_SECONDS, QUEUE_RETRY_SECONDS, None
         while not self._stopping.is_set():
             self._wake.wait(timeout=timeout)
             self._wake.clear()
@@ -639,11 +646,19 @@ class OperationWorker:
                 except SQLAlchemyError as error:
                     # Repository calls and _run_one's app context roll back their sessions as the error leaves them.
                     self._queue_errors += 1
+                    now = monotonic()
+                    if failing_since is None:
+                        failing_since = now
                     # Database errors can embed passwords, DSNs and hostnames; log only their type.
+                    if not self._queue_checked or now - failing_since >= QUEUE_FAILURE_SECONDS:
+                        # Nothing runs between iterations, and a claim that the failed iteration left in place
+                        # is recovered when its lease expires.
+                        logger.error("Operation queue unavailable (%s); exiting", type(error).__name__)
+                        raise SystemExit(1)
                     logger.warning("Operation queue unavailable (%s); retrying in %.1f s", type(error).__name__, retry)
                     timeout, retry = retry, min(IDLE_POLL_SECONDS, retry * 2)
                     continue
-                self._queue_errors, retry = 0, QUEUE_RETRY_SECONDS
+                self._queue_errors, retry, failing_since = 0, QUEUE_RETRY_SECONDS, None
                 timeout = IDLE_POLL_SECONDS
                 if ready_at:
                     timeout = min(timeout, max(0, (ready_at - datetime.now(timezone.utc)).total_seconds()))

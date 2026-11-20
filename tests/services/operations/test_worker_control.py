@@ -41,7 +41,7 @@ class Controller:
 @pytest.fixture
 def private_server():
     controller = Controller()
-    state = {"running": True, "stopping": False}
+    state = {"running": True, "stopping": False, "queue_checked": True}
     with module().WorkerControlServer(
         controller, lambda: state, token="test-secret", port=0, wake_callback=controller.wake
     ) as server:
