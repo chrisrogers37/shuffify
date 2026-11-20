@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import type { IntervalTiming, JobType, RoutineRow } from "../../api/contracts";
 import { useServices, useSession } from "../../auth/SessionProvider";
+import { isOutcomeUnknown } from "../../api/errors";
 import { useAnnouncer } from "../../a11y/Announcer";
 import { ROUTINE_CONTINUATION_KEY as CONTINUATION_KEY } from "../../auth/browser-storage";
 import {
@@ -13,7 +14,7 @@ import {
 } from "../../components/ui/controls";
 import { State } from "../../components/ui/States";
 import { useNavigationBlocker } from "../../navigation/NavigationGuard";
-import { countInputs, unconfirmedMutation } from "./model";
+import { countInputs } from "./model";
 import { createRoutineClient } from "./client";
 import {
   activationBody,
@@ -272,7 +273,7 @@ export function RoutineSetupPage() {
       setUnknown(false);
       announce(`Routine #${result.schedule_id} saved.`, crypto.randomUUID());
     } catch (problem) {
-      const unresolved = unconfirmedMutation(problem);
+      const unresolved = isOutcomeUnknown(problem);
       setUnknown(unresolved);
       if (!unresolved) {
         setReview(null);

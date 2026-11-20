@@ -14,8 +14,8 @@ import type { SessionStore } from "../../auth/session-store.ts";
 import {
   ApiRequestError,
   ConflictError,
+  isOutcomeUnknown,
   MissingCsrfTokenError,
-  NetworkError,
   ProtocolError,
   retryDeadline,
 } from "../../api/errors.ts";
@@ -537,8 +537,7 @@ export function createLibraryController(
       update({
         preferenceError: message(e),
         preferenceRetryUntil: preferenceRetry(e),
-        preferenceUnknown:
-          e instanceof NetworkError || e instanceof ProtocolError,
+        preferenceUnknown: isOutcomeUnknown(e),
       });
       return false;
     } finally {
@@ -567,8 +566,7 @@ export function createLibraryController(
             orderDirty: true,
             preferenceError: message(e),
             preferenceRetryUntil: preferenceRetry(e),
-            preferenceUnknown:
-              e instanceof NetworkError || e instanceof ProtocolError,
+            preferenceUnknown: isOutcomeUnknown(e),
           });
           break;
         } finally {
@@ -638,8 +636,7 @@ export function createLibraryController(
       update({
         preferenceError: message(e),
         preferenceRetryUntil: preferenceRetry(e),
-        preferenceUnknown:
-          e instanceof NetworkError || e instanceof ProtocolError,
+        preferenceUnknown: isOutcomeUnknown(e),
       });
       return false;
     } finally {

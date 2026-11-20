@@ -5,6 +5,7 @@ import { createApiClient } from "../src/api/client.ts";
 import {
   ApiRequestError,
   ConflictError,
+  isOutcomeUnknown,
   MissingCsrfTokenError,
   NetworkError,
   ProtocolError,
@@ -547,6 +548,47 @@ for (const [name, error, deadline] of [
 ]) {
   test(`retryDeadline: ${name}`, () => {
     assert.equal(retryDeadline(error, 1_000_000), deadline);
+  });
+}
+
+for (const [name, error, unknown] of [
+  [
+    "a network failure is unknown",
+    new NetworkError("POST", new TypeError("Failed to fetch")),
+    true,
+  ],
+  [
+    "a protocol error is unknown",
+    new ProtocolError("The response envelope is missing.", 200),
+    true,
+  ],
+  [
+    "a 400 is a refusal",
+    new ApiRequestError(400, apiError("invalid_request")),
+    false,
+  ],
+  [
+    "a 400 for an expired session verification is a refusal",
+    new ApiRequestError(400, apiError("session_verification_expired")),
+    false,
+  ],
+  ["a 409 is a refusal", new ConflictError(apiError("conflict")), false],
+  ["a 429 is a refusal", new RateLimitError(apiError("rate_limited")), false],
+  [
+    "a 500 is unknown",
+    new ApiRequestError(500, apiError("internal_error")),
+    true,
+  ],
+  [
+    "a 503 is unknown",
+    new ApiRequestError(503, apiError("service_unavailable")),
+    true,
+  ],
+  ["a missing CSRF token is a refusal", new MissingCsrfTokenError(), false],
+  ["a plain Error is unknown", new Error("The save was not confirmed."), true],
+]) {
+  test(`isOutcomeUnknown: ${name}`, () => {
+    assert.equal(isOutcomeUnknown(error), unknown);
   });
 }
 

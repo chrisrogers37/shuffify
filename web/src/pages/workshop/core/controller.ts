@@ -16,7 +16,7 @@ import type { SessionStore } from "../../../auth/session-store.ts";
 import {
   ApiRequestError,
   ConflictError,
-  NetworkError,
+  isOutcomeUnknown,
   ProtocolError,
   retryDeadline,
 } from "../../../api/errors.ts";
@@ -1024,10 +1024,7 @@ export function createWorkshopController(
       });
       return true;
     } catch (e) {
-      const unknown =
-        e instanceof NetworkError ||
-        e instanceof ProtocolError ||
-        (e instanceof ApiRequestError && e.status >= 500);
+      const unknown = isOutcomeUnknown(e);
       if (unknown)
         pendingDraft = {
           kind: "save",
@@ -1064,10 +1061,7 @@ export function createWorkshopController(
       });
       return true;
     } catch (e) {
-      const unknown =
-        e instanceof NetworkError ||
-        e instanceof ProtocolError ||
-        (e instanceof ApiRequestError && e.status >= 500);
+      const unknown = isOutcomeUnknown(e);
       if (unknown)
         pendingDraft = {
           kind: "delete",
