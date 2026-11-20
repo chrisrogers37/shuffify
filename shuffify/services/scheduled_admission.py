@@ -18,6 +18,8 @@ from shuffify.services.operations.commands.routine_capture import CaptureNotFoun
 from shuffify.services.operations.repository import BusyOperation, PlaylistNeedsReview, RequestKeyConflict
 
 logger = logging.getLogger(__name__)
+# How late a scheduled fire may still be admitted, in seconds.
+GRACE_SECONDS = 3600
 
 
 def utc(value):
@@ -98,7 +100,7 @@ def eligibility_floor(schedule, activation_at=None):
     return max(floor, utc(activation_at)) if activation_at is not None else floor
 
 
-def recoverable_fire(schedule, cadence, now, *, latest=None, activation_at=None, grace_seconds=3600):
+def recoverable_fire(schedule, cadence, now, *, grace_seconds, latest=None, activation_at=None):
     """Coalesce to the latest eligible slot, never to a new admission-time identity.
 
     A persisted start and current definition/activation floors bound catch-up;

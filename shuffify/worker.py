@@ -615,7 +615,7 @@ class OperationWorker:
         self._control_server = WorkerControlServer(
             controller, self._control_status, token=self.app.config.get("WORKER_CONTROL_TOKEN"),
             host=self.app.config.get("WORKER_CONTROL_HOST", "127.0.0.1"),
-            port=self.app.config.get("WORKER_CONTROL_PORT", 5001), wake_callback=self.wake,
+            port=self.app.config["WORKER_CONTROL_PORT"], wake_callback=self.wake,
         )
         self._serving = True
         try:

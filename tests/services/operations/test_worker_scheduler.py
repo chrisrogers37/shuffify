@@ -83,7 +83,7 @@ def test_refresh_preserves_unchanged_interval_and_tracks_definition_revision(sch
 
 def test_due_executor_receives_exact_times_coalesces_and_respects_grace():
     received, events, finished = [], [], threading.Event()
-    executor = module().DurableAdmissionExecutor(clock=lambda: NOW)
+    executor = module().DurableAdmissionExecutor(clock=lambda: NOW, max_workers=4)
     scheduler = BackgroundScheduler(executors={"default": executor}, timezone="UTC")
     scheduler.add_listener(lambda event: (events.append(event), finished.set()), EVENT_JOB_EXECUTED | EVENT_JOB_MISSED)
     scheduler.start(paused=True)
