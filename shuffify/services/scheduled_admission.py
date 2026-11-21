@@ -15,7 +15,12 @@ from shuffify.models.db import JobExecution, RoutineActivationReceipt, Schedule
 from shuffify.scheduler import InvalidSchedule, _parse_schedule
 from shuffify.services.live_review_bindings import fingerprint
 from shuffify.services.operations.commands.routine_capture import CaptureNotFound, CaptureRejected, capture_schedule
-from shuffify.services.operations.repository import BusyOperation, PlaylistNeedsReview, RequestKeyConflict
+from shuffify.services.operations.repository import (
+    BusyOperation,
+    OutstandingOperationLimit,
+    PlaylistNeedsReview,
+    RequestKeyConflict,
+)
 
 logger = logging.getLogger(__name__)
 # How late a scheduled fire may still be admitted, in seconds.
@@ -223,5 +228,7 @@ def admit_scheduled(
         return AdmissionResult("skipped", due, code="busy", blocking_operation_id=busy.operation_id)
     except RequestKeyConflict:
         return AdmissionResult("skipped", due, code="fire_conflict")
+    except OutstandingOperationLimit as error:
+        return AdmissionResult("skipped", due, code=error.code)
     except (CaptureNotFound, CaptureRejected, ValidationError, ValueError, ZoneInfoNotFoundError):
         return AdmissionResult("skipped", due, code="invalid_schedule")

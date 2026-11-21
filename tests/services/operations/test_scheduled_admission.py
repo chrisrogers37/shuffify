@@ -73,6 +73,31 @@ def test_accepted_fire_replays_before_volatile_definition_capture(schedule, monk
     assert JobExecution.query.count() == 1
 
 
+def test_fresh_fire_shares_manual_capacity_and_exact_fire_still_replays(schedule):
+    repository = OperationRepository()
+    first = submit(repository, schedule)
+    repository.finish(repository.claim(operation_id=first.operation_id), "succeeded")
+
+    manual = [repository.enqueue(kind="shuffle", user_id=schedule.user_id, targets=[f"manual-{i}"], payload={})
+              for i in range(5)]
+    running = repository.claim(operation_id=manual[0].id)
+    compensating = repository.claim(operation_id=manual[1].id)
+    repository.checkpoint(compensating, {}, state="compensating")
+    repository.defer(repository.claim(operation_id=manual[2].id), delay_seconds=60)
+
+    due = NOW + timedelta(days=1)
+    blocked = submit(repository, schedule, due)
+    assert blocked.state == "skipped" and blocked.code == "outstanding_operation_limit"
+    assert blocked.scheduled_for == due and blocked.operation_id is None
+    assert submit(repository, schedule).operation_id == first.operation_id
+    assert JobExecution.query.count() == 6
+
+    repository.finish(running, "needs_attention")
+    admitted = submit(repository, schedule, due)
+    assert admitted.state == "admitted"
+    assert repository.get(admitted.operation_id).scheduled_for == due
+
+
 @pytest.mark.parametrize(
     "change,code", [("paused", "schedule_disabled"), ("deleted", "schedule_missing"), ("cadence", "cadence_changed")]
 )
