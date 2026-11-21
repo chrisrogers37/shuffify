@@ -14,9 +14,9 @@ def playlist_refresh_requested():
 def _exempt_from_refresh_limit():
     profile = session.get("user_data")
     return not (
-        playlist_refresh_requested()
-        and isinstance(profile, dict)
+        isinstance(profile, dict)
         and profile.get("id")
+        and playlist_refresh_requested()
         and is_authenticated()
     )
 

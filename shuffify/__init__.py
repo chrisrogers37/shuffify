@@ -926,14 +926,10 @@ def create_app(config_name=None):
 
     # Register blueprints
     from shuffify.routes import api_bp, auth_bp, site_bp
-    from shuffify.routes.playlist_refresh import apply_playlist_refresh_limit
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(site_bp)
     app.register_blueprint(api_bp)
-
-    if _limiter is not None:
-        apply_playlist_refresh_limit(app, _limiter)
 
     # Apply rate limits to auth endpoints.
     # Traditional account lockout does not apply: this is an
@@ -981,6 +977,11 @@ def create_app(config_name=None):
     from shuffify.request_deadline import register_spotify_deadline
 
     register_spotify_deadline(app)
+
+    if _limiter is not None:
+        from shuffify.routes.playlist_refresh import apply_playlist_refresh_limit
+
+        apply_playlist_refresh_limit(app, _limiter)
 
     # Register operational CLI commands
     from shuffify.cli import register_cli
