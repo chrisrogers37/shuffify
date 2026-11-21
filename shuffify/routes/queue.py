@@ -9,6 +9,7 @@ from shuffify.services.operations.history import HistoryStore, get_history_scope
 from shuffify.services.operations.repository import (
     BusyOperation,
     OperationRepository,
+    OutstandingOperationLimit,
     PlaylistNeedsReview,
     RequestKeyConflict,
 )
@@ -85,6 +86,8 @@ def enqueue_command(user, kind, intent, build, *, schedule_id=None):
     except RequestKeyConflict:
         return jsonify(error_payload("This idempotency key belongs to different changes.", 409,
                                      error_code="request_key_conflict", retryable=False)), 409
+    except OutstandingOperationLimit as error:
+        return jsonify(error_payload(str(error), 429, error_code=error.code, retryable=True)), 429
     location = url_for("api.operation_status", operation_id=accepted.id)
     return jsonify({"success": True, "category": "info", "message": "Operation accepted.",
                     "operation_id": accepted.id, "operation": repository.get_owned(user.id, accepted.id)}), 202, {

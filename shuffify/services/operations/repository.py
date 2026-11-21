@@ -28,6 +28,7 @@ from shuffify.services.playlist_lock import (
 )
 
 logger = logging.getLogger(__name__)
+MAX_OUTSTANDING_OPERATIONS_PER_USER = 5
 ACTIVE_STATES = frozenset({"queued", "running", "compensating"})
 LEASED_STATES = frozenset({"running", "compensating"})
 TERMINAL_STATES = frozenset({"succeeded", "failed", "rolled_back", "needs_attention"})
@@ -59,6 +60,16 @@ class PlaylistNeedsReview(BusyOperation):
 
 class RequestKeyConflict(RuntimeError):
     """An idempotency or scheduled-fire key belongs to a different command."""
+
+
+class OutstandingOperationLimit(RuntimeError):
+    """The user has no room for another durable operation."""
+
+    code = "outstanding_operation_limit"
+
+    def __init__(self):
+        super().__init__(f"You can have up to {MAX_OUTSTANDING_OPERATIONS_PER_USER} unfinished playlist operations. "
+                         "Wait for one to finish, then try again.")
 
 
 class LeaseLost(RuntimeError):
@@ -195,8 +206,11 @@ class OperationRepository:
         if not self._postgres:
             return
         keys = [("target", target) for target in targets]
-        if user_id is not None and request_key is not None:
-            keys.append(("request", user_id, request_key))
+        if user_id is not None:
+            # The owner key sorts before target keys, including targets acquired later by a factory.
+            keys.append(("owner", user_id))
+            if request_key is not None:
+                keys.append(("request", user_id, request_key))
         if schedule_id is not None and scheduled_for is not None:
             keys.append(("fire", schedule_id, scheduled_for.isoformat()))
         encoded = sorted(json.dumps(key, separators=(",", ":")) for key in keys)
@@ -264,6 +278,14 @@ class OperationRepository:
                 if len({row.id for row in existing}) != 1:
                     raise RequestKeyConflict("The request and scheduled fire identify different operations.")
                 return self._detach(session, existing[0])
+            if user_id is not None:
+                # The owner lock (or SQLite's write transaction) covers the capacity check and insert.
+                last_allowed = select(JobExecution.id).where(
+                    JobExecution.user_id == user_id, JobExecution.kind.is_not(None),
+                    JobExecution.state.in_(ACTIVE_STATES),
+                ).offset(MAX_OUTSTANDING_OPERATIONS_PER_USER - 1).limit(1)
+                if session.scalar(last_allowed) is not None:
+                    raise OutstandingOperationLimit()
             if command_factory is not None:
                 targets, payload = command_factory(session)
                 targets, payload = _targets(targets), _json_copy(payload)
