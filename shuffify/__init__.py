@@ -104,13 +104,17 @@ def is_db_available() -> bool:
 # =============================================================================
 
 
+def _is_production(app):
+    return app.config.get("CONFIG_NAME") == "production"
+
+
 def _init_redis(app):
     """Configure Redis for session storage and caching.
 
-    Falls back to filesystem sessions (and disables Redis-backed caching)
-    when REDIS_URL is unset or unreachable. Sessions then live on the
-    container filesystem, the Spotify API cache is disabled, and
-    Flask-Limiter uses in-memory storage.
+    Production requires Redis: an unset REDIS_URL or a failed connection
+    stops the boot. Other configs fall back to filesystem sessions when
+    REDIS_URL is unset or unreachable; the Spotify API cache is then
+    disabled and Flask-Limiter uses in-memory storage.
     """
     redis_url = app.config.get("REDIS_URL")
     if redis_url:
@@ -125,10 +129,16 @@ def _init_redis(app):
             logger.info("Redis caching enabled")
             return client
         except redis.ConnectionError as e:
+            if _is_production(app):
+                raise RuntimeError(
+                    f"Redis at {_loggable_redis_url(redis_url)} is unreachable, and production requires it"
+                ) from e
             logger.warning(
                 "Redis connection failed: %s. Falling back to filesystem sessions.",
                 e,
             )
+    elif _is_production(app):
+        raise RuntimeError("REDIS_URL is not set, and production requires Redis")
     else:
         logger.warning("REDIS_URL not configured. Using filesystem sessions.")
 
@@ -148,10 +158,29 @@ def _user_or_address_key():
     return f"user:{user_id}" if user_id else f"ip:{get_remote_address()}"
 
 
+# Each rate-limited endpoint, with its limit and the function that keys its
+# bucket; None keeps the limiter's per-user default, _user_or_address_key.
+# Traditional account lockout does not apply: this is an OAuth-only app —
+# users never enter credentials here. Per-IP rate limiting on /login and
+# /callback is the appropriate brute-force protection for OAuth flows, so
+# they keep the address key rather than the limiter's per-user default.
+RATE_LIMITS = {
+    "auth.login": ("10/minute", get_remote_address),
+    "auth.callback": ("10/minute", get_remote_address),
+    # Resource-intensive endpoints
+    "api.shuffle": ("5/minute", None),
+    "api.workshop_commit": ("10/minute", None),
+    "api.run_schedule_now": ("5/minute", None),
+    # Each call creates a playlist in the user's Spotify library.
+    "api.playlist_setup_create_playlist": ("10/minute", None),
+}
+
+
 def _init_limiter(app, redis_client):
     """Initialize Flask-Limiter for rate limiting.
 
-    Returns Limiter instance if successful, None otherwise.
+    Returns the Limiter. When it cannot be set up, production stops the
+    boot; other configs log the failure and return None.
     """
     try:
         if redis_client is not None:
@@ -174,12 +203,31 @@ def _init_limiter(app, redis_client):
         logger.info("Flask-Limiter initialized")
         return limiter
     except Exception as e:
+        if _is_production(app):
+            raise
         logger.warning(
             "Flask-Limiter initialization failed: %s. "
             "Rate limiting will be unavailable.",
             e,
         )
         return None
+
+
+def _apply_rate_limits(app, limiter):
+    """Wrap each endpoint in RATE_LIMITS in its limit.
+
+    An endpoint that is not registered, such as a renamed route, stops the
+    boot rather than go without its limit.
+    """
+    missing = [endpoint for endpoint in RATE_LIMITS if endpoint not in app.view_functions]
+    if missing:
+        raise RuntimeError(f"Rate-limited endpoints are not registered: {', '.join(missing)}")
+    for endpoint, (limit, key_func) in RATE_LIMITS.items():
+        app.view_functions[endpoint] = limiter.limit(limit, key_func=key_func)(app.view_functions[endpoint])
+    logger.info(
+        "Rate limits applied: %s",
+        ", ".join(f"{endpoint}={limit}" for endpoint, (limit, _) in RATE_LIMITS.items()),
+    )
 
 
 def _init_token_encryption(app):
@@ -931,43 +979,8 @@ def create_app(config_name=None):
     app.register_blueprint(site_bp)
     app.register_blueprint(api_bp)
 
-    # Apply rate limits to auth endpoints.
-    # Traditional account lockout does not apply: this is an
-    # OAuth-only app — users never enter credentials here.
-    # Per-IP rate limiting on /login and /callback is the
-    # appropriate brute-force protection for OAuth flows, so they
-    # keep the address key rather than the limiter's per-user default.
     if _limiter is not None:
-        try:
-            app.view_functions["auth.login"] = _limiter.limit("10/minute", key_func=get_remote_address)(
-                app.view_functions["auth.login"]
-            )
-            app.view_functions["auth.callback"] = _limiter.limit("10/minute", key_func=get_remote_address)(
-                app.view_functions["auth.callback"]
-            )
-            # Resource-intensive endpoints
-            app.view_functions["api.shuffle"] = _limiter.limit("5/minute")(
-                app.view_functions["api.shuffle"]
-            )
-            app.view_functions["api.workshop_commit"] = _limiter.limit("10/minute")(
-                app.view_functions["api.workshop_commit"]
-            )
-            app.view_functions["api.run_schedule_now"] = _limiter.limit("5/minute")(
-                app.view_functions["api.run_schedule_now"]
-            )
-            # Each call creates a playlist in the user's Spotify library.
-            app.view_functions["api.playlist_setup_create_playlist"] = _limiter.limit("10/minute")(
-                app.view_functions["api.playlist_setup_create_playlist"]
-            )
-            logger.info(
-                "Rate limits applied: /login=10/min, "
-                "/callback=10/min, /api/shuffle=5/min, "
-                "/api/workshop/commit=10/min, "
-                "/api/schedules/*/run=5/min, "
-                "/api/playlist/*/setup/spotify-playlists=10/min"
-            )
-        except Exception as e:
-            logger.warning("Failed to apply rate limits: %s", e)
+        _apply_rate_limits(app, _limiter)
 
     # Register global error handlers
     from shuffify.error_handlers import register_error_handlers
