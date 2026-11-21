@@ -105,7 +105,7 @@ test("build contact input is escaped in both legal text and mailto attributes", 
 test("prerender document keeps external entry/CSS and rejects inline behavior", async () => {
   const { publicDocument } = await import("../scripts/public-document.mjs");
   const template =
-    '<!doctype html><html lang="en"><head><title>Shuffify</title><script type="module" src="/assets/app.js"></script><link rel="stylesheet" href="/assets/app.css"></head><body><div id="root"></div></body></html>';
+    '<!doctype html><html lang="en"><head><title>Raccoon</title><script type="module" src="/assets/app.js"></script><link rel="stylesheet" href="/assets/app.css"></head><body><div id="root"></div></body></html>';
   const html = publicDocument(template, {
     title: "Terms & Conditions",
     description: 'A "safe" description',

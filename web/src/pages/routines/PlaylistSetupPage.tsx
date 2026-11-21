@@ -182,7 +182,7 @@ export function PlaylistSetupPage() {
     };
   }, [client, playlistId, returnTarget, validReturn]);
   useEffect(() => {
-    document.title = "Playlist setup · Shuffify";
+    document.title = "Playlist setup · Raccoon";
     heading.current?.focus();
   }, []);
   const memory = (purpose: Purpose) =>

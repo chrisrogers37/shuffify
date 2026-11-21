@@ -142,7 +142,7 @@ test("ordered sections, returning greeting, Spotify links, responsive intact art
   await expect(
     page.getByRole("heading", { name: "Your playlists", exact: true }),
   ).toBeFocused();
-  await expect(page).toHaveTitle("Your playlists · Shuffify");
+  await expect(page).toHaveTitle("Your playlists · Raccoon");
   await expect(page.getByText("Welcome back, Alice!")).toBeVisible();
   await expect(
     page.getByText("1 thing happened since your last visit."),

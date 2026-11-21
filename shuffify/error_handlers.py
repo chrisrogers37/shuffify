@@ -353,7 +353,7 @@ def handle_spotify_quota_exceeded(
     """Handle Spotify's quota 429, which no short wait will clear."""
     logger.warning(f"Spotify quota exceeded: {error}")
     response, status = json_error_response(
-        "Shuffify has used up its Spotify request quota for now. Please try again later.",
+        "Raccoon has used up its Spotify request quota for now. Please try again later.",
         429,
     )
     if error.retry_after:

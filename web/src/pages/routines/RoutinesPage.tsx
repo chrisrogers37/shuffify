@@ -342,7 +342,7 @@ export function RoutinesPage() {
     };
   }, [client]);
   useEffect(() => {
-    document.title = "Routines · Shuffify";
+    document.title = "Routines · Raccoon";
     heading.current?.focus();
   }, []);
   useEffect(() => {

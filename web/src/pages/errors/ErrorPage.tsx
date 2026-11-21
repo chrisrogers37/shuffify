@@ -2,10 +2,10 @@ import { Link } from "react-router";
 const messages = {
   404: [
     "That page could not be found.",
-    "Check the address or return to Shuffify.",
+    "Check the address or return to Raccoon.",
   ],
   500: ["Something went wrong.", "Please try again in a moment."],
-  503: ["Shuffify is temporarily unavailable.", "Please check back shortly."],
+  503: ["Raccoon is temporarily unavailable.", "Please check back shortly."],
 } as const;
 export function ErrorPage({ code = 404 }: { code?: 404 | 500 | 503 }) {
   const [title, message] = messages[code];
@@ -18,7 +18,7 @@ export function ErrorPage({ code = 404 }: { code?: 404 | 500 | 503 }) {
         </h1>
         <p>{message}</p>
         <Link className="sh-button" to="/">
-          Return to Shuffify
+          Return to Raccoon
         </Link>
       </section>
     </div>

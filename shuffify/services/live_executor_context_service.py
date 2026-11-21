@@ -113,7 +113,7 @@ def _require_authorization(user):
     if not user.encrypted_refresh_token:
         raise DirectFailure(
             409, "authorization_unavailable",
-            "Sign in again so Shuffify can run this for you. Nothing was changed.",
+            "Sign in again so Raccoon can run this for you. Nothing was changed.",
         )
 
 

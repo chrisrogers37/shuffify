@@ -1,9 +1,9 @@
-# Shuffify
+# Raccoon
 
-Keep your Spotify playlists fresh. Shuffify automatically reorders tracks and
+Keep your Spotify playlists fresh. Raccoon automatically reorders tracks and
 collects songs from playlists you trust, on a schedule you choose.
 
-**Try Shuffify:** [**shuffify.app**](https://shuffify.app)
+**Try Raccoon:** [**shuffify.app**](https://shuffify.app)
 
 ## Project Overview
 
@@ -20,7 +20,7 @@ and add** routine. You choose how many tracks to add per run.
 ## Key Features
 
 - **Scheduled reordering:** Run a shuffle on a recurring schedule to change the saved track order in Spotify.
-- **Songs from playlists you trust:** Save source playlists and schedule collection runs. Shuffify filters out tracks already in your target playlist, pending collection, linked collection playlist or linked archive.
+- **Songs from playlists you trust:** Save source playlists and schedule collection runs. Raccoon filters out tracks already in your target playlist, pending collection, linked collection playlist or linked archive.
 - **Automatic additions:** Use a linked collection playlist to add collected tracks in batches, with a track count and schedule you control.
 - **Playlist Workshop:** Edit a local draft, preview shuffles, hold tracks in place, manage snapshots and review collected or archived tracks before saving.
 - **Seven shuffle algorithms:**
@@ -35,7 +35,7 @@ and add** routine. You choose how many tracks to add per run.
 
 ## Getting Started
 
-1. [Open Shuffify](https://shuffify.app) and connect your Spotify account.
+1. [Open Raccoon](https://shuffify.app) and connect your Spotify account.
 2. Choose a playlist you own. Pick a shuffle algorithm, add source playlists, or set up both.
 3. Create a routine, choose its timing and review the settings before enabling it. Use the Playlist Workshop when you want to make changes by hand.
 

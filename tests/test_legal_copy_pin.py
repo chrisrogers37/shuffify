@@ -10,8 +10,8 @@ COPY_DIR = Path(__file__).resolve().parent.parent / "assets" / "legal"
 # prerendered legal sources from these fragments, so regenerating cannot bless a
 # legal-text change: an intended edit updates the hash in the same change.
 LEGAL_COPY_SHA256 = {
-    "terms": "217948dfc8ffee6847f59b340620a0b9ee9f94153cc11804c324c826f8d9f831",
-    "privacy": "102a9df0bcd9024f3408697b9f2476be5fc71f28e052ca4e97b1bebe05636123",
+    "terms": "5aacba77af14d83914edec510f03cb11c236ef1d1fcf3f464c807a77227d7faa",
+    "privacy": "396f4c3da2a66f23f59c706570c1d9ab3d5151cfa3caf0ab1eba197da0f3ed3a",
 }
 
 

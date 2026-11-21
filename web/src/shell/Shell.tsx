@@ -11,7 +11,7 @@ const destinations = [
 ] as const;
 function Brand() {
   return (
-    <Link className="sh-brand" to="/" aria-label="Shuffify home">
+    <Link className="sh-brand" to="/" aria-label="Raccoon home">
       <img
         className="sh-brand-mark"
         src="/images/favicon.svg"
@@ -19,7 +19,7 @@ function Brand() {
         height="32"
         alt=""
       />
-      shuffify
+      raccoon
     </Link>
   );
 }
@@ -48,7 +48,7 @@ export function Navigation() {
         <details ref={menu} className="sh-app-menu">
           <summary>
             <span className="sh-brand" aria-hidden="true">
-              shuffify
+              raccoon
             </span>
             <span className="sh-app-current">
               {
@@ -72,8 +72,8 @@ export function Footer() {
     <footer className="sh-footer">
       <div className="sh-container sh-footer-inner">
         <div>
-          <p>Shuffify is an independent app, unaffiliated with Spotify.</p>
-          <p>© {copyrightYear} Shuffify. All rights reserved.</p>
+          <p>Raccoon is an independent app, unaffiliated with Spotify.</p>
+          <p>© {copyrightYear} Raccoon. All rights reserved.</p>
         </div>
         <nav className="sh-nav-links" aria-label="Legal navigation">
           <NavLink to="/terms" end>
@@ -102,7 +102,7 @@ function RouteFocus() {
       lastHeading = heading;
       document.title =
         publicPage(location.pathname)?.title ??
-        `${heading.textContent ?? "Shuffify"} · Shuffify`;
+        `${heading.textContent ?? "Raccoon"} · Raccoon`;
       let fragment: HTMLElement | null = null;
       try {
         if (location.hash)
