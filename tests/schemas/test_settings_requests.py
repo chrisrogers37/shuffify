@@ -184,3 +184,17 @@ class TestUserSettingsUpdateRequestInvalid:
         with pytest.raises(ValidationError) as exc_info:
             UserSettingsUpdateRequest(theme="")
         assert "Invalid theme" in str(exc_info.value)
+
+
+class TestUserSettingsJsonBound:
+    """Each settings JSON object is at most 16 KiB once serialized."""
+
+    @pytest.mark.parametrize("field", ["default_algorithm_params", "extra"])
+    def test_holds_16_kib_of_json_but_not_one_byte_more(self, field):
+        # {"k":"..."} serializes compactly to 8 bytes plus the string.
+        at_limit = {"k": "x" * (16_384 - 8)}
+        assert getattr(UserSettingsUpdateRequest(**{field: at_limit}), field) == at_limit
+        with pytest.raises(ValidationError) as refused:
+            UserSettingsUpdateRequest(**{field: {"k": "x" * (16_384 - 7)}})
+        assert [error["loc"] for error in refused.value.errors()] == [(field,)]
+        assert "16,384 bytes" in str(refused.value)

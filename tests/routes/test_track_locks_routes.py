@@ -280,3 +280,40 @@ class TestUnlockAll:
         assert data["locks"][0]["track_uri"] == (
             "spotify:track:t2"
         )
+
+
+class TestUnlockAllListBound:
+    @patch("shuffify.routes.require_auth")
+    def test_over_spotify_playlist_limit_rejected(
+        self, mock_auth, auth_client
+    ):
+        # Spotify's limit for one playlist is 10,000 tracks.
+        mock_auth.return_value = MagicMock()
+        resp = auth_client.post(
+            api_path("/workshop/pl1/locks/unlock-all"),
+            json={
+                "track_uris": [
+                    f"spotify:track:{i:022d}"
+                    for i in range(10_001)
+                ],
+            },
+        )
+        assert resp.status_code == 400
+
+    @patch("shuffify.routes.require_auth")
+    def test_at_spotify_playlist_limit_accepted(
+        self, mock_auth, auth_client
+    ):
+        # Spotify's limit for one playlist is 10,000 tracks.
+        mock_auth.return_value = MagicMock()
+        resp = auth_client.post(
+            api_path("/workshop/pl1/locks/unlock-all"),
+            json={
+                "track_uris": [
+                    f"spotify:track:{i:022d}"
+                    for i in range(10_000)
+                ],
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True

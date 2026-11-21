@@ -97,3 +97,11 @@ def test_broken_history_for_either_resource_refuses_locally(auth_client, paired,
     assert response.status_code == 409
     assert response.json["error_code"] == "history_unavailable"
     assert JobExecution.query.count() == 0
+
+
+def test_unarchive_over_spotify_playlist_limit_never_enqueues(auth_client, paired, no_spotify):
+    # Spotify's limit for one playlist is 10,000 tracks.
+    uris = [f"spotify:track:{i:022d}" for i in range(10_001)]
+    response = auth_client.post("/api/playlist/target/pair/unarchive", json={"track_uris": uris})
+    assert response.status_code == 400
+    assert JobExecution.query.count() == 0

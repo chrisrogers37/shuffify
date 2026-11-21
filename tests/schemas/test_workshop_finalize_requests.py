@@ -101,3 +101,28 @@ def test_raid_finalize_accepts_the_entire_captured_inbox():
         source_playlist_id=None, target_track_uris=[], track_ids=ids
     )
     assert request.track_ids == ids
+
+
+# Spotify's limit for one playlist is 10,000 tracks.
+@pytest.mark.parametrize(
+    ("schema", "field", "values"),
+    [
+        (FinalizeRaidRequest, "target_track_uris", [A] * 10_001),
+        (FinalizeRaidRequest, "track_ids", list(range(1, 10_002))),
+        (FinalizeRestoreRequest, "track_uris", [A] * 10_001),
+        (FinalizeArchiveRequest, "baseline_track_uris", [A] * 10_001),
+    ],
+)
+def test_track_lists_hold_a_full_playlist_but_not_one_track_more(schema, field, values):
+    payload = dict(
+        source_playlist_id="source123",
+        target_track_uris=[],
+        track_ids=[1],
+        track_uris=[A],
+        baseline_track_uris=[],
+    )
+    full = schema(**{**payload, field: values[:10_000]})
+    assert len(getattr(full, field)) == 10_000
+    with pytest.raises(ValidationError) as refused:
+        schema(**{**payload, field: values})
+    assert [(error["loc"], error["type"]) for error in refused.value.errors()] == [((field,), "too_long")]

@@ -573,3 +573,22 @@ def test_owned_playlists_include_hidden_ones_and_refresh_skips_the_cache(auth_cl
 
 
 # --- The page -----------------------------------------------------------------------------------
+
+
+def test_an_acknowledgment_over_16384_bytes_is_a_validation_error(auth_client, api):
+    # Bound: 16,384 bytes of compact JSON; this acknowledgment is 16,385.
+    _, body = reviewed_body(auth_client, api, [{"op": "add_search_source", "search_query": "lofi"}])
+    response = put_settings(auth_client, api, {**body, "acknowledgment": {"k": "x" * (16_385 - 8)}})
+    reply = response.get_json()
+    assert response.status_code == 400 and reply["error_code"] == "invalid_request"
+    assert reply["message"].startswith("Validation error: ")
+    assert UpstreamSource.query.count() == 0 and ActivityLog.query.count() == 0
+
+
+def test_an_acknowledgment_of_exactly_16384_bytes_reaches_the_acknowledgment_check(auth_client, api):
+    # Bound: 16,384 bytes of compact JSON is the last accepted size.
+    _, body = reviewed_body(auth_client, api, [{"op": "add_search_source", "search_query": "lofi"}])
+    response = put_settings(auth_client, api, {**body, "acknowledgment": {"k": "x" * (16_384 - 8)}})
+    reply = response.get_json()
+    assert (response.status_code, reply["error_code"]) == (409, "acknowledgment_invalid")
+    assert UpstreamSource.query.count() == 0 and ActivityLog.query.count() == 0

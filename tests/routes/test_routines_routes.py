@@ -107,3 +107,50 @@ def test_delete_schedule_busy_reply(auth_client, api, method, path, body, servic
         response = getattr(auth_client, method)(path, json=body)
     assert response.status_code == 409
     assert response.get_json()["error_code"] == "playlist_busy"
+
+
+# --- JSON object size bounds ------------------------------------------------
+
+_TIMING = {"kind": "interval", "interval": "daily"}
+_DEFINITION = {"job_type": "shuffle", "algorithm_name": "BasicShuffle", "timing": _TIMING}
+
+
+def _blob(size):
+    """A JSON object whose compact serialization is exactly ``size`` bytes."""
+    return {"k": "x" * (size - 8)}
+
+
+def _bounded_body(field, size):
+    """A routine review or activate body with ``field`` set to a ``size``-byte object."""
+    if field == "definition.algorithm_params":
+        return "review", {"request_key": "k", "definition": {**_DEFINITION, "algorithm_params": _blob(size)}}
+    if field == "definition.timing":
+        return "review", {"request_key": "k", "definition": {**_DEFINITION, "timing": _blob(size)}}
+    activate = {"request_key": "k", "definition": _DEFINITION, "intent": {}, "dependency_revision": "a" * 64}
+    return "activate", {**activate, field: _blob(size)}
+
+
+_BOUNDED_FIELDS = ["definition.algorithm_params", "definition.timing", "definition", "intent"]
+
+
+@pytest.mark.parametrize("field", _BOUNDED_FIELDS)
+def test_routine_object_over_16384_bytes_is_400(auth_client, api, field):
+    # Bound: 16,384 bytes of compact JSON; this object is 16,385.
+    route, body = _bounded_body(field, 16_385)
+    with patch("shuffify.routes.require_auth", return_value=api):
+        response = auth_client.post(api_path(f"{BASE}/{route}"), json=body)
+    assert response.status_code == 400
+    error = response.get_json()["field_errors"][0]
+    assert error["path"] == field
+    assert "16,384 bytes" in error["message"]
+
+
+@pytest.mark.parametrize("field", _BOUNDED_FIELDS)
+def test_routine_object_of_exactly_16384_bytes_is_not_the_size_refusal(auth_client, api, field):
+    # Bound: 16,384 bytes of compact JSON is the last accepted size.
+    route, body = _bounded_body(field, 16_384)
+    with patch("shuffify.routes.require_auth", return_value=api):
+        response = auth_client.post(api_path(f"{BASE}/{route}"), json=body)
+    # Later checks may still refuse the padded body, but never for its size.
+    errors = (response.get_json() or {}).get("field_errors", [])
+    assert not any("bytes as JSON" in error["message"] for error in errors)

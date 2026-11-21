@@ -489,3 +489,46 @@ def test_unexpected_review_failure_reports_the_validated_kind(auth_client, api, 
         kind, "preflight_failed", "partial"
     )
     assert api.writes == []
+
+
+# --- Input bounds -----------------------------------------------------------
+
+
+def test_check_of_over_10000_desired_uris_is_refused(auth_client, api):
+    # Bound: at most 10,000 desired track URIs (Spotify's playlist maximum).
+    body = {"kind": "tracks", "desired_track_uris": [uri(i) for i in range(10_001)]}
+    with as_user(api):
+        response = inspect(auth_client, body)
+    assert response.status_code == 400
+    assert response.get_json()["operation"]["error_code"] == "invalid_request"
+    assert api.reads == 0
+
+
+def test_check_of_exactly_10000_desired_uris_is_not_refused_by_parsing(auth_client, api):
+    # Bound: 10,000 desired track URIs is the last accepted size.
+    body = {"kind": "tracks", "desired_track_uris": [uri(i) for i in range(10_000)]}
+    with as_user(api):
+        response = inspect(auth_client, body)
+    assert response.status_code != 400
+    assert response.get_json()["operation"]["error_code"] != "invalid_request"
+
+
+@pytest.mark.parametrize("kind", ["raid", "raid_and_drip"])
+def test_collect_review_of_11_source_ids_is_invalid_request(auth_client, api, kind):
+    # Bound: at most 10 source_playlist_ids.
+    body = {"kind": kind, "source_playlist_ids": [f"source{i}" for i in range(11)]}
+    with as_user(api):
+        response = post_context(auth_client, TARGET, body)
+    assert response.status_code == 400
+    operation = response.get_json()["operation"]
+    assert operation["error_code"] == "invalid_request"
+    assert api.reads == 0
+
+
+@pytest.mark.parametrize("kind", ["raid", "raid_and_drip"])
+def test_collect_review_of_10_source_ids_is_not_invalid_request(auth_client, api, kind):
+    # Bound: 10 source_playlist_ids is the last accepted size.
+    body = {"kind": kind, "source_playlist_ids": [f"source{i}" for i in range(10)]}
+    with as_user(api):
+        response = post_context(auth_client, TARGET, body)
+    assert response.get_json().get("operation", {}).get("error_code") != "invalid_request"

@@ -43,6 +43,7 @@ from shuffify.services.workshop_commit_service import (
     WorkshopTargetResult,
 )
 from shuffify.services.workshop_finalize_service import WorkshopFinalizeService
+from shuffify.spotify.api import MAX_PLAYLIST_TRACKS, TOO_MANY_TRACKS
 from shuffify.spotify.url_parser import (
     parse_spotify_playlist_url,
 )
@@ -77,6 +78,8 @@ def workshop_preview_shuffle(
         return json_error(
             "Request must include 'tracks' array.", 400
         )
+    if len(tracks) > MAX_PLAYLIST_TRACKS:
+        return json_error(TOO_MANY_TRACKS, 400)
 
     shuffled_uris = ShuffleService.execute(
         shuffle_request.algorithm, tracks, params,
@@ -436,6 +439,8 @@ def save_workshop_session(
 
     if not isinstance(track_uris, list):
         return json_error("track_uris must be a list.", 400)
+    if len(track_uris) > MAX_PLAYLIST_TRACKS:
+        return json_error(TOO_MANY_TRACKS, 400)
 
     try:
         ws = WorkshopSessionService.save_session(
@@ -520,6 +525,8 @@ def update_workshop_session(
         return json_error(
             "track_uris must be a list.", 400
         )
+    if track_uris is not None and len(track_uris) > MAX_PLAYLIST_TRACKS:
+        return json_error(TOO_MANY_TRACKS, 400)
 
     try:
         ws = WorkshopSessionService.update_session(

@@ -404,3 +404,22 @@ def test_contradictory_legacy_label_cannot_report_success_or_start_drip(
         assert summary["tracks_added"] == 1
         assert summary["execution_id"] == response.operation["id"]
     assert api.writes == [("add", "collection", [uri(2)])]
+
+
+@pytest.mark.parametrize("endpoint", ["raid-now", "raid-and-drip"])
+@pytest.mark.parametrize("body", [
+    # At most 10 source playlists per raid.
+    {"source_playlist_ids": [f"src{i}" for i in range(11)]},
+    # Playlist ids are alphanumeric only.
+    {"source_playlist_ids": ["has-a-dash"]},
+])
+def test_out_of_bounds_source_playlist_ids_are_structured_preflight(live_raid, endpoint, body):
+    client, api, _user, _link = live_raid
+    response = post_and_run(client, api, api_path(f"/playlist/target/{endpoint}"), json=body)
+    data = response.get_json()
+    assert response.status_code == 400
+    assert data["success"] is False
+    assert data["operation"]["aggregate_status"] == "partial"
+    assert data["execution_state"] == "not_started"
+    assert JobExecution.query.count() == 0
+    assert api.writes == []

@@ -169,3 +169,25 @@ class TestPendingRaidsFinalize:
         assert response.json["promoted_count"] == 0
         assert response.json["retryable"] is False
         service.assert_not_called()
+
+
+class TestPendingRaidsListBounds:
+    @pytest.mark.parametrize("field", ["track_ids", "target_track_uris"])
+    @patch("shuffify.routes.raid_panel.WorkshopFinalizeService")
+    @patch("shuffify.routes.require_auth")
+    def test_over_spotify_playlist_limit_rejected(self, auth, service, auth_client, field):
+        # Spotify's limit for one playlist is 10,000 tracks.
+        payload = {
+            "track_ids": [12, 24], "source_playlist_id": "raid123",
+            "target_track_uris": ["spotify:track:" + "a" * 22],
+        }
+        if field == "track_ids":
+            payload[field] = list(range(1, 10_002))
+        else:
+            payload[field] = [f"spotify:track:{i:022d}" for i in range(10_001)]
+        response = auth_client.post(api_path("/playlist/p1/pending-raids/finalize"), json=payload)
+        assert response.status_code == 400
+        assert response.json["status"] == "failed"
+        assert response.json["promoted_count"] == 0
+        assert response.json["retryable"] is False
+        service.assert_not_called()
