@@ -34,7 +34,8 @@ def sign_in(app, user_id, token):
     return client
 
 
-def test_shared_refresh_budget(refresh_app, sample_token):
+@pytest.mark.parametrize("first_pair_method", ["GET", "HEAD"])
+def test_shared_refresh_budget(refresh_app, sample_token, first_pair_method):
     alice = sign_in(refresh_app, "alice", sample_token)
     alice_second_session = sign_in(refresh_app, "alice", sample_token)
     bob = sign_in(refresh_app, "bob", sample_token)
@@ -52,8 +53,10 @@ def test_shared_refresh_budget(refresh_app, sample_token):
         build_client.reset_mock()
         spotify.reset_mock()
 
-        for path in PATHS * 5:
-            assert alice.get(path + "?refresh=1", environ_base=SHARED_IP).status_code == 200
+        for method in (first_pair_method, "GET", "GET", "GET", "GET"):
+            for path in PATHS:
+                allowed = alice.open(path + "?refresh=1", method=method, environ_base=SHARED_IP)
+                assert allowed.status_code == 200
         assert spotify.get_user_playlists.call_args_list == [call(skip_cache=True)] * 10
         assert build_client.call_count == 10
 
