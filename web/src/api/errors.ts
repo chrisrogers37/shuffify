@@ -48,6 +48,22 @@ export class RateLimitError extends ApiRequestError {
     this.name = "RateLimitError";
   }
 }
+/** The wait after a 429 that has no retry hint. */
+const rateLimitFallbackMs = 1000;
+/**
+ * When a failed request may be sent again, or null if the failure sets no
+ * deadline: a 429 waits its retry hint, or one second without one, and a 503
+ * waits its retry hint if it has one. HTTP gives Retry-After a meaning on
+ * these two statuses only, so a hint on any other failure is ignored.
+ */
+export function retryDeadline(error: unknown, now: number): number | null {
+  if (!(error instanceof ApiRequestError)) return null;
+  if (error.status === 429)
+    return now + (error.retryAfterMs ?? rateLimitFallbackMs);
+  if (error.status === 503 && error.retryAfterMs !== null)
+    return now + error.retryAfterMs;
+  return null;
+}
 export class NetworkError extends Error {
   readonly admissionUnknown: boolean;
   constructor(method: string, cause: unknown) {
@@ -67,4 +83,17 @@ export class MissingCsrfTokenError extends Error {
     super("Your session must be loaded before this change can be submitted.");
     this.name = "MissingCsrfTokenError";
   }
+}
+/**
+ * Whether a failed write may have been applied, so that only a fresh read can
+ * show its outcome. Two failures show it was not: a missing CSRF token, which
+ * stops the request before it is sent, and a status under 500, which the
+ * server refused. Any other failure is unknown, a plain Error included: page
+ * code also throws one from a check after the server has answered.
+ */
+export function isOutcomeUnknown(error: unknown): boolean {
+  return (
+    !(error instanceof MissingCsrfTokenError) &&
+    !(error instanceof ApiRequestError && error.status < 500)
+  );
 }

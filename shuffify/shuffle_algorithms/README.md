@@ -230,10 +230,9 @@ class ShuffleAlgorithm(Protocol):
 ```
 
 Algorithms are registered in `registry.py` via the `ShuffleRegistry` class:
-- `_algorithms` dict maps class names to classes (pre-populated)
-- `list_algorithms()` returns the algorithms in their UI display order
+- `_algorithms` dict maps class names to classes, in UI display order
+- `list_algorithms()` returns the algorithms in that order
 - `get_algorithm(name)` returns an algorithm by class name
-- `register(cls)` adds new algorithms dynamically
 
 ### Display Order in UI
 
@@ -300,10 +299,11 @@ To create a new shuffle algorithm:
 
 3. Register in `registry.py` (no decorator — explicit registration):
    - Add import: `from .my_algorithm import MyAlgorithm`
-   - Add to `_algorithms` dict: `"MyAlgorithm": MyAlgorithm`
-   - Add to `desired_order` list in `list_algorithms()` for UI positioning
+   - Add to `_algorithms` dict at its place in the UI order: `"MyAlgorithm": MyAlgorithm`
 
-4. Add tests in `tests/algorithms/test_my_algorithm.py`
+4. For an option name no algorithm uses yet, add a `ShuffleRequest` field and its `parse_shuffle_request` conversion in `shuffify/schemas/requests.py`
+
+5. Add tests in `tests/algorithms/test_my_algorithm.py`
 
 
 ## Parameter Types

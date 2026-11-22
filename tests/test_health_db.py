@@ -20,13 +20,14 @@ class TestHealthEndpoint:
         assert data["status"] == "healthy"
 
     def test_health_returns_degraded_when_db_unavailable(self, client):
-        """Health should return 'degraded' when DB is down."""
+        """Health should answer 503 'degraded' when DB is down."""
         with patch(
             "shuffify.is_db_available",
             return_value=False,
         ):
             response = client.get("/health")
             data = response.get_json()
+            assert response.status_code == 503
             assert data["status"] == "degraded"
 
     def test_health_does_not_expose_subsystem_details(self, client):

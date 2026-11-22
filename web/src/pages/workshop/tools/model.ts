@@ -1,7 +1,5 @@
 import type { Algorithm } from "../../../api/contracts.ts";
 import type { ExternalIntent, Snapshot, TrackLock } from "./types.ts";
-export const trackURI = (v: unknown): v is string =>
-  typeof v === "string" && /^spotify:track:[A-Za-z0-9]{22}$/u.test(v);
 export function parameterDefaults(
   algorithm: Algorithm,
 ): Record<string, string> {

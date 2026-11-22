@@ -5,7 +5,7 @@ import threading
 import pytest
 from sqlalchemy import text
 
-from shuffify.services.operations.wake import PostgresWakeListener
+from shuffify.services.operations.wake import OPERATION_CHANNEL, PostgresWakeListener
 from tests.services.operations.test_repository import (
     postgres_repository as postgres_repository,
 )
@@ -33,7 +33,7 @@ def test_notification_is_not_delivered_before_its_transaction_commits(postgres_r
         assert received.wait(3)
         received.clear()
         with repository.engine.begin() as connection:
-            connection.execute(text("SELECT pg_notify('shuffify_operations', 'test')"))
+            connection.execute(text("SELECT pg_notify(:channel, 'test')"), {"channel": OPERATION_CHANNEL})
             assert not received.wait(0.05)
         assert received.wait(3)
 

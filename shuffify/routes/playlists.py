@@ -15,6 +15,7 @@ from shuffify.routes import (
     require_auth_and_db,
     require_session_and_db,
 )
+from shuffify.routes.playlist_refresh import playlist_refresh_requested
 from shuffify.routes.queue import enqueue_command
 from shuffify.services import PlaylistError, PlaylistService
 from shuffify.services.live_action_context_service import (
@@ -56,9 +57,7 @@ def api_user_playlists(api=None, user=None):
     """Return the user's editable playlists as JSON; ``?refresh=1`` skips the cache."""
     try:
         playlist_service = PlaylistService(api)
-        playlists = playlist_service.get_user_playlists(
-            skip_cache=request.args.get("refresh") == "1"
-        )
+        playlists = playlist_service.get_user_playlists(skip_cache=playlist_refresh_requested())
 
         # Apply user preferences (favorites first, hidden excluded)
         try:

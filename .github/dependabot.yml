@@ -2,11 +2,18 @@
 # Docs: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
 version: 2
 updates:
-  # Python pip dependencies
-  - package-ecosystem: "pip"
+  # Python: requirements/*.in and the hashed locks compiled from them
+  # (scripts/lock.sh). Dependabot reads pyproject.toml, which holds the 7-day
+  # cutoff, only from this directory, so it stays the root.
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
+    # The locks' pins of transitive dependencies are bumped too
+    allow:
+      - dependency-type: "all"
     open-pull-requests-limit: 10
     commit-message:
       prefix: "deps"
@@ -36,12 +43,21 @@ updates:
         update-types:
           - "minor"
           - "patch"
+      # Every other minor and patch update, transitive pins included
+      other-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # Frontend and Railway configuration packages
   - package-ecosystem: "npm"
     directory: "/web"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     commit-message:
       prefix: "deps"
@@ -57,6 +73,8 @@ updates:
     directory: "/.railway"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 2
     commit-message:
       prefix: "deps"
@@ -69,6 +87,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     commit-message:
       prefix: "ci"

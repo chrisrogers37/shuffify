@@ -5,6 +5,8 @@ Handles creation of login records on OAuth callback, updating logout
 timestamps, and querying login history for auditing and analytics.
 """
 
+import hashlib
+import hmac
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -12,9 +14,23 @@ from typing import Optional
 from flask import Request
 
 from shuffify.models.db import LoginHistory, db
+from shuffify.services import signed_digest
 from shuffify.services.base import safe_commit
 
 logger = logging.getLogger(__name__)
+
+# Login history stores a keyed digest of each session id, never the id itself:
+# the id is the session cookie's value. The digest still matches a sign-out to
+# its sign-in.
+SESSION_DIGEST_PURPOSE = "shuffify.login.session.v1"
+
+
+def _session_digest(session_id: Optional[str]) -> Optional[str]:
+    """HMAC-SHA256 of a session id under a key derived from SECRET_KEY."""
+    if not session_id:
+        return None
+    key = signed_digest.key(SESSION_DIGEST_PURPOSE)
+    return hmac.new(key, session_id.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 class LoginHistoryError(Exception):
@@ -43,12 +59,13 @@ class LoginHistoryService:
         Record a new login event.
 
         Creates a LoginHistory record capturing the login timestamp,
-        IP address, user agent, and session ID.
+        IP address, user agent, and a keyed digest of the session ID.
 
         Args:
             user_id: The internal database user ID.
             request: The Flask request object (used for IP and UA).
-            session_id: The Flask session ID for correlation.
+            session_id: The Flask session ID. Its keyed digest is stored,
+                so record_logout can match this sign-in.
             login_type: One of 'oauth_initial', 'oauth_refresh',
                 'session_resume'.
 
@@ -69,7 +86,7 @@ class LoginHistoryService:
             user_id=user_id,
             ip_address=ip_address,
             user_agent=user_agent,
-            session_id=session_id,
+            session_id=_session_digest(session_id),
             login_type=login_type,
         )
         db.session.add(entry)
@@ -94,7 +111,7 @@ class LoginHistoryService:
         Args:
             user_id: The internal database user ID.
             session_id: Optional Flask session ID to match a specific
-                login record.
+                login record, by its stored digest.
 
         Returns:
             True if a record was updated, False if no matching record
@@ -108,7 +125,7 @@ class LoginHistoryService:
         )
 
         if session_id:
-            query = query.filter_by(session_id=session_id)
+            query = query.filter_by(session_id=_session_digest(session_id))
 
         # Get the most recent open login record
         entry = query.order_by(LoginHistory.logged_in_at.desc()).first()

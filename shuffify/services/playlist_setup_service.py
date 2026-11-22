@@ -19,7 +19,7 @@ import logging
 from dataclasses import dataclass
 from functools import partial
 
-from shuffify.enums import ActivityType
+from shuffify.enums import JOB_STEPS, ActivityType
 from shuffify.models.db import PlaylistPair, RaidPlaylistLink, Schedule, db
 from shuffify.schemas.playlist_setup_requests import DRIP_COUNT_RANGE, RAID_COUNT_RANGE, is_playlist_id
 from shuffify.services import signed_digest
@@ -28,7 +28,6 @@ from shuffify.services.api_response import busy_error
 from shuffify.services.base import ensure_private, safe_commit
 from shuffify.services.live_review_bindings import fingerprint
 from shuffify.services.live_review_scope import (
-    JOB_STEPS,
     STEP_ROWS,
     drip_forced,
     drip_override,
@@ -92,6 +91,23 @@ PHASES = {
     "set_auto_archive": 4,
     "add_playlist_source": 5,
     "add_search_source": 5,
+}
+# What a routine must use for each change to affect it (a key of a routine's "uses" in the context); _effects
+# says how. No routine uses auto-archive: set_auto_archive affects none, and the impact notes AUTO_ARCHIVE_NOTE.
+AFFECTS = {
+    "remove_source": "sources",
+    "remove_routine_source": "sources",
+    "unlink_collection": "collection",
+    "unpair_archive": "archive",
+    "set_source_count": "sources",
+    "link_collection": "collection",
+    "replace_collection": "collection",
+    "pair_archive": "archive",
+    "replace_archive": "archive",
+    "set_drip": "drip",
+    "set_auto_archive": None,
+    "add_playlist_source": "sources",
+    "add_search_source": "sources",
 }
 
 BUSY = "A routine or save is running on this playlist. Try again when it finishes."

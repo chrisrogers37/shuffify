@@ -9,6 +9,7 @@ import logging
 import time
 
 from flask import current_app, jsonify, request
+from flask_limiter.errors import RateLimitExceeded
 from pydantic import ValidationError
 from werkzeug.exceptions import HTTPException
 
@@ -494,7 +495,7 @@ def handle_csrf_error(error):
         "Your request could not be verified. "
         "Please refresh the page and try again."
     )
-    return json_error_response(message, 400)
+    return json_error_response(message, 400, error_code="session_verification_expired")
 
 
 def handle_bad_request(error):
@@ -585,6 +586,8 @@ def handle_rate_limit_exceeded(error):
     left out when no limit was broken.
     """
     logger.warning("Rate limit exceeded on %s", request.path)
+    if isinstance(error, RateLimitExceeded) and error.response is not None:
+        return error.response
     response, status = json_error_response(
         "Too many requests. Please wait a moment and try again.",
         429,

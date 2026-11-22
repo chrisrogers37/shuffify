@@ -5,6 +5,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import get_args
 from unittest.mock import patch
 
 import pytest
@@ -13,6 +14,7 @@ from sqlalchemy import text
 from shuffify.enums import ActivityType
 from shuffify.models.db import ActivityLog, PlaylistPair, RaidPlaylistLink, Schedule, UpstreamSource, db
 from shuffify.schemas import SetupImpactRequest, SetupSaveRequest
+from shuffify.schemas.playlist_setup_requests import SetupChange
 from shuffify.services import activity_log_service
 from shuffify.services import playlist_setup_service as setup
 from shuffify.services.live_review_scope import STEP_ROWS
@@ -279,6 +281,17 @@ def test_a_routines_own_drip_count_is_reported_as_its_runs_add_it(user, api):
 def test_each_step_that_reads_an_asset_has_its_wording():
     for role, row in (("collection", "link"), ("archive", "pair")):
         assert set(setup.ASSET_EFFECTS[role]) == {step for step, rows in STEP_ROWS.items() if row in rows}
+
+
+def test_each_op_a_request_can_name_has_a_phase_a_review_and_what_it_affects():
+    ops = {op for change in get_args(get_args(SetupChange)[0]) for op in get_args(change.model_fields["op"].annotation)}
+    assert set(setup.PHASES) == ops
+    assert {op for op in ops if not callable(getattr(setup._Review, f"_{op}", None))} <= set(setup.ASSET_OPS)
+    assert set(setup.ASSET_OPS) <= ops
+    # _effects lists no routine for an op it has no branch for, so each op names what it affects, or None.
+    assert set(setup.AFFECTS) == ops
+    # An asset op affects the routines that use its asset.
+    assert {op: setup.AFFECTS[op] for op in setup.ASSET_OPS} == {op: role for op, (role, _) in setup.ASSET_OPS.items()}
 
 
 def test_the_context_refuses_a_target_the_user_cannot_edit(user, api):

@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from shuffify.models.db import JobExecution, db
+from shuffify.services.operations.repository import ACTIVE_STATES
 from shuffify.services.state_service import PLAYLIST_STATES_KEY, StaleHistoryError, StateError
 
 HISTORY_SCOPE_KEY = "history_scope"
@@ -302,7 +303,7 @@ class HistoryStore:
                         protected.add(row.id)
                         seen.add(key)
             active = session.scalars(select(JobExecution).where(
-                JobExecution.kind.is_not(None), JobExecution.state.in_({"queued", "running", "compensating"}),
+                JobExecution.kind.is_not(None), JobExecution.state.in_(ACTIVE_STATES),
             ))
             for row in active:
                 protected.add(row.id)

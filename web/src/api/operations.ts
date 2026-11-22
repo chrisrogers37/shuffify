@@ -1,4 +1,5 @@
 import type { ApiClient } from "./client.ts";
+import { terminalOperationStates } from "./contracts.ts";
 import type { Operation } from "./contracts.ts";
 import { ApiRequestError, NetworkError, RateLimitError } from "./errors.ts";
 
@@ -20,12 +21,6 @@ interface PollEntry {
   subscribers: Set<Subscriber>;
 }
 const polls = new WeakMap<ApiClient, Map<number, PollEntry>>();
-const terminalStates = new Set([
-  "succeeded",
-  "failed",
-  "rolled_back",
-  "needs_attention",
-]);
 const abortError = (signal?: AbortSignal) =>
   signal?.reason ??
   new DOMException("Operation observation stopped.", "AbortError");
@@ -168,7 +163,7 @@ export function pollOperation(
               subscriber.reject(error);
             }
           }
-          if (terminalStates.has(operation.state)) {
+          if (terminalOperationStates.has(operation.state)) {
             for (const subscriber of shared.subscribers) {
               subscriber.detach();
               subscriber.resolve(operation);

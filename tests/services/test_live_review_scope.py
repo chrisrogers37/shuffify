@@ -6,11 +6,10 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.exc import OperationalError
 
-from shuffify.enums import JobType, LockTier, RotationMode
+from shuffify.enums import JOB_STEPS, JobType, LockTier, RotationMode
 from shuffify.models.db import PlaylistPair, RaidPlaylistLink, Schedule, TrackLock, UpstreamSource, db
 from shuffify.services.live_review_scope import (
     DIRECT_DRIP_PARAMS,
-    JOB_STEPS,
     STEP_ROWS,
     build_part,
     direct_parts,

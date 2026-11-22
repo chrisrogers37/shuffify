@@ -8,6 +8,7 @@ for raid playlist link CRUD and drip endpoints.
 from unittest.mock import MagicMock, patch
 
 from shuffify.models.db import db
+from shuffify.schemas.playlist_setup_requests import DRIP_COUNT_RANGE, RAID_COUNT_RANGE
 from tests.paths import api_path
 from tests.playlist_setup_fixtures import SetupSpotify
 from tests.queued_operations import post_and_run
@@ -115,7 +116,7 @@ class TestRaidLinkValidation:
         mock_auth.return_value = MagicMock()
         resp = auth_client.put(
             api_path("/playlist/p1/raid-link"),
-            json={"drip_count": 0},
+            json={"drip_count": DRIP_COUNT_RANGE[0] - 1},
         )
         assert resp.status_code == 400
 
@@ -126,7 +127,7 @@ class TestRaidLinkValidation:
         mock_auth.return_value = MagicMock()
         resp = auth_client.put(
             api_path("/playlist/p1/raid-source-count"),
-            json={"source_id": 1, "raid_count": 0},
+            json={"source_id": 1, "raid_count": RAID_COUNT_RANGE[0] - 1},
         )
         assert resp.status_code == 400
 

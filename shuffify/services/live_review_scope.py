@@ -16,7 +16,7 @@ from contextvars import ContextVar
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
-from shuffify.enums import JobType, RotationMode
+from shuffify.enums import RotationMode
 from shuffify.models.db import UpstreamSource
 from shuffify.services.live_review_bindings import fingerprint, scope_fingerprint
 from shuffify.services.playlist_pair_service import PlaylistPairService
@@ -25,15 +25,6 @@ from shuffify.services.track_lock_service import TrackLockService
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 
 PART_PURPOSE = "shuffify.live.step-part.v1"
-# Executor steps per saved job type, in the order the runner dispatches them.
-JOB_STEPS = {
-    JobType.RAID: ("raid",),
-    JobType.SHUFFLE: ("shuffle",),
-    JobType.RAID_AND_SHUFFLE: ("raid", "shuffle"),
-    JobType.RAID_AND_DRIP: ("raid", "drip"),
-    JobType.ROTATE: ("rotate",),
-    JobType.DRIP: ("drip",),
-}
 # The steps of each explicitly requested Workshop action.
 DIRECT_STEPS = {"raid": ("raid",), "drip": ("drip",), "raid_and_drip": ("raid", "drip")}
 # An explicitly requested Drip runs past the saved Drip setting.

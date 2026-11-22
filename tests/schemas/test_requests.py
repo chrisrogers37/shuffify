@@ -13,6 +13,7 @@ from shuffify.schemas import (
     WorkshopCommitRequest,
     parse_shuffle_request,
 )
+from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 
 
 class TestShuffleRequest:
@@ -24,7 +25,7 @@ class TestShuffleRequest:
 
         assert request.algorithm == "BasicShuffle"
         assert request.keep_first == 0
-        assert request.section_count == 4
+        assert request.section_count is None
         assert request.shuffle_percentage == 50.0
         assert request.shuffle_location == "front"
 
@@ -98,19 +99,51 @@ class TestShuffleRequest:
 
         assert "greater than or equal to 0" in str(exc_info.value).lower()
 
-    def test_zero_section_count(self):
-        """Test that zero section_count raises ValidationError."""
+    @pytest.mark.parametrize("algorithm", ["BalancedShuffle", "StratifiedShuffle"])
+    def test_section_count_follows_the_algorithm_range(self, algorithm):
+        """Only the selected algorithm's declared section_count range is accepted."""
+        declared = ShuffleRegistry.get_algorithm(algorithm)().parameters["section_count"]
+        low, high = declared["min"], declared["max"]
+        for value in (low - 1, high + 1, None):
+            with pytest.raises(ValidationError, match=f"{algorithm} takes {low} to {high} sections"):
+                ShuffleRequest(algorithm=algorithm, section_count=value)
+        for value in (low, high):
+            params = ShuffleRequest(algorithm=algorithm, section_count=value).get_algorithm_params()
+            assert params["section_count"] == value
+
+    @pytest.mark.parametrize("algorithm, sections", [("BalancedShuffle", 4), ("StratifiedShuffle", 5)])
+    def test_left_out_section_count_takes_the_algorithm_default(self, algorithm, sections):
+        """A request without section_count runs with the algorithm's declared default."""
+        params = ShuffleRequest(algorithm=algorithm).get_algorithm_params()
+        assert params["section_count"] == sections
+
+    def test_section_count_is_checked_only_against_a_declared_range(self):
+        """Without a valid algorithm that declares section_count, the value is not checked."""
+        request = ShuffleRequest(algorithm="BasicShuffle", section_count=0)
+        assert request.get_algorithm_params() == {"keep_first": 0}
         with pytest.raises(ValidationError) as exc_info:
-            ShuffleRequest(section_count=0)
+            ShuffleRequest(algorithm="UnknownShuffle", section_count=0)
+        assert [error["loc"] for error in exc_info.value.errors()] == [("algorithm",)]
 
-        assert "greater than or equal to 1" in str(exc_info.value).lower()
-
-    def test_section_count_too_large(self):
-        """Test that section_count over 100 raises ValidationError."""
-        with pytest.raises(ValidationError) as exc_info:
-            ShuffleRequest(section_count=101)
-
-        assert "less than or equal to 100" in str(exc_info.value).lower()
+    @pytest.mark.parametrize(
+        "algorithm, option",
+        [
+            (name, option)
+            for name, algorithm_class in ShuffleRegistry.get_available_algorithms().items()
+            for option in algorithm_class().parameters
+        ],
+    )
+    def test_every_declared_option_is_a_form_field(self, algorithm, option):
+        """Each option an algorithm declares is a ShuffleRequest field that form parsing passes on."""
+        rule = ShuffleRegistry.get_algorithm(algorithm)().parameters[option]
+        assert option in ShuffleRequest.model_fields
+        # A valid value other than the default, so an option the form drops cannot pass.
+        if rule["type"] == "string":
+            value = next(choice for choice in rule["options"] if choice != rule["default"])
+        else:
+            value = rule.get("max", rule["default"] + 1)
+        params = parse_shuffle_request({"algorithm": algorithm, option: str(value)}).get_algorithm_params()
+        assert params[option] == value
 
     def test_negative_shuffle_percentage(self):
         """Test that negative shuffle_percentage raises ValidationError."""
@@ -137,17 +170,11 @@ class TestShuffleRequest:
 
     def test_inclusive_range_limits_accepted(self):
         """Test that the limits of each ranged field are accepted."""
-        low = ShuffleRequest(
-            section_count=1, shuffle_percentage=0.0, shuffle_location="front"
-        )
-        assert low.section_count == 1
+        low = ShuffleRequest(shuffle_percentage=0.0, shuffle_location="front")
         assert low.shuffle_percentage == 0.0
         assert low.shuffle_location == "front"
 
-        high = ShuffleRequest(
-            section_count=100, shuffle_percentage=100.0, shuffle_location="back"
-        )
-        assert high.section_count == 100
+        high = ShuffleRequest(shuffle_percentage=100.0, shuffle_location="back")
         assert high.shuffle_percentage == 100.0
         assert high.shuffle_location == "back"
 

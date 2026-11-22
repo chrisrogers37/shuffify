@@ -5,15 +5,12 @@ hints and read authenticated worker-memory snapshots; PostgreSQL notifications
 cover lost hints.
 """
 
-import logging
 from datetime import datetime
 from typing import Dict, Tuple
 
 from shuffify.enums import IntervalValue, ScheduleType
 from shuffify.services.schedule_utils import schedule_revision
-from shuffify.services.worker_control import WorkerControlClient
-
-logger = logging.getLogger(__name__)
+from shuffify.services.worker_control import MAX_IDS, WorkerControlClient
 
 
 def add_job_for_schedule(schedule):
@@ -31,7 +28,7 @@ def get_schedule_registrations(schedules):
     schedules = list(schedules)
     if not schedules:
         return {}
-    snapshot = WorkerControlClient().registrations([row.id for row in schedules]) if len(schedules) <= 5000 else None
+    snapshot = WorkerControlClient().registrations([row.id for row in schedules]) if len(schedules) <= MAX_IDS else None
     available = bool(snapshot and snapshot.get('leader') is True and snapshot.get('scheduler_running') is True
                      and isinstance(snapshot.get('generation'), str) and snapshot['generation'])
     result = {}
@@ -70,6 +67,25 @@ def sync_schedule_registration(schedule):
     return get_schedule_registration(schedule)
 
 
+# APScheduler interval options for each IntervalValue.
+INTERVAL_TRIGGERS = {
+    IntervalValue.EVERY_6H: {"hours": 6},
+    IntervalValue.EVERY_12H: {"hours": 12},
+    IntervalValue.DAILY: {"days": 1},
+    IntervalValue.EVERY_3D: {"days": 3},
+    IntervalValue.WEEKLY: {"weeks": 1},
+}
+
+
+class InvalidSchedule(ValueError):
+    """A schedule definition the parser refuses, carrying the daily trigger a stored row with it runs on."""
+
+    def __init__(self, reason, fallback):
+        super().__init__(reason)
+        self.reason = reason
+        self.fallback = fallback
+
+
 def _parse_schedule(schedule_type: str, schedule_value: str) -> Tuple[str, Dict]:
     """
     Convert schedule configuration to APScheduler trigger args.
@@ -80,27 +96,19 @@ def _parse_schedule(schedule_type: str, schedule_value: str) -> Tuple[str, Dict]
 
     Returns:
         Tuple of (trigger_type_string, trigger_kwargs_dict).
+
+    Raises:
+        InvalidSchedule: For an unknown interval, a cron that is not five fields, or an unknown type.
     """
     if schedule_type == ScheduleType.INTERVAL:
-        interval_map = {
-            IntervalValue.EVERY_6H: {"hours": 6},
-            IntervalValue.EVERY_12H: {"hours": 12},
-            IntervalValue.DAILY: {"days": 1},
-            IntervalValue.EVERY_3D: {"days": 3},
-            IntervalValue.WEEKLY: {"weeks": 1},
-        }
-        kwargs = interval_map.get(schedule_value, {"days": 1})
-        return "interval", kwargs
+        if schedule_value not in INTERVAL_TRIGGERS:
+            raise InvalidSchedule("unknown interval", ("interval", {"days": 1}))
+        return "interval", dict(INTERVAL_TRIGGERS[schedule_value])
 
     elif schedule_type == ScheduleType.CRON:
         parts = schedule_value.split()
         if len(parts) != 5:
-            logger.warning(
-                f"Invalid cron expression "
-                f"'{schedule_value}', "
-                f"defaulting to daily at midnight"
-            )
-            return "cron", {"hour": 0, "minute": 0}
+            raise InvalidSchedule("cron expression is not five fields", ("cron", {"hour": 0, "minute": 0}))
 
         return "cron", {
             "minute": parts[0],
@@ -111,5 +119,4 @@ def _parse_schedule(schedule_type: str, schedule_value: str) -> Tuple[str, Dict]
         }
 
     else:
-        logger.warning(f"Unknown schedule_type '{schedule_type}', defaulting to daily")
-        return "interval", {"days": 1}
+        raise InvalidSchedule("unknown schedule type", ("interval", {"days": 1}))
