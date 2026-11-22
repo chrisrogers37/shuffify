@@ -397,30 +397,16 @@ class TestRedisProductionRequirement:
         with pytest.raises(RuntimeError, match="REDIS_URL"):
             create_app("production")
 
+    @pytest.mark.parametrize("failure", [redis.ConnectionError, redis.TimeoutError])
     def test_production_refuses_to_boot_when_redis_is_unreachable(
-        self, production_boot_env, no_schema_check, production_redis
+        self, production_boot_env, no_schema_check, production_redis, failure
     ):
         from shuffify import create_app
 
-        production_redis.ping.side_effect = redis.ConnectionError("Connection refused")
+        production_redis.ping.side_effect = failure("Redis unavailable")
         with pytest.raises(RuntimeError, match="unreachable") as excinfo:
             create_app("production")
-        assert isinstance(excinfo.value.__cause__, redis.ConnectionError)
-
-    @pytest.mark.parametrize("redis_url", ["", "redis://localhost:6379/0"])
-    def test_harness_falls_back_when_redis_is_unset_or_unreachable(self, monkeypatch, redis_url):
-        from flask import Flask
-
-        import shuffify
-
-        client = MagicMock(spec=redis.Redis)
-        client.ping.side_effect = redis.ConnectionError("Connection refused")
-        monkeypatch.setattr(shuffify, "_create_redis_client", lambda _url: client)
-        app = Flask(__name__)
-        app.config.update(CONFIG_NAME="harness", REDIS_URL=redis_url)
-
-        assert shuffify._init_redis(app) is None
-        assert app.config["SESSION_TYPE"] == "filesystem"
+        assert isinstance(excinfo.value.__cause__, failure)
 
     def test_development_falls_back_to_filesystem(self):
         """Development should fall back to filesystem when Redis fails."""
@@ -456,6 +442,17 @@ class TestLimiterProductionRequirement:
         with patch("shuffify.Limiter", autospec=True, side_effect=RuntimeError("storage unavailable")):
             with pytest.raises(RuntimeError, match="storage unavailable"):
                 create_app("production")
+
+    def test_production_refuses_a_redis_that_cannot_count_requests(
+        self, production_boot_env, production_redis, no_schema_check
+    ):
+        from shuffify import create_app
+
+        production_redis.register_script.return_value.side_effect = redis.exceptions.ReadOnlyError("read-only")
+        with pytest.raises(RuntimeError, match="rate-limit counter") as exc:
+            create_app("production")
+        assert isinstance(exc.value.__cause__, redis.exceptions.ReadOnlyError)
+        production_redis.ping.assert_called_once()
 
     def test_development_boots_without_a_limiter_when_it_fails(self):
         env = {"SPOTIFY_CLIENT_ID": "test_id", "SPOTIFY_CLIENT_SECRET": "test_secret", "REDIS_URL": ""}
@@ -510,42 +507,14 @@ class TestSecurityHeaders:
                 response = debug_client.get("/health")
                 assert "Strict-Transport-Security" not in response.headers
 
-    def test_hsts_present_in_production_mode(self, monkeypatch, no_schema_check):
-        """HSTS should be sent when debug is False (production)."""
-        import os
-        from unittest.mock import patch
+    def test_hsts_present_in_production_mode(self, production_boot_env, production_redis, no_schema_check):
+        from shuffify import create_app
 
-        from config import ProdConfig
-
-        monkeypatch.setattr(ProdConfig, "REDIS_URL", "redis://localhost:6379/0")
-        os.environ.pop("DATABASE_URL", None)
-
-        mock_redis = MagicMock(spec=redis.Redis)
-        mock_redis.ping.return_value = True
-
-        with patch.dict(
-            "os.environ",
-            {
-                "SPOTIFY_CLIENT_ID": "test_id",
-                "SPOTIFY_CLIENT_SECRET": "test_secret",
-                "SPOTIFY_REDIRECT_URI": "http://localhost:5000/callback",
-                "SECRET_KEY": "test-secret-key-for-testing",
-                "REDIS_URL": "redis://localhost:6379/0",
-            },
-        ):
-            with patch("shuffify.redis.from_url", return_value=mock_redis):
-                from shuffify import create_app
-
-                app = create_app("production")
-                app.config["TESTING"] = True
-
-                with app.test_client() as prod_client:
-                    response = prod_client.get("/health")
-                    hsts = response.headers.get("Strict-Transport-Security")
-                    assert hsts is not None
-                    assert "max-age=31536000" in hsts
-                    assert "includeSubDomains" in hsts
-                    assert "preload" in hsts
+        response = create_app("production").test_client().get("/health")
+        hsts = response.headers["Strict-Transport-Security"]
+        assert "max-age=31536000" in hsts
+        assert "includeSubDomains" in hsts
+        assert "preload" in hsts
 
     def test_csp_header_present(self, client):
         """All responses should include Content-Security-Policy."""

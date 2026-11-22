@@ -284,8 +284,7 @@ def production_redis(monkeypatch):
     """A Redis URL on ProdConfig and a stand-in client for it.
 
     A production app refuses to build without Redis, and no test reaches a
-    real one: the stand-in answers the boot's ping. The rate limiter opens its
-    own connection to the URL only when a request is counted.
+    real one. Both the session client and limiter use this stand-in.
     """
     from unittest.mock import MagicMock
 
@@ -295,13 +294,19 @@ def production_redis(monkeypatch):
 
     client = MagicMock(spec=redis.Redis)
     monkeypatch.setattr(ProdConfig, "REDIS_URL", "redis://localhost:6379/0")
-    monkeypatch.setattr("shuffify._create_redis_client", lambda _url: client)
+    client.ping.return_value = True
+    client.register_script.return_value.return_value = 1
+    monkeypatch.setattr(redis, "from_url", Mock(spec=redis.from_url, return_value=client))
     return client
 
 
 @pytest.fixture
 def production_boot_env(monkeypatch):
-    """The environment variables a production app checks for at boot."""
+    """Synthetic credentials and an isolated database for production factory tests."""
+    from config import ProdConfig
+
+    monkeypatch.setattr(ProdConfig, "SQLALCHEMY_DATABASE_URI", "sqlite:///:memory:")
+    monkeypatch.setattr(ProdConfig, "SQLALCHEMY_ENGINE_OPTIONS", {})
     monkeypatch.setenv("SPOTIFY_CLIENT_ID", "test_client_id")
     monkeypatch.setenv("SPOTIFY_CLIENT_SECRET", "test_client_secret")
     monkeypatch.setenv("SECRET_KEY", "test-secret-key-for-testing")

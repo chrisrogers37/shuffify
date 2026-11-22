@@ -12,6 +12,7 @@ import time
 from unittest.mock import patch
 
 import pytest
+import redis
 from flask import abort
 from flask_limiter.util import get_qualified_name, get_remote_address
 
@@ -20,7 +21,7 @@ from shuffify import _user_or_address_key
 
 
 @pytest.fixture
-def rate_limited_app():
+def rate_limited_app(monkeypatch):
     """Create a Flask app with rate limiting enabled (in-memory)."""
     import os
 
@@ -32,8 +33,11 @@ def rate_limited_app():
     os.environ["SECRET_KEY"] = "test-secret-key-for-testing"
     os.environ.pop("DATABASE_URL", None)
 
+    from config import DevConfig
     from shuffify import create_app
 
+    monkeypatch.setattr(DevConfig, "REDIS_URL", None)
+    monkeypatch.setattr(DevConfig, "SQLALCHEMY_DATABASE_URI", "sqlite:///:memory:")
     app = create_app("development")
     app.config["TESTING"] = True
     app.config["SCHEDULER_ENABLED"] = False
@@ -158,6 +162,32 @@ class TestRetryAfter:
         # /login allows 10 a minute, so its window resets within 60 seconds.
         assert response.headers["Retry-After"].isdigit()
         assert 1 <= int(response.headers["Retry-After"]) <= 60
+
+    @pytest.mark.parametrize(("elapsed", "delay"), [(58.1, "2"), (59.5, "1")])
+    def test_rounds_up_the_time_remaining_in_the_window(self, rate_client, elapsed, delay):
+        start = int(time.time()) + 0.8
+        with patch("time.time", return_value=start) as clock:
+            for _ in range(10):
+                assert rate_client.get("/login").status_code != 429
+            clock.return_value = start + elapsed
+            response = rate_client.get("/login")
+        assert response.status_code == 429
+        assert response.headers["Retry-After"] == delay
+
+    def test_a_failed_reset_lookup_preserves_the_rejection(self, rate_limited_app, monkeypatch):
+        client = rate_limited_app.test_client()
+        for _ in range(10):
+            assert client.get("/login").status_code != 429
+        limiter, = rate_limited_app.extensions["limiter"]
+
+        def unavailable(*args):
+            raise redis.ConnectionError("Redis unavailable after breach")
+
+        monkeypatch.setattr(limiter.limiter, "get_window_stats", unavailable)
+        response = client.get("/login")
+        assert response.status_code == 429
+        assert response.json["error_code"] == "rate_limited"
+        assert "Retry-After" not in response.headers
 
     @pytest.mark.parametrize("limit", [None, "100/minute"])
     def test_a_429_that_no_limit_raised_has_no_retry_after(self, rate_limited_app, limit):
@@ -296,7 +326,10 @@ class TestLimitsAtBoot:
             ]
         assert applied == {endpoint: [expected] for endpoint, expected in LIMITED_ENDPOINTS.items()}
 
-    def test_a_limited_endpoint_that_is_not_registered_fails_the_boot(self, monkeypatch):
+    @pytest.mark.parametrize("limiter_available", [True, False])
+    def test_a_limited_endpoint_that_is_not_registered_fails_the_boot(self, monkeypatch, limiter_available):
+        if not limiter_available:
+            monkeypatch.setattr(shuffify, "_init_limiter", lambda *_: None)
         monkeypatch.setitem(shuffify.RATE_LIMITS, "api.renamed_endpoint", ("5/minute", None))
 
         from shuffify import create_app

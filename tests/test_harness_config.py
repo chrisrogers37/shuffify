@@ -9,6 +9,7 @@ non-production config, which is why the guard raises something else.
 
 import psycopg2
 import pytest
+import redis
 from psycopg2.extensions import parse_dsn
 from sqlalchemy import create_engine
 
@@ -46,6 +47,20 @@ def harness(monkeypatch):
 
 def test_safe_config_passes(harness):
     harness.assert_safe()
+
+
+@pytest.mark.parametrize("failure", [redis.ConnectionError, redis.TimeoutError])
+def test_harness_boot_with_unreachable_loopback_redis(harness, monkeypatch, tmp_path, failure):
+    import shuffify
+
+    def offline(_url):
+        raise failure("Local Redis unavailable")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(shuffify, "_create_redis_client", offline)
+    monkeypatch.setattr(shuffify, "_init_database", lambda _app: None)
+    app = shuffify.create_app("harness")
+    assert app.config["SESSION_TYPE"] == "filesystem"
 
 
 @pytest.mark.parametrize(

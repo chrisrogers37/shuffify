@@ -12,10 +12,10 @@ previous platform is gone.
 | Frontend | Vercel project `shuffify` (team `chrisrogers37`), domains `shuffify.app` and `shuffify.vercel.app` | Root `web/`, build `npm run build:vercel`, production branch `main`. Serves the React app and forwards `/api`, `/login`, `/callback`, `/logout` and `/health` to the URL in `RAILWAY_API_URL`. |
 | API | Railway project `shuffify`, environment `production`, service `api` | Public at `https://api-production-391dd.up.railway.app`. Each deployment runs `scripts/pre-deploy.sh` (Alembic upgrade) first; a failure blocks it. |
 | Worker | Same environment, service `worker` | Private. One replica owns queued Spotify writes and the scheduler. |
-| Redis | Same environment, service `redis` | Sessions and worker coordination. |
+| Redis | Same environment, service `redis` | Sessions, rate-limit counters, Spotify caching and worker coordination. |
 | Database | Neon project `shuffify-db` (`proud-dew-57305636`), branch `production` (`br-snowy-bird-ai3vjw7w`), database `neondb` | The API, its pre-deploy migration and the worker use the branch's direct (unpooled) endpoint. Schema head `e1f2a3b4c5d6`. |
 
-Railway builds the API and worker from `main` of `chrisrogers37/shuffify`.
+Railway builds the API and worker from `main` of `chrisrogers37/shuffify`. Both services receive `REDIS_URL` from the Redis service. The API, its pre-deploy migration and the worker each verify that Redis answers a ping and accepts a rate-limit counter write at startup. Failure blocks startup until writable Redis is available.
 
 The `production` environment's shared variables hold every value that
 `.railway/railway.ts` reads:

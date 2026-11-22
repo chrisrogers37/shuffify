@@ -123,7 +123,7 @@ The Railway infrastructure definition and setup instructions are in [.railway/RE
 | Service | Required environment variable names |
 | --- | --- |
 | API and worker | `APP_CONFIG`, `DATABASE_URL` (required owner-set direct, unpooled Neon URL), `REDIS_URL`, `SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`, `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI`, `WORKER_CONTROL_TOKEN`, `SCHEDULER_ENABLED`, `SCHEDULER_TIMEZONE` |
-| API pre-deploy migration | `DATABASE_URL` (inherits the API's required owner-set direct, unpooled Neon URL) |
+| API pre-deploy migration | Inherits the API environment, including the direct, unpooled `DATABASE_URL` and a writable Redis at `REDIS_URL`. |
 | API | `PORT`, `SHUFFIFY_PROCESS_ROLE`, `WORKER_CONTROL_URL`, `PUBLIC_ORIGIN` (required owner-set browser-facing origin) |
 | Worker | `PORT`, `SHUFFIFY_PROCESS_ROLE`, `WORKER_CONTROL_HOST`, `WORKER_CONTROL_PORT` |
 | Frontend build | `RAILWAY_API_URL`; optional `CONTACT_ADDRESS` override |

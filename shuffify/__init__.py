@@ -3,6 +3,7 @@ import os
 import re
 from typing import Optional
 from urllib.parse import unquote, urlsplit
+from uuid import uuid4
 
 import redis
 from flask import Flask, Request, current_app, request, session
@@ -128,7 +129,7 @@ def _init_redis(app):
             )
             logger.info("Redis caching enabled")
             return client
-        except redis.ConnectionError as e:
+        except (redis.ConnectionError, redis.TimeoutError) as e:
             if _is_production(app):
                 raise RuntimeError(
                     f"Redis at {_loggable_redis_url(redis_url)} is unreachable, and production requires it"
@@ -200,6 +201,13 @@ def _init_limiter(app, redis_client):
             default_limits=[],
             strategy="fixed-window",
         )
+        if _is_production(app):
+            # RedisStorage connects lazily. Use the same atomic write as a
+            # fixed-window hit, with a short-lived counter outside user budgets.
+            try:
+                limiter.storage.incr(f"shuffify:boot:{uuid4().hex}", expiry=1)
+            except redis.RedisError as error:
+                raise RuntimeError("Production Redis could not write a rate-limit counter") from error
         logger.info("Flask-Limiter initialized")
         return limiter
     except Exception as e:
@@ -222,6 +230,8 @@ def _apply_rate_limits(app, limiter):
     missing = [endpoint for endpoint in RATE_LIMITS if endpoint not in app.view_functions]
     if missing:
         raise RuntimeError(f"Rate-limited endpoints are not registered: {', '.join(missing)}")
+    if limiter is None:
+        return
     for endpoint, (limit, key_func) in RATE_LIMITS.items():
         app.view_functions[endpoint] = limiter.limit(limit, key_func=key_func)(app.view_functions[endpoint])
     logger.info(
@@ -979,8 +989,7 @@ def create_app(config_name=None):
     app.register_blueprint(site_bp)
     app.register_blueprint(api_bp)
 
-    if _limiter is not None:
-        _apply_rate_limits(app, _limiter)
+    _apply_rate_limits(app, _limiter)
 
     # Register global error handlers
     from shuffify.error_handlers import register_error_handlers

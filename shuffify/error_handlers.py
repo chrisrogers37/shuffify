@@ -6,9 +6,11 @@ service-layer exceptions and Pydantic validation errors.
 """
 
 import logging
+import math
 import time
 
-from flask import current_app, jsonify, request
+import redis
+from flask import current_app, jsonify, make_response, request
 from flask_limiter.errors import RateLimitExceeded
 from pydantic import ValidationError
 from werkzeug.exceptions import HTTPException
@@ -574,8 +576,12 @@ def _seconds_until_limit_resets():
     for limiter in current_app.extensions.get("limiter", ()):
         limit = limiter.current_limit
         if limit is not None and limit.breached:
-            # The arithmetic Flask-Limiter uses for its own Retry-After header.
-            return int(limit.reset_at - time.time())
+            try:
+                return max(1, math.ceil(limit.window.reset_time - time.time()))
+            except redis.RedisError:
+                # The counter already rejected the request. Only its TTL is unavailable.
+                logger.warning("Could not read the rate-limit reset time")
+                return None
     return None
 
 
@@ -587,15 +593,14 @@ def handle_rate_limit_exceeded(error):
     """
     logger.warning("Rate limit exceeded on %s", request.path)
     if isinstance(error, RateLimitExceeded) and error.response is not None:
-        return error.response
-    response, status = json_error_response(
-        "Too many requests. Please wait a moment and try again.",
-        429,
-    )
-    retry_after = _seconds_until_limit_resets()
-    if retry_after is not None:
-        response.headers["Retry-After"] = str(retry_after)
-    return response, status
+        response = error.response
+    else:
+        response = make_response(json_error_response("Too many requests. Please wait a moment and try again.", 429))
+    if isinstance(error, RateLimitExceeded) and "Retry-After" not in response.headers:
+        retry_after = _seconds_until_limit_resets()
+        if retry_after is not None:
+            response.retry_after = retry_after
+    return response
 
 
 # =============================================================================
