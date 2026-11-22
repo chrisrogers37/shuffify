@@ -1,7 +1,5 @@
 """Share one refresh budget between the two views of the user's playlist list."""
 
-import time
-
 from flask import make_response, request, session
 
 from shuffify.routes import is_authenticated, json_error
@@ -21,12 +19,10 @@ def _exempt_from_refresh_limit():
     )
 
 
-def _refresh_limit_response(limit):
-    response = make_response(json_error(
+def _refresh_limit_response(_limit):
+    return make_response(json_error(
         "Too many playlist refreshes. Try again in a minute, or omit refresh=1 to use cached playlists.", 429
     ))
-    response.retry_after = max(1, int(limit.reset_at - time.time()))
-    return response
 
 
 def apply_playlist_refresh_limit(app, limiter):
