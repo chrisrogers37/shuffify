@@ -8,6 +8,7 @@ service-layer exceptions and Pydantic validation errors.
 import logging
 
 from flask import current_app, jsonify, request
+from flask_limiter.errors import RateLimitExceeded
 from pydantic import ValidationError
 from werkzeug.exceptions import HTTPException
 
@@ -567,6 +568,8 @@ def handle_internal_error(error):
 def handle_rate_limit_exceeded(error):
     """Handle 429 Too Many Requests from Flask-Limiter."""
     logger.warning("Rate limit exceeded on %s", request.path)
+    if isinstance(error, RateLimitExceeded) and error.response is not None:
+        return error.response
     response, status = json_error_response(
         "Too many requests. Please wait a moment and try again.",
         429,

@@ -978,6 +978,11 @@ def create_app(config_name=None):
 
     register_spotify_deadline(app)
 
+    if _limiter is not None:
+        from shuffify.routes.playlist_refresh import apply_playlist_refresh_limit
+
+        apply_playlist_refresh_limit(app, _limiter)
+
     # Register operational CLI commands
     from shuffify.cli import register_cli
 

@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime
 
-from flask import request, session
+from flask import session
 from flask_wtf.csrf import generate_csrf
 
 from shuffify.routes import (
@@ -14,6 +14,7 @@ from shuffify.routes import (
     load_schedule_context,
     require_auth_and_db,
 )
+from shuffify.routes.playlist_refresh import playlist_refresh_requested
 from shuffify.services import (
     ActivityLogService,
     DashboardService,
@@ -91,9 +92,7 @@ def activity_context(api=None, user=None):
 def library_context(api=None, user=None):
     """Read ordered library rows; refresh bypasses Spotify's playlist-list cache."""
     try:
-        favorites, visible, hidden, preferences = _playlist_sections(
-            api, user, refresh=request.args.get("refresh") == "1"
-        )
+        favorites, visible, hidden, preferences = _playlist_sections(api, user, refresh=playlist_refresh_requested())
     except PlaylistError:
         logger.warning("Could not load the library playlists", exc_info=True)
         return json_error("Could not load your library. Please try again.", 500)
