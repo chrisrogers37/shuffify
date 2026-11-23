@@ -18,7 +18,7 @@ import secrets
 from contextlib import nullcontext
 from copy import deepcopy
 
-from sqlalchemy import select
+from sqlalchemy import String, cast, or_, select
 from sqlalchemy.orm import Session
 
 from shuffify.models.db import JobExecution, db
@@ -146,10 +146,11 @@ class HistoryStore:
         self.session = session
 
     @staticmethod
-    def _receipt(row):
+    def _receipt(row, receipt=None):
         if row.state not in _CONFIRMED_STATES or row.completed_at is None:
             return None
-        receipt = row.history_receipt
+        if receipt is None:
+            receipt = row.history_receipt
         if (not isinstance(receipt, dict) or type(receipt.get("version")) is not int or receipt["version"] != 1
                 or receipt.get("confirmed") is not True or receipt.get("state") != row.state
                 or type(receipt.get("user_id")) is not int or receipt["user_id"] != row.user_id
@@ -163,7 +164,7 @@ class HistoryStore:
         return receipt
 
     @staticmethod
-    def _rows(session, *, user_id=None, scope=None):
+    def _receipt_query(*, user_id=None, scope=None):
         receipt = JobExecution.journal["history"]
         query = select(
             JobExecution.id, JobExecution.user_id, JobExecution.state, JobExecution.completed_at,
@@ -176,7 +177,53 @@ class HistoryStore:
             query = query.where(JobExecution.user_id == user_id)
         if scope is not None:
             query = query.where(receipt["scope"].as_string() == scope)
-        return session.execute(query)
+        return query
+
+    @classmethod
+    def _rows(cls, session, **filters):
+        return session.execute(cls._receipt_query(**filters))
+
+    @classmethod
+    def can_expire_receipt(cls, session, row):
+        """Prove every entry (including clears) has a later confirmed receipt.
+
+        Look up one successor per playlist. A missing or malformed successor
+        keeps the old receipt, as does a pending command bound to this revision.
+        """
+        history = row.journal["history"]
+        if not isinstance(history, dict) or cls._receipt(row, history) is None:
+            return False
+        entries = history.get("entries")
+        if not entries or len(entries) > 100:
+            return False
+        receipt = JobExecution.journal["history"]
+        for playlist_id in entries:
+            newer = cls._receipt_query(user_id=row.user_id, scope=history["scope"]).where(
+                (JobExecution.completed_at > row.completed_at)
+                | ((JobExecution.completed_at == row.completed_at) & (JobExecution.id > row.id)),
+                receipt["entries"][playlist_id].as_string().is_not(None),
+            ).limit(1)
+            later = session.execute(newer).first()
+            confirmed = cls._receipt(later) if later is not None else None
+            if confirmed is None or playlist_id not in confirmed["entries"]:
+                return False
+            successor = confirmed["entries"][playlist_id]
+            if not isinstance(successor, dict) or "entry" not in successor:
+                return False
+            try:
+                _entry(successor["entry"])
+            except HistoryError:
+                return False
+            captured = JobExecution.payload["history"]["revisions"][playlist_id]
+            staged = receipt["entries"][playlist_id]["parent_revision"]
+            pending = select(JobExecution.id).where(
+                JobExecution.user_id == row.user_id, JobExecution.state.in_((*ACTIVE_STATES, "needs_attention")),
+                or_(cast(captured.as_string(), String) == str(row.id),
+                    cast(staged.as_string(), String) == str(row.id)),
+            ).limit(1)
+            if session.scalar(pending) is not None:
+                return False
+        return True
 
     def _load_many(self, user_id, scope, playlist_ids, legacy=None):
         """Resolve all requested targets from one scoped receipt projection."""

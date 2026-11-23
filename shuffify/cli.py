@@ -5,6 +5,8 @@ Registered by create_app; run via `flask <command>` with the app's
 context (config, database) already loaded.
 """
 
+import json
+
 import click
 from flask import Flask
 
@@ -51,3 +53,14 @@ def register_cli(app: Flask) -> None:
             db.metadata.create_all(connection)
             context.stamp(script, head)
         click.echo(f"Built the schema from the models and stamped it at head ({head}).")
+
+    from shuffify.services.operations.retention import MAX_PAGE, cleanup_page
+
+    @app.cli.command("prune-executions")
+    @click.option("--after-id", type=click.IntRange(min=0), default=0, show_default=True)
+    @click.option("--limit", type=click.IntRange(1, MAX_PAGE), default=MAX_PAGE, show_default=True)
+    def prune_executions(after_id, limit):
+        """Clean one page of expired execution history and print the continuation cursor."""
+        from shuffify.models.db import db
+
+        click.echo(json.dumps(cleanup_page(db.engine, after_id=after_id, limit=limit)))

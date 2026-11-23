@@ -40,6 +40,7 @@ from shuffify.services.live_review_bindings import (
 )
 from shuffify.services.live_review_context import context_unavailable
 from shuffify.services.operations.commands.schemas import SnapshotRestoreCommand
+from shuffify.services.storage_limits import StorageLimitReached
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,8 @@ def create_manual_snapshot(playlist_id, api=None, user=None, body=None):
             "Snapshot created.",
             snapshot=snapshot.to_dict(),
         )
+    except StorageLimitReached as e:
+        return json_error(str(e), 409)
     except PlaylistSnapshotError as e:
         return _snapshot_failure(e, "Failed to create snapshot.")
 
