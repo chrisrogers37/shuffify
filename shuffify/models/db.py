@@ -604,6 +604,7 @@ class JobExecution(db.Model):
     lease_owner = db.Column(db.String(128), nullable=True)
     lease_expires_at = db.Column(UTCDateTime, nullable=True)
     heartbeat_at = db.Column(UTCDateTime, nullable=True)
+    last_claimed_at = db.Column(UTCDateTime, nullable=True)
     request_key = db.Column(db.String(128), nullable=True)
     scheduled_for = db.Column(UTCDateTime, nullable=True)
 
@@ -618,6 +619,8 @@ class JobExecution(db.Model):
         db.Index("ix_job_executions_started_at", "started_at"),
         db.Index("uq_job_executions_schedule_fire", "schedule_id", "scheduled_for", unique=True),
         db.Index("uq_job_executions_user_request", "user_id", "request_key", unique=True),
+        db.Index("ix_job_executions_owner_turn", "user_id", "last_claimed_at",
+                 postgresql_where=last_claimed_at.is_not(None), sqlite_where=last_claimed_at.is_not(None)),
         db.Index("ix_job_executions_queue_lease", "state", "lease_expires_at"),
     )
 
