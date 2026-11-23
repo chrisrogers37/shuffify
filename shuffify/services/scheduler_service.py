@@ -11,9 +11,11 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import func
 
+from shuffify.enums import ScheduleType
 from shuffify.models.db import JobExecution, PlaylistSnapshot, Schedule, db
 from shuffify.services.base import commit_failure, get_owned_entity, public_error, safe_commit
 from shuffify.services.playlist_lock import playlist_configuration_lock, playlist_lock
+from shuffify.services.routine_policy import check_routine_write
 from shuffify.services.schedule_utils import DEFINITION_COLUMNS
 
 logger = logging.getLogger(__name__)
@@ -112,6 +114,8 @@ class SchedulerService:
         algorithm_name: Optional[str] = None,
         algorithm_params: Optional[Dict[str, Any]] = None,
         timezone: Optional[str] = None,
+        *,
+        advanced_cron: bool = True,
     ) -> Schedule:
         """
         Save a schedule and request a worker refresh.
@@ -125,6 +129,7 @@ class SchedulerService:
         with playlist_configuration_lock(target_playlist_id, timeout_s=LOCK_WAIT_S) as acquired:
             if not acquired:
                 raise public_error(ScheduleBusyError, "A routine is using this playlist. Try again.")
+            check_routine_write(user_id, target_playlist_id, schedule_type, schedule_value)
             schedule = Schedule(
                 user_id=user_id,
                 job_type=job_type,
@@ -136,6 +141,7 @@ class SchedulerService:
                 schedule_type=schedule_type,
                 schedule_value=schedule_value,
                 timezone=timezone,
+                advanced_cron=True if schedule_type == ScheduleType.CRON and advanced_cron else None,
                 is_enabled=True,
             )
 
@@ -173,10 +179,19 @@ class SchedulerService:
             schedule_id, user_id, destination=kwargs.get("target_playlist_id"),
             execution=definition_edit,
         ) as schedule:
+            if definition_edit or kwargs.get("is_enabled"):
+                check_routine_write(user_id, kwargs.get("target_playlist_id", schedule.target_playlist_id),
+                                    kwargs.get("schedule_type", schedule.schedule_type),
+                                    kwargs.get("schedule_value", schedule.schedule_value), existing_id=schedule_id)
             for key, value in kwargs.items():
                 if key in allowed_fields:
                     setattr(schedule, key, value)
 
+            if "schedule_value" in kwargs or "schedule_type" in kwargs:
+                # Raw cron edits are advanced unless the caller identifies a preset.
+                schedule.advanced_cron = (
+                    True if schedule.schedule_type == ScheduleType.CRON and kwargs.get("advanced_cron", True) else None
+                )
             safe_commit(
                 f"update schedule {schedule_id}",
                 ScheduleError,

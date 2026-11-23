@@ -13,6 +13,14 @@ from shuffify.models.db import User, db
 logger = logging.getLogger(__name__)
 
 
+def lock_user_inventory(user_id: int) -> None:
+    """Serialize one owner's source and routine additions through commit on PostgreSQL.
+
+    NO KEY UPDATE permits unrelated inserts with foreign keys to this user.
+    """
+    db.session.query(User.id).filter_by(id=user_id).with_for_update(key_share=True).one()
+
+
 def commit_failure(exception_class: Type[Exception], operation_name: str) -> Exception:
     """
     Build the exception for a failed commit, marked as one.

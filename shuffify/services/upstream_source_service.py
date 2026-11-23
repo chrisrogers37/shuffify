@@ -8,11 +8,12 @@ playlist to a target playlist for a specific user.
 import logging
 from typing import List, Optional
 
-from shuffify.models.db import UpstreamSource, User, db
+from shuffify.models.db import UpstreamSource, db
 from shuffify.services.base import (
     commit_or_stage,
     get_owned_entity,
     get_user_or_raise,
+    lock_user_inventory,
     safe_commit,
 )
 from shuffify.services.playlist_lock import locked_commit_target
@@ -36,18 +37,6 @@ class UpstreamSourceLimitError(UpstreamSourceError):
     """Raised when source limit per target is reached."""
 
     pass
-
-
-def _lock_user(user_id: int) -> None:
-    """Serialize one user's source additions, so the duplicate check and the
-    limit hold; the row lock lasts until the transaction ends. (PostgreSQL
-    refuses FOR UPDATE on the count itself. SQLite ignores it, so there the
-    checks are best-effort.)
-
-    NO KEY UPDATE conflicts with itself but not with inserts that reference
-    the user, such as activity log rows.
-    """
-    db.session.query(User.id).filter_by(id=user_id).with_for_update(key_share=True).one()
 
 
 MAX_SOURCES_PER_TARGET = 10
@@ -116,7 +105,7 @@ class UpstreamSourceService:
         user = get_user_or_raise(
             spotify_id, UpstreamSourceError
         )
-        _lock_user(user.id)
+        lock_user_inventory(user.id)
 
         # Check for duplicate: same user, target, and source
         existing = UpstreamSource.query.filter_by(
@@ -182,7 +171,7 @@ class UpstreamSourceService:
         user = get_user_or_raise(
             spotify_id, UpstreamSourceError
         )
-        _lock_user(user.id)
+        lock_user_inventory(user.id)
 
         # Deduplicate on (user, target, search_query)
         existing = UpstreamSource.query.filter_by(

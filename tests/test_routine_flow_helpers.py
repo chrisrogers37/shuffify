@@ -58,9 +58,9 @@ def test_routine_helper_uses_normalized_review_and_exact_state_revision(flow):
     client, api = flow
     helpers = helper_module()
     schedule = helpers.create_routine(client, "target", timing={
-        "kind": "advanced", "expression": "* * * * *", "timezone": "UTC",
+        "kind": "advanced", "expression": "0 * * * *", "timezone": "UTC",
     })
-    assert schedule["schedule_type"] == "cron" and schedule["schedule_value"] == "* * * * *"
+    assert schedule["schedule_type"] == "cron" and schedule["schedule_value"] == "0 * * * *"
     paused = helpers.set_routine_enabled(client, schedule["id"], False)
     assert paused["schedule"]["is_enabled"] is False
     assert helpers.list_schedules(client, "target")[0]["id"] == schedule["id"]

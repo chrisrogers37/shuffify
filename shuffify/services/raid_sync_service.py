@@ -127,6 +127,7 @@ class RaidSyncService:
                         ),
                         schedule_type=sched_type,
                         schedule_value=sched_val,
+                        advanced_cron=False,  # The watch form offers preset frequencies and an optional clock time.
                         source_playlist_ids=[source_playlist_id],
                     )
                     schedule_written = True

@@ -19,6 +19,7 @@ from shuffify.services.playlist_setup_service import (
     configuration_revision,
     read_state,
 )
+from shuffify.services.routine_policy import RoutinePolicyError, check_routine_write, check_timing
 from shuffify.services.schedule_utils import (
     DEFINITION_COLUMNS,
     normalize_timing,
@@ -33,7 +34,7 @@ INTENT_PURPOSE = "shuffify.routine.activation.v1"
 INTENT_AGE_S = 24 * 60 * 60
 RECEIPT_RETENTION = timedelta(days=7)
 LOCK_WAIT_S = 2.0
-DEFINITION_FIELDS = frozenset(DEFINITION_COLUMNS)
+DEFINITION_FIELDS = frozenset(DEFINITION_COLUMNS) - {"advanced_cron"}
 # Each routine state's code and its label, the text the routine pages show for it.
 ROUTINE_STATES = {
     "active": "Active",
@@ -256,6 +257,12 @@ def _normalize(api, user, target_id, supplied, existing, state, target_name):
             raise DefinitionError("definition.timing", str(error)) from error
     elif existing:
         timing_fields = {key: base[key] for key in ("schedule_type", "schedule_value", "timezone")}
+        if base.get("advanced_cron"):
+            timing_fields["advanced_cron"] = True
+        try:
+            check_timing(base["schedule_type"], base["schedule_value"])
+        except RoutinePolicyError as error:
+            raise DefinitionError("definition.timing", str(error)) from error
     else:
         raise DefinitionError("definition.timing", "Choose when this routine should run.")
     return {
@@ -273,8 +280,12 @@ def _normalize(api, user, target_id, supplied, existing, state, target_name):
 
 
 def _validate_submitted(definition, target_id):
-    if not isinstance(definition, dict) or set(definition) != DEFINITION_FIELDS:
+    if not isinstance(definition, dict) or definition.keys() - {"advanced_cron"} != DEFINITION_FIELDS:
         raise DefinitionError("definition", "Use the complete normalized definition from review.")
+    if "advanced_cron" in definition and (
+        definition["advanced_cron"] is not True or definition["schedule_type"] != "cron"
+    ):
+        raise DefinitionError("definition.timing", "Use the reviewed cron timing.")
     if definition["target_playlist_id"] != target_id:
         raise DefinitionError("definition.target_playlist_id", "The reviewed target changed.")
     sources = definition["source_playlist_ids"]
@@ -307,6 +318,12 @@ def schedule_payloads(schedules):
     schedules = list(schedules)
     registrations = get_schedule_registrations(schedules)
     return [_schedule_payload(row, registrations[row.id]) for row in schedules]
+
+
+def _replay_receipt(user_id, target_id, receipt, payload_hash):
+    if receipt.payload_hash != payload_hash:
+        return _error("request_key_conflict", 409, "This request key belongs to different changes.", "request_key")
+    return _accepted_locked(user_id, target_id, receipt, replayed=True)
 
 
 def _accepted_locked(user_id, target_id, receipt, *, replayed):
@@ -435,11 +452,7 @@ class RoutineActivationService:
     def _activate_locked(api, user, target_id, request, payload_hash):
         receipt = _receipt(user.id, request["request_key"])
         if receipt:
-            if receipt.payload_hash != payload_hash:
-                return _error(
-                    "request_key_conflict", 409, "This request key belongs to different changes.", "request_key"
-                )
-            return _accepted_locked(user.id, target_id, receipt, replayed=True)
+            return _replay_receipt(user.id, target_id, receipt, payload_hash)
         binding = _intent_payload(user.id, target_id, request)
         reason = signed_digest.verify(INTENT_PURPOSE, binding, request["intent"], max_age_s=INTENT_AGE_S)
         if reason:
@@ -489,9 +502,11 @@ class RoutineActivationService:
         except SpotifyError:
             return _error("prerequisites_unavailable", 503, "Playlist settings could not be checked. Try again.")
         try:
+            check_routine_write(user.id, target_id, definition["schedule_type"], definition["schedule_value"],
+                                existing_id=schedule_id)
             schedule = existing or Schedule(user_id=user.id)
-            for name, value in definition.items():
-                setattr(schedule, name, value)
+            for name in DEFINITION_COLUMNS:
+                setattr(schedule, name, definition.get(name))
             schedule.is_enabled = request.get("desired_enabled") if request.get("desired_enabled") is not None else (
                 existing.is_enabled if existing else True
             )
@@ -517,16 +532,19 @@ class RoutineActivationService:
                 metadata={"schedule_id": schedule.id, "request_key": request["request_key"]}, commit=False,
             )
             db.session.commit()
+        except RoutinePolicyError as exc:
+            # A create on another target can accept this key while we wait for
+            # the owner's last slot. Its durable receipt takes precedence.
+            winner = _receipt(user.id, request["request_key"])
+            if winner:
+                return _replay_receipt(user.id, target_id, winner, payload_hash)
+            return _error(exc.code, exc.status, str(exc))
         except IntegrityError:
             db.session.rollback()
             winner = _receipt(user.id, request["request_key"])
             if winner is None:
                 return _error("activation_failed", 503, "Activation could not be saved. Try the same request key.")
-            if winner.payload_hash != payload_hash:
-                return _error(
-                    "request_key_conflict", 409, "This request key belongs to different changes.", "request_key"
-                )
-            return _accepted_locked(user.id, target_id, winner, replayed=True)
+            return _replay_receipt(user.id, target_id, winner, payload_hash)
         except Exception:
             db.session.rollback()
             return _error("activation_failed", 503, "Activation could not be saved. Try the same request key.")
@@ -560,6 +578,10 @@ class RoutineActivationService:
                         api, user, target_id, state, schedule.job_type,
                         extra_source_ids=schedule.source_playlist_ids or [], editable_cache={},
                     )
+                    check_routine_write(user.id, target_id, schedule.schedule_type, schedule.schedule_value,
+                                        existing_id=schedule_id)
+                except RoutinePolicyError as exc:
+                    return _error(exc.code, exc.status, str(exc))
                 except DefinitionError as exc:
                     return _error("invalid_definition", 422, str(exc), exc.path)
                 except SpotifyError:

@@ -44,6 +44,7 @@ from shuffify.services.playlist_service import (
     PlaylistService,
 )
 from shuffify.services.raid_link_service import RaidLinkService
+from shuffify.services.routine_policy import RoutinePolicyError, check_routine_write
 from shuffify.services.schedule_utils import operation_label, timing_text
 from shuffify.services.upstream_source_service import MAX_SOURCES_PER_TARGET, UpstreamSourceService
 from shuffify.spotify.api import playlist_item_count
@@ -267,6 +268,7 @@ def _config(state):
                 "id": schedule.id,
                 "job_type": schedule.job_type,
                 "schedule_type": schedule.schedule_type,
+                "advanced_cron": schedule.advanced_cron,
                 "schedule_value": schedule.schedule_value,
                 "timezone": schedule.timezone,
                 "is_enabled": schedule.is_enabled,
@@ -297,7 +299,7 @@ def _revision_sections(config):
             [
                 r["id"], r["job_type"], r["schedule_type"], r["schedule_value"], r["timezone"], r["is_enabled"],
                 r["source_playlist_ids"], r["algorithm_name"], r["algorithm_params"],
-            ]
+            ] + ([True] if r.get("advanced_cron") else [])
             for r in config["routines"]
         ],
     }
@@ -336,7 +338,7 @@ def _state_digest(user_id, target_id, config):
             [
                 r["id"], r["job_type"], r["is_enabled"], r["schedule_type"],
                 r["schedule_value"], r["timezone"], ordered(_ids(r)),
-            ]
+            ] + ([True] if r.get("advanced_cron") else [])
             for r in config["routines"]
         ],
     })
@@ -965,6 +967,8 @@ def _apply(state, review):
     for schedule in state.schedules:
         wanted = lists[schedule.id]
         if wanted != schedule.source_playlist_ids:
+            check_routine_write(schedule.user_id, schedule.target_playlist_id, schedule.schedule_type,
+                                schedule.schedule_value, existing_id=schedule.id)
             # Assign a new list: the JSON column does not see in-place mutation.
             schedule.source_playlist_ids = copy.deepcopy(wanted)
     db.session.flush()
@@ -1036,6 +1040,8 @@ def _save_locked(api, user, target_id, request):
             commit=False,
         )
         safe_commit(f"save playlist setup for {target_id} (user {user.id})", PlaylistSetupError)
+    except RoutinePolicyError as error:
+        return refusal(error.code, error.status, str(error))
     except Exception:
         db.session.rollback()
         logger.exception("Playlist setup Save for %s did not commit", target_id)

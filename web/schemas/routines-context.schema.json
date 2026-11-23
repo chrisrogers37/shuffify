@@ -93,6 +93,10 @@
     "Schedule": {
       "type": "object",
       "properties": {
+        "advanced_cron": {
+          "type": "boolean",
+          "const": true
+        },
         "job_type": {
           "$ref": "#/definitions/JobType"
         },
@@ -263,6 +267,10 @@
     "RoutineDefinition": {
       "type": "object",
       "properties": {
+        "advanced_cron": {
+          "type": "boolean",
+          "const": true
+        },
         "job_type": {
           "$ref": "#/definitions/JobType"
         },

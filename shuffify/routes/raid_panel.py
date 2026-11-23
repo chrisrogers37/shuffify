@@ -38,7 +38,7 @@ from shuffify.schemas.raid_requests import (
     UnwatchPlaylistRequest,
 )
 from shuffify.schemas.workshop_finalize_requests import FinalizeRaidRequest
-from shuffify.services.api_response import busy_error
+from shuffify.services.api_response import busy_error, error_payload
 from shuffify.services.base import is_commit_failure
 from shuffify.services.live_operation_service import (
     LIVE_ENDPOINT_KINDS,
@@ -74,6 +74,7 @@ from shuffify.services.raid_sync_service import (
     RaidSyncError,
     RaidSyncService,
 )
+from shuffify.services.routine_policy import RoutinePolicyError
 from shuffify.services.scheduler_service import (
     ScheduleBusyError,
 )
@@ -404,6 +405,8 @@ def raid_add_url(playlist_id, api=None, user=None):
         )
     except (UpstreamSourceLimitError, RaidSyncError) as e:
         return json_error(str(e), 400)
+    except RoutinePolicyError as error:
+        return json_reply((error_payload(str(error), error.status, error_code=error.code), error.status))
     except (PlaylistBusyError, ScheduleBusyError):
         return json_reply(busy_error())
     except Exception as e:
@@ -446,6 +449,8 @@ def raid_unwatch(playlist_id, api=None, user=None):
         return json_error("Source not found.", 404)
     except RaidSyncError as e:
         return json_error(str(e), 400)
+    except RoutinePolicyError as error:
+        return json_reply((error_payload(str(error), error.status, error_code=error.code), error.status))
     except (PlaylistBusyError, ScheduleBusyError):
         return json_reply(busy_error())
     except Exception as e:
