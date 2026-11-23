@@ -46,6 +46,17 @@ class OperationBookkeeping:
         )
         return snapshot.to_dict()
 
+    def auto_snapshots(self, destinations, snapshot_type, description):
+        """Stage a routine step's whole snapshot set; skipped destinations retain their empty receipt."""
+        if not PlaylistSnapshotService.is_auto_snapshot_enabled(self.user_id, session=self.session):
+            return [None] * len(destinations)
+        snapshots = PlaylistSnapshotService.create_snapshots(
+            self.user_id, [item for item in destinations if item[2]], snapshot_type, description,
+            self.operation_id, session=self.session, commit=False,
+        )
+        by_playlist = {row.playlist_id: row.to_dict() for row in snapshots}
+        return [by_playlist.get(key) for key, _, _ in destinations]
+
     def activity(self, activity_type, description, *, playlist_id=None, playlist_name=None, metadata=None):
         """Record the existing activity DTO in the same transaction as its step receipt."""
         activity = ActivityLogService.log(

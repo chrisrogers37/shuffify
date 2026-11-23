@@ -15,14 +15,14 @@ from shuffify.models.db import PlaylistSnapshot, User, WorkshopSession, db
 from tests.mutable_spotify import MutableSpotify, uri
 from tests.queued_operations import run_operation
 from tests.routes.test_routine_policy import sign_in
-from tests.routes.test_storage_limits import PLAYLISTS, SNAPSHOTS, save, seed
+from tests.routes.test_storage_limits import PLAYLISTS, SESSIONS, SNAPSHOTS, save, seed
 from tests.services.operations.test_repository import postgres_repository as postgres_repository
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("other_store", [PlaylistSnapshot, WorkshopSession])
-def test_fenced_workshop_snapshot_and_another_playlist_compete_for_last_slot(
-    postgres_repository, other_store, tmp_path, sample_token, monkeypatch,
+@pytest.mark.parametrize("inventory", ["snapshots", "playlists", "sessions"])
+def test_two_different_playlists_compete_for_last_slot(
+    postgres_repository, inventory, tmp_path, sample_token, monkeypatch,
 ):
     engine = postgres_repository.engine
     application = "storage-race-" + uuid4().hex
@@ -39,24 +39,36 @@ def test_fenced_workshop_snapshot_and_another_playlist_compete_for_last_slot(
         user = User(spotify_id="alice")
         db.session.add(user)
         db.session.commit()
-        playlists = ([f"p{i // 10}" for i in range(SNAPSHOTS - 1)] if other_store is PlaylistSnapshot
-                     else [f"p{i}" for i in range(PLAYLISTS - 1)])
-        seed(user.id, PlaylistSnapshot, playlists)
+        first_store = WorkshopSession if inventory == "sessions" else PlaylistSnapshot
+        other_store = PlaylistSnapshot if inventory == "snapshots" else WorkshopSession
+        if inventory == "playlists":
+            playlists = [f"p{i}" for i in range(PLAYLISTS - 1)]
+        else:
+            limit = SESSIONS if inventory == "sessions" else SNAPSHOTS
+            playlists = [f"p{i // 10}" for i in range(limit - 1)]
+        seed(user.id, first_store, playlists)
         worker_client, web_client = (sign_in(app, "alice", sample_token) for _ in range(2))
-        accepted = worker_client.post("/api/workshop/target/commit",
-                                      json={"baseline_track_uris": [uri(1)], "track_uris": [uri(2)]})
-        assert accepted.status_code == 202
+
+        def first_save():
+            if first_store is WorkshopSession:
+                return save(worker_client, WorkshopSession, "target").status_code == 200
+            accepted = worker_client.post("/api/workshop/target/commit",
+                                          json={"baseline_track_uris": [uri(1)], "track_uris": [uri(2)]})
+            assert accepted.status_code == 202
+            applied = run_operation(worker_client, spotify, accepted.json["operation_id"], accepted)
+            return applied.operation["state"] == "succeeded"
+
         receipt_pending, release = Event(), Event()
 
-        def hold(_mapper, _connection, snapshot):
-            if snapshot.job_execution_id == accepted.json["operation_id"]:
+        def hold(_mapper, _connection, record):
+            if record.playlist_id == "target":
                 receipt_pending.set()
                 assert release.wait(10)
 
-        event.listen(PlaylistSnapshot, "after_insert", hold)
+        event.listen(first_store, "after_insert", hold)
         try:
             with ThreadPoolExecutor(max_workers=2) as pool:
-                worker = pool.submit(run_operation, worker_client, spotify, accepted.json["operation_id"], accepted)
+                winner = pool.submit(first_save)
                 try:
                     assert receipt_pending.wait(8)
                     other = pool.submit(save, web_client, other_store, "different")
@@ -73,13 +85,14 @@ def test_fenced_workshop_snapshot_and_another_playlist_compete_for_last_slot(
                             time.sleep(0.01)
                 finally:
                     release.set()
-                assert worker.result().operation["state"] == "succeeded"
+                assert winner.result()
                 refused = other.result()
         finally:
-            event.remove(PlaylistSnapshot, "after_insert", hold)
+            event.remove(first_store, "after_insert", hold)
         assert refused.status_code == 409, refused.json
         assert blocked
-        assert PlaylistSnapshot.query.count() == len(playlists) + 1 and WorkshopSession.query.count() == 0
-        assert spotify.writes == [("update", "target", [uri(2)])]
+        assert first_store.query.count() == len(playlists) + 1
+        assert other_store.query.filter_by(playlist_id="different").count() == 0
+        assert spotify.writes == ([] if first_store is WorkshopSession else [("update", "target", [uri(2)])])
         db.session.remove()
         db.engine.dispose()

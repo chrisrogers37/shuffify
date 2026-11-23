@@ -49,9 +49,11 @@ def test_bounded_cleanup_cutoff_cursor_snapshot_and_unsettled_evidence(accounts)
     attention = execution(state="needs_attention")
     unknown = execution(journal={"plans": [{"batches": [{"state": "dispatched"}]}]})
     pending = execution(journal={"runtime": {"terminal_finalization": {"state": "succeeded", "done": False}}})
+    malformed = execution(journal={**original, "plans": [{"batches": [{"state": {}}]}]})
     unfinished = execution(completed_at=None)
     legacy_pending = JobExecution(status="running", completed_at=OLD)
-    fixtures = [old, recent, legacy, linked, running, attention, unknown, pending, unfinished, legacy_pending]
+    fixtures = [old, recent, legacy, linked, running, attention, unknown, pending,
+                unfinished, legacy_pending, malformed]
     db.session.add_all(fixtures)
     db.session.flush()
     old_id, recent_id, legacy_id = (row.id for row in fixtures[:3])
@@ -64,7 +66,7 @@ def test_bounded_cleanup_cutoff_cursor_snapshot_and_unsettled_evidence(accounts)
     assert first == {"examined": 2, "compacted": 1, "deleted": 0, "next_after_id": recent_id}
     assert db.session.get(JobExecution, legacy_id) is not None
     assert cleanup(app, "--after-id", str(recent_id)) == {
-        "examined": 8, "compacted": 0, "deleted": 1, "next_after_id": None,
+        "examined": 9, "compacted": 0, "deleted": 1, "next_after_id": None,
     }
     assert db.session.get(JobExecution, legacy_id) is None
     assert db.session.get(JobExecution, old_id).journal == {"result": {"success": True}}
@@ -74,8 +76,8 @@ def test_bounded_cleanup_cutoff_cursor_snapshot_and_unsettled_evidence(accounts)
     assert snapshot.job_execution_id == linked.id
     assert unknown.journal["plans"][0]["batches"][0]["state"] == "dispatched"
     assert pending.journal["runtime"]["terminal_finalization"]["done"] is False
-    assert legacy_pending.status == "running"
-    assert cleanup(app) == {"examined": 9, "compacted": 0, "deleted": 0, "next_after_id": None}
+    assert legacy_pending.status == "running" and malformed.journal["plans"][0]["batches"] == [{"state": {}}]
+    assert cleanup(app) == {"examined": 10, "compacted": 0, "deleted": 0, "next_after_id": None}
 
 
 def test_pending_undo_and_snapshot_restore_replay_survive_compaction(accounts):

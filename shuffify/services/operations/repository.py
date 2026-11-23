@@ -172,6 +172,19 @@ def public_operation(row, *, restoration_attempt=None):
     }
 
 
+def _admission_lock_ids(keys):
+    encoded = sorted(json.dumps(key, separators=(",", ":")) for key in keys)
+    return [_playlist_lock_key("queue-admission:" + key) for key in encoded]
+
+
+def try_lock_history_owner(session, user_id):
+    """Exclude in-flight admission captures before expiring an otherwise superseded Undo receipt."""
+    if session.get_bind().dialect.name != "postgresql":
+        return True  # Cleanup and admission both own a SQLite write transaction.
+    owner_lock, = _admission_lock_ids([("owner", user_id)])
+    return session.scalar(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": owner_lock})
+
+
 class OperationRepository:
     """Keep admission, lease ownership and journal persistence outside Flask's scoped session."""
 
@@ -213,10 +226,8 @@ class OperationRepository:
                 keys.append(("request", user_id, request_key))
         if schedule_id is not None and scheduled_for is not None:
             keys.append(("fire", schedule_id, scheduled_for.isoformat()))
-        encoded = sorted(json.dumps(key, separators=(",", ":")) for key in keys)
-        for key in encoded:
-            session.execute(text("SELECT pg_advisory_xact_lock(:key)"),
-                            {"key": _playlist_lock_key("queue-admission:" + key)})
+        for lock_id in _admission_lock_ids(keys):
+            session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_id})
 
     @staticmethod
     def _same_command(row, *, kind, user_id, targets, payload, schedule_id, scheduled_for):

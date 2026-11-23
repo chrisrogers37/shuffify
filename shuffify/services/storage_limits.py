@@ -24,23 +24,28 @@ def lock_storage_inventory(storage, user_id):
         lock_user_inventory(user_id, session=storage)
 
 
-def check_storage_growth(storage, model, user_id, playlist_id):
-    """Check a net addition of one row, after the caller locks the owner's inventory."""
+def _would_exceed(storage, rows, growth, limit):
+    """Only a net increase can violate a grandfathered inventory."""
+    return growth > 0 and (growth > limit or storage.scalar(rows.offset(limit - growth).limit(1)) is not None)
+
+
+def check_storage_growth(storage, model, user_id, playlist_ids, *, row_growth):
+    """Check the whole save, including any rows released by same-playlist rotations."""
     limit, label = (
         (MAX_USER_SNAPSHOTS, "snapshots") if model is PlaylistSnapshot else (MAX_USER_SESSIONS, "saved sessions")
     )
     rows = select(model.id).where(model.user_id == user_id)
-    if storage.scalar(rows.offset(limit - 1).limit(1)) is not None:
+    if _would_exceed(storage, rows, row_growth, limit):
         raise StorageLimitReached(f"You can store up to {limit} {label}. Delete an existing one to save another.")
 
     snapshots = select(PlaylistSnapshot.playlist_id).where(PlaylistSnapshot.user_id == user_id)
     sessions = select(WorkshopSession.playlist_id).where(WorkshopSession.user_id == user_id)
-    represented = snapshots.where(PlaylistSnapshot.playlist_id == playlist_id).union_all(
-        sessions.where(WorkshopSession.playlist_id == playlist_id)
+    requested = set(playlist_ids)
+    represented = snapshots.where(PlaylistSnapshot.playlist_id.in_(requested)).union(
+        sessions.where(WorkshopSession.playlist_id.in_(requested))
     )
-    if storage.scalar(represented.limit(1)) is None and storage.scalar(
-        snapshots.union(sessions).offset(MAX_STORED_PLAYLISTS - 1).limit(1)
-    ) is not None:
+    new_ids = requested.difference(storage.scalars(represented))
+    if _would_exceed(storage, snapshots.union(sessions), len(new_ids), MAX_STORED_PLAYLISTS):
         raise StorageLimitReached(
             f"You can store snapshots and sessions for up to {MAX_STORED_PLAYLISTS} playlists. "
             "Delete all snapshots and sessions for a playlist to save a new one."

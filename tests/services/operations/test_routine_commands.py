@@ -591,7 +591,7 @@ def test_contradictory_producer_status_keeps_verified_collect_and_stops_drip(rou
 
 
 @pytest.mark.parametrize(
-    "helper,receipt", [("snapshot", "routine.raid.snapshots.v1"), ("activity", "routine.finalize.succeeded.v1")]
+    "helper,receipt", [("auto_snapshots", "routine.raid.snapshots.v1"), ("activity", "routine.finalize.succeeded.v1")]
 )
 def test_optional_run_receipts_record_failure_once_without_reversing_verified_effects(
     routine,

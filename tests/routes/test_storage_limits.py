@@ -1,5 +1,6 @@
 """Account storage policy through the authenticated Flask routes and a real local worker."""
 
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -176,3 +177,49 @@ def test_crash_after_collect_and_refused_drip_snapshots_never_repeats_provider_a
     assert routine.run(row).state == "succeeded"
     assert len(routine.world.writes) == 3 and routine.world.writes.count(collect) == 1
     assert PlaylistSnapshot.query.count() == SNAPSHOTS
+
+
+@pytest.mark.parametrize("initial_rotation", [False, True])
+def test_multi_destination_snapshot_refusal_preserves_every_original_row(routine, initial_rotation):
+    owner = routine.user.id
+    # One free slot for two requested snapshots, or one destination that can rotate at a full cap.
+    count = SNAPSHOTS - 1
+    playlists = [f"p{i // 10}" for i in range(count)]
+    if initial_rotation:
+        db.session.add(UserSettings(user_id=owner, max_snapshots_per_playlist=1))
+        playlists.append("collection")
+    seed(owner, PlaylistSnapshot, playlists)
+    before = {row.id for row in PlaylistSnapshot.query.all()}
+    row, _ = routine.enqueue("raid", direct=True)
+    done = routine.run(row)
+    assert done.state == "succeeded"
+    receipts = done.journal["runtime"]["local_steps"]["routine.raid.snapshots.v1"]
+    assert receipts == [{"status": "failed", "error_code": "snapshot_failed"}] * 2
+    assert {row.id for row in PlaylistSnapshot.query.all()} == before
+    assert len(routine.world.writes) == 1
+
+
+def test_rotation_keeps_new_save_when_previous_writer_clock_was_ahead(accounts):
+    owner, alice, _, _ = accounts
+    seed(owner, PlaylistSnapshot, ["target"] * 10)
+    PlaylistSnapshot.query.update({"created_at": datetime.now(timezone.utc) + timedelta(hours=1)})
+    db.session.commit()
+    response = save(alice, PlaylistSnapshot, "target")
+    assert response.status_code == 200
+    url = record_url(PlaylistSnapshot, response.json["snapshot"]["id"])
+    assert alice.get(url).status_code == 200 and PlaylistSnapshot.query.count() == 10
+
+
+@pytest.mark.parametrize("rotating", ["target", "collection"])
+def test_worker_projects_whole_set_after_lowered_playlist_setting(routine, rotating):
+    owner = routine.user.id
+    # Even this grandfathered owner can save: 15 old records rotate down to 10 and the other destination adds one.
+    seed(owner, PlaylistSnapshot, [rotating] * 15 + [f"p{i // 10}" for i in range(SNAPSHOTS - 10)])
+    db.session.add(UserSettings(user_id=owner, max_snapshots_per_playlist=10))
+    db.session.commit()
+    row, _ = routine.enqueue("raid", direct=True)
+    assert routine.run(row).state == "succeeded"
+    assert PlaylistSnapshot.query.count() == SNAPSHOTS + 1
+    assert PlaylistSnapshot.query.filter_by(playlist_id=rotating).count() == 10
+    saved = PlaylistSnapshot.query.filter_by(job_execution_id=row.id).all()
+    assert {s.playlist_id for s in saved} == {"target", "collection"}

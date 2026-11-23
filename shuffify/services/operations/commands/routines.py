@@ -183,29 +183,18 @@ def _config(runtime, name, values):
 def _snapshots(runtime, name, prepared):
     def commit(storage):
         bookkeeping = OperationBookkeeping(storage, runtime.user.id, runtime.operation.id)
-        receipts = []
         destinations = {runtime.operation.payload["command"]["playlist_id"]}
         if name in {"raid", "drip"}:
             collection = prepared["config"].get("collection_playlist_id")
             if collection:
                 destinations.add(collection)
-        for resource, before in prepared["before"].items():
-            if resource not in destinations:
-                continue
-            receipts.append(
-                bookkeeping.optional(
-                    lambda resource=resource, before=before: bookkeeping.snapshot(
-                        resource,
-                        before.get("metadata", {}).get("name") or resource,
-                        before["track_uris"],
-                        SNAPSHOTS[name],
-                        f"Before {name}",
-                        auto=True,
-                    ),
-                    fallback={"status": "failed", "error_code": "snapshot_failed"},
-                )
-            )
-        return receipts
+        resources = [(key, before.get("metadata", {}).get("name") or key, before["track_uris"])
+                     for key, before in prepared["before"].items() if key in destinations]
+        # Each step owns one snapshot set and one durable receipt, including when capacity refuses the set.
+        failures = [{"status": "failed", "error_code": "snapshot_failed"} if uris else None for _, _, uris in resources]
+        return bookkeeping.optional(
+            lambda: bookkeeping.auto_snapshots(resources, SNAPSHOTS[name], f"Before {name}"), fallback=failures,
+        )
 
     # A read-only/gated/no-op step does not need mutation snapshots.
     changing = any(

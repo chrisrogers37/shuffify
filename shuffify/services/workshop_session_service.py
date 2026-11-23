@@ -93,7 +93,7 @@ class WorkshopSessionService:
             )
 
         try:
-            check_storage_growth(db.session, WorkshopSession, user.id, playlist_id)
+            check_storage_growth(db.session, WorkshopSession, user.id, [playlist_id], row_growth=1)
         except StorageLimitReached:
             db.session.rollback()
             raise

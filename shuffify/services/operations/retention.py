@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from shuffify.models.db import JobExecution, PlaylistSnapshot
 from shuffify.services.operations.history import HistoryStore
+from shuffify.services.operations.repository import try_lock_history_owner
 
 RETENTION_DAYS = 90
 MAX_PAGE = 100
@@ -32,7 +33,7 @@ def _settled_document(row):
         not isinstance(marker, dict) or marker.get("done") is not True or marker.get("state") != row.state
     ):
         return False
-    # Old writers may lack finalization markers. Never discard ambiguous dispatch evidence.
+    # Even a terminal marker cannot settle a batch whose dispatch remains ambiguous.
     for key in ("plans", "compensation"):
         plans = document.get(key, [])
         if not isinstance(plans, list):
@@ -40,7 +41,7 @@ def _settled_document(row):
         for plan in plans:
             if not isinstance(plan, dict) or not isinstance(plan.get("batches"), list):
                 return False
-            if any(not isinstance(batch, dict) or batch.get("state") not in {"prepared", "acknowledged", "rejected"}
+            if any(not isinstance(batch, dict) or batch.get("state") not in ("prepared", "acknowledged", "rejected")
                    for batch in plan["batches"]):
                 return False
     return True
@@ -58,7 +59,7 @@ def _referenced(storage, row):
         return True
     if not isinstance(row.journal, dict) or "history" not in row.journal:
         return False
-    return not HistoryStore.can_expire_receipt(storage, row)
+    return not try_lock_history_owner(storage, row.user_id) or not HistoryStore.can_expire_receipt(storage, row)
 
 
 def cleanup_page(engine, *, after_id=0, limit=MAX_PAGE, now=None):
