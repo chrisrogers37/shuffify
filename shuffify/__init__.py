@@ -237,6 +237,7 @@ def _apply_rate_limits(app, limiter):
     )
     if limiter is None:
         return
+    app.extensions["spotify_read_limit"] = limiter.shared_limit("240/minute", scope="interactive-spotify-read")
     for endpoint, (limit, exempt_when) in RATE_LIMITS.items():
         guard = limiter.limit(limit, key_func=get_remote_address, exempt_when=exempt_when)
         app.view_functions[endpoint] = guard(app.view_functions[endpoint])

@@ -568,7 +568,7 @@ def handle_internal_error(error):
 # =============================================================================
 
 
-def _seconds_until_limit_resets():
+def seconds_until_limit_resets():
     """Seconds until the window of the limit this request broke resets.
 
     None when no limiter recorded a broken limit on this request.
@@ -597,7 +597,7 @@ def handle_rate_limit_exceeded(error):
     else:
         response = make_response(json_error_response("Too many requests. Please wait a moment and try again.", 429))
     if isinstance(error, RateLimitExceeded) and "Retry-After" not in response.headers:
-        retry_after = _seconds_until_limit_resets()
+        retry_after = seconds_until_limit_resets()
         if retry_after is not None:
             response.retry_after = retry_after
     return response
