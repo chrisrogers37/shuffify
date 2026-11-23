@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from shuffify.models.db import JobExecution
 from shuffify.services.workshop_finalize_service import WorkshopFinalizeResult
 from tests.paths import api_path
 from tests.playlist_setup_fixtures import SetupSpotify
@@ -341,11 +342,15 @@ class TestArchiveFinalizerListBounds:
         ("finalize-restore", "track_uris"),
         ("finalize-restore", "target_track_uris"),
     ])
+    @pytest.mark.parametrize("inspect_only", [False, True])
+    @patch("shuffify.routes.finalizer_queue.enqueue_command")
     @patch("shuffify.routes.playlist_pairs.WorkshopFinalizeService")
     @patch("shuffify.routes.require_auth")
-    def test_over_spotify_playlist_limit_rejected(self, auth, service, auth_client, endpoint, field):
-        # Spotify's limit for one playlist is 10,000 tracks.
+    def test_over_spotify_playlist_limit_rejected(
+        self, auth, service, enqueue, auth_client, inspect_only, endpoint, field,
+    ):
         payload = {
+            "inspect_only": inspect_only,
             "source_playlist_id": "archive123",
             "target_track_uris": ["spotify:track:" + "a" * 22],
             "track_uris": ["spotify:track:" + "a" * 22] * 2,
@@ -355,6 +360,75 @@ class TestArchiveFinalizerListBounds:
         payload[field] = [f"spotify:track:{i:022d}" for i in range(10_001)]
         response = auth_client.post(api_path(f"/playlist/p1/pair/{endpoint}"), json=payload)
         assert response.status_code == 400
-        assert response.json["status"] == "failed"
+        assert response.json["success"] is False
+        assert response.json["error_code"] == "preflight_failed"
+        assert response.json["status"] == ("unknown" if inspect_only else "failed")
         assert response.json["retryable"] is False
+        count_key = "archived_count" if endpoint == "archive" else "restored_count"
+        assert response.json[count_key] == (None if inspect_only else 0)
         service.assert_not_called()
+        enqueue.assert_not_called()
+        auth.assert_not_called()
+        assert JobExecution.query.count() == 0
+
+    @pytest.mark.parametrize("endpoint,kind,method", [
+        ("archive", "workshop_archive_append", "append_archive"),
+        ("finalize-restore", "workshop_finalize_restore", "finalize_restore"),
+    ])
+    @pytest.mark.parametrize("inspect_only", [False, True])
+    @patch("shuffify.routes.finalizer_queue.enqueue_command", return_value=({}, 202))
+    @patch("shuffify.routes.playlist_pairs.WorkshopFinalizeService")
+    @patch("shuffify.routes.require_auth")
+    def test_playlist_limits_forwarded(
+        self, auth, service, enqueue, auth_client, endpoint, kind, method, inspect_only,
+    ):
+        uris = [f"spotify:track:{i:022d}" for i in range(10_000)]
+        values = {
+            "source_playlist_id": "archive123",
+            "target_track_uris": uris,
+            "track_uris": uris[::-1],
+        }
+        if endpoint == "archive":
+            values["baseline_track_uris"] = uris[1:] + uris[:1]
+        finalize = getattr(service.return_value, method)
+        finalize.return_value = WorkshopFinalizeResult("archive123", "Archive", "complete", "Result")
+        payload = {**values, **({"inspect_only": True} if inspect_only else {})}
+        response = auth_client.post(api_path(f"/playlist/p1/pair/{endpoint}"), json=payload)
+        if inspect_only:
+            assert response.status_code == 200
+            service.assert_called_once_with(auth.return_value)
+            finalize.assert_called_once()
+            assert finalize.call_args.args[0] == "p1"
+            assert finalize.call_args.kwargs == payload
+            enqueue.assert_not_called()
+        else:
+            assert response.status_code == 202
+            enqueue.assert_called_once()
+            _user, actual_kind, intent, _build = enqueue.call_args.args
+            assert actual_kind == kind
+            assert intent == {"playlist_id": "p1", **values}
+            auth.assert_not_called()
+
+
+@pytest.mark.parametrize("path,selection,needs_baseline", [
+    ("pair/archive", "track_uris", True),
+    ("pair/finalize-restore", "track_uris", False),
+    ("pending-raids/finalize", "track_ids", False),
+])
+def test_finalizers_distinguish_empty_orders_from_missing_orders_and_empty_selections(
+    auth_client, path, selection, needs_baseline,
+):
+    payload = {"source_playlist_id": "source1", "target_track_uris": [],
+               selection: [1] if selection == "track_ids" else ["spotify:track:" + "a" * 22]}
+    if needs_baseline:
+        payload["baseline_track_uris"] = []
+    path = api_path(f"/playlist/p1/{path}")
+    with patch("shuffify.routes.finalizer_queue.enqueue_command", autospec=True, return_value=({}, 202)) as enqueue:
+        assert auth_client.post(path, json=payload).status_code == 202
+        assert enqueue.call_args.args[2] == {"playlist_id": "p1", **payload}
+        enqueue.reset_mock()
+        for field in payload.keys() - {"source_playlist_id"}:
+            missing = {key: value for key, value in payload.items() if key != field}
+            assert auth_client.post(path, json=missing).status_code == 400
+        assert auth_client.post(path, json={**payload, selection: []}).status_code == 400
+        enqueue.assert_not_called()

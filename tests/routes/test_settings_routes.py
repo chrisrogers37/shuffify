@@ -1,5 +1,6 @@
 """Settings JSON reads and updates preserve normalized and unedited preferences."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -280,19 +281,37 @@ class TestDedicatedSettings:
             assert saved.default_algorithm == expected
 
 
-class TestSettingsJsonObjectBounds:
-    """Each JSON object setting is capped at 16,384 bytes of compact JSON."""
+@pytest.mark.parametrize("field", ["extra", "default_algorithm_params"])
+def test_settings_bound_counts_compact_utf8_bytes_before_writing(auth_client, field):
+    # Eight bytes of JSON punctuation and key, plus 8,188 two-byte characters.
+    value = {"k": "é" * 8_188}
+    compact = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    assert len(compact) < 16_384 == len(compact.encode("utf-8"))
+    path = api_path("/settings")
+    with patch("shuffify.routes.require_auth", autospec=True, return_value=object()) as spotify:
+        accepted = auth_client.post(path, json={field: value})
+        assert accepted.status_code == 200 and accepted.json["settings"][field] == value
+        spotify.reset_mock()
+        with patch("shuffify.routes.settings.UserSettingsService.update", autospec=True) as update:
+            refused = auth_client.post(path, json={field: {"k": value["k"] + "x"}})
+        assert refused.status_code == 400
+        assert not refused.json["success"] and refused.json["error_code"] == "invalid_request"
+        assert field in refused.json["message"] and "16,384 bytes" in refused.json["message"]
+        spotify.assert_not_called()
+        update.assert_not_called()
+        assert getattr(UserSettings.query.one(), field) == value
 
-    @patch("shuffify.routes.require_auth", return_value=MagicMock(spec=SpotifyAPI))
-    @pytest.mark.parametrize("field", ["extra", "default_algorithm_params"])
-    def test_object_over_16384_bytes_is_400(self, mock_auth, auth_client, field):
-        # Bound: 16,384 bytes of compact JSON; this value is 16,385.
-        response = auth_client.post(api_path("/settings"), json={field: {"k": "x" * (16_385 - 8)}})
-        assert response.status_code == 400
 
-    @patch("shuffify.routes.require_auth", return_value=MagicMock(spec=SpotifyAPI))
-    @pytest.mark.parametrize("field", ["extra", "default_algorithm_params"])
-    def test_object_of_exactly_16384_bytes_succeeds(self, mock_auth, auth_client, field):
-        # Bound: 16,384 bytes of compact JSON is the last accepted size.
-        response = auth_client.post(api_path("/settings"), json={field: {"k": "x" * (16_384 - 8)}})
-        assert response.status_code == 200
+@pytest.mark.parametrize("field", ["extra", "default_algorithm_params"])
+def test_settings_omission_and_null_preserve_an_object_and_empty_clears_it(auth_client, field):
+    path = api_path("/settings")
+    with patch("shuffify.routes.require_auth", autospec=True, return_value=object()):
+        for payload, expected in [
+            ({field: {"saved": True}}, {"saved": True}),
+            ({}, {"saved": True}),
+            ({field: None}, {"saved": True}),
+            ({field: {}}, {}),
+        ]:
+            response = auth_client.post(path, json=payload)
+            assert response.status_code == 200
+            assert getattr(UserSettings.query.one(), field) == expected

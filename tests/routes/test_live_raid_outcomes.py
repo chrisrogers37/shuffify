@@ -408,18 +408,45 @@ def test_contradictory_legacy_label_cannot_report_success_or_start_drip(
 
 @pytest.mark.parametrize("endpoint", ["raid-now", "raid-and-drip"])
 @pytest.mark.parametrize("body", [
-    # At most 10 source playlists per raid.
     {"source_playlist_ids": [f"src{i}" for i in range(11)]},
-    # Playlist ids are alphanumeric only.
     {"source_playlist_ids": ["has-a-dash"]},
+    {"source_playlist_ids": []},
 ])
-def test_out_of_bounds_source_playlist_ids_are_structured_preflight(live_raid, endpoint, body):
-    client, api, _user, _link = live_raid
-    response = post_and_run(client, api, api_path(f"/playlist/target/{endpoint}"), json=body)
+def test_invalid_source_playlist_ids_are_structured_preflight(auth_client, endpoint, body):
+    with (
+        patch("shuffify.routes.routine_queue.enqueue_command") as enqueue,
+        patch("shuffify.routes.require_auth") as authenticate_spotify,
+    ):
+        response = auth_client.post(api_path(f"/playlist/target/{endpoint}"), json=body)
     data = response.get_json()
     assert response.status_code == 400
     assert data["success"] is False
+    assert data["operation"]["error_code"] == "preflight_failed"
     assert data["operation"]["aggregate_status"] == "partial"
     assert data["execution_state"] == "not_started"
+    enqueue.assert_not_called()
+    authenticate_spotify.assert_not_called()
     assert JobExecution.query.count() == 0
-    assert api.writes == []
+
+
+@pytest.mark.parametrize("endpoint", ["raid-now", "raid-and-drip"])
+@pytest.mark.parametrize("body", [
+    {"json": {"source_playlist_ids": [f"src{i}" for i in range(10)]}},
+    {"json": {"source_playlist_ids": None}},
+    {"json": {}},
+    {},
+])
+def test_raid_source_selection_reaches_queue(raid_target, endpoint, body):
+    with (
+        patch("shuffify.routes.require_auth") as authenticate_spotify,
+        patch("requests.sessions.Session.request") as request,
+    ):
+        response = raid_target.client.post(api_path(f"/playlist/target/{endpoint}"), **body)
+    assert response.status_code == 202
+    row = JobExecution.query.one()
+    assert row.kind == endpoint.replace("-", "_")
+    assert row.payload["command"]["definition"]["source_playlist_ids"] == body.get("json", {}).get(
+        "source_playlist_ids",
+    )
+    authenticate_spotify.assert_not_called()
+    request.assert_not_called()

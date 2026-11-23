@@ -48,27 +48,13 @@ def _settings_context(user, settings=None):
     }
 
 
-@api_bp.route("/settings", methods=["POST"])
-@require_auth_and_db
-def update_settings(api=None, user=None):
-    """Update user settings and return the saved values."""
-    try:
-        updated, error = _save_settings(user)
-    except UserSettingsError as e:
-        logger.error("Settings write failed: %s", e)
-        return json_error("Failed to save settings.", 500)
-    if error:
-        return json_error(error, 400)
-    return json_success("Settings saved successfully.", **_settings_context(user, updated))
-
-
-def _save_settings(user):
-    """Parse JSON or native form values and persist one validated settings update."""
+def _settings_body():
+    """Parse and validate a JSON or native form update before Spotify authentication."""
     # Handle both JSON and form-encoded data
     if request.is_json:
         data = request.get_json()
         if not isinstance(data, dict):
-            return None, "Request body must be a JSON object."
+            return None, json_error("Request body must be a JSON object.", 400)
     else:
         data = request.form.to_dict()
 
@@ -110,35 +96,40 @@ def _save_settings(user):
                 data["max_snapshots_per_playlist"]
             )
         except (ValueError, TypeError):
-            return None, "Invalid value for max snapshots."
+            return None, json_error("Invalid value for max snapshots.", 400)
 
     # Handle empty algorithm as None (no default)
     if data.get("default_algorithm") == "":
         data["default_algorithm"] = None
 
     try:
-        update_request = UserSettingsUpdateRequest(**data)
+        return UserSettingsUpdateRequest(**data), None
     except ValidationError as e:
-        return None, f"Validation error: {format_validation_error(e)}"
+        return None, json_error(f"Validation error: {format_validation_error(e)}", 400)
 
+
+@api_bp.route("/settings", methods=["POST"])
+@require_auth_and_db(parse_body=_settings_body)
+def update_settings(api=None, user=None, body=None):
+    """Update user settings and return the saved values."""
     # Leave omitted values unchanged, but an explicitly cleared algorithm
     # means "choose each time" and must clear the stored default.
     update_kwargs = {
         k: v
-        for k, v in update_request.model_dump().items()
+        for k, v in body.model_dump().items()
         if v is not None
     }
-    if "default_algorithm" in update_request.model_fields_set:
-        update_kwargs["default_algorithm"] = update_request.default_algorithm
+    if "default_algorithm" in body.model_fields_set:
+        update_kwargs["default_algorithm"] = body.default_algorithm
 
     try:
         updated = UserSettingsService.update(
             user.id, **update_kwargs
         )
     except UserSettingsError as e:
-        # A failed commit is the caller's 500; the rest are validation text.
         if is_commit_failure(e):
-            raise
-        return None, str(e)
+            logger.error("Settings write failed: %s", e)
+            return json_error("Failed to save settings.", 500)
+        return json_error(str(e), 400)
 
-    return updated.to_dict(), None
+    return json_success("Settings saved successfully.", **_settings_context(user, updated.to_dict()))

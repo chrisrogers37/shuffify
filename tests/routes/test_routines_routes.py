@@ -134,23 +134,50 @@ _BOUNDED_FIELDS = ["definition.algorithm_params", "definition.timing", "definiti
 
 
 @pytest.mark.parametrize("field", _BOUNDED_FIELDS)
-def test_routine_object_over_16384_bytes_is_400(auth_client, api, field):
-    # Bound: 16,384 bytes of compact JSON; this object is 16,385.
+def test_routine_object_over_16384_bytes_is_refused_before_service_or_spotify(auth_client, field):
     route, body = _bounded_body(field, 16_385)
-    with patch("shuffify.routes.require_auth", return_value=api):
+    with (
+        patch("shuffify.routes.require_auth", autospec=True) as spotify,
+        patch(f"shuffify.routes.routines.RoutineActivationService.{route}", autospec=True) as service,
+    ):
         response = auth_client.post(api_path(f"{BASE}/{route}"), json=body)
-    assert response.status_code == 400
-    error = response.get_json()["field_errors"][0]
-    assert error["path"] == field
-    assert "16,384 bytes" in error["message"]
+    assert response.status_code == 400 and response.json["error_code"] == "invalid_request"
+    error, = response.json["field_errors"]
+    assert error["path"] == field and "16,384 bytes" in error["message"]
+    spotify.assert_not_called()
+    service.assert_not_called()
 
 
 @pytest.mark.parametrize("field", _BOUNDED_FIELDS)
-def test_routine_object_of_exactly_16384_bytes_is_not_the_size_refusal(auth_client, api, field):
-    # Bound: 16,384 bytes of compact JSON is the last accepted size.
+def test_routine_object_at_16384_bytes_reaches_service_intact(auth_client, api, field):
     route, body = _bounded_body(field, 16_384)
-    with patch("shuffify.routes.require_auth", return_value=api):
+    with patch("shuffify.routes.require_auth", return_value=api), patch(
+        f"shuffify.routes.routines.RoutineActivationService.{route}", autospec=True,
+        return_value=({"success": True}, 200),
+    ) as service:
         response = auth_client.post(api_path(f"{BASE}/{route}"), json=body)
-    # Later checks may still refuse the padded body, but never for its size.
-    errors = (response.get_json() or {}).get("field_errors", [])
-    assert not any("bytes as JSON" in error["message"] for error in errors)
+    assert response.status_code == 200
+    assert service.call_args.args[-1] == body
+
+
+@pytest.mark.parametrize("field", _BOUNDED_FIELDS)
+@pytest.mark.parametrize("omit", [True, False], ids=["omitted", "empty"])
+def test_routine_object_defaults_and_required_fields(auth_client, api, field, omit):
+    route, body = _bounded_body(field, 8)
+    parts = field.split(".")
+    container = body["definition"] if len(parts) == 2 else body
+    if omit:
+        del container[parts[-1]]
+    else:
+        container[parts[-1]] = {}
+    with patch("shuffify.routes.require_auth", return_value=api), patch(
+        f"shuffify.routes.routines.RoutineActivationService.{route}", autospec=True,
+        return_value=({"success": True}, 200),
+    ) as service:
+        response = auth_client.post(api_path(f"{BASE}/{route}"), json=body)
+    if omit and route == "activate":
+        assert response.status_code == 400 and response.json["field_errors"][0]["path"] == field
+        service.assert_not_called()
+    else:
+        assert response.status_code == 200
+        assert service.call_args.args[-1] == body

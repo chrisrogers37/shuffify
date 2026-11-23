@@ -15,13 +15,13 @@ from shuffify.spotify.api import MAX_PLAYLIST_TRACKS
 
 TRACK_URI_RE = re.compile(r"^spotify:track:[a-zA-Z0-9]{22}$")
 
-# The most bytes one JSON object in a request may take as compact JSON
-# (ASCII-escaped, so its length in characters is its size in bytes).
+# Measure each value as compact UTF-8 JSON, independent of request whitespace or escapes.
 MAX_JSON_BYTES = 16 * 1024
 
 
 def _within_json_limit(value):
-    if len(json.dumps(value, separators=(",", ":"))) > MAX_JSON_BYTES:
+    compact = json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+    if len(compact.encode("utf-8")) > MAX_JSON_BYTES:
         raise ValueError(f"must be at most {MAX_JSON_BYTES:,} bytes as JSON")
     return value
 

@@ -495,22 +495,36 @@ def test_unexpected_review_failure_reports_the_validated_kind(auth_client, api, 
 
 
 def test_check_of_over_10000_desired_uris_is_refused(auth_client, api):
-    # Bound: at most 10,000 desired track URIs (Spotify's playlist maximum).
     body = {"kind": "tracks", "desired_track_uris": [uri(i) for i in range(10_001)]}
-    with as_user(api):
+    with as_user(api) as auth:
         response = inspect(auth_client, body)
+
     assert response.status_code == 400
-    assert response.get_json()["operation"]["error_code"] == "invalid_request"
+    data = response.get_json()
+    assert data["success"] is False
+    operation = data["operation"]
+    assert operation["kind"] == "track_inspection"
+    assert operation["error_code"] == "invalid_request"
+    assert operation["resources"] == operation["bookkeeping"] == []
+    auth.assert_not_called()
     assert api.reads == 0
+    assert api.writes == []
 
 
-def test_check_of_exactly_10000_desired_uris_is_not_refused_by_parsing(auth_client, api):
-    # Bound: 10,000 desired track URIs is the last accepted size.
-    body = {"kind": "tracks", "desired_track_uris": [uri(i) for i in range(10_000)]}
+def test_check_of_exactly_10000_desired_uris_observes_the_entire_order(auth_client):
+    desired = [uri(i) for i in range(10_000)]
+    api = CountingSpotify(SimpleNamespace(spotify_id="user123"), playlist123=desired)
     with as_user(api):
-        response = inspect(auth_client, body)
-    assert response.status_code != 400
-    assert response.get_json()["operation"]["error_code"] != "invalid_request"
+        response = inspect(auth_client, {"kind": "tracks", "desired_track_uris": desired})
+
+    assert response.status_code == 200
+    operation = response.get_json()["operation"]
+    assert operation["aggregate_status"] == "complete"
+    entry = operation["resources"][0]
+    assert entry["verification"] == "ordered"
+    assert entry["current_track_uris"] == entry["desired_track_uris"] == desired
+    assert api.reads > 0
+    assert api.writes == []
 
 
 @pytest.mark.parametrize("kind", ["raid", "raid_and_drip"])

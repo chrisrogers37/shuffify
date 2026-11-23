@@ -14,9 +14,8 @@ logger = logging.getLogger(__name__)
 
 # Session key for storing playlist states
 PLAYLIST_STATES_KEY = "playlist_states"
-# One playlist's history keeps at most this many states, and at most MAX_HISTORY_URIS track
-# URIs in all; recording past either drops the oldest states. A queued Undo carries the whole
-# history, and each operation that changes the playlist stores copies of it in its receipt.
+# These caps apply to each playlist independently. Queued Undo carries that
+# playlist's history, which is also stored in confirmed operation receipts.
 MAX_HISTORY_STATES = 100
 MAX_HISTORY_URIS = 25_000
 
@@ -40,12 +39,25 @@ class PlaylistState:
         )
 
     def push(self, uris: List[str]) -> None:
-        """Make uris the current state; drop redo states, then the oldest past either cap."""
-        states = (self.states[: self.current_index + 1] + [uris])[-MAX_HISTORY_STATES:]
-        size = sum(map(len, states))
-        while size > MAX_HISTORY_URIS and len(states) > 1:
-            size -= len(states.pop(0))
-        self.states, self.current_index = states, len(states) - 1
+        """Append a new current state after discarding any redo states."""
+        self.states = self.states[: self.current_index + 1] + [uris]
+        self.current_index = len(self.states) - 1
+
+    def trim_history(self) -> None:
+        """Bring saved history within both caps while preserving the current state."""
+        start = max(0, self.current_index - MAX_HISTORY_STATES + 1)
+        end = min(len(self.states), start + MAX_HISTORY_STATES)
+        size = sum(len(uris) for uris in self.states[start:end])
+        # An older saved history can be over budget after undo. Prioritize
+        # keeping revisions the user can still undo to.
+        while size > MAX_HISTORY_URIS and end > self.current_index + 1:
+            end -= 1
+            size -= len(self.states[end])
+        while size > MAX_HISTORY_URIS and start < self.current_index:
+            size -= len(self.states[start])
+            start += 1
+        self.states = self.states[start:end]
+        self.current_index -= start
 
 
 class StateError(Exception):
@@ -207,6 +219,7 @@ class StateService:
             raise StateError(f"No existing state for playlist {playlist_id}")
 
         state.push(new_uris)
+        state.trim_history()
 
         # Save back to session
         session[PLAYLIST_STATES_KEY][playlist_id] = state.to_dict()
@@ -263,6 +276,7 @@ class StateService:
         # Move to previous state
         state.current_index -= 1
         previous_uris = state.states[state.current_index]
+        state.trim_history()
 
         # Save back to session
         session[PLAYLIST_STATES_KEY][playlist_id] = state.to_dict()
@@ -345,6 +359,7 @@ class StateService:
 
     @staticmethod
     def _assign_verified_state(session, playlist_id, state):
+        state.trim_history()
         histories = dict(session.get(PLAYLIST_STATES_KEY, {}))
         histories[playlist_id] = deepcopy(state.to_dict())
         session[PLAYLIST_STATES_KEY] = histories

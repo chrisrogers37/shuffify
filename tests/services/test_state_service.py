@@ -522,3 +522,59 @@ class TestHistoryUriBudget:
         state = StateService.record_new_state(session, "current", self._state(9, self.BUDGET + 1))
         assert [len(uris) for uris in state.states] == [self.BUDGET + 1]
         assert state.current_index == 0
+
+    @pytest.mark.parametrize("method", ["undo", "confirm_undo"])
+    @pytest.mark.parametrize(
+        "current_index,state_size,expected_slice",
+        [
+            (1, 251, (0, 99)),
+            (58, 251, (0, 99)),
+            (119, 251, (20, 119)),
+            (119, 1, (19, 119)),
+        ],
+    )
+    def test_undo_bounds_legacy_history_and_preserves_the_selected_revision(
+        self, method, current_index, state_size, expected_slice,
+    ):
+        legacy_states = [self._state(n, state_size) for n in range(120)]
+        session = self._session(current={"states": legacy_states, "current_index": current_index})
+        previous_index = current_index - 1
+        if method == "undo":
+            assert StateService.undo(session, "current") == legacy_states[previous_index]
+        else:
+            selection = StateService.peek_undo(session, "current")
+            assert list(selection.desired_uris) == legacy_states[previous_index]
+            StateService.confirm_undo(session, "current", selection)
+
+        start, end = expected_slice
+        assert session[PLAYLIST_STATES_KEY]["current"] == {
+            "states": legacy_states[start:end], "current_index": previous_index - start,
+        }
+        assert StateService.get_current_uris(session, "current") == legacy_states[previous_index]
+        if previous_index > start:
+            next_undo = StateService.peek_undo(session, "current")
+            assert list(next_undo.desired_uris) == legacy_states[previous_index - 1]
+        else:
+            assert not StateService.can_undo(session, "current")
+
+    def test_verified_no_change_still_bounds_legacy_history(self):
+        legacy_states = [self._state(n, 251) for n in range(120)]
+        session = self._session(current={"states": legacy_states, "current_index": 60})
+        current = legacy_states[60]
+
+        state = StateService.record_verified_change(session, "current", before_uris=current, after_uris=current)
+
+        assert state.states == legacy_states[:99]
+        assert state.current_index == 60
+        assert session[PLAYLIST_STATES_KEY]["current"] == state.to_dict()
+
+    def test_new_state_branches_from_legacy_undo_position_and_bounds_history(self):
+        legacy_states = [self._state(n, 251) for n in range(120)]
+        session = self._session(current={"states": legacy_states, "current_index": 110})
+        replacement = self._state(120, 251)
+
+        state = StateService.record_new_state(session, "current", replacement)
+
+        assert state.states == legacy_states[13:111] + [replacement]
+        assert state.current_index == 98
+        assert session[PLAYLIST_STATES_KEY]["current"] == state.to_dict()

@@ -7,6 +7,10 @@ GET /workshop/<id>/locks, POST .../toggle, POST .../unlock-all.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from shuffify.spotify.api import SpotifyAPI
+from tests.mutable_spotify import uri
 from tests.paths import api_path
 
 # =============================================================
@@ -283,37 +287,41 @@ class TestUnlockAll:
 
 
 class TestUnlockAllListBound:
-    @patch("shuffify.routes.require_auth")
-    def test_over_spotify_playlist_limit_rejected(
-        self, mock_auth, auth_client
-    ):
-        # Spotify's limit for one playlist is 10,000 tracks.
-        mock_auth.return_value = MagicMock()
-        resp = auth_client.post(
-            api_path("/workshop/pl1/locks/unlock-all"),
-            json={
-                "track_uris": [
-                    f"spotify:track:{i:022d}"
-                    for i in range(10_001)
-                ],
-            },
-        )
-        assert resp.status_code == 400
+    def test_over_spotify_playlist_limit_rejected(self, auth_client):
+        with patch("shuffify.routes.require_auth") as auth, patch(
+            "shuffify.routes.track_locks.TrackLockService.bulk_unlock", autospec=True
+        ) as unlock:
+            response = auth_client.post(
+                api_path("/workshop/pl1/locks/unlock-all"),
+                json={"track_uris": [uri(i) for i in range(10_001)]},
+            )
 
-    @patch("shuffify.routes.require_auth")
-    def test_at_spotify_playlist_limit_accepted(
-        self, mock_auth, auth_client
-    ):
-        # Spotify's limit for one playlist is 10,000 tracks.
-        mock_auth.return_value = MagicMock()
-        resp = auth_client.post(
-            api_path("/workshop/pl1/locks/unlock-all"),
-            json={
-                "track_uris": [
-                    f"spotify:track:{i:022d}"
-                    for i in range(10_000)
-                ],
-            },
-        )
-        assert resp.status_code == 200
-        assert resp.get_json()["success"] is True
+        assert response.status_code == 400
+        assert response.get_json() == {
+            "success": False,
+            "error_code": "invalid_request",
+            "category": "error",
+            "message": "Invalid request.",
+        }
+        auth.assert_not_called()
+        unlock.assert_not_called()
+
+    @pytest.mark.parametrize("body, removed, remaining", [
+        ({"track_uris": [uri(i) for i in range(10_000)]}, 1, [uri(10_000)]),
+        ({"track_uris": []}, 0, [uri(9_999), uri(10_000)]),
+        ({}, 2, []),
+    ])
+    def test_only_requested_locks_are_removed(self, auth_client, body, removed, remaining):
+        with patch("shuffify.routes.require_auth", return_value=MagicMock(spec=SpotifyAPI)):
+            for position, track_uri in enumerate([uri(9_999), uri(10_000)]):
+                response = auth_client.post(
+                    api_path("/workshop/pl1/locks/toggle"),
+                    json={"track_uri": track_uri, "position": position},
+                )
+                assert response.status_code == 200
+            response = auth_client.post(api_path("/workshop/pl1/locks/unlock-all"), json=body)
+            locks = auth_client.get(api_path("/workshop/pl1/locks"))
+
+        assert response.status_code == 200
+        assert response.get_json()["count"] == removed
+        assert sorted(lock["track_uri"] for lock in locks.get_json()["locks"]) == remaining

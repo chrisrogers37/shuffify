@@ -153,19 +153,23 @@ def _inspection_preflight(message, status_code):
     ))
 
 
-@api_bp.route("/playlist/<playlist_id>/inspect-live", methods=["POST"])
-@no_store
-@require_auth_and_db(on_preflight_error=_inspection_preflight)
-def inspect_live(playlist_id, api=None, user=None):
-    """Observe current Spotify state against retained intent; never writes or replays."""
+def _inspect_live_body():
     body = request.get_json(silent=True)
     try:
-        kind, desired = parse_inspect_request(body)
+        return parse_inspect_request(body), None
     except InspectRequestError:
-        return json_reply(inspection_rejected(
+        return None, json_reply(inspection_rejected(
             body, "invalid_request", 400,
             "This check request is not valid. Earlier results remain unverified.",
         ))
+
+
+@api_bp.route("/playlist/<playlist_id>/inspect-live", methods=["POST"])
+@no_store
+@require_auth_and_db(on_preflight_error=_inspection_preflight, parse_body=_inspect_live_body)
+def inspect_live(playlist_id, api=None, user=None, body=None):
+    """Observe current Spotify state against retained intent; never writes or replays."""
+    kind, desired = body
     try:
         if kind == "privacy":
             result = LiveMetadataService(api).inspect_visibility(
@@ -178,7 +182,7 @@ def inspect_live(playlist_id, api=None, user=None):
     except Exception:
         logger.exception("Live inspection unavailable for %s", playlist_id)
         return json_reply(inspection_rejected(
-            body, "inspection_failed", 502,
+            request.get_json(silent=True), "inspection_failed", 502,
             "The current playlist could not be checked. Earlier results remain unverified.",
         ))
     return json_reply(inspection_payload(result, INSPECTION_KINDS[kind]))

@@ -71,26 +71,18 @@ def list_snapshots(playlist_id, api=None, user=None):
 @api_bp.route(
     "/playlist/<playlist_id>/snapshots", methods=["POST"]
 )
-@require_auth_and_db
-def create_manual_snapshot(
-    playlist_id, api=None, user=None
-):
+@require_auth_and_db(parse_body=lambda: validate_json(ManualSnapshotRequest))
+def create_manual_snapshot(playlist_id, api=None, user=None, body=None):
     """Create a manual snapshot of a playlist."""
-    snap_request, err = validate_json(
-        ManualSnapshotRequest
-    )
-    if err:
-        return err
-
     try:
         snapshot = PlaylistSnapshotService.create_snapshot(
             user_id=user.id,
             playlist_id=playlist_id,
-            playlist_name=snap_request.playlist_name,
-            track_uris=snap_request.track_uris,
+            playlist_name=body.playlist_name,
+            track_uris=body.track_uris,
             snapshot_type=SnapshotType.MANUAL,
             trigger_description=(
-                snap_request.trigger_description
+                body.trigger_description
             ),
         )
         logger.info(

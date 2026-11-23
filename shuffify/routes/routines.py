@@ -61,21 +61,17 @@ def routine_context(playlist_id, api=None, user=None):
 
 @api_bp.route("/playlist/<playlist_id>/routines/review", methods=["POST"])
 @no_store
-@require_auth_and_db(on_preflight_error=context_preflight("routine_review"))
-def routine_review(playlist_id, api=None, user=None):
-    body, error = _body(RoutineReviewRequest)
-    if error:
-        return json_reply(error)
+@require_auth_and_db(
+    on_preflight_error=context_preflight("routine_review"), parse_body=lambda: _body(RoutineReviewRequest),
+)
+def routine_review(playlist_id, api=None, user=None, body=None):
     return json_reply(RoutineActivationService.review(api, user, playlist_id, body))
 
 
 @api_bp.route("/playlist/<playlist_id>/routines/activate", methods=["POST"])
 @no_store
-@require_auth_and_db
-def routine_activate(playlist_id, api=None, user=None):
-    body, error = _body(RoutineActivateRequest)
-    if error:
-        return json_reply(error)
+@require_auth_and_db(parse_body=lambda: _body(RoutineActivateRequest))
+def routine_activate(playlist_id, api=None, user=None, body=None):
     return json_reply(RoutineActivationService.activate(api, user, playlist_id, body))
 
 
