@@ -61,11 +61,18 @@ jobs:
 
   # Everything about the backend that does not depend on how the test suite is
   # divided runs once, here, beside the test shards: the Python locks, lint, the
-  # migration chain and the PostgreSQL integration tests.
+  # migration chain and the storage integration tests.
   backend-checks:
     name: Backend lint and PostgreSQL integration tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      redis:
+        image: redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
+        ports: ['6379/tcp']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
     env:
       # Config is read at import time, so provide test credentials up front.
       # Fixtures override these; production values are never used in CI.
@@ -122,12 +129,13 @@ jobs:
       - name: Migration chain integrity
         run: python scripts/check-migration-chain.py
 
-      # PostgreSQL-only behaviour: locks, LISTEN and transactional DDL. Each test
-      # module starts a throwaway server from the runner's PostgreSQL binaries;
-      # without them every test would skip, so their absence fails the step, as
-      # does any other skip (--fail-on-skip). The live Spotify scraper checks
-      # stay in the on-demand live-integration workflow.
-      - name: PostgreSQL integration tests
+      # PostgreSQL tests start throwaway clusters for locks, LISTEN and
+      # transactional DDL. The cross-instance Spotify read limit test uses the
+      # job's Redis service. Every selected test must run (--fail-on-skip).
+      # Live Spotify scraper checks stay in the on-demand live-integration workflow.
+      - name: PostgreSQL and Redis integration tests
+        env:
+          SHUFFIFY_TEST_REDIS_PORT: ${{ job.services.redis.ports[6379] }}
         shell: bash
         run: |
           pgbin="$(ls -d /usr/lib/postgresql/*/bin | sort -V | tail -n 1)"

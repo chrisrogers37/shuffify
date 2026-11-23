@@ -103,7 +103,7 @@ class DeadlineHTTPAdapter(HTTPAdapter):
     def send(self, request, **kwargs):
         check = _before_read.get()
         if request.method == "GET" and check is not None:
-            check()
+            check(request.url)
         return super().send(request, **kwargs)
 
     def init_poolmanager(self, *args, **kwargs):
