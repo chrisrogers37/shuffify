@@ -1,6 +1,6 @@
 """Session-authorized admission of immutable worker commands, without Spotify I/O."""
 
-from flask import jsonify, request, session, url_for
+from flask import current_app, jsonify, request, session, url_for
 
 from shuffify.services.api_response import busy_error, error_payload
 from shuffify.services.live_operation_service import direct_rejected_result, direct_response_payload
@@ -62,7 +62,10 @@ def enqueue_command(user, kind, intent, build, *, schedule_id=None):
         return jsonify(error_payload("Use an idempotency key of 1 to 128 characters.", 400)), 400
 
     def factory(storage):
-        command, history = build(storage)
+        # The repository has resolved the key and checked outstanding capacity
+        # under its owner lock. Only a new interactive command reaches build.
+        with current_app.extensions["interactive_queue_limit"]:
+            command, history = build(storage)
         payload = {"version": 1, "command": command.model_dump(mode="json")}
         if history is not None:
             payload["history"] = history

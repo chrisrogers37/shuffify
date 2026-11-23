@@ -14,6 +14,35 @@ CSRF_SESSION_TOKEN = "test-session-csrf"
 
 
 @pytest.fixture
+def limiter_app(monkeypatch, tmp_path):
+    """Real route limits with private in-memory counters, SQLite and session files."""
+    from config import TestConfig
+    from shuffify import create_app
+
+    monkeypatch.setenv("SPOTIFY_CLIENT_ID", "test_id")
+    monkeypatch.setenv("SPOTIFY_CLIENT_SECRET", "test_secret")
+    monkeypatch.setattr(TestConfig, "REDIS_URL", None)
+    monkeypatch.chdir(tmp_path)
+    return create_app("testing")
+
+
+@pytest.fixture
+def signed_in_limiter_client(limiter_app, sample_token):
+    from shuffify.services import UserService
+
+    def sign_in(user_id):
+        profile = {"id": user_id, "display_name": "Workshop user"}
+        with limiter_app.app_context():
+            UserService.upsert_from_spotify(profile)
+        client = limiter_app.test_client()
+        with client.session_transaction() as session:
+            session.update(user_data=profile, spotify_token=sample_token)
+        return client
+
+    return sign_in
+
+
+@pytest.fixture
 def csrf_client(db_app):
     """A client with Flask-WTF enforcement on and a CSRF token in its session."""
     db_app.config.update(WTF_CSRF_ENABLED=True, WTF_CSRF_TIME_LIMIT=60)

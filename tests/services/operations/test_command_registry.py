@@ -30,19 +30,21 @@ def _kinds(call, position):
             if isinstance(leaf, ast.Constant) and isinstance(leaf.value, str)}
 
 
-def _admissions():
-    """Yield (module-level definition, called name, the strings in its kind argument) per admitting call."""
+def _admission_calls():
+    """Locate admission calls even when their arguments are forwarded through **kwargs."""
     for path in sorted(PACKAGE.rglob("*.py")):
         for statement in ast.parse(path.read_text(encoding="utf-8")).body:
             for call in ast.walk(statement):
                 name = _called_name(call) if isinstance(call, ast.Call) else None
-                kinds = _kinds(call, ADMISSIONS[name]) if name in ADMISSIONS else None
-                if kinds is not None:
-                    yield getattr(statement, "name", path.name), name, kinds
+                if name in ADMISSIONS:
+                    yield path.relative_to(PACKAGE).as_posix(), getattr(statement, "name", "<module>"), name, call
 
 
 def test_every_admitted_kind_has_a_worker_handler():
-    admissions = list(_admissions())
+    admissions = [
+        (definition, name, _kinds(call, ADMISSIONS[name]) or set())
+        for _, definition, name, call in _admission_calls()
+    ]
     # These admit a kind their caller chose, so the callers' kinds are read instead.
     assert sorted(definition for definition, _, kinds in admissions if not kinds) == [
         "admit_asset", "admit_direct", "admit_finalizer", "enqueue_command",
@@ -52,6 +54,15 @@ def test_every_admitted_kind_has_a_worker_handler():
     admitted = {kind for _, name, kinds in admissions if name != "admit_direct" for kind in kinds}
     admitted |= {DIRECT_MODELS[kind].kind for kind in direct}
     assert admitted - COMMAND_HANDLERS.keys() == set()
+
+
+def test_only_interactive_and_scheduled_admission_call_enqueue():
+    # A new route or service calling the repository directly would bypass
+    # the shared HTTP limit in enqueue_command. Scheduled fires are exempt.
+    assert sorted((path, definition) for path, definition, name, _ in _admission_calls() if name == "enqueue") == [
+        ("routes/queue.py", "enqueue_command"),
+        ("services/scheduled_admission.py", "admit_scheduled"),
+    ]
 
 
 def test_the_direct_routine_maps_name_the_same_kinds():
