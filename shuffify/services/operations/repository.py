@@ -377,7 +377,7 @@ class OperationRepository:
 
     @staticmethod
     def _waiting_since():
-        """A ready row waits from its queue timestamp or its owner's later turn."""
+        """Rank by the later of stored started_at and the owner's most recent turn."""
         previous = aliased(JobExecution)
         latest = select(func.max(previous.last_claimed_at)).where(previous.last_claimed_at > JobExecution.started_at)
         # Keep each lookup a range in the (user_id, last_claimed_at) index, including ownerless work.

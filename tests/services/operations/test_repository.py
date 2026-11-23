@@ -482,6 +482,19 @@ def test_postgres_skip_locked_claim_and_fencing(postgres_repository):
 
 
 @pytest.mark.integration
+def test_postgres_claim_rotates_after_a_committed_turn(postgres_repository):
+    repository = postgres_repository
+    alice = [enqueue(repository, target=f"alice{i}", key=f"alice{i}").id for i in range(5)]
+    bob = repository.enqueue(kind="example", user_id=2, targets=["bob"], payload={})
+    order = []
+    for _ in range(6):
+        lease = repository.claim()
+        order.append(lease.operation_id)
+        repository.finish(lease, "succeeded")
+    assert order == [alice[0], bob.id, *alice[1:]]
+
+
+@pytest.mark.integration
 def test_postgres_second_claimer_can_finish_before_the_first_claim_commits(postgres_repository):
     repository = postgres_repository
     first = enqueue(repository)

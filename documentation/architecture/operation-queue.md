@@ -22,16 +22,19 @@ a key for different intent returns HTTP 409. Scheduled fires, worker retries,
 status polls and inspect-only finalizer requests spend no interactive budget.
 
 The worker drains interactive operations and scheduled fires through the same
-untargeted claim. Each ready row waits from its queue timestamp (`started_at`)
-or its owner's most recent untargeted claim, whichever is later. The longest
-wait wins. Ties go to the oldest `started_at`, then the lowest operation ID.
-For example, when Alice queues five operations and Bob queues one, Alice gets
-the first turn and Bob gets the second. Alice's remaining operations keep their
-order. Deferred rows join the competition only when their retry deadline arrives.
+untargeted claim. Each ready row waits from its stored `started_at` or its
+owner's most recent untargeted claim, whichever is later. The longest wait
+wins. Ties go to the oldest `started_at`, then the lowest operation ID.
+Admission sets `started_at`. Claiming a queued row resets it to the claim
+time. Deferral and expired-lease recovery preserve that stored time. A deferred
+row becomes eligible at its retry deadline.
 
-The selected row records `last_claimed_at` in the lease transaction. An index
-on owner and claim time preserves turn history across worker restarts. Existing
-rows begin with no recorded turn, and ownerless commands share one turn group.
+When Alice queues five operations and Bob queues one, with all six ready before
+the first claim, Alice gets the first turn and Bob gets the second. Alice's
+remaining operations keep their order. The lease transaction records
+`last_claimed_at` on the selected row. Workers share this history across
+restarts and can look it up by owner and claim time. Existing rows begin with
+no recorded turn, and ownerless commands share one turn group.
 A targeted claim checks only the requested row and leaves turn history alone.
 Concurrent PostgreSQL claimers rank the committed turns visible to them and
 skip locked operations, so simultaneous grants can go to the same owner.
