@@ -14,11 +14,9 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements first to leverage Docker cache
 COPY requirements/ requirements/
 
-# Upgrade pip, setuptools, and wheel to patched releases
-RUN pip install --no-cache-dir --upgrade "pip>=26.0" "setuptools>=78.1.1" "wheel>=0.46.2"
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements/prod.txt
+# Install Python dependencies from the hashed lock, pip, setuptools and wheel
+# included. pip refuses any file whose hash the lock does not list.
+RUN pip install --no-cache-dir --require-hashes -r requirements/prod.txt
 
 # Copy application code
 COPY . .

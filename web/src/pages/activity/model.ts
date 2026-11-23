@@ -12,6 +12,7 @@ import type {
   TriggeredBy,
 } from "../../api/contracts.ts";
 import { ProtocolError } from "../../api/errors.ts";
+import { count, id, record } from "../../api/guards.ts";
 export const operations: Record<JobType, string> = {
   raid: "Collect for review",
   shuffle: "Reorder existing tracks",
@@ -218,13 +219,9 @@ export function routineHref(id: number | null): string | null {
 export function playlistHref(id: string | null): string | null {
   return id ? `/workshop/${encodeURIComponent(id)}` : null;
 }
-const record = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
 const text = (v: unknown) => typeof v === "string";
 const optionalText = (v: unknown) => v === undefined || text(v);
 const nullableText = (v: unknown) => v === null || text(v);
-const count = (v: unknown) => Number.isSafeInteger(v) && Number(v) >= 0;
-const id = (v: unknown) => count(v) && Number(v) > 0;
 const origin = (v: unknown) =>
   v === null || v === "manual" || v === "scheduler";
 const choice = (v: unknown, values: object) =>

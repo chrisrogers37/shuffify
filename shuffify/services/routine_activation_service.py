@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from shuffify.enums import ActivityType, JobType, RotationMode
 from shuffify.models.db import RoutineActivationReceipt, Schedule, db
-from shuffify.schemas.playlist_setup_requests import is_playlist_id
+from shuffify.schemas.playlist_setup_requests import DRIP_COUNT_RANGE, is_playlist_id
 from shuffify.services import signed_digest
 from shuffify.services.activity_log_service import ActivityLogService
 from shuffify.services.api_response import busy_error
@@ -19,7 +19,13 @@ from shuffify.services.playlist_setup_service import (
     configuration_revision,
     read_state,
 )
-from shuffify.services.schedule_utils import normalize_timing, schedule_revision, serialize_timing
+from shuffify.services.schedule_utils import (
+    DEFINITION_COLUMNS,
+    normalize_timing,
+    schedule_revision,
+    serialize_timing,
+    stored_definition,
+)
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 from shuffify.spotify.exceptions import SpotifyError
 
@@ -27,10 +33,14 @@ INTENT_PURPOSE = "shuffify.routine.activation.v1"
 INTENT_AGE_S = 24 * 60 * 60
 RECEIPT_RETENTION = timedelta(days=7)
 LOCK_WAIT_S = 2.0
-DEFINITION_FIELDS = frozenset(
-    ("job_type", "target_playlist_id", "target_playlist_name", "source_playlist_ids",
-     "algorithm_name", "algorithm_params", "schedule_type", "schedule_value", "timezone")
-)
+DEFINITION_FIELDS = frozenset(DEFINITION_COLUMNS)
+# Each routine state's code and its label, the text the routine pages show for it.
+ROUTINE_STATES = {
+    "active": "Active",
+    "paused": "Paused",
+    "needs_attention": "Saved—registration needs attention",
+    "deleted": "Deleted",
+}
 
 
 def _error(code, status, message, field=None, **extra):
@@ -98,7 +108,8 @@ class DefinitionError(ValueError):
         self.path = path
 
 
-def _validate_options(job_type, algorithm, params):
+def _validate_options(job_type, algorithm, params, *, stored_params=None):
+    """Refuse invalid routine options; ``stored_params`` are the saved options of the exact routine, if any."""
     if not isinstance(params, dict):
         raise DefinitionError("definition.algorithm_params", "Routine options must be an object.")
     if params.get("force"):
@@ -136,7 +147,14 @@ def _validate_options(job_type, algorithm, params):
             if key in params:
                 _positive_int(params[key], f"definition.algorithm_params.{key}", minimum=minimum)
     if job_type in (JobType.DRIP, JobType.RAID_AND_DRIP) and "drip_count" in params:
-        _positive_int(params["drip_count"], "definition.algorithm_params.drip_count", minimum=1)
+        count = params["drip_count"]
+        low, high = DRIP_COUNT_RANGE
+        # A count above the range is refused only when new or changed: a saved routine keeps its own count.
+        unchanged = isinstance(stored_params, dict) and stored_params.get("drip_count") == count
+        if type(count) is not int or count < low or (count > high and not unchanged):
+            raise DefinitionError(
+                "definition.algorithm_params.drip_count", f"Enter a whole number from {low} to {high}."
+            )
     if job_type in (JobType.DRIP, JobType.RAID_AND_DRIP):
         unknown = set(params) - {"drip_count"}
         if unknown:
@@ -199,26 +217,12 @@ def _validate_dependencies(api, user, target_id, state, job_type, *, extra_sourc
             raise DefinitionError("definition.job_type", "The paired archive cannot be edited.") from error
 
 
-def _stored(schedule):
-    return {
-        "job_type": schedule.job_type,
-        "target_playlist_id": schedule.target_playlist_id,
-        "target_playlist_name": schedule.target_playlist_name,
-        "source_playlist_ids": schedule.source_playlist_ids or [],
-        "algorithm_name": schedule.algorithm_name,
-        "algorithm_params": schedule.algorithm_params or {},
-        "schedule_type": schedule.schedule_type,
-        "schedule_value": schedule.schedule_value,
-        "timezone": schedule.timezone,
-    }
-
-
 def _normalize(api, user, target_id, supplied, existing, state, target_name):
     if not isinstance(supplied, dict):
         raise DefinitionError("definition", "Routine definition must be an object.")
     if set(supplied) - {"job_type", "algorithm_name", "algorithm_params", "timing"}:
         raise DefinitionError("definition", "The routine definition has unsupported fields.")
-    base = _stored(existing) if existing else {}
+    base = stored_definition(existing) if existing else {}
     job_type = supplied.get("job_type", base.get("job_type"))
     if job_type not in tuple(JobType):
         raise DefinitionError("definition.job_type", "Choose an available routine operation.")
@@ -226,7 +230,7 @@ def _normalize(api, user, target_id, supplied, existing, state, target_name):
     params = supplied.get("algorithm_params", base.get("algorithm_params", {}))
     if params is None:
         params = {}
-    _validate_options(job_type, algorithm, params)
+    _validate_options(job_type, algorithm, params, stored_params=base.get("algorithm_params"))
     _validate_dependencies(
         api, user, target_id, state, job_type,
         extra_source_ids=base.get("source_playlist_ids", []), editable_cache={},
@@ -284,16 +288,16 @@ def _schedule_payload(schedule, registration=None):
     if registration is None:
         registration = get_schedule_registration(schedule)
     if registration["status"] == "registered" and schedule.is_enabled:
-        state = "Active"
+        code = "active"
     elif registration["status"] == "paused" and not schedule.is_enabled:
-        state = "Paused"
+        code = "paused"
     else:
-        state = "Saved—registration needs attention"
+        code = "needs_attention"
     return {
         "schedule_id": schedule.id, "schedule": schedule.to_dict(),
-        "definition": _stored(schedule), "schedule_revision": schedule_revision(schedule),
+        "definition": stored_definition(schedule), "schedule_revision": schedule_revision(schedule),
         "timing": serialize_timing(schedule, effective_timezone=registration["effective_timezone"]),
-        "registration": registration, "state": state,
+        "registration": registration, "state": code,
     }
 
 
@@ -322,7 +326,7 @@ def _accepted_locked(user_id, target_id, receipt, *, replayed):
         return {
             "success": True, "accepted": True, "replayed": replayed,
             "schedule_id": receipt.schedule_id, "accepted_at": receipt.accepted_at.isoformat(),
-            "dependency_revision": revision, "state": "Deleted", "schedule": None,
+            "dependency_revision": revision, "state": "deleted", "schedule": None,
         }, 200
     return {
         "success": True, "accepted": True, "replayed": replayed,
@@ -458,8 +462,11 @@ class RoutineActivationService:
             return _error("invalid_definition", 400, "Activate a new routine as enabled.", "desired_enabled")
         try:
             definition = request["definition"]
-            _validate_options(definition["job_type"], definition["algorithm_name"], definition["algorithm_params"])
-            expected_sources = _stored(existing)["source_playlist_ids"] if existing else []
+            _validate_options(
+                definition["job_type"], definition["algorithm_name"], definition["algorithm_params"],
+                stored_params=existing.algorithm_params if existing else None,
+            )
+            expected_sources = stored_definition(existing)["source_playlist_ids"] if existing else []
             if definition["source_playlist_ids"] != expected_sources:
                 raise DefinitionError("definition.source_playlist_ids", "Routine sources changed. Review it again.")
             _validate_dependencies(
@@ -547,7 +554,8 @@ class RoutineActivationService:
                 if error:
                     return error
                 try:
-                    _validate_options(schedule.job_type, schedule.algorithm_name, schedule.algorithm_params or {})
+                    params = schedule.algorithm_params or {}
+                    _validate_options(schedule.job_type, schedule.algorithm_name, params, stored_params=params)
                     _validate_dependencies(
                         api, user, target_id, state, schedule.job_type,
                         extra_source_ids=schedule.source_playlist_ids or [], editable_cache={},

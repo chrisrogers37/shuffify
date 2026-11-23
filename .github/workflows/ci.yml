@@ -19,10 +19,10 @@ jobs:
     name: Frontend and Railway config
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7, v7.0.1
 
       - name: Set up Node 24
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7, v7.1.0
         with:
           node-version: '24'
           cache: npm
@@ -60,8 +60,8 @@ jobs:
           npm --prefix .railway test
 
   # Everything about the backend that does not depend on how the test suite is
-  # divided runs once, here, beside the test shards: lint, the migration chain
-  # and the PostgreSQL integration tests.
+  # divided runs once, here, beside the test shards: the Python locks, lint, the
+  # migration chain and the PostgreSQL integration tests.
   backend-checks:
     name: Backend lint and PostgreSQL integration tests
     runs-on: ubuntu-latest
@@ -75,19 +75,38 @@ jobs:
       SPOTIFY_REDIRECT_URI: http://localhost:8000/callback
       SECRET_KEY: ci-test-secret-key
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7, v7.0.1
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7, v7.1.0
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: requirements/dev.txt
 
+      # scripts/lock.sh --check compiles requirements/*.in again and fails unless
+      # each lock has the same pins as the new compile and every committed hash
+      # is in it. The committed locks are what "Install dependencies" installs.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.13.7'
+          # The sha256 of this version's uv-x86_64-unknown-linux-gnu.tar.gz, the
+          # archive the runner downloads, from the release's .sha256 file. Change
+          # it with the version.
+          checksum: 'c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83'
+          enable-cache: false
+
+      - name: Python locks up to date
+        run: scripts/lock.sh --check
+
+      # The same check on copies of the locks that it must fail on: one with a
+      # stale pin, one with a hash that no file has.
+      - name: Python lock check fails on a stale pin and an unknown hash
+        run: scripts/test-lock-check.sh
+
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements/dev.txt
+        run: pip install --require-hashes -r requirements/dev.txt
 
       - name: Lint (ruff)
         # The whole tree, tests included. Local virtualenvs are excluded in
@@ -151,19 +170,17 @@ jobs:
       - name: Check the matrix covers TEST_SPLITS
         run: test "${{ strategy.job-total }}" = "$TEST_SPLITS"
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7, v7.0.1
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7, v7.1.0
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: requirements/dev.txt
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements/dev.txt
+        run: pip install --require-hashes -r requirements/dev.txt
 
       # The fingerprint of the WHOLE selection, not of this leg's share: every
       # leg must report the same one for the split to be exact. It takes the
@@ -218,7 +235,7 @@ jobs:
 
       # Uploaded only after a green run: a failed leg publishes nothing.
       - name: Upload the collection fingerprint
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7, v7.0.2
         with:
           name: collection-shard-${{ matrix.group }}
           path: collection-shard-${{ matrix.group }}.txt
@@ -227,7 +244,7 @@ jobs:
           retention-days: 7
 
       - name: Upload coverage data
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7, v7.0.2
         with:
           name: coverage-shard-${{ matrix.group }}
           path: .coverage.shard-${{ matrix.group }}
@@ -237,7 +254,7 @@ jobs:
           retention-days: 7
 
       - name: Upload test durations
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7, v7.0.2
         with:
           name: durations-shard-${{ matrix.group }}
           path: durations-shard-${{ matrix.group }}.json
@@ -268,10 +285,10 @@ jobs:
           echo "backend-checks and backend-shard: $RESULTS"
           for r in $RESULTS; do [ "$r" = success ] || exit 1; done
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7, v7.0.1
 
       - name: Download the collection fingerprints
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8, v8.0.2
         with:
           pattern: collection-shard-*
           path: fingerprints
@@ -289,7 +306,7 @@ jobs:
       # apart; this gates nothing. Download the merged file from a green main
       # run and commit it (documentation/guides/testing-harness.md).
       - name: Download test durations
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8, v8.0.2
         continue-on-error: true
         with:
           pattern: durations-shard-*
@@ -307,7 +324,7 @@ jobs:
           mv merged-durations/merged.json merged-durations/.test_durations
 
       - name: Upload the merged test durations
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7, v7.0.2
         continue-on-error: true
         with:
           name: test-durations
@@ -318,12 +335,14 @@ jobs:
           retention-days: 30
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7, v7.1.0
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements/dev.txt
 
       - name: Download coverage data
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8, v8.0.2
         with:
           pattern: coverage-shard-*
           path: coverage-parts
@@ -334,7 +353,7 @@ jobs:
       # package, one it never ran included, so the total is the whole suite's.
       - name: Combine coverage into the run summary
         run: |
-          pip install "$(grep -E '^pytest-cov==' requirements/dev.txt)"
+          pip install --require-hashes -r requirements/dev.txt
           test "$(find coverage-parts -type f | wc -l)" -eq "$TEST_SPLITS"
           coverage combine coverage-parts
           {
@@ -366,7 +385,7 @@ jobs:
     # artifact.
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:16-alpine@sha256:1d5b02d3a9941fbd52437db4107f8c52d6297dac553ca1e5c299ebb3756b4857
         env:
           POSTGRES_DB: shuffify_harness
           POSTGRES_USER: shuffify
@@ -377,29 +396,27 @@ jobs:
           --health-cmd "pg_isready -U shuffify -d shuffify_harness"
           --health-interval 5s --health-timeout 5s --health-retries 12
       redis:
-        image: redis:7-alpine
+        image: redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
         ports: ['6379:6379']
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 5s --health-timeout 5s --health-retries 12
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7, v7.0.1
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7, v7.1.0
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: requirements/dev.txt
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements/dev.txt
+        run: pip install --require-hashes -r requirements/dev.txt
 
       # The harness builds the React frontend, which requires Node 24.
       - name: Set up Node 24
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7, v7.1.0
         with:
           node-version: '24'
           cache: npm
@@ -419,7 +436,7 @@ jobs:
 
       - name: Page screenshots
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7, v7.0.2
         with:
           name: page-screenshots
           path: .harness/screenshots/

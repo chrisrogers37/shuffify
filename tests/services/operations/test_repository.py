@@ -1,13 +1,14 @@
 """Queue admission and lease fencing use independent database transactions."""
 
 import json
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
-from threading import Barrier
+from threading import Barrier, Event
+from time import monotonic, sleep
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, select, text, update
+from sqlalchemy import create_engine, event, select, text, update
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
 
@@ -16,6 +17,7 @@ from shuffify.services.operations.repository import (
     BusyOperation,
     LeaseLost,
     OperationRepository,
+    OutstandingOperationLimit,
     PlaylistNeedsReview,
     RequestKeyConflict,
 )
@@ -361,6 +363,46 @@ def test_postgres_concurrent_idempotency_and_overlapping_admission(postgres_repo
     conflicts = race(lambda index: repository.enqueue(kind="example", user_id=1, targets=[f"different-{index}"],
                                                       payload={"value": index}, request_key="same-key"))
     assert sum(isinstance(result, RequestKeyConflict) for result in conflicts) == 1
+
+
+@pytest.mark.integration
+def test_postgres_disjoint_submissions_cannot_both_take_last_user_slot(postgres_repository):
+    repository = postgres_repository
+    for i in range(4):
+        enqueue(repository, target=f"existing-{i}", key=f"existing-{i}")
+
+    staged, release = Future(), Event()
+
+    def hold_first_commit(connection):
+        if not staged.done():
+            staged.set_result(connection.scalar(text("SELECT pg_backend_pid()")))
+            assert release.wait(10)
+
+    blocked_by_first = text("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE :pid = ANY(pg_blocking_pids(pid)))")
+    event.listen(repository.engine, "commit", hold_first_commit)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(enqueue, repository, target="first", key="request-first")
+            try:
+                first_pid = staged.result(timeout=5)
+                second = pool.submit(repository.enqueue, kind="example", user_id=1, request_key="request-second",
+                                     intent={}, command_factory=lambda _: (["second"], {}))
+                # Force overlap at commit. An unlocked count would miss the staged row and let both insert.
+                with repository.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as observer:
+                    deadline = monotonic() + 5
+                    while not second.done() and not observer.scalar(blocked_by_first, {"pid": first_pid}):
+                        assert monotonic() < deadline, "The second admission never reached the database lock"
+                        sleep(0.01)
+            finally:
+                release.set()
+            assert first.result(timeout=5).state == "queued"
+            with pytest.raises(OutstandingOperationLimit):
+                second.result(timeout=5)
+    finally:
+        event.remove(repository.engine, "commit", hold_first_commit)
+
+    with Session(repository.engine) as session:
+        assert len(session.scalars(select(JobExecution.id).where(JobExecution.user_id == 1)).all()) == 5
 
 
 @pytest.mark.integration

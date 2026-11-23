@@ -88,7 +88,7 @@ class User(db.Model):
     email = db.Column(db.String(255), nullable=True)
     profile_image_url = db.Column(db.String(1024), nullable=True)
     # Encrypted Spotify refresh token for background job execution.
-    # Encrypted with Fernet using a key derived from SECRET_KEY.
+    # Encrypted with Fernet under TOKEN_ENCRYPTION_KEY (TokenService).
     # Set during OAuth callback, updated on token refresh.
     encrypted_refresh_token = db.Column(db.Text, nullable=True)
 
@@ -174,6 +174,10 @@ class User(db.Model):
         return f"<User {self.spotify_id} ({self.display_name})>"
 
 
+# The snapshot limit a new settings row starts with.
+DEFAULT_SNAPSHOTS_LIMIT = 10
+
+
 class UserSettings(db.Model):
     """
     User preferences and configuration.
@@ -203,7 +207,7 @@ class UserSettings(db.Model):
     # Feature toggles
     notifications_enabled = db.Column(db.Boolean, nullable=False, default=False)
     auto_snapshot_enabled = db.Column(db.Boolean, nullable=False, default=True)
-    max_snapshots_per_playlist = db.Column(db.Integer, nullable=False, default=10)
+    max_snapshots_per_playlist = db.Column(db.Integer, nullable=False, default=DEFAULT_SNAPSHOTS_LIMIT)
 
     # Dashboard preferences
     dashboard_show_recent_activity = db.Column(db.Boolean, nullable=False, default=True)
@@ -668,6 +672,8 @@ class LoginHistory(db.Model):
     logged_out_at = db.Column(UTCDateTime, nullable=True)
     ip_address = db.Column(db.String(45), nullable=True)
     user_agent = db.Column(db.String(512), nullable=True)
+    # A keyed digest of the session id (LoginHistoryService), never the id
+    # itself: the id is the session cookie's value.
     session_id = db.Column(db.String(255), nullable=True)
     login_type = db.Column(db.String(20), nullable=False)
 
@@ -697,7 +703,6 @@ class LoginHistory(db.Model):
             ),
             "ip_address": self.ip_address,
             "user_agent": self.user_agent,
-            "session_id": self.session_id,
             "login_type": self.login_type,
         }
 

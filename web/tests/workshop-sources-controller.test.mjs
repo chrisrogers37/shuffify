@@ -50,6 +50,8 @@ async function harness(handle = () => null, providedOperations = null) {
                         raid_link: null,
                         source_count: 0,
                         max_sources: 10,
+                        raid_count_range: [1, 100],
+                        drip_count_range: [1, 50],
                       },
                     }
                   : { success: true },
@@ -441,6 +443,8 @@ test("source count drafts survive reads, revert known refusal, and retain an unk
             raid_link: null,
             source_count: 1,
             max_sources: 10,
+            raid_count_range: [1, 100],
+            drip_count_range: [1, 50],
           },
         })
       : path.endsWith("/raid-source-count")
@@ -463,6 +467,11 @@ test("source count drafts survive reads, revert known refusal, and retain an unk
   assert.equal(h.t.getSnapshot().sourceCountInputs[5], "9");
   assert.equal(await h.t.updateSourceCount(5, 9), false);
   assert.equal(h.t.getSnapshot().sourceCountInputs[5], "5");
+  assert.equal(await h.t.updateSourceCount(5, 75), false);
+  assert.equal(
+    h.calls.filter((x) => x.path.endsWith("/raid-source-count")).length,
+    2,
+  );
   failure = "unknown";
   h.t.setSourceCountInput(5, "8");
   assert.equal(await h.t.updateSourceCount(5, 8), false);
@@ -471,7 +480,7 @@ test("source count drafts survive reads, revert known refusal, and retain an unk
   assert.equal(await h.t.updateSourceCount(5, 8), false);
   assert.equal(
     h.calls.filter((x) => x.path.endsWith("/raid-source-count")).length,
-    2,
+    3,
   );
 });
 test("queued Collect holds inbox and source edits while leaving draft and Pause available; queued Add holds target editing", async () => {

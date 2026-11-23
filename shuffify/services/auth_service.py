@@ -7,6 +7,7 @@ Handles OAuth URL generation, token exchange, validation, and session management
 import logging
 from typing import Any, Dict, Optional, Tuple
 
+from shuffify.services.token_service import TokenEncryptionError, TokenService
 from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.auth import SpotifyAuthManager, TokenInfo
 from shuffify.spotify.credentials import SpotifyCredentials
@@ -26,6 +27,36 @@ class TokenValidationError(AuthenticationError):
     """Raised when token validation fails."""
 
     pass
+
+
+def encrypt_session_token(token: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a token dict as the session keeps it.
+
+    The refresh token is stored encrypted, under ``encrypted_refresh_token``,
+    with the key that encrypts the users table's copy. The token passed in is
+    not changed.
+    """
+    stored = dict(token)
+    refresh_token = stored.pop("refresh_token", None)
+    if refresh_token:
+        stored["encrypted_refresh_token"] = TokenService.encrypt_token(refresh_token)
+    return stored
+
+
+def decrypt_session_token(stored: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the session's token with its refresh token decrypted.
+
+    Raises:
+        AuthenticationError: If the refresh token cannot be decrypted.
+    """
+    token = dict(stored)
+    encrypted = token.pop("encrypted_refresh_token", None)
+    if encrypted:
+        try:
+            token["refresh_token"] = TokenService.decrypt_token(encrypted)
+        except TokenEncryptionError as error:
+            raise AuthenticationError("The session's refresh token cannot be decrypted") from error
+    return token
 
 
 class AuthService:
@@ -217,7 +248,7 @@ class AuthService:
             return
 
         try:
-            session["spotify_token"] = token_info.to_dict()
+            session["spotify_token"] = encrypt_session_token(token_info.to_dict())
             session.modified = True
             logger.debug("Persisted refreshed Spotify token to session")
         except Exception as e:

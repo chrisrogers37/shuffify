@@ -1,9 +1,8 @@
 import type { Algorithm, WorkshopTrack } from "../../../api/contracts.ts";
 import {
-  ApiRequestError,
   ConflictError,
-  NetworkError,
-  ProtocolError,
+  isOutcomeUnknown,
+  retryDeadline,
 } from "../../../api/errors.ts";
 import type { WorkshopController } from "../core/controller.ts";
 import { freeze } from "../core/occurrences.ts";
@@ -68,10 +67,6 @@ const message = (error: unknown) =>
   error instanceof Error
     ? error.message
     : "This request could not be confirmed.";
-const uncertain = (error: unknown) =>
-  error instanceof NetworkError ||
-  error instanceof ProtocolError ||
-  (error instanceof ApiRequestError && error.status >= 500);
 export function createToolsController(
   core: WorkshopController,
   client: ToolsClient = createToolsClient(core.api, core.playlistId),
@@ -126,10 +121,7 @@ export function createToolsController(
       message: "",
       operationId:
         e instanceof ConflictError ? (e.error.operation_id ?? null) : null,
-      retryUntil:
-        e instanceof ApiRequestError && e.retryAfterMs !== null
-          ? Date.now() + e.retryAfterMs
-          : 0,
+      retryUntil: retryDeadline(e, Date.now()) ?? 0,
     } as Partial<ToolsState[typeof key]>);
   };
   const waiting = (key: keyof ToolsState) => Date.now() < state[key].retryUntil;
@@ -342,7 +334,7 @@ export function createToolsController(
       installLocks();
     } catch (e) {
       error("locks", e);
-      if (uncertain(e))
+      if (isOutcomeUnknown(e))
         update("locks", {
           unknown: true,
           message:
@@ -371,7 +363,7 @@ export function createToolsController(
       installLocks();
     } catch (e) {
       error("locks", e);
-      if (uncertain(e))
+      if (isOutcomeUnknown(e))
         update("locks", {
           unknown: true,
           message: "Unlocking may have completed. Refresh locks to confirm.",
@@ -551,7 +543,7 @@ export function createToolsController(
       update("snapshots", { items, loaded: true });
     } catch (e) {
       error("snapshots", e);
-      if (uncertain(e))
+      if (isOutcomeUnknown(e))
         update("snapshots", {
           createUnknown: true,
           message:
@@ -640,7 +632,7 @@ export function createToolsController(
       return true;
     } catch (e) {
       error("snapshots", e);
-      if (uncertain(e))
+      if (isOutcomeUnknown(e))
         update("snapshots", {
           deleteUnknown: id,
           message:

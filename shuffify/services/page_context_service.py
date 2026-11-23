@@ -60,16 +60,6 @@ def dashboard_context(dashboard):
     }
 
 
-def routine_row(payload):
-    """Add a machine state code while retaining the human-readable routine label."""
-    label = payload["state"]
-    return {
-        **payload,
-        "state": {"Active": "active", "Paused": "paused"}.get(label, "needs_attention"),
-        "state_label": label,
-    }
-
-
 def recently_loaded(history):
     """Project the bounded external-playlist history stored by Workshop."""
     if not isinstance(history, list):

@@ -10,8 +10,9 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
 
 logger = logging.getLogger(__name__)
-_CHANNEL = 'shuffify_operations'
-_SCHEDULE_CHANNEL = 'shuffify_schedules'
+# Operation admission notifies OPERATION_CHANNEL; a schedule-definition change notifies SCHEDULE_CHANNEL.
+OPERATION_CHANNEL = 'shuffify_operations'
+SCHEDULE_CHANNEL = 'shuffify_schedules'
 
 
 def direct_url(url):
@@ -92,9 +93,9 @@ class PostgresWakeListener:
                 driver.autocommit = True
                 cursor = driver.cursor()
                 try:
-                    cursor.execute(f'LISTEN {_CHANNEL}')
+                    cursor.execute(f'LISTEN {OPERATION_CHANNEL}')
                     if self.schedule_callback is not None:
-                        cursor.execute(f'LISTEN {_SCHEDULE_CHANNEL}')
+                        cursor.execute(f'LISTEN {SCHEDULE_CHANNEL}')
                 finally:
                     cursor.close()
                 with self._connection_lock:
@@ -113,8 +114,8 @@ class PostgresWakeListener:
                     wake = refresh = False
                     while notifications:
                         notification = notifications.pop(0)
-                        wake = wake or notification.channel == _CHANNEL
-                        refresh = refresh or notification.channel == _SCHEDULE_CHANNEL
+                        wake = wake or notification.channel == OPERATION_CHANNEL
+                        refresh = refresh or notification.channel == SCHEDULE_CHANNEL
                     if wake:
                         self.wake_callback()
                     if refresh and self.schedule_callback is not None:

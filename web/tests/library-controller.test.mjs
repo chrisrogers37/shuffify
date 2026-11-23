@@ -249,6 +249,26 @@ test("unknown preference blocks further toggles until a fresh authoritative GET;
   await t.c.load(true);
   assert.equal(t.c.getSnapshot().preferenceUnknown, false);
 });
+test("a 500 on a preference toggle is unknown and blocks further toggles", async () => {
+  let writes = 0;
+  const t = setup(async () => {
+    writes++;
+    return Response.json(
+      {
+        success: false,
+        error_code: "internal_error",
+        message: "Failed to update pin state",
+        category: "error",
+      },
+      { status: 500 },
+    );
+  });
+  await t.c.load();
+  await t.c.toggle("alice-mix", "pinned");
+  assert.equal(t.c.getSnapshot().preferenceUnknown, true);
+  await t.c.toggle("alice-mix", "pinned");
+  assert.equal(writes, 1);
+});
 test("preference rate limit preserves full retry hint and blocks another unsafe request until eligible", async () => {
   let writes = 0;
   const t = setup(async () => {
@@ -321,7 +341,7 @@ test("a refused order save keeps shown order and dirty state; only explicit retr
               message: "Order not saved.",
               category: "error",
             },
-            { status: 503 },
+            { status: 400 },
           )
         : Response.json({ success: true, count: 3 }),
     value,

@@ -12,10 +12,10 @@ previous platform is gone.
 | Frontend | Vercel project `shuffify` (team `chrisrogers37`), domains `shuffify.app` and `shuffify.vercel.app` | Root `web/`, build `npm run build:vercel`, production branch `main`. Serves the React app and forwards `/api`, `/login`, `/callback`, `/logout` and `/health` to the URL in `RAILWAY_API_URL`. |
 | API | Railway project `shuffify`, environment `production`, service `api` | Public at `https://api-production-391dd.up.railway.app`. Each deployment runs `scripts/pre-deploy.sh` (Alembic upgrade) first; a failure blocks it. |
 | Worker | Same environment, service `worker` | Private. One replica owns queued Spotify writes and the scheduler. |
-| Redis | Same environment, service `redis` | Sessions and worker coordination. |
-| Database | Neon project `shuffify-db` (`proud-dew-57305636`), branch `production` (`br-snowy-bird-ai3vjw7w`), database `neondb` | The API, its pre-deploy migration and the worker use the branch's direct (unpooled) endpoint. Schema head `d0e1f2a3b4c5`. |
+| Redis | Same environment, service `redis` | Sessions, rate-limit counters, Spotify caching and worker coordination. |
+| Database | Neon project `shuffify-db` (`proud-dew-57305636`), branch `production` (`br-snowy-bird-ai3vjw7w`), database `neondb` | The API, its pre-deploy migration and the worker use the branch's direct (unpooled) endpoint. Schema head `e1f2a3b4c5d6`. |
 
-Railway builds the API and worker from `main` of `chrisrogers37/shuffify`.
+Railway builds the API and worker from `main` of `chrisrogers37/shuffify`. Both services receive `REDIS_URL` from the Redis service. The API, its pre-deploy migration and the worker each verify that Redis answers a ping and accepts a rate-limit counter write at startup. Failure blocks startup until writable Redis is available.
 
 The `production` environment's shared variables hold every value that
 `.railway/railway.ts` reads:
@@ -53,11 +53,14 @@ unsafe requests only from that origin.
 - **API and worker:** in Railway, redeploy each service's previous successful deployment, or revert the change on `main`.
   - The API refuses to start unless the schema is exactly at its own Alembic head.
   - A rollback across a migration therefore also needs the matching schema change.
-  - Releases before #62 use head `c9d0e1f2a3b4`. From #62 on they use `d0e1f2a3b4c5`, which drops v1's
-    `apscheduler_jobs` table. To roll back to a release before #62, first step the schema back. From a checkout of a
-    later release, with the repository's virtualenv active, run it with the API's variables:
-    `railway run --service api --environment production -- env FLASK_APP=run.py SCHEDULER_ENABLED=false SHUFFIFY_MIGRATION_STEP=1 flask db downgrade c9d0e1f2a3b4`.
-    That downgrade changes only the recorded revision.
+  - Releases before #62 use head `c9d0e1f2a3b4`. From #62 they use `d0e1f2a3b4c5`, which drops v1's
+    `apscheduler_jobs` table. From #143 on they use `e1f2a3b4c5d6`, which clears the session ids stored in login
+    history.
+  - To roll back to a release before #143, first step the schema back. From a checkout of a later release, with the
+    repository's virtualenv active, run it with the API's variables:
+    `railway run --service api --environment production -- env FLASK_APP=run.py SCHEDULER_ENABLED=false SHUFFIFY_MIGRATION_STEP=1 flask db downgrade d0e1f2a3b4c5`.
+    For a release before #62, downgrade to `c9d0e1f2a3b4` instead. Each of these downgrades changes only the recorded
+    revision.
 
 ### Recent data changes
 
@@ -87,7 +90,7 @@ This discards everything since 2026-10-17.
    psql "$(npx neonctl connection-string production --project-id proud-dew-57305636 --database-name neondb)" \
      -c "BEGIN; UPDATE users SET encrypted_refresh_token = NULL; UPDATE schedules SET is_enabled = false; COMMIT;"
    ```
-4. Redeploy the API. Its pre-deploy step upgrades the schema from `f7a8b9c0d1e2` to `d0e1f2a3b4c5`.
+4. Redeploy the API. Its pre-deploy step upgrades the schema from `f7a8b9c0d1e2` to `e1f2a3b4c5d6`.
 5. Redeploy the worker.
 6. Users sign in again with Spotify and re-enable their routines.
 

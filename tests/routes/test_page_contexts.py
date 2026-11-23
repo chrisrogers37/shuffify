@@ -9,6 +9,7 @@ from shuffify.models.playlist import Playlist
 from shuffify.services import PlaylistAccessError, PlaylistNotFoundError
 from shuffify.services.playlist_service import PlaylistService
 from shuffify.spotify.api import SpotifyAPI
+from tests.test_scheduler_registration import snapshot
 
 
 @pytest.fixture
@@ -114,18 +115,22 @@ def test_activity_preserves_metadata_and_limits_each_feed(auth_client, context_a
     assert len(response.json["executions"]) <= 20
 
 
-def test_routines_include_machine_state_and_playlist_refs(auth_client, context_api, db_app):
+def test_routines_include_machine_state_and_playlist_refs(auth_client, context_api, db_app, monkeypatch):
     context_api.get_user_playlists.return_value = [raw_playlist("target")]
     with db_app.app_context():
         user = User.query.filter_by(spotify_id="user123").one()
-        db.session.add(Schedule(user_id=user.id, job_type="shuffle", target_playlist_id="target",
-                                target_playlist_name="Example", algorithm_name="BasicShuffle",
-                                schedule_type="interval", schedule_value="daily", is_enabled=False))
+        active, paused = [Schedule(user_id=user.id, job_type="shuffle", target_playlist_id="target",
+                                   target_playlist_name="Example", algorithm_name="BasicShuffle",
+                                   schedule_type="interval", schedule_value="daily", is_enabled=enabled)
+                          for enabled in (True, False)]
+        db.session.add_all([active, paused])
         db.session.commit()
+        expected = {active.id: ("active", "Active"), paused.id: ("paused", "Paused")}
+        memory = snapshot(active)
+    monkeypatch.setattr("shuffify.services.worker_control.WorkerControlClient.registrations", lambda self, ids: memory)
     response = auth_client.get("/api/routines")
     assert response.status_code == 200
-    assert response.json["routines"][0]["state"] in {"active", "paused", "needs_attention"}
-    assert response.json["routines"][0]["state_label"]
+    assert {row["schedule_id"]: (row["state"], row["state_label"]) for row in response.json["routines"]} == expected
     assert response.json["playlists"] == [{"id": "target", "name": "target"}]
 
 

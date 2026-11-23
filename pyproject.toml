@@ -37,3 +37,10 @@ select = ["E", "W", "F", "I"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["shuffify"]
+
+[tool.uv.pip]
+# uv pip compile (scripts/lock.sh, and Dependabot's updates) only considers
+# files uploaded at least 7 days earlier. Keep to keys and values that
+# Dependabot's uv knows: with an unknown one, uv ignores all of [tool.uv] and
+# only logs a warning. See documentation/guides/python-dependencies.md.
+exclude-newer = "7 days"

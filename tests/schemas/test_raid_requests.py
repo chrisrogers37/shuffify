@@ -8,6 +8,7 @@ and RaidNowRequest Pydantic models.
 import pytest
 from pydantic import ValidationError
 
+from shuffify.enums import IntervalValue
 from shuffify.schemas.raid_requests import (
     AddRaidUrlRequest,
     RaidNowRequest,
@@ -121,10 +122,7 @@ class TestAddRaidUrlRequestValid:
         assert req.url is not None
 
     def test_valid_schedule_values(self):
-        for val in [
-            "daily", "weekly", "every_6h",
-            "every_12h", "every_3d",
-        ]:
+        for val in IntervalValue:
             req = AddRaidUrlRequest(
                 url=_VALID_PLAYLIST_URL,
                 schedule_value=val,
