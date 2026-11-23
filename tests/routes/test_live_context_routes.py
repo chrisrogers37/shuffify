@@ -477,11 +477,12 @@ def test_privacy_binding_in_the_query_is_malformed_never_legacy(auth_client, met
     assert metadata.reads == metadata.writes == []
 
 
-@pytest.mark.parametrize("body,kind", [({"kind": "undo"}, "undo"), ({"kind": "other"}, "live_context")])
-def test_unexpected_review_failure_reports_the_validated_kind(auth_client, api, body, kind):
-    with as_user(api), patch(
-        "shuffify.routes.playlists.LiveActionContextService.resolve", side_effect=RuntimeError("unavailable"),
-    ):
+@pytest.mark.parametrize("body,kind,failure_site", [
+    ({"kind": "undo"}, "undo", "LiveActionContextService.resolve_parsed"),
+    ({"kind": "other"}, "live_context", "parse_context_request"),
+])
+def test_unexpected_review_failure_reports_the_validated_kind(auth_client, api, body, kind, failure_site):
+    with as_user(api), patch(f"shuffify.routes.playlists.{failure_site}", side_effect=RuntimeError("unavailable")):
         response = post_context(auth_client, TARGET, body)
     assert response.status_code == 502
     operation = response.get_json()["operation"]
@@ -528,21 +529,13 @@ def test_check_of_exactly_10000_desired_uris_observes_the_entire_order(auth_clie
 
 
 @pytest.mark.parametrize("kind", ["raid", "raid_and_drip"])
-def test_collect_review_of_11_source_ids_is_invalid_request(auth_client, api, kind):
-    # Bound: at most 10 source_playlist_ids.
-    body = {"kind": kind, "source_playlist_ids": [f"source{i}" for i in range(11)]}
-    with as_user(api):
-        response = post_context(auth_client, TARGET, body)
-    assert response.status_code == 400
+@pytest.mark.parametrize("sources", [[f"source{i}" for i in range(11)], ["invalid-id"], [], None])
+def test_collect_review_rejects_invalid_explicit_sources_before_spotify(auth_client, api, kind, sources):
+    with as_user(api) as auth:
+        response = post_context(auth_client, TARGET, {"kind": kind, "source_playlist_ids": sources})
+    assert response.status_code == 400 and response.headers["Cache-Control"] == "no-store"
     operation = response.get_json()["operation"]
-    assert operation["error_code"] == "invalid_request"
-    assert api.reads == 0
-
-
-@pytest.mark.parametrize("kind", ["raid", "raid_and_drip"])
-def test_collect_review_of_10_source_ids_is_not_invalid_request(auth_client, api, kind):
-    # Bound: 10 source_playlist_ids is the last accepted size.
-    body = {"kind": kind, "source_playlist_ids": [f"source{i}" for i in range(10)]}
-    with as_user(api):
-        response = post_context(auth_client, TARGET, body)
-    assert response.get_json().get("operation", {}).get("error_code") != "invalid_request"
+    assert (operation["kind"], operation["error_code"]) == (kind, "invalid_request")
+    auth.assert_not_called()
+    assert api.reads == 0 and api.writes == []
+    assert JobExecution.query.count() == ActivityLog.query.count() == 0

@@ -20,11 +20,13 @@ from shuffify.routes.queue import enqueue_command
 from shuffify.services import PlaylistError, PlaylistService
 from shuffify.services.live_action_context_service import (
     INSPECTION_KINDS,
+    ContextRequestError,
     InspectRequestError,
     LiveActionContextService,
     context_kind,
     inspection_payload,
     inspection_rejected,
+    parse_context_request,
     parse_inspect_request,
 )
 from shuffify.services.live_metadata_service import LiveMetadataService
@@ -125,24 +127,35 @@ def toggle_visibility(
     return enqueue_command(user, "visibility", command.model_dump(mode="json"), lambda _storage: (command, None))
 
 
+def _live_context_body():
+    # Read outside the fallback so Flask still handles the request body's 413.
+    raw = request.get_json(silent=True)
+    try:
+        return parse_context_request(raw), None
+    except ContextRequestError as error:
+        return None, json_reply(error.reply())
+    except Exception:
+        logger.exception("Failed to parse a live action review")
+        return None, json_reply(context_unavailable(context_kind(raw)))
+
+
 @api_bp.route("/playlist/<playlist_id>/live-context", methods=["POST"])
 @no_store
-@require_auth_and_db(on_preflight_error=context_preflight())
-def live_context(playlist_id, api=None, user=None):
-    """Read-only review of one Library or Workshop live action; changes nothing."""
-    # Read first: an oversized body must reach the 413 handler, not the fallback below.
-    body = request.get_json(silent=True)
+@require_auth_and_db(on_preflight_error=context_preflight(), parse_body=_live_context_body)
+def live_context(playlist_id, api=None, user=None, body=None):
+    """Review one Library or Workshop live action."""
+    kind, data = body
     try:
         history = session
-        if isinstance(body, dict) and body.get("kind") == "undo":
+        if kind == "undo":
             history = HistoryStore().session_for(user.id, get_history_scope(session), [playlist_id],
                                                  legacy=session.get("playlist_states"))
-        reply = LiveActionContextService(api).resolve(playlist_id, user, history, body)
+        reply = LiveActionContextService(api).resolve_parsed(playlist_id, user, history, kind, data)
     except StateError as error:
-        reply = failure_rejected(context_kind(body), read_failure(error))
+        reply = failure_rejected(kind, read_failure(error))
     except Exception:
         logger.exception("Live action review unavailable for %s", playlist_id)
-        reply = context_unavailable(context_kind(body))
+        reply = context_unavailable(kind)
     return json_reply(reply)
 
 

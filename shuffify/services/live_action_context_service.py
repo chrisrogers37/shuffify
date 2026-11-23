@@ -81,6 +81,9 @@ class ContextRequestError(ValueError):
         super().__init__(message)
         self.kind, self.code, self.message = kind, code, message
 
+    def reply(self):
+        return context_rejected(self.code, 400, self.message, kind=self.kind)
+
 
 def parse_context_request(body):
     """The (kind, data) of one exact review request variant."""
@@ -163,7 +166,11 @@ class LiveActionContextService:
         try:
             kind, data = parse_context_request(body)
         except ContextRequestError as error:
-            return context_rejected(error.code, 400, error.message, kind=error.kind)
+            return error.reply()
+        return self.resolve_parsed(playlist_id, user, session, kind, data)
+
+    def resolve_parsed(self, playlist_id, user, session, kind, data):
+        """Resolve an already validated review request."""
         if kind in DIRECT_STEPS:
             return LiveExecutorContextService(self.api).direct(kind, playlist_id, user, data)
         if kind == "privacy":

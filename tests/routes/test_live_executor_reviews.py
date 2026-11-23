@@ -154,6 +154,19 @@ def unstarted_target(step, name="Fresh target"):
 # --- Workshop action reviews -------------------------------------------------
 
 
+@pytest.mark.parametrize("kind", ["raid", "raid_and_drip"])
+@pytest.mark.parametrize("explicit_sources", [False, True], ids=["omitted", "ten"])
+def test_collect_review_returns_all_explicit_sources(workshop, kind, explicit_sources):
+    sources = [f"source{i}" for i in range(10)] if explicit_sources else []
+    body = {"kind": kind, **({"source_playlist_ids": sources} if explicit_sources else {})}
+    response = post_context(workshop.client, "target", body)
+    assert response.status_code == 200 and response.headers["Cache-Control"] == "no-store"
+    context = response.get_json()["context"]
+    assert context["kind"] == kind
+    assert context["action"]["extras"] == context["current"]["extra_source_ids"] == sources
+    assert_nothing_ran(workshop.api)
+
+
 def test_collect_review_names_every_resource_without_reading_tracks(workshop):
     response = post_context(workshop.client, "target", {"kind": "raid", "source_playlist_ids": ["extra", "extra"]})
     assert response.status_code == 200
