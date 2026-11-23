@@ -1,13 +1,15 @@
 """Exercise interactive admission through the Flask routes and a private durable queue."""
 
 import time
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 import pytest
 
-from shuffify.models.db import JobExecution
+from shuffify.models.db import JobExecution, Schedule, User, db
 from shuffify.services import AuthService
 from shuffify.services.operations.repository import ACTIVE_STATES, OperationRepository
+from shuffify.services.scheduled_admission import admit_scheduled, build_cadence
 
 SHARED_IP = {"REMOTE_ADDR": "192.0.2.10"}
 OTHER_IP = {"REMOTE_ADDR": "198.51.100.20"}
@@ -98,6 +100,30 @@ def test_replay_identity_user_isolation_and_window_reset(full_budget, signed_in_
     assert same_user.post(SHUFFLE, environ_base=OTHER_IP).status_code == 202
     spotify_client.assert_not_called()
     assert not spotify_client.return_value.mock_calls
+
+
+def test_scheduled_fires_can_fill_capacity_while_the_interactive_window_is_exhausted(full_budget, spotify_client):
+    alice, _ = full_budget
+    with alice.application.app_context():
+        user = User.query.filter_by(spotify_id="alice").one()
+        due = datetime.now(timezone.utc)
+        repo = OperationRepository()
+        for i in range(5):
+            schedule = Schedule(user_id=user.id, job_type="shuffle", target_playlist_id=f"scheduled{i}",
+                                algorithm_name="BasicShuffle", schedule_type="interval", schedule_value="daily",
+                                timezone="UTC", created_at=due - timedelta(days=2))
+            db.session.add(schedule)
+            db.session.commit()
+            fire = admit_scheduled(repo, schedule.id, build_cadence(schedule).fingerprint, due)
+            assert fire.state == "admitted"
+
+    at_capacity = alice.post(SHUFFLE)
+    assert at_capacity.status_code == 429 and at_capacity.json["error_code"] == "outstanding_operation_limit"
+    assert "Retry-After" not in at_capacity.headers
+    with alice.application.app_context():
+        repo.finish(repo.claim(operation_id=fire.operation_id), "succeeded")
+    assert_limited(alice.post(SHUFFLE))
+    spotify_client.assert_not_called()
 
 
 def test_every_queue_route_obeys_the_exhausted_budget(full_budget, spotify_client):
