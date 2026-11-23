@@ -109,17 +109,17 @@ def test_restart_does_not_admit_a_slot_outside_grace(schedule, db_app, scheduler
 
 def test_latest_due_is_coalesced_without_changing_the_interval_phase(schedule, db_app, scheduler_clock):
     schedule.schedule_type = "cron"
-    schedule.schedule_value = "* * * * *"
+    schedule.schedule_value = f"{NOW.minute} * * * *"
     schedule.updated_at = schedule.created_at
     schedule.definition_changed_at = schedule.created_at
     db.session.commit()
-    scheduler_clock[0] = NOW + timedelta(minutes=5, seconds=23)
+    scheduler_clock[0] = NOW + timedelta(hours=1)
     repository = OperationRepository()
     admitted = Event()
     with runtime(db_app, repository, scheduler_clock, admitted=admitted) as replacement:
         assert replacement.ready.wait(2)
         rows = wait_for_fire(repository, admitted)
-        assert [row.scheduled_for for row in rows] == [NOW + timedelta(minutes=5)]
+        assert [row.scheduled_for for row in rows] == [NOW + timedelta(hours=1)]
 
 
 @pytest.mark.parametrize("floor_kind", ["created", "edited", "activation"])
@@ -282,3 +282,32 @@ def test_new_interval_anchor_is_phase_origin_and_first_period_can_recover(schedu
     with runtime(db_app, repository, scheduler_clock, admitted=admitted) as restarted:
         assert restarted.ready.wait(2)
         assert [row.scheduled_for for row in wait_for_fire(repository, admitted)] == [NOW + timedelta(days=1)]
+
+
+def test_subhour_legacy_cron_is_unregistered_and_a_stale_callback_skips(schedule, db_app, scheduler_clock):
+    schedule.schedule_type = "cron"
+    schedule.schedule_value = "*/10 * * * *"
+    db.session.commit()
+    repository = OperationRepository()
+    with runtime(db_app, repository, scheduler_clock) as worker:
+        assert worker.ready.wait(2)
+        assert worker.registration_snapshot([schedule.id])["registrations"][str(schedule.id)] is None
+        assert worker.metrics["invalid_schedules"] == 1
+        stale = admit_scheduled(repository, schedule.id, "previously-installed-cadence", NOW)
+        assert (stale.state, stale.code) == ("skipped", "invalid_schedule")
+        assert executions(repository) == []
+
+
+@pytest.mark.parametrize("before", [
+    datetime(2027, 4, 3, 14, 30, tzinfo=timezone.utc),   # first 01:30 before the half-hour fold
+    datetime(2027, 10, 2, 15, 0, tzinfo=timezone.utc),  # 01:30 before the half-hour jump
+])
+def test_hourly_cron_keeps_elapsed_minimum_across_fractional_dst_and_restart(schedule, before):
+    schedule.schedule_type, schedule.schedule_value = "cron", "30 * * * *"
+    schedule.timezone = "Australia/Lord_Howe"
+    trigger = build_cadence(schedule).trigger
+    first = trigger.get_next_fire_time(None, before)
+    assert first.astimezone(timezone.utc) == before
+    for previous in (first, None):
+        after = trigger.get_next_fire_time(previous, before + timedelta(seconds=1))
+        assert after.astimezone(timezone.utc) == before + timedelta(minutes=90)

@@ -9,10 +9,9 @@ operation and timing are shown in.
 import re
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from apscheduler.triggers.cron import CronTrigger
-
 from shuffify.enums import IntervalValue, JobType, ScheduleType
 from shuffify.services.live_review_bindings import fingerprint
+from shuffify.services.routine_policy import check_timing
 
 # Frequencies that support a time-of-day picker
 TIME_CAPABLE_FREQUENCIES = {"daily", "every_3d", "weekly"}
@@ -78,7 +77,7 @@ def normalize_timing(timing):
     if not isinstance(zone, str) or not zone:
         raise ValueError("timezone must be an IANA timezone")
     try:
-        tz = ZoneInfo(zone)
+        ZoneInfo(zone)
     except (ZoneInfoNotFoundError, ValueError) as error:
         raise ValueError("timezone must be an IANA timezone") from error
     kind = timing.get("kind")
@@ -107,11 +106,7 @@ def normalize_timing(timing):
         schedule_type = ScheduleType.CRON
     else:
         raise ValueError("invalid timing kind")
-    if schedule_type == ScheduleType.CRON:
-        try:
-            CronTrigger.from_crontab(value, timezone=tz)
-        except ValueError as error:
-            raise ValueError("invalid cron expression") from error
+    check_timing(schedule_type, value)
     return {"schedule_type": schedule_type, "schedule_value": value, "timezone": zone}
 
 

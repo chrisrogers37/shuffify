@@ -371,7 +371,7 @@ commit. Covered:
 | Workshop merge from another of her playlists | the merged order, with the source untouched |
 | Workshop, another user's playlist | the app answers in restricted mode: its name and a search, no tracks |
 | Raid: link a staging playlist, watch Bob's Finds, raid, keep two, dismiss one | the private `[Raids]` playlist, the staged and remaining tracks, a target with the kept ones, and a second raid, for as many as the source has, that takes exactly the tracks not yet seen |
-| A scheduled shuffle (cron, every minute) | the worker’s in-memory scheduler enqueues a durable routine operation and the worker reorders the playlist (up to two minutes); the test then deletes the schedule through the app |
+| A scheduled shuffle (hourly cron with its next slot due during the test) | the worker’s in-memory scheduler enqueues a durable routine operation and the worker reorders the playlist (up to two minutes); the test then deletes the schedule through the app |
 | A scheduled shuffle run while Spotify rate-limits its first write | the client waits out `Retry-After`, the playlist is reordered, and the run succeeds |
 | A scheduled shuffle whose second write batch Spotify refuses for quota | the run fails as `failed_rolled_back` and the playlist is exactly as it was, not cut to the first 100 tracks |
 

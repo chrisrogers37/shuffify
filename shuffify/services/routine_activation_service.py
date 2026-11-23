@@ -19,6 +19,7 @@ from shuffify.services.playlist_setup_service import (
     configuration_revision,
     read_state,
 )
+from shuffify.services.routine_policy import RoutinePolicyError, check_routine_write, check_timing
 from shuffify.services.schedule_utils import (
     DEFINITION_COLUMNS,
     normalize_timing,
@@ -256,6 +257,10 @@ def _normalize(api, user, target_id, supplied, existing, state, target_name):
             raise DefinitionError("definition.timing", str(error)) from error
     elif existing:
         timing_fields = {key: base[key] for key in ("schedule_type", "schedule_value", "timezone")}
+        try:
+            check_timing(base["schedule_type"], base["schedule_value"])
+        except RoutinePolicyError as error:
+            raise DefinitionError("definition.timing", str(error)) from error
     else:
         raise DefinitionError("definition.timing", "Choose when this routine should run.")
     return {
@@ -489,6 +494,8 @@ class RoutineActivationService:
         except SpotifyError:
             return _error("prerequisites_unavailable", 503, "Playlist settings could not be checked. Try again.")
         try:
+            check_routine_write(user.id, target_id, definition["schedule_type"], definition["schedule_value"],
+                                existing_id=schedule_id)
             schedule = existing or Schedule(user_id=user.id)
             for name, value in definition.items():
                 setattr(schedule, name, value)
@@ -517,6 +524,8 @@ class RoutineActivationService:
                 metadata={"schedule_id": schedule.id, "request_key": request["request_key"]}, commit=False,
             )
             db.session.commit()
+        except RoutinePolicyError as exc:
+            return _error(exc.code, exc.status, str(exc))
         except IntegrityError:
             db.session.rollback()
             winner = _receipt(user.id, request["request_key"])
@@ -560,6 +569,10 @@ class RoutineActivationService:
                         api, user, target_id, state, schedule.job_type,
                         extra_source_ids=schedule.source_playlist_ids or [], editable_cache={},
                     )
+                    check_routine_write(user.id, target_id, schedule.schedule_type, schedule.schedule_value,
+                                        existing_id=schedule_id)
+                except RoutinePolicyError as exc:
+                    return _error(exc.code, exc.status, str(exc))
                 except DefinitionError as exc:
                     return _error("invalid_definition", 422, str(exc), exc.path)
                 except SpotifyError:
