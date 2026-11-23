@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+from contextlib import nullcontext
 from typing import Optional
 from urllib.parse import unquote, urlsplit
 from uuid import uuid4
@@ -159,21 +160,22 @@ def _user_or_address_key():
     return f"user:{user_id}" if user_id else f"ip:{get_remote_address()}"
 
 
-# Each rate-limited endpoint, with its limit and the function that keys its
-# bucket; None keeps the limiter's per-user default, _user_or_address_key.
-# Traditional account lockout does not apply: this is an OAuth-only app —
-# users never enter credentials here. Per-IP rate limiting on /login and
-# /callback is the appropriate brute-force protection for OAuth flows, so
-# they keep the address key rather than the limiter's per-user default.
+def _signed_in_queue_request():
+    from shuffify.routes import is_authenticated
+
+    return bool((session.get("user_data") or {}).get("id")) and is_authenticated()
+
+
+# Per-address guards on public endpoints. The four queue routes historically
+# also throttled signed-out traffic. Signed-in submissions share a budget at
+# command capture so a route guard cannot intercept a replay or key conflict.
 RATE_LIMITS = {
-    "auth.login": ("10/minute", get_remote_address),
-    "auth.callback": ("10/minute", get_remote_address),
-    # Resource-intensive endpoints
-    "api.shuffle": ("5/minute", None),
-    "api.workshop_commit": ("10/minute", None),
-    "api.run_schedule_now": ("5/minute", None),
-    # Each call creates a playlist in the user's Spotify library.
-    "api.playlist_setup_create_playlist": ("10/minute", None),
+    "auth.login": ("10/minute", None),
+    "auth.callback": ("10/minute", None),
+    "api.shuffle": ("5/minute", _signed_in_queue_request),
+    "api.workshop_commit": ("10/minute", _signed_in_queue_request),
+    "api.run_schedule_now": ("5/minute", _signed_in_queue_request),
+    "api.playlist_setup_create_playlist": ("10/minute", _signed_in_queue_request),
 }
 
 
@@ -222,7 +224,7 @@ def _init_limiter(app, redis_client):
 
 
 def _apply_rate_limits(app, limiter):
-    """Wrap each endpoint in RATE_LIMITS in its limit.
+    """Bind the shared queue budget and the per-address route guards.
 
     An endpoint that is not registered, such as a renamed route, stops the
     boot rather than go without its limit.
@@ -230,12 +232,16 @@ def _apply_rate_limits(app, limiter):
     missing = [endpoint for endpoint in RATE_LIMITS if endpoint not in app.view_functions]
     if missing:
         raise RuntimeError(f"Rate-limited endpoints are not registered: {', '.join(missing)}")
+    app.extensions["interactive_queue_limit"] = (
+        limiter.shared_limit("10/minute", scope="interactive-queue") if limiter is not None else nullcontext()
+    )
     if limiter is None:
         return
-    for endpoint, (limit, key_func) in RATE_LIMITS.items():
-        app.view_functions[endpoint] = limiter.limit(limit, key_func=key_func)(app.view_functions[endpoint])
+    for endpoint, (limit, exempt_when) in RATE_LIMITS.items():
+        guard = limiter.limit(limit, key_func=get_remote_address, exempt_when=exempt_when)
+        app.view_functions[endpoint] = guard(app.view_functions[endpoint])
     logger.info(
-        "Rate limits applied: %s",
+        "Per-address route guards: %s",
         ", ".join(f"{endpoint}={limit}" for endpoint, (limit, _) in RATE_LIMITS.items()),
     )
 

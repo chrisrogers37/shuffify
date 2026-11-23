@@ -5,9 +5,7 @@ from unittest.mock import call, create_autospec, patch
 
 import pytest
 
-from config import TestConfig
-from shuffify import create_app
-from shuffify.services import AuthService, UserService
+from shuffify.services import AuthService
 from shuffify.spotify.api import SpotifyAPI
 
 PATHS = ("/api/library", "/api/user-playlists")
@@ -15,30 +13,11 @@ SHARED_IP = {"REMOTE_ADDR": "192.0.2.10"}
 OTHER_IP = {"REMOTE_ADDR": "198.51.100.20"}
 
 
-@pytest.fixture
-def refresh_app(monkeypatch, tmp_path):
-    monkeypatch.setenv("SPOTIFY_CLIENT_ID", "test_id")
-    monkeypatch.setenv("SPOTIFY_CLIENT_SECRET", "test_secret")
-    monkeypatch.setattr(TestConfig, "REDIS_URL", None)
-    monkeypatch.chdir(tmp_path)
-    return create_app("testing")
-
-
-def sign_in(app, user_id, token):
-    profile = {"id": user_id, "display_name": user_id}
-    with app.app_context():
-        UserService.upsert_from_spotify(profile)
-    client = app.test_client()
-    with client.session_transaction() as session:
-        session.update(user_data=profile, spotify_token=token)
-    return client
-
-
 @pytest.mark.parametrize("first_pair_method", ["GET", "HEAD"])
-def test_shared_refresh_budget(refresh_app, sample_token, first_pair_method):
-    alice = sign_in(refresh_app, "alice", sample_token)
-    alice_second_session = sign_in(refresh_app, "alice", sample_token)
-    bob = sign_in(refresh_app, "bob", sample_token)
+def test_shared_refresh_budget(signed_in_limiter_client, first_pair_method):
+    alice = signed_in_limiter_client("alice")
+    alice_second_session = signed_in_limiter_client("alice")
+    bob = signed_in_limiter_client("bob")
     spotify = create_autospec(SpotifyAPI, instance=True)
     spotify.get_user_playlists.return_value = []
     start = time.time()
@@ -85,8 +64,8 @@ def test_shared_refresh_budget(refresh_app, sample_token, first_pair_method):
 
 
 @pytest.mark.parametrize("profile_only", [False, True])
-def test_signed_out_refresh_keeps_auth_response(refresh_app, profile_only):
-    client = refresh_app.test_client()
+def test_signed_out_refresh_keeps_auth_response(limiter_app, profile_only):
+    client = limiter_app.test_client()
     if profile_only:
         with client.session_transaction() as session:
             session["user_data"] = {"id": "alice"}

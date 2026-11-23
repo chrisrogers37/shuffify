@@ -54,6 +54,14 @@ def test_every_admitted_kind_has_a_worker_handler():
     assert admitted - COMMAND_HANDLERS.keys() == set()
 
 
+def test_only_interactive_and_scheduled_admission_call_enqueue():
+    # A new route or service calling the repository directly would bypass
+    # the shared HTTP limit in enqueue_command. Scheduled fires are exempt.
+    assert {definition for definition, name, _ in _admissions() if name == "enqueue"} == {
+        "enqueue_command", "admit_scheduled",
+    }
+
+
 def test_the_direct_routine_maps_name_the_same_kinds():
     # Admission, capture and the worker read a direct kind's command from
     # DIRECT_MODELS, and its review reads its steps from DIRECT_STEPS.

@@ -6,6 +6,21 @@ target set while queued, running, or compensating. Admission checks the request
 key before target conflicts: an identical request returns its accepted identity;
 reusing a key for a different command is a conflict.
 
+All interactive queue routes share a fixed window of **10 new submissions per
+minute per signed-in Spotify user**. A Workshop save can submit a target
+commit followed by several source cleanup tasks. Ten leaves room for that
+sequence and a second edit within the minute. Admission first resolves the
+idempotency key and checks the five-outstanding-operation cap. It then charges
+the Redis-backed budget before capturing the command, so a new attempt that
+fails capture or finds a busy target still counts.
+
+An exhausted window returns HTTP 429 with `rate_limited` and a `Retry-After`
+in seconds when Redis supplies the reset time. At five outstanding operations
+the response is `outstanding_operation_limit` and the user can retry when an
+operation finishes. Exact replays return the original operation, and reusing
+a key for different intent returns HTTP 409. Scheduled fires, worker retries,
+status polls and inspect-only finalizer requests spend no interactive budget.
+
 The repository owns short database transactions. PostgreSQL row locks with
 `SKIP LOCKED` coordinate claims, and each claim receives a fresh random lease
 owner token. Checkpoints, renewals, and completion require that unexpired token.

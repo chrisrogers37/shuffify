@@ -2,10 +2,9 @@
 Tests for rate limiting.
 
 Verifies that /login and /callback are rate-limited per address to
-prevent abuse of the OAuth flow, that the other limits key by the
-signed-in user, or by the address when no one is signed in, that every
-limit is in place once the app is built, and that a 429 says when its
-limit resets.
+prevent abuse of the OAuth flow, that signed-out queue guards key by
+address, and that a 429 says when its limit resets. Signed-in queue
+submissions are exercised through real admission in the route tests.
 """
 
 import time
@@ -17,7 +16,6 @@ from flask import abort
 from flask_limiter.util import get_qualified_name, get_remote_address
 
 import shuffify
-from shuffify import _user_or_address_key
 
 
 @pytest.fixture
@@ -209,7 +207,7 @@ class TestRetryAfter:
 SHARED_ADDRESS = "192.0.2.10"
 OTHER_ADDRESS = "198.51.100.20"
 SHUFFLE = "/api/shuffle/examplePlaylist"
-SIGNED_IN_LIMITS = [
+SIGNED_OUT_QUEUE_GUARDS = [
     SHUFFLE,
     "/api/workshop/examplePlaylist/commit",
     "/api/schedules/1/run",
@@ -217,8 +215,8 @@ SIGNED_IN_LIMITS = [
 ]
 
 
-def _signed_in(app, user_id, display_name=None):
-    """A client signed in as ``user_id``, shown as ``display_name`` (by default the id)."""
+def _signed_in(app, user_id):
+    """A client with a session for the given Spotify user."""
     client = app.test_client()
     with client.session_transaction() as sess:
         sess["spotify_token"] = {
@@ -228,7 +226,7 @@ def _signed_in(app, user_id, display_name=None):
             "expires_at": time.time() + 3600,
             "refresh_token": "test_refresh",
         }
-        sess["user_data"] = {"id": user_id, "display_name": display_name or user_id}
+        sess["user_data"] = {"id": user_id, "display_name": user_id}
     return client
 
 
@@ -245,23 +243,7 @@ def _allowed_before_429(client, method, path, address, headers=None, cap=50):
 
 
 class TestRateLimitKeys:
-    """Which bucket a request lands in.
-
-    Signed-in limits key by the session's user; /login, /callback and
-    signed-out requests key by address.
-    """
-
-    @pytest.mark.parametrize("path", SIGNED_IN_LIMITS)
-    def test_two_signed_in_users_behind_one_address_do_not_share_a_bucket(self, app, path):
-        alice, bob = _signed_in(app, "alice"), _signed_in(app, "bob")
-        allowed = _allowed_before_429(alice, "POST", path, SHARED_ADDRESS)
-        assert allowed > 0
-        assert _allowed_before_429(bob, "POST", path, SHARED_ADDRESS) == allowed
-
-    def test_one_user_who_changes_address_still_shares_one_bucket(self, app):
-        alice = _signed_in(app, "alice")
-        _allowed_before_429(alice, "POST", SHUFFLE, SHARED_ADDRESS)
-        assert _status(alice, "POST", SHUFFLE, OTHER_ADDRESS) == 429
+    """OAuth and signed-out queue guards remain per address."""
 
     @pytest.mark.parametrize("path", ["/login", "/callback"])
     def test_sign_in_routes_stay_per_address(self, app, path):
@@ -270,11 +252,12 @@ class TestRateLimitKeys:
         assert _status(bob, "GET", path, SHARED_ADDRESS) == 429
         assert _status(bob, "GET", path, OTHER_ADDRESS) != 429
 
-    def test_a_signed_out_request_falls_back_to_the_address(self, app):
+    @pytest.mark.parametrize("path", SIGNED_OUT_QUEUE_GUARDS)
+    def test_a_signed_out_request_falls_back_to_the_address(self, app, path):
         first, second = app.test_client(), app.test_client()
-        allowed = _allowed_before_429(first, "POST", SHUFFLE, SHARED_ADDRESS)
-        assert _status(second, "POST", SHUFFLE, SHARED_ADDRESS) == 429
-        assert _allowed_before_429(second, "POST", SHUFFLE, OTHER_ADDRESS) == allowed
+        allowed = _allowed_before_429(first, "POST", path, SHARED_ADDRESS)
+        assert _status(second, "POST", path, SHARED_ADDRESS) == 429
+        assert _allowed_before_429(second, "POST", path, OTHER_ADDRESS) == allowed
 
     @pytest.mark.parametrize("forwarded", ["user:alice", "alice"])
     def test_a_signed_out_request_never_counts_against_a_signed_in_user(self, app, forwarded):
@@ -282,21 +265,16 @@ class TestRateLimitKeys:
         _allowed_before_429(stranger, "POST", SHUFFLE, SHARED_ADDRESS, headers={"X-Forwarded-For": forwarded})
         assert _status(alice, "POST", SHUFFLE, OTHER_ADDRESS) != 429
 
-    def test_users_who_share_a_display_name_do_not_share_a_bucket(self, app):
-        alice, bob = _signed_in(app, "alice", "Sam"), _signed_in(app, "bob", "Sam")
-        _allowed_before_429(alice, "POST", SHUFFLE, SHARED_ADDRESS)
-        assert _status(bob, "POST", SHUFFLE, SHARED_ADDRESS) != 429
-
 
 # Each limited endpoint, with its limit and the function that keys its bucket,
 # written out here rather than read from shuffify.RATE_LIMITS.
 LIMITED_ENDPOINTS = {
     "auth.login": ("10 per 1 minute", get_remote_address),
     "auth.callback": ("10 per 1 minute", get_remote_address),
-    "api.shuffle": ("5 per 1 minute", _user_or_address_key),
-    "api.workshop_commit": ("10 per 1 minute", _user_or_address_key),
-    "api.run_schedule_now": ("5 per 1 minute", _user_or_address_key),
-    "api.playlist_setup_create_playlist": ("10 per 1 minute", _user_or_address_key),
+    "api.shuffle": ("5 per 1 minute", get_remote_address),
+    "api.workshop_commit": ("10 per 1 minute", get_remote_address),
+    "api.run_schedule_now": ("5 per 1 minute", get_remote_address),
+    "api.playlist_setup_create_playlist": ("10 per 1 minute", get_remote_address),
 }
 
 
