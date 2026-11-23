@@ -12,8 +12,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, event, func, or_, select, text
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, case, event, func, or_, select, text
+from sqlalchemy.orm import Session, aliased
 
 from shuffify.models.db import JobExecution, db
 from shuffify.services.execution_result_service import serialize_execution_detail
@@ -375,6 +375,18 @@ class OperationRepository:
                 JobExecution.lease_expires_at.is_not(None),
             )))
 
+    @staticmethod
+    def _waiting_since():
+        """A ready row waits from its queue timestamp or its owner's later turn."""
+        previous = aliased(JobExecution)
+        latest = select(func.max(previous.last_claimed_at)).where(previous.last_claimed_at > JobExecution.started_at)
+        # Keep each lookup a range in the (user_id, last_claimed_at) index, including ownerless work.
+        last_turn = case(
+            (JobExecution.user_id.is_(None), latest.where(previous.user_id.is_(None)).scalar_subquery()),
+            else_=latest.where(previous.user_id == JobExecution.user_id).scalar_subquery(),
+        )
+        return func.coalesce(last_turn, JobExecution.started_at)
+
     def claim(self, *, operation_id=None, lease_seconds=None):
         """Atomically claim queued work or recover an expired execution with a fresh fence token."""
         duration = self.lease_seconds if lease_seconds is None else _positive_seconds(lease_seconds)
@@ -385,15 +397,17 @@ class OperationRepository:
                                                          JobExecution.lease_expires_at <= now)),
                 and_(JobExecution.state.in_(LEASED_STATES), JobExecution.lease_expires_at <= now),
             )
-            statement = select(JobExecution).where(JobExecution.kind.is_not(None), ready).order_by(
-                JobExecution.started_at, JobExecution.id
-            ).limit(1).with_for_update(skip_locked=True)
+            statement = select(JobExecution).where(JobExecution.kind.is_not(None), ready)
             if operation_id is not None:
                 statement = statement.where(JobExecution.id == operation_id)
-            row = session.scalar(statement)
+            else:
+                statement = statement.order_by(self._waiting_since(), JobExecution.started_at, JobExecution.id)
+            row = session.scalar(statement.limit(1).with_for_update(skip_locked=True))
             if row is None:
                 return None
             now = self._now(session)
+            if operation_id is None:
+                row.last_claimed_at = now
             recovering = row.state in LEASED_STATES
             owner = secrets.token_urlsafe(32)
             if not recovering:

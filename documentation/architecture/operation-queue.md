@@ -21,6 +21,21 @@ operation finishes. Exact replays return the original operation, and reusing
 a key for different intent returns HTTP 409. Scheduled fires, worker retries,
 status polls and inspect-only finalizer requests spend no interactive budget.
 
+The worker drains interactive operations and scheduled fires through the same
+untargeted claim. Each ready row waits from its queue timestamp (`started_at`)
+or its owner's most recent untargeted claim, whichever is later. The longest
+wait wins. Ties go to the oldest `started_at`, then the lowest operation ID.
+For example, when Alice queues five operations and Bob queues one, Alice gets
+the first turn and Bob gets the second. Alice's remaining operations keep their
+order. Deferred rows join the competition only when their retry deadline arrives.
+
+The selected row records `last_claimed_at` in the lease transaction. An index
+on owner and claim time preserves turn history across worker restarts. Existing
+rows begin with no recorded turn, and ownerless commands share one turn group.
+A targeted claim checks only the requested row and leaves turn history alone.
+Concurrent PostgreSQL claimers rank the committed turns visible to them and
+skip locked operations, so simultaneous grants can go to the same owner.
+
 The repository owns short database transactions. PostgreSQL row locks with
 `SKIP LOCKED` coordinate claims, and each claim receives a fresh random lease
 owner token. Checkpoints, renewals, and completion require that unexpired token.

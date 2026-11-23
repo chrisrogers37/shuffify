@@ -194,6 +194,35 @@ def test_legacy_rows_and_future_deferred_rows_are_not_claimed(repository):
         repository.renew(lease)
 
 
+@pytest.mark.parametrize("owner", [1, None], ids=["user", "ownerless"])
+def test_only_untargeted_claims_spend_a_turn_and_the_turn_survives_restart(repository, owner):
+    first, second, third = [
+        repository.enqueue(kind="example", user_id=owner, targets=[name], payload={})
+        for name in ("first", "second", "third")
+    ]
+    other = repository.enqueue(kind="example", user_id=2, targets=["other"], payload={})
+    targeted = repository.claim(operation_id=third.id)
+    assert targeted.operation_id == third.id
+    repository.finish(targeted, "succeeded")
+    assert repository.claim().operation_id == first.id
+    restarted = OperationRepository(repository.engine)
+    assert restarted.claim().operation_id == other.id
+    assert restarted.claim().operation_id == second.id
+
+
+def test_deferred_owner_waits_for_the_deadline_while_other_ready_work_runs(repository, monkeypatch):
+    delayed = enqueue(repository)
+    lease = repository.claim(operation_id=delayed.id)
+    deadline = repository.defer(lease, delay_seconds=60).lease_expires_at
+    other = repository.enqueue(kind="example", user_id=2, targets=["other"], payload={})
+    monkeypatch.setattr(repository, "_now", lambda session: deadline - timedelta(microseconds=1))
+    assert repository.claim(operation_id=delayed.id) is None
+    assert repository.claim().operation_id == other.id
+    assert repository.claim() is None
+    monkeypatch.setattr(repository, "_now", lambda session: deadline)
+    assert repository.claim().operation_id == delayed.id
+
+
 def test_recovery_uses_a_fresh_token_and_fences_every_old_write(repository):
     operation = enqueue(repository)
     first = repository.claim()
@@ -450,6 +479,32 @@ def test_postgres_skip_locked_claim_and_fencing(postgres_repository):
     with pytest.raises(LeaseLost):
         repository.finish(claimed_first, "succeeded")
     assert repository.finish(recovered, "succeeded").state == "succeeded"
+
+
+@pytest.mark.integration
+def test_postgres_second_claimer_can_finish_before_the_first_claim_commits(postgres_repository):
+    repository = postgres_repository
+    first = enqueue(repository)
+    second = enqueue(repository, target="other", key="other")
+    staged, release = Event(), Event()
+
+    def hold_first_commit(connection):
+        if not staged.is_set():
+            staged.set()
+            assert release.wait(10)
+
+    event.listen(repository.engine, "commit", hold_first_commit)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            pending = pool.submit(repository.claim)
+            try:
+                assert staged.wait(5)
+                assert pool.submit(repository.claim).result(timeout=5).operation_id == second.id
+            finally:
+                release.set()
+            assert pending.result(timeout=5).operation_id == first.id
+    finally:
+        event.remove(repository.engine, "commit", hold_first_commit)
 
 
 @pytest.mark.integration
