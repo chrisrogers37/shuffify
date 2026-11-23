@@ -21,6 +21,7 @@ from pydantic import (
     model_validator,
 )
 
+from shuffify.schemas.requests import JSONSizeLimit
 from shuffify.schemas.workshop_finalize_requests import PlaylistID
 from shuffify.services.live_review_bindings import DIGEST
 
@@ -211,10 +212,11 @@ class SetupSaveRequest(SetupImpactRequest):
     """``PUT /playlist/<id>/setup/settings``: the reviewed changes and their signed acknowledgment.
 
     The acknowledgment's shape is checked by ``signed_digest.verify``, so a
-    malformed token is refused as an invalid acknowledgment, not a bad body.
+    malformed token is refused as an invalid acknowledgment, not a bad body;
+    only its size is checked here.
     """
 
-    acknowledgment: Any
+    acknowledgment: Annotated[Any, JSONSizeLimit]
 
 
 class CreateSetupPlaylistRequest(_Strict):

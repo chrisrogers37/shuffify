@@ -1,5 +1,7 @@
 """Unarchive admission binds local owned pair/history without authenticating Spotify."""
 
+from unittest.mock import patch
+
 import pytest
 
 from shuffify.models.db import ActivityLog, JobExecution, PlaylistPair, User, db
@@ -97,3 +99,23 @@ def test_broken_history_for_either_resource_refuses_locally(auth_client, paired,
     assert response.status_code == 409
     assert response.json["error_code"] == "history_unavailable"
     assert JobExecution.query.count() == 0
+
+
+def test_unarchive_over_spotify_playlist_limit_never_enqueues(auth_client, paired, no_spotify):
+    uris = [f"spotify:track:{i:022d}" for i in range(10_001)]
+    with patch("shuffify.routes.playlist_pairs.enqueue_command") as enqueue:
+        response = auth_client.post("/api/playlist/target/pair/unarchive", json={"track_uris": uris})
+    assert response.status_code == 400
+    assert response.json["success"] is False
+    assert response.json["category"] == "error"
+    assert response.json["error_code"] == "invalid_request"
+    assert response.json["message"].startswith("Validation error:")
+    enqueue.assert_not_called()
+    assert JobExecution.query.count() == 0
+
+
+def test_unarchive_accepts_spotify_playlist_limit(auth_client, paired, no_spotify):
+    uris = [f"spotify:track:{i:022d}" for i in range(10_000)]
+    response = auth_client.post("/api/playlist/target/pair/unarchive", json={"track_uris": uris})
+    assert response.status_code == 202
+    assert JobExecution.query.one().payload["command"]["track_uris"] == uris

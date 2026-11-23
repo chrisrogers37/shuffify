@@ -477,11 +477,12 @@ def test_privacy_binding_in_the_query_is_malformed_never_legacy(auth_client, met
     assert metadata.reads == metadata.writes == []
 
 
-@pytest.mark.parametrize("body,kind", [({"kind": "undo"}, "undo"), ({"kind": "other"}, "live_context")])
-def test_unexpected_review_failure_reports_the_validated_kind(auth_client, api, body, kind):
-    with as_user(api), patch(
-        "shuffify.routes.playlists.LiveActionContextService.resolve", side_effect=RuntimeError("unavailable"),
-    ):
+@pytest.mark.parametrize("body,kind,failure_site", [
+    ({"kind": "undo"}, "undo", "LiveActionContextService.resolve_parsed"),
+    ({"kind": "other"}, "live_context", "parse_context_request"),
+])
+def test_unexpected_review_failure_reports_the_validated_kind(auth_client, api, body, kind, failure_site):
+    with as_user(api), patch(f"shuffify.routes.playlists.{failure_site}", side_effect=RuntimeError("unavailable")):
         response = post_context(auth_client, TARGET, body)
     assert response.status_code == 502
     operation = response.get_json()["operation"]
@@ -489,3 +490,52 @@ def test_unexpected_review_failure_reports_the_validated_kind(auth_client, api, 
         kind, "preflight_failed", "partial"
     )
     assert api.writes == []
+
+
+# --- Input bounds -----------------------------------------------------------
+
+
+def test_check_of_over_10000_desired_uris_is_refused(auth_client, api):
+    body = {"kind": "tracks", "desired_track_uris": [uri(i) for i in range(10_001)]}
+    with as_user(api) as auth:
+        response = inspect(auth_client, body)
+
+    assert response.status_code == 400
+    data = response.get_json()
+    assert data["success"] is False
+    operation = data["operation"]
+    assert operation["kind"] == "track_inspection"
+    assert operation["error_code"] == "invalid_request"
+    assert operation["resources"] == operation["bookkeeping"] == []
+    auth.assert_not_called()
+    assert api.reads == 0
+    assert api.writes == []
+
+
+def test_check_of_exactly_10000_desired_uris_observes_the_entire_order(auth_client):
+    desired = [uri(i) for i in range(10_000)]
+    api = CountingSpotify(SimpleNamespace(spotify_id="user123"), playlist123=desired)
+    with as_user(api):
+        response = inspect(auth_client, {"kind": "tracks", "desired_track_uris": desired})
+
+    assert response.status_code == 200
+    operation = response.get_json()["operation"]
+    assert operation["aggregate_status"] == "complete"
+    entry = operation["resources"][0]
+    assert entry["verification"] == "ordered"
+    assert entry["current_track_uris"] == entry["desired_track_uris"] == desired
+    assert api.reads > 0
+    assert api.writes == []
+
+
+@pytest.mark.parametrize("kind", ["raid", "raid_and_drip"])
+@pytest.mark.parametrize("sources", [[f"source{i}" for i in range(11)], ["invalid-id"], [], None])
+def test_collect_review_rejects_invalid_explicit_sources_before_spotify(auth_client, api, kind, sources):
+    with as_user(api) as auth:
+        response = post_context(auth_client, TARGET, {"kind": kind, "source_playlist_ids": sources})
+    assert response.status_code == 400 and response.headers["Cache-Control"] == "no-store"
+    operation = response.get_json()["operation"]
+    assert (operation["kind"], operation["error_code"]) == (kind, "invalid_request")
+    auth.assert_not_called()
+    assert api.reads == 0 and api.writes == []
+    assert JobExecution.query.count() == ActivityLog.query.count() == 0

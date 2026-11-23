@@ -8,7 +8,7 @@ from shuffle, rotation, and drag-and-drop displacement.
 
 import logging
 
-from flask import jsonify
+from flask import jsonify, request
 
 from shuffify.enums import ActivityType
 from shuffify.routes import (
@@ -128,26 +128,24 @@ def toggle_track_lock(
         )
 
 
+def _bulk_unlock_body():
+    data = request.get_json(silent=True) or {}
+    try:
+        return TrackLockBulkUnlockRequest(**data), None
+    except Exception:
+        return None, json_error("Invalid request.", 400)
+
+
 @api_bp.route(
     "/workshop/<playlist_id>/locks/unlock-all",
     methods=["POST"],
 )
-@require_auth_and_db
-def unlock_all_tracks(
-    playlist_id, api=None, user=None
-):
+@require_auth_and_db(parse_body=_bulk_unlock_body)
+def unlock_all_tracks(playlist_id, api=None, user=None, body=None):
     """Unlock all (or specific) tracks in a playlist."""
-    from flask import request as flask_request
-    data = flask_request.get_json(silent=True) or {}
-
-    try:
-        req = TrackLockBulkUnlockRequest(**data)
-    except Exception:
-        return json_error("Invalid request.", 400)
-
     try:
         count = TrackLockService.bulk_unlock(
-            user.id, playlist_id, req.track_uris
+            user.id, playlist_id, body.track_uris
         )
 
         log_activity(

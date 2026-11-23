@@ -125,7 +125,7 @@ def validate_json(schema_class):
         )
 
 
-def require_auth_and_db(f=None, *, on_preflight_error=None):
+def require_auth_and_db(f=None, *, on_preflight_error=None, parse_body=None):
     """
     Decorator that enforces authentication and database availability.
 
@@ -133,6 +133,10 @@ def require_auth_and_db(f=None, *, on_preflight_error=None):
     1. require_auth() -- returns 401 if not authenticated
     2. is_db_available() -- returns 503 if DB is down
     3. get_db_user() -- returns 401 if user not found in DB
+
+    An optional ``parse_body`` returns (body, error response). Check it for a
+    signed-in session before constructing the client, which may refresh a
+    Spotify token over the network. Pass the accepted body to the view.
 
     Injects ``api`` (SpotifyAPI) and ``user`` (User model)
     as keyword arguments to the wrapped function.
@@ -150,12 +154,20 @@ def require_auth_and_db(f=None, *, on_preflight_error=None):
     """
     if f is None:
         return functools.partial(
-            require_auth_and_db, on_preflight_error=on_preflight_error
+            require_auth_and_db, on_preflight_error=on_preflight_error, parse_body=parse_body
         )
     preflight_error = on_preflight_error or json_error
 
     @functools.wraps(f)
     def decorated_function(*args, **kwargs):
+        if parse_body is not None:
+            if not AuthService.validate_session_token(session.get("spotify_token")):
+                return preflight_error("Please log in first.", 401)
+            body, error = parse_body()
+            if error is not None:
+                return error
+            kwargs["body"] = body
+
         api = require_auth()
         if not api:
             return preflight_error("Please log in first.", 401)

@@ -573,3 +573,38 @@ def test_owned_playlists_include_hidden_ones_and_refresh_skips_the_cache(auth_cl
 
 
 # --- The page -----------------------------------------------------------------------------------
+
+
+def test_an_acknowledgment_over_16384_bytes_is_a_validation_error(auth_client, api):
+    # Bound: 16,384 bytes of compact JSON; this acknowledgment is 16,385.
+    _, body = reviewed_body(auth_client, api, [{"op": "add_search_source", "search_query": "lofi"}])
+    with (
+        patch("shuffify.routes.require_auth", autospec=True) as spotify,
+        patch.object(setup.PlaylistSetupService, "save", autospec=True) as save,
+    ):
+        response = auth_client.put(SETTINGS, json={**body, "acknowledgment": {"k": "x" * (16_385 - 8)}})
+    spotify.assert_not_called()
+    save.assert_not_called()
+    reply = response.get_json()
+    assert response.status_code == 400 and reply["error_code"] == "invalid_request"
+    assert "acknowledgment" in reply["message"] and "16,384 bytes" in reply["message"]
+    assert UpstreamSource.query.count() == 0 and ActivityLog.query.count() == 0
+
+
+def test_an_acknowledgment_of_exactly_16384_bytes_reaches_the_acknowledgment_check(auth_client, api):
+    # Bound: 16,384 bytes of compact JSON is the last accepted size.
+    _, body = reviewed_body(auth_client, api, [{"op": "add_search_source", "search_query": "lofi"}])
+    response = put_settings(auth_client, api, {**body, "acknowledgment": {"k": "x" * (16_384 - 8)}})
+    reply = response.get_json()
+    assert (response.status_code, reply["error_code"]) == (409, "acknowledgment_invalid")
+    assert UpstreamSource.query.count() == 0 and ActivityLog.query.count() == 0
+
+
+def test_missing_and_empty_acknowledgment_keep_their_distinct_responses(auth_client, api):
+    _, body = reviewed_body(auth_client, api, [{"op": "add_search_source", "search_query": "lofi"}])
+    body.pop("acknowledgment")
+    missing = put_settings(auth_client, api, body)
+    assert (missing.status_code, missing.json["error_code"]) == (400, "invalid_request")
+    empty = put_settings(auth_client, api, {**body, "acknowledgment": {}})
+    assert (empty.status_code, empty.json["error_code"]) == (409, "acknowledgment_invalid")
+    assert UpstreamSource.query.count() == 0 and ActivityLog.query.count() == 0

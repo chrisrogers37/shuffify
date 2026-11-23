@@ -9,6 +9,7 @@ from typing import Annotated
 from pydantic import BaseModel, Field, StrictBool, StringConstraints
 
 from shuffify.schemas.requests import TRACK_URI_RE
+from shuffify.spotify.api import MAX_PLAYLIST_TRACKS
 
 TrackURI = Annotated[str, StringConstraints(strict=True, pattern=TRACK_URI_RE.pattern)]
 PlaylistID = Annotated[
@@ -21,18 +22,18 @@ PlaylistID = Annotated[
 
 class SourceFinalizeRequest(BaseModel):
     source_playlist_id: PlaylistID
-    target_track_uris: list[TrackURI]
+    target_track_uris: list[TrackURI] = Field(max_length=MAX_PLAYLIST_TRACKS)
     inspect_only: StrictBool = False
 
 
 class FinalizeRaidRequest(SourceFinalizeRequest):
     source_playlist_id: PlaylistID | None
-    track_ids: list[Annotated[int, Field(strict=True, gt=0)]] = Field(min_length=1)
+    track_ids: list[Annotated[int, Field(strict=True, gt=0)]] = Field(min_length=1, max_length=MAX_PLAYLIST_TRACKS)
 
 
 class FinalizeRestoreRequest(SourceFinalizeRequest):
-    track_uris: list[TrackURI] = Field(min_length=1)
+    track_uris: list[TrackURI] = Field(min_length=1, max_length=MAX_PLAYLIST_TRACKS)
 
 
 class FinalizeArchiveRequest(FinalizeRestoreRequest):
-    baseline_track_uris: list[TrackURI]
+    baseline_track_uris: list[TrackURI] = Field(max_length=MAX_PLAYLIST_TRACKS)

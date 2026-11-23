@@ -69,7 +69,7 @@ def test_review_csrf_failure_changes_and_claims_nothing(csrf_client, csrf_header
         csrf_client, api_path("/playlist/untrusted-target/live-context"), {"kind": "undo"}, csrf_headers(token_state), (
             "shuffify.routes.require_auth",
             "shuffify.routes.get_db_user",
-            "shuffify.services.live_action_context_service.LiveActionContextService.resolve",
+            "shuffify.services.live_action_context_service.LiveActionContextService.resolve_parsed",
         ),
     )
     assert response.status_code == 400

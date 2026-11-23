@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from shuffify.models.db import ActivityLog, JobExecution, PlaylistPair, db
 from shuffify.services.operations.commands.archive_move import capture_unarchive
+from shuffify.services.operations.commands.direct import undo
 from shuffify.services.operations.history import HistoryStore
 from shuffify.worker import OperationWorker
 from tests.services.operations.test_crash_recovery import Crash, uri
@@ -23,10 +24,10 @@ def move(routine):  # noqa: F811
     routine.world.playlists["archive"]["track_uris"] = [uri(6), uri(1), uri(1)]
     routine.scope = "archive_move_scope_" + "a" * 32
 
-    def enqueue(values=(1, 1, 7)):
+    def enqueue(values=(1, 1, 7), *, legacy=None):
         with Session(db.engine) as storage:
             command = capture_unarchive(storage, routine.user.id, "target", [uri(value) for value in values])
-        binding = HistoryStore().capture(routine.user.id, routine.scope, command.reserved_targets)
+        binding = HistoryStore().capture(routine.user.id, routine.scope, command.reserved_targets, legacy=legacy)
         return routine.repository.enqueue(
             kind=command.kind,
             user_id=routine.user.id,
@@ -68,6 +69,63 @@ def test_move_preserves_requested_occurrences_and_accepts_both_histories_once(mo
     assert archive["states"] == [[uri(6), uri(1), uri(1)], [uri(6)]]
     assert len(completed.journal["boundaries"]["accepted"]) == 1
     assert ActivityLog.query.count() == 1
+
+
+def test_move_caps_each_history_independently_and_both_can_be_undone(move):
+    target_before = [uri(n) for n in (2, 3, 4)]
+    archive_before = [uri(n) for n in (6, 7, 8, 1, 1)]
+    target_after = target_before + [uri(1), uri(1)]
+    archive_after = archive_before[:-2]
+    move.world.playlists["target"]["track_uris"] = target_before.copy()
+    move.world.playlists["archive"]["track_uris"] = archive_before.copy()
+    legacy = {
+        "target": {
+            "states": [[uri(10)] * 8331, [uri(11)] * 8331, [uri(12)] * 8330, target_before],
+            "current_index": 3,
+        },
+        "archive": {
+            "states": [[uri(13)] * 8332, [uri(14)] * 8331, [uri(15)] * 8330, archive_before],
+            "current_index": 3,
+        },
+    }
+    assert sum(map(len, legacy["target"]["states"])) + len(target_after) == 25_000
+    assert sum(map(len, legacy["archive"]["states"])) + len(archive_after) == 25_001
+
+    completed = move.run_move(move.enqueue_move(values=(1, 1), legacy=legacy))
+    assert completed.state == "succeeded"
+    store = HistoryStore()
+    expected_histories = {
+        "target": legacy["target"]["states"] + [target_after],
+        "archive": legacy["archive"]["states"][1:] + [archive_after],
+    }
+    for playlist, expected in expected_histories.items():
+        history, revision = store.load(move.user.id, move.scope, playlist)
+        assert revision == completed.id
+        assert history == {"states": expected, "current_index": len(expected) - 1}
+        assert move.world.playlists[playlist]["track_uris"] == expected[-1]
+
+    worker = OperationWorker(
+        move.app, repository=move.repository, handlers={"undo": undo},
+        api_factory=move.factory, heartbeat_interval=0,
+    )
+    for playlist, expected in expected_histories.items():
+        selection, _ = store.load(move.user.id, move.scope, playlist)
+        row = move.repository.enqueue(
+            kind="undo",
+            user_id=move.user.id,
+            targets=[playlist],
+            payload={
+                "version": 1,
+                "command": {"playlist_id": playlist, "selection": selection},
+                "history": store.capture(move.user.id, move.scope, [playlist]),
+            },
+        )
+        assert worker.run_once(row.id)
+        assert move.repository.get(row.id).state == "succeeded"
+        assert move.world.playlists[playlist]["track_uris"] == expected[-2]
+        assert store.load(move.user.id, move.scope, playlist) == (
+            {"states": expected, "current_index": len(expected) - 2}, row.id,
+        )
 
 
 def test_pair_relink_after_admission_refuses_before_authentication(move):

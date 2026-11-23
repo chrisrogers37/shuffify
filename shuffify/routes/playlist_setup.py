@@ -66,12 +66,9 @@ def playlist_setup_impact(playlist_id, api=None, user=None):
 
 
 @api_bp.route("/playlist/<playlist_id>/setup/settings", methods=["PUT"])
-@require_auth_and_db(on_preflight_error=_preflight)
-def playlist_setup_settings(playlist_id, api=None, user=None):
+@require_auth_and_db(on_preflight_error=_preflight, parse_body=lambda: _body(SetupSaveRequest))
+def playlist_setup_settings(playlist_id, api=None, user=None, body=None):
     """Save acknowledged shared settings. Never starts, pauses or schedules a routine."""
-    body, invalid = _body(SetupSaveRequest)
-    if invalid:
-        return json_reply(invalid)
     return json_reply(PlaylistSetupService.save(api, user, playlist_id, body))
 
 
