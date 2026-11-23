@@ -268,6 +268,7 @@ def _config(state):
                 "id": schedule.id,
                 "job_type": schedule.job_type,
                 "schedule_type": schedule.schedule_type,
+                "advanced_cron": schedule.advanced_cron,
                 "schedule_value": schedule.schedule_value,
                 "timezone": schedule.timezone,
                 "is_enabled": schedule.is_enabled,
@@ -298,7 +299,7 @@ def _revision_sections(config):
             [
                 r["id"], r["job_type"], r["schedule_type"], r["schedule_value"], r["timezone"], r["is_enabled"],
                 r["source_playlist_ids"], r["algorithm_name"], r["algorithm_params"],
-            ]
+            ] + ([True] if r.get("advanced_cron") else [])
             for r in config["routines"]
         ],
     }
@@ -337,7 +338,7 @@ def _state_digest(user_id, target_id, config):
             [
                 r["id"], r["job_type"], r["is_enabled"], r["schedule_type"],
                 r["schedule_value"], r["timezone"], ordered(_ids(r)),
-            ]
+            ] + ([True] if r.get("advanced_cron") else [])
             for r in config["routines"]
         ],
     })

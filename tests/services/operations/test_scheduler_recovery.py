@@ -242,6 +242,7 @@ def test_recovery_at_exact_grace_boundary_admits_original_due(schedule, db_app, 
 
 
 def test_recovery_across_dst_fold_advances_by_utc_instant(schedule):
+    db.session.refresh(schedule)  # Load the saved definition before setting the historical test clock.
     schedule.schedule_type, schedule.schedule_value = "cron", "30 1 * * *"
     schedule.timezone = "America/New_York"
     # The fold below is a fixed date; the fixture's timestamps follow the clock.

@@ -107,7 +107,10 @@ def normalize_timing(timing):
     else:
         raise ValueError("invalid timing kind")
     check_timing(schedule_type, value)
-    return {"schedule_type": schedule_type, "schedule_value": value, "timezone": zone}
+    fields = {"schedule_type": schedule_type, "schedule_value": value, "timezone": zone}
+    if kind == "advanced":
+        fields["advanced_cron"] = True
+    return fields
 
 
 # The Schedule columns that say what a routine does and when. Every field set
@@ -122,12 +125,16 @@ DEFINITION_COLUMNS = (
     "schedule_type",
     "schedule_value",
     "timezone",
+    "advanced_cron",
 )
 
 
 def stored_definition(schedule):
     """A saved routine's definition, with NULL sources and options read as empty."""
-    definition = {name: getattr(schedule, name) for name in DEFINITION_COLUMNS}
+    definition = {name: getattr(schedule, name) for name in DEFINITION_COLUMNS if name != "advanced_cron"}
+    # Keep old signed definitions and revision hashes byte-for-byte compatible.
+    if getattr(schedule, "advanced_cron", None):
+        definition["advanced_cron"] = True
     definition["source_playlist_ids"] = definition["source_playlist_ids"] or []
     definition["algorithm_params"] = definition["algorithm_params"] or {}
     return definition
@@ -156,7 +163,7 @@ def serialize_timing(schedule, *, effective_timezone=None):
         editable = {"interval": value}
     elif schedule.schedule_type == ScheduleType.CRON:
         parts = str(value).split()
-        if len(parts) == 5 and parts[2:4] == ["*", "*"] and all(
+        if not getattr(schedule, "advanced_cron", None) and len(parts) == 5 and parts[2:4] == ["*", "*"] and all(
             _CLOCK_FIELD.fullmatch(part) for part in parts[:2]
         ):
             minute, hour = int(parts[0]), int(parts[1])

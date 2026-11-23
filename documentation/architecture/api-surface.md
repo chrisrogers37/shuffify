@@ -39,8 +39,13 @@ The interval, daily and weekly presets keep their timing. Advanced cron must
 select one distinct minute in each matching hour. Lists, ranges and steps use
 APScheduler's minute-field rules. For example, `0 * * * *` runs hourly and
 `0,5 9 * * mon` is refused because its Monday fires are five minutes apart.
-If a timezone transition puts two matching slots less than 60 elapsed minutes
+If a timezone transition puts two advanced slots less than 60 elapsed minutes
 apart, the worker skips the later slot, including during restart recovery.
+Daily and weekly presets retain their original behavior in a repeated local
+hour. New reviews record an explicit advanced timing choice, so even an
+advanced expression identical to a preset keeps the elapsed-time floor.
+Older rows used one representation for both choices. A stored expression
+matching a daily, weekly or calendar-day preset keeps the preset's behavior.
 
 Existing rows keep their saved definitions. The worker omits sub-hour cron from
 registration and skips new callbacks for it. An enabled routine with valid

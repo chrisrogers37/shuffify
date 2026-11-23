@@ -17,7 +17,7 @@ from tests.services.operations.test_repository import postgres_repository as pos
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("scope", ["user", "target"])
+@pytest.mark.parametrize("scope", ["user", "target", "request_key"])
 def test_two_writers_compete_for_last_routine_slot(scope, postgres_repository, sample_token, provider,
                                                   monkeypatch, tmp_path):
     isolated = postgres_repository.engine
@@ -32,7 +32,7 @@ def test_two_writers_compete_for_last_routine_slot(scope, postgres_repository, s
     inserting, release = Event(), Event()
 
     def before_insert(_mapper, _connection, schedule):
-        if schedule.job_type == "shuffle":
+        if schedule.job_type == "shuffle" and schedule.target_playlist_id == "mix20":
             inserting.set()
             assert release.wait(8), "The competing request did not reach its write"
 
@@ -40,21 +40,28 @@ def test_two_writers_compete_for_last_routine_slot(scope, postgres_repository, s
         alice = User(spotify_id="user123", display_name="Alice")
         db.session.add_all([alice, User(spotify_id="bob", display_name="Bob")])
         db.session.flush()
-        count = 19 if scope == "user" else 5
+        shared_owner = scope != "target"
+        count = 19 if shared_owner else 5
         db.session.add_all(Schedule(user_id=alice.id, job_type="shuffle", is_enabled=False,
-                                    target_playlist_id=f"mix{i}" if scope == "user" else "mix20") for i in range(count))
+                                    target_playlist_id=f"mix{i}" if shared_owner else "mix20") for i in range(count))
         db.session.commit()
         first = sign_in(app, "user123", sample_token)
-        second = sign_in(app, "user123" if scope == "user" else "bob", sample_token)
+        second = sign_in(app, "user123" if shared_owner else "bob", sample_token)
         response, body = review(first, "mix20", create_another=True)
         assert response.status_code == 200, response.json
+        if scope == "request_key":
+            response, competing_body = review(second, "mix21", request_key=body["request_key"])
+            assert response.status_code == 200, response.json
+            competing = (activate, second, "mix21", competing_body)
+        else:
+            competing = (raid_watch, second, "mix21" if shared_owner else "mix20")
         event.listen(Schedule, "before_insert", before_insert)
         try:
             with ThreadPoolExecutor(max_workers=2) as pool:
                 winner = pool.submit(activate, first, "mix20", body)
                 try:
                     assert inserting.wait(4)
-                    loser = pool.submit(raid_watch, second, "mix21" if scope == "user" else "mix20")
+                    loser = pool.submit(*competing)
                     # Wait for real server-side contention or for an unprotected second insert.
                     with isolated.connect().execution_options(isolation_level="AUTOCOMMIT") as observer:
                         blocked = False
@@ -74,7 +81,8 @@ def test_two_writers_compete_for_last_routine_slot(scope, postgres_repository, s
         finally:
             event.remove(Schedule, "before_insert", before_insert)
         assert refusal.status_code == 409, refusal.json
-        assert refusal.json["error_code"] == f"routine_{scope}_limit"
+        expected = "request_key_conflict" if scope == "request_key" else f"routine_{scope}_limit"
+        assert refusal.json["error_code"] == expected
         assert blocked and Schedule.query.count() == count + 1
         assert RoutineActivationReceipt.query.count() == 1 and UpstreamSource.query.count() == 0
         db.session.remove()

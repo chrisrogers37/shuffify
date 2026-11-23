@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from pydantic import ValidationError
 from sqlalchemy import and_, func, select
@@ -20,7 +21,7 @@ from shuffify.services.operations.repository import (
     PlaylistNeedsReview,
     RequestKeyConflict,
 )
-from shuffify.services.routine_policy import RoutineCronTrigger
+from shuffify.services.routine_policy import RoutineCronTrigger, uses_advanced_cron
 
 logger = logging.getLogger(__name__)
 # How late a scheduled fire may still be admitted, in seconds.
@@ -50,11 +51,11 @@ def build_cadence(schedule, default_timezone="UTC"):
         logger.warning("Schedule runs daily: %s (schedule_id=%s)", invalid.reason, schedule.id)
         kind, options = invalid.fallback
     anchor = utc(schedule.created_at)
-    trigger = (
-        IntervalTrigger(start_date=anchor, timezone=zone, **options)
-        if kind == "interval"
-        else RoutineCronTrigger(timezone=zone, **options)
-    )
+    if kind == "interval":
+        trigger = IntervalTrigger(start_date=anchor, timezone=zone, **options)
+    else:
+        trigger_class = RoutineCronTrigger if uses_advanced_cron(schedule) else CronTrigger
+        trigger = trigger_class(timezone=zone, **options)
     identity = {
         "type": schedule.schedule_type,
         "value": schedule.schedule_value,
@@ -62,6 +63,8 @@ def build_cadence(schedule, default_timezone="UTC"):
         "anchor": anchor.isoformat() if kind == "interval" else None,
         "incarnation": anchor.isoformat(),
     }
+    if getattr(schedule, "advanced_cron", None):
+        identity["advanced_cron"] = True
     return Cadence(fingerprint(identity), str(zone), trigger)
 
 

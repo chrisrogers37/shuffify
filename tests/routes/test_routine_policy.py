@@ -36,10 +36,14 @@ def sign_in(app, spotify_id, token):
 
 
 @pytest.fixture
-def accounts(db_app, sample_token, provider):
-    db.session.add_all([User(spotify_id=name, display_name=name) for name in ("user123", "bob")])
-    db.session.commit()
-    return [sign_in(db_app, name, sample_token) for name in ("user123", "bob")]
+def accounts(limiter_app, sample_token, provider):
+    # Temporary session files, in-memory SQLite and no shared Redis or worker.
+    with limiter_app.app_context():
+        db.session.add_all([User(spotify_id=name, display_name=name) for name in ("user123", "bob")])
+        db.session.commit()
+        yield [sign_in(limiter_app, name, sample_token) for name in ("user123", "bob")]
+        db.session.remove()
+        db.engine.dispose()
 
 
 def review(client, target, definition=None, **options):
@@ -156,9 +160,13 @@ def test_exact_capacity_replay_pause_one_over_and_other_owner(accounts, scope, l
         assert refused.json["error_code"] == f"routine_{scope}_limit"
         assert inventory(provider) == before
     assert create(bob, "mix21")[0].status_code == 200
+    if scope == "user":
+        assert create(bob, full)[0].status_code == 200
+    else:
+        assert create(alice, "mix22")[0].status_code == 200
     assert alice.delete(f"/api/schedules/{row.id}").status_code == 200
     assert raid_watch(alice, full).status_code == 200
-    assert Schedule.query.count() == limit + 1 and UpstreamSource.query.count() == 1
+    assert Schedule.query.count() == limit + 2 and UpstreamSource.query.count() == 1
 
 
 def test_legacy_subhour_edit_resume_replay_and_cleanup(accounts, provider):
@@ -205,6 +213,7 @@ def test_valid_prepolicy_intent_rechecked_at_activation(accounts, provider):
     response, body = review(alice, "mix0")
     assert response.status_code == 200
     # A genuine review issued before the minimum was introduced can still be unexpired.
+    body["definition"].pop("advanced_cron", None)
     body["definition"]["schedule_value"] = "0,30 * * * *"
     owner = User.query.filter_by(spotify_id="user123").one()
     body["intent"] = signed_digest.issue(INTENT_PURPOSE, _intent_payload(owner.id, "mix0", body))
@@ -279,3 +288,65 @@ def test_scheduler_move_counts_the_destination_and_legacy_pause_still_works(acco
     with pytest.raises(ValueError, match="one hour"):
         SchedulerService.update_schedule(row.id, row.user_id, is_enabled=True)
     assert not row.is_enabled and inventory(provider) == before
+
+
+@pytest.mark.parametrize("preset,expression", [
+    ({"kind": "daily", "time": "01:30"}, "30 1 * * *"),
+    ({"kind": "weekly", "time": "01:30", "weekday": "sun"}, "30 1 * * sun"),
+])
+def test_advanced_and_preset_same_expression_keep_distinct_fold_behavior(accounts, preset, expression):
+    from shuffify.services.scheduled_admission import build_cadence
+
+    alice, _ = accounts
+    zone = "Australia/Lord_Howe"
+    before_fold = datetime(2027, 4, 3, 14, 30, tzinfo=timezone.utc)
+
+    def next_two(row):
+        trigger = build_cadence(row).trigger
+        first = trigger.get_next_fire_time(None, before_fold)
+        second = trigger.get_next_fire_time(first, first.astimezone(timezone.utc) + timedelta(seconds=1))
+        return first.astimezone(timezone.utc), second.astimezone(timezone.utc)
+
+    response, _ = create(alice, "mix0", definition={
+        "job_type": "shuffle", "algorithm_name": "BasicShuffle", "timing": {**preset, "timezone": zone},
+    })
+    assert response.status_code == 200, response.json
+    row = db.session.get(Schedule, response.json["schedule_id"])
+    assert next_two(row) == (before_fold, before_fold + timedelta(minutes=30))
+    original_revision = response.json["schedule_revision"]
+    original_cadence = build_cadence(row).fingerprint
+    advanced, body = create(alice, "mix0", schedule_id=row.id, expected_revision=original_revision,
+                            definition={"timing": {"kind": "advanced", "expression": expression, "timezone": zone}})
+    assert advanced.status_code == 200 and advanced.json["timing"]["kind"] == "advanced"
+    assert row.schedule_value == expression and build_cadence(row).fingerprint != original_cadence
+    assert next_two(row)[1] - before_fold >= timedelta(hours=1)
+    stale = alice.put(f"/api/routines/{row.id}/state", json={
+        "expected_revision": original_revision, "desired_enabled": False,
+    })
+    assert stale.status_code == 409 and stale.json["error_code"] == "routine_changed"
+    restored, _ = create(alice, "mix0", schedule_id=row.id, expected_revision=advanced.json["schedule_revision"],
+                         definition={"timing": {**preset, "timezone": zone}})
+    assert restored.status_code == 200 and restored.json["timing"]["kind"] == preset["kind"]
+    assert next_two(row) == (before_fold, before_fold + timedelta(minutes=30))
+    replay = activate(alice, "mix0", body)
+    assert replay.status_code == 200 and replay.json["replayed"] and replay.json["timing"]["kind"] == preset["kind"]
+
+
+def test_raid_clock_preset_and_raw_scheduler_cron_keep_distinct_fold_behavior(accounts):
+    from shuffify.services.scheduled_admission import build_cadence
+    from shuffify.services.scheduler_service import SchedulerService
+
+    alice, _ = accounts
+    response = alice.post("/api/playlist/mix0/raid-add-url", json={
+        "url": f"https://open.spotify.com/playlist/{SOURCE}", "auto_schedule": True,
+        "schedule_value": "daily", "schedule_time": "01:30",
+    })
+    assert response.status_code == 200, response.json
+    preset = db.session.get(Schedule, response.json["schedule"]["id"])
+    raw = SchedulerService.create_schedule(preset.user_id, "shuffle", "mix1", "Mix 1", "cron", preset.schedule_value)
+    before_fold = datetime(2027, 4, 3, 14, 30, tzinfo=timezone.utc)
+    for row, expected in [(preset, timedelta(minutes=30)), (raw, timedelta(days=1, minutes=30))]:
+        trigger = build_cadence(row, "Australia/Lord_Howe").trigger
+        first = trigger.get_next_fire_time(None, before_fold)
+        second = trigger.get_next_fire_time(first, before_fold + timedelta(seconds=1))
+        assert second.astimezone(timezone.utc) - before_fold == expected

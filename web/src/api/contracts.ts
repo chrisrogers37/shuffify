@@ -263,6 +263,7 @@ export interface LibraryGreeting {
   activity_since_last_login_count: Count;
 }
 export interface RoutineDefinition {
+  advanced_cron?: true;
   job_type: JobType;
   target_playlist_id: string;
   target_playlist_name: string | null;
