@@ -38,6 +38,7 @@ from shuffify.services import (
 )
 from shuffify.services.base import is_commit_failure
 from shuffify.services.operations.commands.schemas import WorkshopCommitCommand
+from shuffify.services.storage_limits import StorageLimitReached
 from shuffify.services.workshop_commit_service import (
     WorkshopCommitService,
     WorkshopTargetResult,
@@ -480,6 +481,8 @@ def save_workshop_session(playlist_id, api=None, user=None, body=None):
             f"Session '{session_name}' saved.",
             session=ws.to_dict(),
         )
+    except StorageLimitReached as e:
+        return json_error(str(e), 409)
     except WorkshopSessionLimitError as e:
         return json_error(str(e), 400)
     except WorkshopSessionError as e:

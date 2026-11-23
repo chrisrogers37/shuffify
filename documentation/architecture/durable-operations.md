@@ -112,6 +112,35 @@ on recovery. No database transaction spans Spotify I/O. Schedule deletion
 detaches durable operations instead of deleting their history receipts, and
 legacy stale-execution cleanup excludes durable operations.
 
+## Saved playlist storage
+
+| Inventory per account | Inclusive limit | How a save uses capacity |
+| --- | ---: | --- |
+| Snapshots, manual and automatic combined | 200 | One row. An insertion that rotates a full playlist's oldest snapshot consumes no additional row. |
+| Saved Workshop sessions | 50 | One row per named save. Editing the same session consumes no slot. |
+| Playlists across both stores | 50 | The union of Spotify playlist IDs owned by this account. A playlist in both stores counts once. |
+
+These budgets allow ten snapshots on each of twenty working playlists, or up to fifty playlists with shorter histories. Fifty Workshop slots accommodate a draft for each of those playlists or several drafts for a smaller collection. The settings default of ten snapshots per playlist, the maximum and fallback of fifty, and the ten saved sessions per playlist still apply.
+
+Existing rows remain readable, and existing snapshots can be restored. An owner can edit saved sessions and delete records at any count. A create can proceed if each inventory it grows has room. For example, an owner over the snapshot cap can rotate a full playlist, or add a Workshop session on an existing playlist if session capacity permits. Lowering the per-playlist snapshot setting takes effect on the next snapshot for that playlist. Other playlists keep their history. Once a deletion commits, its row stops counting. The playlist slot opens only after the last record in **both** stores is gone. An owner above a limit must drop below it before growing that inventory again.
+
+Manual snapshot and Workshop session routes return HTTP 409 with the exhausted account limit. The existing per-playlist Workshop limit retains its HTTP 400 response. Stores serialize additions on the same PostgreSQL user row before checking capacity. A snapshot insert and its playlist rotation commit together. Direct Workshop saves use this same snapshot writer. Queued Workshop commits, direct shuffle and snapshot restore, and changing routine steps use it with the worker's fenced session and `commit=False`. Automatic snapshots are optional. A refusal leaves the stored records intact and the worker publishes its existing optional-step receipt. A recovered composite operation can use that receipt after an earlier Spotify write.
+
+## Execution retention
+
+Keep full execution records for **90 days after completion (UTC)** to allow recent runs to be investigated. The exact cutoff is inclusive for retention. A maintenance invocation visits at most 100 IDs in primary-key order in one transaction. For example, run this from the configured application environment:
+
+```sh
+flask --app run:app prune-executions --limit 100
+```
+
+The JSON output gives the number examined, deleted and compacted. Pass a non-null `next_after_id` back with `--after-id` for the next page. A null cursor ends the sweep. Start the next sweep at zero to revisit records that aged out, lost a reference, or were locked during an earlier sweep. A repeated page is safe. This is an operator-invoked command.
+
+- Delete completed legacy execution rows with recognized terminal status when no snapshot, journal, request key or scheduled fire needs them. Preserve unknown or incomplete records.
+- Compact settled queue operations in place. Drop private plans, compensation, resources, local checkpoints and obsolete Undo history. Preserve the original ID, public result, progress, recovery summary and execution-history columns. Clear the unkeyed command payload. Retain the original payload on keyed and scheduled rows for exact-command and intent comparisons, including a changed request's conflict. The stored UTC fire continues to deduplicate callbacks and supply the scheduler's recovery floor.
+- Preserve snapshot-linked executions, every restoration child, and parents identified by the child's capture or by a resolution marker. A queued snapshot restore owns its captured order even if its source snapshot is deleted. Reviewed operation restoration still needs the original journal and the child's proof of dispatch or resolution.
+- Keep queued, leased, compensating and attention rows. Preserve ambiguous dispatches, unfinished finalization and private journals without a recognized final decision. Keep each scope's latest confirmed history per playlist, including an explicit clear. An older receipt expires only after a later confirmed receipt covers **every** playlist and pending work has released both its captured revision and staged parent revision.
+
 ## Verification
 
 Tests exercise the real Spotify API batching and HTTP observer against local

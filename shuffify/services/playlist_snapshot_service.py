@@ -9,9 +9,12 @@ restore them later.
 import logging
 from typing import List, Optional
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from shuffify.enums import SnapshotType  # noqa: F401
 from shuffify.models.db import PlaylistSnapshot, db
-from shuffify.services.base import get_owned_entity, safe_commit
+from shuffify.services.base import commit_failure, get_owned_entity, safe_commit
+from shuffify.services.storage_limits import StorageLimitReached, check_storage_growth, lock_storage_inventory
 
 logger = logging.getLogger(__name__)
 
@@ -85,28 +88,35 @@ class PlaylistSnapshotService:
         )
         snapshot.track_uris = track_uris
 
-        storage.add(snapshot)
-        if commit:
-            safe_commit(
-                f"create {snapshot_type} snapshot for user "
-                f"{user_id}, playlist {playlist_id} "
-                f"({len(track_uris)} tracks)",
-                PlaylistSnapshotError,
-            )
-        else:
-            storage.flush()
-
-        # Enforce retention limit
-        max_snapshots = (
-            PlaylistSnapshotService._get_max_snapshots(user_id, session=storage) if session is not None
-            else PlaylistSnapshotService._get_max_snapshots(user_id)
-        )
-        if not commit:
-            PlaylistSnapshotService.cleanup_old_snapshots(
-                user_id, playlist_id, max_snapshots, session=storage, commit=False,
-            )
-        else:
-            PlaylistSnapshotService.cleanup_old_snapshots(user_id, playlist_id, max_snapshots)
+        operation = f"create {snapshot_type} snapshot for user {user_id}, playlist {playlist_id}"
+        try:
+            lock_storage_inventory(storage, user_id)
+            max_count = PlaylistSnapshotService._get_max_snapshots(user_id, session=session)
+            same_playlist = storage.query(PlaylistSnapshot.id).filter_by(user_id=user_id, playlist_id=playlist_id)
+            rotates = same_playlist.offset(max_count - 1).first() is not None
+            if not rotates:
+                check_storage_growth(storage, PlaylistSnapshot, user_id, playlist_id)
+            storage.add(snapshot)
+            if rotates:
+                # Flush before pruning so the new row participates in the same transaction.
+                storage.flush()
+                PlaylistSnapshotService.cleanup_old_snapshots(
+                    user_id, playlist_id, max_count, session=storage, commit=False,
+                )
+            if commit:
+                safe_commit(operation, PlaylistSnapshotError)
+            else:
+                storage.flush()
+        except StorageLimitReached:
+            if commit:
+                storage.rollback()
+            raise
+        except SQLAlchemyError as error:
+            if not commit:
+                raise
+            storage.rollback()
+            logger.exception("Failed to %s", operation)
+            raise commit_failure(PlaylistSnapshotError, operation) from error
 
         return snapshot
 
@@ -131,7 +141,7 @@ class PlaylistSnapshotService:
             PlaylistSnapshot.query.filter_by(
                 user_id=user_id, playlist_id=playlist_id
             )
-            .order_by(PlaylistSnapshot.created_at.desc())
+            .order_by(PlaylistSnapshot.created_at.desc(), PlaylistSnapshot.id.desc())
             .limit(limit)
             .all()
         )
@@ -216,9 +226,8 @@ class PlaylistSnapshotService:
                 not owned.
             PlaylistSnapshotError: If deletion fails.
         """
-        snapshot = PlaylistSnapshotService.get_snapshot(
-            snapshot_id, user_id
-        )
+        lock_storage_inventory(db.session, user_id)
+        snapshot = PlaylistSnapshotService.get_snapshot(snapshot_id, user_id)
 
         db.session.delete(snapshot)
         safe_commit(
@@ -259,7 +268,7 @@ class PlaylistSnapshotService:
             .filter_by(
                 user_id=user_id, playlist_id=playlist_id
             )
-            .order_by(PlaylistSnapshot.created_at.desc())
+            .order_by(PlaylistSnapshot.created_at.desc(), PlaylistSnapshot.id.desc())
             .limit(max_count)
             .subquery()
         )
