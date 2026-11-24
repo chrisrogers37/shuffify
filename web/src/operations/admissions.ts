@@ -125,8 +125,8 @@ function frozen<T>(value: T): ReadonlyDeep<T> {
 }
 const held = (a: Admission) =>
   !a.acknowledgedOrphan &&
-  ((!!a.restoration && !a.restoration.resolved) ||
-    !["settled", "refused"].includes(a.status));
+  a.status !== "settled" &&
+  ((!!a.restoration && !a.restoration.resolved) || a.status !== "refused");
 function conflictsWith(a: Admission, resources: readonly AdmissionResource[]): boolean {
   return resources.some((r) =>
     a.request.resources.some((c) =>
@@ -363,7 +363,9 @@ export function createAdmissionRegistry(
       !operation.targets.includes(current.request.expected.target)
     )
       return false;
-    const settled = !current.restoration && safelySettled(operation);
+    // A refused child never started restoring its parent. It has no claims
+    // of its own to retain, and does not provide parent resolution evidence.
+    const settled = (!current.restoration || refusedBeforePlaylistWrite(operation)) && safelySettled(operation);
     const released = operation.state === "needs_attention" && current.relation === "original"
       ? operation.recovery.acknowledged_targets?.filter((id) => operation.targets.includes(id))
       : undefined;

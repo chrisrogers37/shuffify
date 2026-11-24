@@ -603,7 +603,8 @@ export function createWorkshopController(
         resources: spotifyResources(
           playlistId,
           review.kind === "commit" ? [] : review.context.resources,
-          review.staging.map((s) => s.source_playlist_id),
+          // A commit reserves each source atomically through its own continuation.
+          review.kind === "commit" ? [] : review.staging.map((s) => s.source_playlist_id),
         ),
         expected: {
           kind:

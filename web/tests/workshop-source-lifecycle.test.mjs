@@ -39,7 +39,7 @@ const task = () => ({
     track_ids: [11],
   },
 });
-async function harness(handler = () => null) {
+async function harness(handler = () => null, key = () => "target-key") {
   const calls = [],
     listeners = new Set();
   let actor = "alice",
@@ -95,7 +95,7 @@ async function harness(handler = () => null) {
   }
   const c = createWorkshopController(api, session, "alice", "target", {
     operations,
-    key: () => "target-key",
+    key,
   });
   await c.load();
   const notify = () => listeners.forEach((fn) => fn());
@@ -493,15 +493,18 @@ test("a scoped hold release reopens a staged Workshop without running its abando
   const partial = operation(2001, "needs_attention", {
     success: false, target_status: "partial", confirmed_batches: 1, total_batches: 2,
   });
+  let saves = 0, reviews = 0;
   const h = await harness((path) => {
-    if (path.endsWith("/commit"))
-      return json({ success: true, operation_id: 2001, operation: operation() }, 202);
+    if (path.endsWith("/commit")) {
+      const id = 2000 + ++saves;
+      return json({ success: true, operation_id: id, operation: operation(id) }, 202);
+    }
     if (path === "/api/operations/2001")
       return json({ success: true, operation: { ...partial, recovery: {
         ...partial.recovery, acknowledged_targets: ["target"],
       } } });
     return null;
-  });
+  }, () => `target-key-${++reviews}`);
   const first = await h.c.prepareReview();
   await h.c.submitReviewed(first.id);
   h.finish(partial);
@@ -513,5 +516,12 @@ test("a scoped hold release reopens a staged Workshop without running its abando
   const registry = getAdmissionRegistry(h.api, "alice", h.operations);
   assert.equal(registry.getSnapshot().get("source-key").status, "refused");
   assert.equal(h.proofs.length, 0);
-  assert.equal((await h.c.prepareReview()).sourceReview.tasks.length, 1);
+  h.coordinator.prepareReview = () => ({ tasks: [{ ...task(), id: "source-2", key: "source-key-2" }] });
+  const second = await h.c.prepareReview();
+  assert.equal(second.sourceReview.tasks.length, 1);
+  await h.c.submitReviewed(second.id);
+  assert.equal(h.c.getSnapshot().receipt.operationId, 2002);
+  assert.equal(saves, 2);
+  assert.equal(registry.getSnapshot().get("source-key-2").status, "reserved");
+  assert.notEqual(second.key, first.key);
 });
