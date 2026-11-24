@@ -20,8 +20,8 @@ from sqlalchemy.exc import DBAPIError, DisconnectionError, OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
-from shuffify.models.db import DeferredScheduleFire, Schedule
-from shuffify.services.operations.repository import OperationRepository
+from shuffify.models.db import DeferredScheduleFire, JobExecution, Schedule
+from shuffify.services.operations.repository import ACTIVE_STATES, OperationRepository
 from shuffify.services.operations.wake import direct_url
 from shuffify.services.schedule_fire_outcomes import process_scheduled_fire
 from shuffify.services.schedule_utils import schedule_revision
@@ -63,7 +63,7 @@ class DurableAdmissionExecutor(BaseExecutor):
                     seconds=job.misfire_grace_time
                 ):
                     if self.on_missed:
-                        self.on_missed(*job.args, scheduled_for=due)
+                        self.on_missed(*job.args, scheduled_for=due, history_only=True)
                     events.append(JobExecutionEvent(EVENT_JOB_MISSED, job.id, job._jobstore_alias, due))
                     continue
                 result = job.func(*job.args, scheduled_for=due, **job.kwargs)
@@ -162,6 +162,7 @@ class WorkerScheduler:
         self._worker_id, self._generation = uuid4().hex, None
         self._requested, self._applied = 1, 0
         self._installed, self._metrics = {}, {}
+        self._retry_blockers = {}
 
     def __enter__(self):
         return self.start()
@@ -174,6 +175,8 @@ class WorkerScheduler:
             if self._closed:
                 raise RuntimeError("A closed scheduler cannot restart")
             if self._enabled and self._thread is None:
+                if self.repository.engine.dialect.name == "sqlite":
+                    self.repository.local_completion_callback = self.blockers_finished
                 self._thread = threading.Thread(target=self._run, name="worker-scheduler", daemon=True)
                 self._thread.start()
         return self
@@ -273,6 +276,7 @@ class WorkerScheduler:
             self._leader, self._generation = False, None
             self.ready.clear()
             self._installed = {}
+            self._retry_blockers.clear()
             if self._scheduler is not None:
                 self._scheduler.pause()
                 self._scheduler.remove_all_jobs()
@@ -308,6 +312,7 @@ class WorkerScheduler:
             schedules = list(storage.scalars(select(Schedule).where(Schedule.is_enabled.is_(True))))
             pending = storage.execute(select(
                 DeferredScheduleFire.schedule_id, DeferredScheduleFire.cadence, DeferredScheduleFire.scheduled_for,
+                DeferredScheduleFire.blocking_operation_id,
             )).all()
             fires, activations = recovery_evidence(storage, schedules)
             now = utc(self.clock())
@@ -358,8 +363,8 @@ class WorkerScheduler:
                     "cadence_fingerprint": cadence.fingerprint,
                     "trigger_identity": _trigger_identity(cadence.trigger),
                 }
-            for schedule_id, cadence_hash, due in pending:
-                self._schedule_retry(schedule_id, cadence_hash, generation, due, now, expedite=True)
+            for schedule_id, cadence_hash, due, blocker_id in pending:
+                self._schedule_retry(schedule_id, cadence_hash, generation, due, now, blocker_id)
             self._installed, self._applied = installed, request
             self._scheduler.resume()
             self.ready.set()
@@ -407,38 +412,70 @@ class WorkerScheduler:
                 self._scheduler.shutdown(wait=True)
 
     @staticmethod
-    def _retry_id(schedule_id, due):
-        return f"busy_{schedule_id}_{due.isoformat()}"
+    def _retry_id(schedule_id, cadence, due, history_only):
+        return f"retry_{schedule_id}_{cadence}_{due.isoformat()}_{int(history_only)}"
 
-    def _schedule_retry(self, schedule_id, cadence, generation, due, run_at, *, expedite=False):
-        # Each busy slot has its own short callback. An interval survives a
-        # coalesced wake while an earlier attempt is still in the executor.
+    def blockers_finished(self, operation_ids):
+        """Expedite just the pending jobs that were waiting for these commits."""
+        with self._state_lock:
+            if not self._leader or self._stop.is_set():
+                return
+            now = utc(self.clock())
+            for job_id, blocker in self._retry_blockers.items():
+                if blocker in operation_ids:
+                    job = self._scheduler.get_job(job_id)
+                    if job is not None and job.next_run_time > now:
+                        job.modify(next_run_time=now)
+
+    def _schedule_retry(self, schedule_id, cadence, generation, due, run_at, blocker_id=None, *, history_only=False):
+        # An interval survives a wake that coalesces while an earlier attempt is running.
         with self._state_lock:
             if generation != self._generation or self._stop.is_set():
-                return
-            job_id = self._retry_id(schedule_id, due)
+                return False
+            job_id = self._retry_id(schedule_id, cadence, due, history_only)
             job = self._scheduler.get_job(job_id)
+            newly_waiting = blocker_id is not None and self._retry_blockers.get(job_id) != blocker_id
+            if blocker_id is not None:
+                self._retry_blockers[job_id] = blocker_id
             if job is None:
                 self._scheduler.add_job(
                     self._fire, "interval", seconds=BUSY_RETRY_SECONDS, next_run_time=run_at, id=job_id,
-                    args=(schedule_id, cadence, generation, due), misfire_grace_time=None,
+                    args=(schedule_id, cadence, generation, due), kwargs={"history_only": history_only},
+                    misfire_grace_time=None,
                 )
-            elif expedite and job.next_run_time > run_at:
+            elif job.next_run_time > run_at:
                 job.modify(next_run_time=run_at)
+            return newly_waiting
 
-    def _fire(self, schedule_id, expected_cadence, generation, retry_due=None, *, scheduled_for=None):
+    def _wait_for_blocker(self, schedule_id, cadence, generation, due, blocker_id):
+        now = utc(self.clock())
+        remaining = due + timedelta(seconds=GRACE_SECONDS) - now
+        delay = min(timedelta(seconds=BUSY_RETRY_SECONDS), remaining, max(timedelta(milliseconds=50), remaining / 2))
+        # At the inclusive boundary the next tick records the expiry.
+        run_at = now + (delay if delay > timedelta(0) else timedelta(milliseconds=1))
+        newly_waiting = self._schedule_retry(schedule_id, cadence, generation, due, run_at, blocker_id)
+        if newly_waiting:
+            # A commit hint can precede in-memory registration. Read once after
+            # arming the timer, without holding the schedule or execution row locks.
+            with Session(self.repository.engine) as storage:
+                state = storage.scalar(select(JobExecution.state).where(JobExecution.id == blocker_id))
+            if state not in ACTIVE_STATES:
+                self.blockers_finished({blocker_id})
+
+    def _fire(self, schedule_id, expected_cadence, generation, retry_due=None, *, scheduled_for=None,
+              history_only=False):
         due, delay = utc(retry_due or scheduled_for), self._retry_initial
         while True:
             if not self._probe(generation):
                 result = AdmissionResult("skipped", due, code="leadership_lost")
                 break
-            expired = utc(self.clock()) - due > timedelta(seconds=GRACE_SECONDS)
+            expired = history_only or utc(self.clock()) - due > timedelta(seconds=GRACE_SECONDS)
             try:
                 admit = process_scheduled_fire if expired else self._admit
                 result = admit(
                     self.repository, schedule_id, expected_cadence, due, default_timezone=self.timezone,
                     is_leader=lambda: self._probe(generation), revalidate_due=True,
-                    clock=self.clock, retry=retry_due is not None,
+                    clock=self.clock, retry=retry_due is not None and not history_only, history_only=expired,
                 )
             except (DBAPIError, DisconnectionError) as error:
                 if isinstance(error, DBAPIError) and not (
@@ -446,7 +483,12 @@ class WorkerScheduler:
                 ):
                     raise
                 if expired:
-                    raise
+                    # Persist the observation when storage recovers. This callback
+                    # remains history-only even if the wall clock moves backwards.
+                    self._schedule_retry(schedule_id, expected_cadence, generation, due,
+                                         utc(self.clock()) + timedelta(seconds=BUSY_RETRY_SECONDS), history_only=True)
+                    self._emit("history_retries")
+                    return AdmissionResult("retrying", due, code="history_unavailable")
                 self._emit("admission_retries")
                 self._stop.wait(delay)
                 delay = min(self._retry_max, delay * 2)
@@ -454,8 +496,7 @@ class WorkerScheduler:
             break
         if result.state == "deferred":
             try:
-                self._schedule_retry(schedule_id, expected_cadence, generation, due,
-                                     utc(self.clock()) + timedelta(seconds=BUSY_RETRY_SECONDS))
+                self._wait_for_blocker(schedule_id, expected_cadence, generation, due, result.blocking_operation_id)
             except Exception:
                 self.request_refresh()
                 raise
@@ -463,9 +504,10 @@ class WorkerScheduler:
             return result
         if retry_due is not None and result.code != "leadership_lost":
             with self._state_lock:
-                job_id = self._retry_id(schedule_id, due)
+                job_id = self._retry_id(schedule_id, expected_cadence, due, history_only)
                 if generation == self._generation and self._scheduler.get_job(job_id) is not None:
                     self._scheduler.remove_job(job_id)
+                    self._retry_blockers.pop(job_id, None)
         if result.state == "skipped":
             logger.info("Scheduled fire skipped (schedule_id=%s scheduled_for=%s code=%s)",
                         schedule_id, due.isoformat(), result.code)
@@ -542,5 +584,7 @@ class WorkerScheduler:
         self.request_stop()
         if self._thread is not None and self._thread is not threading.current_thread():
             self._thread.join()
+        if self.repository.local_completion_callback == self.blockers_finished:
+            self.repository.local_completion_callback = None
         if self._engine is not None:
             self._engine.dispose()

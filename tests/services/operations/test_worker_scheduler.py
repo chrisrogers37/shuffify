@@ -13,6 +13,7 @@ from sqlalchemy import event
 from shuffify.models.db import JobExecution, db
 from tests.services.operations.test_scheduled_admission import NOW
 from tests.services.operations.test_scheduled_admission import schedule as schedule
+from tests.services.operations.test_scheduler_recovery import scheduler_clock as scheduler_clock
 
 
 def module():
@@ -190,12 +191,12 @@ def test_shutdown_interrupts_lock_retry_without_starting_scheduler(schedule, db_
     assert runtime._scheduler is None
 
 
-def test_transient_admission_retries_keep_due_identity_and_stop_at_grace(schedule, db_app):
+def test_transient_admission_retries_keep_due_identity_and_stop_at_grace(schedule, db_app, scheduler_clock):
     from sqlalchemy.exc import OperationalError
 
     schedule.definition_changed_at = schedule.created_at
     db.session.commit()
-    clock = [NOW]
+    clock = [scheduler_clock[0]]
     calls = []
 
     def unavailable(repository, schedule_id, cadence, due, **kwargs):
@@ -209,6 +210,7 @@ def test_transient_admission_retries_keep_due_identity_and_stop_at_grace(schedul
         app, clock=lambda: clock[0], admission_callback=unavailable, retry_initial=0.001, retry_max=0.001
     ) as runtime:
         assert runtime.ready.wait(2)
+        clock[0] = NOW
         snap = runtime.registration_snapshot([schedule.id])
         result = runtime._fire(
             schedule.id,

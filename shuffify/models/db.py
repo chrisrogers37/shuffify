@@ -578,7 +578,7 @@ class DeferredScheduleFire(db.Model):
     schedule_id = db.Column(db.Integer, db.ForeignKey("schedules.id", ondelete="CASCADE"), primary_key=True)
     scheduled_for = db.Column(UTCDateTime, primary_key=True)
     cadence = db.Column(db.String(64), nullable=False)
-    blocking_operation_id = db.Column(db.Integer, nullable=False, index=True)
+    blocking_operation_id = db.Column(db.Integer, nullable=False)
 
 
 class JobExecution(db.Model):

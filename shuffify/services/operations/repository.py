@@ -16,9 +16,9 @@ from sqlalchemy import Text, and_, case, cast, event, func, or_, select, text, u
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Session, aliased
 
-from shuffify.models.db import DeferredScheduleFire, JobExecution, db
+from shuffify.models.db import JobExecution, db
 from shuffify.services.execution_result_service import serialize_execution_detail
-from shuffify.services.operations.wake import OPERATION_CHANNEL, SCHEDULE_CHANNEL
+from shuffify.services.operations.wake import COMPLETION_CHANNEL, OPERATION_CHANNEL
 from shuffify.services.playlist_lock import (
     _held_targets,
     _local_guard,
@@ -209,6 +209,7 @@ class OperationRepository:
     def __init__(self, engine=None, *, lease_seconds=60):
         self.engine = engine if engine is not None else db.engine
         self.lease_seconds = _positive_seconds(lease_seconds)
+        self.local_completion_callback = None
         self._postgres = self.engine.dialect.name == "postgresql"
 
     @contextmanager
@@ -644,12 +645,14 @@ class OperationRepository:
             if tracks_total is not _UNSET:
                 row.tracks_total = tracks_total
             if self._postgres:
-                # The leader retries after this commit. The retry timer covers a lost hint.
-                waiting = select(DeferredScheduleFire.schedule_id).where(
-                    DeferredScheduleFire.blocking_operation_id == row.id,
-                ).exists()
-                session.execute(select(func.pg_notify(SCHEDULE_CHANNEL, "busy-released")).where(waiting))
-            return self._detach(session, row)
+                session.execute(select(func.pg_notify(COMPLETION_CHANNEL, str(row.id))))
+            completed = self._detach(session, row)
+        if self.local_completion_callback is not None:
+            try:
+                self.local_completion_callback({completed.id})
+            except Exception as error:
+                logger.info("Local scheduled retry wake unavailable (%s)", type(error).__name__)
+        return completed
 
     def defer(self, lease, *, delay_seconds=1):
         """Release a claim until a known deadline without replaying an operation already in recovery."""

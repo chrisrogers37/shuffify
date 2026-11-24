@@ -212,9 +212,11 @@ class SchedulerService:
         """
         with _locked_exact_schedule(schedule_id, user_id, execution=True) as schedule:
             try:
+                # Admission locks the parent before recording or removing a busy slot.
+                db.session.refresh(schedule, with_for_update=True)
+                DeferredScheduleFire.query.filter_by(schedule_id=schedule_id).delete(synchronize_session=False)
                 # Saved playlists outlive the execution history. Clear only links
                 # to this schedule's executions before deleting those rows.
-                DeferredScheduleFire.query.filter_by(schedule_id=schedule_id).delete(synchronize_session=False)
                 execution_ids = db.select(JobExecution.id).where(
                     JobExecution.schedule_id == schedule_id, JobExecution.kind.is_(None),
                 )

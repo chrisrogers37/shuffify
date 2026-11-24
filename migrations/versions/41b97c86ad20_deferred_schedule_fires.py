@@ -17,8 +17,6 @@ def upgrade():
         sa.Column("cadence", sa.String(64), nullable=False),
         sa.Column("blocking_operation_id", sa.Integer(), nullable=False),
     )
-    op.create_index("ix_deferred_schedule_fires_blocking_operation_id", "deferred_schedule_fires",
-                    ["blocking_operation_id"])
 
 
 def downgrade():

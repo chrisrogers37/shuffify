@@ -182,8 +182,8 @@ def test_dropped_fire_records_one_history_row_without_taking_the_queue_key(sched
     if reason == "fire_conflict":
         repo.enqueue(kind="different", user_id=schedule.user_id, schedule_id=schedule.id,
                      scheduled_for=NOW, targets=[], payload={})
-    for _ in range(2):
-        assert attempt(repo, schedule, NOW, NOW).code == reason
+    for offset in [timedelta(0), timedelta(hours=2) if reason == "fire_conflict" else timedelta(0)]:
+        assert attempt(repo, schedule, NOW, NOW + offset).code == reason
     row = JobExecution.query.filter_by(status="skipped").one()
     assert row.result_json["schedule_skip_code"] == reason
     assert row.kind is None and row.scheduled_for is None and row.started_at == NOW
@@ -236,7 +236,8 @@ def test_postgres_blocker_commit_wakes_leader_before_retry_timer(postgres_reposi
     with worker(db_app, repo, scheduler_clock, event_callback=observe, wake_callback=admitted.set) as runtime:
         assert runtime.ready.wait(3)
         registered.clear()
-        with PostgresWakeListener(repo, lambda: None, schedule_callback=runtime.request_refresh) as listener:
+        with PostgresWakeListener(repo, lambda: None, schedule_callback=runtime.request_refresh,
+                                  completion_callback=runtime.blockers_finished) as listener:
             assert listener.ready.wait(3) and registered.wait(3)
             outcome = runtime._fire(schedule.id, build_cadence(schedule).fingerprint, runtime._generation,
                                     scheduled_for=due)
@@ -246,3 +247,212 @@ def test_postgres_blocker_commit_wakes_leader_before_retry_timer(postgres_reposi
     with Session(repo.engine) as storage:
         slots = storage.scalars(select(JobExecution.scheduled_for).where(JobExecution.kind == "schedule_run"))
         assert slots.one() == due
+
+
+def test_sqlite_lost_wake_retries_before_four_second_grace_remainder(schedule, db_app, scheduler_clock):
+    repo = OperationRepository()
+    prepare(schedule)
+    blocker = repo.enqueue(kind="shuffle", user_id=schedule.user_id, targets=["target"], payload={})
+    due = NOW
+    scheduler_clock[0] = due + timedelta(hours=1) - timedelta(seconds=4)
+    admitted, waiting = Event(), Event()
+    with worker(db_app, repo, scheduler_clock, wake_callback=admitted.set,
+                event_callback=lambda name, _: waiting.set() if name == "deferred_busy" else None) as runtime:
+        assert runtime.ready.wait(2) and waiting.wait(2)
+        scheduler_clock[0] += timedelta(seconds=1)
+        # A different SQLite worker has no in-process completion hint to send.
+        other = OperationRepository()
+        other.finish(other.claim(operation_id=blocker.id), "succeeded")
+        scheduler_clock[0] += timedelta(seconds=1)
+        runtime._scheduler.wakeup()
+        assert admitted.wait(2)
+    run = JobExecution.query.filter_by(kind="schedule_run").one()
+    assert run.scheduled_for == due and JobExecution.query.filter_by(status="skipped").count() == 0
+
+
+@pytest.mark.parametrize("executor_missed", [False, True])
+def test_transient_history_write_recovers_without_admitting_expired_slot(
+    schedule, db_app, scheduler_clock, monkeypatch, executor_missed,
+):
+    from contextlib import contextmanager
+
+    from sqlalchemy.exc import OperationalError
+
+    repo = OperationRepository()
+    schedule_id, cadence = prepare(schedule)
+    due = scheduler_clock[0] - timedelta(hours=2)
+    recorded = Event()
+    with worker(db_app, repo, scheduler_clock, event_callback=lambda name, _: recorded.set()
+                if name == "skipped_misfire" else None) as runtime:
+        assert runtime.ready.wait(2)
+        job = runtime._scheduler.get_job(f"schedule_{schedule_id}")
+        transaction = repo.scheduled_fire_transaction
+        first = True
+
+        @contextmanager
+        def intermittent(*args):
+            nonlocal first
+            if first:
+                first = False
+                raise OperationalError("storage unavailable", {}, Exception())
+            with transaction(*args) as storage:
+                yield storage
+
+        monkeypatch.setattr(repo, "scheduled_fire_transaction", intermittent)
+        if executor_missed:
+            runtime._scheduler._executors["default"]._run_due(job, [due])
+        else:
+            result = runtime._fire(schedule_id, cadence, runtime._generation, scheduled_for=due)
+            assert result.code == "history_unavailable"
+        assert runtime.metrics["history_retries"] == 1
+        # Keep the regular daily registration in the future while its independent
+        # history callback runs on the scheduler thread.
+        runtime._scheduler.remove_job(job.id)
+        scheduler_clock[0] += timedelta(seconds=5)
+        runtime._scheduler.wakeup()
+        assert recorded.wait(2)
+    row = JobExecution.query.one()
+    assert row.started_at == due and row.kind is None and row.result_json["schedule_skip_code"] == "misfire"
+
+
+def test_capacity_skip_does_not_occupy_fire_key_on_readmission(schedule):
+    prepare(schedule)
+    repo = OperationRepository()
+    active = [repo.enqueue(kind="shuffle", user_id=schedule.user_id, targets=[f"other-{n}"], payload={})
+              for n in range(5)]
+    assert attempt(repo, schedule, NOW, NOW).code == "outstanding_operation_limit"
+    repo.finish(repo.claim(operation_id=active[0].id), "succeeded")
+    admitted = attempt(repo, schedule, NOW, NOW)
+    assert admitted.state == "admitted" and attempt(repo, schedule, NOW, NOW).operation_id == admitted.operation_id
+    assert JobExecution.query.filter_by(status="skipped").one().scheduled_for is None
+    assert JobExecution.query.filter_by(kind="schedule_run").one().scheduled_for == NOW
+
+
+@pytest.mark.integration
+def test_postgres_busy_capture_does_not_deadlock_with_routine_finalization(postgres_repository, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from tests.services.operations.test_worker_scheduler_postgres import make_schedule
+
+    repo = postgres_repository
+    schedule = make_schedule(repo)
+    with Session(repo.engine) as storage, storage.begin():
+        storage.get(type(schedule), schedule.id).definition_changed_at = schedule.created_at
+    blocker = repo.enqueue(kind="schedule_run", user_id=schedule.user_id, targets=["target"], payload={},
+                           schedule_id=schedule.id, scheduled_for=NOW - timedelta(days=1))
+    lease = repo.claim(operation_id=blocker.id)
+    execution_locked, schedule_locked = Event(), Event()
+    find_blocker = repo._admission_blocker
+
+    def signal_candidate(*args):
+        match = find_blocker(*args)
+        assert match.id == blocker.id
+        schedule_locked.set()
+        return match
+
+    def finalize(storage):
+        execution_locked.set()
+        assert schedule_locked.wait(3)
+        storage.get(type(schedule), schedule.id).last_run_at = NOW
+        storage.flush()
+        return {"status": "complete"}
+
+    monkeypatch.setattr(repo, "_admission_blocker", signal_candidate)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        receipt = pool.submit(repo.local_step, lease, "routine.finalize.succeeded.v1", finalize)
+        assert execution_locked.wait(3)
+        fire = pool.submit(attempt, repo, schedule, NOW, NOW)
+        assert fire.result(timeout=5).state == "deferred"
+        assert receipt.result(timeout=5) == {"status": "complete"}
+    repo.finish(lease, "succeeded")
+    with Session(repo.engine) as storage:
+        assert storage.get(type(schedule), schedule.id).last_run_at == NOW
+
+
+@pytest.mark.integration
+def test_postgres_delete_waits_for_parent_before_removing_retry_or_history(
+    postgres_repository, db_app, monkeypatch,
+):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from sqlalchemy import event
+
+    from shuffify.models.db import DeferredScheduleFire
+    from shuffify.services import scheduled_admission
+    from shuffify.services.scheduler_service import SchedulerService
+    from tests.services.operations.test_worker_scheduler_postgres import make_schedule
+
+    repo = postgres_repository
+    schedule = make_schedule(repo)
+    with Session(repo.engine) as storage, storage.begin():
+        storage.get(type(schedule), schedule.id).definition_changed_at = schedule.created_at
+    blocker = repo.enqueue(kind="shuffle", user_id=schedule.user_id, targets=["target"], payload={})
+    assert attempt(repo, schedule, NOW, NOW).state == "deferred"
+    repo.finish(repo.claim(operation_id=blocker.id), "succeeded")
+    db.session.remove()
+    monkeypatch.setitem(db.engines, None, repo.engine)
+    captured, deleting = Event(), Event()
+    capture_schedule = scheduled_admission.capture_schedule
+
+    def pause_capture(*args, **kwargs):
+        captured.set()
+        assert deleting.wait(4)
+        return capture_schedule(*args, **kwargs)
+
+    def observe_delete(_connection, _cursor, statement, *_):
+        if "schedules" in statement and "FOR UPDATE" in statement:
+            deleting.set()
+
+    def delete():
+        with db_app.app_context():
+            SchedulerService.delete_schedule(schedule.id, schedule.user_id)
+
+    monkeypatch.setattr(scheduled_admission, "capture_schedule", pause_capture)
+    event.listen(repo.engine, "before_cursor_execute", observe_delete)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            retried = pool.submit(attempt, repo, schedule, NOW, NOW, retry=True)
+            assert captured.wait(4)
+            deleted = pool.submit(delete)
+            assert retried.result(timeout=6).state == "admitted"
+            deleted.result(timeout=6)
+    finally:
+        event.remove(repo.engine, "before_cursor_execute", observe_delete)
+    with Session(repo.engine) as storage:
+        assert storage.get(type(schedule), schedule.id) is None
+        assert storage.scalars(select(DeferredScheduleFire)).all() == []
+        saved_run = storage.scalars(select(JobExecution).where(JobExecution.kind == "schedule_run")).one()
+        assert saved_run.schedule_id is None
+
+
+def test_expired_retry_records_misfire_when_blocker_finished_inside_grace(schedule):
+    prepare(schedule)
+    repo = OperationRepository()
+    blocker = repo.enqueue(kind="shuffle", user_id=schedule.user_id, targets=["target"], payload={})
+    assert attempt(repo, schedule, NOW, NOW).state == "deferred"
+    repo.finish(repo.claim(operation_id=blocker.id), "succeeded")
+    db.session.get(JobExecution, blocker.id).completed_at = NOW + timedelta(minutes=2)
+    db.session.commit()
+    assert attempt(repo, schedule, NOW, NOW + timedelta(hours=2), retry=True).code == "misfire"
+    assert JobExecution.query.filter_by(status="skipped").one().result_json["schedule_skip_code"] == "misfire"
+
+
+def test_first_busy_attempt_crossing_deadline_keeps_observed_blocker(schedule, monkeypatch):
+    from shuffify.services.schedule_fire_outcomes import process_scheduled_fire
+
+    schedule_id, cadence = prepare(schedule)
+    repo = OperationRepository()
+    blocker = repo.enqueue(kind="shuffle", user_id=schedule.user_id, targets=["target"], payload={})
+    now = [NOW + timedelta(hours=1)]
+    find_blocker = repo._admission_blocker
+
+    def cross_deadline(*args):
+        candidate = find_blocker(*args)
+        now[0] += timedelta(microseconds=1)
+        return candidate
+
+    monkeypatch.setattr(repo, "_admission_blocker", cross_deadline)
+    result = process_scheduled_fire(repo, schedule_id, cadence, NOW, clock=lambda: now[0],
+                                    is_leader=lambda: True, default_timezone="UTC")
+    assert (result.state, result.code, result.blocking_operation_id) == ("skipped", "busy", blocker.id)
+    assert JobExecution.query.filter_by(status="skipped").one().result_json["blocking_operation_id"] == blocker.id

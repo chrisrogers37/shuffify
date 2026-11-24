@@ -6,7 +6,6 @@ from sqlalchemy import select
 
 from shuffify.models.db import DeferredScheduleFire, JobExecution, Schedule
 from shuffify.services.execution_result_service import SCHEDULE_SKIP_REASONS
-from shuffify.services.operations.repository import ACTIVE_STATES
 from shuffify.services.scheduled_admission import (
     GRACE_SECONDS,
     AdmissionResult,
@@ -36,47 +35,36 @@ def _record_skip(storage, schedule, due, result, now):
 
 
 def process_scheduled_fire(repository, schedule_id, expected_cadence, scheduled_for, *, clock, is_leader,
-                           default_timezone, revalidate_due=True, retry=False):
+                           default_timezone, revalidate_due=True, retry=False, history_only=False):
     due = utc(scheduled_for)
     deadline = due + timedelta(seconds=GRACE_SECONDS)
 
     def guard():
         if not is_leader():
             raise AdmissionSkipped("leadership_lost")
-        if utc(clock()) > deadline:
+        if history_only or utc(clock()) > deadline:
             raise AdmissionSkipped("misfire")
 
     with repository.scheduled_fire_transaction(schedule_id, due) as storage:
-        pending = storage.get(DeferredScheduleFire, (schedule_id, due))
         if not is_leader():
             return AdmissionResult("skipped", due, code="leadership_lost")
+        # All history/deferral writers, including deletion, lock the parent first.
+        schedule = storage.scalar(select(Schedule).where(Schedule.id == schedule_id).with_for_update(read=True))
+        pending = storage.get(DeferredScheduleFire, (schedule_id, due))
         if retry and (pending is None or pending.cadence != expected_cadence):
             return AdmissionResult("skipped", due, code="retry_finished")
-        # Keep a deleted or replaced schedule from acquiring its predecessor's history.
-        schedule = storage.scalar(select(Schedule).where(Schedule.id == schedule_id).with_for_update(read=True))
         accepted = storage.scalar(select(JobExecution.id).where(
             JobExecution.schedule_id == schedule_id, JobExecution.scheduled_for == due,
         ))
         if schedule is None and accepted is None:
             result = AdmissionResult("skipped", due, code="schedule_missing")
-        elif accepted is None and utc(clock()) > deadline:
+        elif accepted is None and (history_only or utc(clock()) > deadline):
             result = AdmissionResult("skipped", due, code="misfire")
         else:
-            while True:
-                result = admit_scheduled(
-                    repository, schedule_id, expected_cadence, due, default_timezone=default_timezone,
-                    is_leader=is_leader, revalidate_due=revalidate_due, storage=storage, before_insert=guard,
-                )
-                if result.code != "busy" or utc(clock()) > deadline:
-                    break
-                # The blocker may finish between the overlap query and our
-                # insert. Either see it settled and try again, or hold its row
-                # until commit so its completion notification sees our deferral.
-                state = storage.scalar(select(JobExecution.state).where(
-                    JobExecution.id == result.blocking_operation_id,
-                ).with_for_update(read=True))
-                if state in ACTIVE_STATES:
-                    break
+            result = admit_scheduled(
+                repository, schedule_id, expected_cadence, due, default_timezone=default_timezone,
+                is_leader=is_leader, revalidate_due=revalidate_due, storage=storage, before_insert=guard,
+            )
         if result.code == "leadership_lost":
             return result
         # Capacity, expiry and a conflicting fire key can bypass command capture.
@@ -85,13 +73,15 @@ def process_scheduled_fire(repository, schedule_id, expected_cadence, scheduled_
             if reason:
                 result = AdmissionResult("skipped", due, code=reason)
         if result.code in SCHEDULE_SKIP_REASONS and schedule is not None:
-            if utc(clock()) > deadline:
-                if pending is not None:
-                    result = AdmissionResult("skipped", due, code="busy",
-                                             blocking_operation_id=pending.blocking_operation_id)
-                else:
-                    result = AdmissionResult("skipped", due, code="misfire")
-            elif result.code == "busy":
+            if result.code == "misfire" and pending is not None:
+                # A release before the deadline followed by scheduler downtime
+                # is a missed retry window, rather than a playlist still in use.
+                blocker = storage.execute(select(JobExecution.id, JobExecution.completed_at).where(
+                    JobExecution.id == pending.blocking_operation_id,
+                )).one_or_none()
+                if blocker is not None and (blocker.completed_at is None or blocker.completed_at > deadline):
+                    result = AdmissionResult("skipped", due, code="busy", blocking_operation_id=blocker.id)
+            elif result.code == "busy" and not history_only and utc(clock()) <= deadline:
                 if pending is None:
                     storage.add(DeferredScheduleFire(
                         schedule_id=schedule_id, scheduled_for=due, cadence=expected_cadence,
