@@ -50,6 +50,6 @@ Existing operation recovery data remains bounded. `available: true, action: "res
 
 ## Release a hold on one playlist
 
-In Workshop, **Review playlist hold** lets an editor keep the current Spotify playlist and release one hold on future operations. A failed operation holds its owner's reserved playlists. For another account, only a successful Spotify write recorded on the same playlist creates a hold.
+In Workshop, **Tools → Review playlist hold** lets an editor keep the current Spotify playlist and release one hold on future operations. A failed operation holds its owner's reserved playlists. For another account, only a successful Spotify write recorded on the same playlist creates a hold.
 
 Both GET and POST on `/api/playlist/{playlist_id}/operation-review` check fresh Spotify metadata. A collaborator must also be able to read the current playlist-items endpoint with their own credential. The signed review expires after 15 minutes and binds the account, playlist, snapshot and blocking operation. Confirmation records the acknowledgement for that playlist in the original journal. Other held playlists need their own review. Workshop refreshes the owner's retained operation receipt to release its local claim on the acknowledged playlist. The original owner can still use the reviewed restoration flow. [Spotify playlist-items access](https://developer.spotify.com/documentation/web-api/reference/get-playlists-items)

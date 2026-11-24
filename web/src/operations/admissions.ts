@@ -180,6 +180,12 @@ export function spotifyResources(
   for (const id of sources) if (id) values.set(`playlist:${id}`, "write");
   return [...values].map(([resource, access]) => ({ resource, access }));
 }
+// The worker issues this refusal before the handler runs. Older receipts
+// carry the same error code without the explicit zero-batch result fields.
+export function refusedBeforePlaylistWrite(operation?: Operation | null): boolean {
+  return operation?.state === "failed" && operation.result?.success === false &&
+    operation.result.error_code === "playlist_needs_review";
+}
 /** A terminal error is not evidence that Spotify effects or history were undone. */
 export function safelySettled(operation: Operation): boolean {
   const facts = operation.result,
@@ -227,6 +233,7 @@ export function safelySettled(operation: Operation): boolean {
     ["unknown", "needs_attention"].includes(String(detail?.aggregate_status))
   )
     return false;
+  if (refusedBeforePlaylistWrite(operation)) return true;
   const source = sourceSettlement(operation);
   if (source !== null) return source;
   if (operation.state === "rolled_back") {
@@ -369,8 +376,9 @@ export function createAdmissionRegistry(
           ? "attention"
           : "accepted",
     });
-    if (settled && operation.state !== "succeeded")
+    if ((settled && operation.state !== "succeeded") || released?.includes(current.request.expected.target)) {
       refuseUnstartedContinuations(key);
+    }
     return settled;
   }
   async function refreshPlaylistHolds(target: string, confirmedActor: () => string | null) {

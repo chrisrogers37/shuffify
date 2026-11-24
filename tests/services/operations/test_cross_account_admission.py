@@ -183,7 +183,9 @@ def test_waiting_worker_respects_attention_raised_after_both_submissions(account
         assert row.state == "succeeded" and len(world.writes) == 1
         return
     assert (row.state, row.journal["result"]["error_code"]) == ("failed", "playlist_needs_review")
-    assert "operation_id" not in row.journal["result"]
+    result = row.journal["result"]
+    assert (result["target_status"], result["confirmed_batches"], result["total_batches"]) == ("not_written", 0, 0)
+    assert "operation_id" not in result
     assert not world.writes
 
 

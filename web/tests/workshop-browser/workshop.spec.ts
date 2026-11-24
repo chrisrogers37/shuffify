@@ -741,6 +741,7 @@ test("a playlist hold is reviewed on demand and released only after confirmation
     if (request.method() === "POST") expect(request.postDataJSON()).toEqual({ review });
     await route.fulfill({ json: { success: true, review, message: "Released the reviewed hold on this playlist." } });
   });
+  await page.getByRole("button", { name: "Tools", exact: true }).click();
   await page.getByRole("button", { name: "Review playlist hold" }).click();
   await expect(page.getByRole("link", { name: "Open current playlist on Spotify" })).toHaveAttribute("href", "https://open.spotify.com/playlist/target");
   expect(methods).toEqual(["GET"]);
@@ -775,11 +776,28 @@ test("acknowledging a playlist hold unblocks a fresh save in the same Workshop",
     if (released) receipt.operation.recovery.acknowledged_targets = ["target"];
     await route.fulfill({ json: receipt });
   });
+  await page.getByRole("button", { name: "Tools", exact: true }).click();
   await page.getByRole("button", { name: "Review playlist hold" }).click();
-  await expect(save).toBeDisabled();
   await page.getByRole("button", { name: "Keep current playlist and release hold" }).click();
+  await expect(page.getByText("Released the reviewed hold on this playlist.")).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(save).toBeEnabled();
+  const nextKey: string[] = [];
+  await page.route("**/api/workshop/target/commit", async (route) => {
+    const key = route.request().headers()["idempotency-key"];
+    if (!key) throw new Error("Expected a fresh submission key");
+    nextKey.push(key);
+    const operation = { ...receipt.operation, id: 2002, state: "queued", result: null };
+    await route.fulfill({ status: 202, json: { success: true, operation_id: 2002, operation } });
+  });
+  await page.route("**/api/operations/2002", async (route) => {
+    const operation = { ...receipt.operation, id: 2002, state: "succeeded",
+      result: { ...receipt.operation.result, success: true, target_status: "saved", error_code: null,
+        message: "Second save completed." } };
+    await route.fulfill({ json: { success: true, operation } });
+  });
   await reviewSave(page);
-  await expect.poll(() => calls.filter((c) => c.path.endsWith("/commit")).length).toBe(2);
-  expect(new Set(calls.filter((c) => c.path.endsWith("/commit")).map((c) => c.key)).size).toBe(2);
+  await expect(page.getByRole("region", { name: "Retained operation" })).toContainText("Second save completed.");
+  expect(nextKey).toHaveLength(1);
+  expect(nextKey[0]).not.toBe(calls.find((call) => call.path.endsWith("/commit"))?.key);
 });

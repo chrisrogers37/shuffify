@@ -138,7 +138,9 @@ class OperationWorker:
             if needs_review:
                 self._finish(lease, runtime, "failed", result={
                     "success": False, "error_code": "playlist_needs_review", "category": "error",
-                    "message": "Open the playlist in Workshop and select Review playlist hold.", "retryable": False,
+                    "target_status": "not_written", "confirmed_batches": 0, "total_batches": 0,
+                    "message": "In Workshop, open Tools and select Review playlist hold.",
+                    "retryable": False,
                 })
                 return True
             handler = self.handlers.get(runtime.operation.kind)

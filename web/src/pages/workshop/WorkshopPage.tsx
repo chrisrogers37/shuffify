@@ -213,6 +213,7 @@ export function WorkshopPage({
                 {tool.title}
               </Button>
             ))}
+            <PlaylistHold playlistId={c.playlistId} refreshHolds={c.refreshPlaylistHolds} />
           </div>
         </ActorTask>
       ),
@@ -315,14 +316,12 @@ export function WorkshopPage({
                           </Link>
                         )}
                       </nav>
-                      {tools.length > 0 && (
-                        <Button
-                          variant="secondary"
-                          onClick={(e) => openTools(e.currentTarget)}
-                        >
-                          Tools
-                        </Button>
-                      )}
+                      <Button
+                        variant="secondary"
+                        onClick={(e) => openTools(e.currentTarget)}
+                      >
+                        Tools
+                      </Button>
                     </div>
                     <div className="sh-workshop-action-buttons">
                       <Button
@@ -351,7 +350,6 @@ export function WorkshopPage({
                       </Button>
                     </div>
                   </header>
-                  {sameActor && <PlaylistHold playlistId={c.playlistId} refreshHolds={c.refreshPlaylistHolds} />}
                   {!c.permission("review").allowed && !busy && !attention && (
                     <p role="status" className="sh-workshop-notice">
                       {c.permission("review").reason}

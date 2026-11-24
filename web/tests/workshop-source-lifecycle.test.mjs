@@ -488,3 +488,30 @@ test("proved restoration clears only receipt attention while retaining original 
   assert.deepEqual(h.c.getSnapshot().baseline, before.baseline);
   assert.equal(h.c.permission("review").allowed, true);
 });
+
+test("a scoped hold release reopens a staged Workshop without running its abandoned continuation", async () => {
+  const partial = operation(2001, "needs_attention", {
+    success: false, target_status: "partial", confirmed_batches: 1, total_batches: 2,
+  });
+  const h = await harness((path) => {
+    if (path.endsWith("/commit"))
+      return json({ success: true, operation_id: 2001, operation: operation() }, 202);
+    if (path === "/api/operations/2001")
+      return json({ success: true, operation: { ...partial, recovery: {
+        ...partial.recovery, acknowledged_targets: ["target"],
+      } } });
+    return null;
+  });
+  const first = await h.c.prepareReview();
+  await h.c.submitReviewed(first.id);
+  h.finish(partial);
+  assert.equal(h.c.permission("review").allowed, false);
+  await h.c.refreshPlaylistHolds();
+  assert.equal(h.c.permission("review").allowed, true);
+  assert.deepEqual(h.c.getSnapshot().staging, stage());
+  assert.equal(h.c.getSnapshot().receipt.result.target_status, "partial");
+  const registry = getAdmissionRegistry(h.api, "alice", h.operations);
+  assert.equal(registry.getSnapshot().get("source-key").status, "refused");
+  assert.equal(h.proofs.length, 0);
+  assert.equal((await h.c.prepareReview()).sourceReview.tasks.length, 1);
+});
