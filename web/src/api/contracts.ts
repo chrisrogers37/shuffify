@@ -424,6 +424,7 @@ export interface OperationRecovery {
   reason: string | null;
   resolved_operation_id?: DatabaseId;
   restoration_operation_id?: DatabaseId;
+  acknowledged_targets?: string[];
 }
 /** Private commands, credentials, baselines, and lease tokens never cross this boundary. */
 export interface Operation {

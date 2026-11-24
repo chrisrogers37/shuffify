@@ -185,7 +185,13 @@ export function createWorkshopController(
           message: `Operation ${receipt.operationId} was restored by operation ${resolution.operationId}. Original result facts are retained; review the current draft before another change.`,
         },
       });
-    else update({});
+    else if (receipt && !receipt.holdAcknowledged && claim?.relation === "original" &&
+      claim.operationId === receipt.operationId && claim.acknowledgedTargets?.includes(playlistId)) {
+      update({
+        receipt: { ...receipt, holdAcknowledged: true, message: "The playlist hold was released. Review any draft changes before saving." },
+        review: null,
+      });
+    } else update({});
   });
   const refuse = (group: PermissionGroup) => {
     const p = permission(group);
@@ -597,7 +603,8 @@ export function createWorkshopController(
         resources: spotifyResources(
           playlistId,
           review.kind === "commit" ? [] : review.context.resources,
-          review.staging.map((s) => s.source_playlist_id),
+          // A commit reserves each source atomically through its own continuation.
+          review.kind === "commit" ? [] : review.staging.map((s) => s.source_playlist_id),
         ),
         expected: {
           kind:
@@ -1154,6 +1161,7 @@ export function createWorkshopController(
     hasDraft,
     hasRetainedSourceWork,
     retrySourceHandoff,
+    refreshPlaylistHolds: () => admissions.refreshPlaylistHolds(playlistId, () => authenticated() ? actor : null),
     moveOccurrence: move,
     removeOccurrence: remove,
     appendTracks: append,

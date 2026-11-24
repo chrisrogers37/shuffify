@@ -102,7 +102,9 @@ def test_a_manual_operation_is_refused_on_a_playlist_with_an_unresolved_needs_at
 
 def test_a_shared_target_is_enough_to_be_refused(repository):
     parent = repository.enqueue(kind="example", user_id=1, targets=["a", "b"], payload={}, request_key="first")
-    repository.finish(repository.claim(operation_id=parent.id), "needs_attention")
+    lease = repository.claim(operation_id=parent.id)
+    repository.checkpoint(lease, {"plans": [{"resource": "b", "batches": [{"last_http_status": 200}]}]})
+    repository.finish(lease, "needs_attention")
     with pytest.raises(PlaylistNeedsReview) as error:
         repository.enqueue(kind="example", user_id=2, targets=["b", "c"], payload={}, request_key="second")
     assert error.value.operation_id == parent.id

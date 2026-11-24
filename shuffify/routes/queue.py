@@ -78,8 +78,11 @@ def enqueue_command(user, kind, intent, build, *, schedule_id=None):
     except AdmissionRejected as error:
         return error.response
     except PlaylistNeedsReview as error:
+        message = "In Workshop, open Tools and select Review playlist hold."
+        if error.owner_id == user.id:
+            message = "An earlier operation needs review. Restore or resolve it first. " + message
         return jsonify(error_payload(
-            "An earlier operation on this playlist needs review. Restore or resolve it first.", 409,
+            message, 409,
             error_code="playlist_needs_review", retryable=False, reason="needs_attention",
             **_blocking_operation(user, error))), 409
     except BusyOperation as error:

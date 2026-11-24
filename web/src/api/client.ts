@@ -86,6 +86,9 @@ export function isOperation(value: unknown): value is Operation {
     (progress.phase === undefined ||
       progress.phase === "forward" ||
       progress.phase === "compensating") &&
+    (recovery.acknowledged_targets === undefined ||
+      (Array.isArray(recovery.acknowledged_targets) &&
+        recovery.acknowledged_targets.every((id) => typeof id === "string"))) &&
     typeof recovery.available === "boolean" &&
     (recovery.action === null || recovery.action === "restore") &&
     isNullableString(recovery.reason)

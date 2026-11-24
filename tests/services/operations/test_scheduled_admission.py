@@ -227,3 +227,23 @@ def test_recreated_cron_incarnation_cannot_consume_an_old_registration_fire(sche
     result = module().admit_scheduled(OperationRepository(), schedule.id, expected, NOW)
     assert result.code == "cadence_changed"
     assert JobExecution.query.count() == 0
+
+
+@pytest.mark.parametrize("written", [False, True])
+def test_foreign_attention_only_holds_a_fire_until_its_playlist_is_acknowledged(schedule, written, db_app):
+    repo = OperationRepository()
+    author = User(spotify_id="other")
+    db.session.add(author)
+    db.session.commit()
+    parent = repo.enqueue(kind="shuffle", user_id=author.id, targets=["target"], payload={})
+    lease = repo.claim(operation_id=parent.id)
+    if written:
+        repo.checkpoint(lease, {"plans": [{"resource": "target", "batches": [{"last_http_status": 204}]}]})
+    repo.finish(lease, "needs_attention")
+    if written:
+        assert submit(repo, schedule).code == "needs_attention"
+        review = repo.attention_review(schedule.user_id, "target", "snapshot")
+        assert repo.attention_review(schedule.user_id, "target", "snapshot", confirmation=review)
+    accepted = submit(repo, schedule)
+    assert accepted.state == "admitted"
+    assert submit(repo, schedule).operation_id == accepted.operation_id

@@ -363,3 +363,13 @@ test("another known blocking operation or an unconfirmed actor cannot join the r
   assert.equal(h.calls.length, 1);
   assert.equal(h.r.getSnapshot().has("restore-key"), false);
 });
+
+test("a restoration child refused before its handler releases its own claims without resolving the parent", async () => {
+  const h = harness();
+  await h.r.submitRestoration({ parent: parent(), context: context(), request: request() }, "alice");
+  h.operations.finish(child("failed", { success: false, error_code: "playlist_needs_review" }));
+  const admission = h.r.getSnapshot().get("restore-key");
+  assert.equal(admission.restoration.resolved, false);
+  assert.equal(admission.resolution, undefined);
+  assert.equal(h.r.conflict(request().resources), null);
+});

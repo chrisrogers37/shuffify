@@ -104,6 +104,7 @@ export interface Admission {
     readonly parentTargets: readonly string[];
     readonly resolved: boolean;
   };
+  readonly acknowledgedTargets?: readonly string[];
   readonly acknowledgedOrphan?: UnidentifiedCreationAcknowledgement;
   readonly continuation?: {
     readonly parentKey: string;
@@ -124,8 +125,17 @@ function frozen<T>(value: T): ReadonlyDeep<T> {
 }
 const held = (a: Admission) =>
   !a.acknowledgedOrphan &&
-  ((!!a.restoration && !a.restoration.resolved) ||
-    !["settled", "refused"].includes(a.status));
+  a.status !== "settled" &&
+  ((!!a.restoration && !a.restoration.resolved) || a.status !== "refused");
+function conflictsWith(a: Admission, resources: readonly AdmissionResource[]): boolean {
+  return resources.some((r) =>
+    a.request.resources.some((c) =>
+      r.resource === c.resource &&
+      (r.access === "write" || c.access === "write") &&
+      !a.acknowledgedTargets?.some((id) => c.resource === `playlist:${id}`),
+    ),
+  );
+}
 const sameTargets = (a: readonly string[], b: readonly string[]) =>
   a.length > 0 &&
   new Set(a).size === a.length &&
@@ -169,6 +179,12 @@ export function spotifyResources(
     }
   for (const id of sources) if (id) values.set(`playlist:${id}`, "write");
   return [...values].map(([resource, access]) => ({ resource, access }));
+}
+// The worker issues this refusal before the handler runs. Older receipts
+// carry the same error code without the explicit zero-batch result fields.
+export function refusedBeforePlaylistWrite(operation?: Operation | null): boolean {
+  return operation?.state === "failed" && operation.result?.success === false &&
+    operation.result.error_code === "playlist_needs_review";
 }
 /** A terminal error is not evidence that Spotify effects or history were undone. */
 export function safelySettled(operation: Operation): boolean {
@@ -217,6 +233,7 @@ export function safelySettled(operation: Operation): boolean {
     ["unknown", "needs_attention"].includes(String(detail?.aggregate_status))
   )
     return false;
+  if (refusedBeforePlaylistWrite(operation)) return true;
   const source = sourceSettlement(operation);
   if (source !== null) return source;
   if (operation.state === "rolled_back") {
@@ -281,13 +298,7 @@ export function createAdmissionRegistry(
       if (
         key !== exceptKey &&
         held(a) &&
-        resources.some((r) =>
-          a.request.resources.some(
-            (c) =>
-              r.resource === c.resource &&
-              (r.access === "write" || c.access === "write"),
-          ),
-        )
+        conflictsWith(a, resources)
       )
         return a;
     return null;
@@ -352,18 +363,38 @@ export function createAdmissionRegistry(
       !operation.targets.includes(current.request.expected.target)
     )
       return false;
-    const settled = !current.restoration && safelySettled(operation);
+    // A refused child never started restoring its parent. It has no claims
+    // of its own to retain, and does not provide parent resolution evidence.
+    const settled = (!current.restoration || refusedBeforePlaylistWrite(operation)) && safelySettled(operation);
+    const released = operation.state === "needs_attention" && current.relation === "original"
+      ? operation.recovery.acknowledged_targets?.filter((id) => operation.targets.includes(id))
+      : undefined;
     update(key, {
       ...withKnownResources(current, operation),
+      ...(released?.length ? { acknowledgedTargets: frozen(released) } : {}),
       status: settled
         ? "settled"
         : terminalOperationStates.has(operation.state)
           ? "attention"
           : "accepted",
     });
-    if (settled && operation.state !== "succeeded")
+    if ((settled && operation.state !== "succeeded") || released?.includes(current.request.expected.target)) {
       refuseUnstartedContinuations(key);
+    }
     return settled;
+  }
+  async function refreshPlaylistHolds(target: string, confirmedActor: () => string | null) {
+    // A collaborator may already have acknowledged a hold from another browser.
+    // Only fresh, owned terminal receipts can release the corresponding local claims.
+    for (const [key, a] of snapshot) {
+      if (a.relation !== "original" || a.status !== "attention" || !a.operationId ||
+          operations.getSnapshot().get(a.operationId)?.operation?.state !== "needs_attention" ||
+          !a.request.resources.some((r) => r.resource === `playlist:${target}`)) continue;
+      if (confirmedActor() !== actor) return;
+      const op = await api.getOperation(a.operationId);
+      if (confirmedActor() !== actor) return;
+      reconcile(key, op);
+    }
   }
   function accept(key: string, operation: Operation, observe = true) {
     const a = snapshot.get(key);
@@ -569,16 +600,7 @@ export function createAdmissionRegistry(
         a.restoration?.parentId === parent.id
       )
         continue;
-      if (
-        effective.resources.some((r) =>
-          a.request.resources.some(
-            (c) =>
-              r.resource === c.resource &&
-              (r.access === "write" || c.access === "write"),
-          ),
-        )
-      )
-        throw new AdmissionBlockedError(a);
+      if (conflictsWith(a, effective.resources)) throw new AdmissionBlockedError(a);
     }
     const a: Admission = {
       request: effective,
@@ -946,13 +968,7 @@ export function createAdmissionRegistry(
       if (
         !sameFamily &&
         held(a) &&
-        replacement.resources.some((r) =>
-          a.request.resources.some(
-            (c) =>
-              r.resource === c.resource &&
-              (r.access === "write" || c.access === "write"),
-          ),
-        )
+        conflictsWith(a, replacement.resources)
       )
         throw new AdmissionBlockedError(a);
     }
@@ -1002,13 +1018,7 @@ export function createAdmissionRegistry(
       if (
         !sameFamily &&
         held(other) &&
-        a.request.resources.some((r) =>
-          other.request.resources.some(
-            (c) =>
-              r.resource === c.resource &&
-              (r.access === "write" || c.access === "write"),
-          ),
-        )
+        conflictsWith(other, a.request.resources)
       )
         throw new AdmissionBlockedError(other);
     }
@@ -1017,6 +1027,7 @@ export function createAdmissionRegistry(
   return {
     actor,
     submitRestoration,
+    refreshPlaylistHolds,
     reconcileRestoration,
     unidentifiedCreationAcknowledgement,
     acknowledgeUnidentifiedCreation,

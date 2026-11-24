@@ -222,3 +222,47 @@ def test_worker_recapture_enforces_scope_limit_without_provider_access(restorati
     assert finished and completed.state == "failed"
     assert completed.journal["result"]["error_code"] == "restore_scope_too_large"
     assert restoration.world.writes == []
+
+
+@pytest.mark.parametrize("interrupt_publication", [False, True])
+def test_pre_handler_hold_refusal_allows_the_parent_to_be_reviewed_and_restored_again(
+    restoration, sample_token, monkeypatch, interrupt_publication,
+):
+    from tests.services.operations.test_crash_recovery import Crash, expire_lease
+
+    repo = restoration.repository
+    child = restoration.enqueue_restore()
+    # Stand in for a co-admitted operation which reached needs_attention after
+    # this restoration was accepted, before the worker acquired the target.
+    other = User(spotify_id="another-editor")
+    db.session.add(other)
+    db.session.flush()
+    db.session.add(JobExecution(kind="example", user_id=other.id, targets=["target"], state="needs_attention",
+                                journal={"plans": [{"resource": "target", "batches": [{"last_http_status": 200}]}]}))
+    db.session.commit()
+    if interrupt_publication:
+        def stop(*args, **kwargs):
+            raise Crash
+
+        with monkeypatch.context() as patch, pytest.raises(Crash):
+            patch.setattr(repo, "finish", stop)
+            restoration.run_restore(child)
+        expire_lease(repo, child.id)
+    finished, refused = restoration.run_restore(child)
+    assert finished and refused.state == "failed" and refused.journal["result"]["error_code"] == "playlist_needs_review"
+    assert not restoration.world.writes
+
+    # Keep the current playlist for both pending holds. This does not restore
+    # the original parent, which can still be reviewed on its own merits.
+    for _ in range(2):
+        review = repo.attention_review(restoration.user.id, "target", "snapshot")
+        assert repo.attention_review(restoration.user.id, "target", "snapshot", confirmation=review)
+    browser = client(restoration, sample_token)
+    base = f"/api/operations/{restoration.parent_id}"
+    monkeypatch.setattr("shuffify.routes.require_auth", lambda: restoration.factory(restoration.user))
+    context = browser.get(base + "/restore-context")
+    assert context.status_code == 200
+    attempt = browser.post(base + "/restore", json={"reviewed": context.json["context"]["reviewed"]})
+    assert attempt.status_code == 202 and attempt.json["operation_id"] != child.id
+    finished, completed = restoration.run_restore(repo.get(attempt.json["operation_id"]))
+    assert finished and completed.state == "succeeded"

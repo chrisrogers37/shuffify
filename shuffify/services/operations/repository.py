@@ -12,7 +12,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import Text, and_, case, cast, event, func, or_, select, text
+from sqlalchemy import Text, and_, case, cast, event, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Session, aliased
 
@@ -112,6 +112,20 @@ def _targets(values):
     return tuple(sorted(set(values)))
 
 
+def _has_confirmed_write(journal, targets):
+    # An inferred acknowledgement can exist without a successful authenticated write.
+    if not isinstance(journal, dict):
+        return False
+    for phase in ("plans", "compensation"):
+        for step in journal.get(phase, []):
+            if step.get("resource") in targets:
+                for batch in step.get("batches", []):
+                    status = batch.get("last_http_status")
+                    if type(status) is int and 200 <= status < 300:
+                        return True
+    return False
+
+
 def _utc(value):
     if value is None:
         return None
@@ -154,6 +168,9 @@ def public_operation(row, *, restoration_attempt=None):
     if row.state == "needs_attention":
         from .restoration import RestoreUnavailable, capture_restore
 
+        released = (journal.get("runtime") or {}).get("acknowledgements", {})
+        if released:
+            recovery["acknowledged_targets"] = [target for target in (row.targets or []) if target in released]
         try:
             capture_restore(row, row.user_id)
             if restoration_attempt is None:
@@ -311,7 +328,9 @@ class OperationRepository:
                 active = self._admission_blocker(session, overlap, targets, user_id)
                 if active is not None:
                     raise BusyOperation(active.id, active.user_id)
-                blocker = self._unresolved_attention(session, kind, overlap, payload)
+                blocker = self._unresolved_attention(
+                    session, user_id, targets, exempt=self._restore_parent_id(kind, payload),
+                )
                 if blocker is not None:
                     raise PlaylistNeedsReview(blocker.id, blocker.user_id)
             now = self._now(session)
@@ -348,15 +367,8 @@ class OperationRepository:
             if row.user_id == user_id:
                 return row
             shared = set(targets).intersection(row.targets)
-            journal = row.journal or {}
-            # Metadata, dispatch intent and recovery-inferred acknowledgements
-            # can all exist without this account ever being allowed to write.
-            for phase in ("plans", "compensation"):
-                for step in journal.get(phase, []):
-                    if step.get("resource") in shared and any(
-                        200 <= batch.get("last_http_status", 0) < 300 for batch in step["batches"]
-                    ):
-                        return row
+            if _has_confirmed_write(row.journal, shared):
+                return row
         return None
 
     def begin_execution(self, lease, row):
@@ -373,7 +385,9 @@ class OperationRepository:
             ).limit(1))
             if started is not None:
                 return "busy"
-            if self._unresolved_attention(session, row.kind, overlap, row.payload) is not None:
+            if self._unresolved_attention(
+                session, row.user_id, row.targets, exempt=self._restore_parent_id(row.kind, row.payload),
+            ) is not None:
                 return "needs_attention"
             owned, _ = self._leased_row(session, lease)
             # Existing nonempty journals already own their turn, including after
@@ -382,32 +396,53 @@ class OperationRepository:
         return None
 
     @staticmethod
-    def _unresolved_attention(session, kind, overlap, payload):
-        """Return the oldest needs_attention operation sharing a target that has not been restored.
-
-        Runs inside the admission transaction, after the target locks and the active-state check. An operation
-        is resolved once its restoration committed (the parent journal records ``runtime.restoration``) or an
-        operator moved it out of ``needs_attention``. A restore that is still running is already refused as busy;
-        one that ended ``needs_attention`` is itself an unresolved row. The only exemption is the restore of that
-        very parent, which is the resolution path and writes nothing the review has not seen.
-        """
-        exempt = None
+    def _restore_parent_id(kind, payload):
         if kind == "operation_restore" and isinstance(payload, dict):
             try:
-                exempt = payload["command"]["capture"]["operation_id"]
+                return payload["command"]["capture"]["operation_id"]
             except (KeyError, TypeError):
-                exempt = None
-        for row in session.execute(select(JobExecution.id, JobExecution.user_id, JobExecution.journal).where(
-            JobExecution.kind.is_not(None), JobExecution.state == "needs_attention", overlap,
-        ).order_by(JobExecution.id)):
+                pass
+        return None
+
+    def _unresolved_attention(self, session, user_id, targets, *, exempt=None, lock=False):
+        """Find the oldest applicable hold on any requested target. A restore exempts its own parent."""
+        candidates = select(JobExecution.id, JobExecution.user_id, JobExecution.targets, JobExecution.journal).where(
+            JobExecution.kind.is_not(None), JobExecution.state == "needs_attention", self._target_overlap(targets),
+        ).order_by(JobExecution.id)
+        if lock:
+            candidates = candidates.with_for_update()
+        for row in session.execute(candidates):
             if row.id == exempt:
                 continue
-            runtime = row.journal.get("runtime") if isinstance(row.journal, dict) else None
-            restoration = runtime.get("restoration") if isinstance(runtime, dict) else None
+            runtime = (row.journal or {}).get("runtime") or {}
+            restoration = runtime.get("restoration")
             if isinstance(restoration, dict) and restoration.get("operation_id") is not None:
                 continue
-            return row
+            shared = set(targets).intersection(row.targets).difference(runtime.get("acknowledgements", {}))
+            if shared and (row.user_id == user_id or _has_confirmed_write(row.journal, shared)):
+                return row
         return None
+
+    def attention_review(self, user_id, playlist_id, snapshot_id, *, confirmation=_UNSET):
+        """Bind a review to one actor, Spotify version and blocking row, without exposing the row ID."""
+        from shuffify.services import signed_digest
+
+        applying = confirmation is not _UNSET
+        purpose = "shuffify.playlist.attention.v1"
+        with self._transaction(write=applying) as session:
+            row = self._unresolved_attention(session, user_id, [playlist_id], lock=applying)
+            if row is None:
+                return None
+            facts = dict(user_id=user_id, playlist_id=playlist_id, snapshot_id=snapshot_id, operation_id=row.id)
+            if not applying:
+                return signed_digest.issue(purpose, facts)
+            if signed_digest.verify(purpose, facts, confirmation, max_age_s=900) is not None:
+                return None
+            journal = deepcopy(row.journal or {})
+            acknowledgements = journal.setdefault("runtime", {}).setdefault("acknowledgements", {})
+            acknowledgements[playlist_id] = {"user_id": user_id, "snapshot_id": snapshot_id}
+            session.execute(update(JobExecution).where(JobExecution.id == row.id).values(journal=journal))
+            return True
 
     def get(self, operation_id):
         """Return a private detached storage row to a worker."""

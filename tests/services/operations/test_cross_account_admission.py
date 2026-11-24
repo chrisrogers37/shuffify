@@ -168,15 +168,24 @@ def test_confirmed_write_keeps_its_reservation_across_worker_loss(accounts, monk
     assert len(world.writes) == 2
 
 
-def test_waiting_worker_respects_attention_raised_after_both_submissions(accounts):
+@pytest.mark.parametrize("written", [True, False])
+def test_waiting_worker_respects_attention_raised_after_both_submissions(accounts, written):
     app, repo = accounts
     first, waiting = [repo.enqueue(kind="add", user_id=i, targets=["target"], payload={}) for i in (1, 2)]
-    repo.finish(repo.claim(operation_id=first.id), "needs_attention")
-    runner, world = make_worker(app, repo, lambda *_: pytest.fail("Wrote through an unresolved review"))
+    lease = repo.claim(operation_id=first.id)
+    if written:
+        repo.checkpoint(lease, {"plans": [{"resource": "target", "batches": [{"last_http_status": 200}]}]})
+    repo.finish(lease, "needs_attention")
+    runner, world = make_worker(app, repo, lambda *_: 201)
     assert runner.run_once(waiting.id)
     row = repo.get(waiting.id)
+    if not written:
+        assert row.state == "succeeded" and len(world.writes) == 1
+        return
     assert (row.state, row.journal["result"]["error_code"]) == ("failed", "playlist_needs_review")
-    assert "operation_id" not in row.journal["result"]
+    result = row.journal["result"]
+    assert (result["target_status"], result["confirmed_batches"], result["total_batches"]) == ("not_written", 0, 0)
+    assert "operation_id" not in result
     assert not world.writes
 
 
