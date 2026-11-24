@@ -140,7 +140,8 @@ def test_two_collaborators_admitted_before_proof_write_in_sequence(accounts):
 
 def test_confirmed_write_keeps_its_reservation_across_worker_loss(accounts, monkeypatch):
     app, repo = accounts
-    first, waiting = [repo.enqueue(kind="add", user_id=i, targets=["target"], payload={}) for i in (1, 2)]
+    # Either worker may get there first. A queued predecessor does not own a turn.
+    waiting, first = [repo.enqueue(kind="add", user_id=i, targets=["target"], payload={}) for i in (1, 2)]
     runner, world = make_worker(app, repo, lambda *_: 201)
     checkpoint = repo.checkpoint
 
@@ -163,7 +164,7 @@ def test_confirmed_write_keeps_its_reservation_across_worker_loss(accounts, monk
     assert runner.run_once(first.id)
     expire_lease(repo, waiting.id)
     assert runner.run_once(waiting.id)
-    assert world.playlists["target"]["track_uris"] == [uri(1), uri(2)]
+    assert world.playlists["target"]["track_uris"] == [uri(first.user_id), uri(waiting.user_id)]
     assert len(world.writes) == 2
 
 
@@ -177,3 +178,33 @@ def test_waiting_worker_respects_attention_raised_after_both_submissions(account
     assert (row.state, row.journal["result"]["error_code"]) == ("failed", "playlist_needs_review")
     assert "operation_id" not in row.journal["result"]
     assert not world.writes
+
+
+def test_crash_before_permission_check_resumes_without_blocking_admission(accounts):
+    app, repo = accounts
+    first = repo.enqueue(kind="add", user_id=1, targets=["target"], payload={})
+    lease = repo.claim(operation_id=first.id)
+    with repo.target_locks(lease.targets) as acquired:
+        assert acquired
+        assert repo.begin_execution(lease, first) is None
+    # Process loss immediately after opening the journal, before the first
+    # provider read. Its successor can submit but must wait to start writing.
+    second = repo.enqueue(kind="add", user_id=2, targets=["target"], payload={})
+    runner, world = make_worker(app, repo, lambda *_: 201)
+    assert runner.run_once(second.id) is False
+    assert not world.writes
+    expire_lease(repo, first.id)
+    assert runner.run_once(first.id)
+    expire_lease(repo, second.id)
+    assert runner.run_once(second.id)
+    assert world.playlists["target"]["track_uris"] == [uri(1), uri(2)]
+
+
+def test_sqlite_workers_with_independent_target_locks_open_only_one_journal(repository):
+    rows = [repository.enqueue(kind="add", user_id=i, targets=["target"], payload={}) for i in (1, 2)]
+    leases = [repository.claim(operation_id=row.id) for row in rows]
+    # Separate processes cannot see each other's in-memory target locks. Exercise
+    # just the database arbitration on independent connections.
+    turns = race(lambda i: repository.begin_execution(leases[i], rows[i]))
+    assert turns.count(None) == turns.count("busy") == 1
+    assert sum(bool(repository.get(row.id).journal) for row in rows) == 1

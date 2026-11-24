@@ -16,9 +16,9 @@ authenticate with Spotify. Another user receives `404`.
 Clients send `Idempotency-Key` with each distinct submitted intent. Keys contain
 1–128 characters. A matching retry returns the original operation before
 reading current history or a selected snapshot again. Changing that intent
-with the same key returns `409 request_key_conflict`. An active operation reserves all its targets
-against new commands from its owner. For another account, a target becomes busy
-once Spotify has returned a successful write response for that playlist in the
+with the same key returns `409 request_key_conflict`. An active operation reserves
+all its targets against new commands from its owner. For another account, a
+target becomes busy once Spotify has returned a successful write response for that playlist in the
 operation's journal. A collaborative flag alone gives no account-specific proof.
 A `409 playlist_busy` names the blocking operation only to its owner. Commands
 without a key follow the same conflict rules but cannot identify a retry after
@@ -33,10 +33,12 @@ Flask session nor credentials. Public response schemas are generated from
 ## Execution and recovery
 
 The worker owns a renewable lease and sorted playlist locks, plus a credential
-lock for the user. Cross-account requests admitted before write proof execute in
-admission order on overlapping targets. A later worker waits through a predecessor's
-deferral or crash and checks for unresolved attention before starting. Randomized algorithm choices and original observations are
-checkpointed before any mutation. Each HTTP batch has a durable intent and
+lock for the user. Before executing a newly admitted command it opens the operation's
+journal. An open journal reserves the worker's turn across retries and crashes.
+Other accounts can still submit before proof, and queued work holds no execution
+turn. A waiting worker checks for unresolved attention before starting.
+Randomized algorithm choices and original observations are checkpointed before
+any mutation. Each HTTP batch has a durable intent and
 acknowledgment. Command steps retain their plan ranges, results and working
 history so recovery does not select another shuffle or treat a completed write
 as its original baseline.

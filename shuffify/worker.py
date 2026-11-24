@@ -116,14 +116,17 @@ class OperationWorker:
                 # User credential serialization also protects rotated refresh tokens between workers.
                 locks = sorted({*lease.targets, f"credential:{row.user_id}"})
                 acquired = stack.enter_context(self.repository.target_locks(locks))
-                conflict = self.repository.execution_conflict(row) if acquired else "busy"
+                conflict = self.repository.begin_execution(lease, row) if acquired else "busy"
+            except LeaseLost:
+                return False, True
             except SQLAlchemyError:
                 # Nothing has run yet, so the claim goes back to the queue now instead of at lease expiry.
                 with suppress(LeaseLost):
                     self.repository.defer(lease)
                 raise
             if conflict == "busy":
-                self.repository.defer(lease)
+                with suppress(LeaseLost):
+                    self.repository.defer(lease)
                 return False, True
             with self._heartbeat(lease) as lost, spotify_deadline(self.operation_timeout):
                 return self._execute(lease, lost, needs_review=(conflict == "needs_attention")), True

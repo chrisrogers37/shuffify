@@ -359,23 +359,26 @@ class OperationRepository:
                         return row
         return None
 
-    def execution_conflict(self, row):
-        """Recheck co-admitted work before its first execution, under all target locks."""
+    def begin_execution(self, lease, row):
+        """Open the journal under the target locks, or wait for unfinished work on any target."""
         if not row.targets or row.journal:
             return None
         overlap = self._target_overlap(row.targets)
-        with self._transaction() as session:
-            # Overlapping admissions take their target locks before assigning IDs.
-            # Keep that order across a deferral or crash which releases execution locks.
-            earlier = session.scalar(select(JobExecution.id).where(
-                JobExecution.kind.is_not(None), JobExecution.state.in_(ACTIVE_STATES),
-                overlap, JobExecution.id < row.id,
+        # PostgreSQL workers hold session-level target locks here. BEGIN IMMEDIATE
+        # makes the check and journal creation atomic across SQLite processes too.
+        with self._transaction(write=True) as session:
+            started = session.scalar(select(JobExecution.id).where(
+                JobExecution.kind.is_not(None), JobExecution.state.in_(LEASED_STATES),
+                overlap, JobExecution.id != row.id, cast(JobExecution.journal, Text).not_in(("{}", "null")),
             ).limit(1))
-            if earlier is not None:
+            if started is not None:
                 return "busy"
-            review = self._unresolved_attention(session, row.kind, overlap, row.payload)
-            if review is not None:
+            if self._unresolved_attention(session, row.kind, overlap, row.payload) is not None:
                 return "needs_attention"
+            owned, _ = self._leased_row(session, lease)
+            # Existing nonempty journals already own their turn, including after
+            # a crash or deferral. A freshly claimed row still has an empty one.
+            owned.journal = {"version": 1}
         return None
 
     @staticmethod
@@ -600,8 +603,8 @@ class OperationRepository:
         delay = _positive_seconds(delay_seconds)
         with self._transaction(write=True) as session:
             row, now = self._leased_row(session, lease)
-            if not lease.recovering and row.state == "running" and not row.journal:
-                row.state, row.status = "queued", "queued"
+            if not lease.recovering and row.state == "running" and (not row.journal or row.journal == {"version": 1}):
+                row.state, row.status, row.journal = "queued", "queued", {}
             row.lease_owner = None
             row.lease_expires_at = now + timedelta(seconds=delay)
             return self._detach(session, row)
