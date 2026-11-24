@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import types
+from sqlalchemy.dialects.postgresql import JSONB
 
 from shuffify.enums import (
     IntervalValue,
@@ -624,6 +625,10 @@ class JobExecution(db.Model):
         db.Index("ix_job_executions_owner_turn", "user_id", "last_claimed_at",
                  postgresql_where=last_claimed_at.is_not(None), sqlite_where=last_claimed_at.is_not(None)),
         db.Index("ix_job_executions_queue_lease", "state", "lease_expires_at"),
+        db.Index(
+            "ix_job_executions_blocking_targets", db.cast(targets, JSONB), postgresql_using="gin",
+            postgresql_where=kind.is_not(None) & state.in_(("queued", "running", "compensating", "needs_attention")),
+        ).ddl_if(dialect="postgresql"),
     )
 
     def to_dict(self) -> Dict[str, Any]:
