@@ -12,7 +12,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, case, event, func, or_, select, text
+from sqlalchemy import Text, and_, case, cast, event, func, or_, select, text
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Session, aliased
 
 from shuffify.models.db import JobExecution, db
@@ -306,13 +307,15 @@ class OperationRepository:
                 self._admission_locks(session, targets=targets, user_id=None, request_key=None,
                                       schedule_id=None, scheduled_for=None)
             if targets:
-                active = session.scalars(select(JobExecution).where(
-                    JobExecution.kind.is_not(None), JobExecution.state.in_(ACTIVE_STATES)
-                ).order_by(JobExecution.id)).all()
-                for row in active:
-                    if set(targets).intersection(row.targets or []):
-                        raise BusyOperation(row.id, row.user_id)
-                blocker = self._unresolved_attention(session, kind, targets, payload)
+                overlap = self._target_overlap(targets)
+                # Sorting just the overlaps lets PostgreSQL use the target index.
+                # ORDER BY id LIMIT 1 can instead walk the entire primary key on a miss.
+                active = session.execute(select(JobExecution.id, JobExecution.user_id).where(
+                    JobExecution.kind.is_not(None), JobExecution.state.in_(ACTIVE_STATES), overlap,
+                ).order_by(JobExecution.id)).first()
+                if active is not None:
+                    raise BusyOperation(active.id, active.user_id)
+                blocker = self._unresolved_attention(session, kind, overlap, payload)
                 if blocker is not None:
                     raise PlaylistNeedsReview(blocker.id, blocker.user_id)
             now = self._now(session)
@@ -327,8 +330,14 @@ class OperationRepository:
                 )
             return self._detach(session, row)
 
+    def _target_overlap(self, targets):
+        if self._postgres:
+            return cast(JobExecution.targets, JSONB).has_any(cast(list(targets), ARRAY(Text)))
+        elements = func.json_each(JobExecution.targets).table_valued("value")
+        return select(1).select_from(elements).where(elements.c.value.in_(targets)).exists()
+
     @staticmethod
-    def _unresolved_attention(session, kind, targets, payload):
+    def _unresolved_attention(session, kind, overlap, payload):
         """Return the oldest needs_attention operation sharing a target that has not been restored.
 
         Runs inside the admission transaction, after the target locks and the active-state check. An operation
@@ -343,10 +352,10 @@ class OperationRepository:
                 exempt = payload["command"]["capture"]["operation_id"]
             except (KeyError, TypeError):
                 exempt = None
-        for row in session.scalars(select(JobExecution).where(
-            JobExecution.kind.is_not(None), JobExecution.state == "needs_attention"
+        for row in session.execute(select(JobExecution.id, JobExecution.user_id, JobExecution.journal).where(
+            JobExecution.kind.is_not(None), JobExecution.state == "needs_attention", overlap,
         ).order_by(JobExecution.id)):
-            if row.id == exempt or not set(targets).intersection(row.targets or []):
+            if row.id == exempt:
                 continue
             runtime = row.journal.get("runtime") if isinstance(row.journal, dict) else None
             restoration = runtime.get("restoration") if isinstance(runtime, dict) else None
