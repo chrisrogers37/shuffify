@@ -412,8 +412,8 @@ class WorkerScheduler:
                 self._scheduler.shutdown(wait=True)
 
     @staticmethod
-    def _retry_id(schedule_id, cadence, due, history_only):
-        return f"retry_{schedule_id}_{cadence}_{due.isoformat()}_{int(history_only)}"
+    def _retry_id(schedule_id, cadence, due):
+        return f"retry_{schedule_id}_{cadence}_{due.isoformat()}"
 
     def blockers_finished(self, operation_ids):
         """Expedite just the pending jobs that were waiting for these commits."""
@@ -432,8 +432,12 @@ class WorkerScheduler:
         with self._state_lock:
             if generation != self._generation or self._stop.is_set():
                 return False
-            job_id = self._retry_id(schedule_id, cadence, due, history_only)
+            job_id = self._retry_id(schedule_id, cadence, due)
             job = self._scheduler.get_job(job_id)
+            if job is not None and job.kwargs["history_only"] and not history_only:
+                return False
+            if history_only:
+                self._retry_blockers.pop(job_id, None)
             newly_waiting = blocker_id is not None and self._retry_blockers.get(job_id) != blocker_id
             if blocker_id is not None:
                 self._retry_blockers[job_id] = blocker_id
@@ -443,6 +447,8 @@ class WorkerScheduler:
                     args=(schedule_id, cadence, generation, due), kwargs={"history_only": history_only},
                     misfire_grace_time=None,
                 )
+            elif history_only and not job.kwargs["history_only"]:
+                job.modify(kwargs={"history_only": True}, next_run_time=run_at)
             elif job.next_run_time > run_at:
                 job.modify(next_run_time=run_at)
             return newly_waiting
@@ -504,7 +510,7 @@ class WorkerScheduler:
             return result
         if retry_due is not None and result.code != "leadership_lost":
             with self._state_lock:
-                job_id = self._retry_id(schedule_id, expected_cadence, due, history_only)
+                job_id = self._retry_id(schedule_id, expected_cadence, due)
                 if generation == self._generation and self._scheduler.get_job(job_id) is not None:
                     self._scheduler.remove_job(job_id)
                     self._retry_blockers.pop(job_id, None)

@@ -456,3 +456,124 @@ def test_first_busy_attempt_crossing_deadline_keeps_observed_blocker(schedule, m
                                     is_leader=lambda: True, default_timezone="UTC")
     assert (result.state, result.code, result.blocking_operation_id) == ("skipped", "busy", blocker.id)
     assert JobExecution.query.filter_by(status="skipped").one().result_json["blocking_operation_id"] == blocker.id
+
+
+@pytest.mark.integration
+def test_leader_lost_while_expired_retry_waits_for_schedule_preserves_pending(postgres_repository):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from sqlalchemy import event
+
+    from shuffify.models.db import DeferredScheduleFire, Schedule
+    from shuffify.services.schedule_fire_outcomes import process_scheduled_fire
+    from tests.services.operations.test_worker_scheduler_postgres import make_schedule
+
+    repo = postgres_repository
+    schedule = make_schedule(repo)
+    with Session(repo.engine) as storage, storage.begin():
+        storage.get(Schedule, schedule.id).definition_changed_at = schedule.created_at
+    repo.enqueue(kind="shuffle", user_id=schedule.user_id, targets=["target"], payload={})
+    assert attempt(repo, schedule, NOW, NOW).state == "deferred"
+    waiting, leader = Event(), Event()
+    leader.set()
+
+    def observe(_connection, _cursor, statement, *_):
+        if "schedules" in statement and "FOR SHARE" in statement:
+            waiting.set()
+
+    event.listen(repo.engine, "before_cursor_execute", observe)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            with Session(repo.engine) as holder, holder.begin():
+                holder.scalar(select(Schedule.id).where(Schedule.id == schedule.id).with_for_update())
+                retry = pool.submit(process_scheduled_fire, repo, schedule.id, build_cadence(schedule).fingerprint,
+                                    NOW, clock=lambda: NOW + timedelta(hours=2), is_leader=leader.is_set,
+                                    default_timezone="UTC", retry=True)
+                assert waiting.wait(3)
+                leader.clear()
+            assert retry.result(timeout=3).code == "leadership_lost"
+    finally:
+        event.remove(repo.engine, "before_cursor_execute", observe)
+    with Session(repo.engine) as storage:
+        assert storage.get(DeferredScheduleFire, (schedule.id, NOW)) is not None
+        assert storage.scalars(select(JobExecution.id).where(JobExecution.status == "skipped")).all() == []
+    assert attempt(repo, schedule, NOW, NOW + timedelta(hours=2), retry=True).code == "busy"
+
+
+def test_loss_of_leadership_during_busy_lookup_creates_no_deferral(schedule, monkeypatch):
+    from shuffify.models.db import DeferredScheduleFire
+    from shuffify.services.schedule_fire_outcomes import process_scheduled_fire
+
+    schedule_id, cadence = prepare(schedule)
+    repo = OperationRepository()
+    repo.enqueue(kind="shuffle", user_id=schedule.user_id, targets=["target"], payload={})
+    leader = Event()
+    leader.set()
+    find_blocker = repo._admission_blocker
+
+    def lose_leader(*args):
+        candidate = find_blocker(*args)
+        leader.clear()
+        return candidate
+
+    monkeypatch.setattr(repo, "_admission_blocker", lose_leader)
+    outcome = process_scheduled_fire(repo, schedule_id, cadence, NOW, clock=lambda: NOW,
+                                     default_timezone="UTC", is_leader=leader.is_set)
+    assert outcome.code == "leadership_lost" and DeferredScheduleFire.query.count() == 0
+
+
+def test_expired_busy_slot_switches_to_one_history_only_job(schedule, db_app, scheduler_clock, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    repo = OperationRepository()
+    schedule_id, cadence = prepare(schedule)
+    blocker = repo.enqueue(kind="shuffle", user_id=schedule.user_id, targets=["target"], payload={})
+    due = scheduler_clock[0] - timedelta(minutes=1)
+    with worker(db_app, repo, scheduler_clock) as runtime:
+        assert runtime.ready.wait(2)
+        runtime._scheduler.pause()
+        assert runtime._fire(schedule_id, cadence, runtime._generation, scheduled_for=due).state == "deferred"
+        scheduler_clock[0] = due + timedelta(hours=2)
+
+        def unavailable(*args):
+            raise OperationalError("database unavailable", {}, Exception())
+
+        with monkeypatch.context() as patch:
+            patch.setattr(repo, "scheduled_fire_transaction", unavailable)
+            outcome = runtime._fire(schedule_id, cadence, runtime._generation, due, scheduled_for=scheduler_clock[0])
+            assert outcome.code == "history_unavailable"
+        scheduler_clock[0] = due + timedelta(minutes=30)
+        repo.finish(repo.claim(operation_id=blocker.id), "succeeded")
+        retry, = [job for job in runtime._scheduler.get_jobs() if job.id.startswith("retry_")]
+        assert retry.kwargs["history_only"] is True
+        retry.func(*retry.args, scheduled_for=scheduler_clock[0], **retry.kwargs)
+        assert not any(job.id.startswith("retry_") for job in runtime._scheduler.get_jobs())
+    assert JobExecution.query.filter_by(kind="schedule_run").count() == 0
+    assert JobExecution.query.filter_by(status="skipped").count() == 1
+
+
+def test_leadership_loss_during_history_flush_rolls_back_and_preserves_waiter(schedule):
+    from sqlalchemy import event
+
+    from shuffify.models.db import DeferredScheduleFire
+    from shuffify.services.schedule_fire_outcomes import process_scheduled_fire
+
+    schedule_id, cadence = prepare(schedule)
+    repo = OperationRepository()
+    repo.enqueue(kind="shuffle", user_id=schedule.user_id, targets=["target"], payload={})
+    assert attempt(repo, schedule, NOW, NOW).state == "deferred"
+    leader = Event()
+    leader.set()
+
+    def on_insert(_connection, _cursor, statement, *_):
+        if statement.startswith("INSERT INTO job_executions"):
+            leader.clear()
+
+    event.listen(repo.engine, "after_cursor_execute", on_insert)
+    try:
+        result = process_scheduled_fire(repo, schedule_id, cadence, NOW, clock=lambda: NOW + timedelta(hours=2),
+                                        default_timezone="UTC", is_leader=leader.is_set, retry=True)
+    finally:
+        event.remove(repo.engine, "after_cursor_execute", on_insert)
+    assert result.code == "leadership_lost" and DeferredScheduleFire.query.count() == 1
+    assert JobExecution.query.filter_by(status="skipped").count() == 0

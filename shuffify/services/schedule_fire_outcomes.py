@@ -82,16 +82,30 @@ def process_scheduled_fire(repository, schedule_id, expected_cadence, scheduled_
                 if blocker is not None and (blocker.completed_at is None or blocker.completed_at > deadline):
                     result = AdmissionResult("skipped", due, code="busy", blocking_operation_id=blocker.id)
             elif result.code == "busy" and not history_only and utc(clock()) <= deadline:
-                if pending is None:
-                    storage.add(DeferredScheduleFire(
-                        schedule_id=schedule_id, scheduled_for=due, cadence=expected_cadence,
-                        blocking_operation_id=result.blocking_operation_id,
-                    ))
-                else:
-                    pending.cadence = expected_cadence
-                    pending.blocking_operation_id = result.blocking_operation_id
-                return AdmissionResult("deferred", due, code="busy", blocking_operation_id=result.blocking_operation_id)
-            _record_skip(storage, schedule, due, result, utc(clock()))
-        if pending is not None and pending.cadence == expected_cadence:
-            storage.delete(pending)
+                result = AdmissionResult("deferred", due, code="busy",
+                                         blocking_operation_id=result.blocking_operation_id)
+
+        if not is_leader():
+            storage.rollback()
+            return AdmissionResult("skipped", due, code="leadership_lost")
+        if result.state == "deferred":
+            if pending is None:
+                storage.add(DeferredScheduleFire(
+                    schedule_id=schedule_id, scheduled_for=due, cadence=expected_cadence,
+                    blocking_operation_id=result.blocking_operation_id,
+                ))
+            else:
+                pending.cadence = expected_cadence
+                pending.blocking_operation_id = result.blocking_operation_id
+        else:
+            if result.code in SCHEDULE_SKIP_REASONS and schedule is not None:
+                _record_skip(storage, schedule, due, result, utc(clock()))
+            if pending is not None and pending.cadence == expected_cadence:
+                storage.delete(pending)
+        # Flush can itself wait on a row lock. A retired generation must leave
+        # both queue admission and the pending/history transition to its successor.
+        storage.flush()
+        if not is_leader():
+            storage.rollback()
+            return AdmissionResult("skipped", due, code="leadership_lost")
         return result
