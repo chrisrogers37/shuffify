@@ -146,3 +146,19 @@ def test_confirmed_resolution_releases_retention_only_while_child_remains_confir
         parent_id, child_id = parent.id, child.id
     retained = history.protected_operation_ids()
     assert (parent_id in retained) is protected and (child_id in retained) is protected
+
+
+def test_existing_pre_execution_refusal_requires_the_exact_completed_ledger():
+    result = {"error_code": "playlist_needs_review", "success": False, "parent_operation_id": 10}
+    row = refused()
+    row.journal = {"result": result, "runtime": {"terminal_finalization": {
+        "done": True, "state": "failed", "result": deepcopy(result),
+    }}}
+    assert conclusively_no_dispatch(row)
+    for key in ("plans", "compensation", "boundaries"):
+        assert not conclusively_no_dispatch(SimpleNamespace(**{**vars(row), "journal": {**row.journal, key: []}}))
+    row.journal["runtime"]["terminal_finalization"]["done"] = False
+    assert not conclusively_no_dispatch(row)
+    row.journal["runtime"]["terminal_finalization"]["done"] = True
+    row.journal["result"]["error_code"] = "other_failure"
+    assert not conclusively_no_dispatch(row)
