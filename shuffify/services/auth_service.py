@@ -181,12 +181,16 @@ class AuthService:
             return False
 
     @staticmethod
-    def get_authenticated_api(token: Dict[str, Any]) -> SpotifyAPI:
+    def get_authenticated_api(
+        token: Dict[str, Any], *, authenticated_user_id: Optional[str] = None
+    ) -> SpotifyAPI:
         """
         Build an authenticated SpotifyAPI from a session token.
 
         Args:
             token: Valid token data dictionary.
+            authenticated_user_id: The account verified for this signed-in session.
+                Leave unset when authenticating a new token.
 
         Returns:
             An authenticated SpotifyAPI instance.
@@ -211,6 +215,7 @@ class AuthService:
                 AuthService._auth_manager(),
                 auto_refresh=True,
                 cache=get_spotify_cache(),
+                authenticated_user_id=authenticated_user_id,
                 on_token_refresh=AuthService._persist_token_to_session,
             )
         except SpotifyDeadlineError:

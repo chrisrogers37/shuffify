@@ -23,6 +23,7 @@ from shuffify.error_handlers import (
     format_validation_error,
     json_error_response,
 )
+from shuffify.routes.spotify_reads import run_with_read_limit
 from shuffify.services import (
     AuthenticationError,
     AuthService,
@@ -68,7 +69,8 @@ def require_auth():
         return None
     try:
         return AuthService.get_authenticated_api(
-            decrypt_session_token(session["spotify_token"])
+            decrypt_session_token(session["spotify_token"]),
+            authenticated_user_id=(session.get("user_data") or {}).get("id"),
         )
     except AuthenticationError:
         return None
@@ -142,7 +144,7 @@ def require_auth_and_db(f=None, *, on_preflight_error=None, parse_body=None):
     as keyword arguments to the wrapped function.
 
     ``on_preflight_error(message, status_code)`` optionally formats these
-    gate failures. It never handles responses or exceptions from the route.
+    gate failures and a refused Spotify data read.
 
     Usage::
 
@@ -184,7 +186,7 @@ def require_auth_and_db(f=None, *, on_preflight_error=None, parse_body=None):
 
         kwargs["api"] = api
         kwargs["user"] = user
-        return f(*args, **kwargs)
+        return run_with_read_limit(f, preflight_error, *args, **kwargs)
 
     return decorated_function
 
@@ -206,7 +208,7 @@ def require_session_and_db(view=None, *, on_preflight_error=None):
         user = get_db_user()
         if user is None:
             return preflight_error("User not found.", 401)
-        return view(*args, user=user, **kwargs)
+        return run_with_read_limit(view, preflight_error, *args, user=user, **kwargs)
 
     return authorized
 
@@ -223,7 +225,7 @@ def context_preflight(kind="live_context"):
     def preflight(message, status_code):
         return json_reply(context_rejected(
             preflight_error_code(status_code), status_code, message,
-            retryable=status_code in (401, 503), kind=kind,
+            retryable=status_code in (401, 429, 503), kind=kind,
         ))
 
     return preflight

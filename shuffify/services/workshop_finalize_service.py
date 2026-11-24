@@ -64,7 +64,7 @@ class WorkshopFinalizeResult:
             message,
             http_status=http_status,
             affected_count=None if inspect_only else 0,
-            error_code=error_code,
+            error_code="rate_limited" if http_status == 429 else error_code,
             retryable=not inspect_only and http_status in (401, 403, 503),
             extra={count_key: None if inspect_only else 0},
         )
