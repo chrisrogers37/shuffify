@@ -9,6 +9,15 @@ from copy import deepcopy
 
 from shuffify.enums import JOB_STEPS, JobType
 
+SCHEDULE_SKIP_REASONS = {
+    "busy": "Another operation was using this playlist until the retry window ended.",
+    "misfire": "The scheduler missed the time window for this run.",
+    "fire_conflict": "A different operation already occupied this scheduled time.",
+    "invalid_schedule": "The routine could not be run with its saved settings.",
+    "needs_attention": "An earlier operation on this playlist needs review.",
+    "outstanding_operation_limit": "You already had the maximum number of unfinished operations.",
+}
+
 VERSION = 1
 MAX_STEPS = 4
 MAX_FACTS = 12

@@ -382,6 +382,9 @@ export function parseHistory(value: unknown): JobExecution[] {
       !record(row) ||
       !id(row.id) ||
       !record(row.result_detail) ||
+      (row.scheduled_skip !== undefined &&
+        (!record(row.scheduled_skip) || typeof row.scheduled_skip.reason !== "string" ||
+          typeof row.scheduled_skip.scheduled_for !== "string")) ||
       typeof row.result_detail.detail_status !== "string"
     )
       throw new ProtocolError("This run detail is incomplete.");

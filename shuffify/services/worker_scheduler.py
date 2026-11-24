@@ -20,14 +20,14 @@ from sqlalchemy.exc import DBAPIError, DisconnectionError, OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
-from shuffify.models.db import Schedule
+from shuffify.models.db import DeferredScheduleFire, Schedule
 from shuffify.services.operations.repository import OperationRepository
 from shuffify.services.operations.wake import direct_url
+from shuffify.services.schedule_fire_outcomes import process_scheduled_fire
 from shuffify.services.schedule_utils import schedule_revision
 from shuffify.services.scheduled_admission import (
     GRACE_SECONDS,
     AdmissionResult,
-    admit_scheduled,
     build_cadence,
     recoverable_fire,
     recovery_evidence,
@@ -37,6 +37,7 @@ from shuffify.services.worker_control import valid_ids
 
 logger = logging.getLogger(__name__)
 LOCK_ID = 88442211
+BUSY_RETRY_SECONDS = 5
 
 
 def now_utc():
@@ -46,8 +47,9 @@ def now_utc():
 class DurableAdmissionExecutor(BaseExecutor):
     """APScheduler 3.x extension: pass exact run_times to local queue admission."""
 
-    def __init__(self, *, max_workers, clock=now_utc):
+    def __init__(self, *, max_workers, clock=now_utc, on_missed=None):
         super().__init__()
+        self.on_missed = on_missed
         self.clock = clock
         self._pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="schedule-admission")
 
@@ -56,12 +58,14 @@ class DurableAdmissionExecutor(BaseExecutor):
         times = run_times[-1:] if job.coalesce else run_times
         for run_time in times:
             due = utc(run_time)
-            if job.misfire_grace_time is not None and utc(self.clock()) - due > timedelta(
-                seconds=job.misfire_grace_time
-            ):
-                events.append(JobExecutionEvent(EVENT_JOB_MISSED, job.id, job._jobstore_alias, due))
-                continue
             try:
+                if job.misfire_grace_time is not None and utc(self.clock()) - due > timedelta(
+                    seconds=job.misfire_grace_time
+                ):
+                    if self.on_missed:
+                        self.on_missed(*job.args, scheduled_for=due)
+                    events.append(JobExecutionEvent(EVENT_JOB_MISSED, job.id, job._jobstore_alias, due))
+                    continue
                 result = job.func(*job.args, scheduled_for=due, **job.kwargs)
             except Exception as error:
                 logger.warning("Scheduled admission failed (%s)", type(error).__name__)
@@ -120,7 +124,7 @@ class WorkerScheduler:
         connection_factory=None,
         wake_callback=None,
         event_callback=None,
-        admission_callback=admit_scheduled,
+        admission_callback=process_scheduled_fire,
         leader_check_interval=5,
         retry_initial=0.1,
         retry_max=5,
@@ -286,13 +290,13 @@ class WorkerScheduler:
                 jobstores={"default": MemoryJobStore()},
                 executors={
                     "default": DurableAdmissionExecutor(
-                        clock=self.clock, max_workers=self.app.config["SCHEDULER_THREAD_POOL_SIZE"]
+                        clock=self.clock, on_missed=self._fire,
+                        max_workers=self.app.config["SCHEDULER_THREAD_POOL_SIZE"],
                     )
                 },
                 job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": GRACE_SECONDS},
             )
             scheduler.start(paused=True)
-            scheduler.add_listener(lambda event: self._emit("missed"), EVENT_JOB_MISSED)
             scheduler.add_listener(lambda event: self._emit("admission_errors"), EVENT_JOB_ERROR)
             self._scheduler = scheduler
 
@@ -302,6 +306,9 @@ class WorkerScheduler:
         specs = {}
         with Session(self.repository.engine) as storage:
             schedules = list(storage.scalars(select(Schedule).where(Schedule.is_enabled.is_(True))))
+            pending = storage.execute(select(
+                DeferredScheduleFire.schedule_id, DeferredScheduleFire.cadence, DeferredScheduleFire.scheduled_for,
+            )).all()
             fires, activations = recovery_evidence(storage, schedules)
             now = utc(self.clock())
             for schedule in schedules:
@@ -351,6 +358,8 @@ class WorkerScheduler:
                     "cadence_fingerprint": cadence.fingerprint,
                     "trigger_identity": _trigger_identity(cadence.trigger),
                 }
+            for schedule_id, cadence_hash, due in pending:
+                self._schedule_retry(schedule_id, cadence_hash, generation, due, now, expedite=True)
             self._installed, self._applied = installed, request
             self._scheduler.resume()
             self.ready.set()
@@ -397,44 +406,81 @@ class WorkerScheduler:
             if self._scheduler is not None:
                 self._scheduler.shutdown(wait=True)
 
-    def _fire(self, schedule_id, expected_cadence, generation, *, scheduled_for=None):
-        due, delay = utc(scheduled_for), self._retry_initial
+    @staticmethod
+    def _retry_id(schedule_id, due):
+        return f"busy_{schedule_id}_{due.isoformat()}"
+
+    def _schedule_retry(self, schedule_id, cadence, generation, due, run_at, *, expedite=False):
+        # Each busy slot has its own short callback. An interval survives a
+        # coalesced wake while an earlier attempt is still in the executor.
+        with self._state_lock:
+            if generation != self._generation or self._stop.is_set():
+                return
+            job_id = self._retry_id(schedule_id, due)
+            job = self._scheduler.get_job(job_id)
+            if job is None:
+                self._scheduler.add_job(
+                    self._fire, "interval", seconds=BUSY_RETRY_SECONDS, next_run_time=run_at, id=job_id,
+                    args=(schedule_id, cadence, generation, due), misfire_grace_time=None,
+                )
+            elif expedite and job.next_run_time > run_at:
+                job.modify(next_run_time=run_at)
+
+    def _fire(self, schedule_id, expected_cadence, generation, retry_due=None, *, scheduled_for=None):
+        due, delay = utc(retry_due or scheduled_for), self._retry_initial
         while True:
             if not self._probe(generation):
-                return AdmissionResult("skipped", due, code="leadership_lost")
-            if utc(self.clock()) - due > timedelta(seconds=GRACE_SECONDS):
-                self._emit("missed")
-                return AdmissionResult("skipped", due, code="misfire")
+                result = AdmissionResult("skipped", due, code="leadership_lost")
+                break
+            expired = utc(self.clock()) - due > timedelta(seconds=GRACE_SECONDS)
             try:
-                result = self._admit(
-                    self.repository,
-                    schedule_id,
-                    expected_cadence,
-                    due,
-                    default_timezone=self.timezone,
-                    is_leader=lambda: self._probe(generation),
-                    revalidate_due=True,
+                admit = process_scheduled_fire if expired else self._admit
+                result = admit(
+                    self.repository, schedule_id, expected_cadence, due, default_timezone=self.timezone,
+                    is_leader=lambda: self._probe(generation), revalidate_due=True,
+                    clock=self.clock, retry=retry_due is not None,
                 )
             except (DBAPIError, DisconnectionError) as error:
                 if isinstance(error, DBAPIError) and not (
                     isinstance(error, OperationalError) or error.connection_invalidated
                 ):
                     raise
+                if expired:
+                    raise
                 self._emit("admission_retries")
-                if self._stop.wait(delay):
-                    return AdmissionResult("skipped", due, code="leadership_lost")
+                self._stop.wait(delay)
                 delay = min(self._retry_max, delay * 2)
                 continue
-            self._emit("admitted" if result.state == "admitted" else "skipped_" + result.code, result.to_dict())
-            if result.state == "admitted" and self._wake_callback:
-                try:
-                    self._wake_callback()
-                except Exception as error:
-                    logger.warning("Schedule queue wake failed (%s)", type(error).__name__)
-                    self._emit("wake_failures")
-            if result.code in {"cadence_changed", "eligibility_changed", "schedule_missing", "schedule_disabled"}:
+            break
+        if result.state == "deferred":
+            try:
+                self._schedule_retry(schedule_id, expected_cadence, generation, due,
+                                     utc(self.clock()) + timedelta(seconds=BUSY_RETRY_SECONDS))
+            except Exception:
                 self.request_refresh()
+                raise
+            self._emit("deferred_busy", result.to_dict())
             return result
+        if retry_due is not None and result.code != "leadership_lost":
+            with self._state_lock:
+                job_id = self._retry_id(schedule_id, due)
+                if generation == self._generation and self._scheduler.get_job(job_id) is not None:
+                    self._scheduler.remove_job(job_id)
+        if result.state == "skipped":
+            logger.info("Scheduled fire skipped (schedule_id=%s scheduled_for=%s code=%s)",
+                        schedule_id, due.isoformat(), result.code)
+            if result.code == "misfire":
+                self._emit("missed")
+        self._emit("admitted" if result.state == "admitted" else "skipped_" + result.code, result.to_dict())
+        if result.state == "admitted" and self._wake_callback:
+            try:
+                self._wake_callback()
+            except Exception as error:
+                logger.warning("Schedule queue wake failed (%s)", type(error).__name__)
+                self._emit("wake_failures")
+        if result.code in {"cadence_changed", "eligibility_changed", "schedule_missing", "schedule_disabled"}:
+            self.request_refresh()
+        return result
 
     def registration_snapshot(self, schedule_ids):
         ids = list(schedule_ids)

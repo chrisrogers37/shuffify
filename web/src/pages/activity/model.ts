@@ -350,6 +350,8 @@ export function parseActivityContext(value: unknown): ActivityContext {
         (run.tracks_added === null || count(run.tracks_added)) &&
         (run.tracks_total === null || count(run.tracks_total)) &&
         nullableText(run.error_message) &&
+        (run.scheduled_skip === undefined ||
+          (record(run.scheduled_skip) && text(run.scheduled_skip.reason) && text(run.scheduled_skip.scheduled_for))) &&
         nullableText(run.schedule_name) &&
         (run.job_type === "unknown" || choice(run.job_type, operations)) &&
         origin(run.triggered_by) &&

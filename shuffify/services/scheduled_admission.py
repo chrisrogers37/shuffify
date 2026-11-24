@@ -1,6 +1,7 @@
 """Deterministic worker-only schedule timing and local durable fire admission."""
 
 import logging
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -147,15 +148,36 @@ class AdmissionResult:
         return value
 
 
-class _Skipped(Exception):
+class AdmissionSkipped(Exception):
     def __init__(self, code):
         self.code = code
         super().__init__(code)
 
 
+def ineligible_fire(storage, current, expected_cadence, due, default_timezone, revalidate_due):
+    if current is None:
+        return "schedule_missing"
+    if not current.is_enabled:
+        return "schedule_disabled"
+    try:
+        if build_cadence(current, default_timezone).fingerprint != expected_cadence:
+            return "cadence_changed"
+    except (ValueError, ZoneInfoNotFoundError):
+        return "invalid_schedule"
+    if revalidate_due:
+        activation = storage.scalar(select(func.max(RoutineActivationReceipt.accepted_at)).where(
+            RoutineActivationReceipt.schedule_id == current.id,
+            RoutineActivationReceipt.user_id == current.user_id,
+            RoutineActivationReceipt.schedule_created_at == current.created_at,
+        ))
+        if due < eligibility_floor(current, activation):
+            return "eligibility_changed"
+    return None
+
+
 def admit_scheduled(
     repository, schedule_id, expected_cadence, scheduled_for, *, default_timezone="UTC", is_leader=lambda: True,
-    revalidate_due=False,
+    revalidate_due=False, storage=None, before_insert=None,
 ):
     """Admit one exact due instant; replay accepted intent before volatile capture.
 
@@ -168,41 +190,30 @@ def admit_scheduled(
 
     def require_leader():
         if not is_leader():
-            raise _Skipped("leadership_lost")
+            raise AdmissionSkipped("leadership_lost")
 
     try:
         require_leader()
         # The stable owner of an accepted fire lets enqueue replay it before
         # any fresh definition/state check, including a subsequent Pause.
-        with Session(repository.engine) as storage:
-            owner = storage.scalar(
+        with (nullcontext(storage) if storage is not None else Session(repository.engine)) as lookup:
+            owner = lookup.scalar(
                 select(JobExecution.user_id).where(
                     JobExecution.schedule_id == schedule_id,
                     JobExecution.scheduled_for == due,
                 )
             )
             if owner is None:
-                owner = storage.scalar(select(Schedule.user_id).where(Schedule.id == schedule_id))
+                owner = lookup.scalar(select(Schedule.user_id).where(Schedule.id == schedule_id))
         if owner is None:
-            raise _Skipped("schedule_missing")
+            raise AdmissionSkipped("schedule_missing")
 
         def capture(storage):
             require_leader()
             current = storage.scalar(select(Schedule).where(Schedule.id == schedule_id, Schedule.user_id == owner))
-            if current is None:
-                raise _Skipped("schedule_missing")
-            if not current.is_enabled:
-                raise _Skipped("schedule_disabled")
-            if build_cadence(current, default_timezone).fingerprint != expected_cadence:
-                raise _Skipped("cadence_changed")
-            if revalidate_due:
-                activation = storage.scalar(select(func.max(RoutineActivationReceipt.accepted_at)).where(
-                    RoutineActivationReceipt.schedule_id == current.id,
-                    RoutineActivationReceipt.user_id == current.user_id,
-                    RoutineActivationReceipt.schedule_created_at == current.created_at,
-                ))
-                if due < eligibility_floor(current, activation):
-                    raise _Skipped("eligibility_changed")
+            reason = ineligible_fire(storage, current, expected_cadence, due, default_timezone, revalidate_due)
+            if reason:
+                raise AdmissionSkipped(reason)
             command = capture_schedule(storage, owner, schedule_id, triggered_by="scheduler")
             require_leader()
             return command.reserved_targets, {"version": 1, "command": command.model_dump(mode="json")}
@@ -215,17 +226,12 @@ def admit_scheduled(
             scheduled_for=due,
             intent=intent,
             command_factory=capture,
+            storage=storage, before_insert=before_insert,
         )
         return AdmissionResult("admitted", due, operation_id=row.id)
-    except _Skipped as skipped:
+    except AdmissionSkipped as skipped:
         return AdmissionResult("skipped", due, code=skipped.code)
     except PlaylistNeedsReview as blocked:
-        # Routine skipped: an earlier run on this playlist needs review. Restore or resolve it first.
-        logger.warning(
-            "Scheduled fire skipped: an earlier run needs review "
-            "(schedule_id=%s scheduled_for=%s blocking_operation_id=%s)",
-            schedule_id, due.isoformat(), blocked.operation_id,
-        )
         return AdmissionResult("skipped", due, code="needs_attention", blocking_operation_id=blocked.operation_id)
     except BusyOperation as busy:
         return AdmissionResult("skipped", due, code="busy", blocking_operation_id=busy.operation_id)

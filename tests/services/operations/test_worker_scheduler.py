@@ -193,6 +193,8 @@ def test_shutdown_interrupts_lock_retry_without_starting_scheduler(schedule, db_
 def test_transient_admission_retries_keep_due_identity_and_stop_at_grace(schedule, db_app):
     from sqlalchemy.exc import OperationalError
 
+    schedule.definition_changed_at = schedule.created_at
+    db.session.commit()
     clock = [NOW]
     calls = []
 
@@ -218,7 +220,7 @@ def test_transient_admission_retries_keep_due_identity_and_stop_at_grace(schedul
         assert calls == [NOW, NOW]
         assert runtime.metrics["admission_retries"] == 2
         assert runtime.metrics["missed"] == 1
-        assert JobExecution.query.count() == 0
+        assert JobExecution.query.one().result_json["schedule_skip_code"] == "misfire"
 
 
 @pytest.mark.parametrize("invalidated_interface", [False, True])
