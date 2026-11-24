@@ -748,3 +748,38 @@ test("a playlist hold is reviewed on demand and released only after confirmation
   await expect(page.getByText("Released the reviewed hold on this playlist.")).toBeVisible();
   expect(methods).toEqual(["GET", "POST"]);
 });
+
+test("acknowledging a playlist hold unblocks a fresh save in the same Workshop", async ({ page }) => {
+  const calls = await start(page, "workshop-partial");
+  await edit(page);
+  const terminal = page.waitForResponse(async (response) =>
+    response.url().endsWith("/api/operations/2001") &&
+    (await response.json()).operation?.state === "needs_attention",
+  );
+  await reviewSave(page);
+  const receipt = await (await terminal).json();
+  await expect(page.getByRole("region", { name: "Retained operation" })).toContainText("partial");
+  await page.keyboard.press("Escape");
+  const save = page.getByRole("button", { name: "Review & save", exact: true });
+  await expect(save).toBeDisabled();
+  let released = false;
+  await page.route("**/api/playlist/target/operation-review", async (route) => {
+    if (route.request().method() === "POST") released = true;
+    await route.fulfill({ json: {
+      success: true,
+      review: { signature: "a".repeat(64), version: 1, issued_at: 1 },
+      message: "Released the reviewed hold on this playlist.",
+    } });
+  });
+  await page.route("**/api/operations/2001", async (route) => {
+    if (released) receipt.operation.recovery.acknowledged_targets = ["target"];
+    await route.fulfill({ json: receipt });
+  });
+  await page.getByRole("button", { name: "Review playlist hold" }).click();
+  await expect(save).toBeDisabled();
+  await page.getByRole("button", { name: "Keep current playlist and release hold" }).click();
+  await expect(save).toBeEnabled();
+  await reviewSave(page);
+  await expect.poll(() => calls.filter((c) => c.path.endsWith("/commit")).length).toBe(2);
+  expect(new Set(calls.filter((c) => c.path.endsWith("/commit")).map((c) => c.key)).size).toBe(2);
+});

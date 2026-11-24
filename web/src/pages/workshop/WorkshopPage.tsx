@@ -351,7 +351,7 @@ export function WorkshopPage({
                       </Button>
                     </div>
                   </header>
-                  {sameActor && <PlaylistHold playlistId={c.playlistId} />}
+                  {sameActor && <PlaylistHold playlistId={c.playlistId} refreshHolds={c.refreshPlaylistHolds} />}
                   {!c.permission("review").allowed && !busy && !attention && (
                     <p role="status" className="sh-workshop-notice">
                       {c.permission("review").reason}
@@ -442,7 +442,7 @@ export function WorkshopPage({
                 </>
               )
             )}
-            {sameActor && s.phase === "error" && <PlaylistHold playlistId={c.playlistId} />}
+            {sameActor && s.phase === "error" && <PlaylistHold playlistId={c.playlistId} refreshHolds={c.refreshPlaylistHolds} />}
           </div>
         </Workspace>
         {decision.element}

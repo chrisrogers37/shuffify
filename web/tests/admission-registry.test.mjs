@@ -383,3 +383,21 @@ test("unknown source or required database facts cannot release a failed no-targe
       false,
     );
 });
+
+test("an editor's acknowledgement releases only the named target of its terminal receipt", async () => {
+  const terminal = { ...op(1, "needs_attention"), targets: ["target", "other"] };
+  const t = harness(async (path) => path === "/api/operations/1"
+    ? Response.json({ success: true, operation: {
+        ...terminal, recovery: { ...terminal.recovery, acknowledged_targets: ["target"] },
+      } })
+    : Response.json({ success: true, operation_id: 1, operation: op() }, { status: 202 }));
+  await t.r.submit(request(), "alice");
+  t.operations.finish(terminal);
+  assert.ok(t.r.conflict(spotifyResources("target")));
+  await t.r.refreshPlaylistHolds("target", () => "bob");
+  assert.ok(t.r.conflict(spotifyResources("target")));
+  await t.r.refreshPlaylistHolds("target", () => "alice");
+  assert.equal(t.r.conflict(spotifyResources("target")), null);
+  assert.ok(t.r.conflict(spotifyResources("other")));
+  assert.equal(t.r.getSnapshot().get("key").status, "attention");
+});

@@ -54,8 +54,7 @@ class BusyOperation(RuntimeError):
 class PlaylistNeedsReview(BusyOperation):
     """A needs_attention operation on a requested target has not been restored or resolved."""
 
-    def __init__(self, operation_id, owner_id, playlist_id):
-        self.playlist_id = playlist_id
+    def __init__(self, operation_id, owner_id):
         super().__init__(operation_id, owner_id)
         self.args = ("An earlier operation on this playlist needs review.",)
 
@@ -113,18 +112,18 @@ def _targets(values):
     return tuple(sorted(set(values)))
 
 
-def _confirmed_write_target(journal, targets):
+def _has_confirmed_write(journal, targets):
     # An inferred acknowledgement can exist without a successful authenticated write.
     if not isinstance(journal, dict):
-        return None
+        return False
     for phase in ("plans", "compensation"):
         for step in journal.get(phase, []):
             if step.get("resource") in targets:
                 for batch in step.get("batches", []):
                     status = batch.get("last_http_status")
                     if type(status) is int and 200 <= status < 300:
-                        return step["resource"]
-    return None
+                        return True
+    return False
 
 
 def _utc(value):
@@ -169,6 +168,9 @@ def public_operation(row, *, restoration_attempt=None):
     if row.state == "needs_attention":
         from .restoration import RestoreUnavailable, capture_restore
 
+        released = (journal.get("runtime") or {}).get("acknowledgements", {})
+        if released:
+            recovery["acknowledged_targets"] = [target for target in (row.targets or []) if target in released]
         try:
             capture_restore(row, row.user_id)
             if restoration_attempt is None:
@@ -330,8 +332,7 @@ class OperationRepository:
                     session, user_id, targets, exempt=self._restore_parent_id(kind, payload),
                 )
                 if blocker is not None:
-                    row, playlist_id = blocker
-                    raise PlaylistNeedsReview(row.id, row.user_id, playlist_id)
+                    raise PlaylistNeedsReview(blocker.id, blocker.user_id)
             now = self._now(session)
             row = JobExecution(kind=kind, user_id=user_id, targets=list(targets), payload=payload,
                                request_key=request_key, schedule_id=schedule_id, scheduled_for=scheduled_for,
@@ -366,7 +367,7 @@ class OperationRepository:
             if row.user_id == user_id:
                 return row
             shared = set(targets).intersection(row.targets)
-            if _confirmed_write_target(row.journal, shared) is not None:
+            if _has_confirmed_write(row.journal, shared):
                 return row
         return None
 
@@ -418,10 +419,8 @@ class OperationRepository:
             if isinstance(restoration, dict) and restoration.get("operation_id") is not None:
                 continue
             shared = set(targets).intersection(row.targets).difference(runtime.get("acknowledgements", {}))
-            if shared:
-                target = min(shared) if row.user_id == user_id else _confirmed_write_target(row.journal, shared)
-                if target is not None:
-                    return row, target
+            if shared and (row.user_id == user_id or _has_confirmed_write(row.journal, shared)):
+                return row
         return None
 
     def attention_review(self, user_id, playlist_id, snapshot_id, *, confirmation=_UNSET):
@@ -431,10 +430,9 @@ class OperationRepository:
         applying = confirmation is not _UNSET
         purpose = "shuffify.playlist.attention.v1"
         with self._transaction(write=applying) as session:
-            blocker = self._unresolved_attention(session, user_id, [playlist_id], lock=applying)
-            if blocker is None:
+            row = self._unresolved_attention(session, user_id, [playlist_id], lock=applying)
+            if row is None:
                 return None
-            row, _ = blocker
             facts = dict(user_id=user_id, playlist_id=playlist_id, snapshot_id=snapshot_id, operation_id=row.id)
             if not applying:
                 return signed_digest.issue(purpose, facts)

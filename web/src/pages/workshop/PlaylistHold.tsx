@@ -4,7 +4,10 @@ import { Button } from "../../components/ui/controls";
 
 type Review = { version: number; issued_at: number; signature: string };
 
-export function PlaylistHold({ playlistId }: { playlistId: string }) {
+export function PlaylistHold({ playlistId, refreshHolds }: {
+  playlistId: string;
+  refreshHolds: () => Promise<void>;
+}) {
   const { api } = useServices();
   const [review, setReview] = useState<Review | null>(null);
   const [busy, setBusy] = useState(false);
@@ -23,6 +26,15 @@ export function PlaylistHold({ playlistId }: { playlistId: string }) {
       } else {
         setReview(result.data.review);
         setMessage(result.data.review ? "" : "This playlist has no hold to review.");
+      }
+      if (review || !result.data.review) {
+        try {
+          await refreshHolds();
+        } catch {
+          setMessage(review
+            ? "The hold was released. Review again to refresh the Workshop receipt."
+            : "This playlist has no hold. Review again to refresh the Workshop receipt.");
+        }
       }
     } catch (error) {
       setReview(null);

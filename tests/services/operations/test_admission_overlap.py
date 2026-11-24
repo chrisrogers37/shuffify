@@ -163,4 +163,5 @@ def test_releasing_one_hold_preserves_the_same_owners_other_targets(repo, app):
     assert repo.enqueue(kind="example", user_id=1, targets=["left"], payload={}).state == "queued"
     with pytest.raises(PlaylistNeedsReview) as blocked:
         repo.enqueue(kind="example", user_id=1, targets=["right"], payload={})
-    assert blocked.value.playlist_id == "right"
+    assert blocked.value.operation_id == parent.id
+    assert repo.get_owned(1, parent.id)["recovery"]["acknowledged_targets"] == ["left"]

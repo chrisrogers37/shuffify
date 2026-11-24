@@ -84,6 +84,14 @@
     "endpoint": "api.live_context"
   },
   {
+    "path": "/api/playlist/<playlist_id>/operation-review",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "endpoint": "api.playlist_operation_review"
+  },
+  {
     "path": "/api/playlist/<playlist_id>/pair",
     "methods": [
       "DELETE"
