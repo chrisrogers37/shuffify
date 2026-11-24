@@ -728,3 +728,23 @@ test("initial viewport keeps the first track details and Actions above the foote
   expect(copy!.y + copy!.height).toBeLessThanOrEqual(footer!.y);
   expect(actions!.y + actions!.height).toBeLessThanOrEqual(footer!.y);
 });
+
+test("a playlist hold is reviewed on demand and released only after confirmation", async ({ page }) => {
+  const calls = await start(page);
+  const url = "/api/playlist/target/operation-review";
+  expect(calls.some((call) => call.path === url)).toBe(false);
+  const review = { version: 1, issued_at: 1, signature: "a".repeat(64) };
+  const methods: string[] = [];
+  await page.route(`**${url}`, async (route) => {
+    const request = route.request();
+    methods.push(request.method());
+    if (request.method() === "POST") expect(request.postDataJSON()).toEqual({ review });
+    await route.fulfill({ json: { success: true, review, message: "Released the reviewed hold on this playlist." } });
+  });
+  await page.getByRole("button", { name: "Review playlist hold" }).click();
+  await expect(page.getByRole("link", { name: "Open current playlist on Spotify" })).toHaveAttribute("href", "https://open.spotify.com/playlist/target");
+  expect(methods).toEqual(["GET"]);
+  await page.getByRole("button", { name: "Keep current playlist and release hold" }).click();
+  await expect(page.getByText("Released the reviewed hold on this playlist.")).toBeVisible();
+  expect(methods).toEqual(["GET", "POST"]);
+});

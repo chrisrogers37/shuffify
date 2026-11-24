@@ -441,3 +441,64 @@ def test_a_batch_refused_for_quota_is_a_partial_write(server, api, store, backof
     assert isinstance(raised.value.cause, SpotifyQuotaExceededError)
     assert playlist.uris == reversed_uris[:100]
     assert backoffs == []
+
+
+@pytest.fixture
+def playlist_review_client(monkeypatch, request):
+    # A loopback contract test permits only the fake Spotify server. Use the
+    # testing app's filesystem session fallback without probing a Redis server.
+    monkeypatch.setattr("config.TestConfig.REDIS_URL", None)
+    return request.getfixturevalue("auth_client")
+
+
+@pytest.mark.parametrize("actor", ["bob", "alice", "carol"])
+def test_acknowledging_a_playlist_hold_checks_the_editor_at_confirmation(store, auth, playlist_review_client,
+                                                                        monkeypatch, actor):
+    from shuffify.models.db import User, db
+    from shuffify.services.operations.repository import OperationRepository
+
+    auth_client = playlist_review_client
+    playlist = store.playlists[pid("bob-road-trip")]
+    playlist.public = True  # All three accounts can see the flag and snapshot.
+    playlist.followers.add("carol")
+    path = f"/api/playlist/{playlist.id}/operation-review"
+    editor, author = User(spotify_id=actor), User(spotify_id="original-writer")
+    db.session.add_all([editor, author])
+    db.session.commit()
+    with auth_client.session_transaction() as session:
+        session["user_data"] = {"id": actor}
+        session.pop("_db_user_id", None)
+    client = SpotifyAPI(log_in(auth, actor), auth)
+    monkeypatch.setattr("shuffify.routes.require_auth", lambda: client)
+    repo = OperationRepository()
+    parent = repo.enqueue(kind="example", user_id=author.id, targets=[playlist.id], payload={})
+    lease = repo.claim(operation_id=parent.id)
+    plans = [{"resource": playlist.id, "batches": [{"last_http_status": 201}]}]
+    repo.checkpoint(lease, {"plans": plans})
+    repo.finish(lease, "needs_attention")
+    initial_version = playlist.version
+
+    review = auth_client.get(path)
+    assert review.headers["Cache-Control"] == "no-store"
+    assert "operation_id" not in review.json
+    if actor == "carol":
+        assert review.status_code == 403
+        assert auth_client.post(path, json={"review": {}}).status_code == 403
+        assert repo.get(parent.id).journal == {"plans": plans}
+        return
+    assert review.status_code == 200
+    token = review.json["review"]
+    assert set(token) == {"signature", "version", "issued_at"}
+    if actor == "alice":
+        playlist.collaborators.remove(actor)
+        assert auth_client.post(path, json={"review": token}).status_code == 403
+        playlist.collaborators.add(actor)
+    playlist.version += 1  # Simulate an independent Spotify edit after the review.
+    assert auth_client.post(path, json={"review": token}).status_code == 409
+    assert repo.get(parent.id).journal == {"plans": plans}
+    current = auth_client.get(path).json["review"]
+    assert auth_client.post(path, json={"review": current}).status_code == 200
+    assert auth_client.get(path).json["review"] is None
+    assert auth_client.get(f"/api/operations/{parent.id}").status_code == 404
+    assert playlist.version == initial_version + 1
+    assert repo.enqueue(kind="example", user_id=editor.id, targets=[playlist.id], payload={}).state == "queued"

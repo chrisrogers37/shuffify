@@ -98,10 +98,9 @@ def test_a_refusal_never_names_another_users_operation(auth_client, local_source
     repository = OperationRepository()
     blocking = repository.enqueue(kind="shuffle", user_id=other.id, targets=["target"], payload={})
     lease = repository.claim(operation_id=blocking.id)
+    repository.checkpoint(lease, {"plans": [{"resource": "target", "batches": [{"last_http_status": 200}]}]})
     if state == "needs_attention":
         repository.finish(lease, "needs_attention")
-    else:
-        repository.checkpoint(lease, {"plans": [{"resource": "target", "batches": [{"last_http_status": 200}]}]})
     path, options = writer_case("shuffle", None)
     response = auth_client.post(path, **options)
     assert (response.status_code, response.json["error_code"]) == (409, error_code)

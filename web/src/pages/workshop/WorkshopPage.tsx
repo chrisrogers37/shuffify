@@ -19,6 +19,7 @@ import type { WorkshopTool, WorkshopToolContext } from "./workspace";
 import { TrackList } from "./TrackList";
 import { ReviewPanel, ActorTask } from "./ReviewPanel";
 import { NamedDrafts } from "./NamedDrafts";
+import { PlaylistHold } from "./PlaylistHold";
 import { PlaylistPicker } from "./PlaylistPicker";
 import { useDraftDecision } from "./DraftDecision";
 import "./workshop.css";
@@ -350,6 +351,7 @@ export function WorkshopPage({
                       </Button>
                     </div>
                   </header>
+                  {sameActor && <PlaylistHold playlistId={c.playlistId} />}
                   {!c.permission("review").allowed && !busy && !attention && (
                     <p role="status" className="sh-workshop-notice">
                       {c.permission("review").reason}
@@ -440,6 +442,7 @@ export function WorkshopPage({
                 </>
               )
             )}
+            {sameActor && s.phase === "error" && <PlaylistHold playlistId={c.playlistId} />}
           </div>
         </Workspace>
         {decision.element}

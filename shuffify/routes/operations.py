@@ -1,6 +1,6 @@
 """Owner-scoped operation status, independent of Spotify availability."""
 
-from shuffify.routes import api_bp, json_error, json_success, no_store, require_session_and_db
+from shuffify.routes import api_bp, json_error, json_success, no_store, require_auth_and_db, require_session_and_db
 
 
 @api_bp.get("/operations/<int:operation_id>")
@@ -161,3 +161,52 @@ def operation_restore_admit(operation_id, user=None):
         {"operation_id": operation_id, "reviewed": value.reviewed.model_dump(mode="json")},
         build,
     )
+
+
+@api_bp.route("/playlist/<playlist_id>/operation-review", methods=["GET", "POST"])
+@no_store
+@require_auth_and_db
+def playlist_operation_review(playlist_id, api=None, user=None):
+    """Review and acknowledge one playlist hold with the current editor's own credential."""
+    from flask import request, session
+    from pydantic import TypeAdapter, ValidationError
+
+    from shuffify.schemas.workshop_finalize_requests import PlaylistID
+    from shuffify.services.operations.repository import OperationRepository
+    from shuffify.spotify.exceptions import SpotifyForbiddenError, SpotifyNotFoundError
+
+    try:
+        TypeAdapter(PlaylistID).validate_python(playlist_id)
+    except ValidationError:
+        return json_error("Invalid playlist ID.", 400)
+    if user.spotify_id != (session.get("user_data") or {}).get("id"):
+        return json_error("Please log in again.", 401)
+    applying = request.method == "POST"
+    if applying:
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict) or set(body) != {"review"} or not isinstance(body["review"], dict):
+            return json_error("Load a playlist review before acknowledging it.", 400)
+
+    try:
+        playlist = api.get_playlist(playlist_id, skip_cache=True)
+        snapshot = playlist.get("snapshot_id")
+        if playlist.get("id") != playlist_id or not isinstance(snapshot, str) or not snapshot:
+            return json_error("Spotify could not confirm the playlist version.", 502)
+        if (playlist.get("owner") or {}).get("id") != user.spotify_id:
+            if playlist.get("collaborative") is not True:
+                raise SpotifyForbiddenError("Not a collaborative playlist")
+            # The current /items endpoint is restricted to this playlist's owner
+            # and collaborators. Metadata or a legacy /tracks read is insufficient.
+            items = api.get_playlist_items_raw(playlist_id, fields="total", limit=1)
+            if type(items.get("total")) is not int or items["total"] < 0:
+                return json_error("Spotify could not confirm playlist access.", 502)
+    except (SpotifyForbiddenError, SpotifyNotFoundError):
+        return json_error("This playlist is unavailable or you cannot edit it.", 403)
+
+    repo = OperationRepository()
+    if applying:
+        if not repo.attention_review(user.id, playlist_id, snapshot, confirmation=body["review"]):
+            return json_error("This review has changed or expired. Review the playlist again.", 409)
+        return json_success("Released the reviewed hold on this playlist.")
+    review = repo.attention_review(user.id, playlist_id, snapshot)
+    return json_success("Playlist review loaded.", review=review)

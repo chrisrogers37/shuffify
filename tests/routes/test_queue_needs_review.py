@@ -18,7 +18,7 @@ def reply(app, monkeypatch, error):
 
 
 def test_refusal_names_the_blocking_run_and_is_not_retryable(app, monkeypatch):
-    body, status = reply(app, monkeypatch, PlaylistNeedsReview(41, owner_id=1))
+    body, status = reply(app, monkeypatch, PlaylistNeedsReview(41, owner_id=1, playlist_id="target"))
     assert status == 409
     assert body["error_code"] == "playlist_needs_review"
     assert body["operation_id"] == 41 and body["reason"] == "needs_attention"
