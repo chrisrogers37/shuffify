@@ -16,11 +16,13 @@ authenticate with Spotify. Another user receives `404`.
 Clients send `Idempotency-Key` with each distinct submitted intent. Keys contain
 1–128 characters. A matching retry returns the original operation before
 reading current history or a selected snapshot again. Changing that intent
-with the same key returns `409 request_key_conflict`. An active operation
-reserves all its targets, so another command for a reserved target returns
-`409 playlist_busy`, which names the blocking operation's ID only to its owner.
-Commands without a key still reserve their targets but cannot identify a retry
-after completion.
+with the same key returns `409 request_key_conflict`. An active operation reserves
+all its targets against new commands from its owner. For another account, a
+target becomes busy once Spotify has returned a successful write response for that playlist in the
+operation's journal. A collaborative flag alone gives no account-specific proof.
+A `409 playlist_busy` names the blocking operation only to its owner. Commands
+without a key follow the same conflict rules but cannot identify a retry after
+completion.
 
 The command records the validated input, selected snapshot contents and relevant
 browser history binding. Snapshot retries therefore preserve the accepted order
@@ -31,8 +33,12 @@ Flask session nor credentials. Public response schemas are generated from
 ## Execution and recovery
 
 The worker owns a renewable lease and sorted playlist locks, plus a credential
-lock for the user. Randomized algorithm choices and original observations are
-checkpointed before any mutation. Each HTTP batch has a durable intent and
+lock for the user. Before executing a newly admitted command it opens the operation's
+journal. An open journal reserves the worker's turn across retries and crashes.
+Other accounts can still submit before proof, and queued work holds no execution
+turn. A waiting worker checks for unresolved attention before starting.
+Randomized algorithm choices and original observations are checkpointed before
+any mutation. Each HTTP batch has a durable intent and
 acknowledgment. Command steps retain their plan ranges, results and working
 history so recovery does not select another shuffle or treat a completed write
 as its original baseline.

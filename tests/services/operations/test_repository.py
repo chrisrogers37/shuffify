@@ -67,7 +67,7 @@ def test_idempotency_distinguishes_json_scalar_types(repository, value):
 def test_busy_reservations_include_queued_and_shared_targets(repository):
     first = repository.enqueue(kind="example", user_id=1, targets=["target", "shared"], payload={}, request_key="first")
     with pytest.raises(BusyOperation) as error:
-        repository.enqueue(kind="example", user_id=2, targets=["other", "shared"], payload={}, request_key="second")
+        repository.enqueue(kind="example", user_id=1, targets=["other", "shared"], payload={}, request_key="second")
     assert error.value.operation_id == first.id
     lease = repository.claim()
     with pytest.raises(BusyOperation):

@@ -25,7 +25,7 @@ def repo(request):
     return request.getfixturevalue(request.param)
 
 
-@pytest.mark.parametrize("state", ["queued", "needs_attention"])
+@pytest.mark.parametrize("state", ["running", "needs_attention"])
 def test_conflict_queries_return_only_overlapping_executions(repo, state):
     noise = [
         dict(id=i, user_id=i, kind="shuffle", state=status, targets=[f"unrelated-{i}"])
@@ -38,6 +38,8 @@ def test_conflict_queries_return_only_overlapping_executions(repo, state):
         dict(id=302, user_id=2, kind="shuffle", state=state, targets=["other", "shared"]),
         dict(id=303, user_id=3, kind="shuffle", state=state, targets=["shared", "third"]),
     ]
+    for row in noise + matches:
+        row["journal"] = {"plans": [{"resource": row["targets"][-1], "batches": [{"last_http_status": 201}]}]}
     with repo.engine.begin() as conn:
         conn.execute(JobExecution.__table__.insert(), noise + matches)
 
@@ -54,7 +56,7 @@ def test_conflict_queries_return_only_overlapping_executions(repo, state):
                          payload={"command": {"capture": {"operation_id": 301}}})
     finally:
         event.remove(repo.engine, "before_cursor_execute", record_select)
-    assert type(blocked.value) is (BusyOperation if state == "queued" else PlaylistNeedsReview)
+    assert type(blocked.value) is (BusyOperation if state == "running" else PlaylistNeedsReview)
     assert (blocked.value.operation_id, blocked.value.owner_id) == (302, 2)
 
     # Replay the actual SELECTs against the same rows. This measures what the
@@ -84,8 +86,9 @@ def test_upgrade_preserves_existing_blockers(repo):
     assert target_index() is None
     with engine.begin() as conn:
         conn.execute(JobExecution.__table__.insert(), [
-            dict(id=1, user_id=6, kind="shuffle", state="running", targets=["a", "b"]),
-            dict(id=2, user_id=7, kind="shuffle", state="needs_attention", targets=["c", "d"]),
+            dict(id=1, user_id=6, kind="shuffle", state="running", targets=["a", "b"],
+                 journal={"plans": [{"resource": "b", "batches": [{"last_http_status": 200}]}]}),
+            dict(id=2, user_id=7, kind="shuffle", state="needs_attention", targets=["c", "d"], journal={}),
         ])
     with engine.begin() as conn, Operations.context(MigrationContext.configure(conn)):
         revision.upgrade()
@@ -95,3 +98,19 @@ def test_upgrade_preserves_existing_blockers(repo):
             repo.enqueue(kind="shuffle", user_id=9, targets=["new", target], payload={})
         assert type(blocked.value) is expected
         assert (blocked.value.operation_id, blocked.value.owner_id) == blocker
+
+
+@pytest.mark.parametrize("phase", ["plans", "compensation"])
+def test_only_actual_write_responses_reserve_their_own_shared_target(repo, phase):
+    active = repo.enqueue(kind="example", user_id=1, targets=["written", "other"], payload={})
+    lease = repo.claim(operation_id=active.id)
+    repo.checkpoint(lease, {phase: [
+        {"resource": "written", "batches": [{"last_http_status": 204}]},
+        {"resource": "other", "batches": [{"state": "acknowledged", "inferred": True}, {"last_http_status": 403}]},
+        # The command created this playlist; it was never one of the reserved targets.
+        {"resource": "created", "batches": [{"last_http_status": 200}]},
+    ]}, state="running" if phase == "plans" else "compensating")
+    with pytest.raises(BusyOperation) as blocked:
+        repo.enqueue(kind="example", user_id=2, targets=["written"], payload={})
+    assert blocked.value.operation_id == active.id
+    assert repo.enqueue(kind="example", user_id=2, targets=["other", "created"], payload={}).state == "queued"

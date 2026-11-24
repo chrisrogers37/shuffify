@@ -68,6 +68,19 @@ Interactive checks embedded in setup saves, routine activation or state changes 
   kept by the owner outside the repository. It restores cleanly into PostgreSQL 18 with the source's
   17 tables and 5 rows.
 
+## Changing the cross-account queue admission rule
+
+When introducing per-playlist write proof (#129, step 1), stop and drain all
+older worker replicas before either the upgraded API accepts manual requests or
+an upgraded worker admits scheduled fires. Older workers can write during the
+gap between another operation's interrupted write and its recovery. Once the
+old workers have exited, start the upgraded worker and release the API.
+
+To roll back across this change, stop manual submissions and scheduled fires
+first. Keep the upgraded worker draining the queue, with scheduling disabled,
+until all active operations have settled, including deferred and recovering
+work. Then switch the API and worker back and resume admission.
+
 ## Rolling back
 
 ### Code

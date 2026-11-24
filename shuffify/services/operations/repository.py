@@ -308,11 +308,7 @@ class OperationRepository:
                                       schedule_id=None, scheduled_for=None)
             if targets:
                 overlap = self._target_overlap(targets)
-                # Sorting just the overlaps lets PostgreSQL use the target index.
-                # ORDER BY id LIMIT 1 can instead walk the entire primary key on a miss.
-                active = session.execute(select(JobExecution.id, JobExecution.user_id).where(
-                    JobExecution.kind.is_not(None), JobExecution.state.in_(ACTIVE_STATES), overlap,
-                ).order_by(JobExecution.id)).first()
+                active = self._admission_blocker(session, overlap, targets, user_id)
                 if active is not None:
                     raise BusyOperation(active.id, active.user_id)
                 blocker = self._unresolved_attention(session, kind, overlap, payload)
@@ -335,6 +331,55 @@ class OperationRepository:
             return cast(JobExecution.targets, JSONB).has_any(cast(list(targets), ARRAY(Text)))
         elements = func.json_each(JobExecution.targets).table_valued("value")
         return select(1).select_from(elements).where(elements.c.value.in_(targets)).exists()
+
+    @staticmethod
+    def _admission_blocker(session, overlap, targets, user_id):
+        same_owner = JobExecution.user_id == user_id
+        # Keep the indexed candidate set and its ID ordering. Only foreign leased
+        # candidates need their write evidence inspected; queued rows have none.
+        candidates = select(
+            JobExecution.id, JobExecution.user_id, JobExecution.targets,
+            case((same_owner, None), else_=JobExecution.journal).label("journal"),
+        ).where(
+            JobExecution.kind.is_not(None), JobExecution.state.in_(ACTIVE_STATES), overlap,
+            or_(same_owner, JobExecution.state.in_(LEASED_STATES)),
+        ).order_by(JobExecution.id)
+        for row in session.execute(candidates):
+            if row.user_id == user_id:
+                return row
+            shared = set(targets).intersection(row.targets)
+            journal = row.journal or {}
+            # Metadata, dispatch intent and recovery-inferred acknowledgements
+            # can all exist without this account ever being allowed to write.
+            for phase in ("plans", "compensation"):
+                for step in journal.get(phase, []):
+                    if step.get("resource") in shared and any(
+                        200 <= batch.get("last_http_status", 0) < 300 for batch in step["batches"]
+                    ):
+                        return row
+        return None
+
+    def begin_execution(self, lease, row):
+        """Open the journal under the target locks, or wait for unfinished work on any target."""
+        if not row.targets or row.journal:
+            return None
+        overlap = self._target_overlap(row.targets)
+        # PostgreSQL workers hold session-level target locks here. BEGIN IMMEDIATE
+        # makes the check and journal creation atomic across SQLite processes too.
+        with self._transaction(write=True) as session:
+            started = session.scalar(select(JobExecution.id).where(
+                JobExecution.kind.is_not(None), JobExecution.state.in_(LEASED_STATES),
+                overlap, JobExecution.id != row.id, cast(JobExecution.journal, Text).not_in(("{}", "null")),
+            ).limit(1))
+            if started is not None:
+                return "busy"
+            if self._unresolved_attention(session, row.kind, overlap, row.payload) is not None:
+                return "needs_attention"
+            owned, _ = self._leased_row(session, lease)
+            # Existing nonempty journals already own their turn, including after
+            # a crash or deferral. A freshly claimed row still has an empty one.
+            owned.journal = {"version": 1}
+        return None
 
     @staticmethod
     def _unresolved_attention(session, kind, overlap, payload):
@@ -558,8 +603,8 @@ class OperationRepository:
         delay = _positive_seconds(delay_seconds)
         with self._transaction(write=True) as session:
             row, now = self._leased_row(session, lease)
-            if not lease.recovering and row.state == "running" and not row.journal:
-                row.state, row.status = "queued", "queued"
+            if not lease.recovering and row.state == "running" and (not row.journal or row.journal == {"version": 1}):
+                row.state, row.status, row.journal = "queued", "queued", {}
             row.lease_owner = None
             row.lease_expires_at = now + timedelta(seconds=delay)
             return self._detach(session, row)
