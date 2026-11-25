@@ -444,20 +444,22 @@ def test_a_batch_refused_for_quota_is_a_partial_write(server, api, store, backof
 
 
 @pytest.fixture
-def playlist_review_client(monkeypatch, request):
+def playlist_client(monkeypatch, request):
     # A loopback contract test permits only the fake Spotify server. Use the
     # testing app's filesystem session fallback without probing a Redis server.
     monkeypatch.setattr("config.TestConfig.REDIS_URL", None)
+    monkeypatch.setattr("config.TestConfig.SPOTIFY_CLIENT_ID", "harness-fake-client-id")
+    monkeypatch.setattr("config.TestConfig.SPOTIFY_CLIENT_SECRET", "harness-fake-client-secret")
     return request.getfixturevalue("auth_client")
 
 
 @pytest.mark.parametrize("actor", ["bob", "alice", "carol"])
-def test_acknowledging_a_playlist_hold_checks_the_editor_at_confirmation(store, auth, playlist_review_client,
+def test_acknowledging_a_playlist_hold_checks_the_editor_at_confirmation(store, auth, playlist_client,
                                                                         monkeypatch, actor):
     from shuffify.models.db import User, db
     from shuffify.services.operations.repository import OperationRepository
 
-    auth_client = playlist_review_client
+    auth_client = playlist_client
     playlist = store.playlists[pid("bob-road-trip")]
     playlist.public = True  # All three accounts can see the flag and snapshot.
     playlist.followers.add("carol")
@@ -502,3 +504,133 @@ def test_acknowledging_a_playlist_hold_checks_the_editor_at_confirmation(store, 
     assert auth_client.get(f"/api/operations/{parent.id}").status_code == 404
     assert playlist.version == initial_version + 1
     assert repo.enqueue(kind="example", user_id=editor.id, targets=[playlist.id], payload={}).state == "queued"
+
+
+def sign_in_to_raid(client, auth, actor):
+    from shuffify.models.db import User, db
+
+    user = User(spotify_id=actor)
+    db.session.add(user)
+    db.session.commit()
+    with client.session_transaction() as session:
+        session["spotify_token"] = log_in(auth, actor).to_dict()
+        session["user_data"] = {"id": actor}
+        session.pop("_db_user_id", None)
+    return user
+
+
+def add_raid_source(client, target, source, auto_schedule):
+    return client.post(f"/api/playlist/{target}/raid-add-url", json={
+        "url": f"https://open.spotify.com/playlist/{source}", "auto_schedule": auto_schedule,
+    })
+
+
+def raid_rows():
+    from shuffify.models.db import Schedule, UpstreamSource, db
+
+    db.session.expire_all()
+    return ([row.to_dict() for row in UpstreamSource.query.order_by(UpstreamSource.id)],
+            [row.to_dict() for row in Schedule.query.order_by(Schedule.id)])
+
+
+@pytest.mark.parametrize("auto_schedule", [False, True])
+@pytest.mark.parametrize("actor", ["bob", "alice", "carol"], ids=["owner", "collaborator", "follower"])
+def test_raid_add_url_checks_target_editor(store, auth, playlist_client, actor, auto_schedule):
+    target = store.playlists[pid("bob-road-trip")]
+    target.public = True
+    target.followers.add("carol")
+    target.entries.clear()  # An editor can read the protected items endpoint even when total is zero.
+    user = sign_in_to_raid(playlist_client, auth, actor)
+    source = pid("erin-workout")
+    response = add_raid_source(playlist_client, target.id, source, auto_schedule)
+    sources, schedules = raid_rows()
+    if actor == "carol":
+        assert (response.status_code, len(sources), len(schedules)) == (403, 0, 0)
+        return
+    assert response.status_code == 200, response.json
+    assert [(s["user_id"], s["target_playlist_id"], s["source_playlist_id"], s["source_type"])
+            for s in sources] == [(user.id, target.id, source, "external")]
+    assert [(s["user_id"], s["target_playlist_id"], s["source_playlist_ids"], s["is_enabled"])
+            for s in schedules] == ([(user.id, target.id, [source], True)] if auto_schedule else [])
+
+
+@pytest.mark.parametrize("auto_schedule", [False, True])
+@pytest.mark.parametrize("failure", ["revoked", "collaboration_disabled", "spotify_quota"])
+def test_raid_add_url_rechecks_access_before_changing_existing_rows(
+    server, store, auth, playlist_client, failure, auto_schedule
+):
+    target = store.playlists[pid("bob-road-trip")]
+    target.public = True
+    target.followers.add("alice")
+    sign_in_to_raid(playlist_client, auth, "alice")
+    # The caller can read this external source's count. A duplicate watch could
+    # overwrite its saved count, and a new watch could append to the saved schedule.
+    source = store.playlists[pid("erin-workout")]
+    source.collaborative = True
+    source.collaborators.add("alice")
+    response = add_raid_source(playlist_client, target.id, source.id, True)
+    assert response.status_code == 200, response.json
+    before = raid_rows()
+    assert before[0][0]["last_track_count"] == len(source.entries) > 0
+    source.entries.clear()
+
+    if failure == "revoked":
+        target.collaborators.remove("alice")
+        status = 403
+    elif failure == "collaboration_disabled":
+        target.collaborative = False
+        status = 403
+    else:
+        arm(server, operation="GET /playlists/{playlist_id}/items", kind="quota", playlist_id=target.id, times=2)
+        status = 429
+    for source_id in (source.id, pid("frank-focus")):
+        response = add_raid_source(playlist_client, target.id, source_id, auto_schedule)
+        assert response.status_code == status, response.json
+        assert raid_rows() == before
+
+
+def test_raid_add_url_rejects_a_stale_cached_account(store, auth, playlist_client):
+    from shuffify.models.db import User
+
+    sign_in_to_raid(playlist_client, auth, "carol")
+    target = store.playlists[pid("bob-road-trip")]
+    target.public = True
+    # The signed-in token and profile belong to Carol. An old database PK must
+    # never let the owner shortcut authorize a write to another account's rows.
+    with playlist_client.session_transaction() as session:
+        session["_db_user_id"] = User.query.filter_by(spotify_id="user123").one().id
+    target.owner = "user123"
+    response = add_raid_source(playlist_client, target.id, pid("erin-workout"), True)
+    assert response.status_code == 401
+    assert raid_rows() == ([], [])
+
+
+@pytest.mark.parametrize("auto_schedule", [False, True])
+def test_raid_add_url_finishes_spotify_reads_before_first_mutation_lock(
+    store, auth, playlist_client, monkeypatch, auto_schedule
+):
+    from shuffify.services.playlist_lock import _target_lock
+
+    target, source = pid("bob-road-trip"), pid("erin-workout")
+    sign_in_to_raid(playlist_client, auth, "alice")
+    events = []
+    send = requests.Session.send
+
+    def observe_response(session, request, **kwargs):
+        response = send(session, request, **kwargs)
+        events.append(urlsplit(request.url).path)
+        return response
+
+    def observe_lock(*args, **kwargs):
+        events.append("lock")
+        return _target_lock(*args, **kwargs)
+
+    monkeypatch.setattr(requests.Session, "send", observe_response)
+    monkeypatch.setattr("shuffify.services.playlist_lock._target_lock", observe_lock)
+    response = add_raid_source(playlist_client, target, source, auto_schedule)
+    assert response.status_code == 200, response.json
+    first_lock = events.index("lock")
+    assert events[:first_lock] == [
+        f"/v1/playlists/{target}", f"/v1/playlists/{target}/items", f"/v1/playlists/{source}",
+    ]
+    assert set(events[first_lock:]) == {"lock"}

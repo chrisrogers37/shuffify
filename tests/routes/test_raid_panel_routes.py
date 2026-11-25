@@ -8,6 +8,8 @@ and basic success paths.
 import time
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from tests.paths import api_path
 
 # =============================================================================
@@ -229,6 +231,7 @@ class TestRaidAddUrlValidation:
         auth_client,
     ):
         mock_auth.return_value = MagicMock()
+        mock_auth.return_value.get_playlist_summary.return_value = {"id": "p1", "owner": {"id": "user123"}}
         mock_parse.return_value = "ext1"
 
         mock_svc_cls.return_value.get_playlist_metadata.return_value = {
@@ -272,6 +275,7 @@ class TestRaidAddUrlValidation:
         )
 
         mock_auth.return_value = MagicMock()
+        mock_auth.return_value.get_playlist_summary.return_value = {"id": "p1", "owner": {"id": "user123"}}
         mock_parse.return_value = "ext1"
         mock_svc_cls.return_value.get_playlist_metadata.side_effect = (
             PlaylistNotFoundError("Not found")
@@ -289,55 +293,33 @@ class TestRaidAddUrlValidation:
         assert resp.status_code == 404
 
     @patch("shuffify.routes.require_auth")
-    @patch(
-        "shuffify.routes.raid_panel"
-        ".parse_spotify_playlist_url"
-    )
-    @patch(
-        "shuffify.routes.raid_panel.PlaylistService"
-    )
-    def test_target_the_caller_cannot_edit_returns_403(
-        self,
-        mock_svc_cls,
-        mock_parse,
-        mock_auth,
-        auth_client,
-    ):
+    def test_malformed_target_owner_returns_provider_error(self, mock_auth, auth_client):
         from shuffify.models.db import Schedule, UpstreamSource
-        from shuffify.services.playlist_service import (
-            PlaylistAccessError,
-        )
 
-        mock_auth.return_value = MagicMock()
-        mock_parse.return_value = "ext1"
-        playlists = mock_svc_cls.return_value
-        playlists.get_playlist_metadata.return_value = {
-            "id": "ext1",
-            "name": "Their List",
-            "owner_id": "someone_else",
-            "description": None,
-            "total_tracks": 10,
+        mock_auth.return_value.get_playlist_summary.return_value = {
+            "id": "p1", "owner": "unavailable", "collaborative": True,
         }
-        playlists.validate_user_can_edit.side_effect = (
-            PlaylistAccessError("Not editable")
-        )
+        resp = auth_client.post(api_path("/playlist/p1/raid-add-url"), json={
+            "url": "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+        })
+        assert resp.status_code == 502
+        mock_auth.return_value.get_playlist_items_raw.assert_not_called()
+        assert UpstreamSource.query.count() == Schedule.query.count() == 0
 
-        resp = auth_client.post(
-            api_path("/playlist/p1/raid-add-url"),
-            json={
-                "url": (
-                    "https://open.spotify.com/playlist/"
-                    "37i9dQZF1DXcBWIGoYBM5M"
-                ),
-                "auto_schedule": True,
-            },
-        )
-        assert resp.status_code == 403
-        assert playlists.validate_user_can_edit.call_args.args == (
-            "p1", "user123"
-        )
-        assert UpstreamSource.query.count() == 0
-        assert Schedule.query.count() == 0
+    @pytest.mark.parametrize("items", [{}, {"total": True}, {"total": -1}, None])
+    @patch("shuffify.routes.require_auth")
+    def test_unconfirmed_items_response_fails_closed(self, mock_auth, auth_client, items):
+        from shuffify.models.db import Schedule, UpstreamSource
+
+        mock_auth.return_value.get_playlist_summary.return_value = {
+            "id": "p1", "owner": {"id": "someone_else"}, "collaborative": True,
+        }
+        mock_auth.return_value.get_playlist_items_raw.return_value = items
+        resp = auth_client.post(api_path("/playlist/p1/raid-add-url"), json={
+            "url": "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+        })
+        assert resp.status_code == 502
+        assert UpstreamSource.query.count() == Schedule.query.count() == 0
 
 
 # =============================================================================
