@@ -322,7 +322,10 @@ throwaway script, not committed, with no token pasted anywhere)
      `create_snapshots` rolls back only on a storage limit or a database
      error (`playlist_snapshot_service.py:126-135`), and a workshop commit's
      `_snapshot` logs any other error and goes on to write to Spotify
-     (`workshop_commit_service.py:557-570, 236`). Add a comment at
+     (`workshop_commit_service.py:557-570, 236`). Make `create_snapshots`
+     roll back on any error when it owns the commit (`commit=True`), not
+     only on `StorageLimitReached` and `SQLAlchemyError`, so the lock never
+     outlives a failed snapshot into the Spotify write. Add a comment at
      `lock_user_inventory` that says a caller must not call Spotify while it
      holds the lock, and one test that each path that takes it commits or
      rolls back before its next Spotify call, that error path included. The

@@ -51,10 +51,9 @@ larger moves since b65d2d9, at dc4ec8b:
 - `shuffify/services/operations/repository.py`: 509-543 is now 669-703, and
   540 is now 700.
 - `shuffify/services/scheduled_admission.py`: 95-98 is now 111-114, 95-118 is
-  now 111-134, 141-220 is now 178-243, 174-193 is now 211-219 and 207-214 is
-  now 234-235. The `is_enabled` recheck is now in `ineligible_fire`
-  (157-175), which `capture` calls, and a skipped fire for a blocked playlist
-  no longer logs a warning.
+  now 111-134, 141-220 is now 178-243 and 174-193 is now 211-219. The
+  `is_enabled` recheck is now in `ineligible_fire` (157-175), which `capture`
+  calls.
 - `config.py`: lines after 272 are 2 lower down.
 - `shuffify/models/db.py`: 595 is now 612.
 - `shuffify/services/schedule_notifications.py`: 57-100 is now 45-88, and

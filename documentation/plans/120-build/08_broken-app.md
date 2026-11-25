@@ -56,8 +56,8 @@ address).
 - **The scheduler** loads `is_enabled = True` rows
   (`services/worker_scheduler.py:298-357`). `admit_scheduled` rechecks
   `is_enabled` inside `capture` (`scheduled_admission.py:174-193`) and
-  reports other skips by code. A skipped fire for a blocked playlist logs a
-  warning (`scheduled_admission.py:207-214`, the #107 precedent).
+  reports other skips by code. Every skip is logged with its code, schedule
+  id and `scheduled_for` (`services/worker_scheduler.py:517-519`).
 - **The worker** claims a queued operation, then takes the credential lock
   and runs it (`shuffify/worker.py:85-100`; 105-131 on main at dc4ec8b, where
   a database error while it locks defers the claim).
@@ -118,9 +118,8 @@ together.
 1. **Derive "paused" from the connection.** A schedule is paused when its
    workspace's connection isn't `ok`.
    - In `admit_scheduled`'s `capture`, next to the `schedule_disabled` check,
-     skip with code `app_broken` when the workspace's connection isn't `ok`,
-     and log a warning with the schedule id, `scheduled_for` and workspace
-     id, as the needs-review skip does (#107). Internal ids only.
+     skip with code `app_broken` when the workspace's connection isn't `ok`;
+     the scheduler's skip log records it (Evidence).
    - The scheduler's `_refresh` is unchanged; admission is the check.
    - There is no `Schedule.paused_reason`, and `is_enabled` is never touched:
      it stays the person's own on/off switch.
@@ -263,8 +262,7 @@ together.
   - a failed connect (for example, still not registered) stays `broken`;
   - a successful connect sets `ok` and clears the reason.
 - **Scheduler tests:**
-  - a schedule in a workspace that isn't `ok` is skipped with `app_broken`,
-    and the skip logs a warning;
+  - a schedule in a workspace that isn't `ok` is skipped with `app_broken`;
   - after `mark_ok` it fires at the next slot;
   - no catch-up fire for a slot missed while paused, inside the 3600s
     grace;
