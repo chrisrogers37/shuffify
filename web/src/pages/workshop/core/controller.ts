@@ -10,24 +10,22 @@ import {
 } from "../../../operations/admissions.ts";
 import type { AdmissionRequest } from "../../../operations/admissions.ts";
 import type { ApiClient } from "../../../api/client.ts";
+import { terminalOperationStates } from "../../../api/contracts.ts";
 import type { WorkshopTrack } from "../../../api/contracts.ts";
 import type { SessionStore } from "../../../auth/session-store.ts";
 import {
   ApiRequestError,
   ConflictError,
-  NetworkError,
+  isOutcomeUnknown,
   ProtocolError,
-  RateLimitError,
+  retryDeadline,
 } from "../../../api/errors.ts";
-import {
-  getOperationStore,
-  terminalOperationStates,
-} from "../../../operations/store.ts";
+import { trackURI } from "../../../api/guards.ts";
+import { getOperationStore } from "../../../operations/store.ts";
 import type { OperationStore } from "../../../operations/store.ts";
 import {
   createWorkshopClient,
   targetResult,
-  trackURI,
   verifiedRestore,
 } from "./client.ts";
 import {
@@ -187,7 +185,13 @@ export function createWorkshopController(
           message: `Operation ${receipt.operationId} was restored by operation ${resolution.operationId}. Original result facts are retained; review the current draft before another change.`,
         },
       });
-    else update({});
+    else if (receipt && !receipt.holdAcknowledged && claim?.relation === "original" &&
+      claim.operationId === receipt.operationId && claim.acknowledgedTargets?.includes(playlistId)) {
+      update({
+        receipt: { ...receipt, holdAcknowledged: true, message: "The playlist hold was released. Review any draft changes before saving." },
+        review: null,
+      });
+    } else update({});
   });
   const refuse = (group: PermissionGroup) => {
     const p = permission(group);
@@ -195,9 +199,7 @@ export function createWorkshopController(
     return !p.allowed;
   };
   const retryHint = (e: unknown) =>
-    e instanceof RateLimitError
-      ? Date.now() + (e.retryAfterMs ?? 1000)
-      : state.retryUntil;
+    retryDeadline(e, Date.now()) ?? state.retryUntil;
   const cooling = () => Date.now() < state.retryUntil;
   const hasDraft = () =>
     !sameOrder(uris(state.baseline), uris(state.working)) ||
@@ -601,7 +603,8 @@ export function createWorkshopController(
         resources: spotifyResources(
           playlistId,
           review.kind === "commit" ? [] : review.context.resources,
-          review.staging.map((s) => s.source_playlist_id),
+          // A commit reserves each source atomically through its own continuation.
+          review.kind === "commit" ? [] : review.staging.map((s) => s.source_playlist_id),
         ),
         expected: {
           kind:
@@ -676,10 +679,7 @@ export function createWorkshopController(
         unknown =
           admissions.getSnapshot().has(review.key) &&
           admissionUnknown(admissions, review.key, e),
-        until =
-          e instanceof RateLimitError
-            ? Date.now() + (e.retryAfterMs ?? 1000)
-            : 0;
+        until = retryDeadline(e, Date.now()) ?? 0;
       const busy =
         !unknown && e instanceof ConflictError ? e.error.operation_id : null;
       update({
@@ -1031,10 +1031,7 @@ export function createWorkshopController(
       });
       return true;
     } catch (e) {
-      const unknown =
-        e instanceof NetworkError ||
-        e instanceof ProtocolError ||
-        (e instanceof ApiRequestError && e.status >= 500);
+      const unknown = isOutcomeUnknown(e);
       if (unknown)
         pendingDraft = {
           kind: "save",
@@ -1071,10 +1068,7 @@ export function createWorkshopController(
       });
       return true;
     } catch (e) {
-      const unknown =
-        e instanceof NetworkError ||
-        e instanceof ProtocolError ||
-        (e instanceof ApiRequestError && e.status >= 500);
+      const unknown = isOutcomeUnknown(e);
       if (unknown)
         pendingDraft = {
           kind: "delete",
@@ -1167,6 +1161,7 @@ export function createWorkshopController(
     hasDraft,
     hasRetainedSourceWork,
     retrySourceHandoff,
+    refreshPlaylistHolds: () => admissions.refreshPlaylistHolds(playlistId, () => authenticated() ? actor : null),
     moveOccurrence: move,
     removeOccurrence: remove,
     appendTracks: append,

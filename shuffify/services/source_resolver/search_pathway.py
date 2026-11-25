@@ -98,13 +98,7 @@ class SearchPathway:
                 error_message=str(e),
             )
 
-        if not all_uris:
-            return ResolveResult(
-                track_uris=[],
-                pathway_name=self.name,
-                success=False,
-            )
-
+        # A search with no hits is an empty result, not a failure.
         return ResolveResult(
             track_uris=all_uris,
             pathway_name=self.name,

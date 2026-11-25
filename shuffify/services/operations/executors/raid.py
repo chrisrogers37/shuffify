@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from shuffify.enums import ActivityType
+from shuffify.schemas.playlist_setup_requests import RAID_COUNT_RANGE
 from shuffify.services.executors.base_executor import JobExecutionError
 from shuffify.services.operations.control import propagate_control
 from shuffify.services.source_resolver import SourceResolver
@@ -77,7 +78,8 @@ def _validate(runtime, config, prepare_key):
         (config.target_playlist_id, config.collection_playlist_id, config.archive_playlist_id),
     )))
     if (any(not isinstance(source, RaidSource) or source.source_type not in {'own', 'external', 'search_query'}
-            or type(source.raid_count) is not int or not 1 <= source.raid_count <= 100
+            or type(source.raid_count) is not int
+            or not RAID_COUNT_RANGE[0] <= source.raid_count <= RAID_COUNT_RANGE[1]
             or source.id is not None and (type(source.id) is not int or source.id < 1)
             or source.source_type == 'search_query' and not source.search_query
             or source.source_type != 'search_query' and not source.source_playlist_id

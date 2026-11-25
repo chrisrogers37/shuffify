@@ -14,6 +14,7 @@ from shuffify.services.base import (
     get_user_or_raise,
     safe_commit,
 )
+from shuffify.services.storage_limits import StorageLimitReached, check_storage_growth, lock_storage_inventory
 
 logger = logging.getLogger(__name__)
 
@@ -77,17 +78,25 @@ class WorkshopSessionService:
             spotify_id, WorkshopSessionError
         )
 
+        lock_storage_inventory(db.session, user.id)
         # Check session limit per playlist
         existing_count = WorkshopSession.query.filter_by(
             user_id=user.id, playlist_id=playlist_id
         ).count()
 
         if existing_count >= MAX_SESSIONS_PER_PLAYLIST:
+            db.session.rollback()
             raise WorkshopSessionLimitError(
                 f"Maximum of {MAX_SESSIONS_PER_PLAYLIST} saved "
                 f"sessions per playlist reached. "
                 f"Delete an existing session first."
             )
+
+        try:
+            check_storage_growth(db.session, WorkshopSession, user.id, [playlist_id], row_growth=1)
+        except StorageLimitReached:
+            db.session.rollback()
+            raise
 
         ws = WorkshopSession(
             user_id=user.id,
@@ -217,6 +226,7 @@ class WorkshopSessionService:
             session_id, spotify_id
         )
 
+        lock_storage_inventory(db.session, ws.user_id)
         db.session.delete(ws)
         safe_commit(
             f"delete workshop session {session_id}",

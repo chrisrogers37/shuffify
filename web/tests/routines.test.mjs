@@ -10,11 +10,13 @@ import {
   operationLabel,
   listDeepLink,
   safeAvailableDetail,
-  unconfirmedMutation,
+  parseSetup,
+  countInputs,
 } from "../src/pages/routines/model.ts";
 import { createRoutinesFixtures } from "../src/fixtures/routines.ts";
 import { createLibraryFixtures } from "../src/fixtures/library.ts";
 import signedIn from "../fixtures/valid/session-signed-in.json" with { type: "json" };
+import routinesSeed from "../fixtures/routines/initial.json" with { type: "json" };
 import { createApiClient } from "../src/api/client.ts";
 import { createRoutineClient } from "../src/pages/routines/client.ts";
 
@@ -27,7 +29,7 @@ test("deep links accept exact positive IDs and finite origin codes only", () => 
     assert.throws(() => parseNavigation("?schedule_id=" + value));
   assert.throws(() => parseNavigation("?origin=https://outside.invalid"));
 });
-test("row state normalization uses documented server state only and checks exact identities", () => {
+test("row state normalization reads the state code only and checks exact identities", () => {
   const row = {
     schedule_id: 7,
     schedule: { id: 7, target_playlist_id: "target" },
@@ -35,14 +37,43 @@ test("row state normalization uses documented server state only and checks exact
     schedule_revision: "a".repeat(64),
     timing: {},
     registration: {},
-    state: "Paused",
+    state: "paused",
   };
   assert.equal(normalizeRow(row).state, "paused");
   assert.equal(normalizeRow(row).state_label, "Paused");
   assert.throws(() =>
     normalizeRow({ ...row, schedule: { ...row.schedule, id: 8 } }),
   );
-  assert.throws(() => normalizeRow({ ...row, state: "maybe" }));
+  for (const value of [
+    { ...row, state: "Paused" },
+    { ...row, state: "Paused", state_code: "paused" },
+    { ...row, state: "maybe" },
+    { ...row, state: "deleted" },
+  ])
+    assert.throws(() => normalizeRow(value));
+});
+test("an activation reply's state is its code, a deleted replay's included", async () => {
+  const activate = (fields) =>
+    createRoutineClient(
+      createApiClient({
+        getCsrfToken: () => "fixture",
+        transport: async () =>
+          Response.json({
+            success: true,
+            accepted: true,
+            replayed: true,
+            schedule_id: 7,
+            accepted_at: "2026-11-20T00:00:00Z",
+            schedule: null,
+            ...fields,
+          }),
+      }),
+    ).activate("target", { schedule_id: 7 });
+  const deleted = await activate({ state: "deleted" });
+  assert.equal(deleted.state, "deleted");
+  await assert.rejects(activate({ state: "Deleted" }), {
+    name: "ProtocolError",
+  });
 });
 test("activation sends the exact normalized definition and signed intent with original request key", () => {
   const request = {
@@ -172,23 +203,6 @@ test("a repeated accepted run intent returns its original ID", async () => {
   assert.equal(first.operation.id, second.operation.id);
 });
 
-test("authored refusal stays distinct from unconfirmed transport or protocol failures", async () => {
-  const { ApiRequestError, NetworkError, ProtocolError } =
-    await import("../src/api/errors.ts");
-  const body = {
-    success: false,
-    error_code: "refused",
-    category: "error",
-    message: "Refused",
-  };
-  assert.equal(unconfirmedMutation(new ApiRequestError(409, body)), false);
-  assert.equal(unconfirmedMutation(new NetworkError("POST", Error())), true);
-  assert.equal(
-    unconfirmedMutation(new ProtocolError("Invalid reply", 202)),
-    true,
-  );
-});
-
 
 test("composed fixture dispatch preserves a foreign FormData admission and exact replay", async () => {
   const routines = createRoutinesFixtures("library-unknown");
@@ -225,4 +239,19 @@ test("composed fixture dispatch preserves a foreign FormData admission and exact
   assert.equal(observed.operation.state, "succeeded");
   await assert.rejects(transport("/api/not-a-route", "POST", request), /Unhandled fixture request/);
   await assert.rejects(routines("/api/playlist/target/routines/review", "POST", { body: "{" }), SyntaxError);
+});
+test("the setup pages take each count input's min and max from the context's limits", () => {
+  const limits = { max_sources: 10, raid_count: [1, 7], drip_count: [2, 9] };
+  assert.deepEqual(countInputs(parseSetup({ ...routinesSeed.setup, limits })), {
+    source: { min: 1, max: 7 },
+    drip: { min: 2, max: 9 },
+  });
+  for (const malformed of [
+    undefined,
+    { raid_count: [1, 7] },
+    { raid_count: [7, 1], drip_count: [2, 9] },
+    { raid_count: [1, "7"], drip_count: [2, 9] },
+    { raid_count: [1, 7, 9], drip_count: [2, 9] },
+  ])
+    assert.throws(() => parseSetup({ ...routinesSeed.setup, limits: malformed }), /incomplete/u);
 });

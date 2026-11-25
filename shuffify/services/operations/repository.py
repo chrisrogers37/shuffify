@@ -7,16 +7,18 @@ import re
 import secrets
 import threading
 import time
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, event, func, or_, select, text
-from sqlalchemy.orm import Session
+from sqlalchemy import Text, and_, case, cast, event, func, or_, select, text, update
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.orm import Session, aliased
 
 from shuffify.models.db import JobExecution, db
 from shuffify.services.execution_result_service import serialize_execution_detail
+from shuffify.services.operations.wake import COMPLETION_CHANNEL, OPERATION_CHANNEL
 from shuffify.services.playlist_lock import (
     _held_targets,
     _local_guard,
@@ -27,6 +29,7 @@ from shuffify.services.playlist_lock import (
 )
 
 logger = logging.getLogger(__name__)
+MAX_OUTSTANDING_OPERATIONS_PER_USER = 5
 ACTIVE_STATES = frozenset({"queued", "running", "compensating"})
 LEASED_STATES = frozenset({"running", "compensating"})
 TERMINAL_STATES = frozenset({"succeeded", "failed", "rolled_back", "needs_attention"})
@@ -58,6 +61,16 @@ class PlaylistNeedsReview(BusyOperation):
 
 class RequestKeyConflict(RuntimeError):
     """An idempotency or scheduled-fire key belongs to a different command."""
+
+
+class OutstandingOperationLimit(RuntimeError):
+    """The user has no room for another durable operation."""
+
+    code = "outstanding_operation_limit"
+
+    def __init__(self):
+        super().__init__(f"You can have up to {MAX_OUTSTANDING_OPERATIONS_PER_USER} unfinished playlist operations. "
+                         "Wait for one to finish, then try again.")
 
 
 class LeaseLost(RuntimeError):
@@ -97,6 +110,20 @@ def _targets(values):
     if any(not isinstance(value, str) or not value or len(value) > 255 for value in values):
         raise ValueError("Each target must be a nonempty resource ID of at most 255 characters.")
     return tuple(sorted(set(values)))
+
+
+def _has_confirmed_write(journal, targets):
+    # An inferred acknowledgement can exist without a successful authenticated write.
+    if not isinstance(journal, dict):
+        return False
+    for phase in ("plans", "compensation"):
+        for step in journal.get(phase, []):
+            if step.get("resource") in targets:
+                for batch in step.get("batches", []):
+                    status = batch.get("last_http_status")
+                    if type(status) is int and 200 <= status < 300:
+                        return True
+    return False
 
 
 def _utc(value):
@@ -141,6 +168,9 @@ def public_operation(row, *, restoration_attempt=None):
     if row.state == "needs_attention":
         from .restoration import RestoreUnavailable, capture_restore
 
+        released = (journal.get("runtime") or {}).get("acknowledgements", {})
+        if released:
+            recovery["acknowledged_targets"] = [target for target in (row.targets or []) if target in released]
         try:
             capture_restore(row, row.user_id)
             if restoration_attempt is None:
@@ -160,12 +190,26 @@ def public_operation(row, *, restoration_attempt=None):
     }
 
 
+def _admission_lock_ids(keys):
+    encoded = sorted(json.dumps(key, separators=(",", ":")) for key in keys)
+    return [_playlist_lock_key("queue-admission:" + key) for key in encoded]
+
+
+def try_lock_history_owner(session, user_id):
+    """Exclude in-flight admission captures before expiring an otherwise superseded Undo receipt."""
+    if session.get_bind().dialect.name != "postgresql":
+        return True  # Cleanup and admission both own a SQLite write transaction.
+    owner_lock, = _admission_lock_ids([("owner", user_id)])
+    return session.scalar(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": owner_lock})
+
+
 class OperationRepository:
     """Keep admission, lease ownership and journal persistence outside Flask's scoped session."""
 
     def __init__(self, engine=None, *, lease_seconds=60):
         self.engine = engine if engine is not None else db.engine
         self.lease_seconds = _positive_seconds(lease_seconds)
+        self.local_completion_callback = None
         self._postgres = self.engine.dialect.name == "postgresql"
 
     @contextmanager
@@ -194,14 +238,23 @@ class OperationRepository:
         if not self._postgres:
             return
         keys = [("target", target) for target in targets]
-        if user_id is not None and request_key is not None:
-            keys.append(("request", user_id, request_key))
+        if user_id is not None:
+            # The owner key sorts before target keys, including targets acquired later by a factory.
+            keys.append(("owner", user_id))
+            if request_key is not None:
+                keys.append(("request", user_id, request_key))
         if schedule_id is not None and scheduled_for is not None:
             keys.append(("fire", schedule_id, scheduled_for.isoformat()))
-        encoded = sorted(json.dumps(key, separators=(",", ":")) for key in keys)
-        for key in encoded:
-            session.execute(text("SELECT pg_advisory_xact_lock(:key)"),
-                            {"key": _playlist_lock_key("queue-admission:" + key)})
+        for lock_id in _admission_lock_ids(keys):
+            session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_id})
+
+    @contextmanager
+    def scheduled_fire_transaction(self, schedule_id, due):
+        """Serialize admission, busy deferral and final history for this exact fire."""
+        with self._transaction(write=True) as storage:
+            self._admission_locks(storage, targets=(), user_id=None, request_key=None,
+                                  schedule_id=schedule_id, scheduled_for=due)
+            yield storage
 
     @staticmethod
     def _same_command(row, *, kind, user_id, targets, payload, schedule_id, scheduled_for):
@@ -211,13 +264,15 @@ class OperationRepository:
                 and row.schedule_id == schedule_id and row.scheduled_for == scheduled_for)
 
     def enqueue(self, *, kind, user_id, targets=None, payload=None, request_key=None, schedule_id=None,
-                scheduled_for=None, intent=None, command_factory=None):
+                scheduled_for=None, intent=None, command_factory=None, storage=None, before_insert=None):
         """Reserve targets once, replaying keyed intent before capturing volatile local facts.
 
         A command factory receives this transaction's Session, performs only local reads and returns ``(targets,
         payload)``. Its immutable request intent identifies retries even after
         the selected snapshot or browser history has changed. Never perform
-        Spotify I/O or commit database mutations inside this callback.
+        Spotify I/O or commit database mutations inside this callback. Scheduled
+        admission can supply its fire transaction and a deadline/leadership check
+        to run after waiting for all admission locks, just before insertion.
         """
         if not isinstance(kind, str) or not kind or len(kind) > 80:
             raise ValueError("Operation kind must contain 1 to 80 characters.")
@@ -237,7 +292,7 @@ class OperationRepository:
             targets, payload = _targets(targets), _json_copy(payload)
         else:
             intent = _json_copy(intent)
-        with self._transaction(write=True) as session:
+        with (nullcontext(storage) if storage is not None else self._transaction(write=True)) as session:
             self._admission_locks(session, targets=targets or [], user_id=user_id, request_key=request_key,
                                   schedule_id=schedule_id, scheduled_for=scheduled_for)
             lookup = []
@@ -263,6 +318,14 @@ class OperationRepository:
                 if len({row.id for row in existing}) != 1:
                     raise RequestKeyConflict("The request and scheduled fire identify different operations.")
                 return self._detach(session, existing[0])
+            if user_id is not None:
+                # The owner lock (or SQLite's write transaction) covers the capacity check and insert.
+                last_allowed = select(JobExecution.id).where(
+                    JobExecution.user_id == user_id, JobExecution.kind.is_not(None),
+                    JobExecution.state.in_(ACTIVE_STATES),
+                ).offset(MAX_OUTSTANDING_OPERATIONS_PER_USER - 1).limit(1)
+                if session.scalar(last_allowed) is not None:
+                    raise OutstandingOperationLimit()
             if command_factory is not None:
                 targets, payload = command_factory(session)
                 targets, payload = _targets(targets), _json_copy(payload)
@@ -272,15 +335,17 @@ class OperationRepository:
                 self._admission_locks(session, targets=targets, user_id=None, request_key=None,
                                       schedule_id=None, scheduled_for=None)
             if targets:
-                active = session.scalars(select(JobExecution).where(
-                    JobExecution.kind.is_not(None), JobExecution.state.in_(ACTIVE_STATES)
-                ).order_by(JobExecution.id)).all()
-                for row in active:
-                    if set(targets).intersection(row.targets or []):
-                        raise BusyOperation(row.id, row.user_id)
-                blocker = self._unresolved_attention(session, kind, targets, payload)
+                overlap = self._target_overlap(targets)
+                active = self._admission_blocker(session, overlap, targets, user_id)
+                if active is not None:
+                    raise BusyOperation(active.id, active.user_id)
+                blocker = self._unresolved_attention(
+                    session, user_id, targets, exempt=self._restore_parent_id(kind, payload),
+                )
                 if blocker is not None:
                     raise PlaylistNeedsReview(blocker.id, blocker.user_id)
+            if before_insert is not None:
+                before_insert()
             now = self._now(session)
             row = JobExecution(kind=kind, user_id=user_id, targets=list(targets), payload=payload,
                                request_key=request_key, schedule_id=schedule_id, scheduled_for=scheduled_for,
@@ -288,36 +353,109 @@ class OperationRepository:
             session.add(row)
             session.flush()
             if self._postgres:
-                session.execute(text("SELECT pg_notify('shuffify_operations', :id)"), {"id": str(row.id)})
+                session.execute(
+                    text("SELECT pg_notify(:channel, :id)"), {"channel": OPERATION_CHANNEL, "id": str(row.id)}
+                )
             return self._detach(session, row)
 
-    @staticmethod
-    def _unresolved_attention(session, kind, targets, payload):
-        """Return the oldest needs_attention operation sharing a target that has not been restored.
+    def _target_overlap(self, targets):
+        if self._postgres:
+            return cast(JobExecution.targets, JSONB).has_any(cast(list(targets), ARRAY(Text)))
+        elements = func.json_each(JobExecution.targets).table_valued("value")
+        return select(1).select_from(elements).where(elements.c.value.in_(targets)).exists()
 
-        Runs inside the admission transaction, after the target locks and the active-state check. An operation
-        is resolved once its restoration committed (the parent journal records ``runtime.restoration``) or an
-        operator moved it out of ``needs_attention``. A restore that is still running is already refused as busy;
-        one that ended ``needs_attention`` is itself an unresolved row. The only exemption is the restore of that
-        very parent, which is the resolution path and writes nothing the review has not seen.
-        """
-        exempt = None
+    @staticmethod
+    def _admission_blocker(session, overlap, targets, user_id):
+        same_owner = JobExecution.user_id == user_id
+        # Keep the indexed candidate set and its ID ordering. Only foreign leased
+        # candidates need their write evidence inspected; queued rows have none.
+        candidates = select(
+            JobExecution.id, JobExecution.user_id, JobExecution.targets,
+            case((same_owner, None), else_=JobExecution.journal).label("journal"),
+        ).where(
+            JobExecution.kind.is_not(None), JobExecution.state.in_(ACTIVE_STATES), overlap,
+            or_(same_owner, JobExecution.state.in_(LEASED_STATES)),
+        ).order_by(JobExecution.id)
+        for row in session.execute(candidates):
+            if row.user_id == user_id:
+                return row
+            shared = set(targets).intersection(row.targets)
+            if _has_confirmed_write(row.journal, shared):
+                return row
+        return None
+
+    def begin_execution(self, lease, row):
+        """Open the journal under the target locks, or wait for unfinished work on any target."""
+        if not row.targets or row.journal:
+            return None
+        overlap = self._target_overlap(row.targets)
+        # PostgreSQL workers hold session-level target locks here. BEGIN IMMEDIATE
+        # makes the check and journal creation atomic across SQLite processes too.
+        with self._transaction(write=True) as session:
+            started = session.scalar(select(JobExecution.id).where(
+                JobExecution.kind.is_not(None), JobExecution.state.in_(LEASED_STATES),
+                overlap, JobExecution.id != row.id, cast(JobExecution.journal, Text).not_in(("{}", "null")),
+            ).limit(1))
+            if started is not None:
+                return "busy"
+            if self._unresolved_attention(
+                session, row.user_id, row.targets, exempt=self._restore_parent_id(row.kind, row.payload),
+            ) is not None:
+                return "needs_attention"
+            owned, _ = self._leased_row(session, lease)
+            # Existing nonempty journals already own their turn, including after
+            # a crash or deferral. A freshly claimed row still has an empty one.
+            owned.journal = {"version": 1}
+        return None
+
+    @staticmethod
+    def _restore_parent_id(kind, payload):
         if kind == "operation_restore" and isinstance(payload, dict):
             try:
-                exempt = payload["command"]["capture"]["operation_id"]
+                return payload["command"]["capture"]["operation_id"]
             except (KeyError, TypeError):
-                exempt = None
-        for row in session.scalars(select(JobExecution).where(
-            JobExecution.kind.is_not(None), JobExecution.state == "needs_attention"
-        ).order_by(JobExecution.id)):
-            if row.id == exempt or not set(targets).intersection(row.targets or []):
+                pass
+        return None
+
+    def _unresolved_attention(self, session, user_id, targets, *, exempt=None, lock=False):
+        """Find the oldest applicable hold on any requested target. A restore exempts its own parent."""
+        candidates = select(JobExecution.id, JobExecution.user_id, JobExecution.targets, JobExecution.journal).where(
+            JobExecution.kind.is_not(None), JobExecution.state == "needs_attention", self._target_overlap(targets),
+        ).order_by(JobExecution.id)
+        if lock:
+            candidates = candidates.with_for_update()
+        for row in session.execute(candidates):
+            if row.id == exempt:
                 continue
-            runtime = row.journal.get("runtime") if isinstance(row.journal, dict) else None
-            restoration = runtime.get("restoration") if isinstance(runtime, dict) else None
+            runtime = (row.journal or {}).get("runtime") or {}
+            restoration = runtime.get("restoration")
             if isinstance(restoration, dict) and restoration.get("operation_id") is not None:
                 continue
-            return row
+            shared = set(targets).intersection(row.targets).difference(runtime.get("acknowledgements", {}))
+            if shared and (row.user_id == user_id or _has_confirmed_write(row.journal, shared)):
+                return row
         return None
+
+    def attention_review(self, user_id, playlist_id, snapshot_id, *, confirmation=_UNSET):
+        """Bind a review to one actor, Spotify version and blocking row, without exposing the row ID."""
+        from shuffify.services import signed_digest
+
+        applying = confirmation is not _UNSET
+        purpose = "shuffify.playlist.attention.v1"
+        with self._transaction(write=applying) as session:
+            row = self._unresolved_attention(session, user_id, [playlist_id], lock=applying)
+            if row is None:
+                return None
+            facts = dict(user_id=user_id, playlist_id=playlist_id, snapshot_id=snapshot_id, operation_id=row.id)
+            if not applying:
+                return signed_digest.issue(purpose, facts)
+            if signed_digest.verify(purpose, facts, confirmation, max_age_s=900) is not None:
+                return None
+            journal = deepcopy(row.journal or {})
+            acknowledgements = journal.setdefault("runtime", {}).setdefault("acknowledgements", {})
+            acknowledgements[playlist_id] = {"user_id": user_id, "snapshot_id": snapshot_id}
+            session.execute(update(JobExecution).where(JobExecution.id == row.id).values(journal=journal))
+            return True
 
     def get(self, operation_id):
         """Return a private detached storage row to a worker."""
@@ -350,6 +488,18 @@ class OperationRepository:
                 JobExecution.lease_expires_at.is_not(None),
             )))
 
+    @staticmethod
+    def _waiting_since():
+        """Rank by the later of stored started_at and the owner's most recent turn."""
+        previous = aliased(JobExecution)
+        latest = select(func.max(previous.last_claimed_at)).where(previous.last_claimed_at > JobExecution.started_at)
+        # Keep each lookup a range in the (user_id, last_claimed_at) index, including ownerless work.
+        last_turn = case(
+            (JobExecution.user_id.is_(None), latest.where(previous.user_id.is_(None)).scalar_subquery()),
+            else_=latest.where(previous.user_id == JobExecution.user_id).scalar_subquery(),
+        )
+        return func.coalesce(last_turn, JobExecution.started_at)
+
     def claim(self, *, operation_id=None, lease_seconds=None):
         """Atomically claim queued work or recover an expired execution with a fresh fence token."""
         duration = self.lease_seconds if lease_seconds is None else _positive_seconds(lease_seconds)
@@ -360,15 +510,17 @@ class OperationRepository:
                                                          JobExecution.lease_expires_at <= now)),
                 and_(JobExecution.state.in_(LEASED_STATES), JobExecution.lease_expires_at <= now),
             )
-            statement = select(JobExecution).where(JobExecution.kind.is_not(None), ready).order_by(
-                JobExecution.started_at, JobExecution.id
-            ).limit(1).with_for_update(skip_locked=True)
+            statement = select(JobExecution).where(JobExecution.kind.is_not(None), ready)
             if operation_id is not None:
                 statement = statement.where(JobExecution.id == operation_id)
-            row = session.scalar(statement)
+            else:
+                statement = statement.order_by(self._waiting_since(), JobExecution.started_at, JobExecution.id)
+            row = session.scalar(statement.limit(1).with_for_update(skip_locked=True))
             if row is None:
                 return None
             now = self._now(session)
+            if operation_id is None:
+                row.last_claimed_at = now
             recovering = row.state in LEASED_STATES
             owner = secrets.token_urlsafe(32)
             if not recovering:
@@ -492,15 +644,23 @@ class OperationRepository:
                 row.tracks_added = tracks_added
             if tracks_total is not _UNSET:
                 row.tracks_total = tracks_total
-            return self._detach(session, row)
+            if self._postgres:
+                session.execute(select(func.pg_notify(COMPLETION_CHANNEL, str(row.id))))
+            completed = self._detach(session, row)
+        if self.local_completion_callback is not None:
+            try:
+                self.local_completion_callback({completed.id})
+            except Exception as error:
+                logger.info("Local scheduled retry wake unavailable (%s)", type(error).__name__)
+        return completed
 
     def defer(self, lease, *, delay_seconds=1):
         """Release a claim until a known deadline without replaying an operation already in recovery."""
         delay = _positive_seconds(delay_seconds)
         with self._transaction(write=True) as session:
             row, now = self._leased_row(session, lease)
-            if not lease.recovering and row.state == "running" and not row.journal:
-                row.state, row.status = "queued", "queued"
+            if not lease.recovering and row.state == "running" and (not row.journal or row.journal == {"version": 1}):
+                row.state, row.status, row.journal = "queued", "queued", {}
             row.lease_owner = None
             row.lease_expires_at = now + timedelta(seconds=delay)
             return self._detach(session, row)

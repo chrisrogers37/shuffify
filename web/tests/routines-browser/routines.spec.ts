@@ -753,3 +753,20 @@ test("replacement keeps saved settings while staged unlink hides controls and un
   await expect(page.getByLabel(archiving, { exact: true })).not.toBeChecked();
   expect(calls.filter((call) => call.method !== "GET")).toEqual([]);
 });
+
+test("history shows the reason and original time of a skipped fire", async ({ page }) => {
+  await setup(page);
+  const scheduled = "2026-11-24T13:00:00+00:00";
+  const reason = "Another operation was using this playlist until the retry window ended.";
+  await page.route("**/api/schedules/2/history", (route) =>
+    route.fulfill({ json: { success: true, history: [{
+      id: 17, status: "skipped",
+      result_detail: { detail_status: "unavailable", version: null, steps: null },
+      scheduled_skip: { scheduled_for: scheduled, reason },
+    }] } }),
+  );
+  await card(page, 2).getByRole("button", { name: "History", exact: true }).click();
+  const row = card(page, 2).locator(".sh-routine-history-row");
+  await expect(row).toContainText(reason);
+  await expect(row.locator("time")).toHaveAttribute("datetime", scheduled);
+});

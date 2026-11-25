@@ -11,11 +11,13 @@ from unittest.mock import MagicMock, Mock, create_autospec, patch
 import pytest
 from werkzeug.exceptions import ServiceUnavailable
 
+from shuffify.models.db import WorkshopSession
 from shuffify.models.playlist import Playlist
 from shuffify.services import PlaylistAccessError
 from shuffify.services.user_service import UserService
 from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.exceptions import SpotifyTokenExpiredError
+from tests.mutable_spotify import uri
 from tests.paths import api_path
 
 # =============================================================================
@@ -139,6 +141,41 @@ class TestWorkshopPreviewShuffle:
             content_type="application/json",
         )
         assert response.status_code == 400
+
+    @patch("shuffify.is_db_available")
+    @patch("shuffify.routes.get_db_user")
+    @patch("shuffify.routes.require_auth")
+    @patch("shuffify.routes.workshop.ShuffleService")
+    def test_preview_refuses_a_section_count_outside_the_algorithm_range(
+        self,
+        mock_shuffle_svc,
+        mock_auth,
+        mock_get_db_user,
+        mock_db_available,
+        authenticated_client,
+    ):
+        """A section_count outside the algorithm's declared range is a 400, and nothing is shuffled."""
+        mock_auth.return_value = Mock()
+        mock_db_available.return_value = True
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_get_db_user.return_value = mock_user
+
+        response = authenticated_client.post(
+            api_path("/workshop/playlist123/preview-shuffle"),
+            data=json.dumps(
+                {
+                    "algorithm": "BalancedShuffle",
+                    "section_count": "11",
+                    "tracks": _make_mock_playlist().tracks,
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert "BalancedShuffle takes 2 to 10 sections" in response.get_json()["message"]
+        mock_shuffle_svc.execute.assert_not_called()
 
 
 # =============================================================================
@@ -277,6 +314,14 @@ class TestWorkshopCommit:
         assert body["retryable"] is True
         assert body["message"]
         service.assert_not_called()
+
+    def test_commit_accepts_full_baseline_and_draft(self, auth_client):
+        order = [uri(i) for i in range(10_000)]
+        payload = {"baseline_track_uris": order, "track_uris": list(reversed(order))}
+        with patch("shuffify.routes.workshop.enqueue_command", autospec=True, return_value=({}, 202)) as enqueue:
+            response = auth_client.post(api_path("/workshop/playlist123/commit"), json=payload)
+        assert response.status_code == 202
+        assert enqueue.call_args.args[2] == {"playlist_id": "playlist123", **payload}
 
     def test_invalid_json_is_retryable_without_calling_commit(
         self, authenticated_client, authorized
@@ -469,6 +514,123 @@ class TestWorkshopCommit:
             assert body["requires_refresh"] is False
             assert body["retryable"] is True
         service.assert_not_called()
+
+
+# =============================================================================
+# Preview Shuffle Input Bounds
+# =============================================================================
+
+
+class TestWorkshopPreviewShuffleBounds:
+    @staticmethod
+    def _preview(client, **payload):
+        return client.post(
+            api_path("/workshop/playlist123/preview-shuffle"),
+            json={"algorithm": "BasicShuffle", **payload},
+        )
+
+    @pytest.mark.parametrize("payload, message_field", [
+        ({"tracks": [{"uri": uri(i)} for i in range(10_001)]}, "10,000"),
+        ({"tracks": [{"uri": uri(0)}],
+          "locked_positions": {str(i): uri(i) for i in range(10_001)}}, "locked_positions"),
+        ({"locked_positions": {str(i): uri(i) for i in range(10_001)}}, "locked_positions"),
+        ({}, "'tracks' array"),
+        ({"tracks": []}, "'tracks' array"),
+    ])
+    def test_invalid_lists_rejected_before_auth_and_shuffle(self, auth_client, payload, message_field):
+        with patch("shuffify.routes.require_auth") as auth, patch(
+            "shuffify.routes.workshop.ShuffleService.execute", autospec=True
+        ) as execute:
+            response = self._preview(auth_client, **payload)
+
+        assert response.status_code == 400
+        body = response.get_json()
+        assert body.keys() == {"success", "error_code", "category", "message"}
+        assert (body["success"], body["error_code"], body["category"]) == (
+            False, "invalid_request", "error"
+        )
+        assert message_field in body["message"]
+        auth.assert_not_called()
+        execute.assert_not_called()
+
+    @pytest.mark.parametrize("lock_all", [False, True])
+    def test_playlist_sized_preview_keeps_every_track_and_lock(self, auth_client, lock_all):
+        track_uris = [uri(i) for i in range(10_000)]
+        payload = {"tracks": [{"uri": track_uri} for track_uri in track_uris]}
+        if lock_all:
+            payload["locked_positions"] = {str(i): track_uri for i, track_uri in enumerate(track_uris)}
+
+        with patch("shuffify.routes.require_auth", return_value=MagicMock(spec=SpotifyAPI)):
+            response = self._preview(auth_client, **payload)
+
+        assert response.status_code == 200
+        shuffled_uris = response.get_json()["shuffled_uris"]
+        assert sorted(shuffled_uris) == sorted(track_uris)
+        if lock_all:
+            assert shuffled_uris == track_uris
+
+
+class TestSavedSessionTrackBounds:
+    @pytest.mark.parametrize("method, route, service", [
+        ("post", "/workshop/p1/sessions", "save_session"),
+        ("put", "/workshop/sessions/1", "update_session"),
+    ])
+    def test_oversized_lists_rejected_before_auth_and_persistence(self, auth_client, method, route, service):
+        with patch("shuffify.routes.require_auth") as auth, patch(
+            f"shuffify.routes.workshop.WorkshopSessionService.{service}", autospec=True
+        ) as persist:
+            response = getattr(auth_client, method)(
+                api_path(route),
+                json={"session_name": "Big", "track_uris": [uri(i) for i in range(10_001)]},
+            )
+
+        assert response.status_code == 400
+        assert response.get_json() == {
+            "success": False,
+            "error_code": "invalid_request",
+            "category": "error",
+            "message": "A Spotify playlist holds at most 10,000 tracks",
+        }
+        auth.assert_not_called()
+        persist.assert_not_called()
+
+    @pytest.mark.parametrize("fields,expected", [
+        ({"track_uris": [uri(i) for i in range(10_000)]}, [uri(i) for i in range(10_000)]),
+        ({"track_uris": []}, []),
+        ({}, []),
+    ])
+    def test_save_persists_the_full_order(self, auth_client, fields, expected):
+        with patch("shuffify.routes.require_auth", return_value=MagicMock(spec=SpotifyAPI)):
+            response = auth_client.post(
+                api_path("/workshop/p1/sessions"), json={"session_name": "Saved", **fields}
+            )
+
+        assert response.status_code == 200
+        saved = response.get_json()["session"]
+        assert saved["track_uris"] == expected
+        assert WorkshopSession.query.filter_by(id=saved["id"]).one().track_uris == expected
+
+    @pytest.mark.parametrize("fields,expected", [
+        ({"track_uris": [uri(i) for i in range(10_000)]}, [uri(i) for i in range(10_000)]),
+        ({"track_uris": []}, []),
+        ({}, []),
+    ])
+    def test_update_replaces_the_full_order(self, auth_client, fields, expected):
+        with patch("shuffify.routes.require_auth", return_value=MagicMock(spec=SpotifyAPI)):
+            saved = auth_client.post(
+                api_path("/workshop/p1/sessions"),
+                json={"session_name": "Original", "track_uris": [uri(1)]},
+            )
+            session_id = saved.get_json()["session"]["id"]
+            response = auth_client.put(
+                api_path(f"/workshop/sessions/{session_id}"), json={"session_name": "Edited", **fields}
+            )
+
+        assert response.status_code == 200
+        updated = response.get_json()["session"]
+        assert updated["session_name"] == "Edited"
+        assert updated["track_uris"] == expected
+        assert WorkshopSession.query.filter_by(id=session_id).one().track_uris == expected
 
 
 class TestSaveWorkshopSession:

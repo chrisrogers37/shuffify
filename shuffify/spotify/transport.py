@@ -1,6 +1,8 @@
 """Deadline-aware response sockets for Requests, including trickling HTTP bodies."""
 
 import io
+from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import lru_cache
 from http.client import HTTPResponse
 
@@ -8,6 +10,18 @@ import requests
 from requests.adapters import HTTPAdapter
 
 from .deadline import remaining_seconds
+
+_before_read = ContextVar("before_spotify_read", default=None)
+
+
+@contextmanager
+def before_spotify_reads(check):
+    """Install an admission check only for the current authenticated view."""
+    token = _before_read.set(check)
+    try:
+        yield
+    finally:
+        _before_read.reset(token)
 
 
 class _DeadlineReader(io.RawIOBase):
@@ -85,6 +99,12 @@ def _configure_pools(manager):
 
 class DeadlineHTTPAdapter(HTTPAdapter):
     """Recompute the shared budget before every socket read, including header reads."""
+
+    def send(self, request, **kwargs):
+        check = _before_read.get()
+        if request.method == "GET" and check is not None:
+            check(request.url)
+        return super().send(request, **kwargs)
 
     def init_poolmanager(self, *args, **kwargs):
         super().init_poolmanager(*args, **kwargs)

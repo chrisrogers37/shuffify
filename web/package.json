@@ -41,23 +41,28 @@
     "test:readiness-browser": "playwright test --config playwright.readiness.config.ts"
   },
   "devDependencies": {
-    "@playwright/test": "1.64.1",
-    "@tailwindcss/vite": "4.3.3",
+    "@playwright/test": "1.65.0",
+    "@tailwindcss/vite": "4.3.5",
     "@types/node": "24.19.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@types/sortablejs": "1.15.9",
-    "@vitejs/plugin-react": "6.1.2",
+    "@vitejs/plugin-react": "6.3.0",
     "ajv": "8.20.0",
-    "tailwindcss": "4.3.3",
+    "tailwindcss": "4.3.5",
     "ts-json-schema-generator": "2.9.0",
     "typescript": "7.0.2",
-    "vite": "8.3.4"
+    "vite": "8.3.8"
   },
   "dependencies": {
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "react-router": "8.4.0",
+    "react-router": "8.5.1",
     "sortablejs": "1.15.7"
+  },
+  "overrides": {
+    "ts-json-schema-generator": {
+      "glob": "^14.0.6"
+    }
   }
 }

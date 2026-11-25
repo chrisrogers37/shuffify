@@ -1,7 +1,8 @@
 import { Button } from "../../../components/ui/controls";
 import type { WorkshopToolContext } from "../workspace";
 import { useTasks } from "../../../components/tasks/TaskPanel";
-import { record, records } from "./model";
+import { record } from "../../../api/guards";
+import { records } from "./model";
 import {
   SourceActor,
   ActionReceipt,

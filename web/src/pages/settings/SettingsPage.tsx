@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { SettingsContext } from "../../api/contracts";
-import { ApiRequestError, RateLimitError } from "../../api/errors";
+import { ApiRequestError, retryDeadline } from "../../api/errors";
 import { useServices, useSession } from "../../auth/SessionProvider";
 import { Button, Field, Input, Select } from "../../components/ui/controls";
 import { State } from "../../components/ui/States";
@@ -11,6 +11,7 @@ import {
   draftFromSettings,
   isDirty,
   loadSettings,
+  maxSnapshotLimit,
   saveSettings,
   settingsProblem,
   validateDraft,
@@ -141,8 +142,8 @@ export function SettingsPage() {
             ? error.message
             : "The settings response could not be loaded. Please try again.",
         );
-        if (error instanceof RateLimitError)
-          setRetryUntil(Date.now() + (error.retryAfterMs ?? 1000));
+        const until = retryDeadline(error, Date.now());
+        if (until !== null) setRetryUntil(until);
         setLoading(false);
       },
     );
@@ -178,7 +179,7 @@ export function SettingsPage() {
       limitRef.current?.focus();
       return;
     }
-    // Capture before disabling the controls; the shared client never replays a POST.
+    // Capture before disabling the controls; a resend after a CSRF refusal sends this same body.
     const captured = { ...draft };
     inFlight.current = true;
     setSaving(true);
@@ -331,7 +332,7 @@ export function SettingsPage() {
                     <Field
                       id="max_snapshots_per_playlist"
                       label={labels.max_snapshots_per_playlist}
-                      help="Keep 1–50 snapshots. The oldest is removed when the limit is reached."
+                      help={`Keep 1–${maxSnapshotLimit} snapshots. The oldest is removed when the limit is reached.`}
                       {...(fields.max_snapshots_per_playlist
                         ? { error: fields.max_snapshots_per_playlist }
                         : {})}
@@ -343,7 +344,7 @@ export function SettingsPage() {
                           type="number"
                           name="max_snapshots_per_playlist"
                           min="1"
-                          max="50"
+                          max={maxSnapshotLimit}
                           step="1"
                           required
                           className="sh-settings-limit"

@@ -8,6 +8,7 @@ and RaidNowRequest Pydantic models.
 import pytest
 from pydantic import ValidationError
 
+from shuffify.enums import IntervalValue
 from shuffify.schemas.raid_requests import (
     AddRaidUrlRequest,
     RaidNowRequest,
@@ -121,10 +122,7 @@ class TestAddRaidUrlRequestValid:
         assert req.url is not None
 
     def test_valid_schedule_values(self):
-        for val in [
-            "daily", "weekly", "every_6h",
-            "every_12h", "every_3d",
-        ]:
+        for val in IntervalValue:
             req = AddRaidUrlRequest(
                 url=_VALID_PLAYLIST_URL,
                 schedule_value=val,
@@ -236,3 +234,22 @@ class TestBuildCron:
     def test_unsupported_frequency_raises(self):
         with pytest.raises(ValueError):
             build_cron("every_6h", "12:00")
+
+
+class TestRaidNowRequestBounds:
+    """Explicit sources are playlist IDs, no more than one playlist can have."""
+
+    def test_names_at_most_ten_sources(self):
+        # A playlist can have at most 10 sources.
+        ids = [f"source{number}" for number in range(11)]
+        assert RaidNowRequest(source_playlist_ids=ids[:10]).source_playlist_ids == ids[:10]
+        with pytest.raises(ValidationError) as refused:
+            RaidNowRequest(source_playlist_ids=ids)
+        assert [(error["loc"], error["type"]) for error in refused.value.errors()] == [
+            (("source_playlist_ids",), "too_long")
+        ]
+
+    @pytest.mark.parametrize("source_id", ["has-a-dash", "has_an_underscore", " padded "])
+    def test_each_source_is_a_playlist_id(self, source_id):
+        with pytest.raises(ValidationError):
+            RaidNowRequest(source_playlist_ids=[source_id])

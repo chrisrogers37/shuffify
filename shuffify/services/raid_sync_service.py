@@ -9,6 +9,7 @@ from contextlib import ExitStack, contextmanager
 
 from shuffify.enums import JobType, ScheduleType
 from shuffify.models.db import Schedule, User, db
+from shuffify.schemas.playlist_setup_requests import DRIP_COUNT_RANGE, RAID_COUNT_RANGE
 from shuffify.services.playlist_lock import (
     PlaylistBusyError,
     playlist_configuration_lock,
@@ -126,6 +127,7 @@ class RaidSyncService:
                         ),
                         schedule_type=sched_type,
                         schedule_value=sched_val,
+                        advanced_cron=False,  # The watch form offers preset frequencies and an optional clock time.
                         source_playlist_ids=[source_playlist_id],
                     )
                     schedule_written = True
@@ -235,6 +237,8 @@ class RaidSyncService:
                 "drip_schedule": None,
                 "source_count": 0,
                 "max_sources": max_sources,
+                "raid_count_range": list(RAID_COUNT_RANGE),
+                "drip_count_range": list(DRIP_COUNT_RANGE),
                 "has_schedule": False,
                 "is_schedule_enabled": False,
                 "last_run_at": None,
@@ -269,6 +273,8 @@ class RaidSyncService:
             ),
             "source_count": len(sources),
             "max_sources": max_sources,
+            "raid_count_range": list(RAID_COUNT_RANGE),
+            "drip_count_range": list(DRIP_COUNT_RANGE),
             "has_schedule": schedule is not None,
             "is_schedule_enabled": (
                 schedule.is_enabled if schedule else False

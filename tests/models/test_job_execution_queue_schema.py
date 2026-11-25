@@ -114,7 +114,7 @@ def test_model_unique_indexes_compile_with_distinct_nulls(name, columns):
 
 def test_migration_extends_the_base_without_a_fork():
     script = ScriptDirectory(str(ROOT / "migrations"))
-    assert script.get_heads() == ["e1f2a3b4c5d6"]
+    assert script.get_heads() == ["41b97c86ad20"]
     assert script.get_revision(REVISION).down_revision == "f7a8b9c0d1e2"
 
 
@@ -173,6 +173,16 @@ def _exercise_additive_upgrade(connection):
     assert all(saved[name] is None for name in QUEUE_COLUMNS)
     added = connection.execute(sa.select(upgraded).where(upgraded.c.id == 2)).mappings().one()
     assert all(added[name] is None for name in QUEUE_COLUMNS)
+    # Exercise the worker turn migration on the existing history, on both backends.
+    turns = ScriptDirectory(str(ROOT / "migrations")).get_revision("f2a3b4c5d6e7").module
+    with Operations.context(MigrationContext.configure(connection)):
+        turns.upgrade()
+        stamps = connection.execute(sa.text("SELECT last_claimed_at FROM job_executions")).scalars().all()
+        assert stamps == [None, None]
+        indexes = {index["name"]: index for index in sa.inspect(connection).get_indexes("job_executions")}
+        assert indexes["ix_job_executions_owner_turn"]["column_names"] == ["user_id", "last_claimed_at"]
+        turns.downgrade()
+    assert "last_claimed_at" not in {column["name"] for column in sa.inspect(connection).get_columns("job_executions")}
     return legacy_names, upgraded
 
 

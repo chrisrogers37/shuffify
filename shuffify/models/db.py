@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import types
+from sqlalchemy.dialects.postgresql import JSONB
 
 from shuffify.enums import (
     IntervalValue,
@@ -174,6 +175,10 @@ class User(db.Model):
         return f"<User {self.spotify_id} ({self.display_name})>"
 
 
+# The snapshot limit a new settings row starts with.
+DEFAULT_SNAPSHOTS_LIMIT = 10
+
+
 class UserSettings(db.Model):
     """
     User preferences and configuration.
@@ -203,7 +208,7 @@ class UserSettings(db.Model):
     # Feature toggles
     notifications_enabled = db.Column(db.Boolean, nullable=False, default=False)
     auto_snapshot_enabled = db.Column(db.Boolean, nullable=False, default=True)
-    max_snapshots_per_playlist = db.Column(db.Integer, nullable=False, default=10)
+    max_snapshots_per_playlist = db.Column(db.Integer, nullable=False, default=DEFAULT_SNAPSHOTS_LIMIT)
 
     # Dashboard preferences
     dashboard_show_recent_activity = db.Column(db.Boolean, nullable=False, default=True)
@@ -443,7 +448,7 @@ class Schedule(db.Model):
         index=True,
     )
     job_type = db.Column(db.String(20), nullable=False)
-    target_playlist_id = db.Column(db.String(255), nullable=False)
+    target_playlist_id = db.Column(db.String(255), nullable=False, index=True)
     target_playlist_name = db.Column(db.String(255), nullable=True)
     source_playlist_ids = db.Column(db.JSON, nullable=True, default=list)
     algorithm_name = db.Column(db.String(64), nullable=True)
@@ -458,6 +463,7 @@ class Schedule(db.Model):
         nullable=False,
         default=IntervalValue.DAILY,
     )
+    advanced_cron = db.Column(db.Boolean, nullable=True)
     is_enabled = db.Column(db.Boolean, nullable=False, default=True)
     # A precise eligibility floor, independent of execution bookkeeping.
     definition_changed_at = db.Column(UTCDateTime, nullable=True)
@@ -500,6 +506,7 @@ class Schedule(db.Model):
             "source_playlist_ids": self.source_playlist_ids or [],
             "algorithm_name": self.algorithm_name,
             "algorithm_params": self.algorithm_params or {},
+            **({"advanced_cron": True} if self.advanced_cron else {}),
             "schedule_type": self.schedule_type,
             "schedule_value": self.schedule_value,
             "timezone": self.timezone,
@@ -564,6 +571,16 @@ class RoutineActivationReceipt(db.Model):
     )
 
 
+class DeferredScheduleFire(db.Model):
+    """An observed busy slot still eligible for admission by the scheduler leader."""
+
+    __tablename__ = "deferred_schedule_fires"
+    schedule_id = db.Column(db.Integer, db.ForeignKey("schedules.id", ondelete="CASCADE"), primary_key=True)
+    scheduled_for = db.Column(UTCDateTime, primary_key=True)
+    cadence = db.Column(db.String(64), nullable=False)
+    blocking_operation_id = db.Column(db.Integer, nullable=False)
+
+
 class JobExecution(db.Model):
     """
     Record of a single job execution for audit/history.
@@ -600,6 +617,7 @@ class JobExecution(db.Model):
     lease_owner = db.Column(db.String(128), nullable=True)
     lease_expires_at = db.Column(UTCDateTime, nullable=True)
     heartbeat_at = db.Column(UTCDateTime, nullable=True)
+    last_claimed_at = db.Column(UTCDateTime, nullable=True)
     request_key = db.Column(db.String(128), nullable=True)
     scheduled_for = db.Column(UTCDateTime, nullable=True)
 
@@ -614,14 +632,20 @@ class JobExecution(db.Model):
         db.Index("ix_job_executions_started_at", "started_at"),
         db.Index("uq_job_executions_schedule_fire", "schedule_id", "scheduled_for", unique=True),
         db.Index("uq_job_executions_user_request", "user_id", "request_key", unique=True),
+        db.Index("ix_job_executions_owner_turn", "user_id", "last_claimed_at",
+                 postgresql_where=last_claimed_at.is_not(None), sqlite_where=last_claimed_at.is_not(None)),
         db.Index("ix_job_executions_queue_lease", "state", "lease_expires_at"),
+        db.Index(
+            "ix_job_executions_blocking_targets", db.cast(targets, JSONB), postgresql_using="gin",
+            postgresql_where=kind.is_not(None) & state.in_(("queued", "running", "compensating", "needs_attention")),
+        ).ddl_if(dialect="postgresql"),
     )
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the JobExecution to a dictionary."""
-        from shuffify.services.execution_result_service import serialize_execution_detail
+        from shuffify.services.execution_result_service import SCHEDULE_SKIP_REASONS, serialize_execution_detail
 
-        return {
+        value = {
             "id": self.id,
             "schedule_id": self.schedule_id,
             "started_at": (self.started_at.isoformat() if self.started_at else None),
@@ -634,6 +658,14 @@ class JobExecution(db.Model):
             "error_message": self.error_message,
             "result_detail": serialize_execution_detail(self.result_json),
         }
+
+        if self.status == "skipped" and isinstance(self.result_json, dict):
+            code = self.result_json.get("schedule_skip_code")
+            if isinstance(code, str) and code in SCHEDULE_SKIP_REASONS and self.started_at:
+                value["scheduled_skip"] = {
+                    "scheduled_for": self.started_at.isoformat(), "reason": SCHEDULE_SKIP_REASONS[code],
+                }
+        return value
 
     def __repr__(self) -> str:
         return (

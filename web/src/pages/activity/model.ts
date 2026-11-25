@@ -12,6 +12,7 @@ import type {
   TriggeredBy,
 } from "../../api/contracts.ts";
 import { ProtocolError } from "../../api/errors.ts";
+import { count, id, record } from "../../api/guards.ts";
 export const operations: Record<JobType, string> = {
   raid: "Collect for review",
   shuffle: "Reorder existing tracks",
@@ -218,13 +219,9 @@ export function routineHref(id: number | null): string | null {
 export function playlistHref(id: string | null): string | null {
   return id ? `/workshop/${encodeURIComponent(id)}` : null;
 }
-const record = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
 const text = (v: unknown) => typeof v === "string";
 const optionalText = (v: unknown) => v === undefined || text(v);
 const nullableText = (v: unknown) => v === null || text(v);
-const count = (v: unknown) => Number.isSafeInteger(v) && Number(v) >= 0;
-const id = (v: unknown) => count(v) && Number(v) > 0;
 const origin = (v: unknown) =>
   v === null || v === "manual" || v === "scheduler";
 const choice = (v: unknown, values: object) =>
@@ -353,6 +350,8 @@ export function parseActivityContext(value: unknown): ActivityContext {
         (run.tracks_added === null || count(run.tracks_added)) &&
         (run.tracks_total === null || count(run.tracks_total)) &&
         nullableText(run.error_message) &&
+        (run.scheduled_skip === undefined ||
+          (record(run.scheduled_skip) && text(run.scheduled_skip.reason) && text(run.scheduled_skip.scheduled_for))) &&
         nullableText(run.schedule_name) &&
         (run.job_type === "unknown" || choice(run.job_type, operations)) &&
         origin(run.triggered_by) &&

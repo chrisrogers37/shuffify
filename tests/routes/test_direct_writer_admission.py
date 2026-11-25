@@ -90,15 +90,17 @@ def test_a_playlist_id_outside_the_strict_pattern_is_refused_before_queue(auth_c
     assert JobExecution.query.count() == 0
 
 
-@pytest.mark.parametrize(("state", "error_code"), [("queued", "playlist_busy"),
+@pytest.mark.parametrize(("state", "error_code"), [("running", "playlist_busy"),
                                                    ("needs_attention", "playlist_needs_review")])
 def test_a_refusal_never_names_another_users_operation(auth_client, local_sources, forbid_spotify, state,
                                                        error_code):
     other = UserService.upsert_from_spotify({"id": "other", "display_name": "Other", "images": []}).user
     repository = OperationRepository()
     blocking = repository.enqueue(kind="shuffle", user_id=other.id, targets=["target"], payload={})
+    lease = repository.claim(operation_id=blocking.id)
+    repository.checkpoint(lease, {"plans": [{"resource": "target", "batches": [{"last_http_status": 200}]}]})
     if state == "needs_attention":
-        repository.finish(repository.claim(operation_id=blocking.id), "needs_attention")
+        repository.finish(lease, "needs_attention")
     path, options = writer_case("shuffle", None)
     response = auth_client.post(path, **options)
     assert (response.status_code, response.json["error_code"]) == (409, error_code)

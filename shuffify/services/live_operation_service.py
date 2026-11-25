@@ -104,6 +104,8 @@ LIVE_ENDPOINT_KINDS = {
 
 
 def preflight_error_code(status_code):
+    if status_code == 429:
+        return "rate_limited"
     if status_code == 401:
         return "authentication_required"
     if status_code == 503:

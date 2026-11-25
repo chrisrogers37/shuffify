@@ -196,6 +196,7 @@ export interface TargetResult {
 export interface Receipt {
   /** Proved child plus fresh parent resolution; original result facts stay intact. */
   readonly restoredBy?: number;
+  readonly holdAcknowledged?: boolean;
   readonly review: ReviewedAction;
   readonly status:
     | "submitting"

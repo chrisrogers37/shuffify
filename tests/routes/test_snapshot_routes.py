@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from shuffify.enums import SnapshotType
+from shuffify.models.db import PlaylistSnapshot
 from shuffify.services.playlist_snapshot_service import (
     PlaylistSnapshotService,
 )
@@ -509,3 +510,45 @@ class TestRestoreSnapshot:
         assert not {"execution_id", "started_at", "execution_state"} & data.keys()
         api.get_playlist.assert_not_called()
         api.update_playlist_tracks.assert_not_called()
+
+
+class TestSnapshotTrackListBound:
+    @pytest.mark.parametrize("fields, message_fragment", [
+        ({"track_uris": [uri(i) for i in range(10_001)]}, "at most 10000"),
+        ({}, "Field required"),
+    ])
+    def test_invalid_list_rejected_before_auth_and_persistence(
+        self, auth_client, fields, message_fragment
+    ):
+        with patch("shuffify.routes.require_auth") as auth, patch.object(
+            PlaylistSnapshotService, "create_snapshot", autospec=True
+        ) as create:
+            response = auth_client.post(
+                api_path("/playlist/p1/snapshots"),
+                json={"playlist_name": "Manual", **fields},
+            )
+
+        assert response.status_code == 400
+        body = response.get_json()
+        assert body.keys() == {"success", "error_code", "category", "message"}
+        assert (body["success"], body["error_code"], body["category"]) == (
+            False, "invalid_request", "error"
+        )
+        assert "track_uris" in body["message"]
+        assert message_fragment in body["message"]
+        auth.assert_not_called()
+        create.assert_not_called()
+
+    def test_at_spotify_playlist_limit_is_persisted(self, auth_client):
+        track_uris = [uri(i) for i in range(10_000)]
+        with patch("shuffify.routes.require_auth", return_value=MagicMock(spec=SpotifyAPI)):
+            response = auth_client.post(
+                api_path("/playlist/p1/snapshots"),
+                json={"playlist_name": "At limit", "track_uris": track_uris},
+            )
+
+        assert response.status_code == 200
+        snapshot = response.get_json()["snapshot"]
+        assert snapshot["track_count"] == 10_000
+        assert snapshot["track_uris"] == track_uris
+        assert PlaylistSnapshot.query.filter_by(id=snapshot["id"]).one().track_uris == track_uris

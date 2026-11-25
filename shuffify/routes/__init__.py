@@ -23,6 +23,7 @@ from shuffify.error_handlers import (
     format_validation_error,
     json_error_response,
 )
+from shuffify.routes.spotify_reads import run_with_read_limit
 from shuffify.services import (
     AuthenticationError,
     AuthService,
@@ -68,7 +69,8 @@ def require_auth():
         return None
     try:
         return AuthService.get_authenticated_api(
-            decrypt_session_token(session["spotify_token"])
+            decrypt_session_token(session["spotify_token"]),
+            authenticated_user_id=(session.get("user_data") or {}).get("id"),
         )
     except AuthenticationError:
         return None
@@ -125,7 +127,7 @@ def validate_json(schema_class):
         )
 
 
-def require_auth_and_db(f=None, *, on_preflight_error=None):
+def require_auth_and_db(f=None, *, on_preflight_error=None, parse_body=None):
     """
     Decorator that enforces authentication and database availability.
 
@@ -134,11 +136,15 @@ def require_auth_and_db(f=None, *, on_preflight_error=None):
     2. is_db_available() -- returns 503 if DB is down
     3. get_db_user() -- returns 401 if user not found in DB
 
+    An optional ``parse_body`` returns (body, error response). Check it for a
+    signed-in session before constructing the client, which may refresh a
+    Spotify token over the network. Pass the accepted body to the view.
+
     Injects ``api`` (SpotifyAPI) and ``user`` (User model)
     as keyword arguments to the wrapped function.
 
     ``on_preflight_error(message, status_code)`` optionally formats these
-    gate failures. It never handles responses or exceptions from the route.
+    gate failures and a refused Spotify data read.
 
     Usage::
 
@@ -150,12 +156,20 @@ def require_auth_and_db(f=None, *, on_preflight_error=None):
     """
     if f is None:
         return functools.partial(
-            require_auth_and_db, on_preflight_error=on_preflight_error
+            require_auth_and_db, on_preflight_error=on_preflight_error, parse_body=parse_body
         )
     preflight_error = on_preflight_error or json_error
 
     @functools.wraps(f)
     def decorated_function(*args, **kwargs):
+        if parse_body is not None:
+            if not AuthService.validate_session_token(session.get("spotify_token")):
+                return preflight_error("Please log in first.", 401)
+            body, error = parse_body()
+            if error is not None:
+                return error
+            kwargs["body"] = body
+
         api = require_auth()
         if not api:
             return preflight_error("Please log in first.", 401)
@@ -172,7 +186,7 @@ def require_auth_and_db(f=None, *, on_preflight_error=None):
 
         kwargs["api"] = api
         kwargs["user"] = user
-        return f(*args, **kwargs)
+        return run_with_read_limit(f, preflight_error, *args, **kwargs)
 
     return decorated_function
 
@@ -194,7 +208,7 @@ def require_session_and_db(view=None, *, on_preflight_error=None):
         user = get_db_user()
         if user is None:
             return preflight_error("User not found.", 401)
-        return view(*args, user=user, **kwargs)
+        return run_with_read_limit(view, preflight_error, *args, user=user, **kwargs)
 
     return authorized
 
@@ -211,7 +225,7 @@ def context_preflight(kind="live_context"):
     def preflight(message, status_code):
         return json_reply(context_rejected(
             preflight_error_code(status_code), status_code, message,
-            retryable=status_code in (401, 503), kind=kind,
+            retryable=status_code in (401, 429, 503), kind=kind,
         ))
 
     return preflight

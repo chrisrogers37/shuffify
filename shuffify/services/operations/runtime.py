@@ -5,6 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 
 from shuffify.models.db import User, db
+from shuffify.services.operations.repository import TERMINAL_STATES
 
 
 class VerifiedStepError(RuntimeError):
@@ -28,7 +29,7 @@ class OperationResult:
     result: dict
 
     def __post_init__(self):
-        if self.state not in {"succeeded", "failed", "rolled_back", "needs_attention"}:
+        if self.state not in TERMINAL_STATES:
             raise ValueError("A command result requires a terminal operation state")
 
 

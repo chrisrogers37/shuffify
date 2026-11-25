@@ -16,11 +16,13 @@ authenticate with Spotify. Another user receives `404`.
 Clients send `Idempotency-Key` with each distinct submitted intent. Keys contain
 1–128 characters. A matching retry returns the original operation before
 reading current history or a selected snapshot again. Changing that intent
-with the same key returns `409 request_key_conflict`. An active operation
-reserves all its targets, so another command for a reserved target returns
-`409 playlist_busy`, which names the blocking operation's ID only to its owner.
-Commands without a key still reserve their targets but cannot identify a retry
-after completion.
+with the same key returns `409 request_key_conflict`. An active operation reserves
+all its targets against new commands from its owner. For another account, a
+target becomes busy once Spotify has returned a successful write response for that playlist in the
+operation's journal. A collaborative flag alone gives no account-specific proof.
+A `409 playlist_busy` names the blocking operation only to its owner. Commands
+without a key follow the same conflict rules but cannot identify a retry after
+completion.
 
 The command records the validated input, selected snapshot contents and relevant
 browser history binding. Snapshot retries therefore preserve the accepted order
@@ -31,8 +33,12 @@ Flask session nor credentials. Public response schemas are generated from
 ## Execution and recovery
 
 The worker owns a renewable lease and sorted playlist locks, plus a credential
-lock for the user. Randomized algorithm choices and original observations are
-checkpointed before any mutation. Each HTTP batch has a durable intent and
+lock for the user. Before executing a newly admitted command it opens the operation's
+journal. An open journal reserves the worker's turn across retries and crashes.
+Other accounts can still submit before proof, and queued work holds no execution
+turn. A waiting worker checks for unresolved attention before starting.
+Randomized algorithm choices and original observations are checkpointed before
+any mutation. Each HTTP batch has a durable intent and
 acknowledgment. Command steps retain their plan ranges, results and working
 history so recovery does not select another shuffle or treat a completed write
 as its original baseline.
@@ -111,6 +117,35 @@ together. Optional bookkeeping failures have durable receipts and do not repeat
 on recovery. No database transaction spans Spotify I/O. Schedule deletion
 detaches durable operations instead of deleting their history receipts, and
 legacy stale-execution cleanup excludes durable operations.
+
+## Saved playlist storage
+
+| Inventory per account | Inclusive limit | How a save uses capacity |
+| --- | ---: | --- |
+| Snapshots, manual and automatic combined | 200 | One row. An insertion that rotates a full playlist's oldest snapshot consumes no additional row. |
+| Saved Workshop sessions | 50 | One row per named save. Editing the same session consumes no slot. |
+| Playlists across both stores | 50 | The union of Spotify playlist IDs owned by this account. A playlist in both stores counts once. |
+
+These budgets allow ten snapshots on each of twenty working playlists, or up to fifty playlists with shorter histories. Fifty Workshop slots accommodate a draft for each of those playlists or several drafts for a smaller collection. The settings default of ten snapshots per playlist, the maximum and fallback of fifty, and the ten saved sessions per playlist still apply.
+
+Existing rows remain readable, and existing snapshots can be restored. An owner can edit saved sessions and delete records at any count. A create can proceed if each inventory it grows has room. For example, an owner over the snapshot cap can rotate a full playlist, or add a Workshop session on an existing playlist if session capacity permits. Lowering the per-playlist snapshot setting takes effect on the next snapshot for that playlist. A multi-destination step accounts for all rotations before it checks its net growth. Other playlists keep their history. Once a deletion commits, its row stops counting. The playlist slot opens only after the last record in **both** stores is gone. An owner above a limit must drop below it before growing that inventory again.
+
+Manual snapshot and Workshop session routes return HTTP 409 with the exhausted account limit. The existing per-playlist Workshop limit retains its HTTP 400 response. Stores serialize additions on the same PostgreSQL user row before checking capacity. A snapshot insert and its playlist rotation commit together. Direct Workshop saves use this same snapshot writer. Queued Workshop commits, direct shuffle and snapshot restore, and changing routine steps use it with the worker's fenced session and `commit=False`. Automatic snapshots are optional. A routine step saves all its destination snapshots in one savepoint. A refusal rolls back every insert and rotation in that set, and the worker publishes the optional-step failure receipt. A recovered composite operation can use that receipt after an earlier Spotify write.
+
+## Execution retention
+
+Keep full execution records for **90 days after completion (UTC)** to allow recent runs to be investigated. The exact cutoff is inclusive for retention. A maintenance invocation visits at most 100 IDs in primary-key order in one transaction. For example, run this from the configured application environment:
+
+```sh
+flask --app run:app prune-executions --limit 100
+```
+
+The JSON output gives the number examined, deleted and compacted. Pass a non-null `next_after_id` back with `--after-id` for the next page. A null cursor ends the sweep. Start the next sweep at zero to revisit records that aged out, lost a reference, or were locked during an earlier sweep. A repeated page is safe. This is an operator-invoked command.
+
+- Delete completed legacy execution rows with recognized terminal status when no snapshot, journal, request key or scheduled fire needs them. Preserve unknown or incomplete records.
+- Compact settled queue operations in place. Drop private plans, compensation, resources, local checkpoints and obsolete Undo history. Preserve the original ID, public result, progress, recovery summary and execution-history columns. Clear the unkeyed command payload. Retain the original payload on keyed and scheduled rows for exact-command and intent comparisons, including a changed request's conflict. The stored UTC fire continues to deduplicate callbacks and supply the scheduler's recovery floor.
+- Preserve snapshot-linked executions, every restoration child, and parents identified by the child's capture or by a resolution marker. A queued snapshot restore owns its captured order even if its source snapshot is deleted. Reviewed operation restoration still needs the original journal and the child's proof of dispatch or resolution.
+- Keep queued, leased, compensating and attention rows. Preserve ambiguous dispatches, unfinished finalization and private journals without a recognized final decision. Keep each scope's latest confirmed history per playlist, including an explicit clear. An older receipt expires only after a later confirmed receipt covers **every** playlist and pending work has released both its captured revision and staged parent revision. Cleanup takes the same owner lock as admission before checking those references. If an admission is still capturing its command, cleanup skips the receipt for this sweep.
 
 ## Verification
 

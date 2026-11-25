@@ -10,8 +10,10 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
 
 logger = logging.getLogger(__name__)
-_CHANNEL = 'shuffify_operations'
-_SCHEDULE_CHANNEL = 'shuffify_schedules'
+# Operation admission notifies OPERATION_CHANNEL; a schedule-definition change notifies SCHEDULE_CHANNEL.
+OPERATION_CHANNEL = 'shuffify_operations'
+SCHEDULE_CHANNEL = 'shuffify_schedules'
+COMPLETION_CHANNEL = 'shuffify_operation_finishes'
 
 
 def direct_url(url):
@@ -31,11 +33,12 @@ class PostgresWakeListener:
     owns draining durable state; notification payloads are only wake hints.
     """
 
-    def __init__(self, repository, wake_callback, *, schedule_callback=None, connection_factory=None,
-                 reconnect_delay=0.1, max_reconnect_delay=5, connect_timeout=3):
+    def __init__(self, repository, wake_callback, *, schedule_callback=None, completion_callback=None,
+                 connection_factory=None, reconnect_delay=0.1, max_reconnect_delay=5, connect_timeout=3):
         self.enabled = repository.engine.dialect.name == 'postgresql'
         self.wake_callback = wake_callback
         self.schedule_callback = schedule_callback
+        self.completion_callback = completion_callback
         self.ready = threading.Event()
         self._stop = threading.Event()
         self._thread = None
@@ -92,9 +95,11 @@ class PostgresWakeListener:
                 driver.autocommit = True
                 cursor = driver.cursor()
                 try:
-                    cursor.execute(f'LISTEN {_CHANNEL}')
+                    cursor.execute(f'LISTEN {OPERATION_CHANNEL}')
                     if self.schedule_callback is not None:
-                        cursor.execute(f'LISTEN {_SCHEDULE_CHANNEL}')
+                        cursor.execute(f'LISTEN {SCHEDULE_CHANNEL}')
+                    if self.completion_callback is not None:
+                        cursor.execute(f'LISTEN {COMPLETION_CHANNEL}')
                 finally:
                     cursor.close()
                 with self._connection_lock:
@@ -111,10 +116,16 @@ class PostgresWakeListener:
                     driver.poll()
                     notifications = driver.notifies
                     wake = refresh = False
+                    completed = set()
                     while notifications:
                         notification = notifications.pop(0)
-                        wake = wake or notification.channel == _CHANNEL
-                        refresh = refresh or notification.channel == _SCHEDULE_CHANNEL
+                        if (notification.channel == COMPLETION_CHANNEL and len(notification.payload) <= 10
+                                and notification.payload.isascii() and notification.payload.isdecimal()):
+                            completed.add(int(notification.payload))
+                        wake = wake or notification.channel == OPERATION_CHANNEL
+                        refresh = refresh or notification.channel == SCHEDULE_CHANNEL
+                    if completed and self.completion_callback:
+                        self.completion_callback(completed)
                     if wake:
                         self.wake_callback()
                     if refresh and self.schedule_callback is not None:

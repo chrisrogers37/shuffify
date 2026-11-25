@@ -13,6 +13,7 @@ from sqlalchemy import event
 from shuffify.models.db import JobExecution, db
 from tests.services.operations.test_scheduled_admission import NOW
 from tests.services.operations.test_scheduled_admission import schedule as schedule
+from tests.services.operations.test_scheduler_recovery import scheduler_clock as scheduler_clock
 
 
 def module():
@@ -83,7 +84,7 @@ def test_refresh_preserves_unchanged_interval_and_tracks_definition_revision(sch
 
 def test_due_executor_receives_exact_times_coalesces_and_respects_grace():
     received, events, finished = [], [], threading.Event()
-    executor = module().DurableAdmissionExecutor(clock=lambda: NOW)
+    executor = module().DurableAdmissionExecutor(clock=lambda: NOW, max_workers=4)
     scheduler = BackgroundScheduler(executors={"default": executor}, timezone="UTC")
     scheduler.add_listener(lambda event: (events.append(event), finished.set()), EVENT_JOB_EXECUTED | EVENT_JOB_MISSED)
     scheduler.start(paused=True)
@@ -190,10 +191,12 @@ def test_shutdown_interrupts_lock_retry_without_starting_scheduler(schedule, db_
     assert runtime._scheduler is None
 
 
-def test_transient_admission_retries_keep_due_identity_and_stop_at_grace(schedule, db_app):
+def test_transient_admission_retries_keep_due_identity_and_stop_at_grace(schedule, db_app, scheduler_clock):
     from sqlalchemy.exc import OperationalError
 
-    clock = [NOW]
+    schedule.definition_changed_at = schedule.created_at
+    db.session.commit()
+    clock = [scheduler_clock[0]]
     calls = []
 
     def unavailable(repository, schedule_id, cadence, due, **kwargs):
@@ -207,6 +210,7 @@ def test_transient_admission_retries_keep_due_identity_and_stop_at_grace(schedul
         app, clock=lambda: clock[0], admission_callback=unavailable, retry_initial=0.001, retry_max=0.001
     ) as runtime:
         assert runtime.ready.wait(2)
+        clock[0] = NOW
         snap = runtime.registration_snapshot([schedule.id])
         result = runtime._fire(
             schedule.id,
@@ -218,7 +222,7 @@ def test_transient_admission_retries_keep_due_identity_and_stop_at_grace(schedul
         assert calls == [NOW, NOW]
         assert runtime.metrics["admission_retries"] == 2
         assert runtime.metrics["missed"] == 1
-        assert JobExecution.query.count() == 0
+        assert JobExecution.query.one().result_json["schedule_skip_code"] == "misfire"
 
 
 @pytest.mark.parametrize("invalidated_interface", [False, True])

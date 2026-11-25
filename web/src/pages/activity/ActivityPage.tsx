@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 import type { ActivityContext } from "../../api/contracts";
-import { ApiRequestError, RateLimitError } from "../../api/errors";
+import { ApiRequestError, retryDeadline } from "../../api/errors";
 import { useServices, useSession } from "../../auth/SessionProvider";
 import {
   HistoricalOperationRestoration,
@@ -82,8 +82,8 @@ export function ActivityPage() {
               ? problem.message
               : "The activity response could not be loaded. Please try again.",
           );
-          if (problem instanceof RateLimitError)
-            setRetryUntil(Date.now() + (problem.retryAfterMs ?? 1000));
+          const until = retryDeadline(problem, Date.now());
+          if (until !== null) setRetryUntil(until);
           setLoading(false);
         }
       },
@@ -359,7 +359,9 @@ export function ActivityPage() {
                               >
                                 {dateText(run.started_at)}
                               </time>
-                              {detail ? (
+                              {run.scheduled_skip ? (
+                                <p>{run.scheduled_skip.reason}</p>
+                              ) : detail ? (
                                 <details
                                   open={expanded.has(run.id)}
                                   onToggle={(event) => {

@@ -441,3 +441,12 @@ test("only conclusive original400/401/403 refusal can be freshly reviewed withou
     assert.equal(h.r.getSnapshot().get("source-key").operationId, null);
   }
 });
+
+test("a worker refusal before the handler releases the target and unstarted source reservations", async () => {
+  const h = harness();
+  await h.r.reserveReviewedContinuations(parent(), [child()], "alice").submitTarget("alice");
+  h.operations.finish(operation(2001, "failed", { success: false, error_code: "playlist_needs_review" }));
+  assert.equal(h.r.getSnapshot().get("target-key").status, "settled");
+  assert.equal(h.r.getSnapshot().get("source-key").status, "refused");
+  assert.equal(h.calls.length, 1);
+});

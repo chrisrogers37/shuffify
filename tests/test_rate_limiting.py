@@ -2,18 +2,24 @@
 Tests for rate limiting.
 
 Verifies that /login and /callback are rate-limited per address to
-prevent abuse of the OAuth flow, and that the other limits key by the
-signed-in user, or by the address when no one is signed in.
+prevent abuse of the OAuth flow, that signed-out queue guards key by
+address, and that a 429 says when its limit resets. Signed-in queue
+submissions are exercised through real admission in the route tests.
 """
 
 import time
 from unittest.mock import patch
 
 import pytest
+import redis
+from flask import abort
+from flask_limiter.util import get_qualified_name, get_remote_address
+
+import shuffify
 
 
 @pytest.fixture
-def rate_limited_app():
+def rate_limited_app(monkeypatch):
     """Create a Flask app with rate limiting enabled (in-memory)."""
     import os
 
@@ -25,8 +31,11 @@ def rate_limited_app():
     os.environ["SECRET_KEY"] = "test-secret-key-for-testing"
     os.environ.pop("DATABASE_URL", None)
 
+    from config import DevConfig
     from shuffify import create_app
 
+    monkeypatch.setattr(DevConfig, "REDIS_URL", None)
+    monkeypatch.setattr(DevConfig, "SQLALCHEMY_DATABASE_URI", "sqlite:///:memory:")
     app = create_app("development")
     app.config["TESTING"] = True
     app.config["SCHEDULER_ENABLED"] = False
@@ -140,23 +149,65 @@ class TestRateLimitDoesNotAffectOtherRoutes:
             assert response.status_code != 429
 
 
-class TestLimiterInitialization:
-    """Tests for limiter initialization behavior."""
+class TestRetryAfter:
+    """A limit's 429 says when the limit resets; any other 429 says nothing."""
 
-    def test_rate_limit_header_present(self, rate_client):
-        """Rate-limited responses should include Retry-After."""
-        for _ in range(11):
-            response = rate_client.get("/login")
+    def test_a_429_carries_the_seconds_until_its_limit_resets(self, rate_client):
+        statuses = [rate_client.get("/login").status_code for _ in range(10)]
         response = rate_client.get("/login")
-        if response.status_code == 429:
-            assert "Retry-After" in response.headers
+        assert 429 not in statuses
+        assert response.status_code == 429
+        # /login allows 10 a minute, so its window resets within 60 seconds.
+        assert response.headers["Retry-After"].isdigit()
+        assert 1 <= int(response.headers["Retry-After"]) <= 60
+
+    @pytest.mark.parametrize(("elapsed", "delay"), [(58.1, "2"), (59.5, "1")])
+    def test_rounds_up_the_time_remaining_in_the_window(self, rate_client, elapsed, delay):
+        start = int(time.time()) + 0.8
+        with patch("time.time", return_value=start) as clock:
+            for _ in range(10):
+                assert rate_client.get("/login").status_code != 429
+            clock.return_value = start + elapsed
+            response = rate_client.get("/login")
+        assert response.status_code == 429
+        assert response.headers["Retry-After"] == delay
+
+    def test_a_failed_reset_lookup_preserves_the_rejection(self, rate_limited_app, monkeypatch):
+        client = rate_limited_app.test_client()
+        for _ in range(10):
+            assert client.get("/login").status_code != 429
+        limiter, = rate_limited_app.extensions["limiter"]
+
+        def unavailable(*args):
+            raise redis.ConnectionError("Redis unavailable after breach")
+
+        monkeypatch.setattr(limiter.limiter, "get_window_stats", unavailable)
+        response = client.get("/login")
+        assert response.status_code == 429
+        assert response.json["error_code"] == "rate_limited"
+        assert "Retry-After" not in response.headers
+
+    @pytest.mark.parametrize("limit", [None, "100/minute"])
+    def test_a_429_that_no_limit_raised_has_no_retry_after(self, rate_limited_app, limit):
+        """A 429 from the view itself, on a route with no limit or one it has not reached."""
+
+        def busy():
+            abort(429)
+
+        if limit:
+            (limiter,) = rate_limited_app.extensions["limiter"]
+            busy = limiter.limit(limit)(busy)
+        rate_limited_app.add_url_rule("/busy", "busy", busy)
+        response = rate_limited_app.test_client().get("/busy")
+        assert response.status_code == 429
+        assert "Retry-After" not in response.headers
 
 
 # Documentation addresses (RFC 5737), never a real client's.
 SHARED_ADDRESS = "192.0.2.10"
 OTHER_ADDRESS = "198.51.100.20"
 SHUFFLE = "/api/shuffle/examplePlaylist"
-SIGNED_IN_LIMITS = [
+SIGNED_OUT_QUEUE_GUARDS = [
     SHUFFLE,
     "/api/workshop/examplePlaylist/commit",
     "/api/schedules/1/run",
@@ -164,8 +215,8 @@ SIGNED_IN_LIMITS = [
 ]
 
 
-def _signed_in(app, user_id, display_name=None):
-    """A client signed in as ``user_id``, shown as ``display_name`` (by default the id)."""
+def _signed_in(app, user_id):
+    """A client with a session for the given Spotify user."""
     client = app.test_client()
     with client.session_transaction() as sess:
         sess["spotify_token"] = {
@@ -175,7 +226,7 @@ def _signed_in(app, user_id, display_name=None):
             "expires_at": time.time() + 3600,
             "refresh_token": "test_refresh",
         }
-        sess["user_data"] = {"id": user_id, "display_name": display_name or user_id}
+        sess["user_data"] = {"id": user_id, "display_name": user_id}
     return client
 
 
@@ -192,23 +243,7 @@ def _allowed_before_429(client, method, path, address, headers=None, cap=50):
 
 
 class TestRateLimitKeys:
-    """Which bucket a request lands in.
-
-    Signed-in limits key by the session's user; /login, /callback and
-    signed-out requests key by address.
-    """
-
-    @pytest.mark.parametrize("path", SIGNED_IN_LIMITS)
-    def test_two_signed_in_users_behind_one_address_do_not_share_a_bucket(self, app, path):
-        alice, bob = _signed_in(app, "alice"), _signed_in(app, "bob")
-        allowed = _allowed_before_429(alice, "POST", path, SHARED_ADDRESS)
-        assert allowed > 0
-        assert _allowed_before_429(bob, "POST", path, SHARED_ADDRESS) == allowed
-
-    def test_one_user_who_changes_address_still_shares_one_bucket(self, app):
-        alice = _signed_in(app, "alice")
-        _allowed_before_429(alice, "POST", SHUFFLE, SHARED_ADDRESS)
-        assert _status(alice, "POST", SHUFFLE, OTHER_ADDRESS) == 429
+    """OAuth and signed-out queue guards remain per address."""
 
     @pytest.mark.parametrize("path", ["/login", "/callback"])
     def test_sign_in_routes_stay_per_address(self, app, path):
@@ -217,11 +252,12 @@ class TestRateLimitKeys:
         assert _status(bob, "GET", path, SHARED_ADDRESS) == 429
         assert _status(bob, "GET", path, OTHER_ADDRESS) != 429
 
-    def test_a_signed_out_request_falls_back_to_the_address(self, app):
+    @pytest.mark.parametrize("path", SIGNED_OUT_QUEUE_GUARDS)
+    def test_a_signed_out_request_falls_back_to_the_address(self, app, path):
         first, second = app.test_client(), app.test_client()
-        allowed = _allowed_before_429(first, "POST", SHUFFLE, SHARED_ADDRESS)
-        assert _status(second, "POST", SHUFFLE, SHARED_ADDRESS) == 429
-        assert _allowed_before_429(second, "POST", SHUFFLE, OTHER_ADDRESS) == allowed
+        allowed = _allowed_before_429(first, "POST", path, SHARED_ADDRESS)
+        assert _status(second, "POST", path, SHARED_ADDRESS) == 429
+        assert _allowed_before_429(second, "POST", path, OTHER_ADDRESS) == allowed
 
     @pytest.mark.parametrize("forwarded", ["user:alice", "alice"])
     def test_a_signed_out_request_never_counts_against_a_signed_in_user(self, app, forwarded):
@@ -229,7 +265,52 @@ class TestRateLimitKeys:
         _allowed_before_429(stranger, "POST", SHUFFLE, SHARED_ADDRESS, headers={"X-Forwarded-For": forwarded})
         assert _status(alice, "POST", SHUFFLE, OTHER_ADDRESS) != 429
 
-    def test_users_who_share_a_display_name_do_not_share_a_bucket(self, app):
-        alice, bob = _signed_in(app, "alice", "Sam"), _signed_in(app, "bob", "Sam")
-        _allowed_before_429(alice, "POST", SHUFFLE, SHARED_ADDRESS)
-        assert _status(bob, "POST", SHUFFLE, SHARED_ADDRESS) != 429
+
+# Each limited endpoint, with its limit and the function that keys its bucket,
+# written out here rather than read from shuffify.RATE_LIMITS.
+LIMITED_ENDPOINTS = {
+    "auth.login": ("10 per 1 minute", get_remote_address),
+    "auth.callback": ("10 per 1 minute", get_remote_address),
+    "api.shuffle": ("5 per 1 minute", get_remote_address),
+    "api.workshop_commit": ("10 per 1 minute", get_remote_address),
+    "api.run_schedule_now": ("5 per 1 minute", get_remote_address),
+    "api.playlist_setup_create_playlist": ("10 per 1 minute", get_remote_address),
+}
+
+
+@pytest.fixture
+def production_app(production_boot_env, production_redis, no_schema_check):
+    """The production app, built on conftest's stand-in Redis."""
+    from shuffify import create_app
+
+    return create_app("production")
+
+
+class TestLimitsAtBoot:
+    """Every limit is in place once the app is built, or the boot fails."""
+
+    def test_production_wraps_each_limited_endpoint_in_its_limit(self, production_app):
+        # The two things Flask-Limiter reads when a wrapped view runs: the
+        # limiter that made the wrapper, and the limits that limiter holds
+        # under the view's qualified name.
+        (limiter,) = production_app.extensions["limiter"]
+        applied = {}
+        for endpoint in LIMITED_ENDPOINTS:
+            view = production_app.view_functions[endpoint]
+            assert getattr(view, "__wrapper-limiter-instance", None) == limiter, endpoint
+            applied[endpoint] = [
+                (str(limit.limit), limit.key_func)
+                for limit in limiter.limit_manager.decorated_limits(get_qualified_name(view))
+            ]
+        assert applied == {endpoint: [expected] for endpoint, expected in LIMITED_ENDPOINTS.items()}
+
+    @pytest.mark.parametrize("limiter_available", [True, False])
+    def test_a_limited_endpoint_that_is_not_registered_fails_the_boot(self, monkeypatch, limiter_available):
+        if not limiter_available:
+            monkeypatch.setattr(shuffify, "_init_limiter", lambda *_: None)
+        monkeypatch.setitem(shuffify.RATE_LIMITS, "api.renamed_endpoint", ("5/minute", None))
+
+        from shuffify import create_app
+
+        with pytest.raises(RuntimeError, match="api.renamed_endpoint"):
+            create_app("testing")

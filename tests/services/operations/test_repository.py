@@ -1,13 +1,14 @@
 """Queue admission and lease fencing use independent database transactions."""
 
 import json
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
-from threading import Barrier
+from threading import Barrier, Event
+from time import monotonic, sleep
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, select, text, update
+from sqlalchemy import create_engine, event, select, text, update
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
 
@@ -16,6 +17,7 @@ from shuffify.services.operations.repository import (
     BusyOperation,
     LeaseLost,
     OperationRepository,
+    OutstandingOperationLimit,
     PlaylistNeedsReview,
     RequestKeyConflict,
 )
@@ -65,7 +67,7 @@ def test_idempotency_distinguishes_json_scalar_types(repository, value):
 def test_busy_reservations_include_queued_and_shared_targets(repository):
     first = repository.enqueue(kind="example", user_id=1, targets=["target", "shared"], payload={}, request_key="first")
     with pytest.raises(BusyOperation) as error:
-        repository.enqueue(kind="example", user_id=2, targets=["other", "shared"], payload={}, request_key="second")
+        repository.enqueue(kind="example", user_id=1, targets=["other", "shared"], payload={}, request_key="second")
     assert error.value.operation_id == first.id
     lease = repository.claim()
     with pytest.raises(BusyOperation):
@@ -100,7 +102,9 @@ def test_a_manual_operation_is_refused_on_a_playlist_with_an_unresolved_needs_at
 
 def test_a_shared_target_is_enough_to_be_refused(repository):
     parent = repository.enqueue(kind="example", user_id=1, targets=["a", "b"], payload={}, request_key="first")
-    repository.finish(repository.claim(operation_id=parent.id), "needs_attention")
+    lease = repository.claim(operation_id=parent.id)
+    repository.checkpoint(lease, {"plans": [{"resource": "b", "batches": [{"last_http_status": 200}]}]})
+    repository.finish(lease, "needs_attention")
     with pytest.raises(PlaylistNeedsReview) as error:
         repository.enqueue(kind="example", user_id=2, targets=["b", "c"], payload={}, request_key="second")
     assert error.value.operation_id == parent.id
@@ -190,6 +194,35 @@ def test_legacy_rows_and_future_deferred_rows_are_not_claimed(repository):
     assert repository.claim() is None
     with pytest.raises(LeaseLost):
         repository.renew(lease)
+
+
+@pytest.mark.parametrize("owner", [1, None], ids=["user", "ownerless"])
+def test_only_untargeted_claims_spend_a_turn_and_the_turn_survives_restart(repository, owner):
+    first, second, third = [
+        repository.enqueue(kind="example", user_id=owner, targets=[name], payload={})
+        for name in ("first", "second", "third")
+    ]
+    other = repository.enqueue(kind="example", user_id=2, targets=["other"], payload={})
+    targeted = repository.claim(operation_id=third.id)
+    assert targeted.operation_id == third.id
+    repository.finish(targeted, "succeeded")
+    assert repository.claim().operation_id == first.id
+    restarted = OperationRepository(repository.engine)
+    assert restarted.claim().operation_id == other.id
+    assert restarted.claim().operation_id == second.id
+
+
+def test_deferred_owner_waits_for_the_deadline_while_other_ready_work_runs(repository, monkeypatch):
+    delayed = enqueue(repository)
+    lease = repository.claim(operation_id=delayed.id)
+    deadline = repository.defer(lease, delay_seconds=60).lease_expires_at
+    other = repository.enqueue(kind="example", user_id=2, targets=["other"], payload={})
+    monkeypatch.setattr(repository, "_now", lambda session: deadline - timedelta(microseconds=1))
+    assert repository.claim(operation_id=delayed.id) is None
+    assert repository.claim().operation_id == other.id
+    assert repository.claim() is None
+    monkeypatch.setattr(repository, "_now", lambda session: deadline)
+    assert repository.claim().operation_id == delayed.id
 
 
 def test_recovery_uses_a_fresh_token_and_fences_every_old_write(repository):
@@ -364,6 +397,46 @@ def test_postgres_concurrent_idempotency_and_overlapping_admission(postgres_repo
 
 
 @pytest.mark.integration
+def test_postgres_disjoint_submissions_cannot_both_take_last_user_slot(postgres_repository):
+    repository = postgres_repository
+    for i in range(4):
+        enqueue(repository, target=f"existing-{i}", key=f"existing-{i}")
+
+    staged, release = Future(), Event()
+
+    def hold_first_commit(connection):
+        if not staged.done():
+            staged.set_result(connection.scalar(text("SELECT pg_backend_pid()")))
+            assert release.wait(10)
+
+    blocked_by_first = text("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE :pid = ANY(pg_blocking_pids(pid)))")
+    event.listen(repository.engine, "commit", hold_first_commit)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(enqueue, repository, target="first", key="request-first")
+            try:
+                first_pid = staged.result(timeout=5)
+                second = pool.submit(repository.enqueue, kind="example", user_id=1, request_key="request-second",
+                                     intent={}, command_factory=lambda _: (["second"], {}))
+                # Force overlap at commit. An unlocked count would miss the staged row and let both insert.
+                with repository.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as observer:
+                    deadline = monotonic() + 5
+                    while not second.done() and not observer.scalar(blocked_by_first, {"pid": first_pid}):
+                        assert monotonic() < deadline, "The second admission never reached the database lock"
+                        sleep(0.01)
+            finally:
+                release.set()
+            assert first.result(timeout=5).state == "queued"
+            with pytest.raises(OutstandingOperationLimit):
+                second.result(timeout=5)
+    finally:
+        event.remove(repository.engine, "commit", hold_first_commit)
+
+    with Session(repository.engine) as session:
+        assert len(session.scalars(select(JobExecution.id).where(JobExecution.user_id == 1)).all()) == 5
+
+
+@pytest.mark.integration
 def test_postgres_scheduled_fire_replay_is_atomic(postgres_repository):
     repository = postgres_repository
     with Session(repository.engine) as session, session.begin():
@@ -408,6 +481,45 @@ def test_postgres_skip_locked_claim_and_fencing(postgres_repository):
     with pytest.raises(LeaseLost):
         repository.finish(claimed_first, "succeeded")
     assert repository.finish(recovered, "succeeded").state == "succeeded"
+
+
+@pytest.mark.integration
+def test_postgres_claim_rotates_after_a_committed_turn(postgres_repository):
+    repository = postgres_repository
+    alice = [enqueue(repository, target=f"alice{i}", key=f"alice{i}").id for i in range(5)]
+    bob = repository.enqueue(kind="example", user_id=2, targets=["bob"], payload={})
+    order = []
+    for _ in range(6):
+        lease = repository.claim()
+        order.append(lease.operation_id)
+        repository.finish(lease, "succeeded")
+    assert order == [alice[0], bob.id, *alice[1:]]
+
+
+@pytest.mark.integration
+def test_postgres_second_claimer_can_finish_before_the_first_claim_commits(postgres_repository):
+    repository = postgres_repository
+    first = enqueue(repository)
+    second = enqueue(repository, target="other", key="other")
+    staged, release = Event(), Event()
+
+    def hold_first_commit(connection):
+        if not staged.is_set():
+            staged.set()
+            assert release.wait(10)
+
+    event.listen(repository.engine, "commit", hold_first_commit)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            pending = pool.submit(repository.claim)
+            try:
+                assert staged.wait(5)
+                assert pool.submit(repository.claim).result(timeout=5).operation_id == second.id
+            finally:
+                release.set()
+            assert pending.result(timeout=5).operation_id == first.id
+    finally:
+        event.remove(repository.engine, "commit", hold_first_commit)
 
 
 @pytest.mark.integration

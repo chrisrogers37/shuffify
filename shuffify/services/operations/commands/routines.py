@@ -1,5 +1,6 @@
 """Queued routine orchestration: frozen child choices and atomic acceptance, one execution identity."""
 
+import logging
 from datetime import datetime, timezone
 
 from pydantic import ValidationError
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from shuffify.enums import ActivityType, SnapshotType
 from shuffify.models.db import ActivityLog, Schedule
+from shuffify.schemas.playlist_setup_requests import DRIP_COUNT_RANGE
 from shuffify.services.live_review_bindings import REVIEW_CHANGED
 from shuffify.services.live_review_scope import ReviewChanged, drip_forced, effective_drip_count, rotation_settings
 from shuffify.services.operations.bookkeeping import OperationBookkeeping
@@ -38,9 +40,11 @@ from shuffify.spotify.exceptions import (
 from shuffify.spotify.observation import observe_mutations
 
 from .envelope import validate_command
-from .routine_capture import CaptureNotFound, CaptureRejected, recapture, require_review
+from .routine_capture import DIRECT_MODELS, CaptureNotFound, CaptureRejected, recapture, require_review
 from .routine_facts import BINDING_KEY, build_result, input_key, plan_key
 from .routine_schemas import DripNowCommand, RaidAndDripCommand, RaidNowCommand, ScheduleRunCommand
+
+logger = logging.getLogger(__name__)
 
 EXECUTORS = {
     "raid": (prepare_raid, execute_raid),
@@ -121,11 +125,7 @@ def _config(runtime, name, values):
     schema = (
         ScheduleRunCommand
         if raw["definition"]["schedule_id"] is not None
-        else {
-            "raid": RaidNowCommand,
-            "drip": DripNowCommand,
-            "raid_and_drip": RaidAndDripCommand,
-        }[raw["definition"]["job_type"]]
+        else DIRECT_MODELS[raw["definition"]["job_type"]]
     )
     command = schema.model_validate(raw)
     config, definition, user_id, target = command.config, command.definition, runtime.user.id, command.playlist_id
@@ -146,6 +146,12 @@ def _config(runtime, name, values):
             raise CaptureRejected("link_required", "No raid playlist link found. Create a raid link first.")
         forced = drip_forced(params)
         count = effective_drip_count(params, link) if forced or link.drip_enabled else 1
+        low, high = DRIP_COUNT_RANGE
+        if not low <= count <= high:
+            # The routine API refuses only new or changed counts outside the range; a saved one runs as saved.
+            logger.warning(
+                "Drip count outside %s to %s: %s (schedule_id=%s)", low, high, count, definition.schedule_id
+            )
         return DripConfig(
             user_id,
             target,
@@ -177,29 +183,18 @@ def _config(runtime, name, values):
 def _snapshots(runtime, name, prepared):
     def commit(storage):
         bookkeeping = OperationBookkeeping(storage, runtime.user.id, runtime.operation.id)
-        receipts = []
         destinations = {runtime.operation.payload["command"]["playlist_id"]}
         if name in {"raid", "drip"}:
             collection = prepared["config"].get("collection_playlist_id")
             if collection:
                 destinations.add(collection)
-        for resource, before in prepared["before"].items():
-            if resource not in destinations:
-                continue
-            receipts.append(
-                bookkeeping.optional(
-                    lambda resource=resource, before=before: bookkeeping.snapshot(
-                        resource,
-                        before.get("metadata", {}).get("name") or resource,
-                        before["track_uris"],
-                        SNAPSHOTS[name],
-                        f"Before {name}",
-                        auto=True,
-                    ),
-                    fallback={"status": "failed", "error_code": "snapshot_failed"},
-                )
-            )
-        return receipts
+        resources = [(key, before.get("metadata", {}).get("name") or key, before["track_uris"])
+                     for key, before in prepared["before"].items() if key in destinations]
+        # Each step owns one snapshot set and one durable receipt, including when capacity refuses the set.
+        failures = [{"status": "failed", "error_code": "snapshot_failed"} if uris else None for _, _, uris in resources]
+        return bookkeeping.optional(
+            lambda: bookkeeping.auto_snapshots(resources, SNAPSHOTS[name], f"Before {name}"), fallback=failures,
+        )
 
     # A read-only/gated/no-op step does not need mutation snapshots.
     changing = any(

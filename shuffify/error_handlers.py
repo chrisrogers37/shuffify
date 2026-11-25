@@ -6,8 +6,12 @@ service-layer exceptions and Pydantic validation errors.
 """
 
 import logging
+import math
+import time
 
-from flask import current_app, jsonify, request
+import redis
+from flask import current_app, jsonify, make_response, request
+from flask_limiter.errors import RateLimitExceeded
 from pydantic import ValidationError
 from werkzeug.exceptions import HTTPException
 
@@ -493,7 +497,7 @@ def handle_csrf_error(error):
         "Your request could not be verified. "
         "Please refresh the page and try again."
     )
-    return json_error_response(message, 400)
+    return json_error_response(message, 400, error_code="session_verification_expired")
 
 
 def handle_bad_request(error):
@@ -564,23 +568,39 @@ def handle_internal_error(error):
 # =============================================================================
 
 
+def seconds_until_limit_resets():
+    """Seconds until the window of the limit this request broke resets.
+
+    None when no limiter recorded a broken limit on this request.
+    """
+    for limiter in current_app.extensions.get("limiter", ()):
+        limit = limiter.current_limit
+        if limit is not None and limit.breached:
+            try:
+                return max(1, math.ceil(limit.window.reset_time - time.time()))
+            except redis.RedisError:
+                # The counter already rejected the request. Only its TTL is unavailable.
+                logger.warning("Could not read the rate-limit reset time")
+                return None
+    return None
+
+
 def handle_rate_limit_exceeded(error):
-    """Handle 429 Too Many Requests from Flask-Limiter."""
+    """Handle 429 Too Many Requests from Flask-Limiter.
+
+    Retry-After gives the seconds until the broken limit resets, and is
+    left out when no limit was broken.
+    """
     logger.warning("Rate limit exceeded on %s", request.path)
-    response, status = json_error_response(
-        "Too many requests. Please wait a moment and try again.",
-        429,
-    )
-    retry_after = (
-        error.description
-        if isinstance(error.description, str) and error.description.isdigit()
-        else None
-    )
-    if retry_after:
-        response.headers["Retry-After"] = retry_after
-    elif hasattr(error, "retry_after"):
-        response.headers["Retry-After"] = str(error.retry_after)
-    return response, status
+    if isinstance(error, RateLimitExceeded) and error.response is not None:
+        response = error.response
+    else:
+        response = make_response(json_error_response("Too many requests. Please wait a moment and try again.", 429))
+    if isinstance(error, RateLimitExceeded) and "Retry-After" not in response.headers:
+        retry_after = seconds_until_limit_resets()
+        if retry_after is not None:
+            response.retry_after = retry_after
+    return response
 
 
 # =============================================================================

@@ -19,6 +19,7 @@ import type { WorkshopTool, WorkshopToolContext } from "./workspace";
 import { TrackList } from "./TrackList";
 import { ReviewPanel, ActorTask } from "./ReviewPanel";
 import { NamedDrafts } from "./NamedDrafts";
+import { PlaylistHold } from "./PlaylistHold";
 import { PlaylistPicker } from "./PlaylistPicker";
 import { useDraftDecision } from "./DraftDecision";
 import "./workshop.css";
@@ -212,6 +213,7 @@ export function WorkshopPage({
                 {tool.title}
               </Button>
             ))}
+            <PlaylistHold playlistId={c.playlistId} refreshHolds={c.refreshPlaylistHolds} />
           </div>
         </ActorTask>
       ),
@@ -314,14 +316,12 @@ export function WorkshopPage({
                           </Link>
                         )}
                       </nav>
-                      {tools.length > 0 && (
-                        <Button
-                          variant="secondary"
-                          onClick={(e) => openTools(e.currentTarget)}
-                        >
-                          Tools
-                        </Button>
-                      )}
+                      <Button
+                        variant="secondary"
+                        onClick={(e) => openTools(e.currentTarget)}
+                      >
+                        Tools
+                      </Button>
                     </div>
                     <div className="sh-workshop-action-buttons">
                       <Button
@@ -440,6 +440,7 @@ export function WorkshopPage({
                 </>
               )
             )}
+            {sameActor && s.phase === "error" && <PlaylistHold playlistId={c.playlistId} refreshHolds={c.refreshPlaylistHolds} />}
           </div>
         </Workspace>
         {decision.element}

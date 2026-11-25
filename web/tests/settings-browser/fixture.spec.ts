@@ -90,7 +90,7 @@ test("fixture failure and load-error routes recover without success claims", asy
     .getByRole("button", { name: "Save settings", exact: true })
     .click();
   await expect(page.locator("#settings-error")).toContainText(
-    "Settings could not be saved.",
+    "Could not confirm your settings were saved.",
   );
   await expect(page.locator(".sh-toast")).toHaveCount(0);
 });

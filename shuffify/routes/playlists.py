@@ -15,15 +15,18 @@ from shuffify.routes import (
     require_auth_and_db,
     require_session_and_db,
 )
+from shuffify.routes.playlist_refresh import playlist_refresh_requested
 from shuffify.routes.queue import enqueue_command
 from shuffify.services import PlaylistError, PlaylistService
 from shuffify.services.live_action_context_service import (
     INSPECTION_KINDS,
+    ContextRequestError,
     InspectRequestError,
     LiveActionContextService,
     context_kind,
     inspection_payload,
     inspection_rejected,
+    parse_context_request,
     parse_inspect_request,
 )
 from shuffify.services.live_metadata_service import LiveMetadataService
@@ -56,9 +59,7 @@ def api_user_playlists(api=None, user=None):
     """Return the user's editable playlists as JSON; ``?refresh=1`` skips the cache."""
     try:
         playlist_service = PlaylistService(api)
-        playlists = playlist_service.get_user_playlists(
-            skip_cache=request.args.get("refresh") == "1"
-        )
+        playlists = playlist_service.get_user_playlists(skip_cache=playlist_refresh_requested())
 
         # Apply user preferences (favorites first, hidden excluded)
         try:
@@ -126,24 +127,35 @@ def toggle_visibility(
     return enqueue_command(user, "visibility", command.model_dump(mode="json"), lambda _storage: (command, None))
 
 
+def _live_context_body():
+    # Read outside the fallback so Flask still handles the request body's 413.
+    raw = request.get_json(silent=True)
+    try:
+        return parse_context_request(raw), None
+    except ContextRequestError as error:
+        return None, json_reply(error.reply())
+    except Exception:
+        logger.exception("Failed to parse a live action review")
+        return None, json_reply(context_unavailable(context_kind(raw)))
+
+
 @api_bp.route("/playlist/<playlist_id>/live-context", methods=["POST"])
 @no_store
-@require_auth_and_db(on_preflight_error=context_preflight())
-def live_context(playlist_id, api=None, user=None):
-    """Read-only review of one Library or Workshop live action; changes nothing."""
-    # Read first: an oversized body must reach the 413 handler, not the fallback below.
-    body = request.get_json(silent=True)
+@require_auth_and_db(on_preflight_error=context_preflight(), parse_body=_live_context_body)
+def live_context(playlist_id, api=None, user=None, body=None):
+    """Review one Library or Workshop live action."""
+    kind, data = body
     try:
         history = session
-        if isinstance(body, dict) and body.get("kind") == "undo":
+        if kind == "undo":
             history = HistoryStore().session_for(user.id, get_history_scope(session), [playlist_id],
                                                  legacy=session.get("playlist_states"))
-        reply = LiveActionContextService(api).resolve(playlist_id, user, history, body)
+        reply = LiveActionContextService(api).resolve_parsed(playlist_id, user, history, kind, data)
     except StateError as error:
-        reply = failure_rejected(context_kind(body), read_failure(error))
+        reply = failure_rejected(kind, read_failure(error))
     except Exception:
         logger.exception("Live action review unavailable for %s", playlist_id)
-        reply = context_unavailable(context_kind(body))
+        reply = context_unavailable(kind)
     return json_reply(reply)
 
 
@@ -154,19 +166,23 @@ def _inspection_preflight(message, status_code):
     ))
 
 
-@api_bp.route("/playlist/<playlist_id>/inspect-live", methods=["POST"])
-@no_store
-@require_auth_and_db(on_preflight_error=_inspection_preflight)
-def inspect_live(playlist_id, api=None, user=None):
-    """Observe current Spotify state against retained intent; never writes or replays."""
+def _inspect_live_body():
     body = request.get_json(silent=True)
     try:
-        kind, desired = parse_inspect_request(body)
+        return parse_inspect_request(body), None
     except InspectRequestError:
-        return json_reply(inspection_rejected(
+        return None, json_reply(inspection_rejected(
             body, "invalid_request", 400,
             "This check request is not valid. Earlier results remain unverified.",
         ))
+
+
+@api_bp.route("/playlist/<playlist_id>/inspect-live", methods=["POST"])
+@no_store
+@require_auth_and_db(on_preflight_error=_inspection_preflight, parse_body=_inspect_live_body)
+def inspect_live(playlist_id, api=None, user=None, body=None):
+    """Observe current Spotify state against retained intent; never writes or replays."""
+    kind, desired = body
     try:
         if kind == "privacy":
             result = LiveMetadataService(api).inspect_visibility(
@@ -179,7 +195,7 @@ def inspect_live(playlist_id, api=None, user=None):
     except Exception:
         logger.exception("Live inspection unavailable for %s", playlist_id)
         return json_reply(inspection_rejected(
-            body, "inspection_failed", 502,
+            request.get_json(silent=True), "inspection_failed", 502,
             "The current playlist could not be checked. Earlier results remain unverified.",
         ))
     return json_reply(inspection_payload(result, INSPECTION_KINDS[kind]))

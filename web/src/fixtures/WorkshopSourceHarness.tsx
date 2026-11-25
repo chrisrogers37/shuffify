@@ -1,4 +1,5 @@
 import { useParams } from "react-router";
+import { unsuccessfulOperationStates } from "../api/contracts";
 import { useServices, useSession } from "../auth/SessionProvider";
 import { Button } from "../components/ui/controls";
 import { WorkshopPage } from "../pages/workshop/WorkshopPage";
@@ -48,7 +49,7 @@ function createPeer(c: WorkshopController) {
     update(
       op.state === "succeeded" && op.result?.success === true
         ? "complete"
-        : ["failed", "rolled_back", "needs_attention"].includes(op.state)
+        : unsuccessfulOperationStates.has(op.state)
           ? "failed"
           : "accepted",
       id,

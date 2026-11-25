@@ -13,20 +13,16 @@ from .stratified import StratifiedShuffle
 class ShuffleRegistry:
     """Registry for shuffle algorithms."""
 
+    # In display order: list_algorithms() returns them in this order.
     _algorithms: Dict[str, Type[ShuffleAlgorithm]] = {
         "BasicShuffle": BasicShuffle,
-        "BalancedShuffle": BalancedShuffle,
         "PercentageShuffle": PercentageShuffle,
+        "BalancedShuffle": BalancedShuffle,
         "StratifiedShuffle": StratifiedShuffle,
         "ArtistSpacingShuffle": ArtistSpacingShuffle,
         "AlbumSequenceShuffle": AlbumSequenceShuffle,
         "NewestFirstShuffle": NewestFirstShuffle,
     }
-
-    @classmethod
-    def register(cls, algorithm_class: Type[ShuffleAlgorithm]) -> None:
-        """Register a new shuffle algorithm."""
-        cls._algorithms[algorithm_class.__name__] = algorithm_class
 
     @classmethod
     def get_algorithm(cls, name: str) -> Type[ShuffleAlgorithm]:
@@ -42,27 +38,16 @@ class ShuffleRegistry:
 
     @classmethod
     def list_algorithms(cls) -> List[dict]:
-        """List all algorithms with their metadata."""
+        """List all algorithms with their metadata, in display order."""
         result = []
-        desired_order = [
-            BasicShuffle,
-            PercentageShuffle,
-            BalancedShuffle,
-            StratifiedShuffle,
-            ArtistSpacingShuffle,
-            AlbumSequenceShuffle,
-            NewestFirstShuffle,
-        ]
-
-        for algo_class in desired_order:
-            if algo_class.__name__ in cls._algorithms:
-                algo = algo_class()
-                result.append(
-                    {
-                        "name": algo.name,
-                        "class_name": algo_class.__name__,
-                        "description": algo.description,
-                        "parameters": algo.parameters,
-                    }
-                )
+        for class_name, algo_class in cls._algorithms.items():
+            algo = algo_class()
+            result.append(
+                {
+                    "name": algo.name,
+                    "class_name": class_name,
+                    "description": algo.description,
+                    "parameters": algo.parameters,
+                }
+            )
         return result

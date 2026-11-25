@@ -154,7 +154,7 @@ def test_guided_create_keeps_choices_and_activates_once_after_read_only_review(
     accepted = response.value.json()
     expect(page.get_by_role("heading", name=f"Routine #{accepted['schedule_id']} saved", exact=True)).to_be_visible()
     assert len(session.writes("POST", ACTIVATE)) == 1
-    assert accepted["state"] == "Active" and accepted["registration"]["status"] == "registered"
+    assert accepted["state"] == "active" and accepted["registration"]["status"] == "registered"
     saved = _rows(alice)
     assert len(saved) == 1 and saved[0]["schedule_id"] == accepted["schedule_id"]
     definition = saved[0]["definition"]
@@ -213,7 +213,7 @@ def test_guided_duplicate_choice_edits_exact_paused_routine_without_resuming(
     assert request["schedule_id"] == second
     assert "desired_enabled" not in request and "timing" not in request["definition"]
     accepted = _activate(page)
-    assert accepted["schedule_id"] == second and accepted["state"] == "Paused"
+    assert accepted["schedule_id"] == second and accepted["state"] == "paused"
     assert _registration(second) is None
     after = {row["schedule_id"]: row for row in _rows(alice)}
     assert len(after) == 2 and after[first]["schedule_revision"] == before[first]["schedule_revision"]
@@ -407,7 +407,7 @@ def test_registration_attention_retries_only_the_exact_saved_routine(
         response = route.fetch()
         assert response.status == 200, response.text()
         body = response.json()
-        body["state"] = "Saved—registration needs attention"
+        body["state"] = "needs_attention"
         body["registration"] = {"status": "needs_attention", "next_run_at": None}
         route.fulfill(response=response, json=body)
 

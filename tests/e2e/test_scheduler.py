@@ -5,19 +5,21 @@ worker refreshes the stored login credentials before changing the local fake.
 """
 
 import time
+from datetime import datetime, timedelta, timezone
 
 from tests.e2e.conftest import pid
 from tests.routine_flow import create_routine
 
 LONG_HAUL = pid("alice-long-haul")
-# A minute for the next cron tick, and time for the job to finish after it.
+# Allow time to register the hourly slot and finish the isolated shuffle.
 FIRE_WITHIN = 120
 
 
 def test_a_scheduled_shuffle_fires_and_reorders_the_playlist(alice, fake):
     before = fake.uris(LONG_HAUL)
+    minute = (datetime.now(timezone.utc) + timedelta(seconds=90)).minute
     schedule = create_routine(alice, LONG_HAUL, timing={
-        "kind": "advanced", "expression": "* * * * *", "timezone": "UTC",
+        "kind": "advanced", "expression": f"{minute} * * * *", "timezone": "UTC",
     })
     try:
         deadline = time.monotonic() + FIRE_WITHIN

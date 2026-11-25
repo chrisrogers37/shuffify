@@ -1,5 +1,6 @@
 """Settings JSON reads and updates preserve normalized and unedited preferences."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -278,3 +279,39 @@ class TestDedicatedSettings:
         with db_app.app_context():
             saved = UserSettings.query.filter_by(user_id=user_id).one()
             assert saved.default_algorithm == expected
+
+
+@pytest.mark.parametrize("field", ["extra", "default_algorithm_params"])
+def test_settings_bound_counts_compact_utf8_bytes_before_writing(auth_client, field):
+    # Eight bytes of JSON punctuation and key, plus 8,188 two-byte characters.
+    value = {"k": "é" * 8_188}
+    compact = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    assert len(compact) < 16_384 == len(compact.encode("utf-8"))
+    path = api_path("/settings")
+    with patch("shuffify.routes.require_auth", autospec=True, return_value=object()) as spotify:
+        accepted = auth_client.post(path, json={field: value})
+        assert accepted.status_code == 200 and accepted.json["settings"][field] == value
+        spotify.reset_mock()
+        with patch("shuffify.routes.settings.UserSettingsService.update", autospec=True) as update:
+            refused = auth_client.post(path, json={field: {"k": value["k"] + "x"}})
+        assert refused.status_code == 400
+        assert not refused.json["success"] and refused.json["error_code"] == "invalid_request"
+        assert field in refused.json["message"] and "16,384 bytes" in refused.json["message"]
+        spotify.assert_not_called()
+        update.assert_not_called()
+        assert getattr(UserSettings.query.one(), field) == value
+
+
+@pytest.mark.parametrize("field", ["extra", "default_algorithm_params"])
+def test_settings_omission_and_null_preserve_an_object_and_empty_clears_it(auth_client, field):
+    path = api_path("/settings")
+    with patch("shuffify.routes.require_auth", autospec=True, return_value=object()):
+        for payload, expected in [
+            ({field: {"saved": True}}, {"saved": True}),
+            ({}, {"saved": True}),
+            ({field: None}, {"saved": True}),
+            ({field: {}}, {}),
+        ]:
+            response = auth_client.post(path, json=payload)
+            assert response.status_code == 200
+            assert getattr(UserSettings.query.one(), field) == expected

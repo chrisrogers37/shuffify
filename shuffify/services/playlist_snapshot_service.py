@@ -9,14 +9,19 @@ restore them later.
 import logging
 from typing import List, Optional
 
+from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
+
 from shuffify.enums import SnapshotType  # noqa: F401
 from shuffify.models.db import PlaylistSnapshot, db
-from shuffify.services.base import get_owned_entity, safe_commit
+from shuffify.services.base import commit_failure, get_owned_entity, safe_commit
+from shuffify.services.storage_limits import StorageLimitReached, check_storage_growth, lock_storage_inventory
 
 logger = logging.getLogger(__name__)
 
-# Default max snapshots if UserSettings is unavailable
-DEFAULT_MAX_SNAPSHOTS_PER_PLAYLIST = 50
+# The snapshot limit for a user with no settings row, and for a settings read
+# that fails without a caller's session.
+FALLBACK_SNAPSHOTS_LIMIT = 50
 
 
 class PlaylistSnapshotError(Exception):
@@ -69,45 +74,67 @@ class PlaylistSnapshotService:
         Raises:
             PlaylistSnapshotError: If creation fails.
         """
+        return PlaylistSnapshotService.create_snapshots(
+            user_id, [(playlist_id, playlist_name, track_uris)], snapshot_type, trigger_description,
+            job_execution_id, session=session, commit=commit,
+        )[0]
+
+    @staticmethod
+    def create_snapshots(user_id, playlists, snapshot_type, trigger_description=None, job_execution_id=None,
+                         *, session=None, commit=True):
+        """Store one snapshot per destination as a unit. The result follows the caller's playlist order."""
         if session is not None and commit:
             raise ValueError("An explicit snapshot session requires commit=False.")
         storage = session if session is not None else db.session
-
-        snapshot = PlaylistSnapshot(
-            user_id=user_id,
-            playlist_id=playlist_id,
-            playlist_name=playlist_name,
-            track_count=len(track_uris),
-            snapshot_type=snapshot_type,
-            trigger_description=trigger_description,
-            job_execution_id=job_execution_id,
-        )
-        snapshot.track_uris = track_uris
-
-        storage.add(snapshot)
-        if commit:
-            safe_commit(
-                f"create {snapshot_type} snapshot for user "
-                f"{user_id}, playlist {playlist_id} "
-                f"({len(track_uris)} tracks)",
-                PlaylistSnapshotError,
+        snapshots = []
+        for playlist_id, playlist_name, track_uris in playlists:
+            snapshot = PlaylistSnapshot(
+                user_id=user_id, playlist_id=playlist_id, playlist_name=playlist_name,
+                track_count=len(track_uris), snapshot_type=snapshot_type,
+                trigger_description=trigger_description, job_execution_id=job_execution_id,
             )
-        else:
-            storage.flush()
+            snapshot.track_uris = track_uris
+            snapshots.append(snapshot)
+        playlist_ids = {row.playlist_id for row in snapshots}
+        if len(playlist_ids) != len(snapshots):
+            raise ValueError("A snapshot set requires distinct playlists.")
+        if not snapshots:
+            return []
+        operation = f"create {snapshot_type} snapshot for user {user_id}"
+        try:
+            lock_storage_inventory(storage, user_id)
+            max_count = PlaylistSnapshotService._get_max_snapshots(user_id, session=session)
+            counts = dict(storage.execute(select(PlaylistSnapshot.playlist_id, func.count()).where(
+                PlaylistSnapshot.user_id == user_id, PlaylistSnapshot.playlist_id.in_(playlist_ids),
+            ).group_by(PlaylistSnapshot.playlist_id)).all())
+            # Each destination ends with min(previous + 1, max_count) rows. A lowered playlist
+            # setting can free multiple slots in the same save, independent of destination order.
+            growth = sum(min(1, max_count - counts.get(key, 0)) for key in playlist_ids)
+            check_storage_growth(storage, PlaylistSnapshot, user_id, playlist_ids, row_growth=growth)
+            storage.add_all(snapshots)
+            rotation = [row for row in snapshots if counts.get(row.playlist_id, 0) >= max_count]
+            if rotation:
+                storage.flush()
+                for row in rotation:
+                    PlaylistSnapshotService.cleanup_old_snapshots(
+                        user_id, row.playlist_id, max_count, session=storage, commit=False, keep_snapshot_id=row.id,
+                    )
+            if commit:
+                safe_commit(operation, PlaylistSnapshotError)
+            else:
+                storage.flush()
+        except StorageLimitReached:
+            if commit:
+                storage.rollback()
+            raise
+        except SQLAlchemyError as error:
+            if not commit:
+                raise
+            storage.rollback()
+            logger.exception("Failed to %s", operation)
+            raise commit_failure(PlaylistSnapshotError, operation) from error
 
-        # Enforce retention limit
-        max_snapshots = (
-            PlaylistSnapshotService._get_max_snapshots(user_id, session=storage) if session is not None
-            else PlaylistSnapshotService._get_max_snapshots(user_id)
-        )
-        if not commit:
-            PlaylistSnapshotService.cleanup_old_snapshots(
-                user_id, playlist_id, max_snapshots, session=storage, commit=False,
-            )
-        else:
-            PlaylistSnapshotService.cleanup_old_snapshots(user_id, playlist_id, max_snapshots)
-
-        return snapshot
+        return snapshots
 
     @staticmethod
     def get_snapshots(
@@ -130,7 +157,7 @@ class PlaylistSnapshotService:
             PlaylistSnapshot.query.filter_by(
                 user_id=user_id, playlist_id=playlist_id
             )
-            .order_by(PlaylistSnapshot.created_at.desc())
+            .order_by(PlaylistSnapshot.created_at.desc(), PlaylistSnapshot.id.desc())
             .limit(limit)
             .all()
         )
@@ -215,9 +242,8 @@ class PlaylistSnapshotService:
                 not owned.
             PlaylistSnapshotError: If deletion fails.
         """
-        snapshot = PlaylistSnapshotService.get_snapshot(
-            snapshot_id, user_id
-        )
+        lock_storage_inventory(db.session, user_id)
+        snapshot = PlaylistSnapshotService.get_snapshot(snapshot_id, user_id)
 
         db.session.delete(snapshot)
         safe_commit(
@@ -234,6 +260,7 @@ class PlaylistSnapshotService:
         *,
         session=None,
         commit=True,
+        keep_snapshot_id=None,
     ) -> int:
         """
         Enforce retention limit by deleting oldest snapshots.
@@ -252,28 +279,17 @@ class PlaylistSnapshotService:
         if session is not None and commit:
             raise ValueError("An explicit snapshot session requires commit=False.")
         storage = session if session is not None else db.session
-        # IDs of snapshots to keep (most recent N)
-        keep_ids_query = (
-            storage.query(PlaylistSnapshot.id)
-            .filter_by(
-                user_id=user_id, playlist_id=playlist_id
-            )
-            .order_by(PlaylistSnapshot.created_at.desc())
-            .limit(max_count)
-            .subquery()
-        )
-
-        # Bulk delete all snapshots NOT in the keep set
-        deleted_count = (
-            storage.query(PlaylistSnapshot).filter(
-                PlaylistSnapshot.user_id == user_id,
-                PlaylistSnapshot.playlist_id
-                == playlist_id,
-                ~PlaylistSnapshot.id.in_(
-                    storage.query(keep_ids_query)
-                ),
-            ).delete(synchronize_session="fetch")
-        )
+        candidates = storage.query(PlaylistSnapshot).filter_by(user_id=user_id, playlist_id=playlist_id)
+        if keep_snapshot_id is not None:
+            # The new save owns one slot even if an older writer's wall clock was ahead.
+            candidates = candidates.filter(PlaylistSnapshot.id != keep_snapshot_id)
+            max_count -= 1
+        keep_ids = candidates.with_entities(PlaylistSnapshot.id).order_by(
+            PlaylistSnapshot.created_at.desc(), PlaylistSnapshot.id.desc(),
+        ).limit(max_count).subquery()
+        deleted_count = candidates.filter(
+            ~PlaylistSnapshot.id.in_(storage.query(keep_ids)),
+        ).delete(synchronize_session="fetch")
 
         if not commit:
             storage.flush()
@@ -299,7 +315,7 @@ class PlaylistSnapshotService:
         Get the max snapshots setting for a user.
 
         Reads from UserSettings if available,
-        otherwise returns the default.
+        otherwise returns FALLBACK_SNAPSHOTS_LIMIT.
 
         Args:
             user_id: The internal database user ID.
@@ -319,11 +335,18 @@ class PlaylistSnapshotService:
                 and settings.max_snapshots_per_playlist
             ):
                 return settings.max_snapshots_per_playlist
-        except (ImportError, Exception):
+        except (ImportError, Exception) as err:
             if session is not None:
                 raise
+            # Database errors can embed passwords, DSNs and hostnames; log only their type.
+            logger.warning(
+                "Could not read the snapshot limit for user %s; falling back to %s (%s)",
+                user_id,
+                FALLBACK_SNAPSHOTS_LIMIT,
+                type(err).__name__,
+            )
 
-        return DEFAULT_MAX_SNAPSHOTS_PER_PLAYLIST
+        return FALLBACK_SNAPSHOTS_LIMIT
 
     @staticmethod
     def is_auto_snapshot_enabled(user_id: int, *, session=None) -> bool:

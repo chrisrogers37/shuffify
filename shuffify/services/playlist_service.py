@@ -25,6 +25,7 @@ from shuffify.spotify.exceptions import (
     SpotifyForbiddenError,
     SpotifyNotFoundError,
 )
+from shuffify.spotify.transport import request_with_deadline
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +69,8 @@ def scrape_playlist_metadata(
     """
     url = _EMBED_URL.format(playlist_id=playlist_id)
     try:
-        resp = requests.get(
-            url,
+        resp = request_with_deadline(
+            requests.get, "GET", url,
             timeout=_SCRAPE_TIMEOUT,
             headers=_SCRAPE_HEADERS,
         )

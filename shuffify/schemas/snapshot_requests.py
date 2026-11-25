@@ -6,6 +6,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from shuffify.spotify.api import MAX_PLAYLIST_TRACKS
+
 
 class ManualSnapshotRequest(BaseModel):
     """Schema for creating a manual snapshot."""
@@ -19,6 +21,7 @@ class ManualSnapshotRequest(BaseModel):
     track_uris: List[str] = Field(
         ...,
         min_length=0,
+        max_length=MAX_PLAYLIST_TRACKS,
         description=(
             "Ordered list of track URIs to snapshot"
         ),

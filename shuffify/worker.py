@@ -6,9 +6,12 @@ import logging
 import signal
 import threading
 from collections import Counter
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager, suppress
 from copy import deepcopy
 from datetime import datetime, timezone
+from time import monotonic
+
+from sqlalchemy.exc import SQLAlchemyError
 
 from shuffify.services.operations.control import propagate_control, read_retry_delay
 from shuffify.services.operations.journal import NeedsAttention, OperationAborted, OperationDeferred, ReadRetryExhausted
@@ -20,6 +23,14 @@ from shuffify.spotify.observation import observe_mutations
 logger = logging.getLogger(__name__)
 TERMINAL_RECOVERY_LIMIT = 3
 IDLE_POLL_SECONDS = 5  # Upper bound on how long a lost wake notification can delay queued work.
+QUEUE_RETRY_SECONDS = 0.1  # First wait after a database error in the queue loop; it doubles up to IDLE_POLL_SECONDS.
+# Queue loop iterations that fail for this long in a row end the process with a non-zero status, so the deployment's
+# ON_FAILURE policy runs it again and a lasting failure ends in a failed deployment. A process whose first claim query
+# has not returned ends at its first failure, so those runs fail fast.
+QUEUE_FAILURE_SECONDS = 600
+# A lease is given up when this many renewals in a row fail with a database error. That many heartbeat
+# intervals, plus the time the failed calls take, must stay well inside the lease: 30 s of 60 s by default.
+HEARTBEAT_ATTEMPTS = 3
 
 
 class TerminalPending(RuntimeError):
@@ -42,6 +53,8 @@ class OperationWorker:
         self._wake = threading.Event()
         self._scheduler_controller = self._control_server = None
         self._serving = False
+        self._queue_errors = 0  # Queue loop iterations in a row that ended in a database error.
+        self._queue_checked = False  # Whether a claim query has returned in this process.
 
     def request_stop(self):
         """Prevent new claims; the active command retains its lease until it settles."""
@@ -58,10 +71,17 @@ class OperationWorker:
         finished, lost = threading.Event(), threading.Event()
 
         def renew():
+            failures = 0
             while not finished.wait(self.heartbeat_interval):
                 try:
                     self.repository.renew(lease)
-                except Exception:
+                    failures = 0
+                except Exception as error:
+                    failures += 1
+                    if isinstance(error, SQLAlchemyError) and failures < HEARTBEAT_ATTEMPTS:
+                        logger.warning("Operation %s lease renewal failed (%s); retrying",
+                                       lease.operation_id, type(error).__name__)
+                        continue
                     lost.set()
                     logger.exception("Operation %s lost its lease heartbeat", lease.operation_id)
                     return
@@ -86,24 +106,43 @@ class OperationWorker:
         """Distinguish deferred work from an empty queue so other targets can drain."""
         if self._stopping.is_set():
             return False, False
-        with self.app.app_context():
+        with self.app.app_context(), ExitStack() as stack:
             lease = self.repository.claim(operation_id=operation_id)
+            self._queue_checked = True
             if lease is None:
                 return False, False
-            row = self.repository.get(lease.operation_id)
-            # User credential serialization also protects rotated refresh tokens between workers.
-            locks = sorted({*lease.targets, f"credential:{row.user_id}"})
-            with self.repository.target_locks(locks) as acquired:
-                if not acquired:
+            try:
+                row = self.repository.get(lease.operation_id)
+                # User credential serialization also protects rotated refresh tokens between workers.
+                locks = sorted({*lease.targets, f"credential:{row.user_id}"})
+                acquired = stack.enter_context(self.repository.target_locks(locks))
+                conflict = self.repository.begin_execution(lease, row) if acquired else "busy"
+            except LeaseLost:
+                return False, True
+            except SQLAlchemyError:
+                # Nothing has run yet, so the claim goes back to the queue now instead of at lease expiry.
+                with suppress(LeaseLost):
                     self.repository.defer(lease)
-                    return False, True
-                with self._heartbeat(lease) as lost, spotify_deadline(self.operation_timeout):
-                    return self._execute(lease, lost), True
+                raise
+            if conflict == "busy":
+                with suppress(LeaseLost):
+                    self.repository.defer(lease)
+                return False, True
+            with self._heartbeat(lease) as lost, spotify_deadline(self.operation_timeout):
+                return self._execute(lease, lost, needs_review=(conflict == "needs_attention")), True
 
-    def _execute(self, lease, lost):
+    def _execute(self, lease, lost, *, needs_review=False):
         runtime = None
         try:
             runtime = OperationRuntime(self.repository, lease, api_factory=self.api_factory, lease_lost=lost)
+            if needs_review:
+                self._finish(lease, runtime, "failed", result={
+                    "success": False, "error_code": "playlist_needs_review", "category": "error",
+                    "target_status": "not_written", "confirmed_batches": 0, "total_batches": 0,
+                    "message": "In Workshop, open Tools and select Review playlist hold.",
+                    "retryable": False,
+                })
+                return True
             handler = self.handlers.get(runtime.operation.kind)
             if handler is None:
                 self._finish(lease, runtime, "failed", result={
@@ -588,12 +627,13 @@ class OperationWorker:
         self._control_server = WorkerControlServer(
             controller, self._control_status, token=self.app.config.get("WORKER_CONTROL_TOKEN"),
             host=self.app.config.get("WORKER_CONTROL_HOST", "127.0.0.1"),
-            port=self.app.config.get("WORKER_CONTROL_PORT", 5001), wake_callback=self.wake,
+            port=self.app.config["WORKER_CONTROL_PORT"], wake_callback=self.wake,
         )
         self._serving = True
         try:
             with controller, self._control_server, PostgresWakeListener(
                 self.repository, self.wake, schedule_callback=controller.request_refresh,
+                completion_callback=controller.blockers_finished,
             ):
                 self._serve_waiting()
         finally:
@@ -602,18 +642,36 @@ class OperationWorker:
 
     def _control_status(self):
         return {"running": self._serving, "stopping": self._stopping.is_set(),
-                "scheduler_enabled": bool(self.app.config.get("SCHEDULER_ENABLED", True))}
+                "scheduler_enabled": bool(self.app.config.get("SCHEDULER_ENABLED", True)),
+                "queue_checked": self._queue_checked, "queue_errors": self._queue_errors}
 
     def _serve_waiting(self):
         """Wake hints trigger durable reads; lease deadlines and a bounded poll cover lost hints."""
         self._wake.set()
-        timeout = IDLE_POLL_SECONDS
+        timeout, retry, failing_since = IDLE_POLL_SECONDS, QUEUE_RETRY_SECONDS, None
         while not self._stopping.is_set():
             self._wake.wait(timeout=timeout)
             self._wake.clear()
             if not self._stopping.is_set():
-                self.drain()
-                ready_at = self.repository.next_ready_at()
+                try:
+                    self.drain()
+                    ready_at = self.repository.next_ready_at()
+                except SQLAlchemyError as error:
+                    # Repository calls and _run_one's app context roll back their sessions as the error leaves them.
+                    self._queue_errors += 1
+                    now = monotonic()
+                    if failing_since is None:
+                        failing_since = now
+                    # Database errors can embed passwords, DSNs and hostnames; log only their type.
+                    if not self._queue_checked or now - failing_since >= QUEUE_FAILURE_SECONDS:
+                        # Nothing runs between iterations, and a claim that the failed iteration left in place
+                        # is recovered when its lease expires.
+                        logger.error("Operation queue unavailable (%s); exiting", type(error).__name__)
+                        raise SystemExit(1)
+                    logger.warning("Operation queue unavailable (%s); retrying in %.1f s", type(error).__name__, retry)
+                    timeout, retry = retry, min(IDLE_POLL_SECONDS, retry * 2)
+                    continue
+                self._queue_errors, retry, failing_since = 0, QUEUE_RETRY_SECONDS, None
                 timeout = IDLE_POLL_SECONDS
                 if ready_at:
                     timeout = min(timeout, max(0, (ready_at - datetime.now(timezone.utc)).total_seconds()))

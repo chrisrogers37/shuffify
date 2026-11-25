@@ -20,13 +20,19 @@ def conclusively_no_dispatch(row):
     if (
         row.state != "failed"
         or row.completed_at is None
-        or type(document.get("version")) is not int
-        or document["version"] != 1
-        or document.get("status") != "failed"
         or terminal.get("state") != "failed"
         or terminal.get("done") is not True
         or boundaries.get("accepted")
     ):
+        return False
+    # A hold raised between admission and execution refuses the child before
+    # its execution journal is opened. Only its private terminal marker and
+    # published result exist, including on rows written before target counts.
+    if set(document) == {"runtime", "result"} and set(runtime) == {"terminal_finalization"}:
+        result = document["result"]
+        return (isinstance(result, dict) and result.get("success") is False
+                and result.get("error_code") == "playlist_needs_review" and terminal.get("result") == result)
+    if type(document.get("version")) is not int or document["version"] != 1 or document.get("status") != "failed":
         return False
     try:
         plans = document["plans"] + document.get("compensation", [])

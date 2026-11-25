@@ -40,6 +40,7 @@ from shuffify.services.live_review_bindings import (
 )
 from shuffify.services.live_review_context import context_unavailable
 from shuffify.services.operations.commands.schemas import SnapshotRestoreCommand
+from shuffify.services.storage_limits import StorageLimitReached
 
 logger = logging.getLogger(__name__)
 
@@ -71,26 +72,18 @@ def list_snapshots(playlist_id, api=None, user=None):
 @api_bp.route(
     "/playlist/<playlist_id>/snapshots", methods=["POST"]
 )
-@require_auth_and_db
-def create_manual_snapshot(
-    playlist_id, api=None, user=None
-):
+@require_auth_and_db(parse_body=lambda: validate_json(ManualSnapshotRequest))
+def create_manual_snapshot(playlist_id, api=None, user=None, body=None):
     """Create a manual snapshot of a playlist."""
-    snap_request, err = validate_json(
-        ManualSnapshotRequest
-    )
-    if err:
-        return err
-
     try:
         snapshot = PlaylistSnapshotService.create_snapshot(
             user_id=user.id,
             playlist_id=playlist_id,
-            playlist_name=snap_request.playlist_name,
-            track_uris=snap_request.track_uris,
+            playlist_name=body.playlist_name,
+            track_uris=body.track_uris,
             snapshot_type=SnapshotType.MANUAL,
             trigger_description=(
-                snap_request.trigger_description
+                body.trigger_description
             ),
         )
         logger.info(
@@ -101,6 +94,8 @@ def create_manual_snapshot(
             "Snapshot created.",
             snapshot=snapshot.to_dict(),
         )
+    except StorageLimitReached as e:
+        return json_error(str(e), 409)
     except PlaylistSnapshotError as e:
         return _snapshot_failure(e, "Failed to create snapshot.")
 

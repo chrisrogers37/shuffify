@@ -38,11 +38,13 @@ from shuffify.services import (
 )
 from shuffify.services.base import is_commit_failure
 from shuffify.services.operations.commands.schemas import WorkshopCommitCommand
+from shuffify.services.storage_limits import StorageLimitReached
 from shuffify.services.workshop_commit_service import (
     WorkshopCommitService,
     WorkshopTargetResult,
 )
 from shuffify.services.workshop_finalize_service import WorkshopFinalizeService
+from shuffify.spotify.api import MAX_PLAYLIST_TRACKS, TOO_MANY_TRACKS
 from shuffify.spotify.url_parser import (
     parse_spotify_playlist_url,
 )
@@ -50,34 +52,36 @@ from shuffify.spotify.url_parser import (
 logger = logging.getLogger(__name__)
 
 
+def _workshop_preview_shuffle_body():
+    data = request.get_json()
+    if not data:
+        return None, json_error("Request body must be JSON.", 400)
+
+    shuffle_request = parse_shuffle_request(data)
+    tracks = data.get("tracks")
+    if not tracks or not isinstance(tracks, list):
+        return None, json_error(
+            "Request must include 'tracks' array.", 400
+        )
+    if len(tracks) > MAX_PLAYLIST_TRACKS:
+        return None, json_error(TOO_MANY_TRACKS, 400)
+    return (shuffle_request, tracks), None
+
+
 @api_bp.route(
     "/workshop/<playlist_id>/preview-shuffle",
     methods=["POST"],
 )
-@require_auth_and_db
-def workshop_preview_shuffle(
-    playlist_id, api=None, user=None
-):
+@require_auth_and_db(parse_body=_workshop_preview_shuffle_body)
+def workshop_preview_shuffle(playlist_id, api=None, user=None, body=None):
     """
     Run a shuffle algorithm on client-provided tracks and
     return the new order WITHOUT saving to Spotify.
     """
-    data = request.get_json()
-    if not data:
-        return json_error("Request body must be JSON.", 400)
+    shuffle_request, tracks = body
 
-    shuffle_request = parse_shuffle_request(data)
-    algorithm = ShuffleService.get_algorithm(
-        shuffle_request.algorithm
-    )
+    algorithm = ShuffleService.get_algorithm(shuffle_request.algorithm)
     params = shuffle_request.get_algorithm_params()
-
-    tracks = data.get("tracks")
-    if not tracks or not isinstance(tracks, list):
-        return json_error(
-            "Request must include 'tracks' array.", 400
-        )
-
     shuffled_uris = ShuffleService.execute(
         shuffle_request.algorithm, tracks, params,
         locked_positions=shuffle_request.locked_positions,
@@ -416,26 +420,31 @@ def list_workshop_sessions(
     })
 
 
-@api_bp.route(
-    "/workshop/<playlist_id>/sessions", methods=["POST"]
-)
-@require_auth_and_db
-def save_workshop_session(
-    playlist_id, api=None, user=None
-):
-    """Save the current workshop state as a named session."""
+def _save_workshop_session_body():
     data = request.get_json()
     if not data:
-        return json_error("Request body must be JSON.", 400)
+        return None, json_error("Request body must be JSON.", 400)
 
     session_name = data.get("session_name", "").strip()
     track_uris = data.get("track_uris", [])
 
     if not session_name:
-        return json_error("Session name is required.", 400)
+        return None, json_error("Session name is required.", 400)
 
     if not isinstance(track_uris, list):
-        return json_error("track_uris must be a list.", 400)
+        return None, json_error("track_uris must be a list.", 400)
+    if len(track_uris) > MAX_PLAYLIST_TRACKS:
+        return None, json_error(TOO_MANY_TRACKS, 400)
+    return (session_name, track_uris), None
+
+
+@api_bp.route(
+    "/workshop/<playlist_id>/sessions", methods=["POST"]
+)
+@require_auth_and_db(parse_body=_save_workshop_session_body)
+def save_workshop_session(playlist_id, api=None, user=None, body=None):
+    """Save the current workshop state as a named session."""
+    session_name, track_uris = body
 
     try:
         ws = WorkshopSessionService.save_session(
@@ -472,6 +481,8 @@ def save_workshop_session(
             f"Session '{session_name}' saved.",
             session=ws.to_dict(),
         )
+    except StorageLimitReached as e:
+        return json_error(str(e), 409)
     except WorkshopSessionLimitError as e:
         return json_error(str(e), 400)
     except WorkshopSessionError as e:
@@ -498,18 +509,10 @@ def load_workshop_session(
         return json_error("Saved session not found.", 404)
 
 
-@api_bp.route(
-    "/workshop/sessions/<int:session_id>",
-    methods=["PUT"],
-)
-@require_auth_and_db
-def update_workshop_session(
-    session_id, api=None, user=None
-):
-    """Update an existing saved workshop session."""
+def _update_workshop_session_body():
     data = request.get_json()
     if not data:
-        return json_error("Request body must be JSON.", 400)
+        return None, json_error("Request body must be JSON.", 400)
 
     track_uris = data.get("track_uris")
     session_name = data.get("session_name")
@@ -517,9 +520,22 @@ def update_workshop_session(
     if track_uris is not None and not isinstance(
         track_uris, list
     ):
-        return json_error(
+        return None, json_error(
             "track_uris must be a list.", 400
         )
+    if track_uris is not None and len(track_uris) > MAX_PLAYLIST_TRACKS:
+        return None, json_error(TOO_MANY_TRACKS, 400)
+    return (session_name, track_uris), None
+
+
+@api_bp.route(
+    "/workshop/sessions/<int:session_id>",
+    methods=["PUT"],
+)
+@require_auth_and_db(parse_body=_update_workshop_session_body)
+def update_workshop_session(session_id, api=None, user=None, body=None):
+    """Update an existing saved workshop session."""
+    session_name, track_uris = body
 
     try:
         ws = WorkshopSessionService.update_session(

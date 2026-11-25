@@ -73,6 +73,31 @@ def test_accepted_fire_replays_before_volatile_definition_capture(schedule, monk
     assert JobExecution.query.count() == 1
 
 
+def test_fresh_fire_shares_manual_capacity_and_exact_fire_still_replays(schedule):
+    repository = OperationRepository()
+    first = submit(repository, schedule)
+    repository.finish(repository.claim(operation_id=first.operation_id), "succeeded")
+
+    manual = [repository.enqueue(kind="shuffle", user_id=schedule.user_id, targets=[f"manual-{i}"], payload={})
+              for i in range(5)]
+    running = repository.claim(operation_id=manual[0].id)
+    compensating = repository.claim(operation_id=manual[1].id)
+    repository.checkpoint(compensating, {}, state="compensating")
+    repository.defer(repository.claim(operation_id=manual[2].id), delay_seconds=60)
+
+    due = NOW + timedelta(days=1)
+    blocked = submit(repository, schedule, due)
+    assert blocked.state == "skipped" and blocked.code == "outstanding_operation_limit"
+    assert blocked.scheduled_for == due and blocked.operation_id is None
+    assert submit(repository, schedule).operation_id == first.operation_id
+    assert JobExecution.query.count() == 6
+
+    repository.finish(running, "needs_attention")
+    admitted = submit(repository, schedule, due)
+    assert admitted.state == "admitted"
+    assert repository.get(admitted.operation_id).scheduled_for == due
+
+
 @pytest.mark.parametrize(
     "change,code", [("paused", "schedule_disabled"), ("deleted", "schedule_missing"), ("cadence", "cadence_changed")]
 )
@@ -101,17 +126,12 @@ def test_busy_fire_is_authored_skip_without_new_row_or_new_now_identity(schedule
     assert JobExecution.query.count() == 1
 
 
-def test_fire_is_skipped_with_the_blocking_id_on_a_playlist_with_an_unresolved_needs_attention_run(schedule, caplog):
+def test_fire_is_skipped_with_the_blocking_id_on_a_playlist_with_an_unresolved_needs_attention_run(schedule):
     repository = OperationRepository()
     first = submit(repository, schedule)
     repository.finish(repository.claim(operation_id=first.operation_id), "needs_attention")
-    with caplog.at_level("WARNING", logger="shuffify.services.scheduled_admission"):
-        second = submit(repository, schedule, NOW + timedelta(days=1))
+    second = submit(repository, schedule, NOW + timedelta(days=1))
     assert second.state == "skipped" and second.code == "needs_attention"
-    message = " ".join(record.getMessage() for record in caplog.records)
-    assert f"schedule_id={schedule.id}" in message
-    assert f"scheduled_for={(NOW + timedelta(days=1)).isoformat()}" in message
-    assert f"blocking_operation_id={first.operation_id}" in message
     assert second.blocking_operation_id == first.operation_id
     assert second.to_dict()["code"] == "needs_attention"
     assert JobExecution.query.count() == 1
@@ -202,3 +222,23 @@ def test_recreated_cron_incarnation_cannot_consume_an_old_registration_fire(sche
     result = module().admit_scheduled(OperationRepository(), schedule.id, expected, NOW)
     assert result.code == "cadence_changed"
     assert JobExecution.query.count() == 0
+
+
+@pytest.mark.parametrize("written", [False, True])
+def test_foreign_attention_only_holds_a_fire_until_its_playlist_is_acknowledged(schedule, written, db_app):
+    repo = OperationRepository()
+    author = User(spotify_id="other")
+    db.session.add(author)
+    db.session.commit()
+    parent = repo.enqueue(kind="shuffle", user_id=author.id, targets=["target"], payload={})
+    lease = repo.claim(operation_id=parent.id)
+    if written:
+        repo.checkpoint(lease, {"plans": [{"resource": "target", "batches": [{"last_http_status": 204}]}]})
+    repo.finish(lease, "needs_attention")
+    if written:
+        assert submit(repo, schedule).code == "needs_attention"
+        review = repo.attention_review(schedule.user_id, "target", "snapshot")
+        assert repo.attention_review(schedule.user_id, "target", "snapshot", confirmation=review)
+    accepted = submit(repo, schedule)
+    assert accepted.state == "admitted"
+    assert submit(repo, schedule).operation_id == accepted.operation_id

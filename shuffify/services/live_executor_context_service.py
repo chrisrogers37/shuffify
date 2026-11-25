@@ -12,6 +12,7 @@ import logging
 
 from sqlalchemy.exc import SQLAlchemyError
 
+from shuffify.enums import JOB_STEPS
 from shuffify.models.db import db
 from shuffify.services.live_operation_service import STEP_BOOKKEEPING, STEP_TARGET_WRITES, DirectFailure
 from shuffify.services.live_review_context import (
@@ -24,7 +25,6 @@ from shuffify.services.live_review_context import (
 )
 from shuffify.services.live_review_scope import (
     DIRECT_STEPS,
-    JOB_STEPS,
     InvalidSettings,
     direct_parts,
     direct_scope,

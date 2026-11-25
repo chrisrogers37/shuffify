@@ -1,6 +1,6 @@
 """Owner-scoped operation status, independent of Spotify availability."""
 
-from shuffify.routes import api_bp, json_error, json_success, no_store, require_session_and_db
+from shuffify.routes import api_bp, json_error, json_success, no_store, require_auth_and_db, require_session_and_db
 
 
 @api_bp.get("/operations/<int:operation_id>")
@@ -161,3 +161,35 @@ def operation_restore_admit(operation_id, user=None):
         {"operation_id": operation_id, "reviewed": value.reviewed.model_dump(mode="json")},
         build,
     )
+
+
+@api_bp.route("/playlist/<playlist_id>/operation-review", methods=["GET", "POST"])
+@no_store
+@require_auth_and_db
+def playlist_operation_review(playlist_id, api=None, user=None):
+    """Review and acknowledge one playlist hold with the current editor's own credential."""
+    from flask import request
+
+    from shuffify.routes.playlist_editor import playlist_editor_request_error, read_editor_playlist
+    from shuffify.services.operations.repository import OperationRepository
+
+    error = playlist_editor_request_error(playlist_id, user)
+    if error:
+        return error
+    applying = request.method == "POST"
+    if applying:
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict) or set(body) != {"review"} or not isinstance(body["review"], dict):
+            return json_error("Load a playlist review before acknowledging it.", 400)
+
+    playlist, error = read_editor_playlist(api, playlist_id, user.spotify_id, with_snapshot=True)
+    if error:
+        return error
+    snapshot = playlist["snapshot_id"]
+    repo = OperationRepository()
+    if applying:
+        if not repo.attention_review(user.id, playlist_id, snapshot, confirmation=body["review"]):
+            return json_error("This review has changed or expired. Review the playlist again.", 409)
+        return json_success("Released the reviewed hold on this playlist.")
+    review = repo.attention_review(user.id, playlist_id, snapshot)
+    return json_success("Playlist review loaded.", review=review)

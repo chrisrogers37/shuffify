@@ -9,16 +9,15 @@ operation and timing are shown in.
 import re
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from apscheduler.triggers.cron import CronTrigger
-
 from shuffify.enums import IntervalValue, JobType, ScheduleType
 from shuffify.services.live_review_bindings import fingerprint
+from shuffify.services.routine_policy import check_timing
 
 # Frequencies that support a time-of-day picker
 TIME_CAPABLE_FREQUENCIES = {"daily", "every_3d", "weekly"}
 
-# HH:MM pattern
-TIME_RE = re.compile(r"^\d{2}:\d{2}$")
+# A clock time: HH:MM from 00:00 to 23:59
+TIME_RE = re.compile(r"^([01][0-9]|2[0-3]):[0-5][0-9]$")
 
 
 def build_cron(schedule_value: str, schedule_time: str) -> str:
@@ -78,7 +77,7 @@ def normalize_timing(timing):
     if not isinstance(zone, str) or not zone:
         raise ValueError("timezone must be an IANA timezone")
     try:
-        tz = ZoneInfo(zone)
+        ZoneInfo(zone)
     except (ZoneInfoNotFoundError, ValueError) as error:
         raise ValueError("timezone must be an IANA timezone") from error
     kind = timing.get("kind")
@@ -93,8 +92,6 @@ def normalize_timing(timing):
         if not isinstance(clock, str) or not TIME_RE.fullmatch(clock):
             raise ValueError("time must be HH:MM")
         hour, minute = (int(part) for part in clock.split(":"))
-        if hour > 23 or minute > 59:
-            raise ValueError("time must be HH:MM")
         weekday = "*"
         if kind == "weekly":
             weekday = timing.get("weekday")
@@ -109,28 +106,46 @@ def normalize_timing(timing):
         schedule_type = ScheduleType.CRON
     else:
         raise ValueError("invalid timing kind")
-    if schedule_type == ScheduleType.CRON:
-        try:
-            CronTrigger.from_crontab(value, timezone=tz)
-        except ValueError as error:
-            raise ValueError("invalid cron expression") from error
-    return {"schedule_type": schedule_type, "schedule_value": value, "timezone": zone}
+    check_timing(schedule_type, value)
+    fields = {"schedule_type": schedule_type, "schedule_value": value, "timezone": zone}
+    if kind == "advanced":
+        fields["advanced_cron"] = True
+    return fields
+
+
+# The Schedule columns that say what a routine does and when. Every field set
+# that covers a routine's definition is built from this tuple.
+DEFINITION_COLUMNS = (
+    "job_type",
+    "target_playlist_id",
+    "target_playlist_name",
+    "source_playlist_ids",
+    "algorithm_name",
+    "algorithm_params",
+    "schedule_type",
+    "schedule_value",
+    "timezone",
+    "advanced_cron",
+)
+
+
+def stored_definition(schedule):
+    """A saved routine's definition, with NULL sources and options read as empty."""
+    definition = {name: getattr(schedule, name) for name in DEFINITION_COLUMNS if name != "advanced_cron"}
+    # Keep old signed definitions and revision hashes byte-for-byte compatible.
+    if getattr(schedule, "advanced_cron", None):
+        definition["advanced_cron"] = True
+    definition["source_playlist_ids"] = definition["source_playlist_ids"] or []
+    definition["algorithm_params"] = definition["algorithm_params"] or {}
+    return definition
 
 
 def schedule_revision(schedule):
     """A definition/state token unaffected by execution bookkeeping."""
     return fingerprint({
+        **stored_definition(schedule),
         "id": schedule.id,
         "user_id": schedule.user_id,
-        "job_type": schedule.job_type,
-        "target_playlist_id": schedule.target_playlist_id,
-        "target_playlist_name": schedule.target_playlist_name,
-        "source_playlist_ids": schedule.source_playlist_ids or [],
-        "algorithm_name": schedule.algorithm_name,
-        "algorithm_params": schedule.algorithm_params or {},
-        "schedule_type": schedule.schedule_type,
-        "schedule_value": schedule.schedule_value,
-        "timezone": getattr(schedule, "timezone", None),
         "is_enabled": schedule.is_enabled,
     })
 
@@ -148,7 +163,7 @@ def serialize_timing(schedule, *, effective_timezone=None):
         editable = {"interval": value}
     elif schedule.schedule_type == ScheduleType.CRON:
         parts = str(value).split()
-        if len(parts) == 5 and parts[2:4] == ["*", "*"] and all(
+        if not getattr(schedule, "advanced_cron", None) and len(parts) == 5 and parts[2:4] == ["*", "*"] and all(
             _CLOCK_FIELD.fullmatch(part) for part in parts[:2]
         ):
             minute, hour = int(parts[0]), int(parts[1])

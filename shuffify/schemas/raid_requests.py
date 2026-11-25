@@ -4,12 +4,14 @@ Pydantic schemas for raid panel API endpoints.
 
 from typing import List, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from shuffify.enums import IntervalValue
+from shuffify.schemas.workshop_finalize_requests import PlaylistID
 from shuffify.services.schedule_utils import (
     TIME_RE as _TIME_RE,
 )
+from shuffify.services.upstream_source_service import MAX_SOURCES_PER_TARGET
 from shuffify.spotify.url_parser import parse_spotify_playlist_url
 
 
@@ -86,21 +88,7 @@ class RaidNowRequest(BaseModel):
 
     model_config = {"extra": "ignore"}
 
-    source_playlist_ids: Optional[List[str]] = None
-
-    @field_validator("source_playlist_ids")
-    @classmethod
-    def validate_source_ids(cls, v):
-        if v is not None:
-            if not v:
-                raise ValueError(
-                    "source_playlist_ids must not be empty "
-                    "(use null for all sources)"
-                )
-            for sid in v:
-                if not sid or not sid.strip():
-                    raise ValueError(
-                        "Each source_playlist_id must be "
-                        "non-empty"
-                    )
-        return v
+    # Null means every configured source; a list names at most as many as one playlist can have.
+    source_playlist_ids: Optional[List[PlaylistID]] = Field(
+        default=None, min_length=1, max_length=MAX_SOURCES_PER_TARGET
+    )

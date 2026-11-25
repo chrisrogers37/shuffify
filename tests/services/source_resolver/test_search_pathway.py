@@ -111,7 +111,7 @@ class TestResolve:
     def test_empty_results(self, pathway, mock_source, mock_api):
         mock_api.search_tracks.return_value = []
         result = pathway.resolve(mock_source, api=mock_api)
-        assert result.success is False
+        assert result.success is True
         assert result.track_uris == []
 
     def test_deduplicates_within_pages(

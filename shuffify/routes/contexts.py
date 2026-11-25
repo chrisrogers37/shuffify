@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime
 
-from flask import request, session
+from flask import session
 from flask_wtf.csrf import generate_csrf
 
 from shuffify.routes import (
@@ -14,6 +14,7 @@ from shuffify.routes import (
     load_schedule_context,
     require_auth_and_db,
 )
+from shuffify.routes.playlist_refresh import playlist_refresh_requested
 from shuffify.services import (
     ActivityLogService,
     DashboardService,
@@ -30,11 +31,10 @@ from shuffify.services.page_context_service import (
     execution_row,
     playlist_row,
     recently_loaded,
-    routine_row,
 )
 from shuffify.services.playlist_preference_service import PlaylistPreferenceService
 from shuffify.services.playlist_service import PlaylistAccessError, PlaylistNotFoundError
-from shuffify.services.routine_activation_service import schedule_payloads
+from shuffify.services.routine_activation_service import ROUTINE_STATES, schedule_payloads
 from shuffify.services.scheduler_service import SchedulerService
 
 logger = logging.getLogger(__name__)
@@ -92,9 +92,7 @@ def activity_context(api=None, user=None):
 def library_context(api=None, user=None):
     """Read ordered library rows; refresh bypasses Spotify's playlist-list cache."""
     try:
-        favorites, visible, hidden, preferences = _playlist_sections(
-            api, user, refresh=request.args.get("refresh") == "1"
-        )
+        favorites, visible, hidden, preferences = _playlist_sections(api, user, refresh=playlist_refresh_requested())
     except PlaylistError:
         logger.warning("Could not load the library playlists", exc_info=True)
         return json_error("Could not load your library. Please try again.", 500)
@@ -124,7 +122,8 @@ def routines_context(api=None, user=None):
     """Read full routine rows and the editable playlist names used by their forms."""
     return json_success(
         "Routines loaded.",
-        routines=[routine_row(row) for row in schedule_payloads(SchedulerService.get_user_schedules(user.id))],
+        routines=[{**row, "state_label": ROUTINE_STATES[row["state"]]}
+                  for row in schedule_payloads(SchedulerService.get_user_schedules(user.id))],
         playlists=[{"id": row["id"], "name": row["name"]} for row in PlaylistService(api).get_user_playlists()],
     )
 

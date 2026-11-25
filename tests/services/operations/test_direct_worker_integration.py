@@ -158,6 +158,23 @@ def test_restores_finish_the_selected_history_without_an_extra_execution(setup, 
     assert db.session.query(JobExecution).count() == 1
 
 
+def test_worker_undo_bounds_legacy_history_at_the_selected_revision(setup):
+    app, user_id, repository, world, _ = setup
+    initial = list(world.playlists['target']['track_uris'])
+    previous = initial[1:] + initial[:1]
+    old_states = [[uri(n)] * 251 for n in range(100, 218)]
+    selection = {'states': [previous, initial, *old_states], 'current_index': 1}
+    accepted = accept(repository, user_id, 'undo', {'selection': selection}, legacy={'target': selection})
+
+    assert worker_for(app, repository, world).run_once(accepted.id)
+    assert repository.get(accepted.id).state == 'succeeded'
+    assert world.playlists['target']['track_uris'] == previous
+    assert HistoryStore(repository.engine).load(user_id, SCOPE, 'target') == (
+        {'states': [previous, initial, *old_states[:98]], 'current_index': 0},
+        accepted.id,
+    )
+
+
 def test_stale_review_remains_a_rich_no_effect_worker_failure(setup, monkeypatch):
     app, user_id, repository, world, _ = setup
     monkeypatch.setattr('shuffify.services.live_playlist_service.ShuffleService.execute',

@@ -39,6 +39,7 @@ _TRACK_URI = re.compile(r"spotify:track:([A-Za-z0-9]{22})")
 PLAYLIST_SUMMARY_FIELDS = "id,name,owner(id),collaborative"
 # Spotify's maximum number of tracks in one playlist.
 MAX_PLAYLIST_TRACKS = 10_000
+TOO_MANY_TRACKS = f"A Spotify playlist holds at most {MAX_PLAYLIST_TRACKS:,} tracks"
 
 
 def _write_may_have_applied(error: Exception) -> bool:
@@ -110,6 +111,8 @@ class SpotifyAPI:
         auto_refresh: bool = True,
         cache: Optional["SpotifyCache"] = None,
         on_token_refresh: Optional[Callable[[TokenInfo], None]] = None,
+        *,
+        authenticated_user_id: Optional[str] = None,
     ):
         """
         Initialize the API client.
@@ -120,6 +123,7 @@ class SpotifyAPI:
             auth_manager: Optional auth manager for token refresh.
             auto_refresh: Whether to automatically refresh expired tokens.
             cache: Optional SpotifyCache instance for caching API responses.
+            authenticated_user_id: The account previously verified with /me for this token.
             on_token_refresh: Optional callback invoked with the new TokenInfo
                 whenever the access token is refreshed: at construction, on
                 expiry before a call, or on a 401 retry. Web requests use it
@@ -150,7 +154,9 @@ class SpotifyAPI:
                 self._handle_token_refresh if self._auto_refresh else None
             ),
         )
-        self._user_id: Optional[str] = None
+        # Web sessions already paired this token with /me at OAuth sign-in.
+        # Other clients establish their own account before accessing private cache entries.
+        self._user_id = authenticated_user_id
         logger.debug(
             "SpotifyAPI initialized with valid token%s",
             " (with cache)" if cache else "",

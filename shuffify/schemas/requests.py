@@ -4,15 +4,30 @@ Request validation schemas using Pydantic.
 Provides type-safe validation for all API request parameters.
 """
 
+import json
 import re
 from typing import Annotated, Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AfterValidator, BaseModel, Field, field_validator
 
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
 from shuffify.spotify.api import MAX_PLAYLIST_TRACKS
 
 TRACK_URI_RE = re.compile(r"^spotify:track:[a-zA-Z0-9]{22}$")
+
+# Measure each value as compact UTF-8 JSON, independent of request whitespace or escapes.
+MAX_JSON_BYTES = 16 * 1024
+
+
+def _within_json_limit(value):
+    compact = json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+    if len(compact.encode("utf-8")) > MAX_JSON_BYTES:
+        raise ValueError(f"must be at most {MAX_JSON_BYTES:,} bytes as JSON")
+    return value
+
+
+# Annotated metadata that refuses a JSON value larger than MAX_JSON_BYTES.
+JSONSizeLimit = AfterValidator(_within_json_limit)
 
 
 class ShuffleRequest(BaseModel):
@@ -28,7 +43,9 @@ class ShuffleRequest(BaseModel):
 
     # Common parameters (used by multiple algorithms)
     keep_first: Annotated[int, Field(ge=0)] = 0
-    section_count: Annotated[int, Field(ge=1, le=100)] = 4
+    # Range and default come from the selected algorithm's `parameters`;
+    # None means the request left it out.
+    section_count: Optional[int] = None
 
     # PercentageShuffle specific
     shuffle_percentage: Annotated[float, Field(ge=0.0, le=100.0)] = 50.0
@@ -46,6 +63,7 @@ class ShuffleRequest(BaseModel):
     # Track locks: {position: track_uri} for locked tracks
     locked_positions: Optional[Dict[str, str]] = Field(
         default=None,
+        max_length=MAX_PLAYLIST_TRACKS,
         description=(
             "Map of position (as string key) to track URI "
             "for tracks that should stay in place"
@@ -70,27 +88,39 @@ class ShuffleRequest(BaseModel):
             )
         return v
 
-    # Maps algorithm names to the list of parameter field names they use.
-    # When adding a new algorithm, add an entry here with its parameter names.
-    _ALGORITHM_PARAMS = {
-        "BasicShuffle": ["keep_first"],
-        "BalancedShuffle": ["keep_first", "section_count"],
-        "StratifiedShuffle": ["keep_first", "section_count"],
-        "PercentageShuffle": ["shuffle_percentage", "shuffle_location"],
-        "ArtistSpacingShuffle": ["min_spacing"],
-        "AlbumSequenceShuffle": ["shuffle_within_albums"],
-        "NewestFirstShuffle": ["jitter"],
-    }
+    @field_validator("section_count")
+    @classmethod
+    def validate_section_count(cls, v: Optional[int], info) -> Optional[int]:
+        """Hold section_count to the range the selected algorithm declares."""
+        algorithm = info.data.get("algorithm")
+        if algorithm is None:  # the algorithm itself was refused
+            return v
+        declared = ShuffleRegistry.get_algorithm(algorithm)().parameters
+        rule = declared.get("section_count")
+        if rule is None:  # an algorithm without sections ignores the option
+            return v
+        # Only a sent value reaches this check, so None here is an explicit null.
+        if v is None or not rule["min"] <= v <= rule["max"]:
+            raise ValueError(
+                f"{algorithm} takes {rule['min']} to {rule['max']} sections"
+            )
+        return v
 
     def get_algorithm_params(self) -> Dict[str, Any]:
         """
-        Extract only the parameters relevant to the selected algorithm.
+        Extract only the parameters the selected algorithm declares.
+
+        A field left as None takes the algorithm's declared default.
 
         Returns:
             Dictionary of algorithm-specific parameters.
         """
-        param_names = self._ALGORITHM_PARAMS.get(self.algorithm, [])
-        return {name: getattr(self, name) for name in param_names}
+        params = {}
+        declared = ShuffleRegistry.get_algorithm(self.algorithm)().parameters
+        for name, rule in declared.items():
+            value = getattr(self, name)
+            params[name] = rule["default"] if value is None else value
+        return params
 
 
 def parse_shuffle_request(form_data: Dict[str, Any]) -> ShuffleRequest:

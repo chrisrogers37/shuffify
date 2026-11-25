@@ -272,14 +272,16 @@ class ProdConfig(Config):
     # Production database - PostgreSQL
     SQLALCHEMY_DATABASE_URI = _resolve_database_url("sqlite:///shuffify.db")
 
-    # PostgreSQL engine options: connection pooling and SSL for managed providers
+    # PostgreSQL engine options: connection pooling, SSL for managed providers,
+    # and a connect timeout, so a new connection to a host that does not answer
+    # fails after 3 seconds instead of when the operating system gives up.
     SQLALCHEMY_ENGINE_OPTIONS = {
         **Config.SQLALCHEMY_ENGINE_OPTIONS,
         "pool_size": 5,
         "pool_recycle": 300,
         "pool_pre_ping": True,
         "connect_args": (
-            {"sslmode": "require"}
+            {"sslmode": "require", "connect_timeout": 3}
             if os.getenv("DATABASE_URL", "").startswith("postgres")
             else {}
         ),

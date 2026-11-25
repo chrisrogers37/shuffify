@@ -23,6 +23,7 @@ from shuffify.routes import (
 )
 from shuffify.routes.asset_queue import admit_asset
 from shuffify.routes.finalizer_queue import admit_finalizer
+from shuffify.routes.playlist_editor import playlist_editor_request_error, read_editor_playlist
 from shuffify.routes.routine_queue import admit_direct
 from shuffify.schemas.pending_raid_requests import (
     DismissTracksRequest,
@@ -38,7 +39,7 @@ from shuffify.schemas.raid_requests import (
     UnwatchPlaylistRequest,
 )
 from shuffify.schemas.workshop_finalize_requests import FinalizeRaidRequest
-from shuffify.services.api_response import busy_error
+from shuffify.services.api_response import busy_error, error_payload
 from shuffify.services.base import is_commit_failure
 from shuffify.services.live_operation_service import (
     LIVE_ENDPOINT_KINDS,
@@ -74,6 +75,7 @@ from shuffify.services.raid_sync_service import (
     RaidSyncError,
     RaidSyncService,
 )
+from shuffify.services.routine_policy import RoutinePolicyError
 from shuffify.services.scheduler_service import (
     ScheduleBusyError,
 )
@@ -304,19 +306,19 @@ def raid_add_url(playlist_id, api=None, user=None):
             "Cannot raid from the same playlist", 400
         )
 
-    # 3. Guard: the caller can edit the target. A refusal
-    # raises PlaylistAccessError (403) before any source or
-    # schedule is written.
-    playlist_svc = PlaylistService(api)
-    playlist_svc.validate_user_can_edit(
-        playlist_id, user.spotify_id, lean=True
-    )
+    # 3. Prove target access before reading the source or taking mutation locks.
+    error = playlist_editor_request_error(playlist_id, user)
+    if error:
+        return error
+    _, error = read_editor_playlist(api, playlist_id, user.spotify_id)
+    if error:
+        return error
 
     # 4. Get playlist metadata for ownership check.
     # The service tries the API first and falls back to
     # the public embed page when the API answers 404.
     try:
-        playlist_meta = playlist_svc.get_playlist_metadata(
+        playlist_meta = PlaylistService(api).get_playlist_metadata(
             source_playlist_id
         )
     except PlaylistNotFoundError:
@@ -404,6 +406,8 @@ def raid_add_url(playlist_id, api=None, user=None):
         )
     except (UpstreamSourceLimitError, RaidSyncError) as e:
         return json_error(str(e), 400)
+    except RoutinePolicyError as error:
+        return json_reply((error_payload(str(error), error.status, error_code=error.code), error.status))
     except (PlaylistBusyError, ScheduleBusyError):
         return json_reply(busy_error())
     except Exception as e:
@@ -446,6 +450,8 @@ def raid_unwatch(playlist_id, api=None, user=None):
         return json_error("Source not found.", 404)
     except RaidSyncError as e:
         return json_error(str(e), 400)
+    except RoutinePolicyError as error:
+        return json_reply((error_payload(str(error), error.status, error_code=error.code), error.status))
     except (PlaylistBusyError, ScheduleBusyError):
         return json_reply(busy_error())
     except Exception as e:

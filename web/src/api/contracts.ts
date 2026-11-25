@@ -34,14 +34,17 @@ export interface ApiError {
   message: string;
   category: string;
   retryable?: boolean;
-  retry_after?: number;
+  retry_after?: number | null;
   field_errors?: FieldError[];
   operation_id?: DatabaseId;
 }
 export type ApiResponse<T extends SuccessEnvelope> = T | ApiError;
 
-export type AuthNoticeCode = 'access_denied' | 'oauth_failed' | 'missing_code' | 'invalid_state'
-  | 'authentication_failed' | 'consent_required' | 'login_failed';
+export const authNoticeCodes = [
+  'access_denied', 'oauth_failed', 'missing_code', 'invalid_state',
+  'authentication_failed', 'consent_required', 'login_failed',
+] as const;
+export type AuthNoticeCode = (typeof authNoticeCodes)[number];
 /** A fixed-map notice is consumed from the session once. No OAuth query text is returned. */
 export interface AuthNotice {
   code: AuthNoticeCode;
@@ -204,6 +207,7 @@ export interface JobExecution {
   tracks_total: Count | null;
   error_message: string | null;
   result_detail: ExecutionDetail;
+  scheduled_skip?: { scheduled_for: Timestamp; reason: string };
 }
 export interface ActivityExecution extends JobExecution {
   schedule_name: string | null;
@@ -260,6 +264,7 @@ export interface LibraryGreeting {
   activity_since_last_login_count: Count;
 }
 export interface RoutineDefinition {
+  advanced_cron?: true;
   job_type: JobType;
   target_playlist_id: string;
   target_playlist_name: string | null;
@@ -393,8 +398,22 @@ export interface WorkshopContext extends SuccessEnvelope {
   recently_loaded: RecentlyLoadedPlaylist[];
 }
 
-export type OperationState = 'queued' | 'running' | 'compensating' | 'succeeded'
-  | 'failed' | 'rolled_back' | 'needs_attention';
+export const operationStates = [
+  'queued', 'running', 'compensating', 'succeeded',
+  'failed', 'rolled_back', 'needs_attention',
+] as const;
+export type OperationState = (typeof operationStates)[number];
+export const terminalOperationStates: ReadonlySet<OperationState> = new Set([
+  'succeeded', 'failed', 'rolled_back', 'needs_attention',
+]);
+/** The terminal states other than needs_attention. */
+export const confirmedOperationStates: ReadonlySet<OperationState> = new Set([
+  'succeeded', 'failed', 'rolled_back',
+]);
+/** The terminal states other than succeeded. */
+export const unsuccessfulOperationStates: ReadonlySet<OperationState> = new Set([
+  'failed', 'rolled_back', 'needs_attention',
+]);
 export interface OperationProgress {
   batches_done?: Count;
   total_batches?: Count;
@@ -406,6 +425,7 @@ export interface OperationRecovery {
   reason: string | null;
   resolved_operation_id?: DatabaseId;
   restoration_operation_id?: DatabaseId;
+  acknowledged_targets?: string[];
 }
 /** Private commands, credentials, baselines, and lease tokens never cross this boundary. */
 export interface Operation {

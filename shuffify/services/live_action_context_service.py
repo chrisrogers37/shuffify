@@ -40,6 +40,7 @@ from shuffify.services.playlist_snapshot_service import PlaylistSnapshotNotFound
 from shuffify.services.state_service import StateService
 from shuffify.services.workshop_commit_service import _TRACK_URI, WorkshopCommitService
 from shuffify.shuffle_algorithms.registry import ShuffleRegistry
+from shuffify.spotify.api import MAX_PLAYLIST_TRACKS
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,9 @@ class ContextRequestError(ValueError):
     def __init__(self, kind, code, message):
         super().__init__(message)
         self.kind, self.code, self.message = kind, code, message
+
+    def reply(self):
+        return context_rejected(self.code, 400, self.message, kind=self.kind)
 
 
 def parse_context_request(body):
@@ -162,7 +166,11 @@ class LiveActionContextService:
         try:
             kind, data = parse_context_request(body)
         except ContextRequestError as error:
-            return context_rejected(error.code, 400, error.message, kind=error.kind)
+            return error.reply()
+        return self.resolve_parsed(playlist_id, user, session, kind, data)
+
+    def resolve_parsed(self, playlist_id, user, session, kind, data):
+        """Resolve an already validated review request."""
         if kind in DIRECT_STEPS:
             return LiveExecutorContextService(self.api).direct(kind, playlist_id, user, data)
         if kind == "privacy":
@@ -299,7 +307,7 @@ def parse_inspect_request(body):
         if type(desired) is not bool:
             raise InspectRequestError()
         return kind, desired
-    if not isinstance(desired, list) or any(
+    if not isinstance(desired, list) or len(desired) > MAX_PLAYLIST_TRACKS or any(
         not isinstance(uri, str) or not _TRACK_URI.fullmatch(uri) for uri in desired
     ):
         raise InspectRequestError()

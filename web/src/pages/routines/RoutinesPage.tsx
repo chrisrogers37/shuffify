@@ -858,7 +858,14 @@ export function RoutinesPage() {
                                       : null,
                                   )}
                                 </p>
-                                {detail ? (
+                                {run.scheduled_skip ? (
+                                  <p>
+                                    {run.scheduled_skip.reason} Scheduled for{" "}
+                                    <time dateTime={run.scheduled_skip.scheduled_for}>
+                                      {new Date(run.scheduled_skip.scheduled_for).toLocaleString()}
+                                    </time>
+                                  </p>
+                                ) : detail ? (
                                   <ExecutionDetails detail={detail} />
                                 ) : (
                                   <p>

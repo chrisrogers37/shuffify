@@ -1,6 +1,6 @@
 """Session-authorized admission of immutable worker commands, without Spotify I/O."""
 
-from flask import jsonify, request, session, url_for
+from flask import current_app, jsonify, request, session, url_for
 
 from shuffify.services.api_response import busy_error, error_payload
 from shuffify.services.live_operation_service import direct_rejected_result, direct_response_payload
@@ -9,6 +9,7 @@ from shuffify.services.operations.history import HistoryStore, get_history_scope
 from shuffify.services.operations.repository import (
     BusyOperation,
     OperationRepository,
+    OutstandingOperationLimit,
     PlaylistNeedsReview,
     RequestKeyConflict,
 )
@@ -61,7 +62,10 @@ def enqueue_command(user, kind, intent, build, *, schedule_id=None):
         return jsonify(error_payload("Use an idempotency key of 1 to 128 characters.", 400)), 400
 
     def factory(storage):
-        command, history = build(storage)
+        # The repository has resolved the key and checked outstanding capacity
+        # under its owner lock. Only a new interactive command reaches build.
+        with current_app.extensions["interactive_queue_limit"]:
+            command, history = build(storage)
         payload = {"version": 1, "command": command.model_dump(mode="json")}
         if history is not None:
             payload["history"] = history
@@ -74,8 +78,11 @@ def enqueue_command(user, kind, intent, build, *, schedule_id=None):
     except AdmissionRejected as error:
         return error.response
     except PlaylistNeedsReview as error:
+        message = "In Workshop, open Tools and select Review playlist hold."
+        if error.owner_id == user.id:
+            message = "An earlier operation needs review. Restore or resolve it first. " + message
         return jsonify(error_payload(
-            "An earlier operation on this playlist needs review. Restore or resolve it first.", 409,
+            message, 409,
             error_code="playlist_needs_review", retryable=False, reason="needs_attention",
             **_blocking_operation(user, error))), 409
     except BusyOperation as error:
@@ -85,6 +92,8 @@ def enqueue_command(user, kind, intent, build, *, schedule_id=None):
     except RequestKeyConflict:
         return jsonify(error_payload("This idempotency key belongs to different changes.", 409,
                                      error_code="request_key_conflict", retryable=False)), 409
+    except OutstandingOperationLimit as error:
+        return jsonify(error_payload(str(error), 429, error_code=error.code, retryable=True)), 429
     location = url_for("api.operation_status", operation_id=accepted.id)
     return jsonify({"success": True, "category": "info", "message": "Operation accepted.",
                     "operation_id": accepted.id, "operation": repository.get_owned(user.id, accepted.id)}), 202, {

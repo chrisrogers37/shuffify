@@ -5,6 +5,13 @@ from pydantic import ValidationError
 
 from shuffify.schemas import CreateSetupPlaylistRequest, SetupImpactRequest, SetupSaveRequest
 from shuffify.schemas.playlist_setup_requests import DRIP_COUNT_RANGE, MAX_CHANGES, RAID_COUNT_RANGE, is_playlist_id
+from shuffify.schemas.raid_link_requests import (
+    CreateRaidLinkRequest,
+    UpdateRaidLinkRequest,
+    UpdateSourceRaidCountRequest,
+)
+from shuffify.services.operations.commands.asset_schemas import AssetCommand
+from shuffify.services.operations.commands.routine_schemas import CapturedLink
 from shuffify.services.playlist_setup_service import LIMITS
 
 REVISION = "a" * 64
@@ -154,16 +161,30 @@ def test_the_revision_is_a_64_hex_digest(revision):
         SetupImpactRequest.model_validate({"configuration_revision": revision, "changes": [EXAMPLES[0][0]]})
 
 
-@pytest.mark.parametrize("limit, change, bounds", [
-    ("raid_count", lambda count: {"op": "set_source_count", "source_id": 1, "raid_count": count}, RAID_COUNT_RANGE),
-    ("drip_count", lambda count: {"op": "set_drip", "drip_count": count}, DRIP_COUNT_RANGE),
-])
-def test_counts_are_bounded_by_the_ranges_the_context_reports(limit, change, bounds):
+COLLECTION_COMMAND = {"kind": "raid_link_create", "playlist_id": "Target1", "purpose": "collection",
+                      "create_new": True, "name": "Collected", "description": "Collected tracks"}
+CAPTURED_LINK = {"id": 1, "raid_playlist_id": "Raid1", "raid_playlist_name": None, "drip_enabled": True}
+
+
+# Every schema that takes a raid or drip count, with the range it takes it from.
+@pytest.mark.parametrize("limit, validate, bounds", [
+    ("raid_count", lambda count: impact({"op": "set_source_count", "source_id": 1, "raid_count": count}),
+     RAID_COUNT_RANGE),
+    ("drip_count", lambda count: impact({"op": "set_drip", "drip_count": count}), DRIP_COUNT_RANGE),
+    ("raid_count", lambda count: UpdateSourceRaidCountRequest(source_id=1, raid_count=count), RAID_COUNT_RANGE),
+    ("drip_count", lambda count: CreateRaidLinkRequest(drip_count=count), DRIP_COUNT_RANGE),
+    ("drip_count", lambda count: UpdateRaidLinkRequest(drip_count=count), DRIP_COUNT_RANGE),
+    ("drip_count", lambda count: AssetCommand(**COLLECTION_COMMAND, drip_count=count), DRIP_COUNT_RANGE),
+    ("drip_count", lambda count: CapturedLink(**CAPTURED_LINK, drip_count=count), DRIP_COUNT_RANGE),
+], ids=["setup-source-count", "setup-drip", "source-count", "link-create", "link-update", "asset-command",
+        "captured-link"])
+def test_counts_are_bounded_by_the_ranges_the_context_reports(limit, validate, bounds):
     low, high = bounds
     for count in (low, high):
-        impact(change(count))
+        validate(count)
     for count in (low - 1, high + 1):
-        refused(change(count))
+        with pytest.raises(ValidationError):
+            validate(count)
     assert LIMITS[limit] == [low, high]
 
 
@@ -227,3 +248,19 @@ def test_creation_names_a_purpose_and_a_trimmed_name():
 def test_creation_bodies_are_strict(body):
     with pytest.raises(ValidationError):
         CreateSetupPlaylistRequest.model_validate(body)
+
+
+@pytest.mark.parametrize(("size", "accepted"), [(16_384, True), (16_385, False)])
+def test_an_acknowledgment_is_at_most_16_kib_of_json(size, accepted):
+    # {"k":"..."} serializes compactly to 8 bytes plus the string; its shape is checked later.
+    body = {
+        "configuration_revision": REVISION,
+        "changes": [EXAMPLES[0][0]],
+        "acknowledgment": {"k": "x" * (size - 8)},
+    }
+    if accepted:
+        assert SetupSaveRequest.model_validate(body).acknowledgment == body["acknowledgment"]
+    else:
+        with pytest.raises(ValidationError) as refused:
+            SetupSaveRequest.model_validate(body)
+        assert [error["loc"] for error in refused.value.errors()] == [("acknowledgment",)]

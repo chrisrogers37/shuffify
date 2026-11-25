@@ -5,16 +5,21 @@ import {
   admissionUnknown,
 } from "../../operations/admissions.ts";
 import type { ApiClient } from "../../api/client.ts";
+import {
+  confirmedOperationStates,
+  terminalOperationStates,
+} from "../../api/contracts.ts";
 import type { JsonRecord, LibraryContext } from "../../api/contracts.ts";
 import type { SessionStore } from "../../auth/session-store.ts";
 import {
   ApiRequestError,
   ConflictError,
+  isOutcomeUnknown,
   MissingCsrfTokenError,
-  NetworkError,
   ProtocolError,
-  RateLimitError,
+  retryDeadline,
 } from "../../api/errors.ts";
+import { record } from "../../api/guards.ts";
 import { getOperationStore } from "../../operations/store.ts";
 import type { OperationStore } from "../../operations/store.ts";
 import {
@@ -22,7 +27,6 @@ import {
   loadLibrary,
   loadReview,
   preference,
-  record,
   libraryAdmission,
 } from "./api.ts";
 import type { Intent, Review, Inspection, InspectionIntent } from "./api.ts";
@@ -176,10 +180,7 @@ export function createLibraryController(
       } catch (e) {
         update({
           error: message(e),
-          retryUntil:
-            e instanceof RateLimitError
-              ? Date.now() + (e.retryAfterMs ?? 1000)
-              : 0,
+          retryUntil: retryDeadline(e, Date.now()) ?? 0,
         });
       } finally {
         update({ loading: false });
@@ -230,7 +231,7 @@ export function createLibraryController(
         )
       )
         return true;
-      return !op || !["succeeded", "failed", "rolled_back"].includes(op.state);
+      return !op || !confirmedOperationStates.has(op.state);
     });
   }
   async function begin(
@@ -307,10 +308,7 @@ export function createLibraryController(
             ? (JSON.parse(JSON.stringify(e.error)) as JsonRecord)
             : null,
         error: message(e),
-        retryUntil:
-          e instanceof RateLimitError
-            ? Date.now() + (e.retryAfterMs ?? 1000)
-            : 0,
+        retryUntil: retryDeadline(e, Date.now()) ?? 0,
       });
     }
   }
@@ -368,10 +366,7 @@ export function createLibraryController(
         error: known
           ? message(e)
           : "The request may have been accepted. Its exact request and key are retained. New Spotify changes are blocked until this is reconciled.",
-        retryUntil:
-          e instanceof RateLimitError
-            ? Date.now() + (e.retryAfterMs ?? 1000)
-            : 0,
+        retryUntil: retryDeadline(e, Date.now()) ?? 0,
         busyId: busy,
       });
       if (busy !== null) operations.observe(busy);
@@ -430,10 +425,7 @@ export function createLibraryController(
     } catch (e) {
       changeReceipt(id, {
         inspectionError: message(e),
-        inspectionRetryUntil:
-          e instanceof RateLimitError
-            ? Date.now() + (e.retryAfterMs ?? 1000)
-            : 0,
+        inspectionRetryUntil: retryDeadline(e, Date.now()) ?? 0,
       });
     } finally {
       changeReceipt(id, { inspecting: false });
@@ -474,13 +466,7 @@ export function createLibraryController(
     for (const r of state.receipts.values()) {
       if (r.operationId === null || applied.has(r.operationId)) continue;
       const op = operations.getSnapshot().get(r.operationId)?.operation;
-      if (
-        !op ||
-        !["succeeded", "failed", "rolled_back", "needs_attention"].includes(
-          op.state,
-        )
-      )
-        continue;
+      if (!op || !terminalOperationStates.has(op.state)) continue;
       applied.add(op.id);
       // Only verified terminal success may update the Library projection.
       if (op.state === "succeeded" && op.result?.success === true) {
@@ -511,8 +497,7 @@ export function createLibraryController(
     update({});
   });
   const preferenceCooling = () => Date.now() < state.preferenceRetryUntil;
-  const preferenceRetry = (e: unknown) =>
-    e instanceof RateLimitError ? Date.now() + (e.retryAfterMs ?? 1000) : 0;
+  const preferenceRetry = (e: unknown) => retryDeadline(e, Date.now()) ?? 0;
   async function toggle(id: string, flag: "pinned" | "hidden") {
     if (
       state.loading ||
@@ -552,8 +537,7 @@ export function createLibraryController(
       update({
         preferenceError: message(e),
         preferenceRetryUntil: preferenceRetry(e),
-        preferenceUnknown:
-          e instanceof NetworkError || e instanceof ProtocolError,
+        preferenceUnknown: isOutcomeUnknown(e),
       });
       return false;
     } finally {
@@ -582,8 +566,7 @@ export function createLibraryController(
             orderDirty: true,
             preferenceError: message(e),
             preferenceRetryUntil: preferenceRetry(e),
-            preferenceUnknown:
-              e instanceof NetworkError || e instanceof ProtocolError,
+            preferenceUnknown: isOutcomeUnknown(e),
           });
           break;
         } finally {
@@ -653,8 +636,7 @@ export function createLibraryController(
       update({
         preferenceError: message(e),
         preferenceRetryUntil: preferenceRetry(e),
-        preferenceUnknown:
-          e instanceof NetworkError || e instanceof ProtocolError,
+        preferenceUnknown: isOutcomeUnknown(e),
       });
       return false;
     } finally {

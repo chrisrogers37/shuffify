@@ -1,3 +1,4 @@
+import { refusedBeforePlaylistWrite } from "../../../operations/admissions.ts";
 import { verifiedRestore } from "./client.ts";
 import type {
   Permission,
@@ -6,14 +7,14 @@ import type {
   Receipt,
 } from "./types.ts";
 export function receiptNeedsAttention(receipt: Receipt | null): boolean {
-  if (!receipt || receipt.restoredBy) return false;
+  if (!receipt || receipt.restoredBy || receipt.holdAcknowledged) return false;
   if (
     receipt.status === "unknown" ||
     receipt.operation?.state === "needs_attention" ||
     ["partial", "unknown"].includes(receipt.result?.target_status ?? "")
   )
     return true;
-  if (receipt.status !== "settled") return false;
+  if (receipt.status !== "settled" || refusedBeforePlaylistWrite(receipt.operation)) return false;
   if (receipt.review.kind === "privacy")
     return (
       receipt.operation?.state !== "succeeded" ||
