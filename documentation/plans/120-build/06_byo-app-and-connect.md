@@ -315,8 +315,7 @@ Spotify dashboard and raccoon.fm's DNS.
      it, pre-deploy runs only `flask db upgrade`, as today, so a database with
      no revision still fails the deploy (`migrations/env.py:54-66`). The
      variable is set only on staging's api (step 8) and on production's api
-     from phase 09 step 3 until phase 09 step 11's config apply or step 14
-     removes it.
+     from phase 09 step 3 to step 11, where it goes.
    - `flask create-schema` (`shuffify/cli.py:15-53`) builds the schema and
      stamps head **only when the database has no Alembic revision and no
      tables at all**. Today it refuses only when the models' tables exist, so
@@ -338,7 +337,7 @@ Spotify dashboard and raccoon.fm's DNS.
      is wiped and rebuilt by its deploy. **Decision: pre-deploy builds an
      empty database only while the variable is set.** The variable is the
      explicit bootstrap, set for the two databases that need one, and the
-     rule holds everywhere else, production after phase 09 step 14 included.
+     rule holds everywhere else, production after phase 09 step 11 included.
      While it is set, an empty database behind a wrong `DATABASE_URL` would be
      built and booted instead of failing the deploy, and production's
      `DATABASE_URL` host has already differed from what the guides described.
@@ -369,9 +368,8 @@ Spotify dashboard and raccoon.fm's DNS.
    1. the staging database, holding no production data, on its pooled host
       (as production's api and worker use; re-check production's host type
       now);
-   2. the Railway `staging` environment, created empty, with every variable
-      set by hand and read back, and `SCHEDULER_ENABLED` overridden to
-      `false` on its worker;
+   2. the Railway `staging` environment, created empty, with every shared
+      variable set by hand and read back;
    3. `staging.raccoon.fm` on Vercel with its DNS record, the Vercel branch
       variable, and **`staging.raccoon.fm` added to the project's Deployment
       Protection Exceptions** (without it the domain sits behind a Vercel
@@ -381,14 +379,19 @@ Spotify dashboard and raccoon.fm's DNS.
       Google Cloud project (Testing mode is fine there);
    5. confirm the link with `railway status`, check that the plan proposes
       only creations in the staging environment, and apply. The apply
-      creates the api, so its first deploy can't carry
-      `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` yet: step 7's pre-deploy refuses the
-      empty database and the deploy fails, as the rule says. Then set
-      `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA=1` on staging's api and deploy the
-      staged change: pre-deploy builds the schema and stamps head. Redeploy
-      the worker once the api is at head. A later apply to staging can
-      remove the variable, because the file doesn't name it, so read it back
-      after any apply.
+      creates the api and the worker, so their first deploys run without
+      staging's own settings: step 7's pre-deploy refuses the empty database
+      and the api's deploy fails, as the rule says, and the worker refuses to
+      start on a database with no schema (phase 09, Evidence), so its
+      scheduler can't run. A worker restart that outlasts the schema build
+      finds no schedules in the new database, so it has nothing to fire.
+      Right after the apply, and before the worker's redeploy, set
+      `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA=1` on staging's api and
+      `SCHEDULER_ENABLED=false` on its worker, so the scheduler stays off
+      except during a check (overview, Staging), and deploy the staged
+      changes: pre-deploy builds the schema and stamps head. Redeploy the
+      worker once the api is at head. A later apply to staging can undo
+      either setting, so read both back after any apply.
 
    Then run the checks below. Until phase 07's pages are on staging there is
    no page that saves a client ID, and the save is a `PUT` with CSRF that is

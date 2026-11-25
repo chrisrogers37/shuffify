@@ -25,8 +25,7 @@ Testing mode until #123, and the owner adds people by hand.
 
 The domain moved in phase 01b, and the pre-deploy script learned to build a
 new database in phase 06 (while `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` is set,
-from step 3 until step 11 or step 14 removes it), so neither is done on this
-day.
+from step 3 to step 11), so neither is done on this day.
 
 **The wipe removes every account, and nobody else is told:** the other
 accounts hold stale data from the original app. That is the plan's decision.
@@ -159,7 +158,7 @@ depends on 01b.
       variable the file doesn't name), and deploy the staged change. Main's
       pre-deploy doesn't read it, so it does nothing until the merge brings
       phase 06's script, whose pre-deploy then builds the wiped database
-      (step 9). It goes at step 11 or step 14.
+      (step 9). It goes at step 11.
 
    Keep the shared `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` and
    `SPOTIFY_REDIRECT_URI`, and their references, until step 11: the old code
@@ -288,10 +287,12 @@ wipe and one build. The dress rehearsal's timings say how long that is.
     `SPOTIFY_REDIRECT_URI` from Railway (the redirect URL is now
     `PUBLIC_ORIGIN` plus `/spotify/callback`, F13) and deploy any staged
     change. Nothing running reads them, and no client secret stays in Railway
-    (the design's decision 2). The file doesn't name
-    `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` either: if the apply removes the
-    variables the file doesn't declare, the variable goes here too, which is
-    fine now that the schema exists; otherwise step 14 deletes it. These
+    (the design's decision 2). `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` goes here
+    too, now that the schema exists: the file doesn't name it, so it goes
+    with the apply if the apply removes the variables the file doesn't
+    declare, and otherwise delete it from the api by hand with the
+    `SPOTIFY_*` removal. Confirm it is gone: from then on an empty database
+    fails the deploy again, as the repo's rule says (phase 06 step 7). These
     deploys restart the api and the worker once more, here: wait until both
     are SUCCESS before step 12, so the apply redeploys nothing during steps 12
     and 13.
@@ -333,19 +334,15 @@ away, so this part isn't one sitting.
 
 **Clean-up, after step 13**
 14. In this order:
-    1. If step 11's apply didn't remove `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA`
-       from production's api, delete it and deploy the staged change. From
-       then on an empty database fails the deploy again, as the repo's rule
-       says (phase 06 step 7).
-    2. Check the owner's hand-rebuilt configuration against step 4's list,
+    1. Check the owner's hand-rebuilt configuration against step 4's list,
        then delete step 8's backup branch and the 2026-10-17 backup. They
        have no other end date.
-    3. Delete staging: the `staging` Railway environment, staging's Neon
+    2. Delete staging: the `staging` Railway environment, staging's Neon
        branch or project, the Vercel branch variable and the Deployment
        Protection Exception for `staging.raccoon.fm`, the `staging` DNS
        record and then the `staging.raccoon.fm` domain in Vercel (the record
        first), and the staging Google client with its project.
-    4. Update `documentation/guides/production.md`, the README and
+    3. Update `documentation/guides/production.md`, the README and
        `.railway/README.md` with the new variables and this runbook's outcome
        (phase 06 step 7 already documented the pre-deploy variable); their "no
        staging environment" lines are correct again. Correct their database
@@ -405,13 +402,12 @@ rehearsal and the run of setup step 1 from scratch included.
 - [ ] The broken-app drill paused and then resumed schedules.
 - [ ] The merged `.railway/railway.ts` was applied to production once the
       new api and worker were up, and `SPOTIFY_CLIENT_ID`,
-      `SPOTIFY_CLIENT_SECRET` and `SPOTIFY_REDIRECT_URI` are gone from Railway
-      (step 11).
-- [ ] `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` is gone from production's api (step
-      11 or 14), the rebuilt configuration matched step 4's list before both
-      backups were deleted, and the staging environment, database, Vercel
-      variable, protection exception, DNS record and domain, and Google client
-      are gone (step 14).
+      `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI` and
+      `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` are gone from Railway (step 11).
+- [ ] The rebuilt configuration matched step 4's list before both backups
+      were deleted, and the staging environment, database, Vercel variable,
+      protection exception, DNS record and domain, and Google client are gone
+      (step 14).
 - [ ] The README describes Google sign-in and creating your own Spotify app.
 
 ## What NOT To Do

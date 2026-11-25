@@ -203,9 +203,9 @@ The larger moves since then:
     head. Gating the `create-schema` step behind the variable keeps a rule
     pinned since the split runtime (05d4262), that an empty database fails
     the deploy, wherever the variable isn't set. It is set only on staging's
-    api and on production's api from phase 09 step 3 until step 11's config
-    apply or step 14 removes it; phase 06 step 7 records the decision and
-    names the tests and docs that state the rule.
+    api and on production's api from phase 09 step 3 to step 11; phase 06
+    step 7 records the decision and names the tests and docs that state the
+    rule.
 - **The harness signs in through a fake Spotify** (`harness/fake_spotify/app.py`).
   - It has one hard-coded client, no PKCE and no Google.
   - Sign-in is the real OAuth round trip (`scripts/harness.sh:501-523`,
@@ -493,7 +493,8 @@ served is done, and phase 09 does.
   - **Staging's scheduler stays off except during a check.** The shared block
     of `.railway/railway.ts` sets `SCHEDULER_ENABLED` to `true`, and the file
     has to stay production's, so override it to `false` on staging's worker
-    service and turn it on only for a check.
+    service as soon as the apply has created it (phase 06 step 8), and turn
+    it on only for a check.
 - **Vercel:** the build reads `RAILWAY_API_URL` when it runs
   (`web/scripts/build-vercel-output.mjs:13-22, 74`), and today every preview
   forwards to the production API (`documentation/guides/production.md`). Set
@@ -788,7 +789,7 @@ here.
 | A Google client secret leaks into logs or Sentry | Credential exposure | `GOOGLE_CLIENT_SECRET` is registered in `_SENTRY_SECRET_CONFIG_ATTRS` and covered by a `_strip_pii` test (phase 05) |
 | The cutover runs in the wrong order | The deploy fails, or the new migrations run over production's old data | Phase 09's runbook orders it (stop the old worker and api, snapshot, wipe and merge back to back, check, redeploy the worker), runs `create-schema` through the pre-deploy script that phase 06 ships, with its variable set on production's api from step 3, and is rehearsed end to end on staging at the candidate SHA. Phase 04's migration refuses a database that has rows, so a merge that lands before the wipe fails its deploy and leaves the data alone. Production's services get the `GOOGLE_*` references before the day, and what each service resolves is read back before the wipe |
 | The merge builds a new worker before the api has built the schema | The new worker refuses on its startup schema check and uses up its restart retries (the deployment shows FAILED); it can't run against the wrong schema | The old worker's deployment is removed first, and the new one is redeployed by hand once the api is at head (phase 09 step 11) |
-| Pre-deploy can build a new database while `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` is set | While it is set, an empty database behind a wrong `DATABASE_URL` is built and booted instead of failing the deploy | It is set only on staging's api and on production's api from phase 09 step 3 until step 11's config apply or step 14 removes it, so everywhere else an empty database fails the deploy, as the repo's rule says; `create-schema` builds only with no revision and no tables and refuses any tables without a revision; the Neon branch identity is verified before staging's first deploy and the cutover (phase 06 step 7) |
+| Pre-deploy can build a new database while `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` is set | While it is set, an empty database behind a wrong `DATABASE_URL` is built and booted instead of failing the deploy | It is set only on staging's api and on production's api from phase 09 step 3 to step 11, so everywhere else an empty database fails the deploy, as the repo's rule says; `create-schema` builds only with no revision and no tables and refuses any tables without a revision; the Neon branch identity is verified before staging's first deploy and the cutover (phase 06 step 7) |
 | The owner deletes their only Spotify app on cutover day, and the dashboard or the copy then blocks app creation | A wiped database and no app, with no way back | Accepted by the owner (2026-11-10): sole user, one sitting. Staging walks the guide against the existing app first, and the owner's second Spotify account runs setup step 1 from scratch on staging, a gate for the cutover only (phase 09 step 1). There is no rollback: a failure is fixed forward (phase 09) |
 | Acceptance never exercises restore | The epic's differentiator could be broken by the credential path and nobody would know | The first scheduled run's snapshot is restored through the workspace's app (phase 09 step 13) |
 | Harness work (fake Google, several fake Spotify apps with PKCE, error injection) is bigger than it looks | Phases slip | Fake Google lands in phase 05 and fake apps in phase 06, each with its phase |
