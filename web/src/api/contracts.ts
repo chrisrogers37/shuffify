@@ -207,6 +207,7 @@ export interface JobExecution {
   tracks_total: Count | null;
   error_message: string | null;
   result_detail: ExecutionDetail;
+  scheduled_skip?: { scheduled_for: Timestamp; reason: string };
 }
 export interface ActivityExecution extends JobExecution {
   schedule_name: string | null;

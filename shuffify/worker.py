@@ -633,6 +633,7 @@ class OperationWorker:
         try:
             with controller, self._control_server, PostgresWakeListener(
                 self.repository, self.wake, schedule_callback=controller.request_refresh,
+                completion_callback=controller.blockers_finished,
             ):
                 self._serve_waiting()
         finally:

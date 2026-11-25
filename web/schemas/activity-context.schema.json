@@ -256,6 +256,22 @@
         "result_detail": {
           "$ref": "#/definitions/ExecutionDetail"
         },
+        "scheduled_skip": {
+          "type": "object",
+          "properties": {
+            "scheduled_for": {
+              "$ref": "#/definitions/Timestamp"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "scheduled_for",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
         "schedule_name": {
           "type": [
             "string",

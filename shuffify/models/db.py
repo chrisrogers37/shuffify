@@ -571,6 +571,16 @@ class RoutineActivationReceipt(db.Model):
     )
 
 
+class DeferredScheduleFire(db.Model):
+    """An observed busy slot still eligible for admission by the scheduler leader."""
+
+    __tablename__ = "deferred_schedule_fires"
+    schedule_id = db.Column(db.Integer, db.ForeignKey("schedules.id", ondelete="CASCADE"), primary_key=True)
+    scheduled_for = db.Column(UTCDateTime, primary_key=True)
+    cadence = db.Column(db.String(64), nullable=False)
+    blocking_operation_id = db.Column(db.Integer, nullable=False)
+
+
 class JobExecution(db.Model):
     """
     Record of a single job execution for audit/history.
@@ -633,9 +643,9 @@ class JobExecution(db.Model):
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the JobExecution to a dictionary."""
-        from shuffify.services.execution_result_service import serialize_execution_detail
+        from shuffify.services.execution_result_service import SCHEDULE_SKIP_REASONS, serialize_execution_detail
 
-        return {
+        value = {
             "id": self.id,
             "schedule_id": self.schedule_id,
             "started_at": (self.started_at.isoformat() if self.started_at else None),
@@ -648,6 +658,14 @@ class JobExecution(db.Model):
             "error_message": self.error_message,
             "result_detail": serialize_execution_detail(self.result_json),
         }
+
+        if self.status == "skipped" and isinstance(self.result_json, dict):
+            code = self.result_json.get("schedule_skip_code")
+            if isinstance(code, str) and code in SCHEDULE_SKIP_REASONS and self.started_at:
+                value["scheduled_skip"] = {
+                    "scheduled_for": self.started_at.isoformat(), "reason": SCHEDULE_SKIP_REASONS[code],
+                }
+        return value
 
     def __repr__(self) -> str:
         return (

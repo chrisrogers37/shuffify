@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import func
 
 from shuffify.enums import ScheduleType
-from shuffify.models.db import JobExecution, PlaylistSnapshot, Schedule, db
+from shuffify.models.db import DeferredScheduleFire, JobExecution, PlaylistSnapshot, Schedule, db
 from shuffify.services.base import commit_failure, get_owned_entity, public_error, safe_commit
 from shuffify.services.playlist_lock import playlist_configuration_lock, playlist_lock
 from shuffify.services.routine_policy import check_routine_write
@@ -212,6 +212,9 @@ class SchedulerService:
         """
         with _locked_exact_schedule(schedule_id, user_id, execution=True) as schedule:
             try:
+                # Admission locks the parent before recording or removing a busy slot.
+                db.session.refresh(schedule, with_for_update=True)
+                DeferredScheduleFire.query.filter_by(schedule_id=schedule_id).delete(synchronize_session=False)
                 # Saved playlists outlive the execution history. Clear only links
                 # to this schedule's executions before deleting those rows.
                 execution_ids = db.select(JobExecution.id).where(

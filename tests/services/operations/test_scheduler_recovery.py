@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from shuffify.models.db import JobExecution, RoutineActivationReceipt, db
 from shuffify.services.operations.repository import OperationRepository
+from shuffify.services.schedule_fire_outcomes import process_scheduled_fire
 from shuffify.services.scheduled_admission import GRACE_SECONDS, admit_scheduled, build_cadence, recoverable_fire
 from shuffify.services.worker_scheduler import WorkerScheduler
 from tests.services.operations.test_scheduled_admission import NOW
@@ -216,7 +217,7 @@ def test_resume_after_registration_before_catchup_admission_refuses_old_slot(
         with Session(repository.engine) as storage, storage.begin():
             current = storage.get(type(schedule), schedule_id)
             current.is_enabled = True
-        result = admit_scheduled(repository, schedule_id, cadence, due, **kwargs)
+        result = process_scheduled_fire(repository, schedule_id, cadence, due, **kwargs)
         results.append(result)
         return result
 

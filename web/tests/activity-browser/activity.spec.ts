@@ -398,3 +398,17 @@ test("same exact-run link opens collapsed details again and keeps a stable share
   await expect(page.locator("#run-3 details")).toHaveAttribute("open", "");
   await expect(page.locator("#run-3")).toBeFocused();
 });
+
+test("shows the reason a scheduled fire expired while busy", async ({ page }) => {
+  const run = {
+    ...initial.executions[0],
+    status: "skipped",
+    result_detail: { detail_status: "unavailable", version: null, steps: null },
+    scheduled_skip: {
+      scheduled_for: "2026-11-24T13:00:00+00:00",
+      reason: "Another operation was using this playlist until the retry window ended.",
+    },
+  };
+  await setup(page, { ...initial, executions: [run] });
+  await expect(page.getByText(run.scheduled_skip.reason, { exact: true })).toBeVisible();
+});

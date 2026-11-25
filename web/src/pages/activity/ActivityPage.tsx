@@ -359,7 +359,9 @@ export function ActivityPage() {
                               >
                                 {dateText(run.started_at)}
                               </time>
-                              {detail ? (
+                              {run.scheduled_skip ? (
+                                <p>{run.scheduled_skip.reason}</p>
+                              ) : detail ? (
                                 <details
                                   open={expanded.has(run.id)}
                                   onToggle={(event) => {

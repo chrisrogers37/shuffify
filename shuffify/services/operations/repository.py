@@ -7,7 +7,7 @@ import re
 import secrets
 import threading
 import time
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, aliased
 
 from shuffify.models.db import JobExecution, db
 from shuffify.services.execution_result_service import serialize_execution_detail
-from shuffify.services.operations.wake import OPERATION_CHANNEL
+from shuffify.services.operations.wake import COMPLETION_CHANNEL, OPERATION_CHANNEL
 from shuffify.services.playlist_lock import (
     _held_targets,
     _local_guard,
@@ -209,6 +209,7 @@ class OperationRepository:
     def __init__(self, engine=None, *, lease_seconds=60):
         self.engine = engine if engine is not None else db.engine
         self.lease_seconds = _positive_seconds(lease_seconds)
+        self.local_completion_callback = None
         self._postgres = self.engine.dialect.name == "postgresql"
 
     @contextmanager
@@ -247,6 +248,14 @@ class OperationRepository:
         for lock_id in _admission_lock_ids(keys):
             session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_id})
 
+    @contextmanager
+    def scheduled_fire_transaction(self, schedule_id, due):
+        """Serialize admission, busy deferral and final history for this exact fire."""
+        with self._transaction(write=True) as storage:
+            self._admission_locks(storage, targets=(), user_id=None, request_key=None,
+                                  schedule_id=schedule_id, scheduled_for=due)
+            yield storage
+
     @staticmethod
     def _same_command(row, *, kind, user_id, targets, payload, schedule_id, scheduled_for):
         return (row.kind == kind and row.user_id == user_id and tuple(row.targets or []) == targets
@@ -255,13 +264,15 @@ class OperationRepository:
                 and row.schedule_id == schedule_id and row.scheduled_for == scheduled_for)
 
     def enqueue(self, *, kind, user_id, targets=None, payload=None, request_key=None, schedule_id=None,
-                scheduled_for=None, intent=None, command_factory=None):
+                scheduled_for=None, intent=None, command_factory=None, storage=None, before_insert=None):
         """Reserve targets once, replaying keyed intent before capturing volatile local facts.
 
         A command factory receives this transaction's Session, performs only local reads and returns ``(targets,
         payload)``. Its immutable request intent identifies retries even after
         the selected snapshot or browser history has changed. Never perform
-        Spotify I/O or commit database mutations inside this callback.
+        Spotify I/O or commit database mutations inside this callback. Scheduled
+        admission can supply its fire transaction and a deadline/leadership check
+        to run after waiting for all admission locks, just before insertion.
         """
         if not isinstance(kind, str) or not kind or len(kind) > 80:
             raise ValueError("Operation kind must contain 1 to 80 characters.")
@@ -281,7 +292,7 @@ class OperationRepository:
             targets, payload = _targets(targets), _json_copy(payload)
         else:
             intent = _json_copy(intent)
-        with self._transaction(write=True) as session:
+        with (nullcontext(storage) if storage is not None else self._transaction(write=True)) as session:
             self._admission_locks(session, targets=targets or [], user_id=user_id, request_key=request_key,
                                   schedule_id=schedule_id, scheduled_for=scheduled_for)
             lookup = []
@@ -333,6 +344,8 @@ class OperationRepository:
                 )
                 if blocker is not None:
                     raise PlaylistNeedsReview(blocker.id, blocker.user_id)
+            if before_insert is not None:
+                before_insert()
             now = self._now(session)
             row = JobExecution(kind=kind, user_id=user_id, targets=list(targets), payload=payload,
                                request_key=request_key, schedule_id=schedule_id, scheduled_for=scheduled_for,
@@ -631,7 +644,15 @@ class OperationRepository:
                 row.tracks_added = tracks_added
             if tracks_total is not _UNSET:
                 row.tracks_total = tracks_total
-            return self._detach(session, row)
+            if self._postgres:
+                session.execute(select(func.pg_notify(COMPLETION_CHANNEL, str(row.id))))
+            completed = self._detach(session, row)
+        if self.local_completion_callback is not None:
+            try:
+                self.local_completion_callback({completed.id})
+            except Exception as error:
+                logger.info("Local scheduled retry wake unavailable (%s)", type(error).__name__)
+        return completed
 
     def defer(self, lease, *, delay_seconds=1):
         """Release a claim until a known deadline without replaying an operation already in recovery."""
