@@ -29,6 +29,44 @@ class SpotifyTokenExpiredError(SpotifyTokenError):
     pass
 
 
+class SpotifyAppUnavailable(SpotifyError):
+    """There is no Spotify app to act with: its client ID, secret or redirect URI is not set."""
+
+
+class _TypedFailure:
+    """A failure the app acts on, keeping what Spotify said about it.
+
+    ``error`` is the OAuth error code (``invalid_client``, ``invalid_grant``)
+    when Spotify sent one, and ``error_description`` its text. ``code`` is the
+    error code recorded for a run that ends with this failure.
+    """
+
+    code: str
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        error: str | None = None,
+        error_description: str | None = None,
+    ):
+        super().__init__(message)
+        self.error = error
+        self.error_description = error_description
+
+
+class SpotifyAppRejected(_TypedFailure, SpotifyTokenExpiredError):
+    """Spotify refused the app itself (OAuth ``invalid_client``), so no token can be refreshed or issued."""
+
+    code = "spotify_app_rejected"
+
+
+class SpotifyGrantRevoked(_TypedFailure, SpotifyTokenExpiredError):
+    """Spotify refused the refresh token or authorization code (OAuth ``invalid_grant``)."""
+
+    code = "spotify_grant_revoked"
+
+
 class SpotifyAPIError(SpotifyError):
     """Raised when a Spotify API call fails."""
 
@@ -83,6 +121,37 @@ class SpotifyForbiddenError(SpotifyAPIError):
     """
 
     pass
+
+
+class SpotifyUserNotAllowed(_TypedFailure, SpotifyForbiddenError):
+    """A 403 saying the user isn't registered for the app, on any call.
+
+    It is still a 403, so code that handles one handles this too; code that
+    must tell it apart from a playlist 403 tests for this class first.
+    """
+
+    code = "spotify_user_not_allowed"
+
+
+# The failures the app acts on, each kept through the wrappers that carry it.
+SPOTIFY_FAILURES = (SpotifyAppRejected, SpotifyGrantRevoked, SpotifyUserNotAllowed)
+
+
+def spotify_failure_of(error: BaseException | None):
+    """The typed Spotify failure behind ``error``, or None.
+
+    Looks at ``error`` itself, then along its ``__cause__`` and ``cause``
+    links (``cause`` is how ``JobExecutionError``, ``AuthenticationError`` and
+    ``SpotifyPartialBatchError`` keep theirs), and returns the first
+    ``SpotifyAppRejected``, ``SpotifyGrantRevoked`` or ``SpotifyUserNotAllowed``.
+    """
+    current, seen = error, set()
+    while isinstance(current, BaseException) and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, SPOTIFY_FAILURES):
+            return current
+        current = current.__cause__ or getattr(current, "cause", None)
+    return None
 
 
 class SpotifyPartialBatchError(SpotifyAPIError):

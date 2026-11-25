@@ -36,6 +36,7 @@ from shuffify.spotify.exceptions import (
     SpotifyRateLimitError,
     SpotifyWriteRejectedError,
     SpotifyWriteUnverifiedError,
+    spotify_failure_of,
 )
 from shuffify.spotify.observation import observe_mutations
 
@@ -353,6 +354,9 @@ class RoutineHandler:
             )
         except Exception as error:
             cause = error.cause if isinstance(error, SpotifyPartialBatchError) else error
+            # A failure the app acts on (the app refused, access revoked, the
+            # user not on the app's list) is named, wherever it was wrapped.
+            failure = spotify_failure_of(error)
             rejected = isinstance(
                 cause,
                 (
@@ -366,6 +370,8 @@ class RoutineHandler:
             code = (
                 "review_changed"
                 if isinstance(error, ReviewChanged)
+                else failure.code
+                if failure is not None
                 else "write_rejected"
                 if rejected
                 else "write_unverified"

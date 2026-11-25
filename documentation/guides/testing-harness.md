@@ -262,8 +262,9 @@ because a fake built that way agrees with the app's mistakes.
   State is in memory, so restarting the fake also resets it; playlists
   created since are gone.
 - **Faults** (`faults.py`). Spotify documents how it answers when it is
-  busy, out of quota or failing, but no account can be made to answer that
-  way on demand. A test arms one with `POST /_fake/faults`:
+  busy, out of quota or failing, or when it refuses the app, the grant or
+  the user, but no account can be made to answer that way on demand. A test
+  arms one with `POST /_fake/faults`:
 
   ```json
   {"operation": "POST /playlists/{playlist_id}/items", "kind": "quota",
@@ -276,12 +277,24 @@ because a fake built that way agrees with the app's mistakes.
   | `quota` | 429 with `{"error": {"status": 429, "message": "Too many requests", "reason": "QUOTA_EXCEEDED"}}`, Spotify's spent-quota answer |
   | `server_error` | 500, 502 or 503 (`status`, default 503), before the operation runs, so nothing is applied |
   | `slow` | served normally, `delay` seconds late (at most 60), or as soon as it is released. A write is still applied after a client that gave up on it |
+  | `user_not_allowed` | 403, "User not registered in the Developer Dashboard", Spotify's answer for an account that isn't on a development-mode app's user list |
 
-  `operation` is one of the operations in `shapes.json`, and `playlist_id`
+  Three more arm the token endpoint, with `"operation": "POST /api/token"`,
+  and answer a token request of either grant:
+
+  | `kind` | Answer |
+  |---|---|
+  | `app_rejected` | 400 `{"error": "invalid_client", ...}`: Spotify refusing the app |
+  | `grant_revoked` | 400 `{"error": "invalid_grant", ...}`: Spotify refusing the refresh token or the code |
+  | `rotate_refresh` | a refresh answered with a new refresh token; the one presented is refused from then on (until a reset), as a PKCE refresh may do |
+
+  `operation` is one of the operations in `shapes.json`, or the token
+  endpoint for those three, and `playlist_id`
   narrows a playlist operation to one playlist. The fault lets `skip`
   matching calls through, answers the next `times` of them, then the fake
-  serves normally again. The fault comes after the request checks, so a
-  request Spotify would refuse still gets its 400. `GET /_fake/faults` lists
+  serves normally again. A `/v1` fault comes after the request checks, so a
+  request Spotify would refuse still gets its 400; a token refusal answers
+  before the token request is checked. `GET /_fake/faults` lists
   each fault with how many calls it saw and answered; `DELETE /_fake/faults`
   and `/_fake/reset` clear them. `POST /_fake/faults/release` ends the wait
   of every armed slow fault: held calls are answered at once and its later
@@ -299,7 +312,8 @@ because a fake built that way agrees with the app's mistakes.
   always sends the full order); `collaborative` on a write; searching for
   types other than tracks and playlists, or several at once; `fields`
   filters with dots or `!` exclusions. Also not modelled yet: faults on the
-  OAuth and public-page hosts (faults cover `/v1` operations), the
+  authorize and public pages (faults cover `/v1` operations and the token
+  endpoint), the
   form-encoded client credentials Spotify also accepts (shuffify sends HTTP
   Basic), and how Spotify's real login page looks.
 
@@ -314,8 +328,9 @@ Spotify's references, changelogs and announcements alone) or
 `checked-live` (confirmed against real Spotify too, saying how), such as the
 public embed page, which the live integration tests read, and `limit=0`
 being refused. The fault
-answers (rate limit, spent quota, 5xx) are listed too, `docs-only`: Spotify
-cannot be made to give them on demand. Each behaviour names the scenario a
+answers (rate limit, spent quota, 5xx, and the refused app, grant and user)
+are listed too, `docs-only`: Spotify cannot be made to give them on demand.
+Each behaviour names the scenario a
 live replay checks it with, or says why none can (a scope check needs a
 second token; a login is not a Web API call).
 

@@ -18,7 +18,9 @@ from .credentials import SpotifyCredentials
 from .deadline import SpotifyDeadlineError, check_deadline, remaining_timeout
 from .endpoints import ACCOUNTS_BASE_URL
 from .exceptions import (
+    SpotifyAppRejected,
     SpotifyAuthError,
+    SpotifyGrantRevoked,
     SpotifyRateLimitError,
     SpotifyReadTransientError,
     SpotifyTokenError,
@@ -27,6 +29,20 @@ from .exceptions import (
 from .transport import request_with_deadline
 
 logger = logging.getLogger(__name__)
+
+
+# The token endpoint's OAuth errors the app acts on, by their ``error`` code.
+_TOKEN_FAILURES = {"invalid_client": SpotifyAppRejected, "invalid_grant": SpotifyGrantRevoked}
+
+
+def _token_failure(body: Dict[str, Any], message: str) -> SpotifyTokenError:
+    """The failure a refused token request raises: typed when Spotify's OAuth
+    ``error`` is one the app acts on, else a plain ``SpotifyTokenError``."""
+    error = body.get("error")
+    failure = _TOKEN_FAILURES.get(error) if isinstance(error, str) else None
+    if failure is None:
+        return SpotifyTokenError(message)
+    return failure(message, error=error, error_description=body.get("error_description"))
 
 
 # Minimal scopes — every scope maps to a core feature.
@@ -146,7 +162,7 @@ class SpotifyAuthManager:
     tokens - it operates on tokens passed to it.
 
     Example:
-        credentials = SpotifyCredentials.from_flask_config(app.config)
+        credentials = credentials_for(user)
         auth_manager = SpotifyAuthManager(credentials)
 
         # Get auth URL for user to visit
@@ -218,7 +234,9 @@ class SpotifyAuthManager:
 
         Raises:
             SpotifyAuthError: If code is missing or invalid.
-            SpotifyTokenError: If token exchange fails.
+            SpotifyAppRejected: If Spotify refuses the app (``invalid_client``).
+            SpotifyGrantRevoked: If Spotify refuses the code (``invalid_grant``).
+            SpotifyTokenError: If token exchange fails otherwise.
         """
         if not code:
             raise SpotifyAuthError("Authorization code is required")
@@ -245,8 +263,9 @@ class SpotifyAuthManager:
                     retry_after = None
                 raise SpotifyRateLimitError("Spotify token endpoint is rate limited.", retry_after=retry_after)
             if response.status_code != 200:
-                error_msg = response.json().get("error_description", response.text)
-                raise SpotifyTokenError(f"Token exchange failed: {error_msg}")
+                body = response.json()
+                error_msg = body.get("error_description", response.text)
+                raise _token_failure(body, f"Token exchange failed: {error_msg}")
 
             token_data = response.json()
             if not token_data:
@@ -280,7 +299,9 @@ class SpotifyAuthManager:
             New TokenInfo with fresh access token.
 
         Raises:
-            SpotifyTokenError: If refresh fails or no refresh_token available.
+            SpotifyAppRejected: If Spotify refuses the app (``invalid_client``).
+            SpotifyGrantRevoked: If Spotify refuses the refresh token (``invalid_grant``).
+            SpotifyTokenError: If refresh fails otherwise or no refresh_token available.
         """
         if not token_info.refresh_token:
             raise SpotifyTokenError("Cannot refresh: no refresh_token available")
@@ -308,8 +329,9 @@ class SpotifyAuthManager:
             if 500 <= response.status_code < 600:
                 raise SpotifyReadTransientError("Spotify token refresh is temporarily unavailable.")
             if response.status_code != 200:
-                error_msg = response.json().get("error_description", response.text)
-                raise SpotifyTokenError(f"Token refresh failed: {error_msg}")
+                body = response.json()
+                error_msg = body.get("error_description", response.text)
+                raise _token_failure(body, f"Token refresh failed: {error_msg}")
 
             new_token_data = response.json()
             if not new_token_data:

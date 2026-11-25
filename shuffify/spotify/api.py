@@ -18,7 +18,9 @@ from .deadline import check_deadline
 from .error_handling import api_error_handler
 from .exceptions import (
     SpotifyAPIError,
+    SpotifyAppRejected,
     SpotifyForbiddenError,
+    SpotifyGrantRevoked,
     SpotifyNotFoundError,
     SpotifyPartialBatchError,
     SpotifyRateLimitError,
@@ -84,7 +86,7 @@ class SpotifyAPI:
     Supports optional Redis caching for improved performance.
 
     Example:
-        credentials = SpotifyCredentials.from_flask_config(app.config)
+        credentials = credentials_for(user)
         auth_manager = SpotifyAuthManager(credentials)
         token_info = TokenInfo.from_dict(session['spotify_token'])
 
@@ -113,6 +115,7 @@ class SpotifyAPI:
         on_token_refresh: Optional[Callable[[TokenInfo], None]] = None,
         *,
         authenticated_user_id: Optional[str] = None,
+        on_typed_failure: Optional[Callable[[Exception], None]] = None,
     ):
         """
         Initialize the API client.
@@ -129,6 +132,9 @@ class SpotifyAPI:
                 expiry before a call, or on a 401 retry. Web requests use it
                 to write the token back to the session; background jobs to
                 store a rotated refresh token.
+            on_typed_failure: Optional callback handed to the HTTP client,
+                which calls it once with a ``SpotifyUserNotAllowed`` just
+                before raising it.
 
         Raises:
             SpotifyTokenExpiredError: If token is expired and cannot be refreshed.
@@ -153,6 +159,7 @@ class SpotifyAPI:
             on_token_refresh=(
                 self._handle_token_refresh if self._auto_refresh else None
             ),
+            on_typed_failure=on_typed_failure,
         )
         # Web sessions already paired this token with /me at OAuth sign-in.
         # Other clients establish their own account before accessing private cache entries.
@@ -219,7 +226,14 @@ class SpotifyAPI:
             raise SpotifyTokenExpiredError("Token expired and auto-refresh disabled")
 
         logger.info("Token expired, refreshing...")
-        self._token_info = self._auth_manager.ensure_valid_token(self._token_info)
+        try:
+            self._token_info = self._auth_manager.ensure_valid_token(self._token_info)
+        except (SpotifyAppRejected, SpotifyGrantRevoked) as error:
+            # Any refresh refused here reaches the caller as this generic API
+            # error (api_error_handler wraps the rest); the typed failure is
+            # its cause, where spotify_failure_of finds it.
+            logger.warning("Spotify refused the token refresh: %s", error)
+            raise SpotifyAPIError("The Spotify request failed.") from error
         self._http.update_token(self._token_info.access_token)
         self._notify_token_refresh()
         check_deadline()

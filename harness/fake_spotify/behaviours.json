@@ -159,6 +159,38 @@
       "label": "docs-only",
       "scenario": null,
       "why": "Spotify cannot be made to answer this way on demand; the fake answers it as an armed fault (faults.py)."
+    },
+    {
+      "id": "faults.user-not-allowed",
+      "summary": "A call for an account that isn't on a development-mode app's user list is a 403 saying the user isn't registered.",
+      "source": "https://developer.spotify.com/documentation/web-api/concepts/quota-modes",
+      "label": "docs-only",
+      "scenario": null,
+      "why": "Needs an account the app doesn't allow; the fake answers it as an armed fault (faults.py)."
+    },
+    {
+      "id": "faults.app-rejected",
+      "summary": "A token request from an app Spotify refuses is a 400 with the OAuth error invalid_client.",
+      "source": "https://www.rfc-editor.org/rfc/rfc6749#section-5.2",
+      "label": "docs-only",
+      "scenario": null,
+      "why": "A token request, outside the Web API; the fake answers it as an armed fault (faults.py)."
+    },
+    {
+      "id": "faults.grant-revoked",
+      "summary": "A refresh with a refresh token Spotify no longer honours is a 400 with the OAuth error invalid_grant.",
+      "source": "https://www.rfc-editor.org/rfc/rfc6749#section-5.2",
+      "label": "docs-only",
+      "scenario": null,
+      "why": "A token request, outside the Web API; the fake answers it as an armed fault (faults.py)."
+    },
+    {
+      "id": "oauth.refresh-may-rotate-token",
+      "summary": "A refresh may answer with a new refresh token, and the one it replaced then stops working.",
+      "source": "https://developer.spotify.com/documentation/web-api/tutorials/refreshing-tokens",
+      "label": "docs-only",
+      "scenario": null,
+      "why": "Token exchange happens before a replay starts, outside the Web API; the fake rotates only while a rotate_refresh fault is armed (faults.py)."
     }
   ]
 }

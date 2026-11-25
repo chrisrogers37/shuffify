@@ -8,8 +8,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from shuffify.services.auth_service import decrypt_session_token
+from shuffify.services.auth_service import decrypt_session_token, encrypt_session_token
 from shuffify.services.token_service import TokenService
+from shuffify.spotify.credentials import SpotifyCredentials
 from tests.paths import api_path
 
 
@@ -412,6 +413,45 @@ class TestCallbackRoute:
         assert secret_code not in caplog.text
 
 
+class TestSpotifyAppNotConfigured:
+    """With no Spotify client ID or secret set, sign-in and signed-in requests end as they always have."""
+
+    @pytest.fixture
+    def unconfigured(self, db_app):
+        db_app.config["SPOTIFY_CLIENT_SECRET"] = ""
+        return db_app
+
+    @patch("shuffify.routes.core.AuthService", autospec=True)
+    def test_login_goes_home_with_the_login_notice(self, mock_auth_svc, unconfigured):
+        with unconfigured.test_client() as client:
+            resp = client.get("/login?legal_consent=true")
+            assert (resp.status_code, resp.headers["Location"]) == (302, "/")
+            with client.session_transaction() as sess:
+                assert sess["auth_notice"] == "login_failed"
+        mock_auth_svc.get_auth_url.assert_not_called()
+
+    @patch("shuffify.routes.core.AuthService", autospec=True)
+    def test_the_callback_goes_home_with_the_sign_in_notice(self, mock_auth_svc, unconfigured):
+        with unconfigured.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["oauth_state"] = "valid_state"
+            resp = client.get("/callback?code=code&state=valid_state")
+            assert (resp.status_code, resp.headers["Location"]) == (302, "/")
+            with client.session_transaction() as sess:
+                assert sess["auth_notice"] == "authentication_failed"
+                assert "spotify_token" not in sess
+        mock_auth_svc.exchange_code_for_token.assert_not_called()
+
+    def test_a_signed_in_request_gets_no_spotify_client(self, unconfigured, sample_token):
+        from flask import session
+
+        from shuffify.routes import require_auth
+
+        with unconfigured.test_request_context():
+            session["spotify_token"] = encrypt_session_token(sample_token)
+            assert require_auth() is None
+
+
 class TestLogoutRoute:
     """Tests for POST /logout (CSRF-guarded; GET rejected)."""
 
@@ -422,7 +462,9 @@ class TestLogoutRoute:
         resp = auth_client.post("/logout")
         assert resp.status_code == 302
         assert resp.headers["Location"].endswith("/")
-        mock_auth_svc.revoke_access_token.assert_called_once_with("test_token")
+        mock_auth_svc.revoke_access_token.assert_called_once_with(
+            SpotifyCredentials.from_flask_config(auth_client.application.config), "test_token"
+        )
         with auth_client.session_transaction() as sess:
             assert "spotify_token" not in sess
 

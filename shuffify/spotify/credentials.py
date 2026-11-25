@@ -1,11 +1,13 @@
 """
 Spotify credentials management.
 
-Provides a dataclass for Spotify OAuth credentials that does not
-depend on Flask.
+Provides a dataclass for Spotify OAuth credentials that does not depend on
+Flask, and ``credentials_for``, the one place any code gets them.
 """
 
 from dataclasses import dataclass, field
+
+from .exceptions import SpotifyAppUnavailable
 
 
 @dataclass(frozen=True)
@@ -22,8 +24,8 @@ class SpotifyCredentials:
         redirect_uri: The OAuth callback URL.
 
     Example:
-        # Create from Flask config
-        credentials = SpotifyCredentials.from_flask_config(current_app.config)
+        # Get them for whoever the call acts for
+        credentials = credentials_for(user)
 
         # Or create directly
         credentials = SpotifyCredentials(
@@ -69,21 +71,20 @@ class SpotifyCredentials:
             redirect_uri=config.get("SPOTIFY_REDIRECT_URI", ""),
         )
 
-    @classmethod
-    def from_env(cls) -> "SpotifyCredentials":
-        """
-        Create credentials from environment variables.
 
-        Returns:
-            SpotifyCredentials instance.
+def credentials_for(owner) -> SpotifyCredentials:
+    """The Spotify app credentials to act for ``owner``: the only way any code gets them.
 
-        Raises:
-            ValueError: If required environment variables are missing.
-        """
-        import os
+    ``owner`` is the signed-in ``User``, or None where no user row is at hand
+    (signing in, and a request before its row is loaded). Every owner gets the
+    site's app, from the Flask config of the running app.
 
-        return cls(
-            client_id=os.getenv("SPOTIFY_CLIENT_ID", ""),
-            client_secret=os.getenv("SPOTIFY_CLIENT_SECRET", ""),
-            redirect_uri=os.getenv("SPOTIFY_REDIRECT_URI", ""),
-        )
+    Raises:
+        SpotifyAppUnavailable: If the app's client ID, secret or redirect URI is not set.
+    """
+    from flask import current_app
+
+    try:
+        return SpotifyCredentials.from_flask_config(current_app.config)
+    except ValueError as error:
+        raise SpotifyAppUnavailable(f"The Spotify app is not configured: {error}") from error

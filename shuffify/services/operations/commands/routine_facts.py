@@ -7,8 +7,11 @@ from shuffify.services.execution_result_service import build_live_execution_deta
 from shuffify.services.live_operation_service import LiveOperation, operation_result
 from shuffify.services.operations.planner import replay
 from shuffify.services.workshop_commit_service import ObservedPlaylist
+from shuffify.spotify.exceptions import SPOTIFY_FAILURES
 
 BINDING_KEY = "routine.binding.v1"
+# A refused write's codes: the generic one, or the failure the app acts on that refused it.
+REFUSED_CODES = {"write_rejected", *(failure.code for failure in SPOTIFY_FAILURES)}
 
 
 def plan_key(step):
@@ -309,7 +312,7 @@ def build_result(runtime, command, state, *, error_code=None, message=None, http
         target_total = None
     operation.error_code = error_code
     operation.retryable = retryable or (
-        error_code == "write_rejected" and any(fact.get("retryable") for fact in operation.resources)
+        error_code in REFUSED_CODES and any(fact.get("retryable") for fact in operation.resources)
     )
     detail = serialize_execution_detail(build_live_execution_detail(operation, runtime.operation.id, target))
     complete = state == "succeeded"

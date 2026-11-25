@@ -1,5 +1,6 @@
 """Faults a test arms on the fake Spotify: what Spotify answers when it is
-busy, out of quota, failing or slow, on demand.
+busy, out of quota, failing or slow, or when it refuses the app, the grant
+or the user, on demand.
 
 Spotify documents each of these answers, but no account can be made to
 produce one when a test needs it:
@@ -18,12 +19,27 @@ produce one when a test needs it:
   soon as the fault is released, below), for a client's timeout. A write is
   still applied, after the client may have given up on it, as a real server
   can.
+- ``user_not_allowed``: 403, "User not registered in the Developer
+  Dashboard", Spotify's answer for an account that isn't on a
+  development-mode app's user list.
+
+Three more arm the token endpoint, ``"POST /api/token"``, for either grant
+(a refusal answers before the token request is checked):
+
+- ``app_rejected``: 400 ``invalid_client``, Spotify refusing the app.
+- ``grant_revoked``: 400 ``invalid_grant``, Spotify refusing the refresh
+  token (access removed) or the code.
+- ``rotate_refresh``: a refresh is answered with a new refresh token, and
+  the one presented stops working, as a PKCE refresh may do
+  (https://developer.spotify.com/documentation/web-api/tutorials/refreshing-tokens).
+  Without it the fake keeps every refresh token working.
 
 ``POST /_fake/faults`` arms one for an operation (``"GET /me"``, as in
-shapes.json), optionally only for one playlist. It lets ``skip`` matching
-calls through, answers the next ``times`` of them, then the fake serves
-normally again. ``GET /_fake/faults`` shows each fault and how often it
-fired; ``DELETE /_fake/faults`` and ``/_fake/reset`` clear them.
+shapes.json, or the token endpoint), optionally only for one playlist. It
+lets ``skip`` matching calls through, answers the next ``times`` of them,
+then the fake serves normally again. ``GET /_fake/faults`` shows each fault
+and how often it fired; ``DELETE /_fake/faults`` and ``/_fake/reset`` clear
+them.
 
 ``POST /_fake/faults/release`` ends the wait of every armed slow fault: the
 calls it holds are answered at once, and its later firings are not held at
@@ -38,7 +54,12 @@ from typing import List, Optional
 
 from . import shapes
 
-KINDS = ("rate_limit", "quota", "server_error", "slow")
+TOKEN_OPERATION = "POST /api/token"
+# The token endpoint's refusals, each the OAuth (error, error_description) it answers with.
+TOKEN_REFUSALS = {"app_rejected": ("invalid_client", "Invalid client"),
+                  "grant_revoked": ("invalid_grant", "Refresh token revoked")}
+TOKEN_KINDS = (*TOKEN_REFUSALS, "rotate_refresh")
+KINDS = ("rate_limit", "quota", "server_error", "slow", "user_not_allowed", *TOKEN_KINDS)
 SERVER_ERRORS = {500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable"}
 MAX_DELAY = 60  # seconds: a slow answer, not a hung test
 # The fields only one kind takes.
@@ -81,10 +102,12 @@ def parse(spec) -> Fault:
     if unknown:
         raise ValueError(f"unknown fault fields: {', '.join(sorted(unknown))}")
     operation, kind = spec.get("operation"), spec.get("kind")
-    if operation not in shapes.SHAPES["operations"]:
+    if operation != TOKEN_OPERATION and operation not in shapes.SHAPES["operations"]:
         raise ValueError(f"operation {operation!r} is not one the fake serves")
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {', '.join(KINDS)}")
+    if (operation == TOKEN_OPERATION) != (kind in TOKEN_KINDS):
+        raise ValueError(f"{TOKEN_OPERATION} takes the token faults ({', '.join(TOKEN_KINDS)}), and only those")
     for name, owner in _KIND_FIELDS.items():
         if name in spec and kind != owner:
             raise ValueError(f"{name} applies only to a {owner} fault")
@@ -131,11 +154,11 @@ class Faults:
             for fault in self._armed:
                 fault.released.set()
 
-    def take(self, operation: str, playlist_id: Optional[str]) -> Optional[Fault]:
-        """The fault this call is answered with, if any, counted as fired."""
+    def take(self, operation: str, playlist_id: Optional[str], kinds=KINDS) -> Optional[Fault]:
+        """The fault of one of ``kinds`` this call is answered with, if any, counted as fired."""
         with self._lock:
             for fault in self._armed:
-                if fault.operation != operation or fault.fired >= fault.times:
+                if fault.operation != operation or fault.kind not in kinds or fault.fired >= fault.times:
                     continue
                 if fault.playlist_id is not None and fault.playlist_id != playlist_id:
                     continue
