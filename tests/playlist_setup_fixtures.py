@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from shuffify.models.db import PlaylistPair, RaidPlaylistLink, Schedule, UpstreamSource, db
 from shuffify.services import RaidSyncService, SchedulerService
-from shuffify.spotify.exceptions import SpotifyNotFoundError
+from shuffify.spotify.exceptions import SpotifyForbiddenError, SpotifyNotFoundError
 
 TARGET = "target"
 PLAYLISTS = {
@@ -91,6 +91,15 @@ class SetupSpotify:
             raise SpotifyNotFoundError(f"No playlist {playlist_id}")
         shape = self._shape(playlist_id)
         return {key: shape[key] for key in ("id", "name", "owner", "collaborative")}
+
+    def get_playlist_items_raw(self, playlist_id, *, fields, limit):
+        assert (fields, limit) == ("total", 1)
+        playlist = self.get_playlist(playlist_id)
+        if playlist["owner"]["id"] != self.owner and self.owner not in self.playlists[playlist_id].get(
+            "collaborators", ()
+        ):
+            raise SpotifyForbiddenError("Playlist items are restricted to editors")
+        return playlist["items"]
 
     def get_user_playlists(self, skip_cache=False):
         self.calls.append(("get_user_playlists", skip_cache))

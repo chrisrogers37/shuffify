@@ -23,6 +23,7 @@ from shuffify.routes import (
 )
 from shuffify.routes.asset_queue import admit_asset
 from shuffify.routes.finalizer_queue import admit_finalizer
+from shuffify.routes.playlist_editor import playlist_editor_request_error, read_editor_playlist
 from shuffify.routes.routine_queue import admit_direct
 from shuffify.schemas.pending_raid_requests import (
     DismissTracksRequest,
@@ -305,19 +306,19 @@ def raid_add_url(playlist_id, api=None, user=None):
             "Cannot raid from the same playlist", 400
         )
 
-    # 3. Guard: the caller can edit the target. A refusal
-    # raises PlaylistAccessError (403) before any source or
-    # schedule is written.
-    playlist_svc = PlaylistService(api)
-    playlist_svc.validate_user_can_edit(
-        playlist_id, user.spotify_id, lean=True
-    )
+    # 3. Prove target access before reading the source or taking mutation locks.
+    error = playlist_editor_request_error(playlist_id, user)
+    if error:
+        return error
+    _, error = read_editor_playlist(api, playlist_id, user.spotify_id)
+    if error:
+        return error
 
     # 4. Get playlist metadata for ownership check.
     # The service tries the API first and falls back to
     # the public embed page when the API answers 404.
     try:
-        playlist_meta = playlist_svc.get_playlist_metadata(
+        playlist_meta = PlaylistService(api).get_playlist_metadata(
             source_playlist_id
         )
     except PlaylistNotFoundError:
