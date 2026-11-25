@@ -51,7 +51,7 @@ class TestGetSpotifyApi:
     )
     @patch(
         "shuffify.services.executors.base_executor"
-        ".SpotifyCredentials"
+        ".credentials_for"
     )
     def test_creates_api_with_decrypted_token(
         self,
@@ -90,7 +90,7 @@ class TestGetSpotifyApi:
     )
     @patch(
         "shuffify.services.executors.base_executor"
-        ".SpotifyCredentials"
+        ".credentials_for"
     )
     def test_injects_spotify_cache(
         self,
@@ -143,7 +143,7 @@ class TestGetSpotifyApi:
 
         with (
             patch.object(TokenService, "decrypt_token", autospec=True, return_value="refresh"),
-            patch(f"{executor}.SpotifyCredentials", autospec=True),
+            patch(f"{executor}.credentials_for", autospec=True),
             patch(f"{executor}.SpotifyAuthManager", autospec=True),
             patch(f"{executor}.SpotifyAPI", autospec=True, side_effect=cause),
             pytest.raises(JobExecutionError) as exc_info,
@@ -153,6 +153,7 @@ class TestGetSpotifyApi:
         assert "upstream-7f3c" not in str(exc_info.value)
         assert mock_user.spotify_id not in str(exc_info.value)
         assert exc_info.value.__cause__ is cause
+        assert exc_info.value.cause is cause
 
 
 class TestRotatedRefreshTokenIsStored:
@@ -189,7 +190,7 @@ class TestRotatedRefreshTokenIsStored:
         is what a 401's outright refresh returns.
         """
         with patch(
-            "shuffify.services.executors.base_executor.SpotifyCredentials",
+            "shuffify.services.executors.base_executor.credentials_for",
             autospec=True,
         ), patch(
             "shuffify.services.executors.base_executor.SpotifyAuthManager",

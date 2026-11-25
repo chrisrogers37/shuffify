@@ -943,6 +943,67 @@ def test_each_step_of_a_composite_snapshots_under_its_own_label(routine):
     }
 
 
+def test_a_run_whose_spotify_app_is_refused_fails_with_spotify_app_rejected(routine, monkeypatch):
+    """The worker's client refreshes the stored token before its first call, and Spotify refuses the app."""
+    from shuffify.services.executors.base_executor import JobExecutorService
+    from shuffify.services.token_service import TokenService
+
+    routine.user.encrypted_refresh_token = TokenService.encrypt_token("stored-refresh")
+    db.session.commit()
+    refused = requests.Response()
+    refused.status_code = 400
+    refused._content = json.dumps({"error": "invalid_client", "error_description": "Invalid client"}).encode()
+    monkeypatch.setattr("shuffify.spotify.auth.request_with_deadline", lambda *args, **kwargs: refused)
+    row, _ = routine.enqueue("shuffle")
+    runner = OperationWorker(
+        routine.app,
+        repository=routine.repository,
+        handlers=handlers(),
+        api_factory=JobExecutorService._get_spotify_api,
+        heartbeat_interval=0,
+    )
+    assert runner.run_once(row.id) is True
+    completed = routine.repository.get(row.id)
+    assert completed.state == "failed"
+    result = completed.journal["result"]
+    assert result["operation"]["error_code"] == "spotify_app_rejected"
+    assert result["operation"]["retryable"] is False
+    assert routine.world.writes == []
+
+
+@pytest.mark.parametrize(
+    "message, code",
+    [("Forbidden", "write_rejected"), ("User not registered in the Developer Dashboard", "spotify_user_not_allowed")],
+)
+def test_a_refused_write_names_a_user_not_on_the_apps_list_and_stays_as_retryable(routine, message, code):
+    factory = routine.factory
+
+    def api(user):
+        value = factory(user)
+        send = value._http._session.request
+
+        def transport(method, url, **kwargs):
+            if method == "GET":
+                return send(method, url, **kwargs)
+            response = requests.Response()
+            response.status_code = 403
+            response._content = json.dumps({"error": {"status": 403, "message": message}}).encode()
+            return response
+
+        value._http._session.request = transport
+        return value
+
+    row, _ = routine.enqueue("shuffle")
+    runner = OperationWorker(
+        routine.app, repository=routine.repository, handlers=handlers(), api_factory=api, heartbeat_interval=0
+    )
+    assert runner.run_once(row.id) is True
+    operation = routine.repository.get(row.id).journal["result"]["operation"]
+    assert operation["error_code"] == code
+    assert operation["retryable"] is True
+    assert routine.world.playlists["target"]["track_uris"] == [uri(1), uri(2), uri(3)]
+
+
 def test_each_step_exposes_its_own_outcome_code_and_preserves_known_bookkeeping_failure(routine, monkeypatch):
     def unavailable(*args, **kwargs):
         raise ValueError("Storage unavailable")

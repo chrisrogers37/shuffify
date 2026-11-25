@@ -135,6 +135,8 @@ class Store:
             for spec in seed["playlists"]:
                 self._seed_playlist(spec)
             self.used_codes: set = set()
+            # Refresh tokens a rotation replaced (faults.py rotate_refresh): refused from then on.
+            self.replaced_refresh_tokens: set = set()
 
     # -- catalogue ----------------------------------------------------------
 

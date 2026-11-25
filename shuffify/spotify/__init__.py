@@ -5,7 +5,7 @@ This module provides a clean, modular interface for Spotify OAuth authentication
 and API operations, with optional Redis caching.
 
 Architecture:
-    - credentials.py: SpotifyCredentials for config/DI
+    - credentials.py: SpotifyCredentials, and credentials_for, the one source of them
     - auth.py: SpotifyAuthManager for OAuth and token management
     - api.py: SpotifyAPI for data operations
     - http_client.py: SpotifyHTTPClient for token refresh, retries, rate limits and pagination
@@ -17,15 +17,15 @@ Architecture:
 
 Usage:
     from shuffify.spotify import (
-        SpotifyCredentials,
+        credentials_for,
         SpotifyAuthManager,
         SpotifyAPI,
         SpotifyCache,
         TokenInfo,
     )
 
-    # Create credentials from Flask config
-    credentials = SpotifyCredentials.from_flask_config(app.config)
+    # Get the app's credentials for whoever the calls act for
+    credentials = credentials_for(user)
 
     # Create auth manager
     auth_manager = SpotifyAuthManager(credentials)
@@ -58,19 +58,23 @@ from .auth import (
 from .cache import SpotifyCache
 
 # Credentials (for dependency injection)
-from .credentials import SpotifyCredentials
+from .credentials import SpotifyCredentials, credentials_for
 
 # Exceptions
 from .exceptions import (
     SpotifyAPIError,
+    SpotifyAppRejected,
+    SpotifyAppUnavailable,
     SpotifyAuthError,
     SpotifyError,
     SpotifyForbiddenError,
+    SpotifyGrantRevoked,
     SpotifyNotFoundError,
     SpotifyQuotaExceededError,
     SpotifyRateLimitError,
     SpotifyTokenError,
     SpotifyTokenExpiredError,
+    SpotifyUserNotAllowed,
 )
 
 # URL parser utility
@@ -79,6 +83,7 @@ from .url_parser import parse_spotify_playlist_url
 __all__ = [
     # Credentials
     "SpotifyCredentials",
+    "credentials_for",
     # Auth
     "SpotifyAuthManager",
     "TokenInfo",
@@ -99,4 +104,8 @@ __all__ = [
     "SpotifyQuotaExceededError",
     "SpotifyNotFoundError",
     "SpotifyForbiddenError",
+    "SpotifyUserNotAllowed",
+    "SpotifyAppRejected",
+    "SpotifyGrantRevoked",
+    "SpotifyAppUnavailable",
 ]

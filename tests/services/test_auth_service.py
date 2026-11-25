@@ -13,6 +13,14 @@ from shuffify.services import (
     AuthService,
     TokenValidationError,
 )
+from shuffify.spotify.credentials import SpotifyCredentials
+from shuffify.spotify.exceptions import SpotifyGrantRevoked, spotify_failure_of
+
+CREDENTIALS = SpotifyCredentials(
+    client_id="test_client_id",
+    client_secret="test_client_secret",
+    redirect_uri="http://localhost:5000/callback",
+)
 
 
 class TestAuthServiceTokenValidation:
@@ -65,10 +73,10 @@ class TestAuthServiceGetAuthUrl:
         )
         mock_manager.return_value = mock_instance
 
-        url = AuthService.get_auth_url()
+        url = AuthService.get_auth_url(CREDENTIALS)
 
         assert url == "https://accounts.spotify.com/authorize?test=1"
-        mock_manager.assert_called_once()
+        mock_manager.assert_called_once_with(CREDENTIALS)
         mock_instance.get_auth_url.assert_called_once_with(state=None)
 
     @patch.object(AuthService, "_auth_manager")
@@ -80,7 +88,7 @@ class TestAuthServiceGetAuthUrl:
         )
         mock_manager.return_value = mock_instance
 
-        url = AuthService.get_auth_url(state="abc123")
+        url = AuthService.get_auth_url(CREDENTIALS, state="abc123")
 
         mock_instance.get_auth_url.assert_called_once_with(state="abc123")
         assert "state=abc123" in url
@@ -93,7 +101,7 @@ class TestAuthServiceGetAuthUrl:
         mock_manager.return_value = mock_instance
 
         with pytest.raises(AuthenticationError) as exc_info:
-            AuthService.get_auth_url()
+            AuthService.get_auth_url(CREDENTIALS)
         assert "Failed to generate authorization URL" in str(exc_info.value)
 
 
@@ -107,21 +115,22 @@ class TestAuthServiceExchangeCode:
         mock_instance.exchange_code.return_value.to_dict.return_value = sample_token
         mock_manager.return_value = mock_instance
 
-        result = AuthService.exchange_code_for_token("auth_code_123")
+        result = AuthService.exchange_code_for_token(CREDENTIALS, "auth_code_123")
 
         assert result == sample_token
+        mock_manager.assert_called_once_with(CREDENTIALS)
         mock_instance.exchange_code.assert_called_once_with("auth_code_123")
 
     def test_exchange_code_with_empty_code(self, app_context):
         """Should raise AuthenticationError for empty code."""
         with pytest.raises(AuthenticationError) as exc_info:
-            AuthService.exchange_code_for_token("")
+            AuthService.exchange_code_for_token(CREDENTIALS, "")
         assert "No authorization code provided" in str(exc_info.value)
 
     def test_exchange_code_with_none_code(self, app_context):
         """Should raise AuthenticationError for None code."""
         with pytest.raises(AuthenticationError) as exc_info:
-            AuthService.exchange_code_for_token(None)
+            AuthService.exchange_code_for_token(CREDENTIALS, None)
         assert "No authorization code provided" in str(exc_info.value)
 
     @patch.object(AuthService, "_auth_manager")
@@ -134,7 +143,7 @@ class TestAuthServiceExchangeCode:
         mock_manager.return_value = mock_instance
 
         with pytest.raises(TokenValidationError):
-            AuthService.exchange_code_for_token("auth_code_123")
+            AuthService.exchange_code_for_token(CREDENTIALS, "auth_code_123")
 
     @patch.object(AuthService, "_auth_manager")
     def test_exchange_code_api_failure(self, mock_manager, app_context):
@@ -144,51 +153,20 @@ class TestAuthServiceExchangeCode:
         mock_manager.return_value = mock_instance
 
         with pytest.raises(AuthenticationError) as exc_info:
-            AuthService.exchange_code_for_token("auth_code_123")
+            AuthService.exchange_code_for_token(CREDENTIALS, "auth_code_123")
         assert "Failed to exchange code for token" in str(exc_info.value)
 
 
-class TestAuthServiceCredentialResolution:
-    """Credentials come from Flask config, or the environment outside one.
+class TestAuthServiceAuthManager:
+    """Each call builds its auth manager on the credentials it is given."""
 
-    Background jobs run with no app context, so the Flask lookup raises there
-    and the environment is the only source -- losing the fallback would break
-    every scheduled job while leaving request-path tests green.
-    """
-
-    def test_prefers_flask_config_inside_an_app_context(self, app_context):
+    def test_auth_manager_is_built_on_the_given_credentials(self):
         with patch(
-            "shuffify.services.auth_service.SpotifyCredentials.from_flask_config"
-        ) as from_config, patch(
-            "shuffify.services.auth_service.SpotifyCredentials.from_env"
-        ) as from_env:
-            AuthService._credentials()
-
-        from_config.assert_called_once()
-        from_env.assert_not_called()
-
-    def test_falls_back_to_env_outside_an_app_context(self):
-        """`current_app.config` raises RuntimeError with no app context."""
-        with patch(
-            "shuffify.services.auth_service.SpotifyCredentials.from_flask_config",
-            side_effect=RuntimeError("no app context"),
-        ), patch(
-            "shuffify.services.auth_service.SpotifyCredentials.from_env"
-        ) as from_env:
-            AuthService._credentials()
-
-        from_env.assert_called_once()
-
-    def test_auth_manager_is_built_on_resolved_credentials(self, app_context):
-        sentinel = object()
-        with patch.object(
-            AuthService, "_credentials", return_value=sentinel
-        ), patch(
-            "shuffify.services.auth_service.SpotifyAuthManager"
+            "shuffify.services.auth_service.SpotifyAuthManager", autospec=True
         ) as manager_class:
-            AuthService._auth_manager()
+            AuthService._auth_manager(CREDENTIALS)
 
-        manager_class.assert_called_once_with(sentinel)
+        manager_class.assert_called_once_with(CREDENTIALS)
 
 
 class TestAuthServiceGetAuthenticatedApi:
@@ -204,9 +182,10 @@ class TestAuthServiceGetAuthenticatedApi:
         mock_instance = Mock()
         mock_api_class.return_value = mock_instance
 
-        api = AuthService.get_authenticated_api(sample_token)
+        api = AuthService.get_authenticated_api(CREDENTIALS, sample_token)
 
         assert api == mock_instance
+        mock_manager_class.assert_called_once_with(CREDENTIALS)
         kwargs = mock_api_class.call_args.kwargs
         assert kwargs["on_token_refresh"] is AuthService._persist_token_to_session
         assert kwargs["auto_refresh"] is True
@@ -219,7 +198,7 @@ class TestAuthServiceGetAuthenticatedApi:
         """Expiry must not be pre-validated: with a valid refresh_token, the
         API refreshes an expired token on construction.
         """
-        AuthService.get_authenticated_api(sample_token)
+        AuthService.get_authenticated_api(CREDENTIALS, sample_token)
 
         assert mock_api_class.call_args.kwargs["auto_refresh"] is True
 
@@ -234,7 +213,7 @@ class TestAuthServiceGetAuthenticatedApi:
         sentinel = object()
         mock_get_cache.return_value = sentinel
 
-        AuthService.get_authenticated_api(sample_token)
+        AuthService.get_authenticated_api(CREDENTIALS, sample_token)
 
         assert mock_api_class.call_args.kwargs["cache"] is sentinel
 
@@ -247,8 +226,22 @@ class TestAuthServiceGetAuthenticatedApi:
         mock_api_class.side_effect = Exception("API init error")
 
         with pytest.raises(AuthenticationError) as exc_info:
-            AuthService.get_authenticated_api(sample_token)
+            AuthService.get_authenticated_api(CREDENTIALS, sample_token)
         assert "Failed to create Spotify client" in str(exc_info.value)
+
+    def test_a_refused_refresh_keeps_its_cause(self, app_context, sample_token):
+        """The AuthenticationError carries the Spotify failure that caused it."""
+        from shuffify.spotify.auth import SpotifyAuthManager
+
+        refusal = SpotifyGrantRevoked("Token refresh failed: Refresh token revoked", error="invalid_grant")
+        expired = {**sample_token, "expires_at": 0}
+        with patch.object(SpotifyAuthManager, "ensure_valid_token", side_effect=refusal):
+            with pytest.raises(AuthenticationError) as exc_info:
+                AuthService.get_authenticated_api(CREDENTIALS, expired)
+
+        assert exc_info.value.cause is refusal
+        assert exc_info.value.__cause__ is refusal
+        assert spotify_failure_of(exc_info.value) is refusal
 
 
 class TestAuthServiceGetUserData:
@@ -283,7 +276,7 @@ class TestAuthServiceAuthenticateAndGetUser:
         mock_instance.get_current_user.return_value = sample_user
         mock_api_class.return_value = mock_instance
 
-        api, user = AuthService.authenticate_and_get_user(sample_token)
+        api, user = AuthService.authenticate_and_get_user(CREDENTIALS, sample_token)
 
         assert api == mock_instance
         assert user == sample_user
@@ -297,7 +290,7 @@ class TestAuthServiceAuthenticateAndGetUser:
         mock_api_class.side_effect = Exception("Client error")
 
         with pytest.raises(AuthenticationError):
-            AuthService.authenticate_and_get_user(sample_token)
+            AuthService.authenticate_and_get_user(CREDENTIALS, sample_token)
 
     @patch("shuffify.services.auth_service.SpotifyAuthManager")
     @patch("shuffify.services.auth_service.SpotifyAPI")
@@ -310,7 +303,7 @@ class TestAuthServiceAuthenticateAndGetUser:
         mock_api_class.return_value = mock_instance
 
         with pytest.raises(AuthenticationError):
-            AuthService.authenticate_and_get_user(sample_token)
+            AuthService.authenticate_and_get_user(CREDENTIALS, sample_token)
 
 
 class TestAuthServiceTokenRefreshPersistence:
@@ -341,16 +334,6 @@ class TestAuthServiceTokenRefreshPersistence:
             refresh_token="test_refresh_token",
         )
 
-    @staticmethod
-    def _test_credentials():
-        from shuffify.spotify.credentials import SpotifyCredentials
-
-        return SpotifyCredentials(
-            client_id="test_client_id",
-            client_secret="test_client_secret",
-            redirect_uri="http://localhost:5000/callback",
-        )
-
     def test_get_authenticated_api_persists_refreshed_token_to_session(self, app):
         """When building the client triggers a token refresh, the new token
         must be written back to session['spotify_token'] so subsequent
@@ -364,16 +347,12 @@ class TestAuthServiceTokenRefreshPersistence:
         with app.test_request_context():
             session["spotify_token"] = self._expired_token()
 
-            with patch("shuffify.spotify.api.SpotifyHTTPClient"), patch(
-                "shuffify.services.auth_service.SpotifyCredentials"
-                ".from_flask_config",
-                return_value=self._test_credentials(),
-            ), patch.object(
+            with patch("shuffify.spotify.api.SpotifyHTTPClient"), patch.object(
                 SpotifyAuthManager,
                 "ensure_valid_token",
                 return_value=refreshed,
             ):
-                AuthService.get_authenticated_api(session["spotify_token"])
+                AuthService.get_authenticated_api(CREDENTIALS, session["spotify_token"])
 
             assert session["spotify_token"]["access_token"] == "refreshed_access"
             assert session.modified is True
@@ -391,18 +370,13 @@ class TestAuthServiceTokenRefreshPersistence:
         with app.test_request_context():
             session["spotify_token"] = self._expired_token()
 
-            with patch("shuffify.spotify.api.SpotifyHTTPClient", autospec=True), patch(
-                "shuffify.services.auth_service.SpotifyCredentials"
-                ".from_flask_config",
-                autospec=True,
-                return_value=self._test_credentials(),
-            ), patch.object(
+            with patch("shuffify.spotify.api.SpotifyHTTPClient", autospec=True), patch.object(
                 SpotifyAuthManager,
                 "ensure_valid_token",
                 autospec=True,
                 return_value=refreshed,
             ):
-                AuthService.get_authenticated_api(session["spotify_token"])
+                AuthService.get_authenticated_api(CREDENTIALS, session["spotify_token"])
 
             stored = session["spotify_token"]
 
@@ -418,16 +392,12 @@ class TestAuthServiceTokenRefreshPersistence:
 
         # No request context -- callback must no-op, not raise.
         with app.app_context():
-            with patch("shuffify.spotify.api.SpotifyHTTPClient"), patch(
-                "shuffify.services.auth_service.SpotifyCredentials"
-                ".from_flask_config",
-                return_value=self._test_credentials(),
-            ), patch.object(
+            with patch("shuffify.spotify.api.SpotifyHTTPClient"), patch.object(
                 SpotifyAuthManager,
                 "ensure_valid_token",
                 return_value=refreshed,
             ):
-                api = AuthService.get_authenticated_api(self._expired_token())
+                api = AuthService.get_authenticated_api(CREDENTIALS, self._expired_token())
 
         # Construction succeeded and carries the refreshed token: the callback
         # no-opped outside the request context instead of raising.

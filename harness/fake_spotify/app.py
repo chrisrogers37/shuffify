@@ -10,8 +10,8 @@ what SPOTIFY_BASE_URL does on the app side:
   open.spotify.com      /embed/playlist/<id>, /playlist/<id>
 
 and /_fake/... lets tests and the harness read and reset its state, and
-arm faults: a 429, a spent quota, a 5xx or a slow answer on demand
-(faults.py).
+arm faults: a 429, a spent quota, a 5xx, a slow answer, or a refused app,
+grant or user, on demand (faults.py).
 
 Every /v1 request is checked against Spotify's documented parameters and
 body (shapes.json) before it is served, and every /v1 response against the
@@ -34,7 +34,7 @@ from markupsafe import escape
 
 from . import fields as fields_filter
 from . import shapes, tokens
-from .faults import SERVER_ERRORS, Faults
+from .faults import SERVER_ERRORS, TOKEN_OPERATION, TOKEN_REFUSALS, Faults
 from .render import Renderer
 from .store import Store
 
@@ -184,6 +184,8 @@ def _answer_with(fault) -> None:
     if fault.kind == "quota":
         # Spotify's documented quota-exceeded body, word for word.
         raise APIError(429, "Too many requests", reason="QUOTA_EXCEEDED")
+    if fault.kind == "user_not_allowed":
+        raise APIError(403, "User not registered in the Developer Dashboard")
     raise APIError(fault.status, SERVER_ERRORS[fault.status])
 
 
@@ -282,6 +284,9 @@ def _register_accounts(app: Flask) -> None:
 
     @app.post("/api/token")
     def token():
+        refusal = current_app.config["FAULTS"].take(TOKEN_OPERATION, None, kinds=TOKEN_REFUSALS)
+        if refusal is not None:
+            raise OAuthError(*TOKEN_REFUSALS[refusal.kind])
         # Spotify also takes the credentials in the form; shuffify sends Basic.
         auth = request.authorization
         if auth is None or auth.type != "basic" or (auth.username, auth.password) != (CLIENT_ID, CLIENT_SECRET):
@@ -302,12 +307,20 @@ def _register_accounts(app: Flask) -> None:
                                                                                scope=claims["scope"]))
 
         if grant == "refresh_token":
-            claims = tokens.read(request.form.get("refresh_token", ""), "refresh")
-            if not claims:
-                raise OAuthError("invalid_grant", "Invalid refresh token")
-            # Spotify "might" return a new refresh token; this fake does not,
-            # so the client's keep-the-old-one path is the one exercised.
-            return jsonify(**_access_token(claims))
+            presented = request.form.get("refresh_token", "")
+            claims = tokens.read(presented, "refresh")
+            store = _store()
+            with store.lock:
+                if not claims or presented in store.replaced_refresh_tokens:
+                    raise OAuthError("invalid_grant", "Invalid refresh token")
+                if current_app.config["FAULTS"].take(TOKEN_OPERATION, None, kinds=("rotate_refresh",)) is None:
+                    # Spotify "might" return a new refresh token; unless rotate_refresh is armed this
+                    # fake does not, so the client's keep-the-old-one path is the one exercised.
+                    return jsonify(**_access_token(claims))
+                # Rotated, as a PKCE refresh may be: the token presented stops working.
+                store.replaced_refresh_tokens.add(presented)
+            return jsonify(**_access_token(claims), refresh_token=tokens.mint("refresh", user=claims["user"],
+                                                                               scope=claims["scope"]))
 
         raise OAuthError("unsupported_grant_type", f"grant_type {grant!r} is not supported")
 

@@ -18,9 +18,15 @@ logger = logging.getLogger(__name__)
 
 
 class AuthenticationError(Exception):
-    """Raised when authentication fails."""
+    """Raised when authentication fails.
 
-    pass
+    ``cause`` is the failure that triggered it, if any, so the Spotify
+    failure behind it can be found (``spotify_failure_of``).
+    """
+
+    def __init__(self, message: str, *, cause: Optional[BaseException] = None):
+        super().__init__(message)
+        self.cause = cause
 
 
 class TokenValidationError(AuthenticationError):
@@ -63,30 +69,17 @@ class AuthService:
     """Service for managing Spotify OAuth authentication."""
 
     @staticmethod
-    def _credentials() -> SpotifyCredentials:
-        """Resolve OAuth credentials from Flask config, else the environment.
-
-        Background jobs run outside a request and outside an app context, so
-        the Flask lookup raises there and the environment is the fallback.
-        """
-        try:
-            from flask import current_app
-
-            return SpotifyCredentials.from_flask_config(current_app.config)
-        except RuntimeError:
-            return SpotifyCredentials.from_env()
+    def _auth_manager(credentials: SpotifyCredentials) -> SpotifyAuthManager:
+        """Build an auth manager against the given credentials."""
+        return SpotifyAuthManager(credentials)
 
     @staticmethod
-    def _auth_manager() -> SpotifyAuthManager:
-        """Build an auth manager against the resolved credentials."""
-        return SpotifyAuthManager(AuthService._credentials())
-
-    @staticmethod
-    def get_auth_url(state: Optional[str] = None) -> str:
+    def get_auth_url(credentials: SpotifyCredentials, state: Optional[str] = None) -> str:
         """
         Generate the Spotify authorization URL.
 
         Args:
+            credentials: The app's credentials, from ``credentials_for``.
             state: Optional CSRF state token for OAuth security.
 
         Returns:
@@ -96,17 +89,18 @@ class AuthService:
             AuthenticationError: If URL generation fails.
         """
         try:
-            return AuthService._auth_manager().get_auth_url(state=state)
+            return AuthService._auth_manager(credentials).get_auth_url(state=state)
         except Exception as e:
             logger.error(f"Failed to generate auth URL: {e}", exc_info=True)
-            raise AuthenticationError(f"Failed to generate authorization URL: {e}")
+            raise AuthenticationError(f"Failed to generate authorization URL: {e}", cause=e) from e
 
     @staticmethod
-    def exchange_code_for_token(code: str) -> Dict[str, Any]:
+    def exchange_code_for_token(credentials: SpotifyCredentials, code: str) -> Dict[str, Any]:
         """
         Exchange an authorization code for an access token.
 
         Args:
+            credentials: The app's credentials, from ``credentials_for``.
             code: The authorization code from Spotify callback.
 
         Returns:
@@ -120,7 +114,7 @@ class AuthService:
             raise AuthenticationError("No authorization code provided")
 
         try:
-            token_data = AuthService._auth_manager().exchange_code(code).to_dict()
+            token_data = AuthService._auth_manager(credentials).exchange_code(code).to_dict()
 
             # Validate token structure
             AuthService._validate_token_structure(token_data)
@@ -133,10 +127,10 @@ class AuthService:
         except SpotifyRateLimitError as error:
             if remaining_seconds() is not None:
                 raise
-            raise AuthenticationError(f"Failed to exchange code for token: {error}") from error
+            raise AuthenticationError(f"Failed to exchange code for token: {error}", cause=error) from error
         except Exception as e:
             logger.error(f"Token exchange failed: {e}", exc_info=True)
-            raise AuthenticationError(f"Failed to exchange code for token: {e}")
+            raise AuthenticationError(f"Failed to exchange code for token: {e}", cause=e) from e
 
     @staticmethod
     def _validate_token_structure(token_data: Any) -> None:
@@ -182,12 +176,13 @@ class AuthService:
 
     @staticmethod
     def get_authenticated_api(
-        token: Dict[str, Any], *, authenticated_user_id: Optional[str] = None
+        credentials: SpotifyCredentials, token: Dict[str, Any], *, authenticated_user_id: Optional[str] = None
     ) -> SpotifyAPI:
         """
         Build an authenticated SpotifyAPI from a session token.
 
         Args:
+            credentials: The app's credentials, from ``credentials_for``.
             token: Valid token data dictionary.
             authenticated_user_id: The account verified for this signed-in session.
                 Leave unset when authenticating a new token.
@@ -212,7 +207,7 @@ class AuthService:
             # still fails through the refresh path.
             return SpotifyAPI(
                 TokenInfo.from_dict(token),
-                AuthService._auth_manager(),
+                AuthService._auth_manager(credentials),
                 auto_refresh=True,
                 cache=get_spotify_cache(),
                 authenticated_user_id=authenticated_user_id,
@@ -223,13 +218,13 @@ class AuthService:
         except SpotifyRateLimitError as error:
             if remaining_seconds() is not None:
                 raise
-            raise AuthenticationError(f"Failed to create Spotify client: {error}") from error
+            raise AuthenticationError(f"Failed to create Spotify client: {error}", cause=error) from error
         except SpotifyTokenError as e:
             logger.error("Token initialization failed: %s", e)
-            raise AuthenticationError(f"Invalid or expired token: {e}")
+            raise AuthenticationError(f"Invalid or expired token: {e}", cause=e) from e
         except Exception as e:
             logger.error(f"Failed to create Spotify API client: {e}", exc_info=True)
-            raise AuthenticationError(f"Failed to create Spotify client: {e}")
+            raise AuthenticationError(f"Failed to create Spotify client: {e}", cause=e) from e
 
     @staticmethod
     def _persist_token_to_session(token_info: "TokenInfo") -> None:
@@ -280,13 +275,13 @@ class AuthService:
         except SpotifyRateLimitError as error:
             if remaining_seconds() is not None:
                 raise
-            raise AuthenticationError(f"Failed to fetch user profile: {error}") from error
+            raise AuthenticationError(f"Failed to fetch user profile: {error}", cause=error) from error
         except Exception as e:
             logger.error(f"Failed to get user data: {e}", exc_info=True)
-            raise AuthenticationError(f"Failed to fetch user profile: {e}")
+            raise AuthenticationError(f"Failed to fetch user profile: {e}", cause=e) from e
 
     @staticmethod
-    def revoke_access_token(access_token: str) -> bool:
+    def revoke_access_token(credentials: SpotifyCredentials, access_token: str) -> bool:
         """
         Best-effort revocation of a Spotify access token.
 
@@ -294,25 +289,28 @@ class AuthService:
         so the logout flow is never blocked.
 
         Args:
+            credentials: The app's credentials, from ``credentials_for``.
             access_token: The access token to revoke.
 
         Returns:
             True if the provider accepted the revocation.
         """
         try:
-            return AuthService._auth_manager().revoke_token(access_token)
+            return AuthService._auth_manager(credentials).revoke_token(access_token)
         except Exception as e:
             logger.debug("Token revocation skipped: %s", e)
             return False
 
     @staticmethod
     def authenticate_and_get_user(
+        credentials: SpotifyCredentials,
         token: Dict[str, Any],
     ) -> Tuple[SpotifyAPI, Dict[str, Any]]:
         """
         Authenticate with a token and retrieve user data in one operation.
 
         Args:
+            credentials: The app's credentials, from ``credentials_for``.
             token: Valid token data dictionary.
 
         Returns:
@@ -321,6 +319,6 @@ class AuthService:
         Raises:
             AuthenticationError: If authentication or user fetch fails.
         """
-        api = AuthService.get_authenticated_api(token)
+        api = AuthService.get_authenticated_api(credentials, token)
         user_data = AuthService.get_user_data(api)
         return api, user_data

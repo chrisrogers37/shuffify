@@ -77,6 +77,11 @@ def exchange(client, code, redirect_uri=REDIRECT, auth=BASIC):
                        data={"grant_type": "authorization_code", "code": code, "redirect_uri": redirect_uri})
 
 
+def refresh_with(client, refresh_token):
+    return client.post("/api/token", headers={"Authorization": BASIC},
+                       data={"grant_type": "refresh_token", "refresh_token": refresh_token})
+
+
 def tokens_for(client, user="alice"):
     resp = exchange(client, code_for(client, user))
     assert resp.status_code == 200, resp.get_json()
@@ -814,6 +819,52 @@ class TestFaults:
         thread.join(10)
         assert not thread.is_alive() and statuses == [200]
 
+    def test_a_user_not_on_the_apps_list_gets_spotifys_not_registered_403(self, client, alice):
+        arm(client, operation="GET /me", kind="user_not_allowed")
+        refused = client.get("/v1/me", headers=alice)
+        assert refused.status_code == 403
+        assert refused.get_json() == {
+            "error": {"status": 403, "message": "User not registered in the Developer Dashboard"},
+        }
+        assert client.get("/v1/me", headers=alice).status_code == 200
+
+    @pytest.mark.parametrize("kind, error", [("app_rejected", "invalid_client"), ("grant_revoked", "invalid_grant")])
+    def test_a_token_refusal_answers_the_next_refresh_with_its_oauth_error(self, client, kind, error):
+        refresh = tokens_for(client)["refresh_token"]
+        arm(client, operation="POST /api/token", kind=kind)
+        refused = refresh_with(client, refresh)
+        assert refused.status_code == 400 and refused.get_json()["error"] == error
+        assert refresh_with(client, refresh).status_code == 200
+        assert fired(client) == [1]
+
+    def test_a_token_refusal_answers_a_code_exchange_too(self, client):
+        code = code_for(client)
+        arm(client, operation="POST /api/token", kind="app_rejected")
+        refused = exchange(client, code)
+        assert refused.status_code == 400 and refused.get_json()["error"] == "invalid_client"
+
+    def test_a_rotated_refresh_token_replaces_the_one_presented(self, client):
+        first = tokens_for(client)["refresh_token"]
+        arm(client, operation="POST /api/token", kind="rotate_refresh", times=2)
+
+        second = refresh_with(client, first).get_json()["refresh_token"]
+        stale = refresh_with(client, first)
+        third = refresh_with(client, second).get_json()["refresh_token"]
+        kept = refresh_with(client, third)
+
+        assert len({first, second, third}) == 3
+        assert stale.status_code == 400 and stale.get_json()["error"] == "invalid_grant"
+        assert kept.status_code == 200 and "refresh_token" not in kept.get_json()
+        assert refresh_with(client, second).get_json()["error"] == "invalid_grant"
+        assert fired(client) == [2]
+
+    def test_reset_forgets_the_replaced_refresh_tokens(self, client):
+        first = tokens_for(client)["refresh_token"]
+        arm(client, operation="POST /api/token", kind="rotate_refresh")
+        assert refresh_with(client, first).status_code == 200
+        client.post("/_fake/reset")
+        assert refresh_with(client, first).status_code == 200
+
     def test_a_request_spotify_would_refuse_gets_its_400_not_the_fault(self, client, alice):
         """The fault comes after the request checks, so it hides no contract problem."""
         arm(client, operation="GET /me/playlists", kind="server_error")
@@ -830,6 +881,9 @@ class TestFaults:
         ({"operation": "GET /me", "kind": "quota", "times": 0}, "times must be a whole number of at least 1"),
         ({"operation": "GET /me", "kind": "quota", "playlist_id": "x"}, "playlist_id applies only"),
         ({"operation": "GET /me", "kind": "quota", "tiems": 2}, "unknown fault fields: tiems"),
+        ({"operation": "GET /me", "kind": "app_rejected"}, "takes the token faults"),
+        ({"operation": "POST /api/token", "kind": "quota"}, "takes the token faults"),
+        ({"operation": "POST /api/token", "kind": "grant_revoked", "playlist_id": "x"}, "playlist_id applies only"),
     ])
     def test_a_mistaken_fault_is_refused_with_why(self, client, spec, problem):
         resp = client.post("/_fake/faults", json=spec)

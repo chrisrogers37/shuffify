@@ -32,6 +32,8 @@ from shuffify.services import (
 from shuffify.services.auth_service import decrypt_session_token, encrypt_session_token
 from shuffify.services.live_operation_service import preflight_error_code
 from shuffify.services.live_review_context import context_rejected
+from shuffify.spotify.credentials import credentials_for
+from shuffify.spotify.exceptions import SpotifyAppUnavailable
 
 logger = logging.getLogger(__name__)
 api_bp = Blueprint("api", __name__, url_prefix="/api")
@@ -69,10 +71,11 @@ def require_auth():
         return None
     try:
         return AuthService.get_authenticated_api(
+            credentials_for(None),
             decrypt_session_token(session["spotify_token"]),
             authenticated_user_id=(session.get("user_data") or {}).get("id"),
         )
-    except AuthenticationError:
+    except (AuthenticationError, SpotifyAppUnavailable):
         return None
 
 

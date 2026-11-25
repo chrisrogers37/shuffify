@@ -1,14 +1,16 @@
-"""A scheduled job when Spotify is busy or out of quota, against the fake.
+"""A scheduled job when Spotify is busy, out of quota or refusing, against the fake.
 
-The fake answers as Spotify documents for a rate limit and for a spent quota
-(harness/fake_spotify/faults.py); the app's client and job runner have to do
-the rest. Each test runs the schedule through the app (/schedules/<id>/run,
-as the Schedules page's Run now does) and checks Spotify's side in the
-fake's playlist.
+The fake answers as Spotify documents for a rate limit and for a spent quota,
+and as it answers a refused app, a refused grant and a user who isn't on the
+app's list (harness/fake_spotify/faults.py); the app's client and job runner
+have to do the rest. Each test runs the schedule through the app
+(/schedules/<id>/run, as the Schedules page's Run now does) and checks
+Spotify's side in the fake's playlist.
 """
 
 import time
 
+import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
@@ -25,6 +27,35 @@ def _daily_shuffle(alice) -> int:
 
 def _last_run(alice, schedule_id) -> dict:
     return alice.ok("get", f"/schedules/{schedule_id}/history")["history"][0]
+
+
+@pytest.mark.parametrize(
+    "fault, code",
+    [
+        ({"operation": "POST /api/token", "kind": "app_rejected"}, "spotify_app_rejected"),
+        ({"operation": "POST /api/token", "kind": "grant_revoked"}, "spotify_grant_revoked"),
+        ({"operation": "PUT /playlists/{playlist_id}/items", "kind": "user_not_allowed", "playlist_id": LONG_HAUL},
+         "spotify_user_not_allowed"),
+    ],
+    ids=["app-rejected", "grant-revoked", "user-not-allowed"],
+)
+def test_a_scheduled_shuffle_that_spotify_refuses_says_why(alice, fake, fault, code):
+    """Each refusal ends the run before any write, with its own error code.
+
+    The job's client refreshes the stored refresh token before its first
+    call, so a token refusal stops it there; the 403 refuses its first write.
+    """
+    before = fake.uris(LONG_HAUL)
+    schedule_id = _daily_shuffle(alice)
+    fake.arm(**fault)
+
+    operation = alice.queued(f"/schedules/{schedule_id}/run")
+
+    assert operation["state"] == "failed", operation
+    assert operation["result"]["operation"]["error_code"] == code
+    assert _last_run(alice, schedule_id)["status"] == "failed"
+    assert fake.uris(LONG_HAUL) == before
+    assert [f["fired"] for f in fake.faults()] == [1]
 
 
 def test_a_scheduled_shuffle_rides_out_a_rate_limit(alice, fake):

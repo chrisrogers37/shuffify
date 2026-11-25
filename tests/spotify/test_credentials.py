@@ -1,15 +1,14 @@
 """
 Tests for SpotifyCredentials.
 
-Tests cover credential creation, validation, and factory methods.
+Tests cover credential creation, validation, and factory methods, and
+credentials_for, which every caller gets them from.
 """
-
-import os
-from unittest.mock import patch
 
 import pytest
 
-from shuffify.spotify.credentials import SpotifyCredentials
+from shuffify.spotify.credentials import SpotifyCredentials, credentials_for
+from shuffify.spotify.exceptions import SpotifyAppUnavailable
 
 
 class TestSpotifyCredentialsInit:
@@ -99,26 +98,26 @@ class TestSpotifyCredentialsFromFlaskConfig:
             SpotifyCredentials.from_flask_config({})
 
 
-class TestSpotifyCredentialsFromEnv:
-    """Tests for from_env factory method."""
+class TestCredentialsFor:
+    """credentials_for: the running app's Spotify credentials, for any owner."""
 
-    def test_from_env_success(self):
-        """Should create credentials from environment variables."""
-        env_vars = {
-            'SPOTIFY_CLIENT_ID': 'env_client_id',
-            'SPOTIFY_CLIENT_SECRET': 'env_secret',
-            'SPOTIFY_REDIRECT_URI': 'http://env/callback'
-        }
+    SETTINGS = {
+        "SPOTIFY_CLIENT_ID": "config_client_id",
+        "SPOTIFY_CLIENT_SECRET": "config_secret",
+        "SPOTIFY_REDIRECT_URI": "http://127.0.0.1:8000/callback",
+    }
 
-        with patch.dict(os.environ, env_vars, clear=False):
-            creds = SpotifyCredentials.from_env()
+    def test_returns_the_credentials_in_the_apps_config(self, app):
+        app.config.update(self.SETTINGS)
+        with app.app_context():
+            assert credentials_for(None) == credentials_for(object()) == SpotifyCredentials(
+                "config_client_id", "config_secret", "http://127.0.0.1:8000/callback"
+            )
 
-        assert creds.client_id == 'env_client_id'
-        assert creds.client_secret == 'env_secret'
-        assert creds.redirect_uri == 'http://env/callback'
-
-    def test_from_env_missing_vars(self):
-        """Should raise ValueError when env vars are missing."""
-        with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError):
-                SpotifyCredentials.from_env()
+    @pytest.mark.parametrize("key", sorted(SETTINGS))
+    @pytest.mark.parametrize("value", ["", None])
+    def test_an_unset_setting_means_there_is_no_app(self, app, key, value):
+        app.config.update(self.SETTINGS, **{key: value})
+        with app.app_context():
+            with pytest.raises(SpotifyAppUnavailable, match="The Spotify app is not configured"):
+                credentials_for(None)
