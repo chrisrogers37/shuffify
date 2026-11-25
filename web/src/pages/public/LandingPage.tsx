@@ -76,7 +76,7 @@ export function LandingPage() {
           </p>
           <ConnectForm />
           <p className="sh-landing-data-note">
-            Sign in securely through Spotify. Shuffify stores settings and
+            Sign in securely through Spotify. Raccoon stores settings and
             playlist information to power snapshots, scheduling, and undo.
           </p>
         </div>

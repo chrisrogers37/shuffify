@@ -178,7 +178,7 @@ test("greeting preserves first visit, returning singular/plural and unnamed acco
   );
   assert.equal(
     greeting({ ...base, display_name: null, is_returning_user: false }).welcome,
-    "Welcome to Shuffify!",
+    "Welcome to Raccoon!",
   );
 });
 

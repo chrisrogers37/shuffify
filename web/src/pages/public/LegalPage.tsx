@@ -13,7 +13,7 @@ export function LegalPage({ document }: { document: "terms" | "privacy" }) {
         <div dangerouslySetInnerHTML={{ __html: html }} />
         <div className="legal-back">
           <Link to="/" className="sh-button-secondary">
-            ← Back to Shuffify
+            ← Back to Raccoon
           </Link>
         </div>
       </article>

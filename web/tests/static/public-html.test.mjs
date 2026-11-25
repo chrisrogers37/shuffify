@@ -15,9 +15,9 @@ const config = JSON.parse(
 const source =
   process.env.SHUFFIFY_SOURCE_ROOT || config.sourceRoot || resolve(root, "..");
 const pages = [
-  ["/", "Shuffify: Evolve your collection.", "Evolve your"],
-  ["/terms", "Terms of Service - Shuffify", "Terms of Service"],
-  ["/privacy", "Privacy Policy - Shuffify", "Privacy Policy"],
+  ["/", "Raccoon: Evolve your collection.", "Evolve your"],
+  ["/terms", "Terms of Service - Raccoon", "Terms of Service"],
+  ["/privacy", "Privacy Policy - Raccoon", "Privacy Policy"],
 ];
 for (const [path, title, heading] of pages)
   test(`built ${path} has complete static semantic content and external assets`, async () => {
@@ -35,6 +35,7 @@ for (const [path, title, heading] of pages)
     assert.equal((html.match(/<main\b/g) || []).length, 1);
     assert.equal((html.match(/<h1\b/g) || []).length, 1);
     assert.ok(html.includes(heading));
+    assert.ok(html.includes('Raccoon<span class="sh-text-accent">.</span>'));
     assert.doesNotMatch(
       html,
       /<script(?![^>]*\bsrc=)[^>]*>|<style\b|\s(?:style|on\w+)\s*=/i,

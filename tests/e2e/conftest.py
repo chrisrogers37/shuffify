@@ -41,7 +41,7 @@ def pid(key: str) -> str:
 
 def greets(html: str, display_name: str) -> bool:
     """Library greets the user by name: "Welcome back, ..." or
-    "Welcome to Shuffify, ...", whichever it decides they are."""
+    "Welcome to Raccoon, ...", whichever it decides they are."""
     return re.search(rf"Welcome[^<]*{re.escape(display_name)}", html) is not None
 
 

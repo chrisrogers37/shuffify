@@ -248,7 +248,7 @@ export function greeting(value: LibraryGreeting): {
         onboarding: false,
       }
     : {
-        welcome: `Welcome to Shuffify${name}!`,
+        welcome: `Welcome to Raccoon${name}!`,
         detail:
           "Open a playlist to arrange its tracks, or use its Playlist actions for a quick shuffle.",
         onboarding: true,
