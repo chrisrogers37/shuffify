@@ -292,12 +292,28 @@ class TestRaidAddUrlValidation:
         )
         assert resp.status_code == 404
 
+    @patch("shuffify.routes.require_auth")
+    def test_malformed_target_owner_returns_provider_error(self, mock_auth, auth_client):
+        from shuffify.models.db import Schedule, UpstreamSource
+
+        mock_auth.return_value.get_playlist_summary.return_value = {
+            "id": "p1", "owner": "unavailable", "collaborative": True,
+        }
+        resp = auth_client.post(api_path("/playlist/p1/raid-add-url"), json={
+            "url": "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+        })
+        assert resp.status_code == 502
+        mock_auth.return_value.get_playlist_items_raw.assert_not_called()
+        assert UpstreamSource.query.count() == Schedule.query.count() == 0
+
     @pytest.mark.parametrize("items", [{}, {"total": True}, {"total": -1}, None])
     @patch("shuffify.routes.require_auth")
     def test_unconfirmed_items_response_fails_closed(self, mock_auth, auth_client, items):
         from shuffify.models.db import Schedule, UpstreamSource
 
-        mock_auth.return_value.get_playlist_summary.return_value = {"id": "p1", "collaborative": True}
+        mock_auth.return_value.get_playlist_summary.return_value = {
+            "id": "p1", "owner": {"id": "someone_else"}, "collaborative": True,
+        }
         mock_auth.return_value.get_playlist_items_raw.return_value = items
         resp = auth_client.post(api_path("/playlist/p1/raid-add-url"), json={
             "url": "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",

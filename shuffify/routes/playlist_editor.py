@@ -30,7 +30,10 @@ def read_editor_playlist(api, playlist_id, spotify_id, *, with_snapshot=False):
             playlist = api.get_playlist_summary(playlist_id)
             if not isinstance(playlist, dict) or playlist.get("id") != playlist_id:
                 return None, json_error("Spotify could not confirm the requested playlist.", 502)
-        if (playlist.get("owner") or {}).get("id") != spotify_id:
+        owner = playlist.get("owner")
+        if not isinstance(owner, dict):
+            return None, json_error("Spotify could not confirm playlist access.", 502)
+        if owner.get("id") != spotify_id:
             if playlist.get("collaborative") is not True:
                 raise SpotifyForbiddenError("Not a collaborative playlist")
             # Spotify restricts /items to editors. A valid total of zero proves access too.
