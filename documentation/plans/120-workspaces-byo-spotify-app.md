@@ -135,6 +135,10 @@ These would make the project a failure even if it technically works:
 - **No sign-up gate.** Sign-up is open when this ships and the Google consent
   screen is published, but the owner is the only user. The launch safeguards
   wait for #123.
+- **Update, 2026-11-25:** sign-up does not open at the cutover. The consent
+  screen stays in Testing mode until #123, and the owner adds people by hand.
+  The build plan in documentation/plans/120-build/ governs ship, and #123
+  reopens sign-up.
 
 ### Owner's decisions, ratified 2026-11-10
 

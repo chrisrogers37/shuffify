@@ -1,10 +1,10 @@
 ---
-title: "[plan] Workspaces and bring-your-own Spotify app — build plan (#120)"
+title: "[plan] Workspaces and bring-your-own Spotify app: build plan (#120)"
 type: plan
 status: draft
 owner: chrisrogers37
 created: 2026-11-10
-updated: 2026-11-10
+updated: 2026-11-25
 tags: [enhancement, auth, workspaces]
 repos: chrisrogers37/shuffify
 ---
@@ -27,13 +27,39 @@ Read it first: it holds the what and the why, and the ratified decisions
   owner deletes their old Spotify app and sets up from scratch through the
   in-product guide, timed.
 
+There is no rollback at any step: every failure is fixed forward (phase 09,
+Fix forward).
+
 The epic (#119) has four projects: #122 the name, #120 this, #121 the MCP
 server and #123 the public launch. The last phase is the cutover, not the
 public launch.
 
 ## Evidence
 
-Verified against main at b65d2d9 (2026-11-10).
+Verified against main at b65d2d9 (2026-11-10), and re-checked against main at
+8945b16 (2026-11-20). No migration, model or table changed between the two (the
+migration head is still `e1f2a3b4c5d6`), and the claims below hold. Line
+numbers are b65d2d9's; a builder re-reads each citation when a phase starts.
+Citations added or changed on 2026-11-25, and the moves below, were read at
+dc4ec8b (2026-11-25); the rest of this section was not re-checked there. The
+larger moves since b65d2d9, at dc4ec8b:
+- `shuffify/worker.py`: 33 is now 44, 85-100 is now 105-131, 94-95 is now
+  116-117, 204 is now 243 and 628 is now 686. The credential lock is entered
+  through an `ExitStack` and still spans the whole run, and a database error
+  while it locks now defers the claim.
+- `shuffify/routes/core.py`: every cited line is 3 lower down.
+- `shuffify/services/operations/repository.py`: 509-543 is now 669-703, and
+  540 is now 700.
+- `shuffify/services/scheduled_admission.py`: 95-98 is now 111-114, 95-118 is
+  now 111-134, 141-220 is now 178-243 and 174-193 is now 211-219. The
+  `is_enabled` recheck is now in `ineligible_fire` (157-175), which `capture`
+  calls.
+- `config.py`: lines after 272 are 2 lower down.
+- `shuffify/models/db.py`: 595 is now 612.
+- `shuffify/services/schedule_notifications.py`: 57-100 is now 45-88, and
+  `_FIELDS` is now one line (14), built from
+  `schedule_utils.DEFINITION_COLUMNS` plus the literals `"user_id"`,
+  `"is_enabled"` and `"created_at"`.
 
 - **Spotify clients are built in two places,** and both read the site-wide
   app from config:
@@ -107,10 +133,10 @@ Verified against main at b65d2d9 (2026-11-10).
     reads as signed out.
   - A transaction-scoped row lock on the connection row, held only around
     read, refresh and store, is correct through any pooler. The repo already
-    has both parts: `_lock_user` locks a `users` row `FOR NO KEY UPDATE`
-    (`.with_for_update(key_share=True)`,
-    `shuffify/services/upstream_source_service.py:42-50`), which doesn't block
-    inserts that reference the row, and a lock timeout is set inside the
+    has both parts: `lock_user_inventory` locks a `users` row `FOR NO KEY
+    UPDATE` (`.with_for_update(key_share=True)`,
+    `shuffify/services/base.py:16-22`), which doesn't block inserts that
+    reference the row, and a lock timeout is set inside the
     transaction (`set_config('lock_timeout', ..., true)` at
     `shuffify/services/operations/repository.py:540`, `SET LOCAL` at
     `shuffify/services/playlist_lock.py:190-193`), because a session-level
@@ -150,8 +176,17 @@ Verified against main at b65d2d9 (2026-11-10).
     a nonproduction environment needs its own Neon branch and never the
     production URL.
 - **Every merge to main deploys production:** the Railway api and worker,
-  and Vercel. Both Railway services build from `main`
-  (`.railway/railway.ts:38`), so a merge redeploys a paused worker too.
+  and Vercel. Both Railway services build from `main`: the branch is the
+  `SHUFFIFY_RAILWAY_GITHUB_BRANCH` input given when the config was last
+  applied (`.railway/README.md:13`, `documentation/guides/production.md:18`),
+  so a merge redeploys a paused worker too.
+- **Railway reads `.railway/` only when the config is applied,** not on a
+  deploy. `ctx.shared.NAME` compiles to a reference to a shared variable and
+  doesn't create or manage the variable itself, and a service sees a shared
+  variable only through such a reference. A variable edit is a staged change
+  that has to be deployed. So a change to `.railway/railway.ts` reaches a
+  service only through `railway config apply` (Railway's documentation,
+  read 2026-11-20).
 - **Staging has existed before.** A Railway and Neon staging copy supported
   the 2026-10-17 cutover and was removed on 2026-10-18.
   `documentation/guides/production.md` and `.railway/README.md:9` therefore
@@ -164,14 +199,18 @@ Verified against main at b65d2d9 (2026-11-10).
     revision alone, and refuses one that has the tables but no revision.
   - `migrations/env.py:54-66` refuses `upgrade` on a database with no
     revision. Today's pre-deploy therefore refuses an empty database, so the
-    script gains a `create-schema` step in phase 06 (not at cutover), and
-    staging's first deploy rehearses it.
+    script gains a `create-schema` step in phase 06 (not at cutover) that
+    runs only while `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` is set on the api, and
+    staging's first deploys rehearse it.
   - `scripts/pre-deploy.sh` runs `flask db upgrade` with
     `SHUFFIFY_MIGRATION_STEP=1`; the app's startup schema check
     (`shuffify/__init__.py:214, 284`) otherwise refuses a database not at
-    head. Giving pre-deploy a `create-schema` step reverses a rule pinned since
-    the split runtime (05d4262), with two tests and two docs that state it;
-    phase 06 step 7 records the decision and names them.
+    head. Gating the `create-schema` step behind the variable keeps a rule
+    pinned since the split runtime (05d4262), that an empty database fails
+    the deploy, wherever the variable isn't set. It is set only on staging's
+    api and on production's api from phase 09 step 3 to step 11; phase 06
+    step 7 records the decision and names the tests and docs that state the
+    rule.
 - **The harness signs in through a fake Spotify** (`harness/fake_spotify/app.py`).
   - It has one hard-coded client, no PKCE and no Google.
   - Sign-in is the real OAuth round trip (`scripts/harness.sh:501-523`,
@@ -196,11 +235,32 @@ Verified against main at b65d2d9 (2026-11-10).
 - #122 decided: Raccoon, at raccoon.fm.
 - The owner buys raccoon.fm (the trigger for phase 01b).
 - Security fixes #126 and #128 to #131 (draft PRs #144 and #145) are **not a
-  gate**. `feat/workspaces` is cut when phase 02 lands, and main is merged
-  into it as each fix lands, with `python scripts/check-migration-chain.py`
-  after each merge. They touch code that phases 04 and 05 rewrite, so the
-  later they land, the more conflicts; phase 09's final merge of main and
-  full CI run close the gap.
+  gate**. `feat/workspaces` is cut when phase 02 has landed and 02b has had its
+  day of clean production logs, and main is merged into it as each fix lands,
+  with `python scripts/check-migration-chain.py` after each merge. They touch
+  code that phases 04 and 05 rewrite, so the later they land, the more
+  conflicts. **Each fix merged in brings its regression test into the new
+  code,** re-targeted where the code it tested has moved or where a rewrite
+  deleted the test's file, and phase 09's gate lists those tests; phase 09's
+  final merge of main and full CI run close the gap.
+- **When main gains a migration while the branch is open** (the chain check
+  finds two heads), re-parent the branch's first revision onto main's new
+  head, so main's revisions sit beneath the branch's. Don't add an Alembic
+  merge revision: it gives no order between main's revision and phase 04's
+  renames. Then rebuild the branch's development databases and staging with
+  `flask create-schema` (a database already stamped at a branch revision would
+  skip the re-parented migration), and update the four tests that pin the
+  head: `tests/models/test_drop_apscheduler_jobs_schema.py`,
+  `test_job_execution_queue_schema.py`,
+  `test_schedule_recovery_start_schema.py` and
+  `test_null_login_history_session_ids_schema.py`.
+- **If 02b is reverted on main after the branch is cut,** the revert reaches
+  the branch with the next merge of main and removes the refresher that phases
+  04 on build on. Revert that revert on the branch when merging main.
+- **Sign-up does not open at the cutover:** the consent screen stays in
+  Testing mode until #123, and the owner adds people by hand. Brand
+  verification, and the privacy copy that describes Google sign-in, wait
+  until #123.
 
 ### Blocks
 
@@ -223,10 +283,10 @@ Verified against main at b65d2d9 (2026-11-10).
 
 Phase 01b is a second main-branch phase rather than a second PR of 01. The
 rename has no external dependency and should merge as soon as it's ready;
-the domain move waits for the owner to buy raccoon.fm, touches DNS, Vercel,
-Railway and Spotify rather than application code, and needs its own rollback.
-Keeping them apart stops one holding up the other. The numbering of the
-other phases doesn't change.
+the domain move waits for the owner to buy raccoon.fm and touches DNS,
+Vercel, Railway and Spotify rather than application code. Keeping them apart
+stops one holding up the other. The numbering of the other phases doesn't
+change.
 
 Phase 02 is one phase and two PRs, sized L and L, so XL as a phase. 02a (the
 credential seam and typed failures) changes nothing users see. 02b (the
@@ -253,7 +313,8 @@ stopgaps keep the e2e tests on the real OAuth round trip, and 05's is the
 skeleton of 06's final routes.
 
 The integration branch is `feat/workspaces`, cut from main when phase 02
-(both PRs) merges. Phase PRs target it with full CI. Main is merged into it at
+(both PRs) has merged and 02b has had its day of clean production logs (phase
+02's checklist). Phase PRs target it with full CI. Main is merged into it at
 the start of every phase, and again as each security fix (#126, #128 to #131)
 lands.
 
@@ -265,6 +326,7 @@ users (person, Google login)
            ├─1:0..1─ spotify_connections   (one per workspace; other services later)
            │           client_id            unique site-wide (constraint added in 06)
            │           spotify_id           unique site-wide, set on first connect, then fixed
+           │           spotify_display_name the account's own name, set at connect
            │           refresh_token        encrypted (TOKEN_ENCRYPTION_KEY); the only copy
            │           status               unchecked | ok | broken (+ reason)
            │           credential_generation bumped on every connect and replacement
@@ -305,7 +367,7 @@ There is no client secret column and no secret key.
 - **The refresh token has one home: the database.** Both the web and the
   worker refresh in a short transaction that locks the row holding the token
   with `SELECT ... FOR NO KEY UPDATE` (`with_for_update(key_share=True)`, as
-  `_lock_user` does, so inserts into tables that reference the row aren't
+  `lock_user_inventory` does, so inserts that reference the row aren't
   blocked) and sets a transaction-local `lock_timeout` (`set_config(..., true)`,
   as `repository.py:540` does; never a session-level `SET`, which would leak
   across the pooled host), around read, refresh and store, and never around a
@@ -313,14 +375,17 @@ There is no client secret column and no secret key.
   phase 04. That is correct through Neon's pooled host. The worker's
   credential advisory lock may stay for run serialisation but isn't what
   protects the token. A rotated token whose save failed is kept in memory in
-  that process until a store succeeds; the other process doesn't see it, so in
-  that rare case the next refresh there gets `invalid_grant` and surfaces as
-  `access_revoked`, fixed by one reconnect. An access token is minted from the
-  stored refresh token on demand, so a fresh Google sign-in with a healthy
-  connection works. A lock or database timeout is `SpotifyRefreshUnavailable`,
-  a `SpotifyReadTransientError`: a 503 on the web (inside the 401 retry too), a
-  deferral in the worker through `read_retry_delay`, never "signed out". The
-  session holds the access token and its expiry only.
+  that process until a store succeeds (it is dropped then, or when the stored
+  token or the credential generation changes, and it is never logged); the
+  other process doesn't see it, so in that rare case the next refresh there
+  gets `invalid_grant` and surfaces as `access_revoked`, fixed by one
+  reconnect. An access token is minted from the stored refresh token on
+  demand, so a fresh Google sign-in with a healthy connection works. A lock
+  timeout, or any other database error inside the refresher's transaction, is
+  `SpotifyRefreshUnavailable`, a `SpotifyReadTransientError`: a 503 on the web
+  (inside the 401 retry too), a deferral in the worker through
+  `read_retry_delay`, never "signed out". The session holds the access token
+  and its expiry only.
 - **A credential generation guards the status.** Each connection has a
   `credential_generation`, bumped by every connect and every replacement. A
   client captures it when it is built, and a failure only marks the connection
@@ -349,7 +414,10 @@ There is no client secret column and no secret key.
   handler remains for the response only: it answers `spotify_app_broken` for
   the three typed failures that do reach it, so they aren't read as "log in
   again". After that, `require_auth` refuses a `broken` connection before it
-  builds a client.
+  builds a client. Both refusals (`spotify_app_broken`, and
+  `spotify_not_connected` for a connection that hasn't connected yet) are a
+  401 that carries the error code and `retryable: false`, because an open page
+  re-reads `/api/session` only after a 401.
 - **A broken app** is `status = broken` plus a `broken_reason` on the
   connection. Nothing is stored on schedules: "paused" means the workspace's
   connection isn't `ok`, checked when a run is admitted and when it is
@@ -363,34 +431,45 @@ There is no client secret column and no secret key.
 From phase 06 onward, `feat/workspaces` runs on a staging environment
 against real Spotify and real Google, so the first real-service run isn't the
 wipe. The owner sets it up in phase 06 step 8 and tears it down in phase 09
-step 14, right after the cutover.
+step 14, once acceptance has finished.
 
 **This reverses a recorded decision, for a reason.** A staging environment
 existed on 2026-10-17 and was removed on 2026-10-18, and
 `documentation/guides/production.md` and `.railway/README.md:9` say there is
 none. While this plan's staging exists, this section is the guidance and those
 two sentences are superseded; they are correct again once it is torn down, so
-neither file is edited. The precedent is to remove staging right after the
-cutover it served, and phase 09 does.
+neither file is edited. The precedent is to remove staging once the cutover it
+served is done, and phase 09 does.
 
 - **Address:** `staging.raccoon.fm`, a custom domain on the Vercel project,
   assigned to the `feat/workspaces` branch, with a `staging` record in
   raccoon.fm's DNS. It needs raccoon.fm to be bought, but not phase 01b's
   flip. Vercel's own branch URL is not an option: the project's protection is
-  `all_except_custom_domains`, so a branch URL sits behind a Vercel login,
-  which Google and Spotify redirects and any tester can't pass. Open
+  `all_except_custom_domains` (Vercel's Standard Protection), so a branch URL
+  sits behind a Vercel login, which Google and Spotify redirects and any
+  tester can't pass. **A custom domain assigned to a branch doesn't escape
+  that by itself:** Standard Protection exempts production domains only, and a
+  domain assigned to a branch is a Preview domain. So add
+  `staging.raccoon.fm` to the project's Deployment Protection Exceptions
+  (phase 06 step 8; phase 09 step 14 removes it). Open
   `https://staging.raccoon.fm` in a private window to confirm there is no
-  Vercel login.
-- **Neon:** a new branch of `shuffify-db`, emptied (drop and recreate the
-  public schema), with `DATABASE_URL` set to **that branch's pooled host**, the
-  host type production's api and worker use today (checked read-only
-  2026-11-10; the api's pre-deploy reads the same shared variable). Staging
-  then differs from production in data, not topology: the first real PKCE
-  rotation through the row-locked refresher runs through the pooler here, not
-  on cutover day. Staging's first deploy builds the schema through the
-  pre-deploy script (phase 06 step 7), which rehearses the cutover's database
-  step. Verify the branch identity from Neon's metadata before any migration
-  (`.railway/README.md`).
+  Vercel login, and run that check as soon as raccoon.fm is bought, not at
+  phase 06. With the exception in place, staging is reachable by anyone.
+- **Neon:** a database that has never held production's data: a schema-only
+  branch of `shuffify-db` if the project offers one, otherwise a separate Neon
+  project. `DATABASE_URL` is set to **its pooled host**, the host type
+  production's api and worker use today (checked read-only 2026-11-10; the
+  api's pre-deploy reads the same shared variable). The guides describe the
+  direct host, and both work (the worker strips `-pooler` for LISTEN and for
+  the scheduler lock), so re-check production's host type when staging is set
+  up and again at cutover step 6. Staging then differs from production in
+  data, not topology: the first real PKCE rotation through the row-locked
+  refresher runs through the pooler here, not on cutover day. Staging's schema
+  is built through the pre-deploy script once
+  `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` is set on staging's api (phase 06 steps 7
+  and 8), and the cutover's dress rehearsal (phase 09 step 1) later wipes and
+  rebuilds it with the cutover's own statements. Verify the database's identity from
+  Neon's metadata before any migration (`.railway/README.md`).
 - **Railway:** not a separate project: a `staging` environment inside the
   existing project `shuffify`, for the same `api` and `worker` services, with
   its own variables and its own `redis`, deploying from `feat/workspaces`.
@@ -404,13 +483,22 @@ cutover it served, and phase 09 does.
   production's plan output the same.
   - **Create the environment empty,** not by duplicating production, and set
     every shared variable by hand: duplicating would copy `DATABASE_URL`, and
-    the api's pre-deploy would then run against production. Before the first
-    deploy, read back `DATABASE_URL` and check it is the staging branch's
-    host.
+    the api's pre-deploy would then run against production.
+  - **Order matters, because the apply is the first deploy:**
+    `railway config apply` creates the services. Before it, set and read back
+    staging's variables (`DATABASE_URL` is the staging database's host) and
+    have the empty staging database ready. Confirm the link with
+    `railway status`, and check that the plan proposes only creations in the
+    staging environment: an apply with the branch input set while linked to
+    production would point production's services at the branch.
   - Its own `PUBLIC_ORIGIN` and `GOOGLE_REDIRECT_URI` on
     `staging.raccoon.fm` (the Spotify redirect URL is `PUBLIC_ORIGIN` plus
     `/spotify/callback`), and its own `SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`
     and `WORKER_CONTROL_TOKEN`. It never uses the production URL.
+  - **Staging's scheduler stays off at all times.** The shared block of
+    `.railway/railway.ts` sets `SCHEDULER_ENABLED` to `true`, and the file has
+    to stay production's, so override it to `false` on staging's worker
+    service as soon as the apply has created it (phase 06 step 8).
 - **Vercel:** the build reads `RAILWAY_API_URL` when it runs
   (`web/scripts/build-vercel-output.mjs:13-22, 74`), and today every preview
   forwards to the production API (`documentation/guides/production.md`). Set
@@ -422,18 +510,32 @@ cutover it served, and phase 09 does.
 - **Spotify:** staging reuses the owner's existing app. The staging callback
   (`https://staging.raccoon.fm/spotify/callback`) is added to its redirect URIs; an
   app can have several. Spotify allows one development-mode app per
-  developer, so a second app isn't an option.
-- **Google:** an OAuth client with the staging redirect URI. It can stay in
-  Testing mode with the owner listed as a test user; staging has no need of a
-  published consent screen.
-- **Tear-down (phase 09, right after the cutover):** delete the `staging`
-  environment in Railway, the Neon branch, the Vercel branch variable and the
-  `staging.raccoon.fm` domain with its DNS record, and the staging Google
-  client. The cutover deletes the old Spotify app that staging uses, so
-  staging would only show `app_rejected` afterwards.
+  developer, so a second app on the owner's account isn't an option.
+  **Staging therefore shares that app, the owner's Spotify account and the
+  owner's playlists with production:**
+  - staging routines use copies of playlists only. A staging run writes to
+    real Spotify, and no database restore undoes that;
+  - a drill that resets or removes the account's grant, or takes the account
+    off the app's User Management list, stops production too: Spotify
+    invalidates every refresh token the app holds for that user, and the old
+    code has no broken-app handling, so production's scheduled runs fail at
+    every slot. After any such drill, sign in again on production and watch
+    its next scheduled run.
+- **Google:** an OAuth client with the staging redirect URI, **in its own
+  Google Cloud project**, in Testing mode with the owner listed as a test
+  user.
+- **Tear-down (phase 09 step 14, after acceptance):** delete the `staging`
+  environment in Railway, staging's Neon branch or project, the Vercel branch
+  variable and the Deployment Protection Exception, the `staging` DNS record
+  and then the `staging.raccoon.fm` domain in Vercel (the record first), and
+  the staging Google client with its project. The cutover deletes the old
+  Spotify app that staging uses, so staging would only show `app_rejected`
+  afterwards.
 
 The staging checks are part of the acceptance of phases 06, 07 and 08, and a
-gate in the cutover.
+gate in the cutover. The gate includes a dress rehearsal of the cutover's
+runbook on staging, and a run of setup step 1 from scratch with the owner's
+second Spotify account, which gates the cutover only (phase 09 step 1).
 
 ## Decision Forks
 
@@ -487,8 +589,9 @@ here.
   - nonce = SHA-256(state);
   - identity is keyed on `sub`.
 
-  A loopback-only `GOOGLE_BASE_URL` override lets the harness use a fake,
-  the same way `SPOTIFY_BASE_URL` does.
+  One loopback-only override, `GOOGLE_BASE_URL`, covers both Google hosts and
+  lets the harness use a fake. It is parsed, and refused in production, the
+  same way `SPOTIFY_BASE_URL` is.
 - **Ratifier:** owner · **Status:** locked (owner, 2026-11-10)
 
 ### Fork F4: New schema as a migration, or a fresh base
@@ -507,6 +610,12 @@ here.
     The least work, but CI's migration drift and chain checks would go red or
     be switched off, and the head would have no revision to stamp.
 - **Decision:** (a). The wipe runs `create-schema` once at cutover.
+- **Note:** phase 04's migration refuses a database that has rows in `users`
+  or in the re-keyed tables, and that database is rebuilt with
+  `flask create-schema`. So what upgrades through the chain is an empty
+  schema, or one from before phase 04, not data. The chain and drift checks
+  read revision ids and table names and don't run a migration's body; the
+  per-revision tests that phases 03 to 06 add do.
 - **Ratifier:** owner · **Status:** locked (owner, 2026-11-10)
 
 ### Fork F5: How app secrets are encrypted
@@ -672,48 +781,62 @@ here.
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Spotify's February 2026 development-mode rules: Premium to own an app, one client ID per developer, five users per client ID, and Spotify's statement that development mode shouldn't be a business foundation | Spotify could tighten or end development mode, and the bring-your-own-app model stops working | Accepted by the owner (F9, 2026-11-10). Setup says Premium is required. Revisit if Spotify changes the rules |
-| The integration branch drifts while parallel sessions merge security fixes into the same code | Conflicts at cutover, in code that phases 04 and 05 rewrite; a fix lost | The fixes don't gate the branch. Merge main into `feat/workspaces` at the start of every phase and as each security fix lands, with `python scripts/check-migration-chain.py` after each; phase 09 starts with a final merge and a full CI run |
+| The integration branch drifts while parallel sessions merge security fixes into the same code | Conflicts at cutover, in code that phases 04 and 05 rewrite; a fix lost | The fixes don't gate the branch. Merge main into `feat/workspaces` at the start of every phase and as each security fix lands, with `python scripts/check-migration-chain.py` after each; each fix brings its regression test into the new code, and phase 09's gate lists those tests; phase 09 starts with a final merge and a full CI run |
 | The phase 04 re-key misses a query, so one workspace sees another's data | Cross-workspace data leak | Phase 04 adds a two-workspace isolation test per service and a test that only `workspaces` and `login_history` keep a `user_id` column |
 | The three broken-app cases look alike to a person | The wrong fix is tried | Phase 08's matrix gives each reason its own fix and says what a successful fix looks like; `invalid_client` after a first connect means the app is gone, and the page says so |
-| A wrong client ID never returns to Raccoon (Spotify's own "INVALID_CLIENT" page) | The person is stranded on Spotify's page | The format check catches typos; the setup copy shows the page and says to come back and fix the ID |
+| A wrong client ID, or a missing or wrong redirect URL, never returns to Raccoon: both stop on a Spotify page that begins "INVALID_CLIENT" | The person is stranded on Spotify's page, or sent to fix the wrong thing | The format check catches typos; setup step 4, where the person presses Connect, quotes both pages in full with the fix for each, and steps 2 and 3 quote them too (phase 07) |
 | A PKCE refresh rotates the token and a second refresher uses the old one | Spurious `invalid_grant`, an app wrongly marked broken | One home for the refresh token, refreshed in a short row-locked transaction (`FOR NO KEY UPDATE`, transaction-local `lock_timeout`) that is correct through Neon's pooled host (phase 02b). A lock timeout is `SpotifyRefreshUnavailable`, a transient: a 503 on the web (inside the 401 retry too) and a deferral in the worker, never a sign-out. A rotated token whose save failed is kept in memory, per process. The owner's throwaway script checks real Spotify's rotation before 02b is built, and staging runs it through the pooled host. 02b is its own PR and reverts alone |
 | A failure that started before a reconnect marks the fresh connection broken | Schedules paused again right after the fix | A credential generation bumped on every connect and replacement; the client captures it when it is built and `mark_broken` applies only if it is still current (phases 03, 08) |
 | A typed failure is swallowed by a service that catches 403s or Spotify errors broadly, or read as "log in again" | The app is never marked broken, or the person is told a fix that can't help | Detection is at the client boundary: a hook where the failure is raised, built with the generation captured when the client was built. A handler only chooses the response, and `require_auth` refuses a `broken` connection (phases 02, 08) |
 | A bad or reused code at the connect callback marks a healthy app broken | Schedules paused by mistake | `invalid_grant` at the exchange is only an `oauth_failed` notice, in every status, and the callback builds its clients without the hook (phases 06, 08) |
 | The wrong Spotify account is bound for good | The workspace's data points at another account | Every authorize URL carries `show_dialog=true`; the bound account is checked on reconnect |
 | A Google client secret leaks into logs or Sentry | Credential exposure | `GOOGLE_CLIENT_SECRET` is registered in `_SENTRY_SECRET_CONFIG_ATTRS` and covered by a `_strip_pii` test (phase 05) |
-| The cutover runs in the wrong order | The deploy fails, or the new migrations run over production's old data | Phase 09's runbook orders it (stop the old worker, snapshot, wipe and merge back to back, check, redeploy the worker), runs `create-schema` through the pre-deploy script that phase 06 ships, and rehearsed that build of an emptied database on staging. Production's `GOOGLE_*` variables and `PUBLIC_ORIGIN` are read back before the wipe |
+| The cutover runs in the wrong order | The deploy fails, or the new migrations run over production's old data | Phase 09's runbook orders it (stop the old worker and api, snapshot, wipe and merge back to back, check, redeploy the worker), runs `create-schema` through the pre-deploy script that phase 06 ships, with its variable set on production's api from step 3, and is rehearsed end to end on staging at the candidate SHA. Phase 04's migration refuses a database that has rows, so a merge that lands before the wipe fails its deploy and leaves the data alone. Production's services get the `GOOGLE_*` references before the day, and what each service resolves is read back before the wipe |
 | The merge builds a new worker before the api has built the schema | The new worker refuses on its startup schema check and uses up its restart retries (the deployment shows FAILED); it can't run against the wrong schema | The old worker's deployment is removed first, and the new one is redeployed by hand once the api is at head (phase 09 step 11) |
-| Pre-deploy now builds a new database, reversing the rule that an empty database fails the deploy | An empty database behind a wrong `DATABASE_URL` is built and booted instead of failing the deploy | `create-schema` builds only with no revision and no tables and refuses any tables without a revision; the Neon branch identity is verified before staging's first deploy and the cutover; phase 06 step 7 records keeping it after cutover and rewrites the two tests and two docs that state the old rule |
-| The owner deletes their only Spotify app on cutover day, before the guide has been run from scratch | A wiped database, no app and no way back if the dashboard or the copy blocks app creation | Accepted by the owner (2026-11-10): sole user, one sitting. Staging walks the guide against the existing app first, and a friend with Premium may run it from scratch on staging. The Neon snapshot rolls the database back until the old app is deleted (phase 09) |
+| Pre-deploy can build a new database while `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` is set | While it is set, an empty database behind a wrong `DATABASE_URL` is built and booted instead of failing the deploy | It is set only on staging's api and on production's api from phase 09 step 3 to step 11, so everywhere else an empty database fails the deploy, as the repo's rule says; `create-schema` builds only with no revision and no tables and refuses any tables without a revision; the Neon branch identity is verified before staging's first deploy and the cutover (phase 06 step 7) |
+| The owner deletes their only Spotify app on cutover day, and the dashboard or the copy then blocks app creation | A wiped database and no app, with no way back | Accepted by the owner (2026-11-10): sole user, one sitting. Staging walks the guide against the existing app first, and the owner's second Spotify account runs setup step 1 from scratch on staging, a gate for the cutover only (phase 09 step 1). There is no rollback: a failure is fixed forward (phase 09) |
 | Acceptance never exercises restore | The epic's differentiator could be broken by the credential path and nobody would know | The first scheduled run's snapshot is restored through the workspace's app (phase 09 step 13) |
 | Harness work (fake Google, several fake Spotify apps with PKCE, error injection) is bigger than it looks | Phases slip | Fake Google lands in phase 05 and fake apps in phase 06, each with its phase |
 | Staging hides a real-service problem until phase 06 | A late Google or Spotify surprise | Staging stands up in phase 06, as soon as real Spotify is involved; phase 05's fake-Google tests run against Google's documented behaviour, and the first real Google sign-in is the first staging check |
-| Staging can't be deployed as the repo stands, or reaches production | A stalled phase 06, or staging signing people in against production | `staging.raccoon.fm` (a custom domain, past Vercel's branch protection), its own Railway environment created empty with its own `DATABASE_URL`, its own Neon branch on the pooled host, like production, and a branch-scoped Vercel variable checked against the staging API |
-| Staging is left running after it has served | Cost, a second place secrets live, and a dead app that shows `app_rejected` | Phase 09 deletes the `staging` environment right after the cutover |
-| The Google consent screen is published and sign-up has no gate, so anyone can sign up before #123's safeguards | Unwanted accounts, load | The owner is the only user at first. #139's per-address limit of 10 a minute on the sign-in views is the only sign-up safeguard until #123 (phase 05 applies it to the new views). Google may require brand verification for the consent screen; the basic `openid`, `email` and `profile` scopes need no sensitive-scope review |
+| Staging can't be deployed as the repo stands, or reaches production | A stalled phase 06, or staging signing people in against production | `staging.raccoon.fm` (a custom domain with a Deployment Protection Exception, checked as soon as the domain is bought), its own Railway environment created empty with its own `DATABASE_URL`, its own Neon database on the pooled host, like production, and a branch-scoped Vercel variable checked against the staging API |
+| Staging is left running after it has served | Cost, a second place secrets live, and a dead app that shows `app_rejected` | Phase 09 deletes the `staging` environment once acceptance has finished (step 14) |
+| The Google consent screen is published and sign-up has no gate, so anyone can sign up before #123's safeguards | Unwanted accounts, load | Sign-up does not open at the cutover: the consent screen stays in Testing mode until #123, and the owner adds people by hand |
 | The domain move changes the origin the CSRF check accepts | Writes on the old domain are refused for a moment | Phase 01b flips the variables and the redirect together on a quiet moment |
 | A refresh token reaches its long lifetime and stops working | A workspace's schedules pause with no warning | It surfaces through phase 08 as the access-removed case with a reconnect fix. #141 (the reminder) stays a separate issue, not built now: the owner is the only user |
+| A broken app pauses a workspace and nobody is told | Schedules stop until the person's next visit | Accepted for now (phase 08): the owner finds it on their next visit, and an email notice comes once there are users to tell (Google sign-in gives a verified address) |
+| `.railway/railway.ts` changes on the branch are never applied to production, or the merged file is applied too early | The new api refuses to start after the wipe for want of `GOOGLE_*`; or the old code loses the `SPOTIFY_*` references it still reads | Phase 09's config sequence: a superset applied before the day and read back per service, and the merged file applied once the new api and worker are up (step 11), which also takes the old client secret out of Railway |
+| Staging shares the owner's Spotify app, account and playlists with production | A staging drill on the grant or the allow-list stops production's runs, and a staging routine writes to real playlists | Staging routines use copies of playlists; staging's scheduler stays off at all times; after a drill the owner signs in again on production and watches its next scheduled run (Staging) |
+| Main gains a commit between the last sync and the cutover merge | The merge result differs from what CI passed; a migration on main gives it two heads, and the pre-deploy fails on the wiped database | Main is frozen from phase 09 step 5 through step 11, every merge included, and the freeze is announced before step 5. If main moves anyway, phase 09 merges it into the branch again, runs the chain check and merges only on a green CI for that exact result (phase 09 step 5) |
 
 ## Complexity and Sequencing
 
 | Phase | Size | Depends on | Can be built alongside (merge order follows Depends on) |
 |---|---|---|---|
-| 01 Rename | S | — | 02 |
+| 01 Rename | S | none | 02 |
 | 01b Move the domain | S | 01; the owner buys raccoon.fm | 02 |
-| 02 Credential seam, failures, one refresh token (02a L, then 02b L) | XL | — | 01, 01b |
-| 03 Identity schema (additive) | S | 02 (the branch is cut when 02 lands) | — |
-| 04 Re-key to workspace, and the Spotify account off `users` | XL | 03, and 02b (it re-points that refresher) | — |
-| 05 Google sign-in | L | 04 | — |
+| 02 Credential seam, failures, one refresh token (02a L, then 02b L) | XL | none | 01, 01b |
+| 03 Identity schema (additive) | S | 02 (the branch is cut when 02 has landed and 02b's day of logs is clean) | none |
+| 04 Re-key to workspace, and the Spotify account off `users` | XL | 03, and 02b (it re-points that refresher) | none |
+| 05 Google sign-in | L | 04 | none |
 | 06 BYO app + connect (PKCE) + pre-deploy build + staging | XL | 02, 05 (step 8, staging, also needs raccoon.fm bought) | 07 (on fixtures) |
 | 07 Setup wizard | M | 05 (session shape), 06 (endpoints, redirect URL), 08 (`/setup/problem`) | 06, 08 (built on fixtures; merges after 08) |
 | 08 Broken app | M | 02, 06 | 07 (on fixtures) |
-| 09 Cutover | S | 01, 01b, 03–08 | — |
+| 09 Cutover | S | 01, 01b, 03 to 08 | none |
 
 Only phase 09 depends on 01b. 06 isn't parallel with 08: 08 needs 06's
 connection status, `mark_ok` and connect callback.
 
 **Critical path:** 02 → 03 → 04 → 05 → 06 → 08 → 07 → 09.
+**Before phase 05 builds, the user-facing tables are written:** the routing
+table (phase 07 step 1), the notice tables (phases 05 and 06; phase 06's
+build settles the one Spotify error code its table leaves open) and the
+problem page's copy (phase 08). Phase 05 is the first phase that changes
+what a signed-in person sees on the branch, and 06, 07 and 08 each build part
+of those tables. Phase 06 changes the web contract (the notice codes and the
+session schema), although 07 is the web phase.
+
+**Outside steps with their own clocks start early:** the staging address
+check, as soon as raccoon.fm is bought (Staging).
 
 ## Test Plan
 
@@ -736,8 +859,10 @@ connection status, `mark_ok` and connect callback.
 - [ ] All ten phases are merged, with CI green on each.
 - [ ] `git grep -n "SPOTIFY_CLIENT_ID\|SPOTIFY_CLIENT_SECRET\|SPOTIFY_REDIRECT_URI" -- shuffify config.py scripts harness .railway .github .env.example README.md tests`
       returns nothing after phase 06.
-- [ ] `git grep -n "client_secret" -- shuffify/spotify harness/fake_spotify`
-      returns nothing after phase 06.
+- [ ] `git grep -inE "client.?secret" -- shuffify harness config.py scripts tests .github .railway .env.example`
+      lists only the expected matches after phase 06: Google's client secret
+      setting and its tests, and the two redaction keys phase 06's checklist
+      names.
 - [ ] `git grep -n "from_env\|from_flask_config" -- shuffify` returns nothing
       after phase 06.
 - [ ] The two-workspace isolation suite passes.
@@ -745,10 +870,20 @@ connection status, `mark_ok` and connect callback.
 - [ ] Phase 09's runbook has run: the owner signed up on raccoon.fm, created
       a new Spotify app from the in-product guide in under 15 minutes,
       connected, rebuilt their routines and restored the first scheduled run
-      from its snapshot, and staging was deleted.
+      from its snapshot, and staging, the pre-deploy variable and both
+      backups were deleted.
 - [ ] Phase 02's two PRs merged separately, the throwaway PKCE check against
       the owner's existing app was run between them, and 02b's revert was
       checked.
+- [ ] Staging ran the dress rehearsal of the cutover runbook at the candidate
+      SHA, and the owner's second Spotify account ran setup step 1 from
+      scratch there.
+- [ ] Production's services resolved `GOOGLE_CLIENT_ID`,
+      `GOOGLE_CLIENT_SECRET` and `GOOGLE_REDIRECT_URI`, and the api
+      `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA`, before the wipe, read back per
+      service.
+- [ ] Main took no merge from phase 09 step 5 through step 11 except the
+      cutover's own.
 
 ## What NOT To Do
 
@@ -769,15 +904,20 @@ connection status, `mark_ok` and connect callback.
 - Don't detect a broken app by a failure reaching a Flask handler; detect it
   at the client boundary.
 - Don't build launch safeguards here (abuse limits, account deletion, legal
-  pages); #123 owns them. #139's per-address limit is the only sign-up
-  safeguard until then.
+  pages); #123 owns them. Sign-up does not open at the cutover: the consent
+  screen stays in Testing mode until #123, and the owner adds people by hand.
+- Don't roll back at any step: every failure is fixed forward (phase 09, Fix
+  forward).
 
 ## Later work
 
 - **The #122 rename sweep** includes renaming every service and project on the
   infrastructure providers: the GitHub repository, the Railway project and
-  services, the Vercel project, Neon, Redis, Sentry, the Google Cloud project
-  and the Spotify app. It is tracked on #122 and isn't part of these phases.
+  services, the Vercel project, Neon, Redis, Sentry and the Google Cloud
+  project. It is tracked on #122 and isn't part of these phases. The Spotify
+  app isn't in the sweep: phase 01b renames the current one in Spotify's
+  dashboard, the cutover deletes it, and after that every person has their
+  own.
 
 ## Context
 - Source skill: forge · Area: auth, models, services, worker, web · Effort: XL · Risk: High · Priority: High

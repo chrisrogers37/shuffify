@@ -1,10 +1,10 @@
 ---
-title: "[plan] Person, workspace and Spotify connection tables — models, migration"
+title: "[plan] Person, workspace and Spotify connection tables (models, migration)"
 type: plan
 status: draft
 owner: chrisrogers37
 created: 2026-11-10
-updated: 2026-11-10
+updated: 2026-11-25
 tags: [enhancement, workspaces]
 repos: chrisrogers37/shuffify
 ---
@@ -12,7 +12,8 @@ repos: chrisrogers37/shuffify
 ## Summary
 
 Part of [the #120 build plan](00_overview.md) (integration branch
-`feat/workspaces`, cut from main when 02 merges). Size: S.
+`feat/workspaces`, cut from main when 02 has merged and 02b's day of
+production logs is clean). Size: S.
 
 This phase is purely additive. It adds the new identity tables and two person
 columns, and changes nothing that exists. `users` keeps every column it has,
@@ -61,11 +62,15 @@ Spotify with a client ID only (F8).
 
 ### Steps
 
-1. **Models (`shuffify/models/db.py`).**
+1. **Models (`shuffify/models/db.py`).** Every new constraint gets a name, in
+   the repo's `uq_*` and `ck_*` style, so later phases can tell a violation by
+   its constraint (phases 05 and 06). New timestamps use `UTCDateTime`
+   (`db.py:30`).
    - `User` gains two columns and loses none:
-     - `google_sub` (unique). It stays nullable until phase 05 makes it
-       required;
-     - `email_verified`.
+     - `google_sub` (unique, `uq_users_google_sub`). It stays nullable until
+       phase 05 makes it required;
+     - `email_verified` (NOT NULL, `server_default=sa.false()`, as
+       `tests/test_boolean_server_defaults.py` expects).
 
      Its existing `email`, `display_name`, `profile_image_url`,
      `last_login_at`, `login_count` and timestamps already exist and are
@@ -78,18 +83,30 @@ Spotify with a client ID only (F8).
      - timestamps.
    - `SpotifyConnection`:
      - `id`;
-     - `workspace_id` (FK, unique, `ondelete=CASCADE`);
+     - `workspace_id` (FK, `ondelete=CASCADE`, unique:
+       `uq_spotify_connections_workspace_id`);
      - `client_id` (not null). It is **not** unique yet: phase 06 adds the
-       unique constraint in the migration that deletes the stopgap rows
-       (phase 04's and 05's), so those stopgaps can give every connection the
-       site app's ID without a collision;
-     - `spotify_id` (unique, nullable until first connect), `country`,
-       `spotify_product` and `spotify_uri`: the Spotify account's columns
-       that phase 04 moves here from `users`;
+       unique constraint (`uq_spotify_connections_client_id`) in the
+       migration that deletes the stopgap rows (phase 04's and 05's), so
+       those stopgaps can give every connection the site app's ID without a
+       collision;
+     - `spotify_id` (unique, `uq_spotify_connections_spotify_id`, nullable
+       until first connect), `country`, `spotify_product` and `spotify_uri`:
+       the Spotify account's columns that phase 04 moves here from `users`;
+     - `spotify_display_name` (nullable, set at connect): the Spotify
+       account's own display name. `users.display_name` and
+       `profile_image_url` stay on the person and become Google's in phase
+       05, so without this column the setup page, the "uh oh" page and the
+       wrong-account notice could name the bound account only by its id;
      - `encrypted_refresh_token`, which phase 04 also moves here;
-     - `status` (`unchecked` | `ok` | `broken`, not null, default
-       `unchecked`);
-     - `broken_reason` (nullable) and `status_changed_at`;
+     - `status` (not null, default `unchecked`), with
+       `ck_spotify_connections_status`:
+       `status IN ('unchecked', 'ok', 'broken')`;
+     - `broken_reason` (nullable), with
+       `ck_spotify_connections_broken_reason`:
+       `broken_reason IN ('app_rejected', 'access_revoked', 'user_not_allowed')`;
+     - `status_changed_at` (not null; set when the row is created and on
+       every status change);
      - `credential_generation` (integer, not null, default 0): bumped
        whenever the connection's credentials are replaced (a successful
        connect, or saving a different client ID, phase 06). A failure only
@@ -97,7 +114,10 @@ Spotify with a client ID only (F8).
        the current generation (phase 08), so a stale failure can't undo a
        reconnect;
      - timestamps.
-   - A check constraint ties `broken_reason` to `status = 'broken'`.
+   - `ck_spotify_connections_broken_has_reason`:
+     `(status = 'broken') = (broken_reason IS NOT NULL)`. A broken row always
+     has a reason, because phase 08's matrix chooses every fix by the reason,
+     and no other row has one.
 2. **One additive migration** creates `workspaces` and `spotify_connections`
    and adds `users.google_sub` and `users.email_verified`. It drops, renames
    and relaxes nothing on `users`. Downgrade raises.
@@ -111,7 +131,9 @@ Spotify with a client ID only (F8).
     `spotify_id`; `workspaces.user_id` is non-unique (many workspaces per
     person); two connections may share a `client_id` until phase 06;
   - the cascade from person to workspace to connection;
-  - the status and reason check;
+  - the status and reason checks, each under its constraint's name: a status
+    or a reason outside its list is refused, a `broken` row without a reason
+    is refused, and so is a reason on a row that isn't `broken`;
   - the default workspace name.
 - **Defaults:** a new connection has `credential_generation = 0`.
 - **A repr test:** `repr(SpotifyConnection)` contains no refresh token.

@@ -1,10 +1,10 @@
 ---
-title: "[plan] Rename what users see to Raccoon — web, legal, backend strings"
+title: "[plan] Rename what users see to Raccoon (web, legal, backend strings)"
 type: plan
 status: draft
 owner: chrisrogers37
 created: 2026-11-10
-updated: 2026-11-10
+updated: 2026-11-25
 tags: [enhancement, rename]
 repos: chrisrogers37/shuffify
 ---
@@ -75,12 +75,13 @@ None.
 ### Steps
 1. In each web file listed above, replace the visible "Shuffify" and
    "shuffify" with "Raccoon".
-   - The wordmark is lowercase today; keep the casing the design uses.
+   - The wordmark, lowercase today, reads "Raccoon." (a capital R and the
+     accent dot) for now. Its strings are in #152's files.
    - Leave internal identifiers alone: `shuffify:react-routine-continuation:v1`,
      `shuffify.invalid`, `shuffify-web`, `SHUFFIFY_SOURCE_ROOT`.
-2. Update the legal copy in `assets/legal/*.html` (name only; the sign-in
-   wording changes in phase 05). Regenerate `generated/legal.ts` and update
-   the two sha256 pins.
+2. Update the legal copy in `assets/legal/*.html` (name only; the privacy
+   copy's sign-in wording changes with #123). Regenerate `generated/legal.ts`
+   and update the two sha256 pins.
 3. Update the backend strings. Playlist descriptions become "…created in
    Raccoon setup", and the test assertion changes to match.
 4. Update the tests that assert the name.
@@ -99,6 +100,8 @@ None.
 - [ ] `git grep -in "shuffify" -- web/src web/index.html assets/legal` lists
       only the internal identifiers named in step 1.
 - [ ] CI is green.
+- [ ] The PR's checks were re-run on current main before it merged: main has
+      changed files this PR touches since its checks last ran.
 - [ ] The production site's title and header read Raccoon after deploy.
 
 ## What NOT To Do
