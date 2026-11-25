@@ -1,0 +1,281 @@
+{
+  "owner_id": 7,
+  "playlists": {
+    "NightBus": {
+      "user_id": 7,
+      "name": "Night Bus",
+      "snapshot_id": "night-bus-v8",
+      "locked_positions": {
+        "1": "spotify:track:0000000000000000000002"
+      },
+      "tracks": [
+        {
+          "uri": "spotify:track:0000000000000000000001",
+          "name": "Paper Moon",
+          "added_at": "2026-11-01T12:00:00Z"
+        },
+        {
+          "uri": "spotify:track:0000000000000000000002",
+          "name": "Station ID",
+          "added_at": "2026-11-02T12:00:00Z"
+        },
+        {
+          "uri": "spotify:track:0000000000000000000003",
+          "name": "Afterglow",
+          "added_at": "2026-11-04T12:00:00Z"
+        },
+        {
+          "uri": "spotify:track:0000000000000000000004",
+          "name": "Northbound",
+          "added_at": "2026-11-05T12:00:00Z"
+        },
+        {
+          "uri": "spotify:track:0000000000000000000003",
+          "name": "Afterglow",
+          "added_at": "2026-11-03T12:00:00Z"
+        }
+      ]
+    },
+    "LateSet": {
+      "user_id": 7,
+      "name": "Late Set",
+      "snapshot_id": "late-set-v3",
+      "locked_positions": {},
+      "tracks": [
+        {
+          "uri": "spotify:track:0000000000000000000005",
+          "name": "Soft Landing",
+          "added_at": "2026-11-02T12:00:00Z"
+        },
+        {
+          "uri": "spotify:track:0000000000000000000006",
+          "name": "Last Train",
+          "added_at": "2026-11-01T12:00:00Z"
+        },
+        {
+          "uri": "spotify:track:0000000000000000000007",
+          "name": "Slipstream",
+          "added_at": "2026-11-03T12:00:00Z"
+        }
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": 41,
+      "user_id": 7,
+      "kind": "shuffle",
+      "state": "succeeded",
+      "targets": [
+        "NightBus"
+      ],
+      "status": "success",
+      "started_at": "2026-11-02T16:00:00+00:00",
+      "completed_at": "2026-11-02T16:01:00+00:00",
+      "journal": {
+        "version": 1,
+        "phase": "forward",
+        "status": "succeeded",
+        "resources": {
+          "NightBus": {
+            "baseline": {
+              "track_uris": [
+                "spotify:track:0000000000000000000002",
+                "spotify:track:0000000000000000000001"
+              ],
+              "metadata": {
+                "name": "Night Bus"
+              }
+            },
+            "snapshot_id": "night-bus-v1",
+            "scope": "tracks"
+          }
+        },
+        "plans": [
+          {
+            "id": 0,
+            "kind": "replace",
+            "resource": "NightBus",
+            "baseline": {
+              "track_uris": [
+                "spotify:track:0000000000000000000002",
+                "spotify:track:0000000000000000000001"
+              ],
+              "metadata": {
+                "name": "Night Bus"
+              }
+            },
+            "desired": {
+              "track_uris": [
+                "spotify:track:0000000000000000000001",
+                "spotify:track:0000000000000000000002"
+              ],
+              "metadata": {
+                "name": "Night Bus"
+              }
+            },
+            "batches": [
+              {
+                "method": "PUT",
+                "path": "/playlists/NightBus/items",
+                "body": {
+                  "uris": [
+                    "spotify:track:0000000000000000000001",
+                    "spotify:track:0000000000000000000002"
+                  ]
+                },
+                "before_hash": "1a6c6e026290eef8192ed059f27cc62b6c2869ecdfc5c9658c9da7fcd218d8fa",
+                "after_hash": "0ff21bcee726e1fb63e21189c4bc2e1911e29002999988d3f32149302920fd4c",
+                "state": "acknowledged",
+                "attempts": 1,
+                "snapshot_before": "night-bus-v1",
+                "snapshot_id": "night-bus-v2",
+                "last_http_status": 200
+              }
+            ],
+            "batches_done": 1,
+            "intent": {
+              "kind": "replace",
+              "resource": "NightBus",
+              "track_uris": [
+                "spotify:track:0000000000000000000001",
+                "spotify:track:0000000000000000000002"
+              ]
+            }
+          }
+        ],
+        "compensation": [],
+        "choices": {},
+        "recovery": {
+          "available": false,
+          "action": null,
+          "reason": null
+        },
+        "progress": {
+          "batches_done": 1,
+          "total_batches": 1,
+          "phase": "forward"
+        },
+        "result": {
+          "success": true,
+          "message": "The playlist order was saved and verified."
+        }
+      }
+    },
+    {
+      "id": 42,
+      "user_id": 7,
+      "kind": "shuffle",
+      "state": "needs_attention",
+      "targets": [
+        "LateSet"
+      ],
+      "status": "failed",
+      "started_at": "2026-11-02T16:00:00+00:00",
+      "completed_at": "2026-11-02T16:01:00+00:00",
+      "journal": {
+        "version": 1,
+        "phase": "forward",
+        "status": "needs_attention",
+        "resources": {
+          "LateSet": {
+            "baseline": {
+              "track_uris": [
+                "spotify:track:0000000000000000000006",
+                "spotify:track:0000000000000000000005"
+              ],
+              "metadata": {
+                "name": "Late Set"
+              }
+            },
+            "snapshot_id": "late-set-v1",
+            "scope": "tracks"
+          }
+        },
+        "plans": [
+          {
+            "id": 0,
+            "kind": "replace",
+            "resource": "LateSet",
+            "baseline": {
+              "track_uris": [
+                "spotify:track:0000000000000000000006",
+                "spotify:track:0000000000000000000005"
+              ],
+              "metadata": {
+                "name": "Late Set"
+              }
+            },
+            "desired": {
+              "track_uris": [
+                "spotify:track:0000000000000000000005",
+                "spotify:track:0000000000000000000006"
+              ],
+              "metadata": {
+                "name": "Late Set"
+              }
+            },
+            "batches": [
+              {
+                "method": "PUT",
+                "path": "/playlists/LateSet/items",
+                "body": {
+                  "uris": [
+                    "spotify:track:0000000000000000000005",
+                    "spotify:track:0000000000000000000006"
+                  ]
+                },
+                "before_hash": "5cc5e47cdec035145623b837f07cbd2dfb68ee0f0dc83a4fda2b05afe82305cd",
+                "after_hash": "dc4697ff9ba46431cfa846bf72c842a50569c091dd3acd4451968d1b920aad09",
+                "state": "acknowledged",
+                "attempts": 1,
+                "snapshot_before": "late-set-v1",
+                "snapshot_id": "late-set-v2",
+                "last_http_status": 200
+              }
+            ],
+            "batches_done": 1,
+            "intent": {
+              "kind": "replace",
+              "resource": "LateSet",
+              "track_uris": [
+                "spotify:track:0000000000000000000005",
+                "spotify:track:0000000000000000000006"
+              ]
+            }
+          }
+        ],
+        "compensation": [],
+        "choices": {},
+        "recovery": {
+          "available": true,
+          "action": "restore",
+          "reason": "external_edit"
+        },
+        "progress": {
+          "batches_done": 1,
+          "total_batches": 1,
+          "phase": "forward"
+        },
+        "observations": {
+          "LateSet": {
+            "track_uris": [
+              "spotify:track:0000000000000000000005",
+              "spotify:track:0000000000000000000006",
+              "spotify:track:0000000000000000000007"
+            ],
+            "metadata": {
+              "name": "Late Set"
+            },
+            "snapshot_id": "late-set-v3"
+          }
+        },
+        "result": {
+          "success": false,
+          "error_code": "needs_attention",
+          "message": "The reorder was acknowledged, but a later playlist edit prevented final verification."
+        }
+      }
+    }
+  ]
+}
