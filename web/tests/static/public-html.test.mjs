@@ -35,6 +35,7 @@ for (const [path, title, heading] of pages)
     assert.equal((html.match(/<main\b/g) || []).length, 1);
     assert.equal((html.match(/<h1\b/g) || []).length, 1);
     assert.ok(html.includes(heading));
+    assert.ok(html.includes('Raccoon<span class="sh-text-accent">.</span>'));
     assert.doesNotMatch(
       html,
       /<script(?![^>]*\bsrc=)[^>]*>|<style\b|\s(?:style|on\w+)\s*=/i,

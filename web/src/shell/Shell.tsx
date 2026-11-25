@@ -9,6 +9,14 @@ const destinations = [
   ["Activity", "/activity"],
   ["Settings", "/settings"],
 ] as const;
+// One flex item, so the .sh-brand gap never comes before the dot.
+function Wordmark() {
+  return (
+    <span>
+      Raccoon<span className="sh-text-accent">.</span>
+    </span>
+  );
+}
 function Brand() {
   return (
     <Link className="sh-brand" to="/" aria-label="Raccoon home">
@@ -19,7 +27,7 @@ function Brand() {
         height="32"
         alt=""
       />
-      raccoon
+      <Wordmark />
     </Link>
   );
 }
@@ -48,7 +56,7 @@ export function Navigation() {
         <details ref={menu} className="sh-app-menu">
           <summary>
             <span className="sh-brand" aria-hidden="true">
-              raccoon
+              <Wordmark />
             </span>
             <span className="sh-app-current">
               {
