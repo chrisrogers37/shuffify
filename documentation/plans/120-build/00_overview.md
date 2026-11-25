@@ -40,21 +40,27 @@ Verified against main at b65d2d9 (2026-11-10), and re-checked against main at
 8945b16 (2026-11-20). No migration, model or table changed between the two (the
 migration head is still `e1f2a3b4c5d6`), and the claims below hold. Line
 numbers are b65d2d9's; a builder re-reads each citation when a phase starts.
-The larger moves since then:
-- `shuffify/worker.py`: 33 is now 44, 85-100 is now 105-128, 94-95 is now
-  116-118, 204 is now 231 and 628 is now 673. The credential lock is entered
+Citations added or changed on 2026-11-25, and the moves below, were read at
+dc4ec8b (2026-11-25); the rest of this section was not re-checked there. The
+larger moves since b65d2d9, at dc4ec8b:
+- `shuffify/worker.py`: 33 is now 44, 85-100 is now 105-131, 94-95 is now
+  116-117, 204 is now 243 and 628 is now 686. The credential lock is entered
   through an `ExitStack` and still spans the whole run, and a database error
   while it locks now defers the claim.
 - `shuffify/routes/core.py`: every cited line is 3 lower down.
-- `shuffify/services/operations/repository.py`: 509-543 is now 512-546, and
-  540 is now 543.
-- `shuffify/services/scheduled_admission.py`: every cited line is about 7
-  lower down.
+- `shuffify/services/operations/repository.py`: 509-543 is now 669-703, and
+  540 is now 700.
+- `shuffify/services/scheduled_admission.py`: 95-98 is now 111-114, 95-118 is
+  now 111-134, 141-220 is now 178-243, 174-193 is now 211-219 and 207-214 is
+  now 234-235. The `is_enabled` recheck is now in `ineligible_fire`
+  (157-175), which `capture` calls, and a skipped fire for a blocked playlist
+  no longer logs a warning.
 - `config.py`: lines after 272 are 2 lower down.
-- `shuffify/models/db.py`: 595 is now 599.
-- `shuffify/services/schedule_notifications.py`: `_FIELDS` is now one line
-  (14), built from `schedule_utils.DEFINITION_COLUMNS` plus the literal
-  `"user_id"`.
+- `shuffify/models/db.py`: 595 is now 612.
+- `shuffify/services/schedule_notifications.py`: 57-100 is now 45-88, and
+  `_FIELDS` is now one line (14), built from
+  `schedule_utils.DEFINITION_COLUMNS` plus the literals `"user_id"`,
+  `"is_enabled"` and `"created_at"`.
 
 - **Spotify clients are built in two places,** and both read the site-wide
   app from config:
@@ -128,10 +134,10 @@ The larger moves since then:
     reads as signed out.
   - A transaction-scoped row lock on the connection row, held only around
     read, refresh and store, is correct through any pooler. The repo already
-    has both parts: `_lock_user` locks a `users` row `FOR NO KEY UPDATE`
-    (`.with_for_update(key_share=True)`,
-    `shuffify/services/upstream_source_service.py:42-50`), which doesn't block
-    inserts that reference the row, and a lock timeout is set inside the
+    has both parts: `lock_user_inventory` locks a `users` row `FOR NO KEY
+    UPDATE` (`.with_for_update(key_share=True)`,
+    `shuffify/services/base.py:16-22`), which doesn't block inserts that
+    reference the row, and a lock timeout is set inside the
     transaction (`set_config('lock_timeout', ..., true)` at
     `shuffify/services/operations/repository.py:540`, `SET LOCAL` at
     `shuffify/services/playlist_lock.py:190-193`), because a session-level
@@ -362,7 +368,7 @@ There is no client secret column and no secret key.
 - **The refresh token has one home: the database.** Both the web and the
   worker refresh in a short transaction that locks the row holding the token
   with `SELECT ... FOR NO KEY UPDATE` (`with_for_update(key_share=True)`, as
-  `_lock_user` does, so inserts into tables that reference the row aren't
+  `lock_user_inventory` does, so inserts that reference the row aren't
   blocked) and sets a transaction-local `lock_timeout` (`set_config(..., true)`,
   as `repository.py:540` does; never a session-level `SET`, which would leak
   across the pooled host), around read, refresh and store, and never around a
@@ -490,11 +496,10 @@ served is done, and phase 09 does.
     `staging.raccoon.fm` (the Spotify redirect URL is `PUBLIC_ORIGIN` plus
     `/spotify/callback`), and its own `SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`
     and `WORKER_CONTROL_TOKEN`. It never uses the production URL.
-  - **Staging's scheduler stays off except during a check.** The shared block
-    of `.railway/railway.ts` sets `SCHEDULER_ENABLED` to `true`, and the file
-    has to stay production's, so override it to `false` on staging's worker
-    service as soon as the apply has created it (phase 06 step 8), and turn
-    it on only for a check.
+  - **Staging's scheduler stays off at all times.** The shared block of
+    `.railway/railway.ts` sets `SCHEDULER_ENABLED` to `true`, and the file has
+    to stay production's, so override it to `false` on staging's worker
+    service as soon as the apply has created it (phase 06 step 8).
 - **Vercel:** the build reads `RAILWAY_API_URL` when it runs
   (`web/scripts/build-vercel-output.mjs:13-22, 74`), and today every preview
   forwards to the production API (`documentation/guides/production.md`). Set
@@ -801,7 +806,7 @@ here.
 | A refresh token reaches its long lifetime and stops working | A workspace's schedules pause with no warning | It surfaces through phase 08 as the access-removed case with a reconnect fix. #141 (the reminder) stays a separate issue, not built now: the owner is the only user |
 | A broken app pauses a workspace and nobody is told | Schedules stop until the person's next visit | Accepted for now (phase 08): the owner finds it on their next visit, and an email notice comes once there are users to tell (Google sign-in gives a verified address) |
 | `.railway/railway.ts` changes on the branch are never applied to production, or the merged file is applied too early | The new api refuses to start after the wipe for want of `GOOGLE_*`; or the old code loses the `SPOTIFY_*` references it still reads | Phase 09's config sequence: a superset applied before the day and read back per service, and the merged file applied once the new api and worker are up (step 11), which also takes the old client secret out of Railway |
-| Staging shares the owner's Spotify app, account and playlists with production | A staging drill on the grant or the allow-list stops production's runs, and a staging routine writes to real playlists | Staging routines use copies of playlists; staging's scheduler stays off except during a check; after a drill the owner signs in again on production and watches its next scheduled run (Staging) |
+| Staging shares the owner's Spotify app, account and playlists with production | A staging drill on the grant or the allow-list stops production's runs, and a staging routine writes to real playlists | Staging routines use copies of playlists; staging's scheduler stays off at all times; after a drill the owner signs in again on production and watches its next scheduled run (Staging) |
 | Main gains a commit between the last sync and the cutover merge | The merge result differs from what CI passed; a migration on main gives it two heads, and the pre-deploy fails on the wiped database | Main is frozen from phase 09 step 5 through step 11, every merge included, and the freeze is announced before step 5. If main moves anyway, phase 09 merges it into the branch again, runs the chain check and merges only on a green CI for that exact result (phase 09 step 5) |
 
 ## Complexity and Sequencing

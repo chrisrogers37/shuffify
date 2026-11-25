@@ -65,7 +65,7 @@ Spotify with a client ID only (F8).
 1. **Models (`shuffify/models/db.py`).** Every new constraint gets a name, in
    the repo's `uq_*` and `ck_*` style, so later phases can tell a violation by
    its constraint (phases 05 and 06). New timestamps use `UTCDateTime`
-   (`db.py:29`).
+   (`db.py:30`).
    - `User` gains two columns and loses none:
      - `google_sub` (unique, `uq_users_google_sub`). It stays nullable until
        phase 05 makes it required;

@@ -96,7 +96,7 @@ Spotify dashboard and raccoon.fm's DNS.
      401 (`web/src/api/client.ts`, `web/src/app/services.ts`); on any other
      status it would show a request error and stay where it is.
      `retryable: false` keeps the request out of the retry that live reviews
-     give a 401 (`routes/__init__.py:208-216`). The connect, save-app and
+     give a 401 (`routes/__init__.py:222-231`). The connect, save-app and
      `/api/session` routes check only the signed-in person and their
      workspace, not `require_auth`, so they keep working in every status.
    - Delete `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` from the places
@@ -104,7 +104,7 @@ Spotify dashboard and raccoon.fm's DNS.
      that sets them; the harness identifies fake apps by the client ID it
      registers with the fake (step 6). Two places Evidence doesn't list go
      too: the startup log line that names `SPOTIFY_REDIRECT_URI`
-     (`shuffify/__init__.py:915`), and the harness's fake client secret
+     (`shuffify/__init__.py:980`), and the harness's fake client secret
      (`HARNESS_FAKE_CLIENT_SECRET` in `config.py`, `CLIENT_SECRET` in
      `harness/fake_spotify/app.py`).
    - **The executor's "Sign in again" message goes.**
@@ -387,11 +387,11 @@ Spotify dashboard and raccoon.fm's DNS.
       finds no schedules in the new database, so it has nothing to fire.
       Right after the apply, and before the worker's redeploy, set
       `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA=1` on staging's api and
-      `SCHEDULER_ENABLED=false` on its worker, so the scheduler stays off
-      except during a check (overview, Staging), and deploy the staged
-      changes: pre-deploy builds the schema and stamps head. Redeploy the
-      worker once the api is at head. A later apply to staging can undo
-      either setting, so read both back after any apply.
+      `SCHEDULER_ENABLED=false` on its worker, so the scheduler stays off at
+      all times (overview, Staging), and deploy the staged changes:
+      pre-deploy builds the schema and stamps head. Redeploy the worker once
+      the api is at head. A later apply to staging can undo either setting,
+      so read both back after any apply.
 
    Then run the checks below. Until phase 07's pages are on staging there is
    no page that saves a client ID, and the save is a `PUT` with CSRF that is
@@ -501,8 +501,8 @@ Spotify dashboard and raccoon.fm's DNS.
       returns nothing.
 - [ ] `git grep -inE "client.?secret" -- shuffify harness config.py scripts tests .github .railway .env.example`
       lists only the expected matches: Google's client secret setting and its
-      tests, and the two redaction keys that stay (`shuffify/__init__.py:448`
-      and `shuffify/services/operations/repository.py:38`).
+      tests, and the two redaction keys that stay (`shuffify/__init__.py:513`
+      and `shuffify/services/operations/repository.py:40`).
 - [ ] `GET /callback` returns 404 on the harness, and the Vercel rule and
       preview proxy tests no longer list it (`/spotify/callback` stays).
 - [ ] `git grep -n "from_env\|from_flask_config" -- shuffify` returns nothing

@@ -47,10 +47,11 @@ address).
   Phase 06 gives `status`, `unchecked`→`ok` on a successful connect, and
   `SpotifyConnectionHealth.mark_ok`.
 - **Services catch these failures before any Flask handler can** (phase 02,
-  Evidence): `playlist_service.py:235, 303`, `workshop_commit_service.py:115,
-  140, 169, 251, 392` and `workshop_finalize_service.py:374` catch a 403 (most
-  re-map it to `PlaylistAccessError`; phase 02's Evidence says which don't),
-  and `routine_activation_service.py` and `playlist_setup_service.py` catch
+  Evidence): `playlist_service.py:236-237, 304-305`,
+  `workshop_commit_service.py:115, 140, 169, 251, 392` and
+  `workshop_finalize_service.py:374` catch a 403 (most re-map it to
+  `PlaylistAccessError`; phase 02's Evidence says which don't), and
+  `routine_activation_service.py` and `playlist_setup_service.py` catch
   `SpotifyError` broadly. That is why detection can't live in a handler.
 - **The scheduler** loads `is_enabled = True` rows
   (`services/worker_scheduler.py:298-357`). `admit_scheduled` rechecks
@@ -58,15 +59,14 @@ address).
   reports other skips by code. A skipped fire for a blocked playlist logs a
   warning (`scheduled_admission.py:207-214`, the #107 precedent).
 - **The worker** claims a queued operation, then takes the credential lock
-  and runs it (`shuffify/worker.py:85-100`; 105-128 on main at 8945b16, where
+  and runs it (`shuffify/worker.py:85-100`; 105-131 on main at dc4ec8b, where
   a database error while it locks defers the claim).
 - **Missed runs:** `eligibility_floor` takes the later of the schedule's
   `definition_changed_at` and its creation (`scheduled_admission.py:95-98`),
   and `recoverable_fire` never fires before that floor. A change to a field
-  in `_FIELDS` (`services/schedule_notifications.py:57-100`; one line, 14, on
-  main at 8945b16) stamps
-  `definition_changed_at`; that stamp is what stops missed runs being made
-  up.
+  in `_FIELDS` (`services/schedule_notifications.py:57-100`; 45-88 on main at
+  dc4ec8b, where `_FIELDS` is one line, 14) stamps `definition_changed_at`;
+  that stamp is what stops missed runs being made up.
 - **The design's "uh oh" mockup:** `documentation/plans/120-mockups/uh-oh.html`.
 
 ## Implementation Plan

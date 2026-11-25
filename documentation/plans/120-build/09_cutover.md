@@ -79,7 +79,7 @@ forward).
 taking a backup branch first (step 8). Both backups are kept only for step
 14's check of the rebuilt configuration, and step 14 deletes them.
 
-**Vercel:** Vercel's Instant Rollback (`production.md:52`) turns off
+**Vercel:** Vercel's Instant Rollback (`production.md:88`) turns off
 auto-assignment of production domains until it is undone, so a fix-forward
 deploy after one wouldn't go live.
 

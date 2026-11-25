@@ -49,10 +49,10 @@ and why it stays one PR (F7).
 - `track_locks` (L1126)
 - `pending_raid_tracks` (L1219)
 
-`job_executions.user_id` has no FK and can be null (L595; L599 on main at
-8945b16). The L numbers above are the tables' `__tablename__` lines at
-b65d2d9; on main at 8945b16 the foreign-key lines are 194, 282, 357, 445,
-555, 663, 731, 841, 906, 975, 1053, 1137 and 1228.
+`job_executions.user_id` has no FK and can be null (L595; L612 on main at
+dc4ec8b). The L numbers above are the tables' `__tablename__` lines at
+b65d2d9; on main at dc4ec8b the foreign-key lines are 195, 283, 358, 446,
+558, 691, 759, 869, 934, 1003, 1081, 1165 and 1256.
 
 **Code that scopes by user or Spotify id**
 - `user_id` appears in 66 files under `shuffify/`.
@@ -80,11 +80,11 @@ b65d2d9; on main at 8945b16 the foreign-key lines are 194, 282, 357, 445,
   fix may land on main before or after this phase; when it lands, merge main
   in, re-key whatever it leaves and keep its semantics.
 - **The web app validates the owner id.** The models serialise their owner
-  as `"user_id"` (`db.py:252, 329, 405, 500, 807, 880`), and the web refuses a
+  as `"user_id"` (`db.py:253, 330, 406, 502, 835, 908`), and the web refuses a
   payload without it (`web/src/pages/settings/model.ts:119-120`,
   `workshop/core/client.ts:135`, `workshop/tools/client.ts:68, 87`,
   `activity/model.ts:330`; the types are at
-  `web/src/api/contracts.ts:109, 219, 279, 368`). The web's unit-test fixtures
+  `web/src/api/contracts.ts:109, 220, 281, 370`). The web's unit-test fixtures
   carry `user_id` too (for example `web/src/fixtures/workshop-tools.ts:133`),
   so only the harness's browser pass would notice a mismatch.
 - **`schedule_notifications.py` names the column as a string:** `_FIELDS` is
@@ -132,11 +132,11 @@ b65d2d9; on main at 8945b16 the foreign-key lines are 194, 282, 357, 445,
    - Point the FKs at `workspaces.id` with `ondelete=CASCADE`. Add an FK to
      `job_executions.workspace_id` and make that column NOT NULL: the only
      place that creates the row is the queue's enqueue, and both of its
-     callers pass an owner (`routes/queue.py:72`,
-     `scheduled_admission.py:205`; re-check them when building). A row with a
-     null owner would fall outside every workspace-scoped query and escape
-     the unique index on the owner and `request_key`, and the wipe makes NOT
-     NULL free now.
+     callers pass an owner (`routes/queue.py:76`,
+     `scheduled_admission.py:222-224`; re-check them when building). A row
+     with a null owner would fall outside every workspace-scoped query and
+     escape the unique index on the owner and `request_key`, and the wipe
+     makes NOT NULL free now.
    - **Rename every object whose name carries the old column or table name,**
      not only the unique constraints and indexes that name `user_id`
      (Evidence): the explicitly named indexes, unique constraints and check
