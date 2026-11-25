@@ -1,10 +1,10 @@
 ---
-title: "[plan] Move product data from the Spotify account to the workspace — models, services, routes"
+title: "[plan] Move product data from the Spotify account to the workspace (models, services, routes)"
 type: plan
 status: draft
 owner: chrisrogers37
 created: 2026-11-10
-updated: 2026-11-10
+updated: 2026-11-25
 tags: [enhancement, workspaces]
 repos: chrisrogers37/shuffify
 ---
@@ -49,7 +49,10 @@ and why it stays one PR (F7).
 - `track_locks` (L1126)
 - `pending_raid_tracks` (L1219)
 
-`job_executions.user_id` has no FK (L595).
+`job_executions.user_id` has no FK and can be null (L595; L599 on main at
+8945b16). The L numbers above are the tables' `__tablename__` lines at
+b65d2d9; on main at 8945b16 the foreign-key lines are 194, 282, 357, 445,
+555, 663, 731, 841, 906, 975, 1053, 1137 and 1228.
 
 **Code that scopes by user or Spotify id**
 - `user_id` appears in 66 files under `shuffify/`.
@@ -76,6 +79,32 @@ and why it stays one PR (F7).
 - Admission checks for busy and needs-review spanned all users (#129). The
   fix may land on main before or after this phase; when it lands, merge main
   in, re-key whatever it leaves and keep its semantics.
+- **The web app validates the owner id.** The models serialise their owner
+  as `"user_id"` (`db.py:252, 329, 405, 500, 807, 880`), and the web refuses a
+  payload without it (`web/src/pages/settings/model.ts:119-120`,
+  `workshop/core/client.ts:135`, `workshop/tools/client.ts:68, 87`,
+  `activity/model.ts:330`; the types are at
+  `web/src/api/contracts.ts:109, 219, 279, 368`). The web's unit-test fixtures
+  carry `user_id` too (for example `web/src/fixtures/workshop-tools.ts:133`),
+  so only the harness's browser pass would notice a mismatch.
+- **`schedule_notifications.py` names the column as a string:** `_FIELDS` is
+  built from `schedule_utils.DEFINITION_COLUMNS` plus the literal
+  `"user_id"`, which `git grep -w user_id` finds.
+- **Renaming a column or a table leaves dependent names as they were** in
+  PostgreSQL: the primary key `user_settings_pkey`, the sequence
+  `user_settings_id_seq`, the unique key `user_settings_user_id_key`, the
+  default index names `ix_<table>_user_id` (on 10 of the re-keyed tables) and
+  the unnamed foreign keys `<table>_user_id_fkey`. The explicitly named
+  objects with `user` in the name are six indexes (for example
+  `ix_workshop_user_playlist`), six unique constraints (for example
+  `uq_user_spotify_playlist`) and two check constraints
+  (`ck_user_settings_theme`, `ck_user_settings_max_snapshots`).
+- **Nothing in CI runs a migration's body** except the per-revision tests in
+  `tests/models/test_*_schema.py`, which build the tables by hand and run
+  `upgrade()` on SQLite and on PostgreSQL in a throwaway schema (the pattern
+  is `test_null_login_history_session_ids_schema.py`). The harness job builds
+  its database with `create-schema`, the drift test compares table names, and
+  the chain check reads the revision graph as text.
 
 ## Implementation Plan
 
@@ -89,10 +118,33 @@ and why it stays one PR (F7).
 
 1. **In one migration**, rename `user_id` to `workspace_id` on the 12 tables
    above (everything except `login_history`) and on `job_executions`.
+   - **The migration starts with a guard.** If `users` or any of those 13
+     tables has a row, it raises and says to rebuild the database with
+     `flask create-schema`. It deletes nothing and backfills nothing. On a
+     database with product rows the renamed columns would hold `users.id`
+     values while `workspaces` is empty (phase 03 creates it empty), so the
+     new foreign keys couldn't be added anyway. Branch development databases
+     are rebuilt at this phase. Alembic runs the whole upgrade in one
+     transaction here (`migrations/env.py:125-126`), so if the cutover's
+     order ever slipped and the merge deployed before the wipe, this guard
+     fails the deploy and the old site keeps serving, with production's data
+     untouched.
    - Point the FKs at `workspaces.id` with `ondelete=CASCADE`. Add an FK to
-     `job_executions.workspace_id`.
-   - Rename every unique constraint and index that names `user_id`, keeping
-     the same columns.
+     `job_executions.workspace_id` and make that column NOT NULL: the only
+     place that creates the row is the queue's enqueue, and both of its
+     callers pass an owner (`routes/queue.py:72`,
+     `scheduled_admission.py:205`; re-check them when building). A row with a
+     null owner would fall outside every workspace-scoped query and escape
+     the unique index on the owner and `request_key`, and the wipe makes NOT
+     NULL free now.
+   - **Rename every object whose name carries the old column or table name,**
+     not only the unique constraints and indexes that name `user_id`
+     (Evidence): the explicitly named indexes, unique constraints and check
+     constraints, the default-named indexes, unique key and foreign keys, and
+     `user_settings`' primary key and sequence. The models give each renamed
+     object its new name explicitly, so a database built by `create-schema`
+     and one upgraded through this migration carry the same names, and a
+     later migration that drops or alters one by name works on both.
    - Rename `user_settings` to `workspace_settings`.
    - **Drop the Spotify columns from `users`:** `spotify_id`, `country`,
      `spotify_product`, `spotify_uri` and `encrypted_refresh_token`. The
@@ -113,6 +165,13 @@ and why it stays one PR (F7).
      `get_by_spotify_id`, `upsert_from_spotify`), the profile fields, and the
      rate-limit key. Nothing under `shuffify/` reads `user.spotify_id` or
      `user.encrypted_refresh_token` afterwards.
+   - **The web contract is in this PR.** The owner id leaves the API payloads
+     and the web's validators, types and fixtures (Evidence): every payload
+     is the caller's own, and `/api/session` carries the ids. A mechanical
+     rename that left the web alone would make the settings, workshop and
+     activity pages reject their responses.
+   - The literal `"user_id"` in `schedule_notifications.py`'s `_FIELDS` is
+     renamed with the rest.
 4. **Update the worker and the scheduler.**
    - Operation rows carry `workspace_id`.
    - The worker's run-serialisation lock becomes
@@ -137,7 +196,9 @@ and why it stays one PR (F7).
      staging doesn't stand up until phase 06 and the stopgap is gone by
      then; phase 06's migration still deletes any such rows before adding the
      unique constraint.)
-   - It records the connection's `spotify_id`, profile and refresh token.
+   - It records the connection's `spotify_id`, `spotify_display_name`,
+     `country`, `spotify_product`, `spotify_uri` and refresh token. The
+     person's own `display_name` and `profile_image_url` stay on `users`.
    - Every phase PR keeps the harness e2e suite green.
    - The stopgap is routed through the real OAuth round trip against the fake
      Spotify, not seeded into the harness, so the e2e suite stays on the real
@@ -175,6 +236,15 @@ and why it stays one PR (F7).
 - **Stopgap test:** two Spotify accounts signing in through the stopgap get
   two people, two workspaces and two connections with no constraint error.
 - The full backend suite and the harness e2e run pass on the branch.
+- **Migration tests,** in the per-revision pattern (Evidence): a schema from
+  before this revision that has rows is refused by the guard and left as it
+  was; an empty one upgrades.
+- **Names match:** a test builds the schema both ways in throwaway schemas
+  (`create-schema`, and the chain upgraded on an empty database) and compares
+  the names of constraints, indexes and sequences.
+- **The web contract:** the web's contract tests and fixtures pass without
+  the owner id, and the harness browser pass loads the settings, workshop
+  and activity pages.
 
 ## Verification Checklist
 - [ ] `pytest tests/isolation` passes. It includes the schema test
@@ -191,6 +261,8 @@ and why it stays one PR (F7).
       five Spotify columns are gone from `users`), and
       `git grep -nE "user\.(spotify_id|encrypted_refresh_token)" -- shuffify`
       returns nothing.
+- [ ] The migration contains no `DELETE` and no backfill, and its guard test
+      passes.
 - [ ] CI is green on `feat/workspaces`.
 
 ## What NOT To Do
@@ -201,6 +273,8 @@ and why it stays one PR (F7).
 - Don't rename the Spotify-account `user_id` in `shuffify/spotify/cache.py`
   and `api.py`.
 - Don't add workspace switching.
+- Don't make a branch database upgrade by deleting or backfilling rows in
+  this migration. It refuses, and the database is rebuilt.
 
 ## Context
 - Source skill: forge · Area: models, services, routes, worker · Effort: XL · Risk: High · Priority: High

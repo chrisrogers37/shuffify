@@ -1,10 +1,10 @@
 ---
-title: "[plan] One credential seam, failures that keep their cause, one refresh token — auth, worker"
+title: "[plan] One credential seam, failures that keep their cause, one refresh token (auth, worker)"
 type: plan
 status: draft
 owner: chrisrogers37
 created: 2026-11-10
-updated: 2026-11-10
+updated: 2026-11-25
 tags: [enhancement, auth]
 repos: chrisrogers37/shuffify
 ---
@@ -61,9 +61,10 @@ Phases 06 and 08 build on all three, and they're safe on main today.
 **Typed failures don't survive the call stack.** `SpotifyUserNotAllowed` will
 subclass `SpotifyForbiddenError`, and services catch that class, or
 `SpotifyError`, long before a Flask handler could see it:
-- `playlist_service.py:235, 303`, `workshop_commit_service.py:115, 140, 169,
-  251, 392` and `workshop_finalize_service.py:374` re-map a 403 to
-  `PlaylistAccessError`;
+- `playlist_service.py:235, 303` and `workshop_commit_service.py:115, 140,
+  169` re-map a 403 to `PlaylistAccessError`; `workshop_commit_service.py:251,
+  392` and `workshop_finalize_service.py:374` catch it without re-mapping
+  (251 re-raises, and 374 raises a preflight failure);
 - `routine_activation_service.py:51, 154, 351, 382, 482, 557` and
   `playlist_setup_service.py:990, 1085, 1138, 1185` catch `SpotifyError`
   broadly and turn it into a 503 or a per-item error.
@@ -97,9 +98,10 @@ Catchers that must keep matching:
 - The worker takes `credential:{user_id}` for the whole run
   (`shuffify/worker.py:94-95`, with a deadline of up to 240s at `worker.py:33`)
   and stores a rotated token in the database (`base_executor.py:112-125`). That
-  closure also keeps a rotated token in memory when the save fails, so the
-  next refresh in the same run doesn't use a token Spotify has already
-  invalidated.
+  closure updates its own copy only after the save succeeds. A rotated token
+  whose save failed survives only in the client's own token info
+  (`api.py:187`), for that client's life, which is one run. So keeping a
+  rotated token across refreshes (step 8) is new behaviour in 02b, not a port.
 - A web refresh reads the refresh token from the session, and
   `_persist_token_to_session` (`auth_service.py:230-255`) writes only the
   session. The database copy goes stale, and so does the session's after a
@@ -260,6 +262,9 @@ throwaway script, not committed, with no token pasted anywhere)
    - refresh with a made-up refresh token and, separately, with a made-up
      client ID, and note the status and `error` code each returns (phase 08's
      matrix expects `invalid_grant` and `invalid_client`).
+   - note the prefix and length of the PKCE access token and refresh token
+     (never the tokens themselves), and keep `_SENTRY_OAUTH_TOKEN_RE` matching
+     them.
 
    Put the outcome in 02b's PR description. If Spotify refuses a
    client-ID-only exchange or refresh, stop and take it to the owner: F8
@@ -302,13 +307,30 @@ throwaway script, not committed, with no token pasted anywhere)
      refresher doesn't take it and nothing relies on it to protect the token.
      A web refresh therefore never waits on a worker run. Rewrite the comment
      at `worker.py:94` to say so.
+   - **The row lock conflicts with itself, and `_lock_user` takes the same
+     one.** `_lock_user` (`upstream_source_service.py:41-50`) locks the same
+     `users` row, its staged callers hold the lock until they commit
+     (`raid_sync_service.py:84-91`; `playlist_setup_service.py:616-618`, run
+     inside `_save_locked`), and any UPDATE of the row holds it too. Today
+     none of those paths calls Spotify while it holds the lock, so no refresh
+     waits on its own request; a later change that did would make every
+     refresh in that request wait the full 10 seconds and answer 503. Add a
+     comment at `_lock_user` that says a caller must not call Spotify while
+     it holds the lock, and one test that the staged paths finish their
+     Spotify reads before they take it. The window closes at phase 04, when
+     the token moves to `spotify_connections`, which nothing references.
    - **A failed save keeps the rotated token, within that process.** If
      Spotify has rotated the token and the commit fails, retry the commit
      once. If it still fails, keep the rotated token in memory in the
      refresher (keyed by the row) and use it for the next refresh while the
      stored token is still the one it replaced, retrying the store each time.
-     This replaces the closure at `base_executor.py:112-125`. The save
-     failure itself is transient and is logged.
+     **The kept token is bounded:** it is dropped on a successful store, or
+     when the stored token (and, once phase 03's column exists, the
+     credential generation) is no longer the one it replaced, and it is never
+     logged or put in an exception. This replaces the closure at
+     `base_executor.py:112-125`, and is new behaviour: that closure kept
+     nothing after a failed save (Evidence). The save failure itself is
+     transient, and its log line carries the error type and the row id only.
      - **The guarantee holds per process.** The kept token is invisible to
        the other process: if the web process rotates a token and can't store
        it, the worker's next refresh reads the stale stored token and gets
@@ -317,10 +339,13 @@ throwaway script, not committed, with no token pasted anywhere)
        commit failing right after a successful locked read and refresh), and
        nothing more is built for it. Don't test for more than the
        process-local guarantee.
-   - **A lock or database timeout is transient, never "signed out".**
+   - **A lock timeout, or any other database error in the refresher's
+     transaction, is transient, never "signed out".**
      Add `SpotifyRefreshUnavailable` as a subclass of
      `SpotifyReadTransientError`, so it is a `SpotifyAPIError` and outside
      `SpotifyAuthError`, `SpotifyTokenError` and `SpotifyTokenExpiredError`.
+     Every `SQLAlchemyError` raised inside the refresher's transaction maps
+     to it: a lock timeout, a dropped pooled connection, a connect timeout.
      It is handled as transient in the three places that recognise that
      family:
      - **The 401 retry** (`http_client.py:322-337`) re-raises it instead of
@@ -427,9 +452,18 @@ throwaway script, not committed, with no token pasted anywhere)
   - **in the worker,** a run whose refresh times out is deferred through
     `read_retry_delay` and not recorded `failed`, and
     `read_retry_delay(SpotifyRefreshUnavailable(...))` is not `None`.
+- **A dropped connection is transient too:** a database error other than a
+  lock timeout inside the refresher's transaction (a dropped connection)
+  raises `SpotifyRefreshUnavailable`: a 503 on the web, a deferral in the
+  worker, and the session is unchanged.
 - **A failed save keeps the token:** make the store fail once after Spotify
   rotates the token. The next refresh in the same process uses the in-memory
   token and gets no `invalid_grant`, and the stored token catches up.
+  The kept token is dropped once the store succeeds, and when the stored
+  token changes underneath it, and no log line or exception text contains
+  it.
+- **The lock and `_lock_user`:** the staged paths that hold `_lock_user`
+  finish their Spotify reads before they take it.
 - **The user's row id:** a session that has `user_data` and an expired access
   token but no `_db_user_id` refreshes in `require_auth` and then has
   `_db_user_id` set; a session whose user has no row is signed out.
@@ -454,9 +488,10 @@ throwaway script, not committed, with no token pasted anywhere)
       `credentials_for`); phase 06 deletes it.
 - [ ] **02a:** each of the three faults in the fake Spotify produces its error
       code in the harness.
-- [ ] **Step 7:** the observed behaviour (rotation, and the error codes for a
-      bad refresh token and a bad client ID) is written in 02b's PR
-      description, and the fake Spotify's modes match it.
+- [ ] **Step 7:** the observed behaviour (rotation, the error codes for a bad
+      refresh token and a bad client ID, and the PKCE tokens' prefix and
+      length) is written in 02b's PR description, and the fake Spotify's
+      modes match it.
 - [ ] **02b:** `pytest tests/services/test_credential_refresher.py tests/routes/test_session_holds_no_refresh_token.py`
       passes (both files exist and run their tests).
 - [ ] **02b:** `git grep -n "encrypt_session_token\|decrypt_session_token" -- shuffify`
@@ -471,6 +506,7 @@ throwaway script, not committed, with no token pasted anywhere)
 - [ ] After 02b deploys, the production logs show no `invalid_grant` and no
       503 from a refresh over the next day of scheduled runs. That day is the
       only run through the pooled host before staging.
+      `feat/workspaces` is cut only after that day (overview, Dependencies).
 - [ ] CI is green on each PR.
 
 ## What NOT To Do

@@ -1,10 +1,10 @@
 ---
-title: "[plan] Broken app: detect, pause, guide, resume — worker, scheduler, web"
+title: "[plan] Broken app: detect, pause, guide, resume (worker, scheduler, web)"
 type: plan
 status: draft
 owner: chrisrogers37
 created: 2026-11-10
-updated: 2026-11-10
+updated: 2026-11-25
 tags: [enhancement, workspaces]
 repos: chrisrogers37/shuffify
 ---
@@ -28,6 +28,12 @@ before a reconnect can't undo the reconnect.
 Whether schedules are paused is never stored: a schedule runs only while its
 workspace's connection is `ok`. There is no `paused_reason` column.
 
+**A paused workspace is found on the next visit, and that is accepted for
+now.** Nothing tells the person when their app breaks: the owner finds it on
+their next visit, when the guard sends them to the "uh oh" page. An email
+notice comes once there are users to tell (Google sign-in gives a verified
+address).
+
 ## Evidence
 
 - Phase 03 gives `credential_generation`, and phase 06 bumps it on every
@@ -42,21 +48,23 @@ workspace's connection is `ok`. There is no `paused_reason` column.
   `SpotifyConnectionHealth.mark_ok`.
 - **Services catch these failures before any Flask handler can** (phase 02,
   Evidence): `playlist_service.py:235, 303`, `workshop_commit_service.py:115,
-  140, 169, 251, 392` and `workshop_finalize_service.py:374` re-map a 403 to
-  `PlaylistAccessError`, and `routine_activation_service.py` and
-  `playlist_setup_service.py` catch `SpotifyError` broadly. That is why
-  detection can't live in a handler.
+  140, 169, 251, 392` and `workshop_finalize_service.py:374` catch a 403 (most
+  re-map it to `PlaylistAccessError`; phase 02's Evidence says which don't),
+  and `routine_activation_service.py` and `playlist_setup_service.py` catch
+  `SpotifyError` broadly. That is why detection can't live in a handler.
 - **The scheduler** loads `is_enabled = True` rows
   (`services/worker_scheduler.py:298-357`). `admit_scheduled` rechecks
   `is_enabled` inside `capture` (`scheduled_admission.py:174-193`) and
   reports other skips by code. A skipped fire for a blocked playlist logs a
   warning (`scheduled_admission.py:207-214`, the #107 precedent).
 - **The worker** claims a queued operation, then takes the credential lock
-  and runs it (`shuffify/worker.py:85-100`).
+  and runs it (`shuffify/worker.py:85-100`; 105-128 on main at 8945b16, where
+  a database error while it locks defers the claim).
 - **Missed runs:** `eligibility_floor` takes the later of the schedule's
   `definition_changed_at` and its creation (`scheduled_admission.py:95-98`),
   and `recoverable_fire` never fires before that floor. A change to a field
-  in `_FIELDS` (`services/schedule_notifications.py:57-100`) stamps
+  in `_FIELDS` (`services/schedule_notifications.py:57-100`; one line, 14, on
+  main at 8945b16) stamps
   `definition_changed_at`; that stamp is what stops missed runs being made
   up.
 - **The design's "uh oh" mockup:** `documentation/plans/120-mockups/uh-oh.html`.
@@ -80,7 +88,7 @@ together.
 | `broken_reason` | Spotify said | The person sees | The fix | Status changes | `mark_ok` after |
 |---|---|---|---|---|---|
 | `app_rejected` | `invalid_client`: the app was deleted, or Spotify no longer knows its client ID | "Spotify no longer recognises your app" | Create a new app (setup steps 1 to 3; delete the old one first if it still exists), then connect | `broken` → saving the new client ID sets `unchecked`, clears the reason and the refresh token → connect succeeds → `ok` | a successful connect with the new app, by the same Spotify account |
-| `access_revoked` | `invalid_grant` at a refresh: the refresh token no longer works, for example because the person removed Raccoon in their Spotify account's apps | "Spotify access was removed" | Connect Spotify again through the same app | `broken` → connect succeeds → `ok` | a successful connect (the exchange succeeds and the account matches the bound one) |
+| `access_revoked` | `invalid_grant` at a refresh: the refresh token no longer works, for example because the person removed the app they created for Raccoon in their Spotify account's apps page | "Spotify access was removed" | Connect Spotify again through the same app | `broken` → connect succeeds → `ok` | a successful connect (the exchange succeeds and the account matches the bound one) |
 | `user_not_allowed` | a 403 saying the user isn't registered for the app | "Your account isn't on your app's list" | Add the account under User Management in Spotify's dashboard, then connect again (an app allows five users) | `broken` → connect succeeds → `ok`; a connect that still says "not registered" stays `broken` | a successful connect |
 
 - Clicking "Connect" without succeeding changes nothing. Saving a different
@@ -154,13 +162,22 @@ together.
      request's own rollback when the failure propagates.
    - **The run in flight** ends `failed` with its code, as it does today. A
      queued operation for a workspace whose connection isn't `ok` is refused at
-     claim time in `worker._run_one`, before the handler runs: it ends `failed`
-     with `app_broken` and logs a warning, and Spotify is never called.
+     claim time, before the handler runs (where in the claim it sits, in
+     `worker._run_one` or elsewhere, is left to the builder): it ends `failed`
+     with `app_broken` and logs a warning, and Spotify is never called. A
+     database error while the claim reads the connection defers the run, as
+     the worker already does for a database error at the claim; it never ends
+     the run `failed` with `app_broken`, a failure the person would see and
+     that wouldn't be true.
    - **A handler is left only for the response.** Register one Flask error
      handler for `SpotifyAppRejected`, `SpotifyGrantRevoked` and
      `SpotifyUserNotAllowed` in `shuffify/error_handlers.py`. It marks nothing:
-     it answers `spotify_app_broken`, which the web app sends to
-     `/setup/problem`. Flask picks the handler for the most specific class in an
+     it answers `spotify_app_broken`, a 401 whose error envelope carries
+     `error_code: spotify_app_broken` and `retryable: false`. The web re-reads
+     `/api/session` after a 401 (phase 06 step 1), sees `broken` and goes to
+     `/setup/problem`, with no sign-in panel and no retry loop; on any other
+     status an open page would show a request error and stay where it is.
+     Flask picks the handler for the most specific class in an
      exception's hierarchy, so it wins over `handle_spotify_token_expired`
      (`error_handlers.py:328-333`, which says "Please log in again", a fix that
      can't help here) and over the ordinary 403 handling. `require_auth`
@@ -185,7 +202,7 @@ together.
      the handler above.
 4. **`require_auth` refuses a connection that isn't `ok`, before it builds a
    client.** Phase 06 made it return `spotify_not_connected` for `unchecked`;
-   this adds `broken`, which returns `spotify_app_broken`, the same response
+   this adds `broken`, which returns `spotify_app_broken`, the same 401 response
    the handler gives. A broken workspace's open session therefore stops calling
    Spotify with its still-valid access token; it isn't only redirected in the
    front end. The connect, save-app and `/api/session` routes check the
@@ -197,22 +214,35 @@ together.
    `definition_changed_at` to now on the workspace's enabled schedules. That
    moves the eligibility floor, so each schedule runs at its next slot with
    no making up. It writes no other schedule field.
-6. **Make the "uh oh" page, `/setup/problem`,** from the mockup:
-   - the paused-schedules banner, showing the count of the workspace's
-     enabled schedules (all of them are paused);
+6. **Make the "uh oh" page, `/setup/problem`,** from the mockup, in the
+   setup shell (phase 07 step 2: the brand, the person's name and Log out)
+   and reached by phase 07's routing table:
+   - the paused-schedules banner: "N schedules are paused", where N is the
+     count of the workspace's enabled schedules (all of them are paused). It
+     counts schedules, so it says schedules, not "scheduled runs", and it is
+     hidden when there are none;
+   - it says "Nothing will run on your playlists until this is fixed". It
+     doesn't say that nothing has been changed on them: the run in flight
+     when the failure hit ends `failed` and may have applied part of its
+     change first. After the fix, Activity shows any failed run and its
+     snapshot;
    - the fix for `broken_reason`, from the matrix above, with the screens
-     for each;
+     for each. Where it names the bound Spotify account it uses
+     `spotify_display_name`, and the access-removed copy says "the app you
+     created for Raccoon";
+   - connect notices render inline here, as on setup step 4 (phase 07);
    - "Use a different app" always offered. It says to delete the old app in
      Spotify's dashboard first (one app per developer), then goes to setup
-     step 1.
+     step 1. "Start setup again" goes there too. Both work because `/setup`
+     stays reachable while the app is broken (phase 07's routing table).
 
    While a replacement is in progress (`unchecked` with a bound Spotify
    account), `/setup` shows the same paused-schedules banner.
 7. **Show the state in the API.** `/api/session` `setup.spotify_app = broken`
-   plus `broken_reason`. The schedules API shows `paused` and a derived
-   `paused_reason` (`app_broken` when the connection is `broken`,
-   `app_not_connected` when it's `unchecked`), so the Routines page can label
-   paused schedules. Neither is stored.
+   plus `broken_reason`. The schedules API gains no `paused` or
+   `paused_reason` field in this phase: nothing would read them, because the
+   guard keeps a workspace that isn't `ok` out of the Routines page. They are
+   added when something reads them; the MCP server (#121) may be the first.
 
 ## Test Plan
 - **Worker tests,** one per reason: a typed failure through a worker-built
@@ -240,7 +270,8 @@ together.
     grace;
   - a schedule the person had disabled stays disabled after `mark_ok`;
   - a schedule enabled while the app is broken doesn't run.
-- **Claim-time refusal** of queued runs for a workspace that isn't `ok`.
+- **Claim-time refusal** of queued runs for a workspace that isn't `ok`; a
+  database error during that read defers the run and doesn't fail it.
 - **`require_auth` refusal:** with the connection `broken`, a request through
   `require_auth_and_db` returns `spotify_app_broken` and the fake Spotify
   records no call from it; with `unchecked` it returns `spotify_not_connected`;
@@ -262,14 +293,23 @@ together.
   bound `spotify_id` mark it `broken`. An `invalid_grant` at the exchange shows
   the `oauth_failed` notice and marks nothing broken, for a never-connected,
   an `ok` and a `broken` connection.
-- **Playwright:** the "uh oh" page for each reason and its fix.
+- **Playwright:** the "uh oh" page for each reason and its fix, with phase
+  07's accessibility set (headings, focus moves to the h1, the alert
+  announced); the banner's wording, and no banner when there are no enabled
+  schedules; Log out; and the round trip for each reason ("Start setup
+  again" reaches step 3 and saves).
+- **A break seen mid-session:** with a page open and the connection then
+  marked broken, the page's next request gets the 401 and the page lands on
+  `/setup/problem`, with no sign-in panel and no retry loop.
 - **Harness e2e:** fake Spotify faults (from 02) and its deleted-app mode
   (from 06) break the app; the page appears; the fix resumes the schedules.
 - **On staging:** the owner breaks the app for real (reset or remove the
   account's grant, remove the account from User Management) and confirms the
   page and the fix. Removing the account from User Management is the case
   that a service can swallow, so watch that the page still appears on the next
-  request.
+  request. **Each of these also stops production,** because staging shares
+  the owner's app and account with it (overview, Staging): after the drill,
+  sign in again on production and watch its next scheduled run.
 
 ## Verification Checklist
 - [ ] `pytest tests/services/test_spotify_connection_health.py tests/services/test_scheduled_admission_broken.py`
@@ -293,6 +333,8 @@ together.
 - Don't refuse `/spotify/connect` because the app is broken, and don't put
   the connect, save-app or `/api/session` routes behind `require_auth`.
 - Don't retry a broken app automatically on a timer.
+- Don't send an email when an app breaks; that comes once there are users to
+  tell.
 - Don't rely on a failure reaching a Flask handler to detect a broken app, and
   don't mark anything broken from a handler.
 - Don't mark a connection broken from a client built under an older

@@ -1,10 +1,10 @@
 ---
-title: "[plan] Attach a Spotify app; connect Spotify through it with PKCE — routes, credentials, harness, staging"
+title: "[plan] Attach a Spotify app; connect Spotify through it with PKCE (routes, credentials, harness, staging)"
 type: plan
 status: draft
 owner: chrisrogers37
 created: 2026-11-10
-updated: 2026-11-10
+updated: 2026-11-25
 tags: [enhancement, auth, workspaces]
 repos: chrisrogers37/shuffify
 ---
@@ -17,15 +17,17 @@ A workspace can save its Spotify app's client ID and connect a Spotify
 account through that app using Authorization Code with PKCE. There is no
 client secret anywhere (F8). Every Spotify call then uses the workspace's
 app, and the site-wide Spotify app settings are removed. The phase also
-makes the pre-deploy script able to build a new database and stands up
-staging, so the first real Spotify and real Google runs happen here.
+makes the pre-deploy script able to build a new database while a variable is
+set, and stands up staging, so the first real Spotify and real Google runs
+happen here.
 
 It is XL because it holds six separate pieces of work: the PKCE changes, the
 save-app and connect endpoints, the stopgaps' removal with its migration, a
 rewrite of the fake Spotify (`harness/fake_spotify/app.py`, 652 lines) into a
 per-app registry that enforces PKCE and rotates tokens, retiring the site
 credentials (`SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` and `client_secret`
-appear in 44 tracked files, 24 of them under `tests/`), and the pre-deploy
+appear in 44 tracked files: 38 of code, config and tests, 24 of them under
+`tests/`, and six documentation files, these plans among them), and the pre-deploy
 script's database build (step 7), plus the owner's staging setup. It is one
 phase and still lands as several PRs where the builder finds a clean seam (for
 example the fake Spotify first).
@@ -88,13 +90,29 @@ Spotify dashboard and raccoon.fm's DNS.
    - Code that calls Spotify on a person's behalf refuses a connection that
      isn't `ok`: `require_auth` returns `spotify_not_connected` for
      `unchecked`, and phase 08 adds the `broken` case (its step 4) and the
-     worker's claim-time refusal. The connect, save-app and `/api/session`
-     routes check only the signed-in person and their workspace, not
-     `require_auth`, so they keep working in every status.
+     worker's claim-time refusal. **The refusal is a 401** whose error
+     envelope carries `error_code: spotify_not_connected` and
+     `retryable: false`. An open page re-reads `/api/session` only after a
+     401 (`web/src/api/client.ts`, `web/src/app/services.ts`); on any other
+     status it would show a request error and stay where it is.
+     `retryable: false` keeps the request out of the retry that live reviews
+     give a 401 (`routes/__init__.py:208-216`). The connect, save-app and
+     `/api/session` routes check only the signed-in person and their
+     workspace, not `require_auth`, so they keep working in every status.
    - Delete `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` from the places
      in Evidence, from `_SENTRY_SECRET_CONFIG_ATTRS`, and from every test
      that sets them; the harness identifies fake apps by the client ID it
-     registers with the fake (step 6).
+     registers with the fake (step 6). Two places Evidence doesn't list go
+     too: the startup log line that names `SPOTIFY_REDIRECT_URI`
+     (`shuffify/__init__.py:915`), and the harness's fake client secret
+     (`HARNESS_FAKE_CLIENT_SECRET` in `config.py`, `CLIENT_SECRET` in
+     `harness/fake_spotify/app.py`).
+   - **The executor's "Sign in again" message goes.**
+     `live_executor_context_service.py:112-117` answers a missing stored
+     refresh token with "Sign in again so Raccoon can run this for you".
+     Sign-in is Google now and can't restore a Spotify token. Delete the
+     message if the refusal above makes the case unreachable; otherwise
+     reword it to say "Connect Spotify again".
 2. **Add PKCE to `shuffify/spotify/auth.py`.**
    - A helper makes a code verifier (`secrets.token_urlsafe(64)`) and its
      S256 challenge.
@@ -109,11 +127,17 @@ Spotify dashboard and raccoon.fm's DNS.
      phase 02 refresher.
    - `revoke_token` drops the Basic header and sends `client_id` (L382).
      Spotify ignores revocation, as today.
-3. **`PUT /api/workspace/spotify-app` `{client_id}`**, with CSRF and a
-   per-person rate limit:
+3. **`PUT /api/workspace/spotify-app` `{client_id}`**, with CSRF and a rate
+   limit of 10 requests a minute per person (registered under
+   `_user_or_address_key`):
    - validates the format: 32 hexadecimal characters, normalised to
-     lowercase, so a pasted secret, URL or stray space is refused with a
-     message;
+     lowercase, so a URL, a stray space or a typo is refused with a message.
+     **The format can't tell a client ID from a client secret:** Spotify
+     shows both on the app's Settings page, and the secret is understood to
+     have the same 32-hex shape (confirm it on the owner's app during the
+     staging checks). So the format check is not what keeps a secret out; the
+     setup copy is (phase 07 step 3), and the error text doesn't claim that a
+     pasted secret would be caught;
    - **saving the client ID the connection already has is a no-op** that
      returns the current status: a double submit, or revisiting step 3, must
      not pause schedules or force a reconnect. The comparison is on the
@@ -131,43 +155,71 @@ Spotify dashboard and raccoon.fm's DNS.
    fail the constraint. Development and staging databases therefore lose
    their connections and connect again; production is built fresh by the
    cutover. A `client_id` already used by another workspace returns
-   `app_in_use_elsewhere`.
+   `app_in_use_elsewhere`: the save checks first, and the request that loses
+   a check-then-write race catches the `IntegrityError` by the constraint's
+   name (`uq_spotify_connections_client_id`) and returns the same answer,
+   never a 500.
 
    Replacing the app keeps the connection row, clears its refresh token and
    leaves `spotify_id` as it is. Under the ratified binding rule, the next
    connect must be the same Spotify account.
 
    There is no key-check endpoint. Connecting is the check.
+
+   **A pasted client secret is accepted for now.** If it has the client ID's
+   shape it saves, and Connect then stops on Spotify's "INVALID_CLIENT:
+   Invalid client" page, which setup step 4 quotes with its fix (phase 07).
+   The staging checks confirm the secret's shape on the owner's app, and a
+   probe that tells the two apart is revisited only if someone reaches that
+   dead end.
 4. **Connect Spotify.**
    - `GET /spotify/connect` requires a signed-in person and a workspace that
      has a connection with a client ID, in any status. It refuses a request
      marked `Sec-Fetch-Site: cross-site`, makes a state and a verifier, stores
-     `{state, verifier, workspace_id}` under the session key `spotify_connect`
-     and redirects to Spotify with that workspace's client ID. Google's state
-     lives under a different key (`google_state`), so the flows can't
+     `{state, verifier, workspace_id, client_id, credential_generation}` under
+     the session key `spotify_connect` (the connection's client ID and
+     generation as they are at that moment) and redirects to Spotify with
+     that workspace's client ID. It is a same-tab navigation, so the browser's
+     Back button returns to setup from one of Spotify's own pages. Google's
+     state lives under a different key (`google_state`), so the flows can't
      interfere.
    - `GET /spotify/callback` (F13) is the redirect URL the person pastes:
      `https://raccoon.fm/spotify/callback`. It runs only for a
-     signed-in person, **never calls `session.clear()`**, and removes only
-     `spotify_connect` from the session.
+     signed-in person, **never calls `session.clear()`**, and takes
+     `spotify_connect` out of the session first, on every outcome: the state
+     and the verifier are used once. It removes nothing else from the
+     session.
      - The stored and returned state must match, compared as UTF-8 bytes with
        `hmac.compare_digest` (#135, `routes/core.py:128-130`), so a non-ASCII
        `state` is an `invalid_state` notice and never a 500 (#124); and the
        workspace in it must be the session's current workspace.
+     - **The connection must still be the one Connect started with.** Under
+       the connection's row lock, the callback compares the `client_id` and
+       `credential_generation` kept with the state against the connection's
+       current ones. If the app was replaced in between (two tabs, or the
+       Back button), it refuses with the `invalid_state` notice and marks
+       nothing: a code issued to one app is never exchanged as another.
      - The code exchange uses `credentials_for(connection)` and the stored
        verifier.
      - The profile's `spotify_id` must equal the connection's bound
        `spotify_id` when one is set (`wrong_spotify_account`), and must not
        belong to another workspace's connection
-       (`spotify_account_in_use_elsewhere`; the unique constraint is the
-       backstop).
+       (`spotify_account_in_use_elsewhere`). The unique constraint
+       (`uq_spotify_connections_spotify_id`) is the backstop: the request
+       that loses a check-then-write race catches the `IntegrityError` by
+       that constraint's name and returns the same notice, never a 500.
      - On success, in one transaction that first takes the connection row's
        `FOR NO KEY UPDATE` lock (the lock a refresh takes, phase 02), it
-       stores the encrypted refresh token, sets `spotify_id` and the profile,
-       bumps `credential_generation`, and calls
+       stores the encrypted refresh token, sets `spotify_id`,
+       `spotify_display_name` and the account's other columns, bumps
+       `credential_generation`, and calls
        `SpotifyConnectionHealth.mark_ok(connection)`; then it sets the
        session's Spotify access token. The status becomes `ok` here and
        nowhere earlier. Phase 08 extends `mark_ok` to resume schedules.
+     - **Where it lands.** On success it redirects to `/`, and the guard's
+       routing table (phase 07 step 1) sends an `ok` workspace to the app.
+       With a notice it redirects to `/setup/4`, or to `/setup/problem` when
+       the connection is `broken`.
      - **The callback catches every typed failure itself,** so none of them
        reaches a global handler, and it builds its own clients without a
        failure hook: the exchange uses the bare auth manager and the profile
@@ -186,11 +238,46 @@ Spotify dashboard and raccoon.fm's DNS.
          Phase 08 decides when they also mark the connection broken: only for
          a connection that has connected before (it has a bound
          `spotify_id`), never for a first connect.
-   - A redirect URL mismatch or a wrong client ID never reaches `/spotify/callback`:
-     Spotify stops on its own page. There is no notice for it; step 2 and 3
-     of the setup copy (phase 07) explain what that page looks like and to
-     come back and fix it.
-   - Add the notice codes to `shuffify/services/auth_notice.py`.
+   - A redirect URL mismatch or a wrong client ID never reaches
+     `/spotify/callback`: Spotify stops on its own page, and both pages begin
+     "INVALID_CLIENT". The fake's texts are "INVALID_CLIENT: Invalid client"
+     for an unknown client ID and "INVALID_CLIENT: Invalid redirect URI" for
+     an unregistered redirect URI (`harness/fake_spotify/app.py:259, 262`);
+     confirm Spotify's live wording on staging. There is no notice for
+     either. Setup step 4, where the person presses Connect, quotes both
+     pages with the fix for each, and steps 2 and 3 quote them too (phase
+     07).
+   - **Spotify's error return.** Cancel on Spotify's account dialog, which
+     `show_dialog=true` shows every time, comes back as `error=access_denied`.
+     The callback answers it with the connect flow's `access_denied` notice
+     and marks nothing. Any other `error` value is also a notice and never a
+     mark; which code it uses stays open in the table (its last row), and
+     this phase's build settles it.
+   - **The notice table, Spotify connect.** One row per code. Every notice
+     lands on `/setup/4`, or on `/setup/problem` when the connection is
+     `broken`, where phase 07 renders it inline with its fix. None of them
+     says the person has been signed out, because they haven't. The texts
+     are proposals; the final copy follows the mockups.
+
+     | Code | When | What the person reads | The fix it links to |
+     |---|---|---|---|
+     | `access_denied` | Cancel on Spotify's dialog | "You cancelled before Spotify finished connecting. Nothing has changed." | Connect again |
+     | `invalid_state` | The state is missing, doesn't match, names another workspace, or was made for an app that has since been replaced | "That connect attempt expired. Press Connect again." | Connect again |
+     | `missing_code` | Spotify returned no code | "Spotify didn't finish connecting. Press Connect again." | Connect again |
+     | `oauth_failed` | `invalid_grant` at the code exchange | "Spotify didn't finish connecting. The sign-in expired or was already used." | Connect again; nothing is marked |
+     | `spotify_user_not_allowed` | "Not registered" at the profile fetch | "This Spotify account isn't allowed on your app." | Step 2's allow-list panel |
+     | `spotify_app_rejected` | `invalid_client` at the exchange | "Spotify didn't recognise this app." | Step 3, or step 1 if the app no longer exists |
+     | `wrong_spotify_account` | The account isn't the one the workspace is bound to | "This isn't the Spotify account this workspace started with." | Connect the original account |
+     | `spotify_account_in_use_elsewhere` | The account belongs to another workspace's connection | "This Spotify account is already connected to another workspace. Have you used Raccoon with another Google account? Log out and sign in with that one." | Log out, or use a different account |
+     | `app_in_use_elsewhere` | Returned by the save in step 3, not by connect | "This app is already used by another workspace." | Step 1 |
+     | not settled | A Spotify `error` other than `access_denied` | a notice, never a mark | open |
+
+     Add the codes to `shuffify/services/auth_notice.py` and, in the same
+     PR, to `authNoticeCodes` (`web/src/api/contracts.ts`) and the generated
+     session schema: the web rejects a session that carries a code it doesn't
+     list, and `tests/contracts/test_page_contracts.py` checks the schema
+     against `AUTH_NOTICE_MESSAGES`. This phase changes the web contract,
+     although phase 07 is the web phase.
 5. **Delete the old Spotify sign-in and the phase 04 and 05 stopgaps.**
    Remove the old `/callback` route and `auth.callback` (with its #139 limit
    registration), the Spotify sign-in code behind `/login`, and `/callback`
@@ -217,70 +304,105 @@ Spotify dashboard and raccoon.fm's DNS.
    `HarnessConfig.assert_safe` now checks that every connection's client ID
    is registered with the fake. `check_login` and `App._log_in` become: fake
    Google, save the fake app's client ID, connect as `fake_user`.
-7. **Make the pre-deploy script able to build a new database.** This is
-   the change production's cutover depends on, so staging's first deploy
-   exercises it (it lands on `feat/workspaces` before staging stands up).
+7. **Make the pre-deploy script able to build a new database, only while a
+   variable is set.** This is the change production's cutover depends on, so
+   staging's first deploys exercise it, with the variable and without it (it
+   lands on `feat/workspaces` before staging stands up).
    - `scripts/pre-deploy.sh` runs `flask create-schema` before
      `flask db upgrade`, with the same
-     `SCHEDULER_ENABLED=false SHUFFIFY_MIGRATION_STEP=1` prefix.
+     `SCHEDULER_ENABLED=false SHUFFIFY_MIGRATION_STEP=1` prefix, **only while
+     `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA=1` is set on the service.** Without
+     it, pre-deploy runs only `flask db upgrade`, as today, so a database with
+     no revision still fails the deploy (`migrations/env.py:54-66`). The
+     variable is set only on staging's api (step 8) and on production's api
+     from phase 09 step 3 until phase 09 step 11's config apply or step 14
+     removes it.
    - `flask create-schema` (`shuffify/cli.py:15-53`) builds the schema and
      stamps head **only when the database has no Alembic revision and no
      tables at all**. Today it refuses only when the models' tables exist, so
      a wrong `DATABASE_URL` pointing at some unrelated database would be
      built on quietly. Tighten it: no revision and any table at all is
      refused loudly, naming the tables. A database that has a revision is
-     left to the upgrade, as today. It logs which revision it stamped.
+     left to the upgrade, as today. It logs which revision it stamped and the
+     Neon endpoint id it ran on, taken from `DATABASE_URL`'s host (the id
+     only, never the URL), so phase 09 step 10 can read both from the
+     pre-deploy log.
    - Test the four cases: empty builds and stamps; a revision is left alone;
      no revision with the models' tables is refused; no revision with
      unrelated tables is refused.
-   - **This reverses a rule the repo pinned on purpose.** Since the split
+   - **This keeps a rule the repo pinned on purpose.** Since the split
      runtime (05d4262, 2026-10-15), pre-deploy has run only `flask db
      upgrade`, `create-schema` has been an explicit one-time bootstrap, and a
      database with no revision has failed the deploy
      (`migrations/env.py:54-66`). The cutover can't work that way: production
-     is wiped and rebuilt by its deploy. **Decision: pre-deploy keeps
-     `create-schema` after the cutover.** The tightened command does nothing
-     on a database that has a revision, so on production afterwards it is
-     inert, and putting the old rule back would take another main PR and
-     deploy for a guard whose remaining value is small. What is lost: an
-     empty database behind a wrong `DATABASE_URL` is now built and booted
-     instead of failing the deploy, and production's `DATABASE_URL` host has
-     already differed from what the guides described. What remains is the
-     refusal of any database that has tables and no revision, and the
+     is wiped and rebuilt by its deploy. **Decision: pre-deploy builds an
+     empty database only while the variable is set.** The variable is the
+     explicit bootstrap, set for the two databases that need one, and the
+     rule holds everywhere else, production after phase 09 step 14 included.
+     While it is set, an empty database behind a wrong `DATABASE_URL` would be
+     built and booted instead of failing the deploy, and production's
+     `DATABASE_URL` host has already differed from what the guides described.
+     The refusal of any database that has tables and no revision, and the
      Neon-identity check before a first deploy (overview Staging, cutover
-     step 6).
-   - **Rewrite the tests that assert the old rule:**
-     - `tests/test_db_schema_guard.py::TestPredeploy::test_runs_only_the_explicit_upgrade`
-       (L337) expects the stub `flask` to see only `db upgrade`. It now
-       expects `create-schema`, then `db upgrade`, in that order;
-     - `::test_missing_schema_is_never_silently_bootstrapped` (L354) uses a
-       stub that exits 91 if `create-schema` is called. It becomes: a
-       `create-schema` that fails blocks the deploy, `db upgrade` doesn't run
-       and the exit code passes through;
-     - `tests/test_runtime_launch.py::test_predeploy_disables_scheduler_and_sets_only_the_migration_process_marker`
-       (L40) expects exactly `false|1|db upgrade`. It now expects
-       `false|1|create-schema` and then `false|1|db upgrade`.
-   - **Rewrite the docs that state the old rule,** in this step and not at
-     cutover, because they contradict the script from the day it merges to the
-     branch: README.md's "Split runtime" paragraph (L119: an empty database
-     "requires an explicit one-time `flask create-schema` bootstrap") and the
-     last paragraph of `.railway/README.md` (L21: "upgrading never silently
-     stamps an existing database"). Both now say that pre-deploy builds a
-     database that has no revision and no tables, leaves one that has a
-     revision to the upgrade, and refuses one that has tables and no
-     revision. (The "no staging environment" sentences are the ones left for
-     phase 09.)
-8. **Stand up staging** (the owner, with the overview's Staging section):
-   the Railway environment, the emptied Neon branch on its pooled host (as
-   production's api and worker use), the Vercel branch variable and
-   `staging.raccoon.fm`, the Spotify redirect URI
-   on the owner's existing app (the `/spotify/callback` URL), and a Google
-   client for staging (Testing mode is fine there). Deploy
-   `feat/workspaces` to it, so the first deploy onto the emptied branch runs
-   step 7's pre-deploy, and run the checks below. The two lines about staging
-   in `documentation/guides/production.md` and `.railway/README.md` ("no
-   staging environment") are superseded for as long as staging exists; the
-   overview's Staging section is the guidance, and phase 09 tears it down.
+     step 6), cover that window.
+   - **The tests that pin the rule stay as they are,** because they run with
+     the variable unset:
+     `tests/test_db_schema_guard.py::TestPredeploy::test_runs_only_the_explicit_upgrade`
+     (L337), `::test_missing_schema_is_never_silently_bootstrapped` (L354) and
+     `tests/test_runtime_launch.py::test_predeploy_disables_scheduler_and_sets_only_the_migration_process_marker`
+     (L40). **Add their counterparts with the variable set:** the stub
+     `flask` sees `false|1|create-schema` and then `false|1|db upgrade`, in
+     that order; and a `create-schema` that fails blocks the deploy,
+     `db upgrade` doesn't run and the exit code passes through.
+   - **Document the variable next to the rule,** in this step: README.md's
+     "Split runtime" paragraph (L119) and the last paragraph of
+     `.railway/README.md` (L21) keep what they say, and each gains a sentence:
+     with `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA=1` on the api, pre-deploy runs
+     `flask create-schema` first, which builds a database that has no
+     revision and no tables, leaves one that has a revision to the upgrade,
+     and refuses one that has tables and no revision; the variable is set
+     only while a new database is being built. (The "no staging environment"
+     sentences are the ones left for phase 09.)
+8. **Stand up staging** (the owner, with the overview's Staging section), in
+   this order, because `railway config apply` creates the services and that
+   is the first deploy:
+   1. the staging database, holding no production data, on its pooled host
+      (as production's api and worker use; re-check production's host type
+      now);
+   2. the Railway `staging` environment, created empty, with every variable
+      set by hand and read back, and `SCHEDULER_ENABLED` overridden to
+      `false` on its worker;
+   3. `staging.raccoon.fm` on Vercel with its DNS record, the Vercel branch
+      variable, and **`staging.raccoon.fm` added to the project's Deployment
+      Protection Exceptions** (without it the domain sits behind a Vercel
+      login); confirm in a private window;
+   4. the Spotify redirect URI on the owner's existing app (the
+      `/spotify/callback` URL), and a Google client for staging in its own
+      Google Cloud project (Testing mode is fine there);
+   5. confirm the link with `railway status`, check that the plan proposes
+      only creations in the staging environment, and apply. The apply
+      creates the api, so its first deploy can't carry
+      `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` yet: step 7's pre-deploy refuses the
+      empty database and the deploy fails, as the rule says. Then set
+      `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA=1` on staging's api and deploy the
+      staged change: pre-deploy builds the schema and stamps head. Redeploy
+      the worker once the api is at head. A later apply to staging can
+      remove the variable, because the file doesn't name it, so read it back
+      after any apply.
+
+   Then run the checks below. Until phase 07's pages are on staging there is
+   no page that saves a client ID, and the save is a `PUT` with CSRF that is
+   accepted only from `PUBLIC_ORIGIN`. Do it from the browser console on
+   `https://staging.raccoon.fm`, signed in: read `csrf_token` from
+   `GET /api/session`, send the `PUT` to `/api/workspace/spotify-app` with
+   `{client_id}` and that token in the header the web client sends
+   (`web/src/api/client.ts`), then open `/spotify/connect` in the same tab.
+   A `fetch()` from that console carries the cookie and the right Origin.
+
+   The two lines about staging in `documentation/guides/production.md` and
+   `.railway/README.md` ("no staging environment") are superseded for as long
+   as staging exists; the overview's Staging section is the guidance, and
+   phase 09 tears it down.
 
 ## Test Plan
 - **Route tests:**
@@ -312,11 +434,31 @@ Spotify dashboard and raccoon.fm's DNS.
     connect, which also bumps the generation;
   - the callback and a refresh don't interleave: with the row lock held by a
     refresh, the callback waits for it and then stores its token.
+  - the 11th save in a minute by one person returns 429, and the test that
+    every sign-in, connect and save-app view has a registered limit (phase
+    05) covers this view;
+  - a save that loses a race on the client ID returns `app_in_use_elsewhere`,
+    and a connect that loses one on the Spotify account returns
+    `spotify_account_in_use_elsewhere`; neither is a 500;
+  - `spotify_connect` is gone after every callback outcome (success, a state
+    mismatch, Spotify's error return, a failed exchange), and replaying the
+    callback gets the invalid-state notice;
+  - Cancel on the fake Spotify's dialog shows the connect `access_denied`
+    notice and marks nothing;
+  - a callback for a connection whose app was replaced after Connect started
+    gets the invalid-state notice and marks nothing, for a connection that
+    has connected before as well as one that hasn't;
+  - a request through `require_auth` with an `unchecked` connection gets a
+    401 with `error_code: spotify_not_connected` and `retryable: false`;
+  - every notice code in step 4's table is in `authNoticeCodes` and the
+    session schema (the contract test), and no connect notice says the
+    person has been signed out.
 - **Migration test:** a database with two stopgap connections sharing one
   client ID upgrades through the unique-constraint migration, which leaves
   no connections.
-- **Pre-deploy tests:** the four create-schema cases in step 7, and the three
-  rewritten pre-deploy tests it names.
+- **Pre-deploy tests:** the four create-schema cases in step 7, the
+  pre-deploy tests with the variable set, and the three existing ones it
+  names, unchanged, with it unset.
 - **Fake Spotify tests:** a missing, wrong or reused verifier is refused; a
   Basic header is refused; a deleted app answers `invalid_client`; a rotated
   refresh token invalidates the old one.
@@ -325,34 +467,48 @@ Spotify dashboard and raccoon.fm's DNS.
 - **Isolation:** two workspaces with two fake apps; each one's Spotify calls
   use its own client ID (the fake records which client called).
 - **On staging, against real Spotify and Google** (the owner):
-  - the first deploy onto the emptied branch built the schema through
-    pre-deploy and stamped head (the api log says which revision);
+  - the first deploy onto the empty database failed at pre-deploy, and the
+    deploy after `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` was set built the schema
+    and stamped head (the api log says which revision, and which Neon
+    endpoint);
   - a Vercel preview other than `feat/workspaces` still behaves as before,
     and `https://staging.raccoon.fm` reaches the staging API, not production's
     (overview, Staging);
   - sign in with Google;
-  - save the existing app's client ID, connect and confirm the playlists
-    load, with Spotify's account dialog shown;
+  - **the per-address limit, as phase 05's test asserts it in the harness:**
+    the 11th request in a minute to `/login` from one network is refused, and
+    a request from a different network in that same minute is not. If staging
+    disagrees with the harness, fix it, with a test, before phase 09 step 2;
+  - save the existing app's client ID (by step 8's console recipe until
+    phase 07's pages are on staging), connect and confirm the playlists load,
+    with Spotify's account dialog shown;
   - let a token refresh and confirm the stored token rotated, through the
     pooled host (phase 02's script already showed how real Spotify rotates;
     this confirms the row-locked refresher against it, on the topology
     production has);
-  - run a routine once.
+  - run a routine once, by hand, on a copy of a playlist: staging shares the
+    owner's Spotify account and playlists with production (overview,
+    Staging);
+  - write down, for phase 07's copy: the live wording of Spotify's two
+    "INVALID_CLIENT" pages, and whether a client secret has the same shape as
+    a client ID (the app's Settings page shows both).
 
 ## Verification Checklist
 - [ ] `git grep -n "SPOTIFY_CLIENT_ID\|SPOTIFY_CLIENT_SECRET\|SPOTIFY_REDIRECT_URI" -- shuffify config.py scripts harness .railway .github .env.example README.md tests`
       returns nothing.
-- [ ] `git grep -n "client_secret" -- shuffify/spotify harness/fake_spotify`
-      returns nothing.
+- [ ] `git grep -inE "client.?secret" -- shuffify harness config.py scripts tests .github .railway .env.example`
+      lists only the expected matches: Google's client secret setting and its
+      tests, and the two redaction keys that stay (`shuffify/__init__.py:448`
+      and `shuffify/services/operations/repository.py:38`).
 - [ ] `GET /callback` returns 404 on the harness, and the Vercel rule and
       preview proxy tests no longer list it (`/spotify/callback` stays).
 - [ ] `git grep -n "from_env\|from_flask_config" -- shuffify` returns nothing
       (step 1 deletes `from_flask_config` from `shuffify/spotify/credentials.py`).
 - [ ] `pytest tests/test_runtime_launch.py tests/test_db_schema_guard.py`
-      passes with the four create-schema cases and the three rewritten
-      pre-deploy tests, and
-      `git grep -nE "never silently|explicit,? one-time" -- README.md .railway/README.md`
-      returns nothing.
+      passes with the four create-schema cases, the pre-deploy tests with the
+      variable set, and the three existing pre-deploy tests unchanged, and
+      `git grep -n "SHUFFIFY_PREDEPLOY_CREATE_SCHEMA" -- scripts/pre-deploy.sh README.md .railway/README.md`
+      lists all three files.
 - [ ] The harness e2e first-run test passes.
 - [ ] The staging checks above pass.
 - [ ] CI is green on `feat/workspaces`.
@@ -369,6 +525,8 @@ Spotify dashboard and raccoon.fm's DNS.
 - Don't point staging at the production database, Redis or URL.
 - Don't let `create-schema` build on a database that has any table and no
   revision.
+- Don't let pre-deploy build a database unless
+  `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` is set.
 - Don't make `PUT /api/workspace/spotify-app` change anything when the client
   ID is unchanged.
 
