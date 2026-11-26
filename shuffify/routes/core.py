@@ -138,8 +138,6 @@ def callback():
         _auth_notice("invalid_state")
         return redirect("/")
 
-    # A failed sign-in leaves the session's token as it was.
-    previous_token = session.get("spotify_token")
     try:
         credentials = credentials_for(None)
 
@@ -229,11 +227,7 @@ def callback():
             logger.warning(f"Authentication failed: {e}")
         else:
             logger.error(f"Authentication failed: {e}")
-        # The rest of the session changes only once the sign-in succeeds.
-        if previous_token is None:
-            session.pop("spotify_token", None)
-        else:
-            session["spotify_token"] = previous_token
+        # A sign-in writes the session only once it succeeds, so the session stays as it was.
         _auth_notice("authentication_failed")
         return redirect("/")
 
