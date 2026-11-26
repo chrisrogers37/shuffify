@@ -80,6 +80,22 @@ class PendingRaidStatus(StrEnum):
     DISMISSED = "dismissed"
 
 
+class ConnectionStatus(StrEnum):
+    """What is known about a Spotify connection's credentials."""
+
+    UNCHECKED = "unchecked"  # not yet used since the credentials were set
+    OK = "ok"
+    BROKEN = "broken"  # always paired with a BrokenReason
+
+
+class BrokenReason(StrEnum):
+    """Why a Spotify connection is broken; the fix depends on which."""
+
+    APP_REJECTED = "app_rejected"
+    ACCESS_REVOKED = "access_revoked"
+    USER_NOT_ALLOWED = "user_not_allowed"
+
+
 class ActivityType(StrEnum):
     """Types of user activities tracked in the activity log."""
 

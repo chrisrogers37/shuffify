@@ -14,6 +14,7 @@ from sqlalchemy import types
 from sqlalchemy.dialects.postgresql import JSONB
 
 from shuffify.enums import (
+    ConnectionStatus,
     IntervalValue,
     LockTier,
     PendingRaidStatus,
@@ -105,6 +106,14 @@ class User(db.Model):
     spotify_product = db.Column(db.String(50), nullable=True)
     spotify_uri = db.Column(db.String(255), nullable=True)
 
+    # Google's stable subject identifier; null for a person who has not
+    # signed in with Google.
+    google_sub = db.Column(db.String(255), nullable=True)
+    # Whether Google has verified `email`.
+    email_verified = db.Column(
+        db.Boolean, nullable=False, default=False, server_default=db.false()
+    )
+
     created_at = db.Column(
         UTCDateTime,
         nullable=False,
@@ -116,6 +125,8 @@ class User(db.Model):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+    __table_args__ = (db.UniqueConstraint("google_sub", name="uq_users_google_sub"),)
 
     # Relationships
     workshop_sessions = db.relationship(
@@ -265,6 +276,127 @@ class UserSettings(db.Model):
 
     def __repr__(self) -> str:
         return f"<UserSettings user_id={self.user_id} theme={self.theme}>"
+
+
+class Workspace(db.Model):
+    """
+    A person's workspace, which holds at most one Spotify connection.
+
+    A person may have many workspaces.
+    """
+
+    __tablename__ = "workspaces"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="CASCADE", name="fk_workspaces_user_id"),
+        nullable=False,
+        index=True,
+    )
+    name = db.Column(db.String(255), nullable=False, default="My workspace")
+    created_at = db.Column(
+        UTCDateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        UTCDateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Workspace {self.id}: user_id={self.user_id} name={self.name}>"
+
+
+class SpotifyConnection(db.Model):
+    """
+    A workspace's Spotify app and the Spotify account connected through it.
+
+    One per workspace. `client_id` identifies the Spotify app; the account
+    columns are null until the account first connects. `status` is
+    'broken' exactly when `broken_reason` is set. `credential_generation`
+    increases whenever the credentials are replaced, so a failure from a
+    client built under an older generation can be told from a current one.
+    """
+
+    __tablename__ = "spotify_connections"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    workspace_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            "workspaces.id",
+            ondelete="CASCADE",
+            name="fk_spotify_connections_workspace_id",
+        ),
+        nullable=False,
+    )
+    client_id = db.Column(db.String(255), nullable=False)
+
+    # The connected Spotify account; the same shapes as the Spotify columns
+    # on User.
+    spotify_id = db.Column(db.String(255), nullable=True)
+    spotify_display_name = db.Column(db.String(255), nullable=True)
+    country = db.Column(db.String(10), nullable=True)
+    spotify_product = db.Column(db.String(50), nullable=True)
+    spotify_uri = db.Column(db.String(255), nullable=True)
+    # Encrypted with Fernet under TOKEN_ENCRYPTION_KEY (TokenService).
+    encrypted_refresh_token = db.Column(db.Text, nullable=True)
+
+    status = db.Column(
+        db.String(20),
+        nullable=False,
+        default=ConnectionStatus.UNCHECKED,
+    )
+    broken_reason = db.Column(db.String(32), nullable=True)
+    # When `status` last took its current value; the writer of a status
+    # sets it.
+    status_changed_at = db.Column(
+        UTCDateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    credential_generation = db.Column(
+        db.Integer, nullable=False, default=0, server_default=db.text("0")
+    )
+
+    created_at = db.Column(
+        UTCDateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        UTCDateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint("workspace_id", name="uq_spotify_connections_workspace_id"),
+        db.UniqueConstraint("spotify_id", name="uq_spotify_connections_spotify_id"),
+        db.CheckConstraint(
+            "status IN ('unchecked', 'ok', 'broken')",
+            name="ck_spotify_connections_status",
+        ),
+        db.CheckConstraint(
+            "broken_reason IN ('app_rejected', 'access_revoked', 'user_not_allowed')",
+            name="ck_spotify_connections_broken_reason",
+        ),
+        db.CheckConstraint(
+            "(status = 'broken') = (broken_reason IS NOT NULL)",
+            name="ck_spotify_connections_broken_has_reason",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<SpotifyConnection {self.id}: "
+            f"workspace_id={self.workspace_id} status={self.status}>"
+        )
 
 
 class WorkshopSession(db.Model):
