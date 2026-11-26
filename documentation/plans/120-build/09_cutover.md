@@ -38,10 +38,13 @@ forward).
 - The Railway api pre-deploy runs `scripts/pre-deploy.sh`. From phase 06 it
   runs `flask create-schema` and then `flask db upgrade`, both with
   `SCHEDULER_ENABLED=false SHUFFIFY_MIGRATION_STEP=1`, while
-  `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA=1` is set on the api, and only
-  `flask db upgrade` otherwise. `create-schema` builds
-  and stamps head only when the database has no revision and no tables, leaves
-  a database that has a revision to the upgrade, and refuses anything else.
+  `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` is set on the api, and only
+  `flask db upgrade` while it is unset. `create-schema` refuses unless the
+  variable is the Neon endpoint id of the database it runs on, and a refusal
+  stops the deploy before the upgrade. `create-schema` builds and stamps head
+  only when the database has no revision and no tables, an empty version
+  table aside, leaves a database that has a revision to the upgrade, and
+  refuses anything else.
 - `migrations/env.py:54-66` refuses to upgrade a database with no revision,
   so `create-schema` has to run first on an empty database.
 - The app's startup schema check refuses a database that isn't at head unless
@@ -153,9 +156,11 @@ depends on 01b.
       new names.
    3. Apply that config to production (confirm the link with
       `railway status` and inspect the plan first) and deploy.
-   4. Set `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA=1` on production's api service,
-      not as a shared variable, after that apply (an apply can remove a
-      variable the file doesn't name), and deploy the staged change. Main's
+   4. Set `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` on production's api service to
+      the Neon endpoint id of production's database, read from Neon's
+      metadata and not from `DATABASE_URL`. Set it on the service, not as a
+      shared variable, after that apply (an apply can remove a variable the
+      file doesn't name), and deploy the staged change. Main's
       pre-deploy doesn't read it, so it does nothing until the merge brings
       phase 06's script, whose pre-deploy then builds the wiped database
       (step 9). It goes at step 11.
@@ -208,12 +213,17 @@ depends on 01b.
      Then confirm, through the api's own `DATABASE_URL`, that `current_user`
      can create a table in `public`. **When staging the file, read** the
      api's role and the role `neonctl connection-string` hands out, the owner
-     of every table in `public`, and the installed extensions. If the two
-     roles are the same and own every table, the recreated schema belongs to
-     the role `create-schema` runs as; if they differ, create the schema with
-     `AUTHORIZATION <the api's role>`. If an extension other than `plpgsql`
-     is installed, add its `CREATE EXTENSION` after `CREATE SCHEMA`, so the
-     wipe loses none.
+     of every table in `public`, the installed extensions, every table outside
+     `public` (in any schema but the system ones) and every table an extension
+     owns. If the two roles are the same and own every table in `public`, the
+     recreated schema belongs to the role `create-schema` runs as; if they
+     differ, create the schema with `AUTHORIZATION <the api's role>`. If an
+     extension other than `plpgsql` is installed, add its `CREATE EXTENSION`
+     after `CREATE SCHEMA`, so the wipe loses none. `create-schema` reads every
+     schema, so a table the wipe leaves outside `public`, or one an extension
+     brings back, would make step 9's pre-deploy refuse with the site down: if
+     the read finds one, settle it in the file, so that the wipe drops that
+     schema too or that extension isn't recreated.
    - **The Redis flush:** `FLUSHDB` on database 0 of `REDIS_URL` (the app
      uses one URL and one database). Redis is a private Railway service, so
      the command has to run inside the project: for example through
@@ -234,8 +244,9 @@ depends on 01b.
      `https://raccoon.fm/auth/google/callback`, `PUBLIC_ORIGIN` is exactly
      `https://raccoon.fm`, `GOOGLE_CLIENT_SECRET` is set (compare it with
      the secret Google issued, without printing it into a shared log), and
-     `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` is `1` (step 3): without it the new
-     pre-deploy can't build the wiped database.
+     `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` is the endpoint id Neon's metadata
+     gives for production's database, not one read from `DATABASE_URL`
+     (step 3): without it the new pre-deploy can't build the wiped database.
 
 **Cutover, in one sitting.** The old site serves until step 7, and the wipe
 is followed immediately by the merge, so the downtime is the snapshot, the
