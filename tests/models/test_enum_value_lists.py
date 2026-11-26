@@ -19,7 +19,7 @@ from typing import get_args
 import pytest
 import sqlalchemy as sa
 
-from shuffify.enums import JobType, PendingRaidStatus, ScheduleType, SnapshotType
+from shuffify.enums import BrokenReason, ConnectionStatus, JobType, PendingRaidStatus, ScheduleType, SnapshotType
 from shuffify.models.db import db
 from shuffify.services.operations.commands.routine_schemas import JobKind
 from shuffify.services.playlist_snapshot_service import FALLBACK_SNAPSHOTS_LIMIT
@@ -32,6 +32,8 @@ CHECKS = {
     "ck_schedules_schedule_type": ScheduleType,
     "ck_snapshot_type": SnapshotType,
     "ck_pending_raid_status": PendingRaidStatus,
+    "ck_spotify_connections_status": ConnectionStatus,
+    "ck_spotify_connections_broken_reason": BrokenReason,
 }
 # Each web union that lists an enum's values, by its definition name in web/schemas.
 UNIONS = {"JobType": JobType}
