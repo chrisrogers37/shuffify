@@ -45,3 +45,23 @@ def propagate_control(error):
         observer.defer_read(error)
     if observer is not None and hasattr(observer, 'check_pending_control'):
         observer.check_pending_control()
+
+
+def propagate_refused_refresh(error, journal):
+    """Re-raise ``error`` when a token refresh the database refused caused it, so the worker defers the run.
+
+    A command that settles its own read failures still lets this one through:
+    the stored refresh token could not be read just now, and nothing about the
+    command has failed. It does so only while no write is ambiguous, as the
+    worker defers a failed read only then.
+    """
+    from shuffify.spotify.exceptions import SpotifyRefreshUnavailable
+
+    current, seen = error, set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, SpotifyRefreshUnavailable):
+            if not journal.has_ambiguous_write():
+                raise error
+            return
+        current = current.__cause__ or current.__context__ or getattr(current, "cause", None)

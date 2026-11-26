@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from shuffify.services.operations.control import propagate_control
+from shuffify.services.operations.control import propagate_control, propagate_refused_refresh
 from shuffify.services.operations.executors.creation import CreationConfig, execute_creation
 from shuffify.services.operations.journal import OperationDeferred
 from shuffify.services.operations.runtime import OperationResult, VerifiedStepError
@@ -184,6 +184,7 @@ class AssetHandler:
             return OperationResult("needs_attention", result)
         except Exception as error:
             _control(error)
+            propagate_refused_refresh(error, runtime.journal)
             result = _known_creation(runtime)
             attempted = result["outcome"] in {"created", "unknown"}
             facts = getattr(error, "result", None)

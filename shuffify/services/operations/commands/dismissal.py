@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from shuffify.enums import ActivityType
 from shuffify.services.operations.bookkeeping import OperationBookkeeping
-from shuffify.services.operations.control import propagate_control
+from shuffify.services.operations.control import propagate_control, propagate_refused_refresh
 from shuffify.services.operations.executors.collect_common import apply as apply_cleanup
 from shuffify.services.operations.journal import OperationDeferred
 from shuffify.services.operations.runtime import OperationResult, VerifiedStepError
@@ -157,6 +157,7 @@ class DismissHandler:
             return OperationResult("needs_attention", result)
         except Exception as error:
             _control(error)
+            propagate_refused_refresh(error, runtime.journal)
             result = _result(
                 runtime,
                 command,
