@@ -46,7 +46,7 @@ def expired_token() -> TokenInfo:
 
 
 class _KeptToken:
-    """A rotated refresh token this process could not store, and the stored ciphertext it replaces."""
+    """A rotated refresh token this process has not stored, and the stored ciphertext it replaces."""
 
     __slots__ = ("token", "replaces")
 
@@ -58,10 +58,11 @@ class _KeptToken:
         return "<_KeptToken>"
 
 
-# Rotated refresh tokens whose store failed, by users row id. Each is used for
-# the next refresh of its row in this process while the stored token is still
-# the one it replaced, and dropped once a store succeeds or the stored token
-# changes. The other process can't see them.
+# Rotated refresh tokens this process has not stored, by users row id. Each is
+# kept from the moment Spotify issues it, under the row lock, so the row's next
+# refresh in this process uses it, one already waiting for the lock included,
+# while the stored token is still the one it replaced. It is dropped once a
+# store succeeds or the stored token changes. The other process can't see them.
 _kept: dict = {}
 _kept_lock = threading.Lock()
 
@@ -81,9 +82,17 @@ def _keep(user_id: int, kept: _KeptToken) -> None:
         _kept[user_id] = kept
 
 
-def _forget(user_id: int) -> None:
+def _holds(user_id: int, kept: _KeptToken) -> bool:
+    """Whether ``kept`` is still the row's kept token, not used since by a later refresh that kept its own."""
     with _kept_lock:
-        _kept.pop(user_id, None)
+        return _kept.get(user_id) is kept
+
+
+def _forget(user_id: int, kept: _KeptToken) -> None:
+    """Drop ``kept`` while it is the row's kept token; one a later refresh kept in its place stays."""
+    with _kept_lock:
+        if _kept.get(user_id) is kept:
+            del _kept[user_id]
 
 
 def _bound_lock_wait(storage: Session) -> None:
@@ -217,20 +226,27 @@ class CredentialRefresher:
                 # behind it: after a rotation, or while a kept token stands in.
                 if kept is not None or fresh.refresh_token != presented:
                     rotated = _KeptToken(fresh.refresh_token, stored)
+                    # Kept while the row is locked, before the commit can fail: a
+                    # refresh waiting for the lock takes it as soon as this one ends.
+                    _keep(user_id, rotated)
                     _store(storage, user_id, fresh.refresh_token)
         except SQLAlchemyError as error:
             # rotated is set only once Spotify has answered, so fresh is bound whenever the refresh goes on.
             if rotated is None:
                 raise _unavailable(error, user_id) from error
-            self._store_again_or_keep(user_id, rotated, error)
+            self._store_again(user_id, rotated, error)
         else:
             if rotated is not None:
-                _forget(user_id)
+                _forget(user_id, rotated)
         return replace(fresh, refresh_token=None)
 
     @staticmethod
-    def _store_again_or_keep(user_id: int, rotated: _KeptToken, error: SQLAlchemyError) -> None:
-        """Spotify has rotated the token and storing it failed: try once more, else keep it in this process."""
+    def _store_again(user_id: int, rotated: _KeptToken, error: SQLAlchemyError) -> None:
+        """Spotify has rotated the token and storing it failed: try once more.
+
+        The token stays kept in this process until a store succeeds or a newer
+        token takes its place.
+        """
         logger.warning(
             "Storing the rotated refresh token for user %s failed (%s); trying once more",
             user_id, type(error).__name__,
@@ -238,9 +254,9 @@ class CredentialRefresher:
         try:
             with Session(db.engine) as storage, storage.begin():
                 _bound_lock_wait(storage)
-                if _locked_stored_token(storage, user_id) != rotated.replaces:
-                    # Another refresh or a sign-in stored a token since: it is the newer one.
-                    _forget(user_id)
+                if _locked_stored_token(storage, user_id) != rotated.replaces or not _holds(user_id, rotated):
+                    # A newer token was stored since, or a later refresh here used this one and kept its own.
+                    _forget(user_id, rotated)
                     return
                 _store(storage, user_id, rotated.token)
         except SQLAlchemyError as again:
@@ -248,9 +264,8 @@ class CredentialRefresher:
                 "Storing the rotated refresh token for user %s failed again (%s); keeping it in this process",
                 user_id, type(again).__name__,
             )
-            _keep(user_id, rotated)
         else:
-            _forget(user_id)
+            _forget(user_id, rotated)
 
     def _report(self, failure: Exception) -> None:
         """Hand a typed failure to the hook, which can't change it."""

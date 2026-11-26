@@ -277,6 +277,46 @@ class TestFailedSave:
         assert TokenService.decrypt_token(stored(user.id)) == "refresh-3"
         assert credential_refresher._kept == {}
 
+    def test_a_refresh_waiting_for_the_row_lock_uses_the_kept_token(self, user, commits_fail, monkeypatch):
+        """The failed commit releases the lock, and the waiting refresh runs before the retry."""
+        spotify = RotatingSpotify()
+        store_again = CredentialRefresher._store_again
+
+        def waiting_refresh_first(user_id, rotated, error):
+            CredentialRefresher(auth_manager(spotify), user_id).refresh_token()
+            store_again(user_id, rotated, error)
+
+        monkeypatch.setattr(CredentialRefresher, "_store_again", staticmethod(waiting_refresh_first))
+        commits_fail(1)
+
+        CredentialRefresher(auth_manager(spotify), user.id).refresh_token()
+
+        assert spotify.presented == ["refresh-1", "refresh-2"]
+        assert TokenService.decrypt_token(stored(user.id)) == "refresh-3"
+        assert credential_refresher._kept == {}
+
+    def test_retries_in_lock_order_store_the_newest_token(self, user, commits_fail, monkeypatch):
+        """Both commits fail, the second refresh having used the first's token; the first retries first."""
+        spotify = RotatingSpotify()
+        store_again, failed = CredentialRefresher._store_again, []
+
+        def in_lock_order(user_id, rotated, error):
+            failed.append((rotated, error))
+            if len(failed) == 1:
+                CredentialRefresher(auth_manager(spotify), user_id).refresh_token()
+            else:
+                for queued in failed:
+                    store_again(user_id, *queued)
+
+        monkeypatch.setattr(CredentialRefresher, "_store_again", staticmethod(in_lock_order))
+        commits_fail(2)
+
+        CredentialRefresher(auth_manager(spotify), user.id).refresh_token()
+
+        assert spotify.presented == ["refresh-1", "refresh-2"]
+        assert TokenService.decrypt_token(stored(user.id)) == "refresh-3"
+        assert credential_refresher._kept == {}
+
     def test_the_kept_token_stands_in_even_without_a_rotation(self, user, commits_fail):
         spotify = RotatingSpotify()
         commits_fail(2)
