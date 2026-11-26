@@ -339,12 +339,11 @@ Spotify dashboard and raccoon.fm's DNS.
      empty database only while the variable is set.** The variable is the
      explicit bootstrap, set for the two databases that need one, and the
      rule holds everywhere else, production after phase 09 step 11 included.
-     While it is set, an empty database behind a wrong `DATABASE_URL` would be
-     built and booted instead of failing the deploy, and production's
-     `DATABASE_URL` host has already differed from what the guides described.
-     The refusal of any database that has tables and no revision, and the
-     Neon-identity check before a first deploy (overview Staging, cutover
-     step 6), cover that window.
+     While it is set, the variable names one Neon endpoint, so pre-deploy
+     builds only on that endpoint, only an empty database, and refuses one
+     that has tables. The id names the endpoint, not the database, so an empty
+     database on that same endpoint could still be built while the variable is
+     set.
    - **The tests that pin the rule stay as they are,** because they run with
      the variable unset:
      `tests/test_db_schema_guard.py::TestPredeploy::test_runs_only_the_explicit_upgrade`
