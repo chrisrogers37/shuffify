@@ -178,6 +178,19 @@ class TestNoAccessToken:
         assert "spotify_token" not in session_of(client)
 
 
+@pytest.mark.parametrize("token", [EXPIRED, None], ids=["expired-access-token", "no-access-token"])
+def test_a_session_whose_stored_token_cannot_be_decrypted_is_signed_out(spotify_app, monkeypatch, token):
+    spotify = Spotify(monkeypatch)
+    db.session.add(User(spotify_id="alice", encrypted_refresh_token="not-a-fernet-token"))
+    db.session.commit()
+    with spotify_app.test_request_context():
+        session["user_data"] = {"id": "alice"}
+        if token is not None:
+            session["spotify_token"] = token
+        assert require_auth() is None
+    assert spotify.grants == []
+
+
 def test_a_database_refusal_answers_503_with_retry_after_and_keeps_the_session(spotify_app, monkeypatch):
     spotify = Spotify(monkeypatch)
     user = add_user()
