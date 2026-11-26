@@ -57,6 +57,13 @@ def legacy_users(metadata):
     )
 
 
+def unqualified(default, schema):
+    """A reflected column default without the schema name that reflection writes into a sequence's name."""
+    if default is None or schema is None:
+        return default
+    return default.replace(f'"{schema}".', "").replace(f"{schema}.", "")
+
+
 def describe(connection, schema=None):
     """Columns, constraints and indexes of the new tables, as the database reports them."""
     inspector = sa.inspect(connection)
@@ -64,7 +71,7 @@ def describe(connection, schema=None):
     for name in NEW_TABLES:
         described[name] = {
             "columns": {
-                column["name"]: (str(column["type"]), column["nullable"], column["default"])
+                column["name"]: (str(column["type"]), column["nullable"], unqualified(column["default"], schema))
                 for column in inspector.get_columns(name, schema=schema)
             },
             "unique": sorted(
