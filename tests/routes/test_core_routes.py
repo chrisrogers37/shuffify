@@ -8,8 +8,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from shuffify.services.auth_service import decrypt_session_token, encrypt_session_token
-from shuffify.services.token_service import TokenService
 from shuffify.spotify.credentials import SpotifyCredentials
 from tests.paths import api_path
 
@@ -223,7 +221,7 @@ class TestCallbackRoute:
     @patch("shuffify.routes.core.LoginHistoryService", autospec=True)
     @patch("shuffify.routes.core.UserService", autospec=True)
     @patch("shuffify.routes.core.AuthService", autospec=True)
-    def test_callback_stores_only_encrypted_refresh_token(
+    def test_callback_stores_the_refresh_token_in_the_users_row_only(
         self,
         mock_auth_svc,
         mock_user_svc,
@@ -251,9 +249,7 @@ class TestCallbackRoute:
             with client.session_transaction() as sess:
                 stored = sess["spotify_token"]
 
-        assert "refresh_token" not in stored
-        assert TokenService.decrypt_token(stored["encrypted_refresh_token"]) == "new_refresh"
-        assert decrypt_session_token(stored).get("expires_at") == expires_at
+        assert stored == {"access_token": "new_token", "token_type": "Bearer", "expires_at": expires_at}
         mock_user_svc.store_refresh_token.assert_called_once_with(upserted.user, "new_refresh")
 
     @patch("shuffify.routes.core.LoginHistoryService")
@@ -365,10 +361,11 @@ class TestCallbackRoute:
         assert after == before
 
     @pytest.mark.parametrize("signed_in", [True, False], ids=["signed-in", "no-sign-in"])
-    def test_a_sign_in_that_fails_after_a_token_refresh_keeps_the_session(
+    def test_a_sign_in_whose_profile_request_is_refused_keeps_the_session(
         self, request, db_app, monkeypatch, signed_in
     ):
-        """The profile request answers 401, the refresh is accepted, and it answers 401 again."""
+        """The profile request answers 401. Sign-in's client has no stored refresh token to refresh with, so
+        it sends no refresh and the sign-in fails."""
         client = request.getfixturevalue("auth_client") if signed_in else db_app.test_client()
         grants, profile_reads = [], []
 
@@ -397,8 +394,8 @@ class TestCallbackRoute:
         resp = client.get("/callback?code=new_code&state=valid_state")
 
         assert resp.headers["Location"] == "/"
-        assert grants == ["authorization_code", "refresh_token"]
-        assert profile_reads == ["https://api.spotify.com/v1/me"] * 2
+        assert grants == ["authorization_code"]
+        assert profile_reads == ["https://api.spotify.com/v1/me"]
         with client.session_transaction() as sess:
             after = dict(sess)
         assert after.pop("auth_notice") == "authentication_failed"
@@ -448,7 +445,7 @@ class TestSpotifyAppNotConfigured:
         from shuffify.routes import require_auth
 
         with unconfigured.test_request_context():
-            session["spotify_token"] = encrypt_session_token(sample_token)
+            session["spotify_token"] = sample_token
             assert require_auth() is None
 
 

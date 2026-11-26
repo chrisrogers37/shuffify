@@ -279,8 +279,10 @@ because a fake built that way agrees with the app's mistakes.
   | `slow` | served normally, `delay` seconds late (at most 60), or as soon as it is released. A write is still applied after a client that gave up on it |
   | `user_not_allowed` | 403, "User not registered in the Developer Dashboard", Spotify's answer for an account that isn't on a development-mode app's user list |
 
-  Three more arm the token endpoint, with `"operation": "POST /api/token"`,
-  and answer a token request of either grant:
+  Three more arm the token endpoint, with `"operation": "POST /api/token"`.
+  `app_rejected` and `grant_revoked` answer a token request of either grant;
+  `rotate_refresh` changes how a refresh is answered and leaves a code
+  exchange alone:
 
   | `kind` | Answer |
   |---|---|

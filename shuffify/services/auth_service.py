@@ -5,14 +5,14 @@ Handles OAuth URL generation, token exchange, validation, and session management
 """
 
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
-from shuffify.services.token_service import TokenEncryptionError, TokenService
+from shuffify.services.credential_refresher import CredentialRefresher, expired_token
 from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.auth import SpotifyAuthManager, TokenInfo
 from shuffify.spotify.credentials import SpotifyCredentials
 from shuffify.spotify.deadline import SpotifyDeadlineError, remaining_seconds
-from shuffify.spotify.exceptions import SpotifyRateLimitError, SpotifyTokenError
+from shuffify.spotify.exceptions import SpotifyRateLimitError, SpotifyRefreshUnavailable, SpotifyTokenError
 
 logger = logging.getLogger(__name__)
 
@@ -35,34 +35,16 @@ class TokenValidationError(AuthenticationError):
     pass
 
 
-def encrypt_session_token(token: Dict[str, Any]) -> Dict[str, Any]:
-    """Return a token dict as the session keeps it.
+def session_token(token_info: TokenInfo) -> Dict[str, Any]:
+    """A token as the session keeps it: the access token, its type and its expiry.
 
-    The refresh token is stored encrypted, under ``encrypted_refresh_token``,
-    with the key that encrypts the users table's copy. The token passed in is
-    not changed.
+    The refresh token is stored in the users row only.
     """
-    stored = dict(token)
-    refresh_token = stored.pop("refresh_token", None)
-    if refresh_token:
-        stored["encrypted_refresh_token"] = TokenService.encrypt_token(refresh_token)
-    return stored
-
-
-def decrypt_session_token(stored: Dict[str, Any]) -> Dict[str, Any]:
-    """Return the session's token with its refresh token decrypted.
-
-    Raises:
-        AuthenticationError: If the refresh token cannot be decrypted.
-    """
-    token = dict(stored)
-    encrypted = token.pop("encrypted_refresh_token", None)
-    if encrypted:
-        try:
-            token["refresh_token"] = TokenService.decrypt_token(encrypted)
-        except TokenEncryptionError as error:
-            raise AuthenticationError("The session's refresh token cannot be decrypted") from error
-    return token
+    return {
+        "access_token": token_info.access_token,
+        "token_type": token_info.token_type,
+        "expires_at": token_info.expires_at,
+    }
 
 
 class AuthService:
@@ -176,14 +158,22 @@ class AuthService:
 
     @staticmethod
     def get_authenticated_api(
-        credentials: SpotifyCredentials, token: Dict[str, Any], *, authenticated_user_id: Optional[str] = None
+        credentials: SpotifyCredentials,
+        token: Optional[Dict[str, Any]],
+        *,
+        user_id: Union[Optional[int], Callable[[], Optional[int]]],
+        authenticated_user_id: Optional[str] = None,
     ) -> SpotifyAPI:
         """
-        Build an authenticated SpotifyAPI from a session token.
+        Build an authenticated SpotifyAPI that refreshes from the stored refresh token.
 
         Args:
             credentials: The app's credentials, from ``credentials_for``.
-            token: Valid token data dictionary.
+            token: The session's access token, a cache. When it is missing or
+                malformed the client refreshes before its first call.
+            user_id: The users row whose stored refresh token every refresh
+                uses, or a callable that finds it (``CredentialRefresher``);
+                None when the person has no row yet.
             authenticated_user_id: The account verified for this signed-in session.
                 Leave unset when authenticating a new token.
 
@@ -192,6 +182,8 @@ class AuthService:
 
         Raises:
             AuthenticationError: If construction fails.
+            SpotifyRefreshUnavailable: If the stored refresh token can't be
+                reached just now. It is transient, not "signed out".
         """
         try:
             # Inject the Redis cache so responses are actually cached in
@@ -200,20 +192,17 @@ class AuthService:
 
             # Expiry is deliberately not pre-validated here. SpotifyAPI with
             # auto_refresh=True refreshes an expired token on construction and
-            # on 401 retries; rejecting an expired token up front would force a
-            # logout every hour even when a valid refresh_token is present.
-            # A structurally invalid token still fails in
-            # TokenInfo.from_dict, and an expired one with no refresh_token
-            # still fails through the refresh path.
+            # on 401 retries, from the refresh token stored in the users row.
+            token_info = TokenInfo.from_dict(token) if AuthService.validate_session_token(token) else expired_token()
             return SpotifyAPI(
-                TokenInfo.from_dict(token),
-                AuthService._auth_manager(credentials),
+                token_info,
+                CredentialRefresher(AuthService._auth_manager(credentials), user_id),
                 auto_refresh=True,
                 cache=get_spotify_cache(),
                 authenticated_user_id=authenticated_user_id,
                 on_token_refresh=AuthService._persist_token_to_session,
             )
-        except SpotifyDeadlineError:
+        except (SpotifyDeadlineError, SpotifyRefreshUnavailable):
             raise
         except SpotifyRateLimitError as error:
             if remaining_seconds() is not None:
@@ -229,11 +218,12 @@ class AuthService:
     @staticmethod
     def _persist_token_to_session(token_info: "TokenInfo") -> None:
         """
-        Write a refreshed Spotify token back to the Flask session.
+        Write a refreshed access token and its expiry back to the Flask session.
 
         Wired as SpotifyAPI's ``on_token_refresh`` callback so a token refreshed
-        mid-request is persisted for subsequent requests instead of being
-        discarded. No-ops outside a request context -- background
+        mid-request is reused by subsequent requests instead of being
+        discarded. The refresh token is not written: the refresher has
+        already stored a rotated one. No-ops outside a request context -- background
         scheduled jobs have no session to update, so they simply skip this.
 
         Best-effort: failures are logged and swallowed so token persistence can
@@ -248,7 +238,7 @@ class AuthService:
             return
 
         try:
-            session["spotify_token"] = encrypt_session_token(token_info.to_dict())
+            session["spotify_token"] = session_token(token_info)
             session.modified = True
             logger.debug("Persisted refreshed Spotify token to session")
         except Exception as e:
@@ -309,6 +299,10 @@ class AuthService:
         """
         Authenticate with a token and retrieve user data in one operation.
 
+        The profile names the users row, which may not exist yet, so this
+        client has no stored refresh token to refresh with: a token just
+        exchanged needs none.
+
         Args:
             credentials: The app's credentials, from ``credentials_for``.
             token: Valid token data dictionary.
@@ -319,6 +313,6 @@ class AuthService:
         Raises:
             AuthenticationError: If authentication or user fetch fails.
         """
-        api = AuthService.get_authenticated_api(credentials, token)
+        api = AuthService.get_authenticated_api(credentials, token, user_id=None)
         user_data = AuthService.get_user_data(api)
         return api, user_data

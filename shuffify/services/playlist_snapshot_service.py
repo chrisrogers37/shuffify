@@ -15,7 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from shuffify.enums import SnapshotType  # noqa: F401
 from shuffify.models.db import PlaylistSnapshot, db
 from shuffify.services.base import commit_failure, get_owned_entity, safe_commit
-from shuffify.services.storage_limits import StorageLimitReached, check_storage_growth, lock_storage_inventory
+from shuffify.services.storage_limits import check_storage_growth, lock_storage_inventory
 
 logger = logging.getLogger(__name__)
 
@@ -123,16 +123,18 @@ class PlaylistSnapshotService:
                 safe_commit(operation, PlaylistSnapshotError)
             else:
                 storage.flush()
-        except StorageLimitReached:
-            if commit:
-                storage.rollback()
-            raise
         except SQLAlchemyError as error:
             if not commit:
                 raise
             storage.rollback()
             logger.exception("Failed to %s", operation)
             raise commit_failure(PlaylistSnapshotError, operation) from error
+        except Exception:
+            # A storage limit or any other failure: when this call owns the
+            # commit, the inventory lock is released before the caller goes on.
+            if commit:
+                storage.rollback()
+            raise
 
         return snapshots
 

@@ -58,6 +58,7 @@ from shuffify.spotify.exceptions import (
     SpotifyNotFoundError,
     SpotifyQuotaExceededError,
     SpotifyRateLimitError,
+    SpotifyRefreshUnavailable,
     SpotifyTokenExpiredError,
 )
 
@@ -347,6 +348,25 @@ def handle_spotify_rate_limit(
         429,
     )
     if hasattr(error, "retry_after") and error.retry_after:
+        response.headers["Retry-After"] = str(error.retry_after)
+    return response, status
+
+
+def handle_spotify_refresh_unavailable(
+    error: SpotifyRefreshUnavailable,
+):
+    """Handle a token refresh that couldn't reach the stored refresh token just now.
+
+    It is transient, not "log in again": 503, with Retry-After when the
+    refresh gave one, and the session is left as it is.
+    """
+    # The refresher has logged the database error's type and the row.
+    logger.warning("Spotify token refresh unavailable on %s", request.path)
+    response, status = json_error_response(
+        "Raccoon couldn't reach your Spotify sign-in just now. Please try again in a moment.",
+        503,
+    )
+    if error.retry_after:
         response.headers["Retry-After"] = str(error.retry_after)
     return response, status
 
@@ -641,6 +661,7 @@ def register_error_handlers(app):
         (SpotifyTokenExpiredError, handle_spotify_token_expired),
         (SpotifyQuotaExceededError, handle_spotify_quota_exceeded),
         (SpotifyRateLimitError, handle_spotify_rate_limit),
+        (SpotifyRefreshUnavailable, handle_spotify_refresh_unavailable),
         (SpotifyNotFoundError, handle_spotify_not_found),
         (SpotifyAuthError, handle_spotify_auth_error),
         (SpotifyAPIError, handle_spotify_api_error),

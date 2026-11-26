@@ -28,6 +28,7 @@ from .exceptions import (
     SpotifyQuotaExceededError,
     SpotifyRateLimitError,
     SpotifyReadTransientError,
+    SpotifyRefreshUnavailable,
     SpotifyTokenExpiredError,
     SpotifyUserNotAllowed,
     SpotifyWriteRejectedError,
@@ -357,6 +358,7 @@ class SpotifyHTTPClient:
                             SpotifyDeadlineError,
                             SpotifyRateLimitError,
                             SpotifyReadTransientError,
+                            SpotifyRefreshUnavailable,
                             SpotifyAppRejected,
                             SpotifyGrantRevoked,
                         ):
