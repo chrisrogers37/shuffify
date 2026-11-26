@@ -174,10 +174,10 @@ def test_drip_reports_verified_compensation_when_collection_removal_is_rejected(
 def live_browser():
     from playwright.sync_api import sync_playwright
 
-    from tests.e2e.test_pages import CHROMIUM_ARGS
+    from tests.e2e.test_pages import CHROMIUM_ARGS, CHROMIUM_SANDBOX
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(args=CHROMIUM_ARGS, chromium_sandbox=True)
+        browser = playwright.chromium.launch(args=CHROMIUM_ARGS, chromium_sandbox=CHROMIUM_SANDBOX)
         yield browser
         browser.close()
 

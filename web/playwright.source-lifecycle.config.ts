@@ -11,7 +11,7 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:4198",
     browserName: "chromium",
-    launchOptions: { chromiumSandbox: true },
+    launchOptions: { chromiumSandbox: !process.env.GITHUB_ACTIONS },
     colorScheme: "dark",
     trace: "retain-on-failure",
     video: "on",

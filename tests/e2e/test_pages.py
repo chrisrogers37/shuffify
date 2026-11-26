@@ -26,6 +26,7 @@ anyway (a worker's) are reported too; service workers are blocked. Scripts,
 styles and fonts come from the production React build on the app origin.
 """
 
+import os
 from pathlib import Path
 
 import pytest
@@ -49,6 +50,8 @@ CHROMIUM_ARGS = [
     # WebRTC would send UDP straight to an IP literal, past the resolver.
     "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
 ]
+# Chromium runs with its sandbox, except on GitHub's runners.
+CHROMIUM_SANDBOX = not os.environ.get("GITHUB_ACTIONS")
 MISSING = "/no-such-page"  # The React router renders the missing-route state.
 LOGGED_OUT = {"landing": "/", "terms": "/terms", "privacy": "/privacy", "not-found": MISSING}
 # Before anything is made, apart from the log-in entries in the activity.
@@ -67,7 +70,7 @@ LOGGED_IN = {
 @pytest.fixture(scope="module")
 def browser():
     with sync_playwright() as playwright:
-        chromium = playwright.chromium.launch(args=CHROMIUM_ARGS, chromium_sandbox=True)
+        chromium = playwright.chromium.launch(args=CHROMIUM_ARGS, chromium_sandbox=CHROMIUM_SANDBOX)
         yield chromium
         chromium.close()
 

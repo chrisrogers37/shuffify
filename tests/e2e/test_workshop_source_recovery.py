@@ -9,7 +9,7 @@ import pytest
 from playwright.sync_api import expect, sync_playwright
 
 from tests.e2e.conftest import APP, pid
-from tests.e2e.test_pages import CHROMIUM_ARGS, Visit
+from tests.e2e.test_pages import CHROMIUM_ARGS, CHROMIUM_SANDBOX, Visit
 from tests.paths import api_path
 from tests.routine_flow import add_playlist_source
 
@@ -139,7 +139,7 @@ def test_captured_archive_never_follows_a_relinked_pair(alice, fake):
 @pytest.fixture(scope="module")
 def recovery_browser():
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(args=CHROMIUM_ARGS, chromium_sandbox=True)
+        browser = playwright.chromium.launch(args=CHROMIUM_ARGS, chromium_sandbox=CHROMIUM_SANDBOX)
         yield browser
         browser.close()
 
