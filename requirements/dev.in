@@ -10,7 +10,7 @@ pytest-split==0.11.0
 jsonschema==4.26.0
 # The harness's browser pass (tests/e2e/test_pages.py). Browsers are installed
 # separately: python -m playwright install chromium
-playwright==1.65.1
+playwright==1.65.2
 
 # Code Quality
 # ruff handles lint and import sorting; config in pyproject.toml.
