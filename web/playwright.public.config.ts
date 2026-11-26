@@ -12,6 +12,7 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:4174",
     browserName: "chromium",
+    launchOptions: { chromiumSandbox: true },
     colorScheme: "dark",
     locale: "en-US",
     timezoneId: "America/New_York",

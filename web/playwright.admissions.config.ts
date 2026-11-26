@@ -11,6 +11,7 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:4197",
     browserName: "chromium",
+    launchOptions: { chromiumSandbox: true },
     colorScheme: "dark",
     reducedMotion: "reduce",
     trace: "retain-on-failure",

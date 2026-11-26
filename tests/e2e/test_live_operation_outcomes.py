@@ -177,7 +177,7 @@ def live_browser():
     from tests.e2e.test_pages import CHROMIUM_ARGS
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(args=CHROMIUM_ARGS)
+        browser = playwright.chromium.launch(args=CHROMIUM_ARGS, chromium_sandbox=True)
         yield browser
         browser.close()
 

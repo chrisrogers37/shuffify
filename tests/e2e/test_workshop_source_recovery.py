@@ -139,7 +139,7 @@ def test_captured_archive_never_follows_a_relinked_pair(alice, fake):
 @pytest.fixture(scope="module")
 def recovery_browser():
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(args=CHROMIUM_ARGS)
+        browser = playwright.chromium.launch(args=CHROMIUM_ARGS, chromium_sandbox=True)
         yield browser
         browser.close()
 

@@ -67,7 +67,7 @@ LOGGED_IN = {
 @pytest.fixture(scope="module")
 def browser():
     with sync_playwright() as playwright:
-        chromium = playwright.chromium.launch(args=CHROMIUM_ARGS)
+        chromium = playwright.chromium.launch(args=CHROMIUM_ARGS, chromium_sandbox=True)
         yield chromium
         chromium.close()
 

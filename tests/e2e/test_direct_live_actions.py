@@ -148,7 +148,7 @@ def direct_browser():
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(args=CHROMIUM_ARGS)
+        browser = playwright.chromium.launch(args=CHROMIUM_ARGS, chromium_sandbox=True)
         yield browser
         browser.close()
 
