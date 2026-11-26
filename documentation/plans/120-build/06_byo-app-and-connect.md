@@ -313,16 +313,18 @@ Spotify dashboard and raccoon.fm's DNS.
      `SCHEDULER_ENABLED=false SHUFFIFY_MIGRATION_STEP=1` prefix, **only while
      `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` is set on the service, to the Neon
      endpoint id of the database being built;** `create-schema` refuses a
-     database that isn't on that endpoint. Without it, pre-deploy runs only `flask db upgrade`, as today, so a database with
-     no revision still fails the deploy (`migrations/env.py:54-66`). The
+     database that isn't on that endpoint. Without it, pre-deploy runs only
+     `flask db upgrade`, as today, so a database with no revision still
+     fails the deploy (`migrations/env.py:54-66`). The
      variable is set only on staging's api (step 8) and on production's api
      from phase 09 step 3 to step 11, where it goes.
    - `flask create-schema` (`shuffify/cli.py:15-53`) builds the schema and
      stamps head **only when the database has no Alembic revision and no
-     tables at all**. Today it refuses only when the models' tables exist, so
-     a wrong `DATABASE_URL` pointing at some unrelated database would be
-     built on quietly. Tighten it: no revision and any table at all is
-     refused loudly, naming the tables. A database that has a revision is
+     tables, an empty version table aside**. Today it refuses only when the
+     models' tables exist, so a wrong `DATABASE_URL` pointing at some
+     unrelated database would be built on quietly. Tighten it: with no
+     revision, any table but an empty version table is refused loudly,
+     naming the tables. A database that has a revision is
      left to the upgrade, as today. It logs which revision it stamped and the
      Neon endpoint id it ran on, taken from `DATABASE_URL`'s host (the id
      only, never the URL), so phase 09 step 10 can read both from the
@@ -341,9 +343,9 @@ Spotify dashboard and raccoon.fm's DNS.
      rule holds everywhere else, production after phase 09 step 11 included.
      While it is set, the variable names one Neon endpoint, so pre-deploy
      builds only on that endpoint, only an empty database, and refuses one
-     that has tables. The id names the endpoint, not the database, so an empty
-     database on that same endpoint could still be built while the variable is
-     set.
+     that has tables and no revision. The id names the endpoint, not the
+     database, so an empty database on that same endpoint could still be
+     built while the variable is set.
    - **The tests that pin the rule stay as they are,** because they run with
      the variable unset:
      `tests/test_db_schema_guard.py::TestPredeploy::test_runs_only_the_explicit_upgrade`
@@ -357,11 +359,13 @@ Spotify dashboard and raccoon.fm's DNS.
      "Split runtime" paragraph (L119) and the last paragraph of
      `.railway/README.md` (L21) keep what they say, and each gains a sentence:
      with `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` set on the api to the Neon
-     endpoint id of a new database, pre-deploy runs `flask create-schema`
-     first, which refuses a database that isn't on that endpoint, builds one
-     that has no revision and no tables, leaves one that has a revision to the
-     upgrade, and refuses one that has tables and no revision; the variable is
-     set only while a new database is being built. (The "no staging environment"
+     endpoint id of a new database, read from Neon's metadata and not from
+     `DATABASE_URL`, pre-deploy runs `flask create-schema` first, which
+     refuses a database that isn't on that endpoint, builds one that has no
+     revision and no tables, an empty version table aside, leaves one that
+     has a revision to the upgrade, and refuses one that has any other table
+     and no revision; the variable is set only while a new database is being
+     built. (The "no staging environment"
      sentences are the ones left for phase 09.)
 8. **Stand up staging** (the owner, with the overview's Staging section), in
    this order, because `railway config apply` creates the services and that
@@ -388,8 +392,10 @@ Spotify dashboard and raccoon.fm's DNS.
       finds no schedules in the new database, so it has nothing to fire.
       Right after the apply, and before the worker's redeploy, set
       `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` on staging's api to the staging
-      database's Neon endpoint id and `SCHEDULER_ENABLED=false` on its worker, so the scheduler stays off at
-      all times (overview, Staging), and deploy the staged changes:
+      database's Neon endpoint id, read from Neon's metadata and not from
+      `DATABASE_URL`, and `SCHEDULER_ENABLED=false` on its worker, so the
+      scheduler stays off at all times (overview, Staging), and deploy the
+      staged changes:
       pre-deploy builds the schema and stamps head. Redeploy the worker once
       the api is at head. A later apply to staging can undo either setting,
       so read both back after any apply.
@@ -527,8 +533,8 @@ Spotify dashboard and raccoon.fm's DNS.
 - Don't add a notice for a redirect URL mismatch; it never arrives.
 - Don't fall back to any default client ID, including in the harness.
 - Don't point staging at the production database, Redis or URL.
-- Don't let `create-schema` build on a database that has any table and no
-  revision.
+- Don't let `create-schema` build on a database that has no revision and
+  any table but an empty version table.
 - Don't let pre-deploy build a database unless
   `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` is set.
 - Don't make `PUT /api/workspace/spotify-app` change anything when the client

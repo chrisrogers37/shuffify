@@ -716,13 +716,17 @@ class TestCreateSchemaOnPostgreSQL:
     def test_a_refused_upgrade_leaves_the_database_buildable(
         self, postgres_database_app, real_head
     ):
+        from shuffify.models.db import db
+
         runner = postgres_database_app.test_cli_runner()
-        runner.invoke(args=["db", "upgrade"])
+        upgrade = runner.invoke(args=["db", "upgrade"])
 
         result = runner.invoke(args=["create-schema"])
 
+        assert upgrade.exit_code == 1
         assert result.exit_code == 0, result.output
         assert _revision(postgres_database_app) == real_head
+        assert set(db.metadata.tables) <= _tables(postgres_database_app)
 
 
 class TestUpgradeNeverBuildsADatabase:
