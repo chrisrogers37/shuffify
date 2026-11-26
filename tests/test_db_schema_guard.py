@@ -9,8 +9,10 @@ caught here.
 import json
 import os
 import sys
+from uuid import uuid4
 
 import pytest
+import sqlalchemy as sa
 from flask import Flask
 from sqlalchemy import text
 
@@ -23,6 +25,8 @@ from shuffify import (
     _schema_revision_state,
     _verify_schema_at_head,
 )
+from shuffify.cli import PREDEPLOY_CREATE_SCHEMA_VAR
+from tests.postgres_server import LOCAL_HOSTS
 
 MIGRATIONS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "migrations"
@@ -88,8 +92,8 @@ def production_env(monkeypatch, tmp_path, production_redis):
     """
     from config import ProdConfig
 
-    def _configure(db_name):
-        url = f"sqlite:///{tmp_path / db_name}"
+    def _configure(db_name, url=None):
+        url = url or f"sqlite:///{tmp_path / db_name}"
         monkeypatch.setenv("SPOTIFY_CLIENT_ID", "test_client_id")
         monkeypatch.setenv("SPOTIFY_CLIENT_SECRET", "test_client_secret")
         monkeypatch.setenv("SPOTIFY_REDIRECT_URI", "http://localhost:8000/callback")
@@ -101,13 +105,20 @@ def production_env(monkeypatch, tmp_path, production_redis):
     return _configure
 
 
+CLEARED_VARS = (
+    SCHEMA_DRIFT_OVERRIDE_VAR,
+    MIGRATION_STEP_VAR,
+    PREDEPLOY_CREATE_SCHEMA_VAR,
+)
+
+
 @pytest.fixture(autouse=True)
 def _clear_override():
-    """Keep the break-glass override out of unrelated tests."""
-    for var in (SCHEMA_DRIFT_OVERRIDE_VAR, MIGRATION_STEP_VAR):
+    """Keep the override and the two pre-deploy variables out of unrelated tests."""
+    for var in CLEARED_VARS:
         os.environ.pop(var, None)
     yield
-    for var in (SCHEMA_DRIFT_OVERRIDE_VAR, MIGRATION_STEP_VAR):
+    for var in CLEARED_VARS:
         os.environ.pop(var, None)
 
 
@@ -302,7 +313,7 @@ def run_entrypoint(tmp_path, stub_body, env=None, *, script=ENTRYPOINT, command=
 
     environ = dict(os.environ)
     environ["PATH"] = f"{stub_dir}:{environ['PATH']}"
-    for var in (SCHEMA_DRIFT_OVERRIDE_VAR, MIGRATION_STEP_VAR):
+    for var in CLEARED_VARS:
         environ.pop(var, None)
     environ.update(env or {})
 
@@ -358,6 +369,23 @@ class TestPredeploy:
         )
         assert result.returncode == 0
         assert result.stdout.strip() == "stub flask: db upgrade"
+
+    def test_an_empty_create_schema_variable_runs_only_the_upgrade(self, tmp_path):
+        result = run_entrypoint(
+            tmp_path, 'echo "stub flask: $*"',
+            env={PREDEPLOY_CREATE_SCHEMA_VAR: ""}, script=PREDEPLOY, command=[]
+        )
+        assert result.returncode == 0
+        assert result.stdout.splitlines() == ["stub flask: db upgrade"]
+
+    def test_a_failed_create_schema_blocks_the_deploy(self, tmp_path):
+        result = run_entrypoint(
+            tmp_path, 'if [ "$1" = create-schema ]; then exit 23; fi; echo "stub flask: $*"',
+            env={PREDEPLOY_CREATE_SCHEMA_VAR: "ep-made-up-123456"},
+            script=PREDEPLOY, command=[]
+        )
+        assert result.returncode == 23
+        assert "stub flask: db upgrade" not in result.stdout
 
     def test_migration_runs_with_the_scheduler_disabled(self, tmp_path):
         result = run_entrypoint(
@@ -445,9 +473,8 @@ class TestSchemaDriftOverride:
         assert json.loads(result.stdout) == value
 
 
-@pytest.fixture
-def new_database_app(monkeypatch, production_env, tmp_path):
-    """A production app on an empty database, built as the migration step builds it.
+def _build_migration_step_app(monkeypatch):
+    """A production app built as the migration step builds it.
 
     Flask-Migrate finds migrations/ relative to the working directory, as the
     harness and the pre-deploy process run it. env.py applies alembic.ini's
@@ -455,14 +482,20 @@ def new_database_app(monkeypatch, production_env, tmp_path):
     """
     import logging.config
 
-    production_env("new.db")
     monkeypatch.setenv(MIGRATION_STEP_VAR, "1")
     monkeypatch.chdir(os.path.dirname(MIGRATIONS_DIR))
     monkeypatch.setattr(logging.config, "fileConfig", lambda *args, **kwargs: None)
 
     from shuffify import create_app
 
-    app = create_app("production")
+    return create_app("production")
+
+
+@pytest.fixture
+def new_database_app(monkeypatch, production_env, tmp_path):
+    """A production app on an empty database, built as the migration step builds it."""
+    production_env("new.db")
+    app = _build_migration_step_app(monkeypatch)
     assert app.config["SQLALCHEMY_DATABASE_URI"].startswith(f"sqlite:///{tmp_path}")
     return app
 
@@ -480,6 +513,25 @@ def _revision(app):
     with app.app_context():
         current, _ = _schema_revision_state(MIGRATIONS_DIR)
     return current
+
+
+POOLED_NEON_URL = "postgresql://ep-made-up-123456-pooler.us-east-2.aws.neon.tech/shuffify"
+OTHER_NEON_URL = "postgresql://ep-other-654321.us-east-2.aws.neon.tech/shuffify"
+
+
+def _put_on_neon(monkeypatch, app, url):
+    """Make the app's engine report ``url`` while it keeps its real connections."""
+    from shuffify.models.db import db
+
+    with app.app_context():
+        monkeypatch.setattr(db.engine, "url", sa.make_url(url))
+
+
+def _assert_nothing_built(app):
+    from shuffify.models.db import db
+
+    assert _revision(app) is None
+    assert not set(db.metadata.tables) & _tables(app)
 
 
 class TestCreateSchema:
@@ -517,6 +569,160 @@ class TestCreateSchema:
         assert result.exit_code != 0
         assert "refusing to stamp" in result.output
         assert _revision(new_database_app) is None
+
+    def test_refuses_unrelated_tables_without_a_revision(self, new_database_app):
+        from shuffify.models.db import db
+
+        with new_database_app.app_context(), db.engine.begin() as conn:
+            conn.execute(text("CREATE TABLE unrelated_notes (id INTEGER PRIMARY KEY)"))
+
+        result = new_database_app.test_cli_runner().invoke(args=["create-schema"])
+
+        assert result.exit_code != 0
+        assert "unrelated_notes" in result.output
+        assert "refusing to stamp" in result.output
+        _assert_nothing_built(new_database_app)
+
+    def test_refuses_tables_beside_an_empty_version_table(self, new_database_app):
+        from shuffify.models.db import db
+
+        with new_database_app.app_context(), db.engine.begin() as conn:
+            conn.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
+            conn.execute(text("CREATE TABLE unrelated_notes (id INTEGER PRIMARY KEY)"))
+
+        result = new_database_app.test_cli_runner().invoke(args=["create-schema"])
+
+        assert result.exit_code != 0
+        assert "(unrelated_notes)" in result.output
+        _assert_nothing_built(new_database_app)
+
+    def test_with_the_variable_set_builds_the_endpoint_it_names(
+        self, new_database_app, real_head, monkeypatch
+    ):
+        from shuffify.models.db import db
+
+        monkeypatch.setenv(PREDEPLOY_CREATE_SCHEMA_VAR, "ep-made-up-123456")
+        _put_on_neon(monkeypatch, new_database_app, POOLED_NEON_URL)
+
+        result = new_database_app.test_cli_runner().invoke(args=["create-schema"])
+
+        assert result.exit_code == 0, result.output
+        assert _revision(new_database_app) == real_head
+        assert set(db.metadata.tables) <= _tables(new_database_app)
+        assert real_head in result.output
+        assert "ep-made-up-123456" in result.output
+        assert "neon.tech" not in result.output
+
+    def test_with_the_variable_set_refuses_another_endpoint(self, new_database_app, monkeypatch):
+        monkeypatch.setenv(PREDEPLOY_CREATE_SCHEMA_VAR, "ep-made-up-123456")
+        _put_on_neon(monkeypatch, new_database_app, OTHER_NEON_URL)
+
+        result = new_database_app.test_cli_runner().invoke(args=["create-schema"])
+
+        assert result.exit_code != 0
+        assert "ep-made-up-123456" in result.output
+        assert "ep-other-654321" in result.output
+        _assert_nothing_built(new_database_app)
+
+    def test_with_the_variable_set_refuses_a_host_that_isnt_neons(
+        self, new_database_app, monkeypatch
+    ):
+        monkeypatch.setenv(PREDEPLOY_CREATE_SCHEMA_VAR, "ep-made-up-123456")
+
+        result = new_database_app.test_cli_runner().invoke(args=["create-schema"])
+
+        assert result.exit_code != 0
+        assert "ep-made-up-123456" in result.output
+        _assert_nothing_built(new_database_app)
+
+    def test_a_variable_that_isnt_an_endpoint_id_refuses_to_build(
+        self, new_database_app, monkeypatch
+    ):
+        monkeypatch.setenv(PREDEPLOY_CREATE_SCHEMA_VAR, "1")
+        _put_on_neon(monkeypatch, new_database_app, POOLED_NEON_URL)
+
+        result = new_database_app.test_cli_runner().invoke(args=["create-schema"])
+
+        assert result.exit_code != 0
+        assert "endpoint id" in result.output
+        _assert_nothing_built(new_database_app)
+
+    def test_a_variable_holding_a_url_is_never_echoed(self, new_database_app, monkeypatch):
+        value = "postgresql://ep-made-up-123456.us-east-2.aws.neon.tech/shuffify"
+        monkeypatch.setenv(PREDEPLOY_CREATE_SCHEMA_VAR, value)
+        _put_on_neon(monkeypatch, new_database_app, POOLED_NEON_URL)
+
+        result = new_database_app.test_cli_runner().invoke(args=["create-schema"])
+
+        assert result.exit_code != 0
+        assert value not in result.output
+        _assert_nothing_built(new_database_app)
+
+
+@pytest.fixture
+def postgres_database_app(monkeypatch, production_env, postgres_url):
+    """A production app on its own new, empty PostgreSQL database.
+
+    create-schema reads every schema of its database, so a scratch schema in a
+    shared database can't isolate it, as it does the other PostgreSQL tests.
+    Creating the database needs a role that may create one.
+    """
+    assert sa.make_url(postgres_url).host in LOCAL_HOSTS
+    name = "create_schema_" + uuid4().hex[:12]
+    admin = sa.create_engine(postgres_url, isolation_level="AUTOCOMMIT")
+    with admin.connect() as conn:
+        conn.execute(text(f'CREATE DATABASE "{name}"'))
+    try:
+        from shuffify.models.db import db
+
+        url = sa.make_url(postgres_url).set(database=name)
+        production_env("new.db", url=url.render_as_string(hide_password=False))
+        app = _build_migration_step_app(monkeypatch)
+        yield app
+        with app.app_context():
+            db.engine.dispose()
+    finally:
+        with admin.connect() as conn:
+            conn.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+        admin.dispose()
+
+
+@pytest.mark.integration
+class TestCreateSchemaOnPostgreSQL:
+    """The same command on PostgreSQL, where schemas other than the default exist."""
+
+    def test_builds_a_new_database_and_stamps_it_at_head(self, postgres_database_app, real_head):
+        from shuffify.models.db import db
+
+        result = postgres_database_app.test_cli_runner().invoke(args=["create-schema"])
+
+        assert result.exit_code == 0, result.output
+        assert _revision(postgres_database_app) == real_head
+        assert set(db.metadata.tables) <= _tables(postgres_database_app)
+
+    def test_refuses_a_table_in_another_schema(self, postgres_database_app):
+        from shuffify.models.db import db
+
+        with postgres_database_app.app_context(), db.engine.begin() as conn:
+            conn.execute(text("CREATE SCHEMA other_app"))
+            conn.execute(text("CREATE TABLE other_app.notes (id integer)"))
+
+        result = postgres_database_app.test_cli_runner().invoke(args=["create-schema"])
+
+        assert result.exit_code != 0
+        assert "other_app.notes" in result.output
+        _assert_nothing_built(postgres_database_app)
+
+    def test_a_refused_upgrade_leaves_the_database_buildable(
+        self, postgres_database_app, real_head
+    ):
+        runner = postgres_database_app.test_cli_runner()
+        runner.invoke(args=["db", "upgrade"])
+
+        result = runner.invoke(args=["create-schema"])
+
+        assert result.exit_code == 0, result.output
+        assert _revision(postgres_database_app) == real_head
 
 
 class TestUpgradeNeverBuildsADatabase:

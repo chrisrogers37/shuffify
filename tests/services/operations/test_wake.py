@@ -8,7 +8,13 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy.engine import make_url
 
-from shuffify.services.operations.wake import OPERATION_CHANNEL, SCHEDULE_CHANNEL, PostgresWakeListener, direct_url
+from shuffify.services.operations.wake import (
+    OPERATION_CHANNEL,
+    SCHEDULE_CHANNEL,
+    PostgresWakeListener,
+    direct_url,
+    neon_endpoint_id,
+)
 
 
 class Connection:
@@ -156,3 +162,16 @@ def test_direct_url_only_strips_the_neon_pooler_suffix(url, host):
     assert derived.host == host
     assert (derived.username, derived.password, derived.database) == ('u', 'p', 'db')
     assert dict(derived.query) == dict(make_url(url).query)
+
+
+@pytest.mark.parametrize('url, endpoint', [
+    ('postgresql://ep-foo-123-pooler.us-east-2.aws.neon.tech/db?sslmode=require', 'ep-foo-123'),
+    ('postgresql://ep-foo-123.us-east-2.aws.neon.tech/db', 'ep-foo-123'),
+    ('postgresql+psycopg2://ep-foo-123-pooler.c-2.us-east-2.aws.neon.tech/db', 'ep-foo-123'),
+    ('postgresql://db-pooler.example.com/db', None),
+    ('postgresql://ep-foo-pooler.xneon.tech/db', None),
+    ('postgresql://localhost:5432/db', None),
+    ('sqlite:///shuffify.db', None),
+])
+def test_neon_endpoint_id_is_the_first_host_label_without_the_pooler_suffix(url, endpoint):
+    assert neon_endpoint_id(make_url(url)) == endpoint

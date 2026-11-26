@@ -14,6 +14,12 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def _no_predeploy_create_schema(monkeypatch):
+    """Keep a value set in the calling shell out of these process runs."""
+    monkeypatch.delenv("SHUFFIFY_PREDEPLOY_CREATE_SCHEMA", raising=False)
+
+
 def test_container_startup_never_invokes_flask_or_changes_the_command(tmp_path):
     binary = tmp_path / "flask"
     binary.write_text("#!/bin/sh\necho UNEXPECTED-MIGRATION\nexit 97\n")
@@ -53,6 +59,26 @@ def test_predeploy_disables_scheduler_and_sets_only_the_migration_process_marker
         text=True,
     )
     assert result.returncode == 0 and result.stdout.strip() == "false|1|db upgrade"
+
+
+def test_predeploy_with_the_create_schema_variable_builds_then_upgrades(tmp_path):
+    binary = tmp_path / "flask"
+    binary.write_text('#!/bin/sh\nprintf "%s|%s|%s\\n" "$SCHEDULER_ENABLED" "$SHUFFIFY_MIGRATION_STEP" "$*"\n')
+    binary.chmod(0o755)
+    result = subprocess.run(
+        ["sh", str(ROOT / "scripts/pre-deploy.sh")],
+        env={
+            **os.environ,
+            "PATH": str(tmp_path) + os.pathsep + os.environ["PATH"],
+            "SCHEDULER_ENABLED": "true",
+            "SHUFFIFY_MIGRATION_STEP": "0",
+            "SHUFFIFY_PREDEPLOY_CREATE_SCHEMA": "ep-made-up-123456",
+        },
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert result.stdout.splitlines() == ["false|1|create-schema", "false|1|db upgrade"]
 
 
 def test_api_uses_the_bounded_gthread_configuration_without_preload(monkeypatch):

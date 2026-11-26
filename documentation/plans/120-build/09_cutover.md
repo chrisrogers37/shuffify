@@ -38,8 +38,8 @@ forward).
 - The Railway api pre-deploy runs `scripts/pre-deploy.sh`. From phase 06 it
   runs `flask create-schema` and then `flask db upgrade`, both with
   `SCHEDULER_ENABLED=false SHUFFIFY_MIGRATION_STEP=1`, while
-  `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA=1` is set on the api, and only
-  `flask db upgrade` otherwise. `create-schema` builds
+  `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` is set on the api to the database's
+  Neon endpoint id, and only `flask db upgrade` otherwise. `create-schema` builds
   and stamps head only when the database has no revision and no tables, leaves
   a database that has a revision to the upgrade, and refuses anything else.
 - `migrations/env.py:54-66` refuses to upgrade a database with no revision,
@@ -153,8 +153,8 @@ depends on 01b.
       new names.
    3. Apply that config to production (confirm the link with
       `railway status` and inspect the plan first) and deploy.
-   4. Set `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA=1` on production's api service,
-      not as a shared variable, after that apply (an apply can remove a
+   4. Set `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` on production's api service to
+      the Neon endpoint id of production's database, not as a shared variable, after that apply (an apply can remove a
       variable the file doesn't name), and deploy the staged change. Main's
       pre-deploy doesn't read it, so it does nothing until the merge brings
       phase 06's script, whose pre-deploy then builds the wiped database
@@ -234,7 +234,8 @@ depends on 01b.
      `https://raccoon.fm/auth/google/callback`, `PUBLIC_ORIGIN` is exactly
      `https://raccoon.fm`, `GOOGLE_CLIENT_SECRET` is set (compare it with
      the secret Google issued, without printing it into a shared log), and
-     `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` is `1` (step 3): without it the new
+     `SHUFFIFY_PREDEPLOY_CREATE_SCHEMA` is the Neon endpoint id of
+     production's database (step 3): without it the new
      pre-deploy can't build the wiped database.
 
 **Cutover, in one sitting.** The old site serves until step 7, and the wipe

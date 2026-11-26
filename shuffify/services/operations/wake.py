@@ -16,13 +16,24 @@ SCHEDULE_CHANNEL = 'shuffify_schedules'
 COMPLETION_CHANNEL = 'shuffify_operation_finishes'
 
 
+def _on_neon(rest):
+    """Whether a host name, after its first label, is in Neon's domain."""
+    return rest == 'neon.tech' or rest.endswith('.neon.tech')
+
+
 def direct_url(url):
     """Drop Neon's `-pooler` host suffix; PgBouncer transaction mode silently loses LISTEN/NOTIFY."""
     url = make_url(url)
     label, dot, rest = (url.host or '').partition('.')
-    if (rest == 'neon.tech' or rest.endswith('.neon.tech')) and label.endswith('-pooler'):
+    if _on_neon(rest) and label.endswith('-pooler'):
         return url.set(host=label[:-len('-pooler')] + dot + rest)
     return url
+
+
+def neon_endpoint_id(url):
+    """The Neon endpoint id in a database URL: its host's first label without `-pooler`; None off Neon."""
+    label, _, rest = (make_url(url).host or '').partition('.')
+    return label.removesuffix('-pooler') if _on_neon(rest) else None
 
 
 class PostgresWakeListener:
