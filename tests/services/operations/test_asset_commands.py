@@ -14,6 +14,7 @@ from shuffify.models.db import ActivityLog, PlaylistPair, RaidPlaylistLink, User
 from shuffify.services.operations.commands.asset_capture import capture_asset
 from shuffify.services.operations.commands.assets import HANDLERS
 from shuffify.services.operations.repository import OperationRepository
+from shuffify.services.token_service import TokenService
 from shuffify.spotify.api import SpotifyAPI
 from shuffify.spotify.auth import TokenInfo
 from shuffify.spotify.exceptions import SpotifyForbiddenError
@@ -215,6 +216,32 @@ def test_binding_drift_refuses_before_authentication_or_creation(asset_operation
     assert case.factories == []
     assert case.world.writes == []
     assert PlaylistPair.query.one().archive_playlist_id == "other"
+
+
+@pytest.mark.parametrize("setting", ["SPOTIFY_CLIENT_ID", "SPOTIFY_REDIRECT_URI"])
+@pytest.mark.parametrize("kind", ["pair_create", "raid_link_create", "setup_playlist_create"])
+def test_an_unset_spotify_app_setting_fails_creation_as_not_retryable(
+    asset_operation,
+    db_app,
+    monkeypatch,
+    kind,
+    setting,
+):
+    """The worker's own client, as in production, reads the app's settings before any Spotify call."""
+    case = asset_operation
+    case.user.encrypted_refresh_token = TokenService.encrypt_token("stored-refresh")
+    db.session.commit()
+    monkeypatch.setitem(db_app.config, setting, "")
+    row = case.enqueue(kind)
+    worker = OperationWorker(db_app, repository=case.repository, handlers=HANDLERS, heartbeat_interval=0)
+    assert worker.run_once(row.id)
+    completed = case.repository.get(row.id)
+    result = completed.journal["result"]
+    assert completed.state == "failed"
+    assert result["error_code"] == "creation_failed"
+    assert result["message"] == "The playlist could not be created."
+    assert result["retryable"] is False
+    assert result["http_status"] == 502
 
 
 def test_optional_activity_failure_preserves_required_association(asset_operation, monkeypatch):

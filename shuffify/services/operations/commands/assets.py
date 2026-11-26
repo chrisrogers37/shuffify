@@ -13,7 +13,13 @@ from shuffify.services.operations.runtime import OperationResult, VerifiedStepEr
 from shuffify.services.playlist_lock import playlist_configuration_lock
 from shuffify.services.playlist_service import PlaylistAccessError, PlaylistError, PlaylistNotFoundError
 from shuffify.services.playlist_setup_service import TARGET_NOT_EDITABLE, TARGET_NOT_FOUND
-from shuffify.spotify.exceptions import SpotifyAuthError, SpotifyError, SpotifyNotFoundError, SpotifyRateLimitError
+from shuffify.spotify.exceptions import (
+    SpotifyAppUnavailable,
+    SpotifyAuthError,
+    SpotifyError,
+    SpotifyNotFoundError,
+    SpotifyRateLimitError,
+)
 from shuffify.spotify.observation import observe_mutations
 
 from .asset_capture import AssetCaptureRejected, recapture_asset
@@ -88,6 +94,8 @@ def _preflight_failure(error):
             "http_status": 503,
             "retryable": True,
         }
+    if any(isinstance(item, SpotifyAppUnavailable) for item in chain):
+        return None
     if any(isinstance(item, (PlaylistError, SpotifyError)) for item in chain):
         return {
             "error_code": "spotify_unavailable",
