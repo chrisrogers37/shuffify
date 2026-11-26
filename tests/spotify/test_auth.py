@@ -154,6 +154,13 @@ class TestTokenInfoProperties:
         token = TokenInfo.from_dict(expired_token_data)
         assert token.expires_in_seconds < 0
 
+    def test_repr_holds_neither_token(self, valid_token_data):
+        """Should leave the access and refresh tokens out of its repr."""
+        shown = repr(TokenInfo.from_dict(valid_token_data))
+        assert valid_token_data["access_token"] not in shown
+        assert valid_token_data["refresh_token"] not in shown
+        assert "expires_at=" in shown
+
 
 class TestTokenInfoValidate:
     """Tests for TokenInfo.validate method."""

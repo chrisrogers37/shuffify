@@ -8,7 +8,7 @@ separating them from data operations.
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 from urllib.parse import urlencode
 
@@ -66,10 +66,10 @@ class TokenInfo:
     and expiration checking.
     """
 
-    access_token: str
+    access_token: str = field(repr=False)
     token_type: str
     expires_at: float
-    refresh_token: Optional[str] = None
+    refresh_token: Optional[str] = field(default=None, repr=False)
     scope: Optional[str] = None
     expires_in: Optional[int] = None
 
