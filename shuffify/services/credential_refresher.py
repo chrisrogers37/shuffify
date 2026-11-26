@@ -136,7 +136,11 @@ def _decrypt(stored: str, user_id: int) -> str:
         raise SpotifyTokenError(f"The stored refresh token for user {user_id} cannot be decrypted") from error
 
 
-def _unavailable(error: SQLAlchemyError, user_id: Optional[int]) -> SpotifyRefreshUnavailable:
+def refresh_unavailable(error: SQLAlchemyError, user_id: Optional[int]) -> SpotifyRefreshUnavailable:
+    """The transient refusal for a database error on the way to the stored refresh token.
+
+    Its log line carries the error type and the row id only.
+    """
     logger.warning("Token refresh for user %s could not use the database (%s)", user_id, type(error).__name__)
     return SpotifyRefreshUnavailable(
         "The stored refresh token could not be read just now.", retry_after=LOCK_TIMEOUT_SECONDS,
@@ -205,7 +209,7 @@ class CredentialRefresher:
             try:
                 user_id = user_id()
             except SQLAlchemyError as error:
-                raise _unavailable(error, None) from error
+                raise refresh_unavailable(error, None) from error
         if user_id is None:
             raise SpotifyTokenError("There is no stored refresh token to refresh with")
         return user_id
@@ -233,7 +237,7 @@ class CredentialRefresher:
         except SQLAlchemyError as error:
             # rotated is set only once Spotify has answered, so fresh is bound whenever the refresh goes on.
             if rotated is None:
-                raise _unavailable(error, user_id) from error
+                raise refresh_unavailable(error, user_id) from error
             self._store_again(user_id, rotated, error)
         else:
             if rotated is not None:

@@ -177,6 +177,24 @@ class TestNoAccessToken:
         assert spotify.grants == []
         assert "spotify_token" not in session_of(client)
 
+    def test_a_database_refusal_finding_its_row_answers_503_and_keeps_the_session(self, spotify_app, monkeypatch):
+        spotify = Spotify(monkeypatch)
+        add_user()
+
+        def unavailable(spotify_id):
+            raise OperationalError("SELECT users", {}, Exception("connection lost"))
+
+        monkeypatch.setattr("shuffify.services.user_service.UserService.get_by_spotify_id", unavailable)
+        client = self.signed_in_without_a_token(spotify_app)
+        before = session_of(client)
+
+        response = client.get(api_path("/activity"))
+
+        assert response.status_code == 503, response.get_json()
+        assert response.headers["Retry-After"] == str(credential_refresher.LOCK_TIMEOUT_SECONDS)
+        assert session_of(client) == before
+        assert spotify.grants == []
+
 
 @pytest.mark.parametrize("token", [EXPIRED, None], ids=["expired-access-token", "no-access-token"])
 def test_a_session_whose_stored_token_cannot_be_decrypted_is_signed_out(spotify_app, monkeypatch, token):

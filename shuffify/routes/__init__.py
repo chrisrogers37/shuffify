@@ -18,6 +18,7 @@ from flask import (
     session,
 )
 from pydantic import ValidationError
+from sqlalchemy.exc import SQLAlchemyError
 
 from shuffify.error_handlers import (
     format_validation_error,
@@ -29,6 +30,7 @@ from shuffify.services import (
     AuthService,
     UserService,
 )
+from shuffify.services.credential_refresher import refresh_unavailable
 from shuffify.services.live_operation_service import preflight_error_code
 from shuffify.services.live_review_context import context_rejected
 from shuffify.spotify.credentials import credentials_for
@@ -89,7 +91,11 @@ def require_auth():
     """
     user_id = _signed_in_user_id
     if not is_authenticated():
-        user = get_db_user()
+        try:
+            user = get_db_user()
+        except SQLAlchemyError as error:
+            # Finding the row is the refresh's first step, here as in the refresher.
+            raise refresh_unavailable(error, None) from error
         if user is None or not user.encrypted_refresh_token:
             return None
         user_id = user.id
