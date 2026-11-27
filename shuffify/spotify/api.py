@@ -130,8 +130,10 @@ class SpotifyAPI:
             on_token_refresh: Optional callback invoked with the new TokenInfo
                 whenever the access token is refreshed: at construction, on
                 expiry before a call, or on a 401 retry. Web requests use it
-                to write the token back to the session; background jobs to
-                store a rotated refresh token.
+                to write the access token back to the session. A rotated
+                refresh token is stored by the refresher, not by this
+                callback: ``CredentialRefresher``, which the web and the
+                worker pass as ``auth_manager``.
             on_typed_failure: Optional callback handed to the HTTP client,
                 which calls it once with a ``SpotifyUserNotAllowed`` just
                 before raising it.

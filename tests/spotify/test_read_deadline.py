@@ -271,7 +271,7 @@ def test_auth_service_does_not_turn_budget_exhaustion_into_invalid_login(clock, 
               side_effect=SpotifyDeadlineError("fixture deadline")),
     ):
         with pytest.raises(SpotifyDeadlineError):
-            AuthService.get_authenticated_api(CREDENTIALS, token().to_dict())
+            AuthService.get_authenticated_api(CREDENTIALS, token().to_dict(), user_id=1)
 
 
 def test_oauth_exchange_and_revocation_cap_http_timeout(clock, manager):

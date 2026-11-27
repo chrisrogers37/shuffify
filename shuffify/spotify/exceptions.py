@@ -77,6 +77,20 @@ class SpotifyReadTransientError(SpotifyAPIError):
     """A safe read exhausted transport retries and may be resumed later."""
 
 
+class SpotifyRefreshUnavailable(SpotifyReadTransientError):
+    """A token refresh could not reach the stored refresh token just now.
+
+    The database refused it: the row lock was held past the lock timeout, or a
+    connection failed. It is transient, never "signed out": the web answers
+    503 and the worker defers the run. ``retry_after`` is the number of
+    seconds to wait before trying again.
+    """
+
+    def __init__(self, message: str, *, retry_after: int | None = None):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
 class SpotifyWriteUnverifiedError(SpotifyAPIError):
     """A dispatched write may have applied; it must not be replayed."""
 

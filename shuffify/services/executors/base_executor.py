@@ -9,20 +9,11 @@ from collections import Counter
 from typing import List
 
 from shuffify.models.db import User
-from shuffify.services.base import safe_commit
-from shuffify.services.token_service import (
-    TokenEncryptionError,
-    TokenService,
-)
+from shuffify.services.credential_refresher import CredentialRefresher, expired_token
 from shuffify.spotify.api import SpotifyAPI
-from shuffify.spotify.auth import SpotifyAuthManager, TokenInfo
+from shuffify.spotify.auth import SpotifyAuthManager
 from shuffify.spotify.credentials import credentials_for
 from shuffify.spotify.exceptions import SpotifyTokenError
-
-# Sentinel token used when constructing a SpotifyAPI with only a
-# refresh token. The access_token is intentionally invalid so the
-# client triggers an auto-refresh on the first API call.
-_EXPIRED_ACCESS_TOKEN = "expired_placeholder"
 
 
 class JobExecutionError(Exception):
@@ -78,12 +69,19 @@ class JobExecutorService:
     @staticmethod
     def _get_spotify_api(user: User) -> SpotifyAPI:
         """
-        Create a SpotifyAPI client using the user's stored
+        Create a SpotifyAPI client that refreshes from the user's stored
         refresh token.
 
+        The client starts with an expired access token, so it refreshes
+        before its first call. Every refresh, the first included, goes through
+        ``CredentialRefresher``, which reads the token stored in the users row
+        and stores a rotated one.
+
         Raises:
-            JobExecutionError: If token decryption or refresh
+            JobExecutionError: If there is no stored token, or the refresh
                 fails.
+            SpotifyRefreshUnavailable: If the stored token can't be reached
+                just now. It is transient, so the run is deferred.
         """
         if not user.encrypted_refresh_token:
             raise JobExecutionError(
@@ -93,48 +91,17 @@ class JobExecutorService:
             )
 
         try:
-            refresh_token = TokenService.decrypt_token(user.encrypted_refresh_token)
-        except TokenEncryptionError as e:
-            raise JobExecutionError("Failed to decrypt the stored refresh token.") from e
-
-        try:
-            auth_manager = SpotifyAuthManager(credentials_for(user))
-
-            # Create a token_info with an expired access token
-            # and valid refresh token. SpotifyAPI will
-            # auto-refresh on first call.
-            token_info = TokenInfo(
-                access_token=_EXPIRED_ACCESS_TOKEN,
-                token_type="Bearer",
-                expires_at=0,
-                refresh_token=refresh_token,
-            )
+            refresher = CredentialRefresher(SpotifyAuthManager(credentials_for(user)), user.id)
 
             # Inject the Redis cache (None when Redis is unavailable) so
             # background jobs share the cached playlist/user data.
             from shuffify import get_spotify_cache
 
-            def store_rotated_refresh_token(new_token: TokenInfo) -> None:
-                # Spotify may issue a new refresh token on any refresh -- the
-                # one at construction, a 401 retry, an expiry mid-job -- and
-                # the old one can stop working. Store each the moment it
-                # arrives, or the user's next job fails until they log in.
-                nonlocal refresh_token
-                if not new_token.refresh_token or new_token.refresh_token == refresh_token:
-                    return
-                user.encrypted_refresh_token = TokenService.encrypt_token(new_token.refresh_token)
-                # On failure safe_commit rolls back, logs and raises. SpotifyAPI
-                # swallows that, so the job runs on, and the next refresh,
-                # still differing from the stored token, retries the store.
-                safe_commit(f"store the rotated refresh token for user {user.id}")
-                refresh_token = new_token.refresh_token
-
             return SpotifyAPI(
-                token_info,
-                auth_manager,
+                expired_token(),
+                refresher,
                 auto_refresh=True,
                 cache=get_spotify_cache(),
-                on_token_refresh=store_rotated_refresh_token,
             )
 
         except SpotifyTokenError as e:

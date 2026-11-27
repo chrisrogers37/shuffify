@@ -44,8 +44,10 @@ The repository owns short database transactions. PostgreSQL row locks with
 owner token. Checkpoints, renewals, and completion require that unexpired token.
 Dedicated session advisory locks cover every target across business commits.
 Lease expiry permits recovery but does not permit writes while another runner
-still holds a target lock. Background commands also serialize each user's
-credential use so rotated refresh tokens do not race between workers.
+still holds a target lock. Background commands also run one at a time per
+user. The refresh token needs no lock of theirs: every refresh, the web's
+included, locks the users row in a short transaction of its own
+(`CredentialRefresher`), so a web refresh never waits for a run.
 
 `OperationWorker` supplies a runtime to registered command handlers. The runtime
 constructs Spotify access lazily, persists prepared JSON choices, and records

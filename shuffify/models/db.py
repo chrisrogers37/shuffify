@@ -88,9 +88,10 @@ class User(db.Model):
     display_name = db.Column(db.String(255), nullable=True)
     email = db.Column(db.String(255), nullable=True)
     profile_image_url = db.Column(db.String(1024), nullable=True)
-    # Encrypted Spotify refresh token for background job execution.
+    # The Spotify refresh token's only home, for the web and the worker alike.
     # Encrypted with Fernet under TOKEN_ENCRYPTION_KEY (TokenService).
-    # Set during OAuth callback, updated on token refresh.
+    # Set during OAuth callback; every refresh reads it under a row lock and
+    # stores a rotated one (CredentialRefresher).
     encrypted_refresh_token = db.Column(db.Text, nullable=True)
 
     # Login tracking

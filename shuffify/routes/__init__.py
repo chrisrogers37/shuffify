@@ -18,6 +18,7 @@ from flask import (
     session,
 )
 from pydantic import ValidationError
+from sqlalchemy.exc import SQLAlchemyError
 
 from shuffify.error_handlers import (
     format_validation_error,
@@ -29,7 +30,7 @@ from shuffify.services import (
     AuthService,
     UserService,
 )
-from shuffify.services.auth_service import decrypt_session_token, encrypt_session_token
+from shuffify.services.credential_refresher import refresh_unavailable
 from shuffify.services.live_operation_service import preflight_error_code
 from shuffify.services.live_review_context import context_rejected
 from shuffify.spotify.credentials import credentials_for
@@ -46,33 +47,63 @@ site_bp = Blueprint("site", __name__)
 # =============================================================================
 
 
+# The keys a session token carries a refresh token under, plaintext or encrypted. The session keeps none.
+_SESSION_REFRESH_KEYS = frozenset({"refresh_token", "encrypted_refresh_token"})
+
+
 def is_authenticated() -> bool:
     """Check if the user has a valid session token.
 
-    The session keeps the refresh token encrypted. Every signed-in request
-    passes this check, so a token that still holds a plaintext one is stored
-    again here, encrypted.
+    The session keeps the access token and its expiry, a cache; the users
+    row is the refresh token's only home. Every signed-in request passes this
+    check, so a live session that still carries a refresh token, plaintext or
+    encrypted, has it dropped here.
     """
     token = session.get("spotify_token")
-    if isinstance(token, dict) and "refresh_token" in token:
-        token = encrypt_session_token(token)
+    if isinstance(token, dict) and not _SESSION_REFRESH_KEYS.isdisjoint(token):
+        token = {key: value for key, value in token.items() if key not in _SESSION_REFRESH_KEYS}
         session["spotify_token"] = token
     return AuthService.validate_session_token(token)
+
+
+def _signed_in_user_id():
+    """The signed-in person's users row id, or None when they have no row.
+
+    Looked up as ``get_db_user`` does, so the id is cached in the session.
+    """
+    user = get_db_user()
+    return user.id if user is not None else None
 
 
 def require_auth():
     """
     Get an authenticated Spotify API client, or None.
 
+    The client refreshes from the refresh token stored in the person's users
+    row. The session's access token is a cache: a session that names its
+    account and holds no access token gets one from the stored refresh token,
+    and without a stored token it is signed out before any client is built.
+    When the stored token can't be reached just now,
+    ``SpotifyRefreshUnavailable`` passes through: it is not "signed out".
+
     Returns:
         SpotifyAPI if authenticated, None otherwise.
     """
+    user_id = _signed_in_user_id
     if not is_authenticated():
-        return None
+        try:
+            user = get_db_user()
+        except SQLAlchemyError as error:
+            # Finding the row is the refresh's first step, here as in the refresher.
+            raise refresh_unavailable(error, None) from error
+        if user is None or not user.encrypted_refresh_token:
+            return None
+        user_id = user.id
     try:
         return AuthService.get_authenticated_api(
             credentials_for(None),
-            decrypt_session_token(session["spotify_token"]),
+            session.get("spotify_token"),
+            user_id=user_id,
             authenticated_user_id=(session.get("user_data") or {}).get("id"),
         )
     except (AuthenticationError, SpotifyAppUnavailable):

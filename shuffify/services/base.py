@@ -17,6 +17,10 @@ def lock_user_inventory(user_id: int, *, session=None) -> None:
     """Serialize writes to one owner's inventory through commit on PostgreSQL.
 
     NO KEY UPDATE permits unrelated inserts with foreign keys to this user.
+
+    A caller must commit or roll back before it calls Spotify: a token
+    refresh locks the same row (CredentialRefresher), so a Spotify call made
+    while this lock is held waits for it until the refresh's lock timeout.
     """
     storage = session if session is not None else db.session
     storage.query(User.id).filter_by(id=user_id).with_for_update(key_share=True).one()

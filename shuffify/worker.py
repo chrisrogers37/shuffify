@@ -113,7 +113,9 @@ class OperationWorker:
                 return False, False
             try:
                 row = self.repository.get(lease.operation_id)
-                # User credential serialization also protects rotated refresh tokens between workers.
+                # One run at a time per user. The refresh token needs no lock here: every refresh
+                # locks the users row in its own short transaction, so a web refresh never waits
+                # for a run.
                 locks = sorted({*lease.targets, f"credential:{row.user_id}"})
                 acquired = stack.enter_context(self.repository.target_locks(locks))
                 conflict = self.repository.begin_execution(lease, row) if acquired else "busy"

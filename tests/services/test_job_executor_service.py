@@ -39,10 +39,6 @@ class TestGetSpotifyApi:
 
     @patch(
         "shuffify.services.executors.base_executor"
-        ".TokenService"
-    )
-    @patch(
-        "shuffify.services.executors.base_executor"
         ".SpotifyAPI"
     )
     @patch(
@@ -53,34 +49,32 @@ class TestGetSpotifyApi:
         "shuffify.services.executors.base_executor"
         ".credentials_for"
     )
-    def test_creates_api_with_decrypted_token(
+    def test_creates_api_that_refreshes_from_the_users_row(
         self,
         mock_creds,
         mock_auth,
         mock_api_class,
-        mock_token_svc,
         mock_user,
         app_context,
     ):
-        """Should decrypt token and create SpotifyAPI."""
-        mock_token_svc.decrypt_token.return_value = (
-            "decrypted_refresh"
-        )
+        """The client starts expired, so its first call refreshes, and every
+        refresh goes through the refresher for this user's row."""
+        from shuffify.services.credential_refresher import CredentialRefresher
+
         mock_api_instance = Mock()
         mock_api_class.return_value = mock_api_instance
 
         result = JobExecutorService._get_spotify_api(
             mock_user
         )
-        mock_token_svc.decrypt_token.assert_called_once_with(
-            "encrypted_token_data"
-        )
+        token_info, refresher = mock_api_class.call_args.args
+        assert token_info.is_expired and token_info.refresh_token is None
+        assert isinstance(refresher, CredentialRefresher)
+        assert refresher._user_id == mock_user.id
+        assert "on_token_refresh" not in mock_api_class.call_args.kwargs
         assert result == mock_api_instance
 
     @patch("shuffify.get_spotify_cache")
-    @patch(
-        "shuffify.services.executors.base_executor.TokenService"
-    )
     @patch(
         "shuffify.services.executors.base_executor.SpotifyAPI"
     )
@@ -97,14 +91,12 @@ class TestGetSpotifyApi:
         mock_creds,
         mock_auth,
         mock_api_class,
-        mock_token_svc,
         mock_get_cache,
         mock_user,
         app_context,
     ):
         """The Redis cache is injected into the executor's SpotifyAPI so
         background jobs share cached playlist/user data."""
-        mock_token_svc.decrypt_token.return_value = "decrypted_refresh"
         mock_api_instance = Mock()
         mock_api_class.return_value = mock_api_instance
         sentinel = object()
@@ -124,25 +116,29 @@ class TestGetSpotifyApi:
         ):
             JobExecutorService._get_spotify_api(mock_user)
 
-    def test_decrypt_failure_is_chained_without_its_text_or_the_user(self, mock_user):
+    def test_decrypt_failure_is_chained_without_its_text_or_the_user(self):
+        """The stored token is decrypted by the first refresh, at construction."""
+        user = User(spotify_id="undecryptable_user", encrypted_refresh_token="stored-ciphertext")
+        db.session.add(user)
+        db.session.commit()
         cause = TokenEncryptionError("Decryption failed: upstream-7f3c")
 
         with (
             patch.object(TokenService, "decrypt_token", autospec=True, side_effect=cause),
+            patch("shuffify.services.executors.base_executor.credentials_for", autospec=True),
             pytest.raises(JobExecutionError) as exc_info,
         ):
-            JobExecutorService._get_spotify_api(mock_user)
+            JobExecutorService._get_spotify_api(user)
 
         assert "upstream-7f3c" not in str(exc_info.value)
-        assert mock_user.spotify_id not in str(exc_info.value)
-        assert exc_info.value.__cause__ is cause
+        assert user.spotify_id not in str(exc_info.value)
+        assert exc_info.value.__cause__.__cause__ is cause
 
     def test_refresh_failure_is_chained_without_its_text_or_the_user(self, mock_user, app_context):
         cause = SpotifyTokenError("Token refresh failed: upstream-7f3c")
         executor = "shuffify.services.executors.base_executor"
 
         with (
-            patch.object(TokenService, "decrypt_token", autospec=True, return_value="refresh"),
             patch(f"{executor}.credentials_for", autospec=True),
             patch(f"{executor}.SpotifyAuthManager", autospec=True),
             patch(f"{executor}.SpotifyAPI", autospec=True, side_effect=cause),
@@ -158,8 +154,10 @@ class TestGetSpotifyApi:
 
 class TestRotatedRefreshTokenIsStored:
     """Spotify may issue a new refresh token on any refresh, and the old one
-    can stop working. A job stores each new one the moment it arrives: at
-    construction, on expiry before a call, and on a 401 retry."""
+    can stop working. A job's refreshes store each new one the moment it
+    arrives: at construction, on expiry before a call, and on a 401 retry.
+    Storing it is the refresher's (tests/services/test_credential_refresher.py
+    covers a failed store)."""
 
     @staticmethod
     def _token(refresh_token, expired=False):
@@ -181,13 +179,12 @@ class TestRotatedRefreshTokenIsStored:
         db.session.commit()
         return user
 
-    def _job_api(self, user, at_construction, on_refresh):
+    def _job_api(self, user, *refreshes):
         """A real SpotifyAPI from _get_spotify_api with its Spotify calls
         stubbed, and the 401 callback the HTTP client would invoke.
 
-        ``at_construction`` is the token the first refresh returns, or a list
-        of tokens for successive ``ensure_valid_token`` calls; ``on_refresh``
-        is what a 401's outright refresh returns.
+        ``refreshes`` are the tokens Spotify answers successive refreshes
+        with, the one at construction first.
         """
         with patch(
             "shuffify.services.executors.base_executor.credentials_for",
@@ -198,9 +195,7 @@ class TestRotatedRefreshTokenIsStored:
         ) as auth_cls, patch(
             "shuffify.spotify.api.SpotifyHTTPClient", autospec=True,
         ) as http_cls:
-            tokens = at_construction if isinstance(at_construction, list) else [at_construction]
-            auth_cls.return_value.ensure_valid_token.side_effect = tokens
-            auth_cls.return_value.refresh_token.return_value = self._token(on_refresh)
+            auth_cls.return_value.refresh_token.side_effect = list(refreshes)
             api = JobExecutorService._get_spotify_api(user)
             return api, http_cls.call_args.kwargs["on_token_refresh"]
 
@@ -210,51 +205,33 @@ class TestRotatedRefreshTokenIsStored:
         return db.session.get(User, user.id).encrypted_refresh_token
 
     def test_a_token_rotated_at_construction_is_stored(self, user):
-        self._job_api(user, self._token("refresh_v2"), on_refresh="refresh_v2")
+        self._job_api(user, self._token("refresh_v2"))
         assert TokenService.decrypt_token(self._stored(user)) == "refresh_v2"
 
     def test_a_token_rotated_on_a_401_mid_job_is_stored(self, user):
-        _, on_401 = self._job_api(user, self._token("refresh_v1"), on_refresh="refresh_v2")
+        _, on_401 = self._job_api(user, self._token("refresh_v1"), self._token("refresh_v2"))
         assert TokenService.decrypt_token(self._stored(user)) == "refresh_v1"
         on_401()  # what the HTTP client calls when Spotify answers 401
         assert TokenService.decrypt_token(self._stored(user)) == "refresh_v2"
 
     def test_a_token_rotated_on_expiry_mid_job_is_stored(self, user):
-        api, _ = self._job_api(
-            user,
-            [self._token("refresh_v1", expired=True), self._token("refresh_v2")],
-            on_refresh="refresh_v1",
-        )
+        api, _ = self._job_api(user, self._token("refresh_v1", expired=True), self._token("refresh_v2"))
         api.get_current_user()  # finds the token expired and refreshes first
         assert TokenService.decrypt_token(self._stored(user)) == "refresh_v2"
 
     def test_each_new_token_is_stored_once(self, user):
         """Fernet ciphertext differs on every encryption, so a repeat write
         of the same token would show as a changed column."""
-        _, on_401 = self._job_api(user, self._token("refresh_v2"), on_refresh="refresh_v2")
+        _, on_401 = self._job_api(user, self._token("refresh_v2"), self._token("refresh_v2"))
         stored = self._stored(user)
         on_401()
         assert self._stored(user) == stored
 
-    def test_a_failed_store_is_retried_on_the_next_refresh(self, user):
-        _, on_401 = self._job_api(user, self._token("refresh_v1"), on_refresh="refresh_v2")
-        real_commit, failures = db.session.commit, [RuntimeError("database down")]
-
-        def commit():
-            if failures:
-                raise failures.pop()
-            real_commit()
-
-        with patch.object(db.session, "commit", side_effect=commit):
-            on_401()  # the store fails: the job carries on
-            assert TokenService.decrypt_token(self._stored(user)) == "refresh_v1"
-            on_401()  # the next refresh stores it
-        assert TokenService.decrypt_token(self._stored(user)) == "refresh_v2"
-
-    def test_a_stored_token_logs_the_user_by_internal_id(self, user, shuffify_logs):
-        self._job_api(user, self._token("refresh_v2"), on_refresh="refresh_v2")
-        assert f"store the rotated refresh token for user {user.id}" in shuffify_logs.text
-        assert user.spotify_id not in shuffify_logs.text
+    def test_the_client_holds_no_refresh_token(self, user):
+        api, on_401 = self._job_api(user, self._token("refresh_v2"), self._token("refresh_v3"))
+        assert api.token_info.refresh_token is None
+        on_401()
+        assert api.token_info.refresh_token is None
 
 
 class TestMissingRefreshToken:

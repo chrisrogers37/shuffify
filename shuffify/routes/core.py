@@ -29,7 +29,8 @@ from shuffify.services import (
     UserService,
 )
 from shuffify.services.auth_notice import auth_notice
-from shuffify.services.auth_service import encrypt_session_token
+from shuffify.services.auth_service import session_token
+from shuffify.spotify.auth import TokenInfo
 from shuffify.spotify.credentials import credentials_for
 from shuffify.spotify.exceptions import SpotifyAppUnavailable
 
@@ -137,9 +138,6 @@ def callback():
         _auth_notice("invalid_state")
         return redirect("/")
 
-    # A token refresh during the profile fetch below writes the session's
-    # token; a failed sign-in puts this one back.
-    previous_token = session.get("spotify_token")
     try:
         credentials = credentials_for(None)
 
@@ -155,7 +153,7 @@ def callback():
         # We then clear stale pre-auth data before writing auth state.
         current_app.session_interface.regenerate(session)
         session.clear()
-        session["spotify_token"] = encrypt_session_token(token_data)
+        session["spotify_token"] = session_token(TokenInfo.from_dict(token_data))
         session["user_data"] = user_data
 
         # Upsert user record in database (non-blocking)
@@ -176,7 +174,8 @@ def callback():
 
         session["is_new_user"] = is_new_user
 
-        # Store encrypted refresh token for scheduled ops
+        # The users row is the refresh token's only home: the web's and the
+        # worker's refreshes both use it.
         if db_user and token_data.get("refresh_token"):
             try:
                 UserService.store_refresh_token(
@@ -187,7 +186,7 @@ def callback():
             except Exception as e:
                 logger.warning(
                     f"Failed to store refresh token: {e}. "
-                    f"Scheduled operations may not work."
+                    f"The session signs out when its access token expires."
                 )
 
         # Record login event (non-blocking)
@@ -228,11 +227,7 @@ def callback():
             logger.warning(f"Authentication failed: {e}")
         else:
             logger.error(f"Authentication failed: {e}")
-        # The rest of the session changes only once the sign-in succeeds.
-        if previous_token is None:
-            session.pop("spotify_token", None)
-        else:
-            session["spotify_token"] = previous_token
+        # A sign-in writes the session only once it succeeds, so the session stays as it was.
         _auth_notice("authentication_failed")
         return redirect("/")
 
