@@ -8,7 +8,7 @@ import pytest
 from playwright.sync_api import expect
 
 from tests.e2e.conftest import APP, App, hold_playlist_lock, pid
-from tests.e2e.test_pages import CHROMIUM_ARGS, Visit
+from tests.e2e.test_pages import CHROMIUM_ARGS, CHROMIUM_SANDBOX, Visit
 from tests.paths import api_path
 
 TARGET = pid("alice-morning-mix")
@@ -148,7 +148,7 @@ def direct_browser():
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(args=CHROMIUM_ARGS)
+        browser = playwright.chromium.launch(args=CHROMIUM_ARGS, chromium_sandbox=CHROMIUM_SANDBOX)
         yield browser
         browser.close()
 

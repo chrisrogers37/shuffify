@@ -655,10 +655,12 @@ cmd_e2e() {
   local py rc=0
   py="$(python_bin)"
   log "behaviour tests: tests/e2e against ${APP_URL} and the fake Spotify"
-  # The two settings that say where Playwright's browser is, when either is set.
+  # The two settings that say where Playwright's browser is, when either is set,
+  # and GITHUB_ACTIONS, which the browser launches read (tests/e2e/test_pages.py).
   harness_cmd "${py}" SHUFFIFY_E2E_APP_URL="${APP_URL}" SHUFFIFY_E2E_FAKE_URL="${FAKE_SPOTIFY_URL}" \
     ${PLAYWRIGHT_BROWSERS_PATH:+"PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH}"} \
-    ${XDG_CACHE_HOME:+"XDG_CACHE_HOME=${XDG_CACHE_HOME}"} -- \
+    ${XDG_CACHE_HOME:+"XDG_CACHE_HOME=${XDG_CACHE_HOME}"} \
+    ${GITHUB_ACTIONS:+"GITHUB_ACTIONS=${GITHUB_ACTIONS}"} -- \
     "${py}" -m pytest tests/e2e -p no:cacheprovider "$@"
   # Failed tests or not, show what the network guard blocked and what the
   # fake recorded: either may be why they failed.

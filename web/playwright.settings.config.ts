@@ -14,6 +14,7 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:4175",
     browserName: "chromium",
+    launchOptions: { chromiumSandbox: !process.env.GITHUB_ACTIONS },
     colorScheme: "dark",
     locale: "en-US",
     timezoneId: "America/New_York",
