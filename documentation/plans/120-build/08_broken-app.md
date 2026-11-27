@@ -270,7 +270,9 @@ together.
   the `oauth_failed` notice and marks nothing broken, for a never-connected,
   an `ok` and a `broken` connection.
 - **Harness e2e:** fake Spotify faults (from 02) and its deleted-app mode
-  (from 06) break the app; the page appears; the fix resumes the schedules.
+  (from 06) break the app; `/api/session` says `broken` with the reason, an
+  ordinary call gets the 401, and the fix resumes the schedules. The page
+  appearing is phase 07's harness e2e.
 - **On staging:** the owner breaks the app for real (reset or remove the
   account's grant, remove the account from User Management) and confirms the
   page and the fix. Removing the account from User Management is the case
@@ -313,4 +315,4 @@ together.
 - Don't make up missed runs.
 
 ## Context
-- Source skill: forge · Area: worker, scheduler, services, web/setup · Effort: M · Risk: Medium · Priority: High
+- Source skill: forge · Area: worker, scheduler, services · Effort: M · Risk: Medium · Priority: High

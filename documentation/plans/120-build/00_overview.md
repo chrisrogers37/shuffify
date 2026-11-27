@@ -830,7 +830,7 @@ connection status, `mark_ok` and connect callback.
 **Before phase 05 builds, the user-facing tables are written:** the routing
 table (phase 07 step 1), the notice tables (phases 05 and 06; phase 06's
 build settles the one Spotify error code its table leaves open) and the
-problem page's copy (phase 08). Phase 05 is the first phase that changes
+problem page's copy (phase 07). Phase 05 is the first phase that changes
 what a signed-in person sees on the branch, and 06, 07 and 08 each build part
 of those tables. Phase 06 changes the web contract (the notice codes and the
 session schema), although 07 is the web phase.

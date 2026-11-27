@@ -274,6 +274,8 @@ endpoints and the broken state before this merges.
 - **The harness e2e first-run test** from 06 now drives the real setup
   pages, and a harness e2e reaches each of the fake Spotify's two error
   pages from step 4 and returns with Back.
+- **A harness e2e for the "uh oh" page:** fake Spotify faults (from 02) and
+  its deleted-app mode (from 06) break the app, and the page appears.
 
 ## Verification Checklist
 - [ ] `npx playwright test -c playwright.setup.config.ts` passes.
