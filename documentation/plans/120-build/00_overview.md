@@ -4,7 +4,7 @@ type: plan
 status: draft
 owner: chrisrogers37
 created: 2026-11-10
-updated: 2026-11-25
+updated: 2026-11-26
 tags: [enhancement, auth, workspaces]
 repos: chrisrogers37/shuffify
 ---
@@ -819,7 +819,7 @@ here.
 | 04 Re-key to workspace, and the Spotify account off `users` | XL | 03, and 02b (it re-points that refresher) | none |
 | 05 Google sign-in | L | 04 | none |
 | 06 BYO app + connect (PKCE) + pre-deploy build + staging | XL | 02, 05 (step 8, staging, also needs raccoon.fm bought) | 07 (on fixtures) |
-| 07 Setup wizard | M | 05 (session shape), 06 (endpoints, redirect URL), 08 (`/setup/problem`) | 06, 08 (built on fixtures; merges after 08) |
+| 07 Setup wizard | M | 05 (session shape), 06 (endpoints, redirect URL), 08 (`/api/session`'s broken state, the `spotify_app_broken` refusal) | 06, 08 (built on fixtures; merges after 08) |
 | 08 Broken app | M | 02, 06 | 07 (on fixtures) |
 | 09 Cutover | S | 01, 01b, 03 to 08 | none |
 

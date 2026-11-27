@@ -4,7 +4,7 @@ type: plan
 status: draft
 owner: chrisrogers37
 created: 2026-11-10
-updated: 2026-11-25
+updated: 2026-11-26
 tags: [enhancement, workspaces]
 repos: chrisrogers37/shuffify
 ---
@@ -213,30 +213,8 @@ together.
    `definition_changed_at` to now on the workspace's enabled schedules. That
    moves the eligibility floor, so each schedule runs at its next slot with
    no making up. It writes no other schedule field.
-6. **Make the "uh oh" page, `/setup/problem`,** from the mockup, in the
-   setup shell (phase 07 step 2: the brand, the person's name and Log out)
-   and reached by phase 07's routing table:
-   - the paused-schedules banner: "N schedules are paused", where N is the
-     count of the workspace's enabled schedules (all of them are paused). It
-     counts schedules, so it says schedules, not "scheduled runs", and it is
-     hidden when there are none;
-   - it says "Nothing will run on your playlists until this is fixed". It
-     doesn't say that nothing has been changed on them: the run in flight
-     when the failure hit ends `failed` and may have applied part of its
-     change first. After the fix, Activity shows any failed run and its
-     snapshot;
-   - the fix for `broken_reason`, from the matrix above, with the screens
-     for each. Where it names the bound Spotify account it uses
-     `spotify_display_name`, and the access-removed copy says "the app you
-     created for Raccoon";
-   - connect notices render inline here, as on setup step 4 (phase 07);
-   - "Use a different app" always offered. It says to delete the old app in
-     Spotify's dashboard first (one app per developer), then goes to setup
-     step 1. "Start setup again" goes there too. Both work because `/setup`
-     stays reachable while the app is broken (phase 07's routing table).
-
-   While a replacement is in progress (`unchecked` with a bound Spotify
-   account), `/setup` shows the same paused-schedules banner.
+6. **The "uh oh" page, `/setup/problem`, is built in phase 07** (step 7
+   there), with the fix for each `broken_reason` from the matrix above.
 7. **Show the state in the API.** `/api/session` `setup.spotify_app = broken`
    plus `broken_reason`. The schedules API gains no `paused` or
    `paused_reason` field in this phase: nothing would read them, because the
@@ -291,14 +269,6 @@ together.
   bound `spotify_id` mark it `broken`. An `invalid_grant` at the exchange shows
   the `oauth_failed` notice and marks nothing broken, for a never-connected,
   an `ok` and a `broken` connection.
-- **Playwright:** the "uh oh" page for each reason and its fix, with phase
-  07's accessibility set (headings, focus moves to the h1, the alert
-  announced); the banner's wording, and no banner when there are no enabled
-  schedules; Log out; and the round trip for each reason ("Start setup
-  again" reaches step 3 and saves).
-- **A break seen mid-session:** with a page open and the connection then
-  marked broken, the page's next request gets the 401 and the page lands on
-  `/setup/problem`, with no sign-in panel and no retry loop.
 - **Harness e2e:** fake Spotify faults (from 02) and its deleted-app mode
   (from 06) break the app; the page appears; the fix resumes the schedules.
 - **On staging:** the owner breaks the app for real (reset or remove the

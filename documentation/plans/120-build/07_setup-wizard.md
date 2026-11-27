@@ -4,7 +4,7 @@ type: plan
 status: draft
 owner: chrisrogers37
 created: 2026-11-10
-updated: 2026-11-25
+updated: 2026-11-26
 tags: [enhancement, web]
 repos: chrisrogers37/shuffify
 ---
@@ -42,7 +42,8 @@ their account to it, pastes the client ID and connects.
     `GET /spotify/connect` start, and the connect notice table (phase 06
     step 4): every code that can come back after `/spotify/callback`, and
     `app_in_use_elsewhere`, which the save returns;
-  - from 08: the `/setup/problem` page.
+  - from 08: `/api/session`'s broken state and the `spotify_app_broken`
+    refusal.
 
   There is no workspace-rename endpoint to depend on.
 - **What the shell and the notices do today:**
@@ -61,11 +62,11 @@ their account to it, pastes the client ID and connects.
 ## Implementation Plan
 
 ### Dependencies
-05 (session shape and `redirect_url`), 06 (endpoints) and 08 (the
-`/setup/problem` page that a `broken` workspace is sent to; nothing sets
-`broken` before 08 lands, so the redirect is harmless until then). It can
-build against fixtures in parallel with 06 and 08, which supply the
-endpoints and the problem page before this merges.
+05 (session shape and `redirect_url`), 06 (endpoints) and 08
+(`/api/session`'s broken state and the `spotify_app_broken` refusal; nothing
+sets `broken` before 08 lands, so the redirect is harmless until then). It
+can build against fixtures in parallel with 06 and 08, which supply the
+endpoints and the broken state before this merges.
 
 ### Blocks
 09.
@@ -219,6 +220,30 @@ endpoints and the problem page before this merges.
 6. **Add fixtures** to `web/src/fixtures/transport.ts` for each row of the
    routing table and each notice, plus a Playwright suite
    `playwright.setup.config.ts`.
+7. **Make the "uh oh" page, `/setup/problem`,** from the design's mockup
+   (`documentation/plans/120-mockups/uh-oh.html`), in the setup shell
+   (step 2) and reached by the routing table (step 1):
+   - the paused-schedules banner: "N schedules are paused", where N is the
+     count of the workspace's enabled schedules (all of them are paused). It
+     counts schedules, so it says schedules, not "scheduled runs", and it is
+     hidden when there are none;
+   - it says "Nothing will run on your playlists until this is fixed". It
+     doesn't say that nothing has been changed on them: the run in flight
+     when the failure hit ends `failed` and may have applied part of its
+     change first. After the fix, Activity shows any failed run and its
+     snapshot;
+   - the fix for `broken_reason`, from phase 08's status and action matrix,
+     with the screens for each. Where it names the bound Spotify account it
+     uses `spotify_display_name`, and the access-removed copy says "the app
+     you created for Raccoon";
+   - connect notices render inline here, as on step 4;
+   - "Use a different app" always offered. It says to delete the old app in
+     Spotify's dashboard first (one app per developer), then goes to step 1.
+     "Start setup again" goes there too. Both work because `/setup` stays
+     reachable while the app is broken (the routing table).
+
+   While a replacement is in progress (`unchecked` with a bound Spotify
+   account), `/setup` shows the same paused-schedules banner.
 
 ## Test Plan
 - **Playwright** at 360px and desktop:
@@ -226,6 +251,11 @@ endpoints and the problem page before this merges.
   - **one test per row of the routing table,** and the round trip for each
     broken reason: from `/setup/problem`, "Start setup again" reaches step 3
     and saves;
+  - the "uh oh" page for each reason and its fix, the banner's wording, and
+    no banner when there are no enabled schedules;
+  - **a break seen mid-session:** with a page open and the connection then
+    marked broken, the page's next request gets the 401 and the page lands
+    on `/setup/problem`, with no sign-in panel and no retry loop;
   - the shell shows the signed-in person's name and no app navigation, and
     Log out works from each step and from `/setup/problem`;
   - saving a client ID: the format error (on paste, blur and submit), the
