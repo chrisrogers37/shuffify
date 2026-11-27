@@ -216,7 +216,12 @@ together.
 6. **The "uh oh" page, `/setup/problem`, is built in phase 07** (step 7
    there), with the fix for each `broken_reason` from the matrix above.
 7. **Show the state in the API.** `/api/session` `setup.spotify_app = broken`
-   plus `broken_reason`. The schedules API gains no `paused` or
+   plus `broken_reason`, and `setup.enabled_schedule_count`: the number of the
+   workspace's enabled schedules, the "uh oh" page's banner's N (phase 07
+   step 7). The count is present in every state in which the banner can
+   show: `broken`, and `unchecked` with a bound Spotify account while a
+   replacement is in progress. All three go everywhere the session shape is
+   pinned (phase 05 step 4). The schedules API gains no `paused` or
    `paused_reason` field in this phase: nothing would read them, because the
    guard keeps a workspace that isn't `ok` out of the Routines page. They are
    added when something reads them; the MCP server (#121) may be the first.
@@ -253,6 +258,11 @@ together.
   records no call from it; with `unchecked` it returns `spotify_not_connected`;
   the connect, save-app and `/api/session` routes still answer; after a
   successful connect the same session's request works again.
+- **`/api/session`'s state:** `setup.spotify_app = broken` with
+  `broken_reason`, and `setup.enabled_schedule_count` counting the
+  workspace's enabled schedules (a disabled one isn't counted) while
+  `broken` and while `unchecked` during a replacement, in the session schema
+  and its contract test.
 - **The web path,** for each of the three failures: raised by a refresh in
   `require_auth`, by the 401 retry's refresh mid-request, and (for "not
   registered") by a 403 on an ordinary call that reaches Flask, the connection
@@ -275,8 +285,11 @@ together.
   appearing is phase 07's harness e2e.
 - **On staging:** the owner breaks the app for real (reset or remove the
   account's grant, remove the account from User Management) and confirms the
-  page and the fix. Removing the account from User Management is the case
-  that a service can swallow, so watch that the page still appears on the next
+  server side as the harness e2e does: `/api/session` says `broken` with the
+  reason, an ordinary call gets the 401, and the fix resumes the schedules;
+  the page on real Spotify is phase 07's staging walk. Removing the account
+  from User Management is the case that a service can swallow, so watch that
+  an ordinary call still gets the 401 on the next
   request. **Each of these also stops production,** because staging shares
   the owner's app and account with it (overview, Staging): after the drill,
   sign in again on production and watch its next scheduled run.

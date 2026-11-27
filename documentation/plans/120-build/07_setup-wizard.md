@@ -42,8 +42,8 @@ their account to it, pastes the client ID and connects.
     `GET /spotify/connect` start, and the connect notice table (phase 06
     step 4): every code that can come back after `/spotify/callback`, and
     `app_in_use_elsewhere`, which the save returns;
-  - from 08: `/api/session`'s broken state and the `spotify_app_broken`
-    refusal.
+  - from 08: `/api/session`'s broken state and
+    `setup.enabled_schedule_count`, and the `spotify_app_broken` refusal.
 
   There is no workspace-rename endpoint to depend on.
 - **What the shell and the notices do today:**
@@ -63,8 +63,9 @@ their account to it, pastes the client ID and connects.
 
 ### Dependencies
 05 (session shape and `redirect_url`), 06 (endpoints) and 08
-(`/api/session`'s broken state and the `spotify_app_broken` refusal; nothing
-sets `broken` before 08 lands, so the redirect is harmless until then). It
+(`/api/session`'s broken state and `setup.enabled_schedule_count`, and the
+`spotify_app_broken` refusal; nothing sets `broken` before 08 lands, so the
+redirect is harmless until then). It
 can build against fixtures in parallel with 06 and 08, which supply the
 endpoints and the broken state before this merges.
 
@@ -224,9 +225,10 @@ endpoints and the broken state before this merges.
    (`documentation/plans/120-mockups/uh-oh.html`), in the setup shell
    (step 2) and reached by the routing table (step 1):
    - the paused-schedules banner: "N schedules are paused", where N is the
-     count of the workspace's enabled schedules (all of them are paused). It
-     counts schedules, so it says schedules, not "scheduled runs", and it is
-     hidden when there are none;
+     count of the workspace's enabled schedules (all of them are paused),
+     which it reads from `/api/session`'s `setup.enabled_schedule_count`
+     (phase 08 step 7). It counts schedules, so it says schedules, not
+     "scheduled runs", and it is hidden when there are none;
    - it says "Nothing will run on your playlists until this is fixed". It
      doesn't say that nothing has been changed on them: the run in flight
      when the failure hit ends `failed` and may have applied part of its
@@ -236,9 +238,10 @@ endpoints and the broken state before this merges.
      with the screens for each. Where it names the bound Spotify account it
      uses `spotify_display_name`, and the access-removed copy says "the app
      you created for Raccoon";
-   - connect notices render inline here, as on step 4;
+   - connect notices render inline here, as on setup step 4;
    - "Use a different app" always offered. It says to delete the old app in
-     Spotify's dashboard first (one app per developer), then goes to step 1.
+     Spotify's dashboard first (one app per developer), then goes to setup
+     step 1.
      "Start setup again" goes there too. Both work because `/setup` stays
      reachable while the app is broken (the routing table).
 
@@ -268,8 +271,8 @@ endpoints and the broken state before this merges.
   - the copy button and its "Copied" announcement, and at 360px the whole
     redirect URL is visible (asserted: "renders" doesn't catch clipping);
   - step 1's suggested name and its "I already have a Spotify app" path;
-  - accessibility (headings, focus moves to the h1 on each step, alerts
-    announced).
+  - accessibility (headings, focus moves to the h1 on each step and on
+    `/setup/problem`, alerts announced).
 - **`npm test`** contract tests for the new endpoints.
 - **The harness e2e first-run test** from 06 now drives the real setup
   pages, and a harness e2e reaches each of the fake Spotify's two error
@@ -290,7 +293,11 @@ endpoints and the broken state before this merges.
 - [ ] On staging, the owner walks the setup pages against real Spotify and
       Google, and the copy follow-up PR's description lists every place the
       copy differs from Spotify's live dashboard, or says none was found,
-      with step 5's list answered. Setup step 1's run from scratch, on
+      with step 5's list answered. The walk includes the "uh oh" page on
+      real Spotify: the owner breaks the app as in phase 08's staging drill
+      (which stops production the same way), and the page appears, still
+      appears on the next request after the account is removed from User
+      Management, and clears with the fix. Setup step 1's run from scratch, on
       staging with the owner's second Spotify account, gates the cutover
       only (phase 09 step 1), not this phase; the timed run of the whole
       guide is at cutover (phase 09 step 12).

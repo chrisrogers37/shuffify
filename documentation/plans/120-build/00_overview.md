@@ -819,7 +819,7 @@ here.
 | 04 Re-key to workspace, and the Spotify account off `users` | XL | 03, and 02b (it re-points that refresher) | none |
 | 05 Google sign-in | L | 04 | none |
 | 06 BYO app + connect (PKCE) + pre-deploy build + staging | XL | 02, 05 (step 8, staging, also needs raccoon.fm bought) | 07 (on fixtures) |
-| 07 Setup wizard | M | 05 (session shape), 06 (endpoints, redirect URL), 08 (`/api/session`'s broken state, the `spotify_app_broken` refusal) | 06, 08 (built on fixtures; merges after 08) |
+| 07 Setup wizard | M | 05 (session shape), 06 (endpoints, redirect URL), 08 (`/api/session`'s broken state and `setup.enabled_schedule_count`, the `spotify_app_broken` refusal) | 06, 08 (built on fixtures; merges after 08) |
 | 08 Broken app | M | 02, 06 | 07 (on fixtures) |
 | 09 Cutover | S | 01, 01b, 03 to 08 | none |
 
@@ -831,8 +831,8 @@ connection status, `mark_ok` and connect callback.
 table (phase 07 step 1), the notice tables (phases 05 and 06; phase 06's
 build settles the one Spotify error code its table leaves open) and the
 problem page's copy (phase 07). Phase 05 is the first phase that changes
-what a signed-in person sees on the branch, and 06, 07 and 08 each build part
-of those tables. Phase 06 changes the web contract (the notice codes and the
+what a signed-in person sees on the branch, and 06 and 07 each build part of
+those tables. Phase 06 changes the web contract (the notice codes and the
 session schema), although 07 is the web phase.
 
 **Outside steps with their own clocks start early:** the staging address
